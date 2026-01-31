@@ -16,7 +16,14 @@ import {
   Circle,
   ArrowRight,
   Phone,
-  MessageCircle
+  MessageCircle,
+  Droplet,
+  Bug,
+  FlaskConical,
+  GraduationCap,
+  Briefcase,
+  ClipboardCheck,
+  Star
 } from 'lucide-react';
 
 const iconMap: Record<string, React.ElementType> = {
@@ -29,6 +36,13 @@ const iconMap: Record<string, React.ElementType> = {
   Ear,
   Scissors,
   Circle,
+  Droplet,
+  Bug,
+  FlaskConical,
+  GraduationCap,
+  Briefcase,
+  ClipboardCheck,
+  Star,
 };
 
 export default function Services() {

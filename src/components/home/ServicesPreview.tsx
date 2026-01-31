@@ -3,7 +3,25 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { SERVICES } from '@/lib/constants';
-import { ArrowRight, Stethoscope, Thermometer, TestTube, Wind, Activity, Droplets, Ear, Scissors, Circle } from 'lucide-react';
+import { 
+  ArrowRight, 
+  Stethoscope, 
+  Thermometer, 
+  TestTube, 
+  Wind, 
+  Activity, 
+  Droplets, 
+  Ear, 
+  Scissors, 
+  Circle,
+  Droplet,
+  Bug,
+  FlaskConical,
+  GraduationCap,
+  Briefcase,
+  ClipboardCheck,
+  Star
+} from 'lucide-react';
 
 const iconMap: Record<string, React.ElementType> = {
   Stethoscope,
@@ -15,6 +33,13 @@ const iconMap: Record<string, React.ElementType> = {
   Ear,
   Scissors,
   Circle,
+  Droplet,
+  Bug,
+  FlaskConical,
+  GraduationCap,
+  Briefcase,
+  ClipboardCheck,
+  Star,
 };
 
 // Show only 6 services on homepage

@@ -90,6 +90,55 @@ export const SERVICES = [
     titleMs: 'Rawatan Ketumbuhan & Ketuat',
     titleEn: 'Lump & Wart Treatment',
   },
+  {
+    id: 'full-blood-count',
+    slug: 'ujian-darah-penuh',
+    icon: 'Droplet',
+    titleMs: 'Ujian Darah Penuh (FBC)',
+    titleEn: 'Full Blood Count (FBC)',
+  },
+  {
+    id: 'dengue-test',
+    slug: 'ujian-denggi',
+    icon: 'Bug',
+    titleMs: 'Ujian Denggi',
+    titleEn: 'Dengue Test',
+  },
+  {
+    id: 'blood-investigation',
+    slug: 'pemeriksaan-darah',
+    icon: 'FlaskConical',
+    titleMs: 'Pemeriksaan Darah Menyeluruh',
+    titleEn: 'Thorough Blood Investigation',
+  },
+  {
+    id: 'student-checkup',
+    slug: 'pemeriksaan-pelajar',
+    icon: 'GraduationCap',
+    titleMs: 'Pemeriksaan Kesihatan Pelajar',
+    titleEn: 'Student Medical Checkup',
+  },
+  {
+    id: 'pre-employment-checkup',
+    slug: 'pemeriksaan-pra-pekerjaan',
+    icon: 'Briefcase',
+    titleMs: 'Pemeriksaan Kesihatan Pra-Pekerjaan',
+    titleEn: 'Pre-Employment Medical Checkup',
+  },
+  {
+    id: 'return-to-work',
+    slug: 'pemeriksaan-kembali-bekerja',
+    icon: 'ClipboardCheck',
+    titleMs: 'Penilaian Kembali Bekerja',
+    titleEn: 'Return to Work Assessment',
+  },
+  {
+    id: 'haj-checkup',
+    slug: 'pemeriksaan-haji-2026',
+    icon: 'Star',
+    titleMs: 'Pemeriksaan Kesihatan Haji 2026',
+    titleEn: 'Haj 2026 Medical Checkup',
+  },
 ] as const;
 
 // Navigation items
