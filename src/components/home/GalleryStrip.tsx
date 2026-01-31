@@ -1,0 +1,93 @@
+import { useLanguage } from '@/contexts/LanguageContext';
+import { Button } from '@/components/ui/button';
+import { Link } from 'react-router-dom';
+import { ArrowRight, Image } from 'lucide-react';
+
+// Placeholder gallery items
+const galleryItems = [
+  { id: 1, altMs: 'Ruang menunggu', altEn: 'Waiting area' },
+  { id: 2, altMs: 'Zon permainan kanak-kanak', altEn: 'Kids play zone' },
+  { id: 3, altMs: 'Bilik rawatan', altEn: 'Treatment room' },
+  { id: 4, altMs: 'Kaunter pendaftaran', altEn: 'Registration counter' },
+  { id: 5, altMs: 'Luaran klinik', altEn: 'Clinic exterior' },
+  { id: 6, altMs: 'Peralatan perubatan', altEn: 'Medical equipment' },
+];
+
+export function GalleryStrip() {
+  const { language, t } = useLanguage();
+
+  return (
+    <section className="py-16 md:py-24">
+      <div className="container">
+        <div className="mb-8 flex items-end justify-between">
+          <div>
+            <h2 className="mb-2">
+              {language === 'ms' ? 'Galeri Klinik' : 'Clinic Gallery'}
+            </h2>
+            <p className="text-muted-foreground">
+              {language === 'ms'
+                ? 'Lihat suasana di Klinik Awfa.'
+                : 'See the atmosphere at Klinik Awfa.'}
+            </p>
+          </div>
+          <Button variant="outline" className="hidden sm:flex" asChild>
+            <Link to="/gallery">
+              {t('cta.viewAll')}
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* Horizontal scrollable gallery */}
+      <div className="relative">
+        <div className="flex gap-4 overflow-x-auto pb-4 pl-4 scrollbar-hide md:pl-[max(1rem,calc((100vw-1280px)/2+1rem))]">
+          {galleryItems.map((item) => (
+            <div
+              key={item.id}
+              className="group relative aspect-[4/3] w-72 flex-shrink-0 cursor-pointer overflow-hidden rounded-xl bg-muted shadow-soft transition-all hover:shadow-card md:w-80"
+            >
+              {/* Placeholder */}
+              <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5">
+                <div className="text-center text-muted-foreground">
+                  <Image className="mx-auto mb-2 h-10 w-10 opacity-50" />
+                  <p className="text-sm">{language === 'ms' ? item.altMs : item.altEn}</p>
+                </div>
+              </div>
+
+              {/* Hover overlay */}
+              <div className="absolute inset-0 flex items-center justify-center bg-foreground/60 opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-background text-foreground">
+                  <ArrowRight className="h-5 w-5" />
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* View all card */}
+          <Link
+            to="/gallery"
+            className="flex aspect-[4/3] w-72 flex-shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-border bg-muted/50 text-muted-foreground transition-colors hover:border-primary hover:text-primary md:w-80"
+          >
+            <div className="text-center">
+              <ArrowRight className="mx-auto mb-2 h-8 w-8" />
+              <p className="font-medium">{t('cta.viewAll')}</p>
+            </div>
+          </Link>
+        </div>
+
+        {/* Gradient fade on right */}
+        <div className="pointer-events-none absolute right-0 top-0 h-full w-24 bg-gradient-to-l from-background to-transparent" />
+      </div>
+
+      <div className="container mt-6 text-center sm:hidden">
+        <Button variant="outline" asChild>
+          <Link to="/gallery">
+            {t('cta.viewAll')}
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Link>
+        </Button>
+      </div>
+    </section>
+  );
+}
