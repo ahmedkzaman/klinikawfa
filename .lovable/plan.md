@@ -1,166 +1,96 @@
 
-# Add Room Management Actions
+# Fix WhatsApp Button & Remove Unsuitable Bar
 
-## Problem
-The Video Call Management page currently shows an empty "Actions" column for pending rooms. Staff cannot cancel unwanted rooms or manage them effectively.
+## Problems Identified
+
+### 1. The "Bar" Issue
+The `MobileCTABar` is a fixed bottom bar showing on all pages for mobile/tablet users (screens smaller than 1024px). This creates **duplicate WhatsApp and Call buttons** since the homepage hero already prominently displays these same CTAs.
+
+### 2. WhatsApp Button Not Working Well
+The WhatsApp button in the hero section may have a styling conflict. The button uses the `asChild` pattern with an `<a>` tag, and the `text-whatsapp-foreground` color might not be applying correctly.
+
+---
 
 ## Solution
-Add a dropdown menu in the Actions column with contextual options based on room status.
+
+### Option A: Remove the MobileCTABar Completely
+Since the hero section already has prominent CTA buttons, the fixed bottom bar is redundant and takes up screen space.
+
+### Option B: Hide Bar on Homepage Only
+Keep the bar for inner pages (Services, Doctors, etc.) but hide it on the homepage where the hero CTAs are visible.
 
 ---
 
-## What Actions Will Be Available
+## Recommended: Option A (Remove Bar)
 
-| Room Status | Available Actions |
-|-------------|-------------------|
-| **Pending** | Copy Link, Cancel Room |
-| **Paid** | Start Call, Copy Link, Cancel Room |
-| **Active** | Start Call (rejoin) |
-| **Ended** | View Details |
-| **Cancelled** | Delete Room |
-
----
-
-## UI Design
-
-The Actions column will show a dropdown menu (three dots icon) with contextual options:
-
-```text
-Actions Column (for Pending room)
-┌──────────────────┐
-│  ⋮  (dropdown)   │
-├──────────────────┤
-│ 📋 Copy Link     │
-│ ❌ Cancel Room   │
-│ 🗑️ Delete Room   │
-└──────────────────┘
-
-Actions Column (for Paid room)
-┌──────────────────┐
-│ [Start] ⋮        │  ← Start button + dropdown
-├──────────────────┤
-│ 📋 Copy Link     │
-│ ❌ Cancel Room   │
-└──────────────────┘
-```
+The hero section provides clear CTAs, and the header also has WhatsApp/Call buttons in the mobile menu. The fixed bar is unnecessary.
 
 ---
 
 ## Changes Required
 
-### 1. Frontend: VideoCallManagement.tsx
+| File | Changes |
+|------|---------|
+| `src/components/layout/MainLayout.tsx` | Remove `MobileCTABar` import and usage |
+| `src/components/layout/MainLayout.tsx` | Remove the extra bottom padding (`pb-20`) since bar is gone |
+| `src/components/home/HeroCarousel.tsx` | Ensure WhatsApp button styling is correct |
 
-**Add Cancel Room Function:**
-```typescript
-const cancelRoom = async (roomId: string) => {
-  const { data: session } = await supabase.auth.getSession();
-  
-  await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/video-room?action=update-status`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ 
-        room_id: roomId, 
-        status: 'cancelled' 
-      }),
-    }
-  );
-  
-  fetchRooms(); // Refresh list
-};
+---
+
+## Implementation Details
+
+### 1. Remove MobileCTABar from MainLayout
+
+**Before:**
+```tsx
+import { MobileCTABar } from './MobileCTABar';
+// ...
+<main className="flex-1 pb-20 lg:pb-0">
+// ...
+<MobileCTABar />
 ```
 
-**Add Delete Room Function (new endpoint needed):**
-```typescript
-const deleteRoom = async (roomId: string) => {
-  // Call delete endpoint
-  await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/video-room?action=delete`,
-    { ... }
-  );
-};
+**After:**
+```tsx
+// Remove MobileCTABar import
+// ...
+<main className="flex-1">
+// ...
+// Remove <MobileCTABar />
 ```
 
-**Update Actions Column:**
-- Replace the single "Start" button with a dropdown menu
-- Show contextual options based on room status
-- Add confirmation dialog for cancel/delete actions
+### 2. Fix WhatsApp Button in Hero
 
-### 2. Backend: video-room Edge Function
+The button will be updated to ensure the text color applies correctly:
 
-**Add Delete Action:**
-```typescript
-// POST: Delete room (only for cancelled/ended rooms)
-if (req.method === "POST" && action === "delete") {
-  const { room_id } = await req.json();
-  
-  // Verify room is in deletable state
-  const { data: room } = await supabaseClient
-    .from("video_rooms")
-    .select("status")
-    .eq("id", room_id)
-    .single();
-  
-  if (!['cancelled', 'ended'].includes(room?.status)) {
-    return error("Can only delete cancelled or ended rooms");
-  }
-  
-  // Delete related payments first, then room
-  await supabaseClient.from("video_payments").delete().eq("room_id", room_id);
-  await supabaseClient.from("video_rooms").delete().eq("id", room_id);
-}
+```tsx
+<Button 
+  size="lg" 
+  className="min-w-[180px] bg-[hsl(142,70%,45%)] text-white hover:bg-[hsl(142,70%,40%)]" 
+  asChild
+>
+  <a href={CLINIC_INFO.whatsapp} target="_blank" rel="noopener noreferrer">
+    <MessageCircle className="mr-2 h-5 w-5" />
+    WhatsApp
+  </a>
+</Button>
 ```
+
+Using explicit HSL values ensures the colors work correctly regardless of CSS variable loading order.
 
 ---
 
 ## Files to Modify
 
-| File | Changes |
-|------|---------|
-| `src/pages/admin/VideoCallManagement.tsx` | Add dropdown menu, cancel/delete functions, confirmation dialogs |
-| `supabase/functions/video-room/index.ts` | Add delete action endpoint |
+1. **`src/components/layout/MainLayout.tsx`** - Remove MobileCTABar and adjust padding
+2. **`src/components/home/HeroCarousel.tsx`** - Fix WhatsApp button styling
+3. **`src/components/layout/Header.tsx`** - Also fix WhatsApp button styling for consistency
 
 ---
 
-## Implementation Steps
+## After Implementation
 
-1. Update the edge function to support room deletion
-2. Add `cancelRoom` and `deleteRoom` functions to the component
-3. Replace the Actions column with a dropdown menu component
-4. Add confirmation dialogs for destructive actions
-5. Add bilingual labels (Malay/English)
-6. Test all actions
-
----
-
-## Confirmation Dialog
-
-For cancel and delete actions, users will see a confirmation dialog:
-
-```text
-┌─────────────────────────────────────────┐
-│  Cancel Video Room?                     │
-├─────────────────────────────────────────┤
-│  Are you sure you want to cancel the    │
-│  room for "Ahmed"?                      │
-│                                         │
-│  This action cannot be undone. The      │
-│  patient will not be able to join.      │
-│                                         │
-│         [Keep Room]  [Cancel Room]      │
-└─────────────────────────────────────────┘
-```
-
----
-
-## Technical Notes
-
-- Uses the existing `update-status` endpoint to change status to `cancelled`
-- Only cancelled/ended rooms can be permanently deleted
-- All actions require staff/admin authentication
-- Dropdown uses existing Radix UI DropdownMenu component
-
+- No more fixed bottom bar cluttering the mobile view
+- WhatsApp button will work correctly with proper green color and white text
+- Consistent button styling across header and hero sections
+- Better mobile user experience with more screen real estate
