@@ -1,4 +1,5 @@
 import { MainLayout } from '@/components/layout';
+import { SEOHead } from '@/components/seo';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { CLINIC_INFO } from '@/lib/constants';
@@ -10,6 +11,15 @@ export default function Gallery() {
 
   return (
     <MainLayout>
+      <SEOHead
+        title={language === 'ms' ? 'Galeri' : 'Gallery'}
+        description={language === 'ms' 
+          ? 'Lihat suasana di Klinik Awfa Kuantan. Galeri foto kemudahan dan perkhidmatan kami.'
+          : 'See the atmosphere at Klinik Awfa Kuantan. Photo gallery of our facilities and services.'}
+        url="/gallery"
+      />
+
+      {/* Hero */}
       {/* Hero */}
       <section className="bg-gradient-to-b from-background to-primary/5 py-16 md:py-24">
         <div className="container">

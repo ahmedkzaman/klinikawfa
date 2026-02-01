@@ -1,4 +1,5 @@
 import { MainLayout } from '@/components/layout';
+import { SEOHead } from '@/components/seo';
 import {
   HeroCarousel,
   WhySection,
@@ -12,6 +13,12 @@ import {
 export default function Index() {
   return (
     <MainLayout>
+      <SEOHead
+        title="Klinik Keluarga Anda"
+        description="Klinik Awfa menawarkan rawatan kesihatan berkualiti untuk keluarga anda di KotaSAS, Kuantan. Buka setiap hari 8 pagi - 12 tengah malam."
+        url="/"
+      />
+
       {/* Hero Carousel with auto-rotation */}
       <HeroCarousel autoPlayInterval={5000} />
 
