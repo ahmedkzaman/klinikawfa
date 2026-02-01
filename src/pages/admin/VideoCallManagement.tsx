@@ -21,7 +21,8 @@ import {
   RefreshCw,
   Users,
   Clock,
-  DollarSign
+  DollarSign,
+  Link
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -166,6 +167,18 @@ export default function VideoCallManagement() {
     toast({
       title: language === 'ms' ? 'Disalin!' : 'Copied!',
       description: `Room code ${code} copied to clipboard`,
+    });
+  };
+
+  const copyPatientLink = (code: string) => {
+    const baseUrl = window.location.origin;
+    const patientUrl = `${baseUrl}/video-call?room=${code}`;
+    navigator.clipboard.writeText(patientUrl);
+    toast({
+      title: language === 'ms' ? 'Pautan Disalin!' : 'Link Copied!',
+      description: language === 'ms' 
+        ? 'Pautan panggilan video pesakit disalin ke papan klip'
+        : 'Patient video call link copied to clipboard',
     });
   };
 
@@ -395,8 +408,18 @@ export default function VideoCallManagement() {
                           size="icon"
                           className="h-6 w-6"
                           onClick={() => copyRoomCode(room.room_code)}
+                          title={language === 'ms' ? 'Salin Kod' : 'Copy Code'}
                         >
                           <Copy className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => copyPatientLink(room.room_code)}
+                          title={language === 'ms' ? 'Salin Pautan Pesakit' : 'Copy Patient Link'}
+                        >
+                          <Link className="h-3 w-3" />
                         </Button>
                       </div>
                     </TableCell>
