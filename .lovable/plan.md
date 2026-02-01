@@ -1,140 +1,166 @@
 
-# Add Homepage Video Upload Feature
+# Add Room Management Actions
 
 ## Problem
-The homepage has a VideoSection component that displays a placeholder message "📹 Video klinik akan ditambah di sini" but there's no admin interface to actually upload or manage this video.
+The Video Call Management page currently shows an empty "Actions" column for pending rooms. Staff cannot cancel unwanted rooms or manage them effectively.
 
 ## Solution
-Add a video management section to the Admin Settings page where you can upload your clinic video. The video will be stored in Lovable Cloud storage and automatically display on the homepage.
+Add a dropdown menu in the Actions column with contextual options based on room status.
 
 ---
 
-## What Will Be Built
+## What Actions Will Be Available
 
-### 1. Video Upload in Admin Settings
-A new "Homepage Video" card in the Settings page with:
-- Upload button for video files (MP4, WebM, MOV)
-- Video preview after upload
-- Poster/thumbnail image upload option
-- Delete video button
-- File size limit: 50MB (suitable for short promotional videos)
-
-### 2. Storage Configuration
-- Create a new `videos` storage bucket for video files
-- Configure proper public access for the homepage
-
-### 3. Database Setting
-- Add `homepage_video_url` and `homepage_video_poster` entries to `app_settings`
-
-### 4. Update VideoSection
-- Fetch the video URL from settings
-- Show the actual video when available
-- Keep the placeholder when no video is uploaded
+| Room Status | Available Actions |
+|-------------|-------------------|
+| **Pending** | Copy Link, Cancel Room |
+| **Paid** | Start Call, Copy Link, Cancel Room |
+| **Active** | Start Call (rejoin) |
+| **Ended** | View Details |
+| **Cancelled** | Delete Room |
 
 ---
 
-## How It Will Work
+## UI Design
+
+The Actions column will show a dropdown menu (three dots icon) with contextual options:
 
 ```text
-Admin Settings Page
-+--------------------------------------------------+
-|  Homepage Video                                  |
-|  Upload a video to display on the homepage       |
-+--------------------------------------------------+
-|                                                  |
-|  [Current Video Preview - if uploaded]           |
-|                                                  |
-|  +------------------------------------------+    |
-|  | 📹 Drag & drop or click to upload        |    |
-|  |    MP4, WebM, MOV (max 50MB)              |    |
-|  +------------------------------------------+    |
-|                                                  |
-|  [Upload Poster Image (optional)]               |
-|                                                  |
-|  [Remove Video]                                  |
-+--------------------------------------------------+
+Actions Column (for Pending room)
+┌──────────────────┐
+│  ⋮  (dropdown)   │
+├──────────────────┤
+│ 📋 Copy Link     │
+│ ❌ Cancel Room   │
+│ 🗑️ Delete Room   │
+└──────────────────┘
+
+Actions Column (for Paid room)
+┌──────────────────┐
+│ [Start] ⋮        │  ← Start button + dropdown
+├──────────────────┤
+│ 📋 Copy Link     │
+│ ❌ Cancel Room   │
+└──────────────────┘
 ```
 
 ---
 
-## Files to Create/Modify
+## Changes Required
 
-| File | Changes |
-|------|---------|
-| `src/pages/admin/Settings.tsx` | Add video upload section with preview |
-| `src/components/home/VideoSection.tsx` | Fetch video URL from settings, conditionally show video |
+### 1. Frontend: VideoCallManagement.tsx
 
-## Database Changes
-
-| Change | Details |
-|--------|---------|
-| New storage bucket | `videos` (public) for storing clinic video |
-| New app_settings entries | `homepage_video_url` and `homepage_video_poster` |
-| RLS policies | Allow authenticated admin/staff to upload, public read |
-
----
-
-## Technical Details
-
-### Video Upload Handler
+**Add Cancel Room Function:**
 ```typescript
-const handleVideoUpload = async (file: File) => {
-  // Validate file type and size (max 50MB)
-  const filePath = `clinic/homepage-video.${ext}`;
+const cancelRoom = async (roomId: string) => {
+  const { data: session } = await supabase.auth.getSession();
   
-  // Upload to 'videos' bucket
-  await supabase.storage.from('videos').upload(filePath, file, {
-    upsert: true // Replace existing
-  });
+  await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/video-room?action=update-status`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        room_id: roomId, 
+        status: 'cancelled' 
+      }),
+    }
+  );
   
-  // Get public URL
-  const { data } = supabase.storage.from('videos').getPublicUrl(filePath);
-  
-  // Save URL to app_settings
-  await supabase.from('app_settings')
-    .upsert({ key: 'homepage_video_url', value: data.publicUrl });
+  fetchRooms(); // Refresh list
 };
 ```
 
-### VideoSection Update
+**Add Delete Room Function (new endpoint needed):**
 ```typescript
-// In VideoSection component
-const [videoUrl, setVideoUrl] = useState<string | null>(null);
+const deleteRoom = async (roomId: string) => {
+  // Call delete endpoint
+  await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/video-room?action=delete`,
+    { ... }
+  );
+};
+```
 
-useEffect(() => {
-  const fetchVideo = async () => {
-    const { data } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'homepage_video_url')
-      .single();
-    
-    if (data?.value) setVideoUrl(data.value);
-  };
-  fetchVideo();
-}, []);
+**Update Actions Column:**
+- Replace the single "Start" button with a dropdown menu
+- Show contextual options based on room status
+- Add confirmation dialog for cancel/delete actions
 
-// Render actual video if URL exists, otherwise show placeholder
+### 2. Backend: video-room Edge Function
+
+**Add Delete Action:**
+```typescript
+// POST: Delete room (only for cancelled/ended rooms)
+if (req.method === "POST" && action === "delete") {
+  const { room_id } = await req.json();
+  
+  // Verify room is in deletable state
+  const { data: room } = await supabaseClient
+    .from("video_rooms")
+    .select("status")
+    .eq("id", room_id)
+    .single();
+  
+  if (!['cancelled', 'ended'].includes(room?.status)) {
+    return error("Can only delete cancelled or ended rooms");
+  }
+  
+  // Delete related payments first, then room
+  await supabaseClient.from("video_payments").delete().eq("room_id", room_id);
+  await supabaseClient.from("video_rooms").delete().eq("id", room_id);
+}
 ```
 
 ---
 
-## Implementation Order
+## Files to Modify
 
-1. Create `videos` storage bucket with RLS policies
-2. Add `homepage_video_url` and `homepage_video_poster` to `app_settings`
-3. Add video upload section to Settings page
-4. Update VideoSection to fetch and display the video
-5. Test upload and playback
+| File | Changes |
+|------|---------|
+| `src/pages/admin/VideoCallManagement.tsx` | Add dropdown menu, cancel/delete functions, confirmation dialogs |
+| `supabase/functions/video-room/index.ts` | Add delete action endpoint |
 
 ---
 
-## Supported Formats
+## Implementation Steps
 
-| Format | MIME Type | Browser Support |
-|--------|-----------|-----------------|
-| MP4 | video/mp4 | All browsers |
-| WebM | video/webm | Modern browsers |
-| MOV | video/quicktime | Safari, some browsers |
+1. Update the edge function to support room deletion
+2. Add `cancelRoom` and `deleteRoom` functions to the component
+3. Replace the Actions column with a dropdown menu component
+4. Add confirmation dialogs for destructive actions
+5. Add bilingual labels (Malay/English)
+6. Test all actions
 
-**Recommendation**: Use MP4 (H.264) for best compatibility across all devices.
+---
+
+## Confirmation Dialog
+
+For cancel and delete actions, users will see a confirmation dialog:
+
+```text
+┌─────────────────────────────────────────┐
+│  Cancel Video Room?                     │
+├─────────────────────────────────────────┤
+│  Are you sure you want to cancel the    │
+│  room for "Ahmed"?                      │
+│                                         │
+│  This action cannot be undone. The      │
+│  patient will not be able to join.      │
+│                                         │
+│         [Keep Room]  [Cancel Room]      │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## Technical Notes
+
+- Uses the existing `update-status` endpoint to change status to `cancelled`
+- Only cancelled/ended rooms can be permanently deleted
+- All actions require staff/admin authentication
+- Dropdown uses existing Radix UI DropdownMenu component
+
