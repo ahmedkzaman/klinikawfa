@@ -13,22 +13,51 @@ interface CircularGalleryGridProps {
   error: Error | null;
 }
 
-// Define grid positions for images in the circular layout
-// Each position has column span, row span, and placement
-const gridPositions = [
-  { col: '1 / 5', row: '1 / 4' },      // Top-left large
-  { col: '5 / 9', row: '1 / 3' },      // Top-center
-  { col: '9 / 13', row: '1 / 4' },     // Top-right large
-  { col: '2 / 5', row: '4 / 6' },      // Middle-left
-  { col: '5 / 9', row: '3 / 6' },      // Center (large, focal)
-  { col: '9 / 12', row: '4 / 6' },     // Middle-right
-  { col: '1 / 4', row: '6 / 9' },      // Bottom-left large
-  { col: '4 / 7', row: '6 / 8' },      // Bottom-center-left
-  { col: '7 / 10', row: '6 / 8' },     // Bottom-center-right
-  { col: '10 / 13', row: '6 / 9' },    // Bottom-right large
-  { col: '3 / 6', row: '8 / 10' },     // Extra bottom-left
-  { col: '8 / 11', row: '8 / 10' },    // Extra bottom-right
-];
+// Generate dynamic grid positions based on image count
+function generateGridPositions(imageCount: number) {
+  // Base positions for common layouts
+  const basePositions = [
+    { col: '1 / 5', row: '1 / 4', rotate: -2 },
+    { col: '5 / 9', row: '1 / 3', rotate: 1 },
+    { col: '9 / 13', row: '1 / 4', rotate: 3 },
+    { col: '2 / 5', row: '4 / 6', rotate: -1 },
+    { col: '5 / 9', row: '3 / 6', rotate: 0 },
+    { col: '9 / 12', row: '4 / 6', rotate: 2 },
+    { col: '1 / 4', row: '6 / 9', rotate: -3 },
+    { col: '4 / 7', row: '6 / 8', rotate: 1 },
+    { col: '7 / 10', row: '6 / 8', rotate: -2 },
+    { col: '10 / 13', row: '6 / 9', rotate: 2 },
+    { col: '3 / 6', row: '8 / 10', rotate: -1 },
+    { col: '8 / 11', row: '8 / 10', rotate: 3 },
+  ];
+
+  // Extended positions for more images
+  const extendedPositions = [
+    { col: '1 / 3', row: '3 / 5', rotate: -2 },
+    { col: '11 / 13', row: '3 / 5', rotate: 2 },
+    { col: '2 / 4', row: '5 / 7', rotate: 1 },
+    { col: '10 / 12', row: '5 / 7', rotate: -1 },
+    { col: '4 / 6', row: '4 / 5', rotate: 0 },
+    { col: '8 / 10', row: '4 / 5', rotate: -2 },
+    { col: '5 / 7', row: '8 / 10', rotate: 2 },
+    { col: '7 / 9', row: '8 / 10', rotate: -1 },
+    { col: '1 / 3', row: '7 / 9', rotate: 3 },
+    { col: '11 / 13', row: '7 / 9', rotate: -3 },
+    { col: '3 / 5', row: '2 / 4', rotate: 1 },
+    { col: '9 / 11', row: '2 / 4', rotate: -2 },
+  ];
+
+  const allPositions = [...basePositions, ...extendedPositions];
+  
+  // Return positions for the given image count
+  return allPositions.slice(0, Math.min(imageCount, allPositions.length));
+}
+
+// Get random rotation for variety
+function getRotation(index: number): number {
+  const rotations = [-3, -2, -1, 0, 1, 2, 3];
+  return rotations[index % rotations.length];
+}
 
 export function CircularGalleryGrid({ images, isLoading, error }: CircularGalleryGridProps) {
   const { language } = useLanguage();
@@ -40,6 +69,9 @@ export function CircularGalleryGrid({ images, isLoading, error }: CircularGaller
     setCurrentImageIndex(index);
     setLightboxOpen(true);
   };
+
+  // Generate positions based on actual image count
+  const gridPositions = generateGridPositions(images.length);
 
   if (error) {
     return (
@@ -76,7 +108,7 @@ export function CircularGalleryGrid({ images, isLoading, error }: CircularGaller
     );
   }
 
-  // On mobile, use simple grid layout
+  // On mobile, use simple grid layout with hover effects
   if (isMobile) {
     return (
       <>
@@ -85,7 +117,7 @@ export function CircularGalleryGrid({ images, isLoading, error }: CircularGaller
             <button
               key={image.id}
               onClick={() => handleImageClick(index)}
-              className="group relative aspect-square overflow-hidden rounded-xl bg-muted transition-all duration-300 hover:scale-105 hover:shadow-lg hover:z-10 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+              className="group relative aspect-square overflow-hidden rounded-xl bg-muted transition-all duration-300 hover:scale-105 hover:rotate-1 hover:shadow-lg hover:z-10 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
             >
               <img
                 src={image.url}
@@ -107,6 +139,10 @@ export function CircularGalleryGrid({ images, isLoading, error }: CircularGaller
     );
   }
 
+  // Limit images to fit in circle (max 24)
+  const maxImages = Math.min(images.length, 24);
+  const displayImages = images.slice(0, maxImages);
+
   return (
     <>
       {/* Circular Gallery Container */}
@@ -124,8 +160,9 @@ export function CircularGalleryGrid({ images, isLoading, error }: CircularGaller
               gridTemplateRows: 'repeat(10, 1fr)',
             }}
           >
-            {images.slice(0, 12).map((image, index) => {
+            {displayImages.map((image, index) => {
               const position = gridPositions[index] || gridPositions[index % gridPositions.length];
+              const baseRotation = position?.rotate ?? getRotation(index);
               
               return (
                 <button
@@ -138,8 +175,15 @@ export function CircularGalleryGrid({ images, isLoading, error }: CircularGaller
                     "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
                   )}
                   style={{
-                    gridColumn: position.col,
-                    gridRow: position.row,
+                    gridColumn: position?.col || '1 / 4',
+                    gridRow: position?.row || '1 / 3',
+                    transform: `rotate(${baseRotation}deg)`,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = `rotate(0deg) scale(1.15)`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = `rotate(${baseRotation}deg)`;
                   }}
                 >
                   <img
@@ -163,28 +207,38 @@ export function CircularGalleryGrid({ images, isLoading, error }: CircularGaller
         />
       </div>
 
-      {/* Show remaining images in a smaller grid below if more than 12 */}
-      {images.length > 12 && (
+      {/* Show remaining images below if more than 24 */}
+      {images.length > 24 && (
         <div className="mt-8 grid gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-          {images.slice(12).map((image, index) => (
-            <button
-              key={image.id}
-              onClick={() => handleImageClick(index + 12)}
-              className={cn(
-                "group relative aspect-square overflow-hidden rounded-xl bg-muted",
-                "transition-all duration-300 ease-out",
-                "hover:scale-[1.15] hover:z-10 hover:shadow-xl",
-                "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-              )}
-            >
-              <img
-                src={image.url}
-                alt={image.alt_text || ''}
-                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                loading="lazy"
-              />
-            </button>
-          ))}
+          {images.slice(24).map((image, index) => {
+            const rotation = getRotation(index);
+            return (
+              <button
+                key={image.id}
+                onClick={() => handleImageClick(index + 24)}
+                className={cn(
+                  "group relative aspect-square overflow-hidden rounded-xl bg-muted",
+                  "transition-all duration-300 ease-out",
+                  "hover:scale-[1.15] hover:rotate-0 hover:z-10 hover:shadow-xl",
+                  "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                )}
+                style={{ transform: `rotate(${rotation}deg)` }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = `rotate(0deg) scale(1.15)`;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = `rotate(${rotation}deg)`;
+                }}
+              >
+                <img
+                  src={image.url}
+                  alt={image.alt_text || ''}
+                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  loading="lazy"
+                />
+              </button>
+            );
+          })}
         </div>
       )}
 
