@@ -1,65 +1,94 @@
 
-
-# AI-Powered Biography Generator for Team Members
+# Update Public Doctors Page to Display Team Members from Database
 
 ## Overview
 
-Add a button to the Team Editor that uses AI to automatically generate professional, polished biographies in both Malay and English. The AI will craft eloquent descriptions based on the team member's special interests, years of experience, qualifications, and any additional notes provided.
+Replace the hardcoded doctor and staff data on the public Doctors page with dynamic data fetched from the `team_members` database table. This will allow administrators to manage the team through the admin panel and have changes automatically reflected on the public-facing page.
 
-## How It Will Work
+## Current State
 
-1. After filling in the team member's details (name, title, qualifications, special interests, years of experience), you can click a "Generate Biography" button
-2. The AI will create professional, flowery prose that highlights their expertise and experience
-3. Both Malay and English biographies will be generated simultaneously
-4. You can review and edit the generated text before saving
+- The Doctors page currently displays 2 hardcoded doctors and 2 staff categories
+- The `team_members` table already exists with proper RLS policies (public can view only active members)
+- Admin panel already supports full team management (add, edit, delete, reorder)
 
 ## Implementation Steps
 
-### Step 1: Create Backend Function
+### Step 1: Add Data Fetching Logic
 
-Create an edge function called `generate-bio` that:
-- Receives team member data (name, title, expertise, years of experience, qualifications, additional notes)
-- Calls Lovable AI (using the pre-configured LOVABLE_API_KEY) to generate professional biographies
-- Returns both Malay and English versions
-- Uses a carefully crafted prompt that produces eloquent, professional language while respecting medical terminology guidelines (avoiding terms like "specialist" unless referring to external experts)
+Add state management and a Supabase query to fetch active team members:
+- Create state for doctors and staff arrays
+- Create loading and error states
+- Fetch data on component mount
+- Filter by type (doctor vs staff) for display in different sections
 
-### Step 2: Update Team Editor Form
+### Step 2: Update Doctors Grid Section
 
-Modify the Biography card section to include:
-- An optional "Additional Notes" text field for any extra points to include in the bio
-- A "Generate with AI" button that triggers the biography generation
-- Loading states while the AI is working
-- The generated text will populate the bio fields, which remain editable
+Modify the doctors grid to render from database data:
+- Map over fetched doctors data instead of hardcoded array
+- Display photo from `photo_url` or show placeholder icon if none
+- Show name based on current language (`name_ms` or `name_en`)
+- Display title, qualifications, expertise, and bio from the appropriate language fields
+- Keep the experience badge and styling
 
-### Step 3: Update Configuration
+### Step 3: Update Support Staff Section
 
-Add the new edge function to the Supabase configuration file.
+Modify the staff section to render from database data:
+- Filter team members by `type === 'staff'`
+- Display staff members with their names, titles, and bios
+- If no staff in database yet, show a simplified static message or placeholder
+
+### Step 4: Handle Loading and Empty States
+
+Add appropriate UI feedback:
+- Show loading spinner while fetching data
+- Display a friendly message if no doctors are found
+- Gracefully handle the case where staff section might be empty
+
+### Step 5: Remove Hardcoded Data
+
+Clean up the file by removing:
+- The hardcoded `doctors` array
+- The hardcoded `staffTeam` array
+- Unused icon imports that were specific to hardcoded data
 
 ---
 
 ## Technical Details
 
-### Edge Function: `supabase/functions/generate-bio/index.ts`
+### Data Fetching Pattern
 
-The function will:
-- Accept POST requests with team member data
-- Use Lovable AI Gateway with the `google/gemini-3-flash-preview` model for fast, quality responses
-- Include a system prompt that produces:
-  - Professional, flowery language
-  - Third-person narrative style
-  - Emphasis on dedication and expertise
-  - Proper medical terminology (avoiding "specialist" per compliance guidelines)
-- Return JSON with `bio_ms` and `bio_en` fields
+The query will use the existing Supabase client pattern seen in other pages:
 
-### Frontend Changes: `src/pages/admin/TeamEditor.tsx`
+```typescript
+const { data, error } = await supabase
+  .from('team_members')
+  .select('*')
+  .eq('is_active', true)
+  .order('display_order', { ascending: true });
+```
 
-- Add state for additional notes input and AI generation loading
-- Add a text field for "Additional Notes" in the Biography card
-- Add a "Generate with AI" button with sparkle icon
-- Implement the API call to the edge function
-- Auto-populate the biography textareas with the generated content
+Note: Even though we filter by `is_active`, the RLS policy already enforces this, providing defense in depth.
 
-### Configuration: `supabase/config.toml`
+### Type Safety
 
-Add the new function configuration with `verify_jwt = false` for simplicity (the function doesn't need authentication since it's just generating text).
+Use the existing `Tables` type from the Supabase types file:
+
+```typescript
+import { Tables } from '@/integrations/supabase/types';
+
+type TeamMember = Tables<'team_members'>;
+```
+
+### Language Handling
+
+The page already uses `useLanguage()` hook. Each database field has `_ms` and `_en` variants that will be selected based on the current language setting.
+
+### File Changes
+
+**Modified file:** `src/pages/Doctors.tsx`
+- Add imports for Supabase client and types
+- Add useState and useEffect for data fetching
+- Replace hardcoded rendering with dynamic data
+- Add loading state UI
+- Remove unused hardcoded arrays
 
