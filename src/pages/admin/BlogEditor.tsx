@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowLeft, Loader2, Save, Globe, Clock } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, Globe, Clock, Upload, X, ImageIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { AIWritingAssistant } from '@/components/blog';
 
@@ -49,6 +49,7 @@ export default function BlogEditor() {
 
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [categories, setCategories] = useState<BlogCategory[]>([]);
   const [activeTab, setActiveTab] = useState<'ms' | 'en'>('ms');
 
@@ -162,6 +163,71 @@ export default function BlogEditor() {
     const cat = categories.find(c => c.id === formData.category_id);
     if (!cat) return '';
     return language === 'ms' ? (cat.name_ms || cat.name) : (cat.name_en || cat.name);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: language === 'ms' ? 'Ralat' : 'Error',
+        description: language === 'ms' ? 'Sila pilih fail imej.' : 'Please select an image file.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: language === 'ms' ? 'Ralat' : 'Error',
+        description: language === 'ms' ? 'Saiz fail maksimum 5MB.' : 'Maximum file size is 5MB.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      // Generate unique filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
+      const filePath = `blog/${fileName}`;
+
+      // Upload to storage
+      const { error: uploadError } = await supabase.storage
+        .from('gallery')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('gallery')
+        .getPublicUrl(filePath);
+
+      setFormData(prev => ({ ...prev, featured_image: publicUrl }));
+
+      toast({
+        title: language === 'ms' ? 'Berjaya' : 'Success',
+        description: language === 'ms' ? 'Imej dimuat naik.' : 'Image uploaded.',
+      });
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      toast({
+        title: language === 'ms' ? 'Ralat' : 'Error',
+        description: language === 'ms' ? 'Gagal memuat naik imej.' : 'Failed to upload image.',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const removeImage = () => {
+    setFormData(prev => ({ ...prev, featured_image: '' }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -418,15 +484,61 @@ export default function BlogEditor() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="featured_image">
-                    {language === 'ms' ? 'Imej Utama (URL)' : 'Featured Image (URL)'}
+                  <Label>
+                    {language === 'ms' ? 'Imej Utama' : 'Featured Image'}
                   </Label>
-                  <Input
-                    id="featured_image"
-                    value={formData.featured_image}
-                    onChange={(e) => setFormData(prev => ({ ...prev, featured_image: e.target.value }))}
-                    placeholder="https://example.com/image.jpg"
-                  />
+                  
+                  {formData.featured_image ? (
+                    <div className="relative rounded-lg overflow-hidden border">
+                      <img 
+                        src={formData.featured_image} 
+                        alt="Featured" 
+                        className="w-full h-48 object-cover"
+                      />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-2 right-2 h-8 w-8"
+                        onClick={removeImage}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="border-2 border-dashed rounded-lg p-6 text-center">
+                      <ImageIcon className="mx-auto h-10 w-10 text-muted-foreground mb-2" />
+                      <p className="text-sm text-muted-foreground mb-3">
+                        {language === 'ms' 
+                          ? 'Muat naik imej untuk post ini'
+                          : 'Upload an image for this post'}
+                      </p>
+                      <label>
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          className="hidden"
+                          disabled={uploadingImage}
+                        />
+                        <Button type="button" variant="secondary" size="sm" asChild disabled={uploadingImage}>
+                          <span className="cursor-pointer">
+                            {uploadingImage ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                {language === 'ms' ? 'Memuat naik...' : 'Uploading...'}
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="mr-2 h-4 w-4" />
+                                {language === 'ms' ? 'Pilih Imej' : 'Choose Image'}
+                              </>
+                            )}
+                          </span>
+                        </Button>
+                      </label>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">
