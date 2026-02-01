@@ -58,7 +58,7 @@ export const SERVICES = [
   {
     id: 'sputum-suction',
     slug: 'sedutan-kahak',
-    icon: 'Activity',
+    icon: 'CoughingBaby',
     titleMs: 'Sedutan Kahak',
     titleEn: 'Sputum Suction',
   },
@@ -79,7 +79,7 @@ export const SERVICES = [
   {
     id: 'circumcision',
     slug: 'khatan',
-    icon: 'Scissors',
+    icon: 'Banana',
     titleMs: 'Khatan: Kanak-kanak & Dewasa',
     titleEn: 'Circumcision: Children & Adults',
   },
