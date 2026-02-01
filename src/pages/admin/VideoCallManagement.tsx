@@ -63,7 +63,9 @@ export default function VideoCallManagement() {
   const [rooms, setRooms] = useState<VideoRoom[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [isCreatingTest, setIsCreatingTest] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showTestDialog, setShowTestDialog] = useState(false);
   const [newRoom, setNewRoom] = useState({
     patient_name: '',
     patient_phone: '',
@@ -171,6 +173,60 @@ export default function VideoCallManagement() {
       });
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const createTestRoom = async () => {
+    if (!newRoom.patient_name || !newRoom.patient_phone) {
+      toast({
+        title: language === 'ms' ? 'Ralat' : 'Error',
+        description: language === 'ms' ? 'Nama dan telefon diperlukan' : 'Name and phone required',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsCreatingTest(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/video-room?action=create-test`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(newRoom),
+        }
+      );
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create test room');
+      }
+
+      toast({
+        title: language === 'ms' ? 'Berjaya!' : 'Success!',
+        description: `Test room created: ${result.room.room_code}`,
+      });
+
+      setShowTestDialog(false);
+      setNewRoom({ patient_name: '', patient_phone: '', patient_email: '', notes: '' });
+      fetchRooms();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to create test room',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCreatingTest(false);
     }
   };
 
@@ -310,6 +366,7 @@ export default function VideoCallManagement() {
     const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
       pending: 'outline',
       paid: 'secondary',
+      test: 'secondary',
       active: 'default',
       ended: 'destructive',
       cancelled: 'destructive',
@@ -318,6 +375,7 @@ export default function VideoCallManagement() {
     const labels: Record<string, Record<string, string>> = {
       pending: { ms: 'Menunggu', en: 'Pending' },
       paid: { ms: 'Dibayar', en: 'Paid' },
+      test: { ms: 'Ujian', en: 'Test' },
       active: { ms: 'Aktif', en: 'Active' },
       ended: { ms: 'Tamat', en: 'Ended' },
       cancelled: { ms: 'Dibatalkan', en: 'Cancelled' },
@@ -343,7 +401,7 @@ export default function VideoCallManagement() {
   };
 
   const renderActions = (room: VideoRoom) => {
-    const canStart = room.status === 'paid' || room.status === 'active';
+    const canStart = room.status === 'paid' || room.status === 'active' || room.status === 'test';
     const canCancel = room.status === 'pending' || room.status === 'paid';
     const canDelete = room.status === 'cancelled' || room.status === 'ended';
     const isEnded = room.status === 'ended';
@@ -565,6 +623,72 @@ export default function VideoCallManagement() {
                 <Button onClick={createRoom} disabled={isCreating}>
                   {isCreating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   {language === 'ms' ? 'Cipta' : 'Create'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+          
+          {/* Test Room Dialog */}
+          <Dialog open={showTestDialog} onOpenChange={setShowTestDialog}>
+            <DialogTrigger asChild>
+              <Button variant="secondary">
+                <Video className="h-4 w-4 mr-2" />
+                {language === 'ms' ? 'Ujian Telekonsultasi' : 'Teleconsultation Test'}
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>
+                  {language === 'ms' ? 'Ujian Telekonsultasi' : 'Teleconsultation Test'}
+                </DialogTitle>
+                <DialogDescription>
+                  {language === 'ms' 
+                    ? 'Cipta bilik ujian tanpa pembayaran Stripe. Untuk tujuan ujian sahaja.'
+                    : 'Create a test room without Stripe payment. For testing purposes only.'}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="test_patient_name">
+                    {language === 'ms' ? 'Nama Pesakit' : 'Patient Name'} *
+                  </Label>
+                  <Input
+                    id="test_patient_name"
+                    value={newRoom.patient_name}
+                    onChange={(e) => setNewRoom({ ...newRoom, patient_name: e.target.value })}
+                    placeholder="Test Patient"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="test_patient_phone">
+                    {language === 'ms' ? 'Telefon' : 'Phone'} *
+                  </Label>
+                  <Input
+                    id="test_patient_phone"
+                    value={newRoom.patient_phone}
+                    onChange={(e) => setNewRoom({ ...newRoom, patient_phone: e.target.value })}
+                    placeholder="+60123456789"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="test_notes">
+                    {language === 'ms' ? 'Nota (Pilihan)' : 'Notes (Optional)'}
+                  </Label>
+                  <Textarea
+                    id="test_notes"
+                    value={newRoom.notes}
+                    onChange={(e) => setNewRoom({ ...newRoom, notes: e.target.value })}
+                    placeholder={language === 'ms' ? 'Nota tambahan...' : 'Additional notes...'}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowTestDialog(false)}>
+                  {language === 'ms' ? 'Batal' : 'Cancel'}
+                </Button>
+                <Button onClick={createTestRoom} disabled={isCreatingTest} variant="secondary">
+                  {isCreatingTest && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {language === 'ms' ? 'Cipta Ujian' : 'Create Test'}
                 </Button>
               </div>
             </DialogContent>

@@ -92,7 +92,7 @@ export default function VideoCall() {
       const result = await response.json();
       if (result.room) {
         setRoomData(result.room);
-        if (result.room.status === 'paid' || result.room.status === 'active') {
+        if (result.room.status === 'paid' || result.room.status === 'active' || result.room.status === 'test') {
           setStep('waiting');
         }
       }
@@ -128,7 +128,7 @@ export default function VideoCall() {
       
       if (result.room.status === 'pending') {
         setStep('payment');
-      } else if (result.room.status === 'paid' || result.room.status === 'active') {
+      } else if (result.room.status === 'paid' || result.room.status === 'active' || result.room.status === 'test') {
         setStep('waiting');
       } else {
         throw new Error('This room is no longer available');
