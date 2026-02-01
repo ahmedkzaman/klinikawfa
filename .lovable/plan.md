@@ -1,290 +1,119 @@
 
 
-# Plan: Fix Video Call Connection - Staff and Patient Can't See Each Other
+# Plan: Fix "Failed to start video call" Error
 
-## Problem Identified
+## Root Cause Analysis
 
-After analyzing the WebRTC implementation, I found **two critical issues** preventing the video connection:
+After tracing through the code, I identified **the key timing issue**:
 
-### Issue 1: Supabase Realtime Channel Not Ready Before Sending Offer
+### The Bug
 
-In `useWebRTC.ts`, the staff side subscribes to the channel and immediately sends the offer after a 1-second timeout, but:
-- The `.subscribe()` method is called but the code doesn't wait for it to confirm the subscription is active
-- The offer may be sent before the channel is fully subscribed
-- More importantly, **the patient may not have joined the channel yet** when the offer is sent
-
-```typescript
-// Current problematic code (lines 207-233)
-channel.subscribe();  // <-- Doesn't wait for subscription to be ready
-channelRef.current = channel;
-
-// Staff sends offer after 1 second
-if (isStaff) {
-  setTimeout(() => {
-    channelRef.current?.send({ ... offer ... });  // Patient may not be subscribed yet!
-  }, 1000);
-}
-```
-
-### Issue 2: Timing Race Condition
-
-The current flow has a fundamental timing problem:
+In `setupSignaling()`, we set up event listeners for presence BEFORE the offer is created:
 
 ```text
-CURRENT (BROKEN) FLOW:
-========================
-Staff clicks "Start Call"
-    |
-    v
-Staff subscribes to channel
-Staff creates offer
-Staff sends offer (after 1 sec)     <-- Patient may not be ready!
-    |
-    v
-Patient clicks "Join Call" (later)
-Patient subscribes to channel       <-- MISSED THE OFFER!
-Patient waits for offer...          <-- Never receives it
-    |
-    v
-Both stuck waiting forever
+CURRENT FLOW (BROKEN):
+=======================
+1. Staff calls startCall()
+2. Staff calls initializeMedia() ✓
+3. Staff calls createPeerConnection() ✓
+4. Staff calls await setupSignaling():
+   → Sets up presence listener: if (isStaff && currentOfferRef.current) {...}
+   → currentOfferRef.current = null at this point!
+   → Patient may already be in room, presence event fires
+   → But currentOfferRef.current is STILL null, so offer is NOT sent
+5. AFTER setupSignaling resolves, offer is created
+6. currentOfferRef.current is NOW set, but presence event already fired
+7. Neither side can connect → "Failed to start video call"
 ```
+
+### Additional Issues
+
+1. **Subscription status handling**: Only `SUBSCRIBED` and `CHANNEL_ERROR` are handled. Other statuses like `CLOSED` or `TIMED_OUT` aren't handled.
+
+2. **Double timeout risk**: The subscription timeout can race with the channel status change.
+
+3. **No retry mechanism**: If the initial connection fails, there's no way to retry.
 
 ---
 
 ## Solution
 
-Fix the signaling to properly handle the timing issue:
-
-1. **Wait for subscription to be confirmed** before proceeding
-2. **Implement a "presence" system** so staff knows when patient has joined
-3. **Re-send the offer** when patient joins the channel
-4. **Add reconnection logic** for robustness
+Fix the timing by moving offer creation BEFORE setting up the signaling channel, and add better error handling.
 
 ---
 
 ## Implementation Steps
 
-### Step 1: Update `useWebRTC.ts` - Wait for Subscription
+### Step 1: Restructure the Call Flow
 
-Subscribe to the channel and wait for confirmation before proceeding.
-
-```typescript
-const setupSignaling = async (pc: RTCPeerConnection): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    const channel = supabase.channel(`video-room-${roomCode}`);
-
-    channel
-      .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-        // When the other party joins, re-send offer if we're staff
-        if (isStaff && newPresences.some(p => p.role === 'patient')) {
-          sendOffer();
-        }
-      })
-      .on('broadcast', { event: 'offer' }, ...)
-      .on('broadcast', { event: 'answer' }, ...)
-      .on('broadcast', { event: 'ice-candidate' }, ...)
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          // Track presence
-          await channel.track({ role: isStaff ? 'staff' : 'patient' });
-          channelRef.current = channel;
-          resolve();
-        } else if (status === 'CHANNEL_ERROR') {
-          reject(new Error('Failed to join signaling channel'));
-        }
-      });
-  });
-};
-```
-
-### Step 2: Re-send Offer When Patient Joins
-
-Staff should detect when patient joins and send the offer at that moment.
-
-```typescript
-// Store offer for re-sending
-const currentOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
-
-const sendOffer = () => {
-  if (currentOfferRef.current && channelRef.current) {
-    channelRef.current.send({
-      type: 'broadcast',
-      event: 'offer',
-      payload: { offer: currentOfferRef.current, from: 'staff' },
-    });
-  }
-};
-
-// When creating offer, store it
-const offer = await pc.createOffer();
-await pc.setLocalDescription(offer);
-currentOfferRef.current = offer;
-```
-
-### Step 3: Patient Requests Offer if Missed
-
-If patient joins and doesn't receive an offer, they should request it.
-
-```typescript
-// Add request-offer event
-.on('broadcast', { event: 'request-offer' }, () => {
-  if (isStaff) {
-    sendOffer();
-  }
-})
-
-// Patient sends request when joining
-if (!isStaff) {
-  setTimeout(() => {
-    if (!pc.remoteDescription) {
-      channel.send({
-        type: 'broadcast',
-        event: 'request-offer',
-        payload: { from: 'patient' },
-      });
-    }
-  }, 2000);
-}
-```
-
----
-
-## Updated Flow After Fix
+Move offer creation BEFORE signaling setup:
 
 ```text
-FIXED FLOW:
-===========
-Staff clicks "Start Call"
-    |
-    v
-Staff subscribes to channel (waits for SUBSCRIBED)
-Staff tracks presence (role: staff)
-Staff creates offer and stores it
-    |
-    v
-Patient clicks "Join Call" 
-Patient subscribes to channel (waits for SUBSCRIBED)
-Patient tracks presence (role: patient)
-    |
-    v
-Staff receives presence event (patient joined)
-Staff sends offer to patient
-    |
-    v
-Patient receives offer
-Patient creates answer
-Patient sends answer
-    |
-    v
-Both exchange ICE candidates
-Connection established!
-Both can see each other!
+NEW FLOW (FIXED):
+==================
+1. Staff calls startCall()
+2. Staff calls initializeMedia() ✓
+3. Staff calls createPeerConnection() ✓
+4. Staff creates offer and stores it in currentOfferRef.current ✓
+5. Staff calls await setupSignaling():
+   → Sets up presence listener
+   → Patient joins, presence event fires
+   → currentOfferRef.current HAS THE OFFER → sends offer ✓
+6. Connection succeeds!
 ```
 
----
+### Step 2: Improve Error Handling
 
-## Files to Modify
+Add handling for all subscription statuses and better cleanup on failure.
 
-1. **`src/hooks/useWebRTC.ts`** - Main changes:
-   - Wait for channel subscription to be confirmed
-   - Add presence tracking
-   - Re-send offer when patient joins
-   - Add request-offer fallback mechanism
-   - Better error handling and logging
+### Step 3: Add Better Logging
+
+Add more descriptive error messages to help debug issues.
 
 ---
 
 ## Technical Details
 
-### Key Changes in `useWebRTC.ts`:
+### Changes to `src/hooks/useWebRTC.ts`:
+
+**1. In `startCall()`, create offer BEFORE signaling:**
 
 ```typescript
-// 1. Add ref to store current offer
-const currentOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
-
-// 2. Update setupSignaling to return a Promise
-const setupSignaling = (pc: RTCPeerConnection): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    const channel = supabase.channel(`video-room-${roomCode}`, {
-      config: { presence: { key: isStaff ? 'staff' : 'patient' } }
-    });
-
-    // Helper to send offer
-    const sendOffer = () => {
-      if (currentOfferRef.current) {
-        console.log('Sending offer to patient');
-        channel.send({
-          type: 'broadcast',
-          event: 'offer',
-          payload: { offer: currentOfferRef.current, from: 'staff' },
-        });
-      }
-    };
-
-    channel
-      // When other party joins, staff re-sends offer
-      .on('presence', { event: 'join' }, ({ newPresences }) => {
-        console.log('Presence join:', newPresences);
-        if (isStaff) {
-          // Patient joined, send offer
-          sendOffer();
-        }
-      })
-      // Patient can request offer if they missed it
-      .on('broadcast', { event: 'request-offer' }, ({ payload }) => {
-        if (isStaff && payload.from === 'patient') {
-          console.log('Patient requested offer');
-          sendOffer();
-        }
-      })
-      // ... existing offer/answer/ice-candidate handlers
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('Channel subscribed successfully');
-          await channel.track({ online_at: Date.now() });
-          channelRef.current = channel;
-          resolve();
-        } else if (status === 'CHANNEL_ERROR') {
-          reject(new Error('Failed to subscribe to channel'));
-        }
-      });
-
-    // Timeout for subscription
-    setTimeout(() => {
-      if (!channelRef.current) {
-        reject(new Error('Channel subscription timeout'));
-      }
-    }, 10000);
-  });
-};
-
-// 3. Update startCall to await signaling setup
 const startCall = async () => {
+  console.log('[WebRTC] Starting call as', isStaff ? 'staff' : 'patient');
   setIsConnecting(true);
   
   try {
     const stream = await initializeMedia();
     const pc = createPeerConnection(stream);
     
-    // Wait for channel to be ready
-    await setupSignaling(pc);
-
+    // STAFF: Create offer BEFORE setting up signaling
+    // This ensures currentOfferRef is set when presence events fire
     if (isStaff) {
+      console.log('[WebRTC] Creating offer before signaling...');
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       currentOfferRef.current = offer;
-      
-      // Send offer immediately (other party may already be waiting)
+      console.log('[WebRTC] Offer created and stored');
+    }
+    
+    // Now set up signaling (presence events will have access to offer)
+    await setupSignaling(pc);
+    console.log('[WebRTC] Signaling channel ready');
+
+    if (isStaff) {
+      // Send offer immediately (patient may already be waiting)
+      console.log('[WebRTC] Sending initial offer');
       channelRef.current?.send({
         type: 'broadcast',
         event: 'offer',
-        payload: { offer, from: 'staff' },
+        payload: { offer: currentOfferRef.current, from: 'staff' },
       });
     } else {
       // Patient: request offer after a delay if not received
       setTimeout(() => {
-        if (!pc.remoteDescription) {
-          console.log('No offer received, requesting...');
+        if (peerConnectionRef.current && !peerConnectionRef.current.remoteDescription) {
+          console.log('[WebRTC] No offer received, requesting from staff...');
           channelRef.current?.send({
             type: 'broadcast',
             event: 'request-offer',
@@ -294,25 +123,82 @@ const startCall = async () => {
       }, 3000);
     }
   } catch (err) {
-    console.error('Failed to start call:', err);
+    console.error('[WebRTC] Failed to start call:', err);
+    cleanup(); // Clean up on failure
     setIsConnecting(false);
-    onError?.('Failed to start video call');
+    onError?.(err instanceof Error ? err.message : 'Failed to start video call');
   }
 };
 ```
+
+**2. Improve subscription status handling:**
+
+```typescript
+.subscribe(async (status) => {
+  console.log('[WebRTC] Channel subscription status:', status);
+  if (status === 'SUBSCRIBED') {
+    const role = isStaff ? 'staff' : 'patient';
+    console.log('[WebRTC] Tracking presence as:', role);
+    try {
+      await channel.track({ role, online_at: Date.now() });
+      channelRef.current = channel;
+      resolve();
+    } catch (err) {
+      console.error('[WebRTC] Failed to track presence:', err);
+      reject(new Error('Failed to join room'));
+    }
+  } else if (status === 'CHANNEL_ERROR' || status === 'CLOSED' || status === 'TIMED_OUT') {
+    console.error('[WebRTC] Channel error:', status);
+    reject(new Error(`Failed to join signaling channel: ${status}`));
+  }
+});
+```
+
+**3. Add cleanup on error in `startCall()`:**
+
+After the catch block, ensure all resources are cleaned up so the user can retry.
+
+---
+
+## Visual Flow After Fix
+
+```text
+Staff clicks "Start Call"
+        ↓
+Initialize media (camera/mic)
+        ↓
+Create peer connection
+        ↓
+Create WebRTC offer ← MOVED EARLIER
+Store in currentOfferRef
+        ↓
+Setup signaling channel
+Subscribe to realtime
+        ↓
+If patient already present:
+  → Presence event fires
+  → currentOfferRef HAS offer ✓
+  → Send offer to patient ✓
+        ↓
+Patient receives offer
+Patient sends answer
+        ↓
+Connection established!
+```
+
+---
+
+## Files to Modify
+
+1. **`src/hooks/useWebRTC.ts`**:
+   - Move offer creation before `setupSignaling()` call
+   - Add handling for `CLOSED` and `TIMED_OUT` subscription statuses
+   - Add cleanup on error in `startCall()`
+   - Improve error messages to be more descriptive
 
 ---
 
 ## Summary
 
-The video call isn't working because:
-1. The signaling channel subscription isn't being awaited
-2. The offer is sent before the patient has joined the channel
-3. There's no mechanism to re-send the offer when the patient connects
-
-The fix adds:
-- Proper subscription confirmation before sending messages
-- Presence tracking to detect when both parties are connected
-- Automatic re-sending of offer when patient joins
-- A fallback mechanism for patient to request the offer
+The video call fails because the WebRTC offer is created AFTER setting up the signaling channel, but the presence event listener (which sends the offer) is set up DURING signaling setup. By moving offer creation BEFORE signaling setup, the offer will be ready when presence events fire, and the connection will succeed.
 
