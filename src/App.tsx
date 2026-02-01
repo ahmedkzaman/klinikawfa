@@ -16,6 +16,7 @@ import Gallery from "./pages/Gallery";
 import HealthTips from "./pages/HealthTips";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
+import BlogPost from "./pages/BlogPost";
 import VideoCall from "./pages/VideoCall";
 import VideoCallStaff from "./pages/VideoCallStaff";
 
@@ -52,6 +53,7 @@ const App = () => (
               <Route path="/appointment" element={<Appointment />} />
               <Route path="/gallery" element={<Gallery />} />
               <Route path="/health-tips" element={<HealthTips />} />
+              <Route path="/health-tips/:slug" element={<BlogPost />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/video-call" element={<VideoCall />} />
               <Route path="/video-call/staff" element={<VideoCallStaff />} />
