@@ -1,136 +1,79 @@
 
+# Plan: Fix Room Link Copy Functionality for Video Calls
 
-# Add Auto-Rotating Carousel to Testimonials Section
+## Problem Summary
+There are two issues preventing you from copying the room link:
+1. The copy button next to the room code only copies the room code (e.g., "46Z3KS"), not the full patient link
+2. The "Copy Link" option in the dropdown menu doesn't appear for test rooms
 
-## Overview
+## Solution Overview
+We'll improve the copy functionality to make it more intuitive and ensure test rooms can also have their links copied.
 
-Convert the testimonials section from a static grid to an auto-rotating carousel that smoothly cycles through patient reviews. The carousel will show multiple cards on larger screens and fewer on mobile, automatically advancing every 5 seconds.
+## Implementation Steps
 
----
+### Step 1: Update Copy Button Behavior
+Change the small copy button next to the room code to copy the **full patient link** instead of just the room code. This is the most common action staff would want.
 
-## What Will Change
+**Changes to `VideoCallManagement.tsx`:**
+- The copy icon button will call `copyPatientLink(room.room_code)` instead of `copyRoomCode(room.room_code)`
+- This generates the full URL like `https://klinikawfa.lovable.app/video-call?room=46Z3KS`
 
-| Current | After |
-|---------|-------|
-| Static 4-column grid | Auto-rotating carousel |
-| All reviews visible at once | Shows 1-3 reviews at a time (responsive) |
-| No interaction | Navigation arrows + dot indicators |
-| No animation | Smooth slide transitions |
+### Step 2: Add "Copy Link" Option for Test Rooms
+Update the dropdown menu to include test rooms when showing the "Copy Link" option.
 
----
+**Current condition (line 430):**
+```
+room.status === 'pending' || room.status === 'paid' || room.status === 'active'
+```
 
-## Design Approach
+**Updated condition:**
+```
+room.status === 'pending' || room.status === 'paid' || room.status === 'active' || room.status === 'test'
+```
 
-Using the Embla Carousel component already in the project, enhanced with the **autoplay plugin** for automatic transitions. This provides:
+### Step 3: Improve Toast Message Clarity
+Update the toast message when copying to clearly show the copied URL or indicate it's ready to share with the patient.
 
-- Smooth, touch-friendly sliding
-- Responsive breakpoints (1 card mobile, 2 tablet, 3 desktop)
-- Auto-advance every 5 seconds
-- Pause on hover/touch
-- Dot indicators for current position
-- Optional prev/next arrows
-
----
-
-## Visual Layout
+## Visual Flow After Fix
 
 ```text
-+--------------------------------------------------------------------+
-|  What Our Patients Say                                              |
-|  Patient satisfaction is our priority.                              |
-+--------------------------------------------------------------------+
-|                                                                      |
-|   [<]   +-------------+  +-------------+  +-------------+   [>]     |
-|         | ★★★★★       |  | ★★★★★       |  | ★★★★☆       |            |
-|         | "Doktor     |  | "Perkhidm-  |  | "Klinik     |            |
-|         |  sangat..." |  |  atan..."   |  |  bersih..." |            |
-|         | Puan Fatimah|  | Encik Ahmad |  | Cik Nurul   |            |
-|         +-------------+  +-------------+  +-------------+            |
-|                                                                      |
-|                         ● ○ ○ ○                                      |
-|                                                                      |
-+--------------------------------------------------------------------+
++------------------+
+| Room List Table  |
++------------------+
+| 46Z3KS [Copy] <------ Copies full patient link
+|                       (https://.../video-call?room=46Z3KS)
++------------------+
+| Dropdown Menu    |
+| > Copy Link      | <--- Now also available for test rooms
++------------------+
 ```
 
-**Mobile View:** 1 card visible at a time
-**Tablet View:** 2 cards visible
-**Desktop View:** 3 cards visible
+## Technical Details
 
----
+**File to modify:** `src/pages/admin/VideoCallManagement.tsx`
 
-## Implementation Details
-
-### 1. Install Embla Autoplay Plugin
-
-```bash
-npm install embla-carousel-autoplay
-```
-
-### 2. Update TestimonialsSection Component
-
-The component will be refactored to:
-
-- Use `Carousel`, `CarouselContent`, `CarouselItem` from the existing UI library
-- Add the autoplay plugin with 5-second delay
-- Pause autoplay on hover/interaction
-- Show dot indicators for navigation
-- Responsive card sizing using Tailwind classes
-
-### Key Code Pattern
-
+**Change 1** - Line 786: Update `onClick` handler
 ```tsx
-import Autoplay from "embla-carousel-autoplay";
-import { Carousel, CarouselContent, CarouselItem } from "@/components/ui/carousel";
+// Before
+onClick={() => copyRoomCode(room.room_code)}
 
-// Autoplay plugin configuration
-const autoplayPlugin = Autoplay({ delay: 5000, stopOnInteraction: true });
-
-<Carousel
-  plugins={[autoplayPlugin]}
-  opts={{ loop: true, align: "start" }}
-  className="w-full"
->
-  <CarouselContent>
-    {reviews?.map((review) => (
-      <CarouselItem 
-        key={review.id} 
-        className="md:basis-1/2 lg:basis-1/3"
-      >
-        {/* Review card content */}
-      </CarouselItem>
-    ))}
-  </CarouselContent>
-</Carousel>
+// After  
+onClick={() => copyPatientLink(room.room_code)}
 ```
 
----
+**Change 2** - Line 430: Update condition to include test rooms
+```tsx
+// Before
+{(room.status === 'pending' || room.status === 'paid' || room.status === 'active') && (
 
-## Features
+// After
+{(room.status === 'pending' || room.status === 'paid' || room.status === 'active' || room.status === 'test') && (
+```
 
-| Feature | Description |
-|---------|-------------|
-| **Auto-rotate** | Advances every 5 seconds |
-| **Pause on hover** | Stops when user hovers over carousel |
-| **Loop infinitely** | Cycles back to start after last review |
-| **Dot indicators** | Shows current position with clickable dots |
-| **Touch/swipe support** | Works on mobile with swipe gestures |
-| **Responsive** | 1/2/3 cards based on screen size |
-| **Smooth transitions** | CSS-animated slide movements |
-
----
-
-## Files to Modify
-
-| File | Changes |
-|------|---------|
-| `package.json` | Add `embla-carousel-autoplay` dependency |
-| `src/components/home/TestimonialsSection.tsx` | Refactor to use carousel with autoplay |
-
----
-
-## Loading & Empty States
-
-- **Loading:** Show skeleton carousel items (3 placeholders)
-- **No reviews:** Section is hidden entirely (current behavior preserved)
-- **Single review:** Carousel still works, no auto-scroll needed
-
+## Testing Verification
+After implementation:
+1. Create a new test room using "Teleconsultation Test" button
+2. Click the copy icon next to the room code
+3. Verify the full URL is copied (paste to confirm)
+4. Open the copied link in an incognito/different browser
+5. Verify the patient can enter the room without payment
