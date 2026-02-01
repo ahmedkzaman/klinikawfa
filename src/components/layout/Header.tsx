@@ -1,14 +1,23 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { NAV_ITEMS, CLINIC_INFO } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, X, Phone, MessageCircle } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Menu, Phone, MessageCircle, LogIn, Settings, LogOut, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function Header() {
   const { language, setLanguage, t } = useLanguage();
+  const { user, isStaffOrAdmin, signOut, loading } = useAuth();
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -89,6 +98,46 @@ export function Header() {
               WhatsApp
             </a>
           </Button>
+
+          {/* Auth / Admin */}
+          {!loading && (
+            <>
+              {!user ? (
+                <Button variant="ghost" size="sm" asChild>
+                  <Link to="/auth">
+                    <LogIn className="mr-2 h-4 w-4" />
+                    {language === 'ms' ? 'Log Masuk' : 'Login'}
+                  </Link>
+                </Button>
+              ) : (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="gap-2">
+                      <User className="h-4 w-4" />
+                      <span className="max-w-[120px] truncate">{user.email}</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {isStaffOrAdmin && (
+                      <>
+                        <DropdownMenuItem asChild>
+                          <Link to="/admin" className="flex items-center gap-2">
+                            <Settings className="h-4 w-4" />
+                            {language === 'ms' ? 'Panel Admin' : 'Admin Panel'}
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
+                    <DropdownMenuItem onClick={() => signOut()} className="flex items-center gap-2">
+                      <LogOut className="h-4 w-4" />
+                      {language === 'ms' ? 'Log Keluar' : 'Logout'}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </>
+          )}
         </div>
 
         {/* Mobile Menu */}
@@ -159,6 +208,35 @@ export function Header() {
                       WhatsApp
                     </a>
                   </Button>
+
+                  {/* Auth / Admin Mobile */}
+                  {!loading && (
+                    <>
+                      {!user ? (
+                        <Button size="lg" variant="outline" asChild onClick={() => setIsOpen(false)}>
+                          <Link to="/auth">
+                            <LogIn className="mr-2 h-5 w-5" />
+                            {language === 'ms' ? 'Log Masuk' : 'Login'}
+                          </Link>
+                        </Button>
+                      ) : (
+                        <>
+                          {isStaffOrAdmin && (
+                            <Button size="lg" variant="outline" asChild onClick={() => setIsOpen(false)}>
+                              <Link to="/admin">
+                                <Settings className="mr-2 h-5 w-5" />
+                                {language === 'ms' ? 'Panel Admin' : 'Admin Panel'}
+                              </Link>
+                            </Button>
+                          )}
+                          <Button size="lg" variant="ghost" onClick={() => { signOut(); setIsOpen(false); }}>
+                            <LogOut className="mr-2 h-5 w-5" />
+                            {language === 'ms' ? 'Log Keluar' : 'Logout'}
+                          </Button>
+                        </>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             </SheetContent>
