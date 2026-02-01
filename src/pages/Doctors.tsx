@@ -1,54 +1,25 @@
+import { useEffect, useState } from 'react';
 import { MainLayout } from '@/components/layout';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CLINIC_INFO } from '@/lib/constants';
+import { supabase } from '@/integrations/supabase/client';
+import { Tables } from '@/integrations/supabase/types';
 import { 
   User, 
   Award, 
   Stethoscope, 
-  Scissors, 
-  Ear, 
   Phone, 
   MessageCircle,
   Heart,
   Clock,
   Users,
   ShieldCheck,
-  Baby,
-  Syringe
+  Loader2
 } from 'lucide-react';
 
-const doctors = [
-  {
-    id: 1,
-    nameMs: 'Dr. Ahmad',
-    nameEn: 'Dr. Ahmad',
-    titleMs: 'Pengamal Perubatan Am',
-    titleEn: 'General Medical Practitioner',
-    qualifications: ['MBBS', 'Family Medicine'],
-    yearsExperience: 15,
-    expertiseMs: ['Perubatan Keluarga', 'Pembedahan Minor', 'Rawatan Ketumbuhan & Ketuat', 'Khatan'],
-    expertiseEn: ['Family Medicine', 'Minor Surgery', 'Lump & Wart Treatment', 'Circumcision'],
-    bioMs: 'Dr. Ahmad merupakan doktor berpengalaman lebih 15 tahun dalam bidang perubatan keluarga. Beliau mempunyai minat khusus dan pengalaman luas dalam pembedahan minor termasuk pembuangan ketumbuhan, rawatan ketuat, dan prosedur khatan. Pendekatan beliau yang mesra dan teliti menjadikan pesakit selesa sepanjang rawatan.',
-    bioEn: 'Dr. Ahmad has over 15 years of experience in family medicine. He has a special interest and vast experience in minor surgeries including lump removal, wart treatment, and circumcision procedures. His friendly and thorough approach ensures patients feel comfortable throughout their treatment.',
-    expertiseIcons: [Scissors, Stethoscope, Syringe],
-  },
-  {
-    id: 2,
-    nameMs: 'Dr. Nurul',
-    nameEn: 'Dr. Nurul',
-    titleMs: 'Pengamal Perubatan Am',
-    titleEn: 'General Medical Practitioner',
-    qualifications: ['MBBS', 'Pediatric Care'],
-    yearsExperience: 12,
-    expertiseMs: ['Penjagaan Telinga (Microsuction)', 'Rawatan Pernafasan', 'Pediatrik', 'Rawatan Umum'],
-    expertiseEn: ['Ear Care (Microsuction)', 'Respiratory Treatment', 'Pediatrics', 'General Treatment'],
-    bioMs: 'Dr. Nurul mempunyai pengalaman lebih 12 tahun dengan minat khusus dan pengalaman luas dalam penjagaan telinga menggunakan teknik microsuction. Beliau juga mahir merawat masalah pernafasan dan mempunyai sentuhan lembut untuk pesakit kanak-kanak.',
-    bioEn: 'Dr. Nurul has over 12 years of experience with a special interest and vast experience in ear care using microsuction technique. She is also skilled in treating respiratory issues and has a gentle touch for pediatric patients.',
-    expertiseIcons: [Ear, Baby, Stethoscope],
-  },
-];
+type TeamMember = Tables<'team_members'>;
 
 const values = [
   {
@@ -81,25 +52,32 @@ const values = [
   },
 ];
 
-const staffTeam = [
-  {
-    role: 'Jururawat / Nurses',
-    countMs: '3 jururawat terlatih',
-    countEn: '3 trained nurses',
-    descMs: 'Membantu dalam prosedur perubatan dan penjagaan pesakit',
-    descEn: 'Assisting in medical procedures and patient care',
-  },
-  {
-    role: 'Pembantu Klinik / Clinic Assistants',
-    countMs: '2 pembantu',
-    countEn: '2 assistants',
-    descMs: 'Pendaftaran, farmasi, dan perkhidmatan pelanggan',
-    descEn: 'Registration, pharmacy, and customer service',
-  },
-];
-
 export default function Doctors() {
   const { language } = useLanguage();
+  const [doctors, setDoctors] = useState<TeamMember[]>([]);
+  const [staff, setStaff] = useState<TeamMember[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchTeamMembers() {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('team_members')
+        .select('*')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching team members:', error);
+      } else if (data) {
+        setDoctors(data.filter((m) => m.type === 'doctor'));
+        setStaff(data.filter((m) => m.type === 'staff'));
+      }
+      setLoading(false);
+    }
+
+    fetchTeamMembers();
+  }, []);
 
   return (
     <MainLayout>
@@ -158,83 +136,106 @@ export default function Doctors() {
             </h2>
             <p className="mx-auto max-w-2xl text-muted-foreground">
               {language === 'ms'
-                ? 'Doktor kami mempunyai gabungan pengalaman lebih 25 tahun dalam pelbagai bidang perubatan.'
-                : 'Our doctors have a combined experience of over 25 years across various medical fields.'}
+                ? 'Doktor kami mempunyai gabungan pengalaman dalam pelbagai bidang perubatan.'
+                : 'Our doctors have combined experience across various medical fields.'}
             </p>
           </div>
 
-          <div className="grid gap-8 lg:grid-cols-2">
-            {doctors.map((doctor) => (
-              <Card 
-                key={doctor.id} 
-                className="group overflow-hidden border-border/50 shadow-soft transition-all hover:shadow-card"
-              >
-                {/* Photo Placeholder */}
-                <div className="relative aspect-[16/10] bg-gradient-to-br from-primary/10 via-primary/5 to-background">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="flex h-28 w-28 items-center justify-center rounded-full bg-background shadow-lg ring-4 ring-primary/20 md:h-36 md:w-36">
-                      <User className="h-14 w-14 text-primary md:h-18 md:w-18" />
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : doctors.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground">
+              {language === 'ms'
+                ? 'Tiada doktor dijumpai.'
+                : 'No doctors found.'}
+            </div>
+          ) : (
+            <div className="grid gap-8 lg:grid-cols-2">
+              {doctors.map((doctor) => (
+                <Card 
+                  key={doctor.id} 
+                  className="group overflow-hidden border-border/50 shadow-soft transition-all hover:shadow-card"
+                >
+                  {/* Photo or Placeholder */}
+                  <div className="relative aspect-[16/10] bg-gradient-to-br from-primary/10 via-primary/5 to-background">
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      {doctor.photo_url ? (
+                        <img
+                          src={doctor.photo_url}
+                          alt={language === 'ms' ? doctor.name_ms : doctor.name_en}
+                          className="h-28 w-28 rounded-full object-cover shadow-lg ring-4 ring-primary/20 md:h-36 md:w-36"
+                        />
+                      ) : (
+                        <div className="flex h-28 w-28 items-center justify-center rounded-full bg-background shadow-lg ring-4 ring-primary/20 md:h-36 md:w-36">
+                          <User className="h-14 w-14 text-primary md:h-18 md:w-18" />
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  {/* Experience Badge */}
-                  <div className="absolute bottom-4 right-4 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-lg">
-                    {doctor.yearsExperience}+ {language === 'ms' ? 'Tahun' : 'Years'}
-                  </div>
-                </div>
-
-                <CardContent className="p-6 md:p-8">
-                  {/* Name & Title */}
-                  <div className="mb-5">
-                    <h3 className="text-2xl font-bold md:text-3xl">
-                      {language === 'ms' ? doctor.nameMs : doctor.nameEn}
-                    </h3>
-                    <p className="text-lg text-muted-foreground">
-                      {language === 'ms' ? doctor.titleMs : doctor.titleEn}
-                    </p>
+                    {/* Experience Badge */}
+                    {doctor.years_experience && (
+                      <div className="absolute bottom-4 right-4 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-lg">
+                        {doctor.years_experience}+ {language === 'ms' ? 'Tahun' : 'Years'}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Qualifications */}
-                  <div className="mb-5 flex flex-wrap gap-2">
-                    {doctor.qualifications.map((qual) => (
-                      <span
-                        key={qual}
-                        className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary"
-                      >
-                        <Award className="h-4 w-4" />
-                        {qual}
-                      </span>
-                    ))}
-                  </div>
+                  <CardContent className="p-6 md:p-8">
+                    {/* Name & Title */}
+                    <div className="mb-5">
+                      <h3 className="text-2xl font-bold md:text-3xl">
+                        {language === 'ms' ? doctor.name_ms : doctor.name_en}
+                      </h3>
+                      <p className="text-lg text-muted-foreground">
+                        {language === 'ms' ? doctor.title_ms : doctor.title_en}
+                      </p>
+                    </div>
 
-                  {/* Expertise */}
-                  <div className="mb-5">
-                    <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                      {language === 'ms' ? 'Bidang Kepakaran' : 'Areas of Expertise'}
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {(language === 'ms' ? doctor.expertiseMs : doctor.expertiseEn).map((exp, idx) => {
-                        const IconComponent = doctor.expertiseIcons[idx % doctor.expertiseIcons.length];
-                        return (
+                    {/* Qualifications */}
+                    {doctor.qualifications && doctor.qualifications.length > 0 && (
+                      <div className="mb-5 flex flex-wrap gap-2">
+                        {doctor.qualifications.map((qual) => (
                           <span
-                            key={exp}
-                            className="inline-flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm"
+                            key={qual}
+                            className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary"
                           >
-                            <IconComponent className="h-4 w-4 text-primary" />
-                            {exp}
+                            <Award className="h-4 w-4" />
+                            {qual}
                           </span>
-                        );
-                      })}
-                    </div>
-                  </div>
+                        ))}
+                      </div>
+                    )}
 
-                  {/* Bio */}
-                  <p className="leading-relaxed text-muted-foreground">
-                    {language === 'ms' ? doctor.bioMs : doctor.bioEn}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                    {/* Expertise */}
+                    {((language === 'ms' ? doctor.expertise_ms : doctor.expertise_en) || []).length > 0 && (
+                      <div className="mb-5">
+                        <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                          {language === 'ms' ? 'Bidang Kepakaran' : 'Areas of Expertise'}
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          {(language === 'ms' ? doctor.expertise_ms : doctor.expertise_en)?.map((exp) => (
+                            <span
+                              key={exp}
+                              className="inline-flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm"
+                            >
+                              <Stethoscope className="h-4 w-4 text-primary" />
+                              {exp}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Bio */}
+                    <p className="leading-relaxed text-muted-foreground">
+                      {language === 'ms' ? doctor.bio_ms : doctor.bio_en}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
 
           {/* Photo Update Notice */}
           <div className="mt-10 rounded-2xl border border-dashed border-primary/30 bg-primary/5 p-6 text-center">
@@ -262,24 +263,46 @@ export default function Doctors() {
           </div>
 
           <div className="mx-auto max-w-3xl">
-            <div className="grid gap-6 sm:grid-cols-2">
-              {staffTeam.map((staff, index) => (
-                <Card key={index} className="border-border/50 bg-card shadow-soft">
-                  <CardContent className="p-6">
-                    <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                      <Users className="h-7 w-7" />
-                    </div>
-                    <h4 className="mb-1 text-lg font-semibold">{staff.role}</h4>
-                    <p className="mb-3 text-sm font-medium text-primary">
-                      {language === 'ms' ? staff.countMs : staff.countEn}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {language === 'ms' ? staff.descMs : staff.descEn}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : staff.length === 0 ? (
+              <div className="py-8 text-center text-muted-foreground">
+                {language === 'ms'
+                  ? 'Maklumat pasukan sokongan akan dikemaskini tidak lama lagi.'
+                  : 'Support team information will be updated soon.'}
+              </div>
+            ) : (
+              <div className="grid gap-6 sm:grid-cols-2">
+                {staff.map((member) => (
+                  <Card key={member.id} className="border-border/50 bg-card shadow-soft">
+                    <CardContent className="p-6">
+                      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                        {member.photo_url ? (
+                          <img
+                            src={member.photo_url}
+                            alt={language === 'ms' ? member.name_ms : member.name_en}
+                            className="h-14 w-14 rounded-2xl object-cover"
+                          />
+                        ) : (
+                          <Users className="h-7 w-7" />
+                        )}
+                      </div>
+                      <h4 className="mb-1 text-lg font-semibold">
+                        {language === 'ms' ? member.name_ms : member.name_en}
+                      </h4>
+                      <p className="mb-3 text-sm font-medium text-primary">
+                        {language === 'ms' ? member.title_ms : member.title_en}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {language === 'ms' ? member.bio_ms : member.bio_en}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
 
             {/* Friendly Message */}
             <div className="mt-8 rounded-2xl bg-gradient-to-r from-primary/10 to-primary/5 p-6 text-center md:p-8">
