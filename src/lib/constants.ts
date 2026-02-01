@@ -21,8 +21,8 @@ export const CLINIC_INFO = {
     ms: 'Klinik Keluarga Anda',
     en: 'Your Family Clinic',
   },
-  googleMapsUrl: 'https://maps.google.com/?q=Klinik+Awfa+KotaSAS+Kuantan',
-  googleMapsEmbed: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3975.5!2d103.4!3d3.8!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zM8KwNDgnMDAuMCJOIDEwM8KwMjQnMDAuMCJF!5e0!3m2!1sen!2smy!4v1234567890',
+  googleMapsUrl: 'https://maps.google.com/?q=3.871944656053272,103.27734116870465',
+  googleMapsEmbed: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1987.5!2d103.27734116870465!3d3.871944656053272!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x31c8bbf60e9e1b9d%3A0x5b7b3b3b3b3b3b3b!2sKlinik%20Awfa!5e0!3m2!1sen!2smy!4v1700000000000!5m2!1sen!2smy',
 } as const;
 
 // Service categories
