@@ -252,18 +252,22 @@ export function useWebRTC({
           cleanup();
           onCallEnded?.();
         })
-        .subscribe(async (status) => {
+      .subscribe(async (status) => {
           console.log('[WebRTC] Channel subscription status:', status);
           if (status === 'SUBSCRIBED') {
-            // Track presence
             const role = isStaff ? 'staff' : 'patient';
             console.log('[WebRTC] Tracking presence as:', role);
-            await channel.track({ role, online_at: Date.now() });
-            channelRef.current = channel;
-            resolve();
-          } else if (status === 'CHANNEL_ERROR') {
-            console.error('[WebRTC] Channel error');
-            reject(new Error('Failed to join signaling channel'));
+            try {
+              await channel.track({ role, online_at: Date.now() });
+              channelRef.current = channel;
+              resolve();
+            } catch (err) {
+              console.error('[WebRTC] Failed to track presence:', err);
+              reject(new Error('Failed to join room'));
+            }
+          } else if (status === 'CHANNEL_ERROR' || status === 'CLOSED' || status === 'TIMED_OUT') {
+            console.error('[WebRTC] Channel error:', status);
+            reject(new Error(`Failed to join signaling channel: ${status}`));
           }
         });
 
@@ -285,23 +289,27 @@ export function useWebRTC({
       const stream = await initializeMedia();
       const pc = createPeerConnection(stream);
       
-      // Wait for channel to be ready
+      // STAFF: Create offer BEFORE setting up signaling
+      // This ensures currentOfferRef is set when presence events fire
+      if (isStaff) {
+        console.log('[WebRTC] Creating offer before signaling...');
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        currentOfferRef.current = offer;
+        console.log('[WebRTC] Offer created and stored');
+      }
+      
+      // Now set up signaling (presence events will have access to offer)
       await setupSignaling(pc);
       console.log('[WebRTC] Signaling channel ready');
 
       if (isStaff) {
-        // Staff creates and stores the offer
-        console.log('[WebRTC] Creating offer...');
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        currentOfferRef.current = offer;
-        
         // Send offer immediately (patient may already be waiting)
         console.log('[WebRTC] Sending initial offer');
         channelRef.current?.send({
           type: 'broadcast',
           event: 'offer',
-          payload: { offer, from: 'staff' },
+          payload: { offer: currentOfferRef.current, from: 'staff' },
         });
       } else {
         // Patient: request offer after a delay if not received
@@ -318,8 +326,9 @@ export function useWebRTC({
       }
     } catch (err) {
       console.error('[WebRTC] Failed to start call:', err);
+      cleanup(); // Clean up on failure so user can retry
       setIsConnecting(false);
-      onError?.('Failed to start video call');
+      onError?.(err instanceof Error ? err.message : 'Failed to start video call');
     }
   };
 
