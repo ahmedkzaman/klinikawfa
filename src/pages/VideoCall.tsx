@@ -54,8 +54,20 @@ export default function VideoCall() {
       timer.start();
     },
     onCallEnded: () => {
+      // ONLY called on intentional end (user clicked End Call or received end-call signal)
       const finalSeconds = timer.stop();
       handleCallEnded(finalSeconds);
+    },
+    onConnectionLost: () => {
+      // Connection dropped but allow retry without ending call
+      console.log('[VideoCall] Connection lost - waiting for reconnect');
+      toast({
+        title: language === 'ms' ? 'Sambungan Terputus' : 'Connection Lost',
+        description: language === 'ms' 
+          ? 'Klik "Cuba Lagi" untuk menyambung semula' 
+          : 'Click "Try Again" to reconnect',
+        variant: 'destructive',
+      });
     },
     onError: (error) => {
       toast({
