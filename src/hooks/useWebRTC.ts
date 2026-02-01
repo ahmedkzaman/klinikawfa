@@ -77,17 +77,59 @@ export function useWebRTC({
   const initializeMedia = async () => {
     try {
       console.log('[WebRTC] Initializing media devices...');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
+      
+      // First, enumerate available devices
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const hasVideo = devices.some(d => d.kind === 'videoinput');
+      const hasAudio = devices.some(d => d.kind === 'audioinput');
+      
+      console.log('[WebRTC] Available devices - Video:', hasVideo, 'Audio:', hasAudio);
+      
+      if (!hasVideo && !hasAudio) {
+        throw new Error('No camera or microphone found. Please connect a device and try again.');
+      }
+      
+      // Request only available device types
+      const constraints = {
+        video: hasVideo,
+        audio: hasAudio,
+      };
+      
+      console.log('[WebRTC] Requesting media with constraints:', constraints);
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      
       localStreamRef.current = stream;
       setLocalStream(stream);
+      setIsVideoEnabled(hasVideo);
+      setIsAudioEnabled(hasAudio);
+      
       console.log('[WebRTC] Media initialized successfully');
+      
+      // Warn user if only partial devices available
+      if (!hasVideo) {
+        console.log('[WebRTC] No camera found, audio-only mode');
+      } else if (!hasAudio) {
+        console.log('[WebRTC] No microphone found, video-only mode');
+      }
+      
       return stream;
     } catch (err) {
       console.error('[WebRTC] Failed to get media devices:', err);
-      onError?.('Failed to access camera/microphone. Please check permissions.');
+      
+      // Provide specific error messages based on error type
+      const error = err as Error;
+      if (error.name === 'NotFoundError' || error.message.includes('Requested device not found')) {
+        onError?.('Camera/microphone not found. Please connect a device and check permissions.');
+      } else if (error.name === 'NotAllowedError') {
+        onError?.('Camera/microphone permission denied. Please allow access in your browser settings.');
+      } else if (error.name === 'NotReadableError') {
+        onError?.('Camera/microphone is in use by another application. Please close other apps and try again.');
+      } else if (error.name === 'OverconstrainedError') {
+        onError?.('Camera/microphone settings not supported. Please try a different device.');
+      } else {
+        onError?.(error.message || 'Failed to access camera/microphone.');
+      }
+      
       throw err;
     }
   };
