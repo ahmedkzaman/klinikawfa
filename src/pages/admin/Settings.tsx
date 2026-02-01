@@ -43,7 +43,7 @@ export default function Settings() {
   const videoInputRef = useRef<HTMLInputElement>(null);
   const posterInputRef = useRef<HTMLInputElement>(null);
 
-  const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
+  const MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500MB
   const MAX_POSTER_SIZE = 5 * 1024 * 1024; // 5MB
   const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
   const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -109,8 +109,8 @@ export default function Settings() {
       toast({
         title: language === 'ms' ? 'Fail Terlalu Besar' : 'File Too Large',
         description: language === 'ms' 
-          ? 'Saiz maksimum adalah 50MB' 
-          : 'Maximum size is 50MB',
+          ? 'Saiz maksimum adalah 500MB' 
+          : 'Maximum size is 500MB',
         variant: 'destructive',
       });
       return;
@@ -574,7 +574,7 @@ export default function Settings() {
                   : 'Click or drag file to upload'}
               </p>
               <p className="text-xs text-muted-foreground">
-                MP4, WebM, MOV ({language === 'ms' ? 'maks' : 'max'} 50MB)
+                MP4, WebM, MOV ({language === 'ms' ? 'maks' : 'max'} 500MB)
               </p>
             </div>
             <input
