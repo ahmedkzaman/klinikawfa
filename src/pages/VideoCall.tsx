@@ -381,6 +381,7 @@ export default function VideoCall() {
                     error={webrtc.connectionError}
                     onRetry={webrtc.retryCall}
                     isStaff={false}
+                    retryAttempt={webrtc.retryAttempt}
                   />
                 </div>
               )}
