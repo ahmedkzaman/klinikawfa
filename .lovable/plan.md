@@ -1,49 +1,69 @@
 
-# Improvement: Add Copy Link Button to Video Call Dashboard
+# Fix: Payment Initiation Error
 
-## Current Limitation
-Staff must manually copy the room code and construct the patient link.
+## Problem Identified
+The payment fails because the `initiatePayment` function in `VideoCall.tsx` makes **two separate calls** to the `video-payment` edge function:
 
-## Proposed Enhancement
-Add a button to copy the complete patient video call link directly from the admin dashboard.
+1. **First call** (the problem): `supabase.functions.invoke('video-payment')` - This call does NOT include the `?action=create-deposit` query parameter, so the edge function returns `{ error: "Invalid action" }` with status 400.
 
----
+2. **Second call** (correct but never reached): A `fetch` call with the proper `?action=create-deposit` parameter.
 
-## What Will Change
-
-### Video Call Management Table
-Add a "Copy Link" button next to the existing "Copy Room Code" button that copies the full patient URL.
-
-**Example:**
-- Room code: `ABC123`
-- Copied link: `https://klinikawfa.lovable.app/video-call?room=ABC123`
+The first call fails and throws an error before the second call can execute.
 
 ---
 
-## Technical Details
+## Solution
+Simplify the `initiatePayment` function to make a single, correct API call using `fetch` with the proper action parameter.
 
-### File to Modify
-`src/pages/admin/VideoCallManagement.tsx`
+---
 
-### Changes
-1. Add a `copyPatientLink` function that constructs and copies the full URL
-2. Add a new button with a link icon next to the copy room code button
-3. Show a toast notification when the link is copied
+## File to Modify
+`src/pages/VideoCall.tsx`
 
-### Code Snippet
+---
+
+## Changes
+
+### Remove the redundant first call and fix the payment initiation logic:
+
 ```typescript
-const copyPatientLink = (code: string) => {
-  const baseUrl = window.location.origin;
-  const patientUrl = `${baseUrl}/video-call?room=${code}`;
-  navigator.clipboard.writeText(patientUrl);
-  toast({
-    title: 'Link copied!',
-    description: 'Patient video call link copied to clipboard',
-  });
+const initiatePayment = async () => {
+  if (!roomData) return;
+
+  setIsLoading(true);
+  try {
+    const paymentUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/video-payment?action=create-deposit`;
+    
+    const response = await fetch(paymentUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ room_code: roomData.room_code }),
+    });
+    
+    const result = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to create payment session');
+    }
+    
+    if (result.url) {
+      window.location.href = result.url;
+    } else {
+      throw new Error('Failed to create payment session');
+    }
+  } catch (error) {
+    toast({
+      title: language === 'ms' ? 'Ralat' : 'Error',
+      description: error instanceof Error ? error.message : 'Failed to initiate payment',
+      variant: 'destructive',
+    });
+  } finally {
+    setIsLoading(false);
+  }
 };
 ```
 
 ---
 
 ## Summary
-This is a simple quality-of-life improvement that adds a "Copy Link" button to each row in the video calls table, making it easier for staff to share the complete URL with patients via WhatsApp, SMS, or email.
+This is a simple fix that removes the unnecessary first API call and keeps only the correct one with the `action=create-deposit` query parameter. After this fix, clicking "Pay Now" will properly redirect you to the Stripe checkout page.
