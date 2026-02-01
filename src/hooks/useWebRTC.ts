@@ -63,9 +63,14 @@ export function useWebRTC({
   const currentOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
+  const offerPollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const cleanup = useCallback(() => {
     console.log('[WebRTC] Cleaning up...');
+    if (offerPollIntervalRef.current) {
+      clearInterval(offerPollIntervalRef.current);
+      offerPollIntervalRef.current = null;
+    }
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
@@ -295,6 +300,10 @@ export function useWebRTC({
         .on('presence', { event: 'sync' }, () => {
           const state = channel.presenceState();
           console.log('[WebRTC] Presence sync:', state);
+          // Check if the other party is already present
+          const hasStaff = Object.keys(state).some(key => key === 'staff' || state[key]?.some?.((p: any) => p.role === 'staff'));
+          const hasPatient = Object.keys(state).some(key => key === 'patient' || state[key]?.some?.((p: any) => p.role === 'patient'));
+          console.log('[WebRTC] Presence state - Staff:', hasStaff, 'Patient:', hasPatient);
         })
         .on('presence', { event: 'join' }, ({ newPresences }) => {
           console.log('[WebRTC] Presence join:', newPresences);
@@ -306,6 +315,23 @@ export function useWebRTC({
         })
         .on('presence', { event: 'leave' }, ({ leftPresences }) => {
           console.log('[WebRTC] Presence leave:', leftPresences);
+        })
+        // Handle ready signals from both parties
+        .on('broadcast', { event: 'staff-ready' }, () => {
+          if (!isStaff) {
+            console.log('[WebRTC] Staff is ready, requesting offer');
+            channel.send({
+              type: 'broadcast',
+              event: 'request-offer',
+              payload: { from: 'patient' },
+            });
+          }
+        })
+        .on('broadcast', { event: 'patient-ready' }, () => {
+          if (isStaff && currentOfferRef.current) {
+            console.log('[WebRTC] Patient is ready, sending offer');
+            sendOffer();
+          }
         })
         // Patient can request offer if they missed it
         .on('broadcast', { event: 'request-offer' }, ({ payload }) => {
@@ -389,6 +415,16 @@ export function useWebRTC({
             try {
               await channel.track({ role, online_at: Date.now() });
               channelRef.current = channel;
+              
+              // Broadcast ready signal so both parties know when to exchange
+              const readyEvent = isStaff ? 'staff-ready' : 'patient-ready';
+              console.log('[WebRTC] Broadcasting ready signal:', readyEvent);
+              channel.send({
+                type: 'broadcast',
+                event: readyEvent,
+                payload: { from: role },
+              });
+              
               isResolved = true;
               if (timeoutId) clearTimeout(timeoutId);
               resolve();
@@ -505,17 +541,45 @@ export function useWebRTC({
           payload: { offer: currentOfferRef.current, from: 'staff' },
         });
       } else {
-        // Patient: request offer after a delay if not received
-        setTimeout(() => {
-          if (peerConnectionRef.current && !peerConnectionRef.current.remoteDescription) {
-            console.log('[WebRTC] No offer received, requesting from staff...');
-            channelRef.current?.send({
-              type: 'broadcast',
-              event: 'request-offer',
-              payload: { from: 'patient' },
-            });
+        // Patient: Poll for offer with multiple retries
+        let pollCount = 0;
+        const maxPolls = 5;
+        const pollDelay = 3000; // 3 seconds between polls
+        
+        // Clear any existing poll interval
+        if (offerPollIntervalRef.current) {
+          clearInterval(offerPollIntervalRef.current);
+        }
+        
+        console.log('[WebRTC] Starting offer polling mechanism');
+        offerPollIntervalRef.current = setInterval(() => {
+          // Stop polling if we have a remote description (offer received)
+          if (peerConnectionRef.current?.remoteDescription) {
+            console.log('[WebRTC] Offer received, stopping poll');
+            if (offerPollIntervalRef.current) {
+              clearInterval(offerPollIntervalRef.current);
+              offerPollIntervalRef.current = null;
+            }
+            return;
           }
-        }, 3000);
+          
+          pollCount++;
+          if (pollCount > maxPolls) {
+            console.log('[WebRTC] Max poll attempts reached, stopping');
+            if (offerPollIntervalRef.current) {
+              clearInterval(offerPollIntervalRef.current);
+              offerPollIntervalRef.current = null;
+            }
+            return;
+          }
+          
+          console.log(`[WebRTC] Polling for offer, attempt ${pollCount}/${maxPolls}`);
+          channelRef.current?.send({
+            type: 'broadcast',
+            event: 'request-offer',
+            payload: { from: 'patient' },
+          });
+        }, pollDelay);
       }
     } catch (err) {
       console.error('[WebRTC] Failed to start call:', err);

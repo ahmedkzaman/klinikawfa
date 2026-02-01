@@ -32,16 +32,19 @@ export function VideoPlayer({
     // Set the stream
     videoElement.srcObject = stream;
 
-    // Check for video tracks
+    // Check for video tracks - be lenient for remote streams
     const videoTracks = stream.getVideoTracks();
-    const hasActiveVideo = videoTracks.length > 0 && videoTracks.some(t => t.readyState === 'live');
+    // For remote streams, tracks may not be 'live' immediately
+    // Accept tracks that exist and are not explicitly ended
+    const hasActiveVideo = videoTracks.length > 0 && videoTracks.some(t => t.readyState !== 'ended');
     setHasVideoTrack(hasActiveVideo);
 
     console.log('[VideoPlayer] Stream set:', {
       label,
+      isLocal,
       videoTracks: videoTracks.length,
       hasActiveVideo,
-      trackStates: videoTracks.map(t => ({ enabled: t.enabled, readyState: t.readyState }))
+      trackStates: videoTracks.map(t => ({ enabled: t.enabled, readyState: t.readyState, muted: t.muted }))
     });
 
     // Try to play (needed for some browsers)
@@ -53,13 +56,64 @@ export function VideoPlayer({
         console.warn('[VideoPlayer] Autoplay blocked, will retry on interaction:', err);
       }
     };
+
+    // Handle video element events for remote streams
+    const handleLoadedMetadata = () => {
+      console.log('[VideoPlayer] Video metadata loaded:', label);
+      setHasVideoTrack(true);
+      playVideo();
+    };
+
+    const handleLoadedData = () => {
+      console.log('[VideoPlayer] Video data loaded:', label);
+      setHasVideoTrack(true);
+    };
+
+    const handleCanPlay = () => {
+      console.log('[VideoPlayer] Video can play:', label);
+      setHasVideoTrack(true);
+    };
+
+    videoElement.addEventListener('loadedmetadata', handleLoadedMetadata);
+    videoElement.addEventListener('loadeddata', handleLoadedData);
+    videoElement.addEventListener('canplay', handleCanPlay);
+
+    // Initial play attempt
     playVideo();
+
+    // For remote streams, add a delayed re-check to handle async track initialization
+    let checkInterval: ReturnType<typeof setInterval> | null = null;
+    if (!isLocal) {
+      let checkCount = 0;
+      const maxChecks = 6; // Check for 3 seconds (every 500ms)
+      
+      checkInterval = setInterval(() => {
+        checkCount++;
+        const currentTracks = stream.getVideoTracks();
+        const isActive = currentTracks.length > 0 && currentTracks.some(t => t.readyState !== 'ended');
+        
+        console.log(`[VideoPlayer] Delayed check ${checkCount}/${maxChecks}:`, {
+          label,
+          tracks: currentTracks.length,
+          isActive,
+          states: currentTracks.map(t => t.readyState)
+        });
+        
+        if (isActive) {
+          setHasVideoTrack(true);
+        }
+        
+        if (checkCount >= maxChecks || isActive) {
+          if (checkInterval) clearInterval(checkInterval);
+        }
+      }, 500);
+    }
 
     // Listen for track changes
     const handleTrackChange = () => {
       const currentVideoTracks = stream.getVideoTracks();
-      const isActive = currentVideoTracks.length > 0 && currentVideoTracks.some(t => t.readyState === 'live');
-      console.log('[VideoPlayer] Track changed:', { label, isActive });
+      const isActive = currentVideoTracks.length > 0 && currentVideoTracks.some(t => t.readyState !== 'ended');
+      console.log('[VideoPlayer] Track changed:', { label, isActive, trackCount: currentVideoTracks.length });
       setHasVideoTrack(isActive);
     };
 
@@ -75,6 +129,10 @@ export function VideoPlayer({
     });
 
     return () => {
+      if (checkInterval) clearInterval(checkInterval);
+      videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      videoElement.removeEventListener('loadeddata', handleLoadedData);
+      videoElement.removeEventListener('canplay', handleCanPlay);
       stream.removeEventListener('addtrack', handleTrackChange);
       stream.removeEventListener('removetrack', handleTrackChange);
       videoTracks.forEach(track => {
@@ -83,7 +141,7 @@ export function VideoPlayer({
         track.removeEventListener('unmute', handleTrackChange);
       });
     };
-  }, [stream, label]);
+  }, [stream, label, isLocal]);
 
   return (
     <div className={cn('relative bg-muted rounded-lg overflow-hidden', className)}>
