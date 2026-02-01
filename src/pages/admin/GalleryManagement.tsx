@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -32,10 +33,10 @@ import {
   RefreshCw,
   Upload,
   GripVertical,
-  X,
   Image as ImageIcon
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { GALLERY_CATEGORIES } from '@/hooks/useGalleryImages';
 
 type GalleryImage = Tables<'gallery_images'>;
 
@@ -52,8 +53,26 @@ export default function GalleryManagement() {
   const [uploadForm, setUploadForm] = useState({
     file: null as File | null,
     altText: '',
-    tags: '',
+    selectedCategories: [] as string[],
   });
+
+  // Get category label from tags
+  const getCategoryLabel = (tags: string[] | null) => {
+    if (!tags || tags.length === 0) return null;
+    const category = GALLERY_CATEGORIES.find(cat => 
+      cat.id !== 'all' && tags.includes(cat.id)
+    );
+    return category ? (language === 'ms' ? category.labelMs : category.labelEn) : tags[0];
+  };
+
+  const toggleCategory = (categoryId: string, checked: boolean) => {
+    setUploadForm(prev => ({
+      ...prev,
+      selectedCategories: checked
+        ? [...prev.selectedCategories, categoryId]
+        : prev.selectedCategories.filter(id => id !== categoryId)
+    }));
+  };
 
   const fetchImages = async () => {
     setLoading(true);
@@ -109,6 +128,16 @@ export default function GalleryManagement() {
   const uploadImage = async () => {
     if (!uploadForm.file) return;
 
+    // Validate at least one category selected
+    if (uploadForm.selectedCategories.length === 0) {
+      toast({
+        title: language === 'ms' ? 'Ralat' : 'Error',
+        description: language === 'ms' ? 'Sila pilih sekurang-kurangnya satu kategori.' : 'Please select at least one category.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setUploading(true);
     try {
       // Generate unique filename
@@ -128,11 +157,8 @@ export default function GalleryManagement() {
         .from('gallery')
         .getPublicUrl(filePath);
 
-      // Parse tags
-      const tags = uploadForm.tags
-        .split(',')
-        .map(t => t.trim())
-        .filter(t => t.length > 0);
+      // Use category IDs as tags
+      const tags = uploadForm.selectedCategories;
 
       // Insert into database
       const { error: dbError } = await supabase
@@ -140,7 +166,7 @@ export default function GalleryManagement() {
         .insert({
           url: publicUrl,
           alt_text: uploadForm.altText || null,
-          tags: tags.length > 0 ? tags : null,
+          tags: tags,
           display_order: images.length,
         });
 
@@ -152,7 +178,7 @@ export default function GalleryManagement() {
       });
 
       setShowUploadDialog(false);
-      setUploadForm({ file: null, altText: '', tags: '' });
+      setUploadForm({ file: null, altText: '', selectedCategories: [] });
       fetchImages();
     } catch (error) {
       console.error('Error uploading image:', error);
@@ -315,12 +341,10 @@ export default function GalleryManagement() {
                 </div>
                 
                 {image.tags && image.tags.length > 0 && (
-                  <div className="absolute bottom-2 left-2 right-2 flex flex-wrap gap-1">
-                    {image.tags.slice(0, 3).map((tag, i) => (
-                      <Badge key={i} variant="secondary" className="text-xs">
-                        {tag}
-                      </Badge>
-                    ))}
+                  <div className="absolute bottom-2 left-2 right-2">
+                    <Badge variant="secondary" className="text-xs">
+                      {getCategoryLabel(image.tags)}
+                    </Badge>
                   </div>
                 )}
               </div>
@@ -373,16 +397,34 @@ export default function GalleryManagement() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="tags">
-                {language === 'ms' ? 'Tag (dipisahkan koma)' : 'Tags (comma separated)'}
+            <div className="space-y-3">
+              <Label>
+                {language === 'ms' ? 'Kategori' : 'Category'} *
               </Label>
-              <Input
-                id="tags"
-                value={uploadForm.tags}
-                onChange={(e) => setUploadForm(prev => ({ ...prev, tags: e.target.value }))}
-                placeholder="clinic, equipment, staff"
-              />
+              <p className="text-sm text-muted-foreground">
+                {language === 'ms' ? 'Di mana imej ini akan dipaparkan?' : 'Where will this image appear?'}
+              </p>
+              <div className="space-y-2">
+                {GALLERY_CATEGORIES.filter(cat => cat.id !== 'all').map((category) => (
+                  <label 
+                    key={category.id} 
+                    className="flex items-center gap-3 rounded-md border p-3 cursor-pointer hover:bg-muted/50 transition-colors"
+                  >
+                    <Checkbox
+                      checked={uploadForm.selectedCategories.includes(category.id)}
+                      onCheckedChange={(checked) => toggleCategory(category.id, !!checked)}
+                    />
+                    <span className="text-sm font-medium">
+                      {language === 'ms' ? category.labelMs : category.labelEn}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {uploadForm.selectedCategories.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {language === 'ms' ? 'Pilih sekurang-kurangnya satu kategori' : 'Select at least one category'}
+                </p>
+              )}
             </div>
           </div>
 
