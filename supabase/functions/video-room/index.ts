@@ -170,6 +170,65 @@ serve(async (req) => {
       );
     }
 
+    // POST: Create test room (bypasses Stripe payment)
+    if (req.method === "POST" && action === "create-test") {
+      const body = await req.json();
+      const { patient_name, patient_phone, patient_email, notes } = body;
+
+      if (!patient_name || !patient_phone) {
+        return new Response(
+          JSON.stringify({ error: "Patient name and phone are required" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+        );
+      }
+
+      // Generate unique room code
+      let roomCode = generateRoomCode();
+      let attempts = 0;
+      while (attempts < 10) {
+        const { data: existing } = await supabaseClient
+          .from("video_rooms")
+          .select("id")
+          .eq("room_code", roomCode)
+          .single();
+        
+        if (!existing) break;
+        roomCode = generateRoomCode();
+        attempts++;
+      }
+
+      const { data: room, error } = await supabaseClient
+        .from("video_rooms")
+        .insert({
+          room_code: roomCode,
+          patient_name,
+          patient_phone,
+          patient_email,
+          notes: notes ? `[TEST] ${notes}` : '[TEST] Teleconsultation test room',
+          created_by: userId,
+          status: "test", // Use "test" status to skip payment
+          deposit_amount: 0, // No deposit for test
+          per_minute_rate: 0 // No per-minute charge for test
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Error creating test room:", error);
+        return new Response(
+          JSON.stringify({ error: "Failed to create test room" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+        );
+      }
+
+      console.log(`Test room created: ${roomCode} for ${patient_name}`);
+
+      return new Response(
+        JSON.stringify({ room }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 201 }
+      );
+    }
+
     // POST: Update room status
     if (req.method === "POST" && action === "update-status") {
       const body = await req.json();
