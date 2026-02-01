@@ -13,10 +13,12 @@ export function ProtectedRoute({
   requireAdmin = false, 
   requireStaffOrAdmin = false 
 }: ProtectedRouteProps) {
-  const { user, loading, isAdmin, isStaffOrAdmin } = useAuth();
+  const { user, loading, rolesLoading, isAdmin, isStaffOrAdmin } = useAuth();
   const location = useLocation();
 
-  if (loading) {
+  // Wait for both session and roles when role-based access is required
+  const needsRoleCheck = requireAdmin || requireStaffOrAdmin;
+  if (loading || (needsRoleCheck && rolesLoading)) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
