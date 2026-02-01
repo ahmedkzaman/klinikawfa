@@ -7,4 +7,5 @@ export { default as UserManagement } from './UserManagement';
 export { default as TeamManagement } from './TeamManagement';
 export { default as TeamEditor } from './TeamEditor';
 export { default as VideoCallManagement } from './VideoCallManagement';
+export { default as ReviewsManagement } from './ReviewsManagement';
 export { default as AdminSettings } from './Settings';

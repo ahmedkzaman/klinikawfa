@@ -229,6 +229,45 @@ export type Database = {
         }
         Relationships: []
       }
+      reviews: {
+        Row: {
+          created_at: string
+          display_order: number
+          id: string
+          name_en: string | null
+          name_ms: string
+          published: boolean
+          rating: number
+          text_en: string | null
+          text_ms: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_order?: number
+          id?: string
+          name_en?: string | null
+          name_ms: string
+          published?: boolean
+          rating: number
+          text_en?: string | null
+          text_ms: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_order?: number
+          id?: string
+          name_en?: string | null
+          name_ms?: string
+          published?: boolean
+          rating?: number
+          text_en?: string | null
+          text_ms?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       team_members: {
         Row: {
           bio_en: string | null

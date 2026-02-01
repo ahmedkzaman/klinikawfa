@@ -32,6 +32,7 @@ import {
   TeamManagement,
   TeamEditor,
   VideoCallManagement,
+  ReviewsManagement,
   AdminSettings,
 } from "./pages/admin";
 
@@ -68,6 +69,7 @@ const App = () => (
                 <Route path="blog" element={<BlogManagement />} />
                 <Route path="blog/:id" element={<BlogEditor />} />
                 <Route path="gallery" element={<GalleryManagement />} />
+                <Route path="reviews" element={<ReviewsManagement />} />
                 <Route path="users" element={<UserManagement />} />
                 <Route path="settings" element={<AdminSettings />} />
               </Route>
