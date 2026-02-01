@@ -184,6 +184,25 @@ export function HeroCarousel({ autoPlayInterval = 5000 }: HeroCarouselProps) {
               </a>
             </Button>
           </motion.div>
+
+          {/* Dots indicator - positioned below CTAs */}
+          <div className="mt-10 flex justify-center gap-3">
+            {slides.map((_, index) => (
+              <motion.button
+                key={index}
+                onClick={() => goToSlide(index)}
+                whileHover={{ scale: 1.2 }}
+                whileTap={{ scale: 0.9 }}
+                className={cn(
+                  'h-3 rounded-full transition-all duration-500',
+                  currentSlide === index
+                    ? 'w-10 bg-gradient-to-r from-primary to-primary-glow shadow-glow-primary'
+                    : 'w-3 bg-primary/30 hover:bg-primary/50'
+                )}
+                aria-label={`Go to slide ${index + 1}`}
+              />
+            ))}
+          </div>
         </div>
 
         {/* Navigation arrows */}
@@ -205,25 +224,6 @@ export function HeroCarousel({ autoPlayInterval = 5000 }: HeroCarouselProps) {
         >
           <ChevronRight className="h-5 w-5 md:h-6 md:w-6" />
         </motion.button>
-
-        {/* Dots indicator */}
-        <div className="absolute bottom-8 left-1/2 flex -translate-x-1/2 gap-3">
-          {slides.map((_, index) => (
-            <motion.button
-              key={index}
-              onClick={() => goToSlide(index)}
-              whileHover={{ scale: 1.2 }}
-              whileTap={{ scale: 0.9 }}
-              className={cn(
-                'h-3 rounded-full transition-all duration-500',
-                currentSlide === index
-                  ? 'w-10 bg-gradient-to-r from-primary to-primary-glow shadow-glow-primary'
-                  : 'w-3 bg-primary/30 hover:bg-primary/50'
-              )}
-              aria-label={`Go to slide ${index + 1}`}
-            />
-          ))}
-        </div>
       </div>
     </section>
   );
