@@ -100,7 +100,7 @@ export const SERVICES = [
   {
     id: 'dengue-test',
     slug: 'ujian-denggi',
-    icon: 'Bug',
+    icon: 'Mosquito',
     titleMs: 'Ujian Denggi',
     titleEn: 'Dengue Test',
   },
