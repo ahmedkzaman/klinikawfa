@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { VideoPlayer, CallControls, CallTimer } from '@/components/video';
+import { VideoPlayer, CallControls, CallTimer, ConnectionStatusIndicator } from '@/components/video';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { useCallTimer } from '@/hooks/useCallTimer';
 import { useToast } from '@/hooks/use-toast';
@@ -278,10 +278,14 @@ export default function VideoCallStaff() {
             onToggleVideo={webrtc.toggleVideo}
             onEndCall={webrtc.endCall}
           />
-          {webrtc.isConnecting && (
-            <div className="text-center mt-4 text-muted-foreground">
-              <Loader2 className="h-4 w-4 inline mr-2 animate-spin" />
-              {language === 'ms' ? 'Menunggu pesakit...' : 'Waiting for patient...'}
+          {!webrtc.isConnected && (
+            <div className="mt-4">
+              <ConnectionStatusIndicator
+                status={webrtc.connectionStatus}
+                error={webrtc.connectionError}
+                onRetry={webrtc.retryCall}
+                isStaff={true}
+              />
             </div>
           )}
         </div>
