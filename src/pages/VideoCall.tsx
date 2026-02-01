@@ -5,11 +5,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { VideoPlayer, CallControls, CallTimer, ConnectionStatusIndicator } from '@/components/video';
+import { VideoPlayer, CallControls, CallTimer, ConnectionStatusIndicator, MobileCallLayout } from '@/components/video';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { useCallTimer } from '@/hooks/useCallTimer';
 import { useToast } from '@/hooks/use-toast';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
 import { Video, CreditCard, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 
@@ -27,6 +28,7 @@ interface RoomData {
 export default function VideoCall() {
   const [searchParams] = useSearchParams();
   const { language } = useLanguage();
+  const isMobile = useIsMobile();
   const { toast } = useToast();
   
   const [step, setStep] = useState<Step>('enter-code');
@@ -333,6 +335,41 @@ export default function VideoCall() {
         );
 
       case 'in-call':
+        // Mobile layout with fixed controls and PiP
+        if (isMobile) {
+          return (
+            <MobileCallLayout
+              remoteStream={webrtc.remoteStream}
+              localStream={webrtc.localStream}
+              remoteLabel={language === 'ms' ? 'Doktor' : 'Doctor'}
+              localLabel={language === 'ms' ? 'Anda' : 'You'}
+              timer={{
+                formattedTime: timer.formattedTime,
+                totalMinutes: timer.totalMinutes,
+                currentCost: timer.currentCost,
+                additionalCost: timer.additionalCost,
+                isOverFreeTime: timer.isOverFreeTime,
+              }}
+              freeMinutes={10}
+              controls={{
+                isAudioEnabled: webrtc.isAudioEnabled,
+                isVideoEnabled: webrtc.isVideoEnabled,
+                isConnected: webrtc.isConnected,
+                isConnecting: webrtc.isConnecting,
+                onToggleAudio: webrtc.toggleAudio,
+                onToggleVideo: webrtc.toggleVideo,
+                onEndCall: webrtc.endCall,
+              }}
+              connectionStatus={webrtc.connectionStatus}
+              connectionError={webrtc.connectionError}
+              onRetry={webrtc.retryCall}
+              retryAttempt={webrtc.retryAttempt}
+              isStaff={false}
+            />
+          );
+        }
+
+        // Desktop layout
         return (
           <div className="h-[calc(100vh-200px)] flex flex-col">
             {/* Timer */}
