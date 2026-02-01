@@ -45,8 +45,8 @@ export const SERVICES = [
     id: 'rapid-tests',
     slug: 'ujian-pantas',
     icon: 'TestTube',
-    titleMs: 'Ujian Pantas: Influenza / COVID / RSV',
-    titleEn: 'Rapid Tests: Influenza / COVID / RSV',
+    titleMs: 'Ujian Pantas: Influenza / COVID / RSV / Adenovirus',
+    titleEn: 'Rapid Tests: Influenza / COVID / RSV / Adenovirus',
   },
   {
     id: 'nebulizer',
