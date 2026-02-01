@@ -79,6 +79,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (session?.user) {
         fetchUserRoles(session.user.id);
+      } else {
+        setRolesLoading(false);
       }
     });
 
