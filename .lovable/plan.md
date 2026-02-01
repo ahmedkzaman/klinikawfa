@@ -1,149 +1,166 @@
 
 
-# Plan: Fix Intermittent "Failed to Establish Connection" Error
+# Plan: Fix "This Room Has Ended" Error
 
-## Problem Analysis
+## Root Cause Found
 
-The "failed to establish connection" error occurs intermittently due to timing issues in the WebRTC signaling process. The error specifically comes from line 388 in `useWebRTC.ts` when the staff fails to process the patient's answer.
+The problem is that your video rooms are being **permanently marked as "ended" too early**. Here's what's happening:
 
-### Why It's Intermittent
+```text
+1. You create a test room → status: "test" ✓
+2. Staff & patient join → status: "active" ✓
+3. Connection fails or briefly disconnects
+4. Code calls onCallEnded() → status: "ended" ← BUG!
+5. You try to reconnect
+6. Backend says "This room has ended" ← You're stuck here
+```
 
-The connection works "sometimes" because the timing of signaling messages (offer/answer/ICE candidates) is unpredictable. When both parties happen to be ready at the same time, it works. When there's a timing mismatch, it fails.
-
-**Key issues identified:**
-
-| Issue | Impact |
-|-------|--------|
-| Offer sent before patient subscribes | Patient never receives offer |
-| Answer arrives before staff ready | Staff fails to set remote description |
-| ICE candidates arrive before remote description | Candidates get queued but may be stale |
-| No signaling confirmation | No way to know if messages were received |
-| Single retry for answer handling | One failure = complete failure |
+**The code is marking the room as "ended" on ANY connection failure**, even temporary ones. Once a room is marked "ended", it's permanently unusable.
 
 ---
 
-## Solution: Robust Signaling with Acknowledgements
+## The Bug Location
 
-### 1. Add Signaling Acknowledgements
-
-Both parties should confirm they received critical messages:
-
-```text
-Staff                          Patient
-  |                               |
-  |-- offer ---------------------->|
-  |<-- offer-received -------------|
-  |                               |
-  |<-- answer --------------------|
-  |-- answer-received ------------>|
-  |                               |
-  [Connection established]
-```
-
-### 2. Auto-Retry for Failed Answer Processing
-
-If staff fails to set remote description from answer, automatically request a new answer:
+In `src/hooks/useWebRTC.ts`, lines 260-269:
 
 ```typescript
-// In answer handler
-.on('broadcast', { event: 'answer' }, async ({ payload }) => {
-  if (isStaff && payload.from === 'patient') {
-    try {
-      await pc.setRemoteDescription(...);
-      // Send acknowledgement
-      channel.send({ type: 'broadcast', event: 'answer-received', payload: {} });
-    } catch (err) {
-      console.error('[WebRTC] Answer failed, requesting new one');
-      channel.send({ type: 'broadcast', event: 'request-answer', payload: {} });
-    }
-  }
-});
+} else if (pc.connectionState === 'disconnected') {
+  setConnectionStatus('disconnected');
+  setIsConnected(false);
+  onCallEnded?.();  // ← This marks room as ENDED!
+} else if (pc.connectionState === 'failed') {
+  setConnectionStatus('failed');
+  setConnectionError('...');
+  setIsConnected(false);
+  onCallEnded?.();  // ← This marks room as ENDED!
+}
 ```
 
-### 3. ICE Connection Restart
+And in `VideoCallStaff.tsx`, `onCallEnded` triggers:
+```typescript
+await updateRoomStatus('ended', durationSeconds);
+```
 
-When ICE connection fails, attempt an ICE restart instead of requiring full reconnection:
+---
+
+## Solution
+
+### 1. Only Mark Room "Ended" on Intentional End
+
+The room should ONLY be marked "ended" when:
+- Staff clicks the "End Call" button
+- NOT on connection failures
+- NOT on temporary disconnections
+
+### 2. Add Connection Recovery Without Ending Room
+
+On connection failures, attempt recovery WITHOUT marking the room as ended:
+- Show "reconnecting" status
+- Allow retry without creating a new room
+- Keep room status as "active" during recovery
+
+### 3. Separate "Call Ended" vs "Connection Lost"
+
+Create two distinct flows:
+- **Intentional End**: User clicked end → mark room ended
+- **Connection Lost**: Network issue → show reconnect option, keep room active
+
+---
+
+## Implementation Changes
+
+### File 1: `src/hooks/useWebRTC.ts`
+
+**Add new callback for connection failures (separate from call ended):**
 
 ```typescript
-pc.oniceconnectionstatechange = () => {
-  if (pc.iceConnectionState === 'failed') {
-    console.log('[WebRTC] ICE failed, attempting restart');
-    pc.restartIce();
-    // Create new offer with ICE restart
-    const offer = await pc.createOffer({ iceRestart: true });
-    // ... send new offer
-  }
+interface UseWebRTCOptions {
+  roomCode: string;
+  isStaff: boolean;
+  onCallStarted?: () => void;
+  onCallEnded?: () => void;
+  onConnectionLost?: () => void;  // NEW - for failures
+  onError?: (error: string) => void;
+}
+```
+
+**Update connection state handler:**
+
+```typescript
+} else if (pc.connectionState === 'disconnected') {
+  setConnectionStatus('disconnected');
+  setIsConnected(false);
+  // DON'T call onCallEnded - call new callback instead
+  onConnectionLost?.();
+} else if (pc.connectionState === 'failed') {
+  setConnectionStatus('failed');
+  setConnectionError('...');
+  setIsConnected(false);
+  // DON'T call onCallEnded - call new callback instead
+  onConnectionLost?.();
+}
+```
+
+**Only call onCallEnded on intentional end:**
+
+```typescript
+const endCall = () => {
+  console.log('[WebRTC] Ending call intentionally');
+  channelRef.current?.send({
+    type: 'broadcast',
+    event: 'end-call',
+    payload: { from: isStaff ? 'staff' : 'patient' },
+  });
+  cleanup();
+  onCallEnded?.();  // Only here - intentional end
 };
 ```
 
-### 4. Exponential Backoff for Offer Resends
+### File 2: `src/pages/VideoCallStaff.tsx`
 
-Instead of fixed 3-second intervals, use exponential backoff with jitter:
+**Update WebRTC hook usage:**
 
 ```typescript
-// Start at 1s, then 2s, 4s, 8s, 16s (with random jitter)
-const delay = Math.min(1000 * Math.pow(2, pollCount), 16000);
-const jitter = Math.random() * 500;
-setTimeout(requestOffer, delay + jitter);
+const webrtc = useWebRTC({
+  roomCode: roomData?.room_code || '',
+  isStaff: true,
+  onCallStarted: () => {
+    timer.start();
+    updateRoomStatus('active');
+  },
+  onCallEnded: () => {
+    // Only called on intentional end
+    const finalSeconds = timer.stop();
+    handleCallEnded(finalSeconds);
+  },
+  onConnectionLost: () => {
+    // DON'T end the room - just show reconnect UI
+    console.log('Connection lost, room remains active for retry');
+    // Optionally show a toast
+    toast({
+      title: 'Connection Lost',
+      description: 'Click "Try Again" to reconnect',
+      variant: 'destructive',
+    });
+  },
+  onError: (error) => {
+    toast({ title: 'Error', description: error, variant: 'destructive' });
+  },
+});
 ```
 
-### 5. Connection State Timeout
+### File 3: `src/pages/VideoCall.tsx`
 
-If stuck in "connecting" state for too long, auto-retry:
-
-```typescript
-// Set a timeout when entering 'connecting' state
-const connectionTimeout = setTimeout(() => {
-  if (pc.connectionState === 'connecting') {
-    console.log('[WebRTC] Connection timeout, retrying');
-    retryCall();
-  }
-}, 30000); // 30 second timeout
-```
-
----
-
-## Implementation Details
-
-### File: `src/hooks/useWebRTC.ts`
-
-**Changes:**
-
-1. **Add acknowledgement events** for offer and answer
-2. **Add answer retry logic** when setRemoteDescription fails
-3. **Add ICE restart** on ICE connection failure
-4. **Improve offer polling** with exponential backoff
-5. **Add connection timeout** to detect stuck connections
-6. **Better error messages** to help debugging
-
-### New Signaling Events
-
-| Event | Sender | Purpose |
-|-------|--------|---------|
-| `offer-received` | Patient | Confirm offer was received |
-| `answer-received` | Staff | Confirm answer was received |
-| `request-answer` | Staff | Request patient to resend answer |
-| `resend-offer` | Staff | Send offer again after failure |
-
-### Error Handling Improvements
+**Same update for patient side:**
 
 ```typescript
-// Before (single point of failure)
-} catch (err) {
-  onError?.('Failed to establish connection');
-}
-
-// After (retry with exponential backoff)
-} catch (err) {
-  console.error('[WebRTC] Answer failed, attempt', retryCount);
-  if (retryCount < 3) {
-    retryCount++;
-    await delay(1000 * retryCount);
-    channel.send({ event: 'request-answer', ... });
-  } else {
-    onError?.('Failed to establish connection after multiple attempts');
-  }
-}
+const webrtc = useWebRTC({
+  // ... existing options
+  onConnectionLost: () => {
+    // Don't trigger the ended flow - allow retry
+    console.log('Connection lost, waiting for reconnect');
+  },
+});
 ```
 
 ---
@@ -152,55 +169,20 @@ const connectionTimeout = setTimeout(() => {
 
 | File | Changes |
 |------|---------|
-| `src/hooks/useWebRTC.ts` | Add acknowledgements, retry logic, ICE restart, connection timeout |
-
----
-
-## Technical Details
-
-### ICE Restart Flow
-
-```text
-1. ICE connection fails (iceConnectionState === 'failed')
-2. Call pc.restartIce()
-3. Create new offer with { iceRestart: true }
-4. Send new offer to peer
-5. Peer creates new answer
-6. Exchange new ICE candidates
-7. Connection re-established
-```
-
-### Connection Timeout Flow
-
-```text
-1. startCall() begins
-2. connectionStatus = 'connecting-to-room'
-3. Start 30-second timeout
-4. If 'connected' before timeout → cancel timeout
-5. If timeout fires → cleanup() + retry with error message
-```
-
-### Exponential Backoff for Offers
-
-```text
-Poll 1: 1000ms + jitter
-Poll 2: 2000ms + jitter  
-Poll 3: 4000ms + jitter
-Poll 4: 8000ms + jitter
-Poll 5: 16000ms + jitter
-```
+| `src/hooks/useWebRTC.ts` | Add `onConnectionLost` callback, separate from `onCallEnded` |
+| `src/pages/VideoCallStaff.tsx` | Handle connection lost without ending room |
+| `src/pages/VideoCall.tsx` | Handle connection lost without ending call flow |
 
 ---
 
 ## Summary
 
-This fix addresses the intermittent connection failures by:
+This fix ensures:
 
-1. **Adding acknowledgements** - Know when messages are received
-2. **Auto-retry answer processing** - Don't fail on first error
-3. **ICE restart capability** - Recover from ICE failures without full reconnect
-4. **Better polling** - Exponential backoff reduces race conditions
-5. **Connection timeout** - Detect and recover from stuck states
+1. **Room only ends when you click "End Call"** - not on failures
+2. **Connection failures allow retry** - room stays active
+3. **Reconnection is possible** - no more "room has ended" errors
+4. **Clear separation** between intentional end and connection issues
 
-These changes make the signaling process more resilient to network timing issues and Supabase Realtime variability.
+After this fix, even if the connection fails multiple times, you can keep retrying until it works. The room will only be marked "ended" when someone intentionally clicks the End Call button.
 
