@@ -159,48 +159,53 @@ export function useWebRTC({
     console.log('[WebRTC] Creating peer connection...');
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
+    // CRITICAL FIX: Add explicit transceivers for bidirectional media BEFORE adding tracks
+    // This ensures the SDP includes "sendrecv" direction for both audio and video
+    // Without this, the staff's offer may not properly negotiate receiving media from patient
+    console.log('[WebRTC] Adding transceivers for bidirectional media...');
+    pc.addTransceiver('audio', { direction: 'sendrecv' });
+    pc.addTransceiver('video', { direction: 'sendrecv' });
+
     // Add local tracks
     stream.getTracks().forEach(track => {
       console.log('[WebRTC] Adding local track:', track.kind);
       pc.addTrack(track, stream);
     });
 
-    // Create a persistent remote stream to collect all remote tracks
+    // Initialize remote stream ref if needed
     if (!remoteStreamRef.current) {
       remoteStreamRef.current = new MediaStream();
-      setRemoteStream(remoteStreamRef.current);
     }
 
-    // Handle remote tracks - add each track to our persistent stream
+    // CRITICAL FIX: Improved ontrack handler that uses event.streams when available
     pc.ontrack = (event) => {
-      console.log('[WebRTC] Received remote track:', event.track.kind, 'readyState:', event.track.readyState);
+      console.log('[WebRTC] ontrack event:', event.track.kind, 'readyState:', event.track.readyState, 'streams:', event.streams?.length);
       
-      const track = event.track;
-      
-      // Add track to our persistent remote stream if not already there
-      const existingTrack = remoteStreamRef.current?.getTracks().find(t => t.id === track.id);
-      if (!existingTrack && remoteStreamRef.current) {
-        console.log('[WebRTC] Adding track to remote stream:', track.kind);
-        remoteStreamRef.current.addTrack(track);
+      // Prefer using the stream from the event (this is the proper way)
+      if (event.streams && event.streams[0]) {
+        console.log('[WebRTC] Using stream from event for', event.track.kind);
+        remoteStreamRef.current = event.streams[0];
+        setRemoteStream(event.streams[0]);
+      } else {
+        // Fallback: manually manage tracks
+        const track = event.track;
+        const existingTrack = remoteStreamRef.current?.getTracks().find(t => t.id === track.id);
         
-        // Force React to re-render by creating a new stream reference
-        const newStream = new MediaStream(remoteStreamRef.current.getTracks());
-        remoteStreamRef.current = newStream;
-        setRemoteStream(newStream);
+        if (!existingTrack && remoteStreamRef.current) {
+          console.log('[WebRTC] Adding track to managed remote stream:', track.kind);
+          remoteStreamRef.current.addTrack(track);
+          
+          // Create new MediaStream reference to trigger React re-render
+          const updatedStream = new MediaStream(remoteStreamRef.current.getTracks());
+          remoteStreamRef.current = updatedStream;
+          setRemoteStream(updatedStream);
+        }
       }
       
-      // Listen for track ending
-      track.onended = () => {
-        console.log('[WebRTC] Remote track ended:', track.kind);
-      };
-      
-      track.onmute = () => {
-        console.log('[WebRTC] Remote track muted:', track.kind);
-      };
-      
-      track.onunmute = () => {
-        console.log('[WebRTC] Remote track unmuted:', track.kind);
-      };
+      // Track lifecycle events for debugging
+      event.track.onended = () => console.log('[WebRTC] Remote track ended:', event.track.kind);
+      event.track.onmute = () => console.log('[WebRTC] Remote track muted:', event.track.kind);
+      event.track.onunmute = () => console.log('[WebRTC] Remote track unmuted:', event.track.kind);
     };
 
     // Handle ICE candidates
@@ -519,11 +524,16 @@ export function useWebRTC({
       // STAFF: Create offer BEFORE setting up signaling
       // This ensures currentOfferRef is set when presence events fire
       if (isStaff) {
-        console.log('[WebRTC] Creating offer before signaling...');
-        const offer = await pc.createOffer();
+        console.log('[WebRTC] Creating offer with explicit receive capabilities...');
+        // CRITICAL FIX: Include offerToReceiveAudio/Video options
+        // This guarantees the SDP will include m= lines for receiving media
+        const offer = await pc.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: true,
+        });
         await pc.setLocalDescription(offer);
         currentOfferRef.current = offer;
-        console.log('[WebRTC] Offer created and stored');
+        console.log('[WebRTC] Offer created with sendrecv transceivers');
       }
       
       // Now set up signaling with retry logic
