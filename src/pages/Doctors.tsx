@@ -21,6 +21,61 @@ import {
 
 type TeamMember = Tables<'team_members'>;
 
+// Mock data to display when database is empty
+const mockDoctors: Partial<TeamMember>[] = [
+  {
+    id: 'mock-1',
+    name_ms: 'Dr. Ahmad',
+    name_en: 'Dr. Ahmad',
+    title_ms: 'Pengamal Perubatan Am',
+    title_en: 'General Medical Practitioner',
+    qualifications: ['MBBS', 'Family Medicine'],
+    years_experience: 15,
+    expertise_ms: ['Perubatan Keluarga', 'Pembedahan Minor', 'Rawatan Ketumbuhan & Ketuat', 'Khatan'],
+    expertise_en: ['Family Medicine', 'Minor Surgery', 'Lump & Wart Treatment', 'Circumcision'],
+    bio_ms: 'Dr. Ahmad merupakan doktor berpengalaman lebih 15 tahun dalam bidang perubatan keluarga. Beliau mempunyai minat khusus dan pengalaman luas dalam pembedahan minor termasuk pembuangan ketumbuhan, rawatan ketuat, dan prosedur khatan.',
+    bio_en: 'Dr. Ahmad has over 15 years of experience in family medicine. He has a special interest and vast experience in minor surgeries including lump removal, wart treatment, and circumcision procedures.',
+    type: 'doctor',
+  },
+  {
+    id: 'mock-2',
+    name_ms: 'Dr. Nurul',
+    name_en: 'Dr. Nurul',
+    title_ms: 'Pengamal Perubatan Am',
+    title_en: 'General Medical Practitioner',
+    qualifications: ['MBBS', 'Pediatric Care'],
+    years_experience: 12,
+    expertise_ms: ['Penjagaan Telinga (Microsuction)', 'Rawatan Pernafasan', 'Pediatrik', 'Rawatan Umum'],
+    expertise_en: ['Ear Care (Microsuction)', 'Respiratory Treatment', 'Pediatrics', 'General Treatment'],
+    bio_ms: 'Dr. Nurul mempunyai pengalaman lebih 12 tahun dengan minat khusus dan pengalaman luas dalam penjagaan telinga menggunakan teknik microsuction.',
+    bio_en: 'Dr. Nurul has over 12 years of experience with a special interest and vast experience in ear care using microsuction technique.',
+    type: 'doctor',
+  },
+];
+
+const mockStaff: Partial<TeamMember>[] = [
+  {
+    id: 'mock-staff-1',
+    name_ms: 'Pasukan Jururawat',
+    name_en: 'Nursing Team',
+    title_ms: '3 jururawat terlatih',
+    title_en: '3 trained nurses',
+    bio_ms: 'Membantu dalam prosedur perubatan dan penjagaan pesakit',
+    bio_en: 'Assisting in medical procedures and patient care',
+    type: 'staff',
+  },
+  {
+    id: 'mock-staff-2',
+    name_ms: 'Pembantu Klinik',
+    name_en: 'Clinic Assistants',
+    title_ms: '2 pembantu',
+    title_en: '2 assistants',
+    bio_ms: 'Pendaftaran, farmasi, dan perkhidmatan pelanggan',
+    bio_en: 'Registration, pharmacy, and customer service',
+    type: 'staff',
+  },
+];
+
 const values = [
   {
     icon: Heart,
@@ -54,9 +109,10 @@ const values = [
 
 export default function Doctors() {
   const { language } = useLanguage();
-  const [doctors, setDoctors] = useState<TeamMember[]>([]);
-  const [staff, setStaff] = useState<TeamMember[]>([]);
+  const [doctors, setDoctors] = useState<Partial<TeamMember>[]>([]);
+  const [staff, setStaff] = useState<Partial<TeamMember>[]>([]);
   const [loading, setLoading] = useState(true);
+  const [usingMockData, setUsingMockData] = useState(false);
 
   useEffect(() => {
     async function fetchTeamMembers() {
@@ -69,9 +125,24 @@ export default function Doctors() {
 
       if (error) {
         console.error('Error fetching team members:', error);
+        // Use mock data on error
+        setDoctors(mockDoctors);
+        setStaff(mockStaff);
+        setUsingMockData(true);
       } else if (data) {
-        setDoctors(data.filter((m) => m.type === 'doctor'));
-        setStaff(data.filter((m) => m.type === 'staff'));
+        const dbDoctors = data.filter((m) => m.type === 'doctor');
+        const dbStaff = data.filter((m) => m.type === 'staff');
+        
+        // Use mock data if database is empty
+        if (dbDoctors.length === 0 && dbStaff.length === 0) {
+          setDoctors(mockDoctors);
+          setStaff(mockStaff);
+          setUsingMockData(true);
+        } else {
+          setDoctors(dbDoctors.length > 0 ? dbDoctors : mockDoctors);
+          setStaff(dbStaff.length > 0 ? dbStaff : mockStaff);
+          setUsingMockData(dbDoctors.length === 0 || dbStaff.length === 0);
+        }
       }
       setLoading(false);
     }
@@ -141,15 +212,19 @@ export default function Doctors() {
             </p>
           </div>
 
+          {usingMockData && (
+            <div className="mb-8 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-center">
+              <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                ⚠️ {language === 'ms'
+                  ? 'Ini adalah data contoh. Data sebenar akan dikemaskini tidak lama lagi.'
+                  : 'This is sample data. Actual data will be updated soon.'}
+              </p>
+            </div>
+          )}
+
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : doctors.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground">
-              {language === 'ms'
-                ? 'Tiada doktor dijumpai.'
-                : 'No doctors found.'}
             </div>
           ) : (
             <div className="grid gap-8 lg:grid-cols-2">
@@ -266,12 +341,6 @@ export default function Doctors() {
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            ) : staff.length === 0 ? (
-              <div className="py-8 text-center text-muted-foreground">
-                {language === 'ms'
-                  ? 'Maklumat pasukan sokongan akan dikemaskini tidak lama lagi.'
-                  : 'Support team information will be updated soon.'}
               </div>
             ) : (
               <div className="grid gap-6 sm:grid-cols-2">
