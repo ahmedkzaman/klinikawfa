@@ -21,8 +21,8 @@ import {
   GraduationCap,
   Briefcase,
   ClipboardCheck,
-  Star
 } from 'lucide-react';
+import { KaabaIcon } from '@/components/icons/KaabaIcon';
 
 const iconMap: Record<string, React.ElementType> = {
   Stethoscope,
@@ -40,7 +40,7 @@ const iconMap: Record<string, React.ElementType> = {
   GraduationCap,
   Briefcase,
   ClipboardCheck,
-  Star,
+  Kaaba: KaabaIcon,
 };
 
 const featuredServices = SERVICES.slice(0, 6);

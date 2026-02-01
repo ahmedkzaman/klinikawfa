@@ -135,7 +135,7 @@ export const SERVICES = [
   {
     id: 'haj-checkup',
     slug: 'pemeriksaan-haji-2026',
-    icon: 'Star',
+    icon: 'Kaaba',
     titleMs: 'Pemeriksaan Kesihatan Haji 2026',
     titleEn: 'Haj 2026 Medical Checkup',
   },
