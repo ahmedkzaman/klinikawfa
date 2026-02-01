@@ -44,8 +44,8 @@ const doctors = [
     yearsExperience: 12,
     expertiseMs: ['Penjagaan Telinga (Microsuction)', 'Rawatan Pernafasan', 'Pediatrik', 'Rawatan Umum'],
     expertiseEn: ['Ear Care (Microsuction)', 'Respiratory Treatment', 'Pediatrics', 'General Treatment'],
-    bioMs: 'Dr. Nurul mempunyai pengalaman lebih 12 tahun dengan kepakaran khusus dalam penjagaan telinga menggunakan teknik microsuction. Beliau juga mahir merawat masalah pernafasan dan mempunyai sentuhan lembut untuk pesakit kanak-kanak.',
-    bioEn: 'Dr. Nurul has over 12 years of experience with specialized expertise in ear care using microsuction technique. She is also skilled in treating respiratory issues and has a gentle touch for pediatric patients.',
+    bioMs: 'Dr. Nurul mempunyai pengalaman lebih 12 tahun dengan minat khusus dan pengalaman luas dalam penjagaan telinga menggunakan teknik microsuction. Beliau juga mahir merawat masalah pernafasan dan mempunyai sentuhan lembut untuk pesakit kanak-kanak.',
+    bioEn: 'Dr. Nurul has over 12 years of experience with a special interest and vast experience in ear care using microsuction technique. She is also skilled in treating respiratory issues and has a gentle touch for pediatric patients.',
     expertiseIcons: [Ear, Baby, Stethoscope],
   },
 ];

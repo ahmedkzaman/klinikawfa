@@ -34,8 +34,8 @@ const slides: HeroSlide[] = [
   },
   {
     id: 3,
-    titleMs: 'Pakar Minor Surgery',
-    titleEn: 'Minor Surgery Specialists',
+    titleMs: 'Pengkhususan Minor Surgery',
+    titleEn: 'Special Interest in Minor Surgery',
     subtitleMs: 'Kepakaran dalam rawatan ketumbuhan, ketuat & khatan',
     subtitleEn: 'Expertise in lumps, warts & circumcision treatment',
     gradient: 'from-success/10 via-background to-background',
