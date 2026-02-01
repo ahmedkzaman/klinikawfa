@@ -3,7 +3,7 @@ export const CLINIC_INFO = {
   name: 'Klinik Awfa',
   phone: '+60 18-252 3531',
   phoneLink: 'tel:+60182523531',
-  whatsapp: 'http://www.wasap.my/60182523531',
+  whatsapp: 'https://wa.me/60182523531',
   address: {
     line1: 'B2 & B4, Jalan KS 1/12',
     line2: 'KotaSAS Avenue',
