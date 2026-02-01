@@ -82,6 +82,8 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          name_en: string | null
+          name_ms: string | null
           slug: string
           updated_at: string
         }
@@ -89,6 +91,8 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          name_en?: string | null
+          name_ms?: string | null
           slug: string
           updated_at?: string
         }
@@ -96,6 +100,8 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          name_en?: string | null
+          name_ms?: string | null
           slug?: string
           updated_at?: string
         }
@@ -106,36 +112,60 @@ export type Database = {
           author_id: string | null
           category_id: string | null
           content: string
+          content_en: string | null
+          content_ms: string | null
           created_at: string
+          excerpt_en: string | null
+          excerpt_ms: string | null
+          featured_image: string | null
           id: string
           published: boolean
           published_at: string | null
+          reading_time: number | null
           slug: string
           title: string
+          title_en: string | null
+          title_ms: string | null
           updated_at: string
         }
         Insert: {
           author_id?: string | null
           category_id?: string | null
           content: string
+          content_en?: string | null
+          content_ms?: string | null
           created_at?: string
+          excerpt_en?: string | null
+          excerpt_ms?: string | null
+          featured_image?: string | null
           id?: string
           published?: boolean
           published_at?: string | null
+          reading_time?: number | null
           slug: string
           title: string
+          title_en?: string | null
+          title_ms?: string | null
           updated_at?: string
         }
         Update: {
           author_id?: string | null
           category_id?: string | null
           content?: string
+          content_en?: string | null
+          content_ms?: string | null
           created_at?: string
+          excerpt_en?: string | null
+          excerpt_ms?: string | null
+          featured_image?: string | null
           id?: string
           published?: boolean
           published_at?: string | null
+          reading_time?: number | null
           slug?: string
           title?: string
+          title_en?: string | null
+          title_ms?: string | null
           updated_at?: string
         }
         Relationships: [

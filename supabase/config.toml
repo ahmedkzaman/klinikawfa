@@ -3,6 +3,9 @@ project_id = "ncysmppzfjtiekfnomdv"
 [functions.generate-bio]
 verify_jwt = false
 
+[functions.generate-blog-content]
+verify_jwt = true
+
 [functions.video-room]
 verify_jwt = false
 

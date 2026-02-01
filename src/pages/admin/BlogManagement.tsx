@@ -38,7 +38,16 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
-type BlogPost = Tables<'blog_posts'>;
+interface BlogPost {
+  id: string;
+  title: string;
+  title_ms: string | null;
+  title_en: string | null;
+  slug: string;
+  published: boolean;
+  published_at: string | null;
+  created_at: string;
+}
 
 export default function BlogManagement() {
   const { language } = useLanguage();
@@ -55,7 +64,7 @@ export default function BlogManagement() {
     try {
       const { data, error } = await supabase
         .from('blog_posts')
-        .select('*')
+        .select('id, title, title_ms, title_en, slug, published, published_at, created_at')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -76,10 +85,18 @@ export default function BlogManagement() {
     fetchPosts();
   }, []);
 
-  const filteredPosts = posts.filter((post) =>
-    post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    post.slug.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const getPostTitle = (post: BlogPost) => {
+    if (language === 'ms') {
+      return post.title_ms || post.title_en || post.title;
+    }
+    return post.title_en || post.title_ms || post.title;
+  };
+
+  const filteredPosts = posts.filter((post) => {
+    const title = getPostTitle(post).toLowerCase();
+    const query = searchQuery.toLowerCase();
+    return title.includes(query) || post.slug.toLowerCase().includes(query);
+  });
 
   const togglePublish = async (post: BlogPost) => {
     try {
@@ -209,7 +226,7 @@ export default function BlogManagement() {
                   {filteredPosts.map((post) => (
                     <TableRow key={post.id}>
                       <TableCell className="font-medium max-w-[200px] truncate">
-                        {post.title}
+                        {getPostTitle(post)}
                       </TableCell>
                       <TableCell className="text-muted-foreground max-w-[150px] truncate">
                         {post.slug}
