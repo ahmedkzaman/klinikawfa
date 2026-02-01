@@ -1,68 +1,81 @@
 
-# Plan: Fix Patient Connection Error (Duplicate Transceiver Issue)
 
-## Problem
-
-After the previous fix to enable bidirectional media, the patient now sees an error when trying to connect. The doctor can see the patient's video, suggesting the issue is on the patient side during SDP negotiation.
+# Plan: Fix Doctor Not Seeing Patient's Video
 
 ## Root Cause Analysis
 
-The current code creates **duplicate transceivers**, causing SDP mismatch:
+After deep investigation, I found **three critical issues** causing the doctor to not see the patient's video:
 
+### Issue 1: Track Transceiver Direction Mismatch
+
+**Problem**: When staff creates an offer BEFORE receiving any tracks from the patient, the SDP (Session Description Protocol) doesn't include the proper transceivers for receiving media. The staff's peer connection is set up only to SEND video, not to RECEIVE it.
+
+**Evidence in code**: In `useWebRTC.ts` lines 521-527, staff creates the offer immediately after adding their local tracks but before any negotiation about receiving tracks:
 ```typescript
-// Lines 166-167: Creates 2 transceivers explicitly
-pc.addTransceiver('audio', { direction: 'sendrecv' });
-pc.addTransceiver('video', { direction: 'sendrecv' });
-
-// Lines 170-172: Creates 2 MORE transceivers when adding tracks
-stream.getTracks().forEach(track => {
-  pc.addTrack(track, stream);  // Each addTrack creates a new transceiver!
-});
+if (isStaff) {
+  const offer = await pc.createOffer();  // Only sends tracks, no recv
+  await pc.setLocalDescription(offer);
+  currentOfferRef.current = offer;
+}
 ```
 
-**Result**: Staff's SDP offer has 4 media lines (m=audio, m=video, m=audio, m=video), but this can cause issues when the patient tries to `setRemoteDescription` because:
-1. Browser may reject malformed SDP
-2. Track-to-transceiver mapping becomes ambiguous
-3. Answer creation fails with mismatched transceiver count
+### Issue 2: Remote Stream Reference Created Too Early
 
-## Solution
+**Problem**: In `createPeerConnection()` (line 169-172), a new empty `MediaStream` is created and set as remoteStream BEFORE any tracks arrive. When tracks do arrive (line 187-189), a new `MediaStream` is created but the React component may not re-render properly because the stream object reference keeps changing.
 
-**Use `offerToReceiveAudio/Video` options instead of explicit transceivers**
+### Issue 3: Missing `addTransceiver` for Bidirectional Media
 
-The `pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })` approach is sufficient for the staff side. We should:
-
-1. **Remove** the explicit `addTransceiver()` calls
-2. **Keep** the `offerToReceiveAudio/Video` options in createOffer (staff only)
-3. **Let** `addTrack()` naturally create transceivers with `sendrecv` direction
-
-This ensures exactly 2 transceivers are created (one for audio, one for video).
+**Problem**: The peer connection doesn't explicitly declare it wants to receive video. Without explicit transceivers, the SDP negotiation may not properly set up bidirectional video.
 
 ---
 
-## Implementation Details
+## Solution
 
-### File: `src/hooks/useWebRTC.ts`
+### Fix 1: Add Explicit Transceivers for Receiving Media
 
-**Change 1**: Remove duplicate transceiver creation in `createPeerConnection`
+Before creating the offer, the staff must add transceivers that indicate "I want to receive video and audio":
 
 ```typescript
-// BEFORE (problematic):
-pc.addTransceiver('audio', { direction: 'sendrecv' });
+// Add transceivers for receiving media BEFORE creating offer
 pc.addTransceiver('video', { direction: 'sendrecv' });
-stream.getTracks().forEach(track => {
-  pc.addTrack(track, stream);
-});
-
-// AFTER (correct):
-// Just add tracks - they create transceivers automatically
-stream.getTracks().forEach(track => {
-  pc.addTrack(track, stream);
-});
+pc.addTransceiver('audio', { direction: 'sendrecv' });
 ```
 
-**Change 2**: Staff creates offer with receive options (already in place)
+### Fix 2: Stabilize Remote Stream Reference
 
-This is the correct approach for the staff side - keeps the `offerToReceiveAudio/Video` options which ensure the SDP includes proper direction for receiving media.
+Instead of creating new `MediaStream` objects, maintain a single stable reference and only update React state when tracks actually change:
+
+```typescript
+// Track remote tracks by ID to detect actual changes
+const remoteTrackIds = new Set<string>();
+
+pc.ontrack = (event) => {
+  const track = event.track;
+  if (!remoteTrackIds.has(track.id)) {
+    remoteTrackIds.add(track.id);
+    remoteStreamRef.current.addTrack(track);
+    // Trigger React update
+    setRemoteStream(new MediaStream(remoteStreamRef.current.getTracks()));
+  }
+};
+```
+
+### Fix 3: Handle Stream from Event Properly
+
+The `ontrack` event provides `event.streams[0]` which is the actual remote stream. We should use this when available:
+
+```typescript
+pc.ontrack = (event) => {
+  if (event.streams && event.streams[0]) {
+    // Use the stream provided by WebRTC
+    remoteStreamRef.current = event.streams[0];
+    setRemoteStream(event.streams[0]);
+  } else {
+    // Fallback: manually add track
+    remoteStreamRef.current.addTrack(event.track);
+  }
+};
+```
 
 ---
 
@@ -70,36 +83,120 @@ This is the correct approach for the staff side - keeps the `offerToReceiveAudio
 
 | File | Changes |
 |------|---------|
-| `src/hooks/useWebRTC.ts` | Remove explicit `addTransceiver()` calls, keep `offerToReceiveAudio/Video` in createOffer |
+| `src/hooks/useWebRTC.ts` | Add transceivers, fix remote stream handling, use event.streams |
 
 ---
 
-## Technical Details
+## Implementation Details
 
-### How WebRTC Transceivers Work
+### Modified `createPeerConnection` function
 
-When you call `pc.addTrack(track, stream)`:
-- WebRTC automatically creates a transceiver for that track
-- The direction defaults to `sendrecv` (can both send and receive)
-- This is the standard approach
+```typescript
+const createPeerConnection = (stream: MediaStream) => {
+  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
-When you call `pc.addTransceiver('video', { direction: 'sendrecv' })`:
-- Creates an empty transceiver that can receive video
-- Useful when you want to receive but not send
+  // CRITICAL: Add transceivers for bidirectional media
+  // This ensures the SDP includes "recvonly" or "sendrecv" for incoming tracks
+  pc.addTransceiver('audio', { direction: 'sendrecv' });
+  pc.addTransceiver('video', { direction: 'sendrecv' });
 
-**The problem**: Doing BOTH creates duplicate transceivers!
+  // Add local tracks
+  stream.getTracks().forEach(track => {
+    pc.addTrack(track, stream);
+  });
 
-### Why Staff Needs `offerToReceiveAudio/Video`
+  // Initialize remote stream ref if needed
+  if (!remoteStreamRef.current) {
+    remoteStreamRef.current = new MediaStream();
+  }
 
-Even though `addTrack()` creates `sendrecv` transceivers, the offer options ensure:
-- The SDP explicitly includes `a=recvonly` or `a=sendrecv` lines
-- Some browsers need this explicit hint to properly negotiate
-- It's a safety net, not a replacement for transceivers
+  // Handle remote tracks - PROPERLY this time
+  pc.ontrack = (event) => {
+    console.log('[WebRTC] ontrack:', event.track.kind, event.streams);
+    
+    // Prefer using the stream from the event (if available)
+    if (event.streams && event.streams[0]) {
+      console.log('[WebRTC] Using stream from event');
+      remoteStreamRef.current = event.streams[0];
+      setRemoteStream(event.streams[0]);
+    } else {
+      // Fallback: add track to our managed stream
+      const existingTrack = remoteStreamRef.current?.getTracks()
+        .find(t => t.id === event.track.id);
+      
+      if (!existingTrack) {
+        console.log('[WebRTC] Adding track to managed stream:', event.track.kind);
+        remoteStreamRef.current.addTrack(event.track);
+        
+        // Create new reference to trigger React re-render
+        const updatedStream = new MediaStream(remoteStreamRef.current.getTracks());
+        remoteStreamRef.current = updatedStream;
+        setRemoteStream(updatedStream);
+      }
+    }
+
+    // Track lifecycle events
+    event.track.onended = () => console.log('[WebRTC] Track ended:', event.track.kind);
+    event.track.onmute = () => console.log('[WebRTC] Track muted:', event.track.kind);
+    event.track.onunmute = () => console.log('[WebRTC] Track unmuted:', event.track.kind);
+  };
+
+  // ... rest remains same
+};
+```
+
+### Modified `startCall` function (Staff side)
+
+```typescript
+if (isStaff) {
+  console.log('[WebRTC] Creating offer with sendrecv transceivers...');
+  
+  // Create offer with explicit options to receive media
+  const offer = await pc.createOffer({
+    offerToReceiveAudio: true,
+    offerToReceiveVideo: true,
+  });
+  
+  await pc.setLocalDescription(offer);
+  currentOfferRef.current = offer;
+  console.log('[WebRTC] Offer created with receive capabilities');
+}
+```
+
+---
+
+## Why Previous Fixes Didn't Work
+
+1. **Polling for offer** - The signaling worked, but the SDP itself didn't have proper receive capabilities
+2. **Track state checks** - The tracks weren't arriving at all because the SDP didn't negotiate receiving
+3. **Stream reference changes** - Didn't matter because no tracks were being received
+
+The core issue was always that **the staff's SDP offer didn't include transceivers for receiving media**.
+
+---
+
+## Technical Background
+
+WebRTC requires explicit negotiation of media directions:
+- `sendonly` - I will send but not receive
+- `recvonly` - I will receive but not send  
+- `sendrecv` - I will both send and receive
+- `inactive` - No media
+
+When you call `pc.addTrack()` without transceivers, WebRTC defaults to `sendrecv` for that track. BUT if the offer is created before the remote party adds their tracks, the negotiation may not properly include receiving capabilities.
+
+By explicitly adding transceivers with `direction: 'sendrecv'` AND using `offerToReceiveVideo: true` in the offer options, we guarantee the SDP will include the proper `m=` lines for receiving both audio and video.
 
 ---
 
 ## Summary
 
-The fix is simple: **Remove the explicit `addTransceiver()` calls** that were added in the previous fix. The `addTrack()` method already creates proper bidirectional transceivers, and the `offerToReceiveAudio/Video` options in `createOffer` ensure the staff can receive media.
+This fix addresses the root cause by:
 
-This should resolve the patient connection error while maintaining the doctor's ability to see the patient's video.
+1. **Adding explicit transceivers** before creating the offer
+2. **Using `offerToReceiveVideo: true`** option when creating the offer
+3. **Properly handling `event.streams[0]`** in the ontrack handler
+4. **Stabilizing stream references** to prevent React rendering issues
+
+This should finally resolve the issue where the doctor cannot see the patient's video.
+
