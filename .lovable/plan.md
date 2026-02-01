@@ -1,115 +1,149 @@
 
 
-# Plan: Fix "Staff Access Required" Error for Video Calls
+# Plan: Fix "Staff Access Required" Error - Comprehensive Fix
 
-## Problem Analysis
+## Root Cause Analysis
 
-You're seeing "Staff access required" error even though you have admin role. This is caused by a **timing issue**:
+I traced through the entire authentication flow and found **two issues**:
 
-1. When you navigate to the Video Call page, it immediately checks if you're staff/admin
-2. But roles are loaded **asynchronously** after the session is confirmed
-3. The page checks the role before it's been fetched from the database
+1. **ProtectedRoute doesn't wait for roles**: The `ProtectedRoute` component only checks `loading` (session state) but doesn't wait for `rolesLoading` to complete. This causes premature access checks.
 
-Your user (Ahmed) definitely has the admin role in the database, so the check should pass - it's just happening too early.
+2. **Race condition on navigation**: When navigating to `/video-call/staff`, the ProtectedRoute and VideoCallStaff page both check `isStaffOrAdmin` before roles have finished loading.
+
+---
+
+## Current Flow (Broken)
+
+```text
+User clicks "Start Call"
+        |
+        v
+Navigate to /video-call/staff
+        |
+        v
+ProtectedRoute checks:
+  - loading = false (session loaded)
+  - isStaffOrAdmin = false (roles NOT loaded yet!)
+        |
+        v
+Either: Redirect to / (from ProtectedRoute)
+   or: "Staff access required" error (from VideoCallStaff)
+```
 
 ---
 
 ## Solution
 
-Add a "roles loading" state to the AuthContext and update the VideoCallStaff page to wait for both session AND roles to finish loading before performing the access check.
+Update `ProtectedRoute` to also wait for `rolesLoading` before checking role-based access.
 
 ---
 
 ## Implementation Steps
 
-### Step 1: Add rolesLoading State to AuthContext
+### Step 1: Update ProtectedRoute to Wait for Roles
 
-Track when roles are still being fetched separately from session loading.
+The ProtectedRoute currently only waits for `loading`. We need it to also wait for `rolesLoading` when role-based access is required.
 
-**Changes to `src/contexts/AuthContext.tsx`:**
-- Add new `rolesLoading` state (starts as `true`)
-- Set `rolesLoading = true` before fetching roles
-- Set `rolesLoading = false` after roles are fetched (or if no user)
-- Export `rolesLoading` in the context
+**Changes to `src/components/ProtectedRoute.tsx`:**
 
-### Step 2: Update VideoCallStaff to Wait for Roles
+```tsx
+export function ProtectedRoute({ 
+  children, 
+  requireAdmin = false, 
+  requireStaffOrAdmin = false 
+}: ProtectedRouteProps) {
+  const { user, loading, rolesLoading, isAdmin, isStaffOrAdmin } = useAuth();
+  const location = useLocation();
 
-The page should show a loading spinner until both `loading` (session) AND `rolesLoading` are complete.
+  // Wait for BOTH session AND roles to load when role checks are needed
+  const needsRoleCheck = requireAdmin || requireStaffOrAdmin;
+  if (loading || (needsRoleCheck && rolesLoading)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
-**Changes to `src/pages/VideoCallStaff.tsx`:**
-- Get `rolesLoading` from `useAuth()`
-- Wait for `loading || rolesLoading` to be false before checking `isStaffOrAdmin`
-- Update the useEffect dependency to include loading states
+  // ... rest of the checks
+}
+```
+
+---
+
+## Fixed Flow (After Implementation)
+
+```text
+User clicks "Start Call"
+        |
+        v
+Navigate to /video-call/staff
+        |
+        v
+ProtectedRoute checks:
+  - loading = false (session loaded)
+  - rolesLoading = true (roles loading...)
+  - Shows loading spinner
+        |
+        v
+Roles finish loading:
+  - rolesLoading = false
+  - isStaffOrAdmin = true
+        |
+        v
+VideoCallStaff loads room data
+        |
+        v
+Ready to start call!
+```
 
 ---
 
 ## Technical Details
 
-**File 1:** `src/contexts/AuthContext.tsx`
+**File:** `src/components/ProtectedRoute.tsx`
 
+Current code (lines 16-25):
 ```tsx
-// Add new state
-const [rolesLoading, setRolesLoading] = useState(true);
+const { user, loading, isAdmin, isStaffOrAdmin } = useAuth();
+const location = useLocation();
 
-// Update fetchUserRoles
-const fetchUserRoles = useCallback(async (userId: string) => {
-  setRolesLoading(true);
-  try {
-    // ... existing fetch code ...
-  } finally {
-    setRolesLoading(false);
-  }
-}, []);
-
-// Handle case when no user
-if (!session?.user) {
-  setRolesLoading(false);
+if (loading) {
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  );
 }
-
-// Add to context value
-rolesLoading,
 ```
 
-**File 2:** `src/pages/VideoCallStaff.tsx`
-
+Updated code:
 ```tsx
-const { user, isStaffOrAdmin, loading, rolesLoading } = useAuth();
+const { user, loading, rolesLoading, isAdmin, isStaffOrAdmin } = useAuth();
+const location = useLocation();
 
-useEffect(() => {
-  const loadRoom = async () => {
-    // Wait for auth to fully load
-    if (loading || rolesLoading) return;
-    
-    // ... rest of the logic
-  };
-  
-  loadRoom();
-}, [roomCode, isStaffOrAdmin, loading, rolesLoading]);
+// Wait for both session and roles when role-based access is required
+const needsRoleCheck = requireAdmin || requireStaffOrAdmin;
+if (loading || (needsRoleCheck && rolesLoading)) {
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  );
+}
 ```
 
 ---
 
-## Visual Flow After Fix
+## Why This Fixes It
 
-```text
-User clicks "Start Call"
-        ↓
-  Page loads → Shows loading spinner
-        ↓
-  Session loaded (loading = false)
-        ↓
-  Roles being fetched (rolesLoading = true)
-        ↓
-  Roles loaded (rolesLoading = false)
-        ↓
-  isStaffOrAdmin = true ✓
-        ↓
-  Room data loaded → Ready to start call
-```
+1. **AdminLayout** uses `<ProtectedRoute requireStaffOrAdmin>` - this now waits for roles
+2. **VideoCallStaff** already waits for `rolesLoading` in its useEffect - but ProtectedRoute was redirecting before it could run
+3. By fixing ProtectedRoute, the entire admin section properly waits for role verification
 
 ---
 
 ## Summary
 
-This fix ensures the access check only happens after roles are fully loaded, preventing the false "Staff access required" error for admin and staff users.
+The fix is a single change to `ProtectedRoute.tsx` to also consider `rolesLoading` when checking role-based access. This ensures users aren't redirected or shown errors before their roles have been verified.
 
