@@ -96,7 +96,7 @@ export function Header() {
             </a>
           </Button>
 
-          <Button size="sm" className="bg-whatsapp hover:bg-whatsapp/90" asChild>
+          <Button size="sm" className="bg-[hsl(142,70%,45%)] text-white hover:bg-[hsl(142,70%,40%)]" asChild>
             <a href={CLINIC_INFO.whatsapp} target="_blank" rel="noopener noreferrer">
               <MessageCircle className="mr-2 h-4 w-4" />
               WhatsApp
@@ -210,7 +210,7 @@ export function Header() {
                       {t('cta.call')} - {CLINIC_INFO.phone}
                     </a>
                   </Button>
-                  <Button size="lg" className="bg-whatsapp hover:bg-whatsapp/90" asChild>
+                  <Button size="lg" className="bg-[hsl(142,70%,45%)] text-white hover:bg-[hsl(142,70%,40%)]" asChild>
                     <a href={CLINIC_INFO.whatsapp} target="_blank" rel="noopener noreferrer">
                       <MessageCircle className="mr-2 h-5 w-5" />
                       WhatsApp
