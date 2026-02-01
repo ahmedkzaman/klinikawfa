@@ -58,7 +58,7 @@ export default function Gallery() {
                   WhatsApp
                 </a>
               </Button>
-              <Button size="lg" variant="outline" className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10" asChild>
+              <Button size="lg" variant="outline" className="border-primary-foreground/30 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground" asChild>
                 <a href={CLINIC_INFO.phoneLink}>
                   <Phone className="mr-2 h-5 w-5" />
                   {CLINIC_INFO.phone}

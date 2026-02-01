@@ -425,7 +425,7 @@ export default function Doctors() {
               <Button 
                 size="lg" 
                 variant="outline" 
-                className="min-w-[180px] border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10" 
+                className="min-w-[180px] border-primary-foreground/30 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground" 
                 asChild
               >
                 <a href={CLINIC_INFO.phoneLink}>
