@@ -8,6 +8,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  rolesLoading: boolean;
   roles: AppRole[];
   isAdmin: boolean;
   isStaffOrAdmin: boolean;
@@ -23,9 +24,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [rolesLoading, setRolesLoading] = useState(true);
   const [roles, setRoles] = useState<AppRole[]>([]);
 
   const fetchUserRoles = useCallback(async (userId: string) => {
+    setRolesLoading(true);
     try {
       const { data, error } = await supabase
         .from('user_roles')
@@ -43,6 +46,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error('Error in fetchUserRoles:', err);
       setRoles([]);
+    } finally {
+      setRolesLoading(false);
     }
   }, []);
 
@@ -61,6 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }, 0);
         } else {
           setRoles([]);
+          setRolesLoading(false);
         }
       }
     );
@@ -126,6 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         session,
         loading,
+        rolesLoading,
         roles,
         isAdmin,
         isStaffOrAdmin,
