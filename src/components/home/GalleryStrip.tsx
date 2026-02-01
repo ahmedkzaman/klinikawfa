@@ -1,20 +1,25 @@
+import { useState } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Image } from 'lucide-react';
-
-// Placeholder gallery items
-const galleryItems = [
-  { id: 1, altMs: 'Ruang menunggu', altEn: 'Waiting area' },
-  { id: 2, altMs: 'Zon permainan kanak-kanak', altEn: 'Kids play zone' },
-  { id: 3, altMs: 'Bilik rawatan', altEn: 'Treatment room' },
-  { id: 4, altMs: 'Kaunter pendaftaran', altEn: 'Registration counter' },
-  { id: 5, altMs: 'Luaran klinik', altEn: 'Clinic exterior' },
-  { id: 6, altMs: 'Peralatan perubatan', altEn: 'Medical equipment' },
-];
+import { ArrowRight, ImageIcon } from 'lucide-react';
+import { useGalleryImages } from '@/hooks/useGalleryImages';
+import { GalleryLightbox } from '@/components/gallery';
 
 export function GalleryStrip() {
   const { language, t } = useLanguage();
+  const { allImages, isLoading } = useGalleryImages();
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  // Show first 6 images
+  const displayImages = allImages.slice(0, 6);
+
+  const handleImageClick = (index: number) => {
+    setCurrentImageIndex(index);
+    setLightboxOpen(true);
+  };
 
   return (
     <section className="py-16 md:py-24">
@@ -42,38 +47,66 @@ export function GalleryStrip() {
       {/* Horizontal scrollable gallery */}
       <div className="relative">
         <div className="flex gap-4 overflow-x-auto pb-4 pl-4 scrollbar-hide md:pl-[max(1rem,calc((100vw-1280px)/2+1rem))]">
-          {galleryItems.map((item) => (
-            <div
-              key={item.id}
-              className="group relative aspect-[4/3] w-72 flex-shrink-0 cursor-pointer overflow-hidden rounded-xl bg-muted shadow-soft transition-all hover:shadow-card md:w-80"
+          {isLoading ? (
+            // Loading skeletons
+            Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton 
+                key={i} 
+                className="aspect-[4/3] w-72 flex-shrink-0 rounded-xl md:w-80" 
+              />
+            ))
+          ) : displayImages.length === 0 ? (
+            // Empty state placeholder
+            <div className="flex aspect-[4/3] w-72 flex-shrink-0 items-center justify-center rounded-xl bg-muted md:w-80">
+              <div className="text-center text-muted-foreground">
+                <ImageIcon className="mx-auto mb-2 h-10 w-10 opacity-50" />
+                <p className="text-sm">
+                  {language === 'ms' ? 'Tiada gambar' : 'No images'}
+                </p>
+              </div>
+            </div>
+          ) : (
+            // Real images from database
+            displayImages.map((image, index) => (
+              <button
+                key={image.id}
+                onClick={() => handleImageClick(index)}
+                className="group relative aspect-[4/3] w-72 flex-shrink-0 cursor-pointer overflow-hidden rounded-xl bg-muted shadow-soft transition-all hover:shadow-card focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 md:w-80"
+              >
+                <img
+                  src={image.url}
+                  alt={image.alt_text || ''}
+                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  loading="lazy"
+                />
+
+                {/* Hover overlay */}
+                <div className="absolute inset-0 flex items-center justify-center bg-foreground/0 opacity-0 transition-all group-hover:bg-foreground/40 group-hover:opacity-100">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-background text-foreground">
+                    <ArrowRight className="h-5 w-5" />
+                  </div>
+                </div>
+              </button>
+            ))
+          )}
+
+          {/* View all card - always shown if there are images */}
+          {!isLoading && displayImages.length > 0 && (
+            <Link
+              to="/gallery"
+              className="flex aspect-[4/3] w-72 flex-shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-border bg-muted/50 text-muted-foreground transition-colors hover:border-primary hover:text-primary md:w-80"
             >
-              {/* Placeholder */}
-              <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5">
-                <div className="text-center text-muted-foreground">
-                  <Image className="mx-auto mb-2 h-10 w-10 opacity-50" />
-                  <p className="text-sm">{language === 'ms' ? item.altMs : item.altEn}</p>
-                </div>
+              <div className="text-center">
+                <ArrowRight className="mx-auto mb-2 h-8 w-8" />
+                <p className="font-medium">{t('cta.viewAll')}</p>
+                {allImages.length > 6 && (
+                  <p className="mt-1 text-sm opacity-70">
+                    +{allImages.length - 6} {language === 'ms' ? 'lagi' : 'more'}
+                  </p>
+                )}
               </div>
-
-              {/* Hover overlay */}
-              <div className="absolute inset-0 flex items-center justify-center bg-foreground/60 opacity-0 transition-opacity group-hover:opacity-100">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-background text-foreground">
-                  <ArrowRight className="h-5 w-5" />
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {/* View all card */}
-          <Link
-            to="/gallery"
-            className="flex aspect-[4/3] w-72 flex-shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-border bg-muted/50 text-muted-foreground transition-colors hover:border-primary hover:text-primary md:w-80"
-          >
-            <div className="text-center">
-              <ArrowRight className="mx-auto mb-2 h-8 w-8" />
-              <p className="font-medium">{t('cta.viewAll')}</p>
-            </div>
-          </Link>
+            </Link>
+          )}
         </div>
 
         {/* Gradient fade on right */}
@@ -88,6 +121,15 @@ export function GalleryStrip() {
           </Link>
         </Button>
       </div>
+
+      {/* Lightbox for strip images */}
+      <GalleryLightbox
+        images={displayImages}
+        currentIndex={currentImageIndex}
+        open={lightboxOpen}
+        onOpenChange={setLightboxOpen}
+        onIndexChange={setCurrentImageIndex}
+      />
     </section>
   );
 }
