@@ -6,7 +6,8 @@ import {
   Image, 
   Users,
   LogOut,
-  Home
+  Home,
+  Stethoscope
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
@@ -39,6 +40,13 @@ const menuItems = [
     titleEn: 'Leads / Appointments', 
     url: '/admin/leads', 
     icon: CalendarCheck,
+    staffAccess: true 
+  },
+  { 
+    titleMs: 'Pasukan', 
+    titleEn: 'Team', 
+    url: '/admin/team', 
+    icon: Stethoscope,
     staffAccess: true 
   },
   { 

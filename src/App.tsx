@@ -26,6 +26,8 @@ import {
   BlogEditor,
   GalleryManagement,
   UserManagement,
+  TeamManagement,
+  TeamEditor,
 } from "./pages/admin";
 
 const queryClient = new QueryClient();
@@ -52,6 +54,8 @@ const App = () => (
               <Route path="/admin" element={<AdminLayout />}>
                 <Route index element={<AdminDashboard />} />
                 <Route path="leads" element={<LeadsManagement />} />
+                <Route path="team" element={<TeamManagement />} />
+                <Route path="team/:id" element={<TeamEditor />} />
                 <Route path="blog" element={<BlogManagement />} />
                 <Route path="blog/:id" element={<BlogEditor />} />
                 <Route path="gallery" element={<GalleryManagement />} />
