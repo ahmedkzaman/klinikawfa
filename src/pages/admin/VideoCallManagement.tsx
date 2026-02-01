@@ -8,6 +8,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -22,7 +24,11 @@ import {
   Users,
   Clock,
   DollarSign,
-  Link
+  Link,
+  MoreVertical,
+  XCircle,
+  Trash2,
+  Eye
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -64,6 +70,12 @@ export default function VideoCallManagement() {
     patient_email: '',
     notes: '',
   });
+
+  // Confirmation dialogs state
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedRoom, setSelectedRoom] = useState<VideoRoom | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const fetchRooms = async () => {
     setIsLoading(true);
@@ -162,6 +174,103 @@ export default function VideoCallManagement() {
     }
   };
 
+  const cancelRoom = async (room: VideoRoom) => {
+    setIsProcessing(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/video-room?action=update-status`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            room_id: room.id, 
+            status: 'cancelled' 
+          }),
+        }
+      );
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to cancel room');
+      }
+
+      toast({
+        title: language === 'ms' ? 'Bilik Dibatalkan' : 'Room Cancelled',
+        description: language === 'ms' 
+          ? `Bilik untuk ${room.patient_name} telah dibatalkan`
+          : `Room for ${room.patient_name} has been cancelled`,
+      });
+
+      fetchRooms();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to cancel room',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsProcessing(false);
+      setCancelDialogOpen(false);
+      setSelectedRoom(null);
+    }
+  };
+
+  const deleteRoom = async (room: VideoRoom) => {
+    setIsProcessing(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/video-room?action=delete`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ room_id: room.id }),
+        }
+      );
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to delete room');
+      }
+
+      toast({
+        title: language === 'ms' ? 'Bilik Dipadam' : 'Room Deleted',
+        description: language === 'ms' 
+          ? `Bilik untuk ${room.patient_name} telah dipadam`
+          : `Room for ${room.patient_name} has been deleted`,
+      });
+
+      fetchRooms();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to delete room',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsProcessing(false);
+      setDeleteDialogOpen(false);
+      setSelectedRoom(null);
+    }
+  };
+
   const copyRoomCode = (code: string) => {
     navigator.clipboard.writeText(code);
     toast({
@@ -185,6 +294,16 @@ export default function VideoCallManagement() {
   const startCall = (roomCode: string) => {
     // Open in new tab for staff to join
     window.open(`/video-call/staff?room=${roomCode}`, '_blank');
+  };
+
+  const openCancelDialog = (room: VideoRoom) => {
+    setSelectedRoom(room);
+    setCancelDialogOpen(true);
+  };
+
+  const openDeleteDialog = (room: VideoRoom) => {
+    setSelectedRoom(room);
+    setDeleteDialogOpen(true);
   };
 
   const getStatusBadge = (status: string) => {
@@ -223,8 +342,141 @@ export default function VideoCallManagement() {
       .reduce((sum, r) => sum + (r.total_amount || 0), 0),
   };
 
+  const renderActions = (room: VideoRoom) => {
+    const canStart = room.status === 'paid' || room.status === 'active';
+    const canCancel = room.status === 'pending' || room.status === 'paid';
+    const canDelete = room.status === 'cancelled' || room.status === 'ended';
+    const isEnded = room.status === 'ended';
+
+    return (
+      <div className="flex items-center justify-end gap-2">
+        {canStart && (
+          <Button
+            size="sm"
+            onClick={() => startCall(room.room_code)}
+          >
+            <Phone className="h-4 w-4 mr-1" />
+            {language === 'ms' ? 'Mulakan' : 'Start'}
+          </Button>
+        )}
+        
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <MoreVertical className="h-4 w-4" />
+              <span className="sr-only">Open menu</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="bg-popover">
+            {/* Copy Link - available for pending, paid, active */}
+            {(room.status === 'pending' || room.status === 'paid' || room.status === 'active') && (
+              <DropdownMenuItem onClick={() => copyPatientLink(room.room_code)}>
+                <Link className="h-4 w-4 mr-2" />
+                {language === 'ms' ? 'Salin Pautan' : 'Copy Link'}
+              </DropdownMenuItem>
+            )}
+
+            {/* View Details - for ended rooms */}
+            {isEnded && (
+              <DropdownMenuItem onClick={() => copyRoomCode(room.room_code)}>
+                <Eye className="h-4 w-4 mr-2" />
+                {language === 'ms' ? 'Lihat Butiran' : 'View Details'}
+              </DropdownMenuItem>
+            )}
+
+            {/* Cancel Room - for pending/paid */}
+            {canCancel && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={() => openCancelDialog(room)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <XCircle className="h-4 w-4 mr-2" />
+                  {language === 'ms' ? 'Batalkan Bilik' : 'Cancel Room'}
+                </DropdownMenuItem>
+              </>
+            )}
+
+            {/* Delete Room - for cancelled/ended */}
+            {canDelete && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={() => openDeleteDialog(room)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  {language === 'ms' ? 'Padam Bilik' : 'Delete Room'}
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
+      {/* Cancel Confirmation Dialog */}
+      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {language === 'ms' ? 'Batalkan Bilik Video?' : 'Cancel Video Room?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {language === 'ms' 
+                ? `Adakah anda pasti mahu membatalkan bilik untuk "${selectedRoom?.patient_name}"? Tindakan ini tidak boleh dibatalkan. Pesakit tidak akan dapat menyertai.`
+                : `Are you sure you want to cancel the room for "${selectedRoom?.patient_name}"? This action cannot be undone. The patient will not be able to join.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isProcessing}>
+              {language === 'ms' ? 'Simpan Bilik' : 'Keep Room'}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => selectedRoom && cancelRoom(selectedRoom)}
+              disabled={isProcessing}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isProcessing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {language === 'ms' ? 'Batalkan Bilik' : 'Cancel Room'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {language === 'ms' ? 'Padam Bilik Video?' : 'Delete Video Room?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {language === 'ms' 
+                ? `Adakah anda pasti mahu memadam bilik untuk "${selectedRoom?.patient_name}"? Semua rekod dan data pembayaran berkaitan akan dipadam secara kekal.`
+                : `Are you sure you want to delete the room for "${selectedRoom?.patient_name}"? All related records and payment data will be permanently deleted.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isProcessing}>
+              {language === 'ms' ? 'Batal' : 'Cancel'}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => selectedRoom && deleteRoom(selectedRoom)}
+              disabled={isProcessing}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isProcessing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {language === 'ms' ? 'Padam Bilik' : 'Delete Room'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">
@@ -412,15 +664,6 @@ export default function VideoCallManagement() {
                         >
                           <Copy className="h-3 w-3" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => copyPatientLink(room.room_code)}
-                          title={language === 'ms' ? 'Salin Pautan Pesakit' : 'Copy Patient Link'}
-                        >
-                          <Link className="h-3 w-3" />
-                        </Button>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -444,15 +687,7 @@ export default function VideoCallManagement() {
                       {format(new Date(room.created_at), 'dd/MM/yyyy HH:mm')}
                     </TableCell>
                     <TableCell className="text-right">
-                      {(room.status === 'paid' || room.status === 'active') && (
-                        <Button
-                          size="sm"
-                          onClick={() => startCall(room.room_code)}
-                        >
-                          <Phone className="h-4 w-4 mr-1" />
-                          {language === 'ms' ? 'Mulakan' : 'Start'}
-                        </Button>
-                      )}
+                      {renderActions(room)}
                     </TableCell>
                   </TableRow>
                 ))}

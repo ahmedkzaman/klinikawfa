@@ -214,6 +214,75 @@ serve(async (req) => {
       );
     }
 
+    // POST: Delete room (only cancelled/ended rooms)
+    if (req.method === "POST" && action === "delete") {
+      const body = await req.json();
+      const { room_id } = body;
+
+      if (!room_id) {
+        return new Response(
+          JSON.stringify({ error: "Room ID is required" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+        );
+      }
+
+      // Verify room exists and is in deletable state
+      const { data: room, error: roomError } = await supabaseClient
+        .from("video_rooms")
+        .select("id, status, patient_name")
+        .eq("id", room_id)
+        .single();
+
+      if (roomError || !room) {
+        return new Response(
+          JSON.stringify({ error: "Room not found" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404 }
+        );
+      }
+
+      if (!['cancelled', 'ended'].includes(room.status)) {
+        return new Response(
+          JSON.stringify({ error: "Can only delete cancelled or ended rooms" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+        );
+      }
+
+      // Delete related payments first
+      const { error: paymentsError } = await supabaseClient
+        .from("video_payments")
+        .delete()
+        .eq("room_id", room_id);
+
+      if (paymentsError) {
+        console.error("Error deleting payments:", paymentsError);
+        return new Response(
+          JSON.stringify({ error: "Failed to delete related payments" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+        );
+      }
+
+      // Delete the room
+      const { error: deleteError } = await supabaseClient
+        .from("video_rooms")
+        .delete()
+        .eq("id", room_id);
+
+      if (deleteError) {
+        console.error("Error deleting room:", deleteError);
+        return new Response(
+          JSON.stringify({ error: "Failed to delete room" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+        );
+      }
+
+      console.log(`Room ${room_id} (${room.patient_name}) deleted`);
+
+      return new Response(
+        JSON.stringify({ success: true, message: "Room deleted successfully" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    }
+
     // GET: List all rooms
     if (req.method === "GET" && action === "list") {
       const status = url.searchParams.get("status");
