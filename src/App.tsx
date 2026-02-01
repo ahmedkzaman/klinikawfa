@@ -17,6 +17,17 @@ import HealthTips from "./pages/HealthTips";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
+// Admin
+import { AdminLayout } from "./components/admin";
+import {
+  AdminDashboard,
+  LeadsManagement,
+  BlogManagement,
+  BlogEditor,
+  GalleryManagement,
+  UserManagement,
+} from "./pages/admin";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -36,6 +47,17 @@ const App = () => (
               <Route path="/gallery" element={<Gallery />} />
               <Route path="/health-tips" element={<HealthTips />} />
               <Route path="/auth" element={<Auth />} />
+              
+              {/* Admin Routes */}
+              <Route path="/admin" element={<AdminLayout />}>
+                <Route index element={<AdminDashboard />} />
+                <Route path="leads" element={<LeadsManagement />} />
+                <Route path="blog" element={<BlogManagement />} />
+                <Route path="blog/:id" element={<BlogEditor />} />
+                <Route path="gallery" element={<GalleryManagement />} />
+                <Route path="users" element={<UserManagement />} />
+              </Route>
+
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
