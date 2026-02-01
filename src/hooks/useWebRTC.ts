@@ -19,6 +19,7 @@ interface UseWebRTCOptions {
   isStaff: boolean;
   onCallStarted?: () => void;
   onCallEnded?: () => void;
+  onConnectionLost?: () => void;  // Called on disconnected/failed - NOT an intentional end
   onError?: (error: string) => void;
 }
 
@@ -51,6 +52,7 @@ export function useWebRTC({
   isStaff,
   onCallStarted,
   onCallEnded,
+  onConnectionLost,
   onError,
 }: UseWebRTCOptions): UseWebRTCReturn {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -258,14 +260,20 @@ export function useWebRTC({
       } else if (pc.connectionState === 'connecting') {
         setConnectionStatus('establishing-connection');
       } else if (pc.connectionState === 'disconnected') {
+        // CRITICAL FIX: Don't mark room as ended on temporary disconnection
+        // This allows reconnection attempts without permanently closing the room
+        console.log('[WebRTC] Connection disconnected - NOT ending room, allowing retry');
         setConnectionStatus('disconnected');
         setIsConnected(false);
-        onCallEnded?.();
+        onConnectionLost?.();  // Signal connection lost, but room stays active
       } else if (pc.connectionState === 'failed') {
+        // CRITICAL FIX: Don't mark room as ended on connection failure
+        // User can click "Try Again" to reconnect
+        console.log('[WebRTC] Connection failed - NOT ending room, allowing retry');
         setConnectionStatus('failed');
         setConnectionError('Connection to peer failed. Please try again.');
         setIsConnected(false);
-        onCallEnded?.();
+        onConnectionLost?.();  // Signal connection lost, but room stays active
       }
     };
 

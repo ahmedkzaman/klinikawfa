@@ -54,8 +54,20 @@ export default function VideoCallStaff() {
       updateRoomStatus('active');
     },
     onCallEnded: () => {
+      // ONLY called on intentional end (user clicked End Call)
       const finalSeconds = timer.stop();
       handleCallEnded(finalSeconds);
+    },
+    onConnectionLost: () => {
+      // Connection dropped but room stays active for retry
+      console.log('[VideoCallStaff] Connection lost - room remains active for retry');
+      toast({
+        title: language === 'ms' ? 'Sambungan Terputus' : 'Connection Lost',
+        description: language === 'ms' 
+          ? 'Klik "Cuba Lagi" untuk menyambung semula' 
+          : 'Click "Try Again" to reconnect',
+        variant: 'destructive',
+      });
     },
     onError: (error) => {
       toast({
