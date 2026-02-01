@@ -22,7 +22,7 @@ export const CLINIC_INFO = {
     en: 'Your Family Clinic',
   },
   googleMapsUrl: 'https://maps.google.com/?q=3.871944656053272,103.27734116870465',
-  googleMapsEmbed: 'https://maps.google.com/maps?q=3.871944656053272,103.27734116870465&z=17&output=embed',
+  googleMapsEmbed: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1991.5!2d103.27734116870465!3d3.871944656053272!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zM8KwNTInMTkuMCJOIDEwM8KwMTYnMzguNCJF!5e0!3m2!1sen!2smy!4v1700000000000!5m2!1sen!2smy',
 } as const;
 
 // Service categories
