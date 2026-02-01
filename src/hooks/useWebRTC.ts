@@ -62,6 +62,7 @@ export function useWebRTC({
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const currentOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
 
   const cleanup = useCallback(() => {
     console.log('[WebRTC] Cleaning up...');
@@ -72,6 +73,9 @@ export function useWebRTC({
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
       localStreamRef.current = null;
+    }
+    if (remoteStreamRef.current) {
+      remoteStreamRef.current = null;
     }
     setLocalStream(null);
     if (channelRef.current) {
@@ -156,11 +160,42 @@ export function useWebRTC({
       pc.addTrack(track, stream);
     });
 
-    // Handle remote tracks
+    // Create a persistent remote stream to collect all remote tracks
+    if (!remoteStreamRef.current) {
+      remoteStreamRef.current = new MediaStream();
+      setRemoteStream(remoteStreamRef.current);
+    }
+
+    // Handle remote tracks - add each track to our persistent stream
     pc.ontrack = (event) => {
-      console.log('[WebRTC] Received remote track:', event.track.kind);
-      const [remoteStream] = event.streams;
-      setRemoteStream(remoteStream);
+      console.log('[WebRTC] Received remote track:', event.track.kind, 'readyState:', event.track.readyState);
+      
+      const track = event.track;
+      
+      // Add track to our persistent remote stream if not already there
+      const existingTrack = remoteStreamRef.current?.getTracks().find(t => t.id === track.id);
+      if (!existingTrack && remoteStreamRef.current) {
+        console.log('[WebRTC] Adding track to remote stream:', track.kind);
+        remoteStreamRef.current.addTrack(track);
+        
+        // Force React to re-render by creating a new stream reference
+        const newStream = new MediaStream(remoteStreamRef.current.getTracks());
+        remoteStreamRef.current = newStream;
+        setRemoteStream(newStream);
+      }
+      
+      // Listen for track ending
+      track.onended = () => {
+        console.log('[WebRTC] Remote track ended:', track.kind);
+      };
+      
+      track.onmute = () => {
+        console.log('[WebRTC] Remote track muted:', track.kind);
+      };
+      
+      track.onunmute = () => {
+        console.log('[WebRTC] Remote track unmuted:', track.kind);
+      };
     };
 
     // Handle ICE candidates
