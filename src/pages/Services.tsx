@@ -27,15 +27,16 @@ import {
 } from 'lucide-react';
 import { KaabaIcon } from '@/components/icons/KaabaIcon';
 import { MosquitoIcon } from '@/components/icons/MosquitoIcon';
+import { CoughingBabyIcon } from '@/components/icons/CoughingBabyIcon';
+import { BananaIcon } from '@/components/icons/BananaIcon';
+
 const iconMap: Record<string, React.ElementType> = {
   Stethoscope,
   Thermometer,
   TestTube,
   Wind,
-  Activity,
   Droplets,
   Ear,
-  Scissors,
   Circle,
   Droplet,
   FlaskConical,
@@ -44,6 +45,8 @@ const iconMap: Record<string, React.ElementType> = {
   ClipboardCheck,
   Kaaba: KaabaIcon,
   Mosquito: MosquitoIcon,
+  CoughingBaby: CoughingBabyIcon,
+  Banana: BananaIcon,
 };
 
 export default function Services() {
