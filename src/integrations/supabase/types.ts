@@ -253,6 +253,116 @@ export type Database = {
         }
         Relationships: []
       }
+      video_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          payment_type: string
+          room_id: string
+          status: string
+          stripe_checkout_session_id: string | null
+          stripe_payment_intent_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          payment_type: string
+          room_id: string
+          status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          payment_type?: string
+          room_id?: string
+          status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_payments_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "video_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      video_rooms: {
+        Row: {
+          call_ended_at: string | null
+          call_started_at: string | null
+          created_at: string
+          created_by: string | null
+          deposit_amount: number
+          ice_candidates: Json | null
+          id: string
+          notes: string | null
+          patient_email: string | null
+          patient_name: string
+          patient_phone: string
+          per_minute_rate: number
+          room_code: string
+          sdp_answer: Json | null
+          sdp_offer: Json | null
+          status: string
+          total_amount: number | null
+          total_duration_seconds: number | null
+          updated_at: string
+        }
+        Insert: {
+          call_ended_at?: string | null
+          call_started_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          deposit_amount?: number
+          ice_candidates?: Json | null
+          id?: string
+          notes?: string | null
+          patient_email?: string | null
+          patient_name: string
+          patient_phone: string
+          per_minute_rate?: number
+          room_code: string
+          sdp_answer?: Json | null
+          sdp_offer?: Json | null
+          status?: string
+          total_amount?: number | null
+          total_duration_seconds?: number | null
+          updated_at?: string
+        }
+        Update: {
+          call_ended_at?: string | null
+          call_started_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          deposit_amount?: number
+          ice_candidates?: Json | null
+          id?: string
+          notes?: string | null
+          patient_email?: string | null
+          patient_name?: string
+          patient_phone?: string
+          per_minute_rate?: number
+          room_code?: string
+          sdp_answer?: Json | null
+          sdp_offer?: Json | null
+          status?: string
+          total_amount?: number | null
+          total_duration_seconds?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
