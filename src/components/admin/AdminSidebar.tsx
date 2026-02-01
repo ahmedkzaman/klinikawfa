@@ -9,7 +9,8 @@ import {
   Home,
   Stethoscope,
   Video,
-  Settings
+  Settings,
+  Star
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
@@ -58,7 +59,7 @@ const menuItems = [
     icon: Video,
     staffAccess: true 
   },
-  {
+{
     titleMs: 'Blog Posts', 
     titleEn: 'Blog Posts', 
     url: '/admin/blog', 
@@ -73,6 +74,13 @@ const menuItems = [
     staffAccess: true 
   },
   { 
+    titleMs: 'Ulasan', 
+    titleEn: 'Reviews', 
+    url: '/admin/reviews', 
+    icon: Star,
+    staffAccess: true 
+  },
+  {
     titleMs: 'Pengguna', 
     titleEn: 'Users', 
     url: '/admin/users', 
