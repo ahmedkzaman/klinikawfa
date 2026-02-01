@@ -1,154 +1,124 @@
 
-# Stage 7: Gallery Page with Lightbox
+# Improve Gallery Upload with Category Selector
 
 ## Overview
-Transform the placeholder Gallery page into a fully functional image gallery that fetches real images from the database, supports tag-based filtering, and includes a beautiful lightbox for full-screen viewing with navigation.
+Replace the free-text "Tags" input in the gallery upload dialog with a clear category selector, so admins immediately know where each image will appear on the website.
 
 ---
 
-## What Will Be Built
+## Current Problem
 
-### Public Gallery Page Features
-- **Real images from database** instead of placeholders
-- **Tag-based filtering** with four categories:
-  - Waiting Area and Kids Play Zone
-  - Treatment Rooms
-  - Clinic Exterior/Signage
-  - Staff and Friendly Moments
-- **Responsive grid layout** (2 columns mobile, 3 tablet, 4 desktop)
-- **Full-screen lightbox** with:
-  - Smooth open/close animations
-  - Left/right navigation arrows
-  - Keyboard support (Arrow keys, Escape)
-  - Touch/swipe gestures on mobile
-  - Image captions from alt text
-  - Image counter (e.g., "3 of 12")
-
-### Home Page Gallery Strip
-- Update to fetch real images from database
-- Show first 6 images with "View All" link
+The current upload dialog shows:
+- A free-text "Tags (comma separated)" input
+- Users must remember the exact tag values (e.g., "waiting", "treatment")
+- No visual indication of which gallery section the image will appear in
 
 ---
 
-## Tag System
+## Solution
 
-The admin can already upload images with comma-separated tags. We will use standardized tag values for filtering:
-
-| Filter Button | Matching Tags |
-|---------------|---------------|
-| Waiting Area and Kids Zone | `waiting`, `kids`, `play` |
-| Treatment Rooms | `treatment`, `room` |
-| Clinic Exterior | `exterior`, `signage`, `entrance` |
-| Staff | `staff`, `team` |
-
-Images can have multiple tags and will appear in all matching filters.
+Replace the tags input with a checkbox-based category selector that shows:
+- Clear category names in both languages
+- Multiple categories can be selected (an image can appear in multiple sections)
+- Visual indication of where the image will appear
 
 ---
 
-## Files to Create
+## New Upload Dialog Design
 
-| File | Purpose |
-|------|---------|
-| `src/components/gallery/GalleryLightbox.tsx` | Full-screen image viewer with navigation |
-| `src/components/gallery/GalleryGrid.tsx` | Filterable image grid component |
-| `src/components/gallery/index.ts` | Component exports |
-| `src/hooks/useGalleryImages.ts` | Custom hook for fetching gallery data |
+```text
++------------------------------------------+
+|  Upload Image                            |
+|  Select an image to upload to gallery    |
++------------------------------------------+
+|                                          |
+|  Image *                                  |
+|  [Choose File] No file chosen            |
+|                                          |
+|  Alt Text                                 |
+|  [Image description...              ]    |
+|                                          |
+|  Category *                               |
+|  Where will this image appear?           |
+|                                          |
+|  [ ] Waiting Area & Kids Zone            |
+|  [ ] Treatment Rooms                      |
+|  [ ] Clinic Exterior                      |
+|  [ ] Staff & Team                         |
+|                                          |
+|           [Cancel]  [Upload]             |
++------------------------------------------+
+```
 
 ---
 
-## Files to Modify
+## Technical Changes
+
+### File to Modify
 
 | File | Changes |
 |------|---------|
-| `src/pages/Gallery.tsx` | Replace placeholders with real gallery components |
-| `src/components/home/GalleryStrip.tsx` | Fetch real images from database |
+| `src/pages/admin/GalleryManagement.tsx` | Replace tags input with category checkboxes |
 
----
+### Implementation Details
 
-## Technical Details
+1. **Import GALLERY_CATEGORIES** from the existing hook to ensure consistency
 
-### Lightbox Component
-
-The lightbox will be a custom component using Radix Dialog primitives:
-
-```text
-Features:
-- DialogOverlay with black background
-- Full viewport image display
-- Navigation arrows (ChevronLeft/ChevronRight)
-- Close button (X) in corner
-- Caption at bottom
-- Counter badge (e.g., "3 / 12")
-
-Keyboard Shortcuts:
-- ArrowLeft: Previous image
-- ArrowRight: Next image
-- Escape: Close lightbox
-
-Touch Support:
-- Swipe left/right detection
-- Touch threshold of 50px
-```
-
-### Gallery Hook
-
+2. **Update form state** to track selected categories:
 ```typescript
-// useGalleryImages.ts
-function useGalleryImages(activeTag?: string) {
-  // Fetches from gallery_images table
-  // Filters by tag if provided
-  // Orders by display_order
-  // Returns { images, loading, error }
-}
+const [uploadForm, setUploadForm] = useState({
+  file: null as File | null,
+  altText: '',
+  selectedCategories: [] as string[], // Array of category IDs
+});
 ```
 
-### Filter Logic
-
+3. **Replace tags input** with checkboxes for each category (excluding "all"):
 ```typescript
-// Categories with their matching tags
-const GALLERY_CATEGORIES = [
-  { id: 'waiting', tags: ['waiting', 'kids', 'play'] },
-  { id: 'treatment', tags: ['treatment', 'room'] },
-  { id: 'exterior', tags: ['exterior', 'signage', 'entrance'] },
-  { id: 'staff', tags: ['staff', 'team'] },
-];
-
-// Client-side filtering for instant response
-// Filter images where any of image.tags intersects with category.tags
+{GALLERY_CATEGORIES.filter(cat => cat.id !== 'all').map((category) => (
+  <label key={category.id} className="flex items-center gap-2">
+    <Checkbox
+      checked={uploadForm.selectedCategories.includes(category.id)}
+      onCheckedChange={(checked) => toggleCategory(category.id, checked)}
+    />
+    <span>{language === 'ms' ? category.labelMs : category.labelEn}</span>
+  </label>
+))}
 ```
 
----
+4. **Convert selected categories to tags** when saving:
+```typescript
+// Get all tags from selected categories
+const tags = uploadForm.selectedCategories.flatMap(catId => {
+  const category = GALLERY_CATEGORIES.find(c => c.id === catId);
+  return category ? [category.id] : []; // Use category ID as the main tag
+});
+```
 
-## User Experience
-
-### Loading States
-- Skeleton placeholders while images load
-- Smooth fade-in when images appear
-
-### Empty State
-- Friendly message if no images match filter
-- Or if gallery is empty overall
-
-### Performance
-- Images lazy-loaded with native `loading="lazy"`
-- Lightbox preloads adjacent images
+5. **Update existing images display** to show category names instead of raw tags
 
 ---
 
-## Implementation Order
+## User Experience Improvements
 
-1. Create `useGalleryImages` hook
-2. Build `GalleryLightbox` component with keyboard/touch support
-3. Build `GalleryGrid` component with filtering
-4. Update `Gallery.tsx` page to use new components
-5. Update `GalleryStrip.tsx` on home page
-6. Test on mobile and desktop
+| Before | After |
+|--------|-------|
+| Free text: "waiting, kids" | Checkbox: Waiting Area & Kids Zone |
+| Must remember exact tags | Clear visual categories |
+| No validation | At least one category required |
+| Raw tags shown on hover | Category names shown on hover |
 
 ---
 
-## Mobile Considerations
+## Validation
 
-- Touch swipe gestures for lightbox navigation
-- Larger touch targets for navigation buttons
-- Full-bleed images on mobile screens
-- Filter buttons scroll horizontally if needed
+- Require at least one category to be selected
+- Show validation message if no category is chosen
+
+---
+
+## Impact on Existing Images
+
+- Existing images with tags will continue to work
+- The filtering logic already handles the tag matching
+- New uploads will use consistent category-based tags
