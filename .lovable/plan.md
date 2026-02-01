@@ -1,298 +1,162 @@
 
 
-# Plan: Connection Status Indicator, Retry Button, and Video Call Testing
+# Plan: Fix Supabase Realtime Channel TIMED_OUT Error
 
-## Overview
+## Problem Analysis
 
-This plan addresses three improvements to the video call system:
-1. **Connection status indicator** - Show detailed status during call setup
-2. **Retry button** - Allow users to retry when connection fails
-3. **Testing guidance** - How to verify the signaling channel fix
+The video call is failing with "Failed to join signaling channel: TIMED_OUT" because the Supabase Realtime channel subscription is timing out. This is a Realtime service issue, not a WebRTC issue.
+
+### Root Cause Investigation
+
+The current implementation uses Supabase Realtime with:
+- **Presence tracking** (staff/patient join/leave detection)
+- **Broadcast events** (offer, answer, ICE candidates)
+
+The `TIMED_OUT` status from Supabase Realtime indicates the WebSocket connection to Supabase couldn't be established or maintained.
+
+### Common Causes
+
+1. **Network/firewall blocking WebSocket connections**
+2. **Supabase Realtime service temporarily unavailable**
+3. **Channel configuration issues**
+4. **Browser/device network restrictions**
 
 ---
 
-## Feature 1: Connection Status Indicator
+## Solution
 
-### Current State
-- Only shows "Waiting for doctor..." or "Waiting for patient..." text
-- No visibility into which step of the connection process is happening
-- Users don't know if connection is progressing or stuck
+Implement multiple improvements to make the signaling more robust:
 
-### Proposed Status Stages
+### 1. Add Retry Logic for Channel Subscription
+
+Instead of failing immediately on TIMED_OUT, implement automatic retry with exponential backoff:
 
 ```text
-┌─────────────────────────────────────────────────────────┐
-│  Connection Status Flow                                  │
-├─────────────────────────────────────────────────────────┤
-│  1. "Initializing camera and microphone..."             │
-│  2. "Connecting to room..."                             │
-│  3. "Waiting for [doctor/patient] to join..."           │
-│  4. "Establishing connection..."                         │
-│  5. "Connected!" (success)                              │
-│     OR                                                   │
-│     "Connection failed" (error with retry button)        │
-└─────────────────────────────────────────────────────────┘
+Attempt 1: Try to subscribe
+  -> TIMED_OUT
+  -> Wait 2 seconds
+
+Attempt 2: Try to subscribe again
+  -> TIMED_OUT  
+  -> Wait 4 seconds
+
+Attempt 3: Try to subscribe again
+  -> Success or final failure
 ```
 
-### Implementation
+### 2. Better Connection State Handling
 
-**1. Add new state to `useWebRTC.ts`:**
+Add more granular error handling for different Realtime states:
+- `TIMED_OUT` - Retry with backoff
+- `CHANNEL_ERROR` - Log details and provide actionable error
+- `CLOSED` - Attempt reconnection
 
-```typescript
-type ConnectionStatus = 
-  | 'idle'
-  | 'initializing-media'
-  | 'connecting-to-room'
-  | 'waiting-for-peer'
-  | 'establishing-connection'
-  | 'connected'
-  | 'failed'
-  | 'disconnected';
+### 3. Add Health Check Before Subscription
 
-// Add to hook return
-connectionStatus: ConnectionStatus;
-connectionError: string | null;
-```
+Before attempting to join the signaling channel, perform a quick health check to verify:
+- Network connectivity
+- Supabase is reachable
 
-**2. Create a new `ConnectionStatusIndicator` component:**
+### 4. Improved Error Messages
 
-```typescript
-// src/components/video/ConnectionStatusIndicator.tsx
-interface ConnectionStatusIndicatorProps {
-  status: ConnectionStatus;
-  error: string | null;
-  onRetry: () => void;
-  isStaff: boolean;
-}
-
-export function ConnectionStatusIndicator({
-  status,
-  error,
-  onRetry,
-  isStaff,
-}: ConnectionStatusIndicatorProps) {
-  const getStatusMessage = () => {
-    switch (status) {
-      case 'initializing-media':
-        return 'Initializing camera and microphone...';
-      case 'connecting-to-room':
-        return 'Connecting to room...';
-      case 'waiting-for-peer':
-        return isStaff ? 'Waiting for patient...' : 'Waiting for doctor...';
-      case 'establishing-connection':
-        return 'Establishing connection...';
-      case 'connected':
-        return 'Connected!';
-      case 'failed':
-        return 'Connection failed';
-      case 'disconnected':
-        return 'Disconnected';
-      default:
-        return null;
-    }
-  };
-  // ... render with progress dots, error message, retry button
-}
-```
+Provide clearer error messages that help users troubleshoot:
+- Check internet connection
+- Try refreshing the page
+- Try a different network (mobile data vs WiFi)
 
 ---
 
-## Feature 2: Retry Button
+## Implementation Details
 
-### Current State
-- When connection fails, user sees an error toast but can't retry
-- User must refresh the page to try again
+### File: `src/hooks/useWebRTC.ts`
 
-### Implementation
+**Changes:**
 
-**1. Add `retryCall` function to `useWebRTC.ts`:**
+1. **Add retry mechanism with exponential backoff:**
+   ```typescript
+   const MAX_RETRY_ATTEMPTS = 3;
+   const INITIAL_RETRY_DELAY = 2000;
+   
+   const setupSignalingWithRetry = async (pc: RTCPeerConnection): Promise<void> => {
+     let attempts = 0;
+     let lastError: Error | null = null;
+     
+     while (attempts < MAX_RETRY_ATTEMPTS) {
+       try {
+         await setupSignaling(pc);
+         return; // Success
+       } catch (err) {
+         lastError = err as Error;
+         attempts++;
+         
+         if (attempts < MAX_RETRY_ATTEMPTS) {
+           const delay = INITIAL_RETRY_DELAY * Math.pow(2, attempts - 1);
+           console.log(`[WebRTC] Retry attempt ${attempts} in ${delay}ms...`);
+           await new Promise(resolve => setTimeout(resolve, delay));
+         }
+       }
+     }
+     
+     throw lastError;
+   };
+   ```
 
-```typescript
-const retryCall = useCallback(async () => {
-  // Clean up any existing connection
-  cleanup();
-  
-  // Reset error state
-  setConnectionError(null);
-  setConnectionStatus('idle');
-  
-  // Start fresh
-  await startCall();
-}, [cleanup, startCall]);
-```
+2. **Handle specific Realtime status codes:**
+   ```typescript
+   .subscribe(async (status, err) => {
+     if (status === 'SUBSCRIBED') {
+       // Success
+     } else if (status === 'TIMED_OUT') {
+       reject(new Error('Connection timed out. Please check your internet connection and try again.'));
+     } else if (status === 'CHANNEL_ERROR') {
+       const errorDetails = err?.message || 'Unknown channel error';
+       reject(new Error(`Connection error: ${errorDetails}`));
+     }
+   });
+   ```
 
-**2. Add retry button to error states:**
+3. **Add connection health check:**
+   ```typescript
+   const checkConnection = async (): Promise<boolean> => {
+     try {
+       // Simple fetch to check if Supabase is reachable
+       const response = await fetch(`${SUPABASE_URL}/rest/v1/`, {
+         method: 'HEAD',
+         headers: { 'apikey': SUPABASE_ANON_KEY }
+       });
+       return response.ok;
+     } catch {
+       return false;
+     }
+   };
+   ```
 
-In both `VideoCall.tsx` and `VideoCallStaff.tsx`:
-- Show retry button when `connectionStatus === 'failed'`
-- Style prominently with clear call-to-action
-
----
-
-## Feature 3: Testing the Video Call
-
-### Test Procedure
-
-1. **Staff side:**
-   - Log in as admin/staff
-   - Go to Admin > Video Calls
-   - Create a new room for a patient
-   - Click "Join Call" to open staff video page
-
-2. **Patient side:**
-   - Open a different browser or incognito window
-   - Go to the video call patient link
-   - Enter room code and proceed through payment (or use test mode)
-   - Click "Join Call"
-
-3. **Expected behavior after fixes:**
-   - Both sides should show progressive connection status
-   - Staff should see "Waiting for patient..."
-   - Patient should see "Waiting for doctor..."
-   - Once both are connected, video/audio should work
-   - If connection fails, retry button should appear
+4. **Update connection status messages:**
+   - Add `'retrying'` status to show retry attempts
+   - Update `ConnectionStatusIndicator` to display retry information
 
 ---
 
 ## Files to Modify
 
-### 1. `src/hooks/useWebRTC.ts`
-- Add `connectionStatus` state with detailed stages
-- Add `connectionError` state
-- Add `retryCall` function
-- Update `startCall` to set status at each stage
-- Return new state and functions
-
-### 2. New: `src/components/video/ConnectionStatusIndicator.tsx`
-- Create new component showing connection progress
-- Include animated status indicator (dots/spinner)
-- Show error message with retry button when failed
-- Support bilingual (English/Malay)
-
-### 3. `src/components/video/index.ts`
-- Export the new ConnectionStatusIndicator component
-
-### 4. `src/pages/VideoCall.tsx`
-- Import and use ConnectionStatusIndicator
-- Replace simple "Waiting for doctor..." text
-- Add retry functionality
-
-### 5. `src/pages/VideoCallStaff.tsx`
-- Import and use ConnectionStatusIndicator
-- Replace simple "Waiting for patient..." text
-- Add retry functionality
-
----
-
-## Technical Details
-
-### Updated `useWebRTC.ts` State Management:
-
-```typescript
-// Add new state
-const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
-const [connectionError, setConnectionError] = useState<string | null>(null);
-
-// Update startCall to set status at each stage
-const startCall = async () => {
-  setConnectionStatus('initializing-media');
-  setConnectionError(null);
-  setIsConnecting(true);
-  
-  try {
-    const stream = await initializeMedia();
-    
-    setConnectionStatus('connecting-to-room');
-    const pc = createPeerConnection(stream);
-    
-    if (isStaff) {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      currentOfferRef.current = offer;
-    }
-    
-    await setupSignaling(pc);
-    
-    setConnectionStatus('waiting-for-peer');
-    
-    // ... rest of logic
-  } catch (err) {
-    setConnectionStatus('failed');
-    setConnectionError(err instanceof Error ? err.message : 'Connection failed');
-    cleanup();
-    setIsConnecting(false);
-    onError?.(err instanceof Error ? err.message : 'Failed to start video call');
-  }
-};
-
-// Update connection state handler
-pc.onconnectionstatechange = () => {
-  if (pc.connectionState === 'connected') {
-    setConnectionStatus('connected');
-    setIsConnected(true);
-    // ...
-  } else if (pc.connectionState === 'connecting') {
-    setConnectionStatus('establishing-connection');
-  } else if (pc.connectionState === 'failed') {
-    setConnectionStatus('failed');
-    setConnectionError('Connection to peer failed');
-    // ...
-  }
-};
-
-// Add retry function
-const retryCall = useCallback(async () => {
-  cleanup();
-  setConnectionError(null);
-  setConnectionStatus('idle');
-  await startCall();
-}, [cleanup]);
-
-// Return new values
-return {
-  // ... existing
-  connectionStatus,
-  connectionError,
-  retryCall,
-};
-```
-
-### ConnectionStatusIndicator Component Design:
-
-```text
-┌────────────────────────────────────────────┐
-│                                            │
-│       ⬤ ○ ○ ○  (progress indicator)       │
-│                                            │
-│    Connecting to room...                   │
-│                                            │
-└────────────────────────────────────────────┘
-
-OR (on failure):
-
-┌────────────────────────────────────────────┐
-│                                            │
-│           ⚠️ (error icon)                  │
-│                                            │
-│    Connection failed                       │
-│    Camera/microphone not found             │
-│                                            │
-│    ┌──────────────────┐                    │
-│    │   Try Again      │                    │
-│    └──────────────────┘                    │
-│                                            │
-└────────────────────────────────────────────┘
-```
-
----
-
-## Summary
-
 | File | Changes |
 |------|---------|
-| `src/hooks/useWebRTC.ts` | Add connectionStatus, connectionError, retryCall |
-| `src/components/video/ConnectionStatusIndicator.tsx` | New component (create) |
-| `src/components/video/index.ts` | Export new component |
-| `src/pages/VideoCall.tsx` | Use ConnectionStatusIndicator, add retry |
-| `src/pages/VideoCallStaff.tsx` | Use ConnectionStatusIndicator, add retry |
+| `src/hooks/useWebRTC.ts` | Add retry logic, health check, better error handling |
+| `src/components/video/ConnectionStatusIndicator.tsx` | Add retry status display, show retry count |
+
+---
+
+## Technical Summary
+
+The fix addresses the TIMED_OUT error by:
+
+1. **Retry mechanism** - Automatically retry channel subscription up to 3 times with exponential backoff (2s, 4s, 8s delays)
+
+2. **Better error handling** - Parse Supabase Realtime status codes and provide specific, actionable error messages
+
+3. **Connection verification** - Check network connectivity before attempting signaling
+
+4. **User feedback** - Show retry progress in the UI so users know the system is still trying
+
+This approach is resilient to temporary network issues and provides better UX when connections are unstable.
 
