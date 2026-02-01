@@ -159,14 +159,8 @@ export function useWebRTC({
     console.log('[WebRTC] Creating peer connection...');
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
-    // CRITICAL FIX: Add explicit transceivers for bidirectional media BEFORE adding tracks
-    // This ensures the SDP includes "sendrecv" direction for both audio and video
-    // Without this, the staff's offer may not properly negotiate receiving media from patient
-    console.log('[WebRTC] Adding transceivers for bidirectional media...');
-    pc.addTransceiver('audio', { direction: 'sendrecv' });
-    pc.addTransceiver('video', { direction: 'sendrecv' });
-
-    // Add local tracks
+    // Add local tracks - addTrack automatically creates sendrecv transceivers
+    // The offerToReceiveAudio/Video options in createOffer (staff side) ensure proper SDP negotiation
     stream.getTracks().forEach(track => {
       console.log('[WebRTC] Adding local track:', track.kind);
       pc.addTrack(track, stream);
