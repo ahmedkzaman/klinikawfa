@@ -132,13 +132,9 @@ export default function VideoCallStaff() {
         return;
       }
 
+      // If not staff/admin, redirect to patient video call page with the room code
       if (!isStaffOrAdmin) {
-        toast({
-          title: 'Error',
-          description: 'Staff access required',
-          variant: 'destructive',
-        });
-        navigate('/admin');
+        navigate(`/video-call?room=${roomCode}`, { replace: true });
         return;
       }
 
