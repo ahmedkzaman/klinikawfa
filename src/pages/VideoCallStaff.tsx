@@ -27,7 +27,7 @@ export default function VideoCallStaff() {
   const navigate = useNavigate();
   const { language } = useLanguage();
   const { toast } = useToast();
-  const { user, isStaffOrAdmin, isAdmin } = useAuth();
+  const { user, isStaffOrAdmin, isAdmin, loading: authLoading, rolesLoading } = useAuth();
   
   const roomCode = searchParams.get('room') || '';
   const [step, setStep] = useState<Step>('loading');
@@ -119,6 +119,9 @@ export default function VideoCallStaff() {
 
   useEffect(() => {
     const loadRoom = async () => {
+      // Wait for auth and roles to fully load before checking permissions
+      if (authLoading || rolesLoading) return;
+
       if (!roomCode) {
         toast({
           title: 'Error',
@@ -164,7 +167,7 @@ export default function VideoCallStaff() {
     };
 
     loadRoom();
-  }, [roomCode, isStaffOrAdmin]);
+  }, [roomCode, isStaffOrAdmin, authLoading, rolesLoading]);
 
   const startCall = async () => {
     setStep('in-call');
