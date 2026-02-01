@@ -71,28 +71,39 @@ serve(async (req) => {
 
     // All other actions require staff/admin authentication
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return new Response(
         JSON.stringify({ error: "Authorization required" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
       );
     }
 
+    // Create a user-scoped client to validate the token
     const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
+    const userClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    // Validate the token using getClaims
+    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
     
-    if (userError || !userData.user) {
+    if (claimsError || !claimsData?.claims) {
+      console.error("Token validation error:", claimsError);
       return new Response(
         JSON.stringify({ error: "Invalid token" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
       );
     }
 
+    const userId = claimsData.claims.sub as string;
+
     // Check if user is staff or admin
     const { data: roleData } = await supabaseClient
       .from("user_roles")
       .select("role")
-      .eq("user_id", userData.user.id)
+      .eq("user_id", userId)
       .in("role", ["admin", "staff"]);
 
     if (!roleData || roleData.length === 0) {
@@ -137,7 +148,7 @@ serve(async (req) => {
           patient_phone,
           patient_email,
           notes,
-          created_by: userData.user.id,
+          created_by: userId,
           status: "pending"
         })
         .select()
