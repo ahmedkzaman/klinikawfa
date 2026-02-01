@@ -1,136 +1,80 @@
 
-
-# Add Auto-Rotating Carousel to Testimonials Section
+# Gallery Circular Collage Layout with Hover Zoom
 
 ## Overview
+Transform the current standard grid gallery into an artistic circular collage layout (inspired by the reference image), with an interactive hover effect that enlarges photos when the cursor moves over them.
 
-Convert the testimonials section from a static grid to an auto-rotating carousel that smoothly cycles through patient reviews. The carousel will show multiple cards on larger screens and fewer on mobile, automatically advancing every 5 seconds.
+## What You'll Get
+- A visually striking circular/radial arrangement of gallery photos
+- Photos of varying sizes arranged artistically within a circular boundary
+- Smooth zoom animation when hovering over any photo
+- Maintains existing lightbox functionality when clicking photos
+- Responsive design that works on both desktop and mobile
 
----
+## Technical Implementation
 
-## What Will Change
+### 1. Create New CircularGalleryGrid Component
+- New component: `src/components/gallery/CircularGalleryGrid.tsx`
+- Uses CSS Grid with custom clip-path for circular masking
+- Variable-sized photo slots arranged in a radial pattern
+- Works with existing `useGalleryImages` hook
 
-| Current | After |
-|---------|-------|
-| Static 4-column grid | Auto-rotating carousel |
-| All reviews visible at once | Shows 1-3 reviews at a time (responsive) |
-| No interaction | Navigation arrows + dot indicators |
-| No animation | Smooth slide transitions |
+### 2. Hover Zoom Effect
+- CSS `transform: scale(1.15)` on hover for enlargement
+- Smooth transition animation (300ms)
+- Higher z-index on hover so enlarged photo appears above others
+- Subtle shadow effect on hover for depth
 
----
-
-## Design Approach
-
-Using the Embla Carousel component already in the project, enhanced with the **autoplay plugin** for automatic transitions. This provides:
-
-- Smooth, touch-friendly sliding
-- Responsive breakpoints (1 card mobile, 2 tablet, 3 desktop)
-- Auto-advance every 5 seconds
-- Pause on hover/touch
-- Dot indicators for current position
-- Optional prev/next arrows
-
----
-
-## Visual Layout
-
+### 3. Gallery Layout Structure
 ```text
-+--------------------------------------------------------------------+
-|  What Our Patients Say                                              |
-|  Patient satisfaction is our priority.                              |
-+--------------------------------------------------------------------+
-|                                                                      |
-|   [<]   +-------------+  +-------------+  +-------------+   [>]     |
-|         | ★★★★★       |  | ★★★★★       |  | ★★★★☆       |            |
-|         | "Doktor     |  | "Perkhidm-  |  | "Klinik     |            |
-|         |  sangat..." |  |  atan..."   |  |  bersih..." |            |
-|         | Puan Fatimah|  | Encik Ahmad |  | Cik Nurul   |            |
-|         +-------------+  +-------------+  +-------------+            |
-|                                                                      |
-|                         ● ○ ○ ○                                      |
-|                                                                      |
-+--------------------------------------------------------------------+
++---------------------------+
+|       Circular Mask       |
+|    +---+    +---+         |
+|    |   |    |   |         |
+|  +-+   +----+   +-+       |
+|  |   CENTER    |          |
+|  +-+        +--+--+       |
+|    |  +--+  |     |       |
+|    +--+  +--+     |       |
+|          +--------+       |
++---------------------------+
 ```
 
-**Mobile View:** 1 card visible at a time
-**Tablet View:** 2 cards visible
-**Desktop View:** 3 cards visible
+### 4. Component Structure
+- Outer container with `clip-path: circle(50%)` for circular boundary
+- CSS Grid with 12-column layout for flexible positioning
+- Each image cell with custom grid-area for unique positioning
+- Fallback to standard grid on mobile for better usability
 
----
+### 5. Files to Modify
+| File | Change |
+|------|--------|
+| `src/components/gallery/CircularGalleryGrid.tsx` | New component with circular layout |
+| `src/components/gallery/GalleryGrid.tsx` | Add circular layout option or replace grid |
+| `src/components/gallery/index.ts` | Export new component |
 
-## Implementation Details
+### 6. Key Features
+- **Circular mask**: Photos clipped within a circular boundary
+- **Variable sizing**: Different photos have different sizes based on position
+- **Hover zoom**: Scale up to 115% with smooth 300ms transition
+- **Elevated z-index**: Hovered photo rises above neighboring photos
+- **Shadow effect**: Subtle shadow on hover for depth perception
+- **Click functionality**: Existing lightbox opens on click
+- **Responsive**: Falls back to masonry/grid on smaller screens
 
-### 1. Install Embla Autoplay Plugin
+### 7. CSS Approach
+```css
+/* Circular container */
+.circular-gallery {
+  clip-path: circle(50%);
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+}
 
-```bash
-npm install embla-carousel-autoplay
+/* Hover zoom effect */
+.gallery-image:hover {
+  transform: scale(1.15);
+  z-index: 10;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
 ```
-
-### 2. Update TestimonialsSection Component
-
-The component will be refactored to:
-
-- Use `Carousel`, `CarouselContent`, `CarouselItem` from the existing UI library
-- Add the autoplay plugin with 5-second delay
-- Pause autoplay on hover/interaction
-- Show dot indicators for navigation
-- Responsive card sizing using Tailwind classes
-
-### Key Code Pattern
-
-```tsx
-import Autoplay from "embla-carousel-autoplay";
-import { Carousel, CarouselContent, CarouselItem } from "@/components/ui/carousel";
-
-// Autoplay plugin configuration
-const autoplayPlugin = Autoplay({ delay: 5000, stopOnInteraction: true });
-
-<Carousel
-  plugins={[autoplayPlugin]}
-  opts={{ loop: true, align: "start" }}
-  className="w-full"
->
-  <CarouselContent>
-    {reviews?.map((review) => (
-      <CarouselItem 
-        key={review.id} 
-        className="md:basis-1/2 lg:basis-1/3"
-      >
-        {/* Review card content */}
-      </CarouselItem>
-    ))}
-  </CarouselContent>
-</Carousel>
-```
-
----
-
-## Features
-
-| Feature | Description |
-|---------|-------------|
-| **Auto-rotate** | Advances every 5 seconds |
-| **Pause on hover** | Stops when user hovers over carousel |
-| **Loop infinitely** | Cycles back to start after last review |
-| **Dot indicators** | Shows current position with clickable dots |
-| **Touch/swipe support** | Works on mobile with swipe gestures |
-| **Responsive** | 1/2/3 cards based on screen size |
-| **Smooth transitions** | CSS-animated slide movements |
-
----
-
-## Files to Modify
-
-| File | Changes |
-|------|---------|
-| `package.json` | Add `embla-carousel-autoplay` dependency |
-| `src/components/home/TestimonialsSection.tsx` | Refactor to use carousel with autoplay |
-
----
-
-## Loading & Empty States
-
-- **Loading:** Show skeleton carousel items (3 placeholders)
-- **No reviews:** Section is hidden entirely (current behavior preserved)
-- **Single review:** Carousel still works, no auto-scroll needed
-
