@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Settings as SettingsIcon, CreditCard, Eye, EyeOff, Loader2, CheckCircle, XCircle, Key, Shield, Video, Upload, Trash2, Image } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
@@ -18,6 +19,7 @@ interface StripeKeyState {
 export default function Settings() {
   const { toast } = useToast();
   const { language } = useLanguage();
+  const { isAdmin } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   
   const [secretKey, setSecretKey] = useState<StripeKeyState>({
@@ -490,71 +492,74 @@ export default function Settings() {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CreditCard className="h-5 w-5" />
-            {language === 'ms' ? 'Integrasi Stripe' : 'Stripe Integration'}
-          </CardTitle>
-          <CardDescription>
-            {language === 'ms' 
-              ? 'Konfigurasikan kunci API Stripe untuk pemprosesan pembayaran' 
-              : 'Configure your Stripe API keys for payment processing'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {isLoading ? (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              {language === 'ms' ? 'Memuatkan tetapan...' : 'Loading settings...'}
-            </div>
-          ) : (
-            <>
-              {/* Secret Key Section */}
-              <KeyInput
-                keyType="secret"
-                keyState={secretKey}
-                setKeyState={setSecretKey}
-                placeholder="sk_live_... or sk_test_..."
-                icon={Key}
-                title={language === 'ms' ? 'Kunci Rahsia (Secret Key)' : 'Secret Key'}
-                description={language === 'ms' 
-                  ? 'Kunci rahsia mempunyai akses penuh ke akaun Stripe anda. Bermula dengan "sk_".'
-                  : 'Secret key has full access to your Stripe account. Starts with "sk_".'}
-              />
-
-              <Separator />
-
-              {/* Restricted Key Section */}
-              <KeyInput
-                keyType="restricted"
-                keyState={restrictedKey}
-                setKeyState={setRestrictedKey}
-                placeholder="rk_live_... or rk_test_..."
-                icon={Shield}
-                title={language === 'ms' ? 'Kunci Terhad (Restricted Key)' : 'Restricted Key'}
-                description={language === 'ms' 
-                  ? 'Kunci terhad mempunyai kebenaran terhad untuk operasi tertentu. Bermula dengan "rk_".'
-                  : 'Restricted key has limited permissions for specific operations. Starts with "rk_".'}
-              />
-
-              <Separator />
-
-              {/* Security Notice */}
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                <h4 className="font-medium text-amber-800 mb-1">
-                  ⚠️ {language === 'ms' ? 'Notis Keselamatan' : 'Security Notice'}
-                </h4>
-                <p className="text-sm text-amber-700">
-                  {language === 'ms' 
-                    ? 'Kunci API anda disimpan dalam pangkalan data. Untuk keselamatan maksimum, pertimbangkan untuk menggunakan rahsia persekitaran melalui tetapan Cloud Lovable.' 
-                    : 'Your API keys are stored in the database. For maximum security, consider using environment secrets through Lovable\'s Cloud settings instead.'}
-                </p>
+      {/* Stripe Integration - Admin Only */}
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5" />
+              {language === 'ms' ? 'Integrasi Stripe' : 'Stripe Integration'}
+            </CardTitle>
+            <CardDescription>
+              {language === 'ms' 
+                ? 'Konfigurasikan kunci API Stripe untuk pemprosesan pembayaran' 
+                : 'Configure your Stripe API keys for payment processing'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {isLoading ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {language === 'ms' ? 'Memuatkan tetapan...' : 'Loading settings...'}
               </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+            ) : (
+              <>
+                {/* Secret Key Section */}
+                <KeyInput
+                  keyType="secret"
+                  keyState={secretKey}
+                  setKeyState={setSecretKey}
+                  placeholder="sk_live_... or sk_test_..."
+                  icon={Key}
+                  title={language === 'ms' ? 'Kunci Rahsia (Secret Key)' : 'Secret Key'}
+                  description={language === 'ms' 
+                    ? 'Kunci rahsia mempunyai akses penuh ke akaun Stripe anda. Bermula dengan "sk_".'
+                    : 'Secret key has full access to your Stripe account. Starts with "sk_".'}
+                />
+
+                <Separator />
+
+                {/* Restricted Key Section */}
+                <KeyInput
+                  keyType="restricted"
+                  keyState={restrictedKey}
+                  setKeyState={setRestrictedKey}
+                  placeholder="rk_live_... or rk_test_..."
+                  icon={Shield}
+                  title={language === 'ms' ? 'Kunci Terhad (Restricted Key)' : 'Restricted Key'}
+                  description={language === 'ms' 
+                    ? 'Kunci terhad mempunyai kebenaran terhad untuk operasi tertentu. Bermula dengan "rk_".'
+                    : 'Restricted key has limited permissions for specific operations. Starts with "rk_".'}
+                />
+
+                <Separator />
+
+                {/* Security Notice */}
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <h4 className="font-medium text-amber-800 mb-1">
+                    ⚠️ {language === 'ms' ? 'Notis Keselamatan' : 'Security Notice'}
+                  </h4>
+                  <p className="text-sm text-amber-700">
+                    {language === 'ms' 
+                      ? 'Kunci API anda disimpan dalam pangkalan data. Untuk keselamatan maksimum, pertimbangkan untuk menggunakan rahsia persekitaran melalui tetapan Cloud Lovable.' 
+                      : 'Your API keys are stored in the database. For maximum security, consider using environment secrets through Lovable\'s Cloud settings instead.'}
+                  </p>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Homepage Video Card */}
       <Card>
