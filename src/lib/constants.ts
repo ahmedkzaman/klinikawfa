@@ -129,8 +129,8 @@ export const SERVICES = [
     id: 'return-to-work',
     slug: 'pemeriksaan-kembali-bekerja',
     icon: 'ClipboardCheck',
-    titleMs: 'Penilaian Kembali Bekerja',
-    titleEn: 'Return to Work Assessment',
+    titleMs: 'Penilaian Kecergasan Bekerja',
+    titleEn: 'Fitness to Work Assessment',
   },
   {
     id: 'haj-checkup',
