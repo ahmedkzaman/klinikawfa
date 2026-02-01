@@ -1,48 +1,55 @@
 
-
-# Stage 8: Health Tips Blog
+# Stage 9: Polish, Performance & SEO
 
 ## Overview
-Transform the placeholder Health Tips page into a fully functional blog system with real database content, category filtering, search, pagination, and a dedicated article page with rich features.
+This stage focuses on final optimizations to ensure the Klinik Awfa website is fast, search-engine friendly, accessible, and fully compliant with legal requirements. We will address performance, SEO, accessibility (WCAG 2.1 AA), and ensure all disclaimers and PDPA notices are in place.
 
 ---
 
-## Current State
+## Current State Assessment
 
-The HealthTips page currently shows:
-- Static placeholder posts (hardcoded)
-- Non-functional category filter buttons
-- A "TODO" notice about admin dashboard
+### What's Already Working
+- **Lazy loading**: Gallery images and maps already use `loading="lazy"`
+- **PDPA consent**: Appointment form has proper PDPA checkbox with bilingual text
+- **Medical disclaimer**: ServiceDetail page already includes proper disclaimer
+- **Accessibility basics**: Some aria-labels on carousel buttons and navigation
+- **robots.txt**: Basic robots.txt exists allowing all bots
 
-What already exists:
-- Database tables: `blog_posts` and `blog_categories` (both populated with 4 categories)
-- Admin blog editor with bilingual support and image uploads
-- Blog management page for CRUD operations
+### What Needs Work
+- **SEO**: No page-specific meta tags (title still says "Lovable App")
+- **Schema markup**: No structured data for MedicalClinic/LocalBusiness
+- **Sitemap**: No sitemap.xml exists
+- **Footer**: Needs to match the required verbatim copy from memory
+- **Lazy loading**: Missing on BlogCard images and BlogPost featured image
+- **Accessibility**: Some buttons missing aria-labels, skip navigation missing
+- **Focus management**: Needs review for keyboard navigation
 
 ---
 
 ## What Will Be Built
 
-### 1. Blog Listing Page (`/health-tips`)
-- **Real posts from database** instead of placeholders
-- **Category filtering** with four predefined categories:
-  - Children's Health
-  - General Health
-  - Lump and Wart Info
-  - ENT / Ear Care Tips
-- **Search functionality** to filter by title/content
-- **Pagination** (6 posts per page)
-- **Loading skeletons** for better UX
-- **Empty state** when no posts match
+### 1. SEO System
+- **SEO component** with dynamic meta tags per page
+- **OpenGraph tags** for social sharing
+- **Sitemap.xml** with all public routes
+- **LocalBusiness/MedicalClinic schema** markup
 
-### 2. Blog Post Page (`/health-tips/:slug`)
-- **Article content** with Markdown rendering
-- **Featured image** display
-- **Author info** and published date
-- **Reading time** indicator
-- **Related posts** based on same category
-- **Social share buttons** (WhatsApp, Facebook, X, copy link)
-- **CTA section** to book appointment
+### 2. Performance Optimizations
+- **Add lazy loading** to remaining images (BlogCard, BlogPost, Doctors)
+- **Preconnect hints** for external resources
+- **Image optimization** guidance
+
+### 3. Accessibility Enhancements
+- **Skip to main content** link
+- **Focus visible** improvements
+- **Aria-labels** for interactive elements
+- **Heading hierarchy** audit
+- **Screen reader** announcements
+
+### 4. Compliance Verification
+- **Footer copy** updated to exact required text
+- **PDPA notices** verified on all forms
+- **Medical disclaimers** confirmed on health content
 
 ---
 
@@ -50,14 +57,11 @@ What already exists:
 
 | File | Purpose |
 |------|---------|
-| `src/hooks/useBlogPosts.ts` | Custom hook for fetching blog posts with filtering and pagination |
-| `src/pages/BlogPost.tsx` | Individual blog post page |
-| `src/components/blog/BlogCard.tsx` | Reusable blog post card component |
-| `src/components/blog/BlogSearch.tsx` | Search input component |
-| `src/components/blog/BlogPagination.tsx` | Pagination wrapper component |
-| `src/components/blog/ShareButtons.tsx` | Social share buttons component |
-| `src/components/blog/RelatedPosts.tsx` | Related posts section |
-| `src/components/blog/MarkdownRenderer.tsx` | Markdown to HTML renderer |
+| `src/components/seo/SEOHead.tsx` | Dynamic meta tags component using react-helmet-async |
+| `src/components/seo/SchemaMarkup.tsx` | JSON-LD structured data for LocalBusiness/MedicalClinic |
+| `src/components/seo/index.ts` | Exports |
+| `src/components/layout/SkipToContent.tsx` | Accessibility skip link |
+| `public/sitemap.xml` | Static sitemap for search engines |
 
 ---
 
@@ -65,170 +69,206 @@ What already exists:
 
 | File | Changes |
 |------|---------|
-| `src/pages/HealthTips.tsx` | Replace placeholders with real data, add search and pagination |
-| `src/App.tsx` | Add route for individual blog post page |
-| `src/components/blog/index.ts` | Export new components |
+| `index.html` | Update default title, meta, add preconnect hints |
+| `public/robots.txt` | Add sitemap reference |
+| `src/App.tsx` | Add HelmetProvider wrapper |
+| `src/main.tsx` | Add any required providers |
+| `src/components/layout/Footer.tsx` | Update to required verbatim copy |
+| `src/components/layout/MainLayout.tsx` | Add SkipToContent link, schema markup |
+| `src/pages/Index.tsx` | Add SEO component |
+| `src/pages/Services.tsx` | Add SEO component |
+| `src/pages/ServiceDetail.tsx` | Add dynamic SEO component |
+| `src/pages/Doctors.tsx` | Add SEO component |
+| `src/pages/Appointment.tsx` | Add SEO component |
+| `src/pages/Gallery.tsx` | Add SEO component |
+| `src/pages/HealthTips.tsx` | Add SEO component |
+| `src/pages/BlogPost.tsx` | Add dynamic SEO with article schema |
+| `src/components/blog/BlogCard.tsx` | Add lazy loading to images |
+| `src/components/layout/Header.tsx` | Add aria-labels to language buttons |
 
 ---
 
 ## Technical Details
 
-### useBlogPosts Hook
+### SEO Component
 
 ```typescript
-interface UseBlogPostsOptions {
-  category?: string;       // Category slug filter
-  searchQuery?: string;    // Title/content search
-  page?: number;           // Current page (1-indexed)
-  limit?: number;          // Posts per page (default: 6)
-}
-
-interface UseBlogPostsReturn {
-  posts: BlogPost[];
-  totalPosts: number;
-  totalPages: number;
-  isLoading: boolean;
-  error: Error | null;
-  categories: BlogCategory[];
+// SEOHead.tsx
+interface SEOProps {
+  title: string;
+  description: string;
+  image?: string;
+  url?: string;
+  type?: 'website' | 'article';
+  publishedTime?: string;
+  author?: string;
 }
 ```
 
-### Category Mapping
+Each page will have appropriate meta tags:
 
-The database already has these categories:
+| Page | Title | Description |
+|------|-------|-------------|
+| Home | Klinik Awfa - Klinik Keluarga Anda | Rawatan berkualiti untuk keluarga anda di KotaSAS Kuantan |
+| Services | Perkhidmatan - Klinik Awfa | Pelbagai perkhidmatan kesihatan untuk seluruh keluarga |
+| Doctors | Doktor - Klinik Awfa | Pasukan doktor berpengalaman di Klinik Awfa |
+| Appointment | Temujanji - Klinik Awfa | Buat temujanji dengan Klinik Awfa |
+| Gallery | Galeri - Klinik Awfa | Lihat suasana di Klinik Awfa |
+| Health Tips | Tips Kesihatan - Klinik Awfa | Artikel dan panduan kesihatan |
+| Blog Post | [Post Title] - Klinik Awfa | [Post Excerpt] |
 
-| Category Name | Slug | Malay Name |
-|---------------|------|------------|
-| Children's Health | children-health | Kesihatan Kanak-kanak |
-| General Health | general-health | Kesihatan Umum |
-| Lump and Wart Info | lump-wart-info | Info Ketumbuhan dan Ketuat |
-| ENT / Ear Care Tips | ent-ear-care | Tips Penjagaan Telinga |
+### LocalBusiness Schema
 
-### Markdown Rendering
+```json
+{
+  "@context": "https://schema.org",
+  "@type": ["LocalBusiness", "MedicalClinic"],
+  "name": "Klinik Awfa",
+  "description": "Klinik Keluarga Anda - Your Family Clinic",
+  "url": "https://klinikawfa.lovable.app",
+  "telephone": "+60182523531",
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "B2 & B4, Jalan KS 1/12, KotaSAS Avenue",
+    "addressLocality": "Kuantan",
+    "addressRegion": "Pahang",
+    "postalCode": "25200",
+    "addressCountry": "MY"
+  },
+  "openingHours": "Mo-Su 08:00-00:00",
+  "geo": {
+    "@type": "GeoCoordinates",
+    "latitude": "3.8",
+    "longitude": "103.4"
+  }
+}
+```
 
-Simple markdown support for blog content:
-- Headings (##, ###)
-- Bold (**text**)
-- Italic (*text*)
-- Lists (- item, 1. item)
-- Links ([text](url))
-- Line breaks
+### Footer Update (Required Verbatim Copy)
 
-Using a lightweight approach without heavy dependencies.
-
-### Share Buttons
+The footer must display the exact text from the compliance requirements:
 
 ```text
-+-------------------------------------------+
-|  Share this article:                      |
-|  [WhatsApp] [Facebook] [X] [Copy Link]    |
-+-------------------------------------------+
+Nak buat temujanji dengan kami?
+Boleh hubungi kami untuk maklumat lanjut
+☎️ +60 18-252 3531
+📱 www.wasap.my/60182523531
+
+Klinik Awfa, KotaSAS,
+B2 & B4, Jalan KS 1/12,
+KotaSAS Avenue,
+25200 Kuantan, Pahang
+
+Waktu Operasi:
+Setiap Hari
+8.00 pagi - 12.00 tengah malam
+"Klinik Keluarga Anda"
 ```
 
-Each button opens the respective platform's share URL with:
-- Post title
-- Post URL
-- Preview text (excerpt)
+### Skip to Content
 
-### Related Posts Logic
+```typescript
+// SkipToContent.tsx
+export function SkipToContent() {
+  return (
+    <a
+      href="#main-content"
+      className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100] focus:bg-primary focus:text-primary-foreground focus:px-4 focus:py-2 focus:rounded-md"
+    >
+      Skip to main content
+    </a>
+  );
+}
+```
 
-Query up to 3 posts where:
-- Same category_id as current post
-- Not the current post
-- Published = true
-- Order by published_at DESC
+### Sitemap.xml
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://klinikawfa.lovable.app/</loc><priority>1.0</priority></url>
+  <url><loc>https://klinikawfa.lovable.app/services</loc><priority>0.9</priority></url>
+  <url><loc>https://klinikawfa.lovable.app/doctors</loc><priority>0.8</priority></url>
+  <url><loc>https://klinikawfa.lovable.app/appointment</loc><priority>0.9</priority></url>
+  <url><loc>https://klinikawfa.lovable.app/gallery</loc><priority>0.7</priority></url>
+  <url><loc>https://klinikawfa.lovable.app/health-tips</loc><priority>0.8</priority></url>
+</urlset>
+```
 
 ---
 
-## Page Layouts
+## Accessibility Checklist
 
-### Health Tips Listing
+| Item | Status | Action |
+|------|--------|--------|
+| Skip to content link | Missing | Add to MainLayout |
+| Page titles | Missing | Add SEO component |
+| Heading hierarchy | Mostly OK | Verify H1 on each page |
+| Image alt text | Partial | Already using alt_text from DB |
+| Focus visible | Default | Enhanced with Tailwind |
+| Keyboard navigation | Mostly OK | Review lightbox |
+| Aria-labels | Partial | Add to language buttons |
+| Form labels | Good | Already in place |
+| Color contrast | Tailwind handles | Verify with tool |
+| Screen reader | Basic | Add sr-only text where needed |
 
-```text
-+--------------------------------------------------+
-|  Health Tips                                      |
-|  Health articles and guides from our experts     |
-+--------------------------------------------------+
-|  [Search: ____________________]                  |
-+--------------------------------------------------+
-|  [All] [Children] [General] [Lump] [ENT]         |
-+--------------------------------------------------+
-|  +----------+  +----------+  +----------+        |
-|  | Image    |  | Image    |  | Image    |        |
-|  | Date     |  | Date     |  | Date     |        |
-|  | Title    |  | Title    |  | Title    |        |
-|  | Excerpt  |  | Excerpt  |  | Excerpt  |        |
-|  | Read >   |  | Read >   |  | Read >   |        |
-|  +----------+  +----------+  +----------+        |
-|                                                   |
-|  +----------+  +----------+  +----------+        |
-|  | ...      |  | ...      |  | ...      |        |
-|  +----------+  +----------+  +----------+        |
-+--------------------------------------------------+
-|  [< Previous]  1  2  3  ...  [Next >]            |
-+--------------------------------------------------+
-```
+---
 
-### Blog Post Page
+## Image Lazy Loading Additions
 
-```text
-+--------------------------------------------------+
-|  < Back to Health Tips                           |
-+--------------------------------------------------+
-|  [Featured Image - Full Width]                   |
-+--------------------------------------------------+
-|  Category Badge                                  |
-|  Post Title (H1)                                 |
-|  Date | Author | Reading Time                    |
-+--------------------------------------------------+
-|  [Article Content - Markdown Rendered]           |
-|                                                   |
-|  Paragraph text with formatting...               |
-|  ## Subheading                                   |
-|  More content...                                 |
-+--------------------------------------------------+
-|  Share this article:                             |
-|  [WhatsApp] [Facebook] [X] [Copy]                |
-+--------------------------------------------------+
-|  Related Posts                                   |
-|  +--------+  +--------+  +--------+              |
-|  | Card   |  | Card   |  | Card   |              |
-|  +--------+  +--------+  +--------+              |
-+--------------------------------------------------+
-|  Have Health Questions? [Book Appointment]       |
-+--------------------------------------------------+
-```
+| Component | Current | Action |
+|-----------|---------|--------|
+| GalleryGrid | Has lazy loading | None |
+| GalleryStrip | Has lazy loading | None |
+| MapSection | Has lazy loading | None |
+| BlogCard | Missing | Add `loading="lazy"` |
+| BlogPost | Missing | Add `loading="lazy"` |
+| Doctors | Missing | Add `loading="lazy"` |
 
 ---
 
 ## Implementation Order
 
-1. Create `useBlogPosts` hook with filtering, search, pagination
-2. Create `BlogCard` component (reusable)
-3. Update `HealthTips.tsx` with real data and filters
-4. Add search functionality
-5. Add pagination with page state
-6. Create `BlogPost.tsx` page with markdown rendering
-7. Add share buttons component
-8. Add related posts section
-9. Add route to App.tsx
-10. Test bilingual switching
+1. Create SEO components (SEOHead, SchemaMarkup)
+2. Update index.html with proper defaults and preconnect
+3. Add SEO to all pages
+4. Create sitemap.xml and update robots.txt
+5. Update Footer with required copy
+6. Add SkipToContent link
+7. Add lazy loading to remaining images
+8. Add aria-labels to interactive elements
+9. Verify medical disclaimers are present
+10. Test with Lighthouse
 
 ---
 
-## SEO and Performance
+## Lighthouse Target Scores
 
-- Proper heading hierarchy (H1 for post title)
-- Alt text for images
-- Loading states prevent layout shift
-- Posts lazy-loaded by page
+| Category | Target |
+|----------|--------|
+| Performance | 90+ |
+| Accessibility | 95+ |
+| Best Practices | 95+ |
+| SEO | 100 |
 
 ---
 
-## Mobile Considerations
+## Dependencies
 
-- Category buttons scroll horizontally
-- Full-width cards on mobile
-- Touch-friendly share buttons
-- Back button always visible
+We'll need to add `react-helmet-async` for managing document head:
 
+```bash
+npm install react-helmet-async
+```
+
+This is a lightweight package specifically designed for React 18+ that allows us to update `<head>` tags dynamically per page.
+
+---
+
+## Impact
+
+- **SEO**: Pages will be properly indexed with rich snippets
+- **Social Sharing**: WhatsApp, Facebook, Twitter will show proper previews
+- **Accessibility**: WCAG 2.1 AA compliance for all users
+- **Performance**: Faster initial load with lazy loading
+- **Compliance**: All legal requirements met (PDPA, disclaimers, footer copy)
