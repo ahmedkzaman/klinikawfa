@@ -1,206 +1,202 @@
 
 
-# Plan: Improve Mobile Video Call Layout
+# Plan: Fix Doctor Not Seeing Patient's Video
 
-## Problem
+## Root Cause Analysis
 
-During a video call on mobile (handphone), the camera and microphone buttons are not visible. The current layout is not optimized for small screens, causing:
-- Call controls to be cut off or hidden below the fold
-- Video grid taking too much space
-- Poor use of limited screen real estate
+After deep investigation, I found **three critical issues** causing the doctor to not see the patient's video:
 
-## Current Layout Analysis
+### Issue 1: Track Transceiver Direction Mismatch
 
-**Patient View (VideoCall.tsx - 'in-call' step):**
-```
-+---------------------------+
-|        Timer Section      |  <- Takes full width, stacked vertically
-+---------------------------+
-|                           |
-|     Remote Video          |  <- min-h-[300px]
-|     (Doctor)              |
-|                           |
-+---------------------------+
-|                           |
-|     Local Video           |  <- min-h-[300px]
-|     (You)                 |
-|                           |
-+---------------------------+
-|      Call Controls        |  <- May be off-screen!
-+---------------------------+
+**Problem**: When staff creates an offer BEFORE receiving any tracks from the patient, the SDP (Session Description Protocol) doesn't include the proper transceivers for receiving media. The staff's peer connection is set up only to SEND video, not to RECEIVE it.
+
+**Evidence in code**: In `useWebRTC.ts` lines 521-527, staff creates the offer immediately after adding their local tracks but before any negotiation about receiving tracks:
+```typescript
+if (isStaff) {
+  const offer = await pc.createOffer();  // Only sends tracks, no recv
+  await pc.setLocalDescription(offer);
+  currentOfferRef.current = offer;
+}
 ```
 
-**Problems:**
-1. Two video players at 300px each = 600px minimum
-2. Timer section takes additional space (~120px)
-3. MainLayout header/footer takes ~100px
-4. Call controls at bottom may be pushed below viewport
-5. Controls have no safe area / fixed positioning on mobile
+### Issue 2: Remote Stream Reference Created Too Early
+
+**Problem**: In `createPeerConnection()` (line 169-172), a new empty `MediaStream` is created and set as remoteStream BEFORE any tracks arrive. When tracks do arrive (line 187-189), a new `MediaStream` is created but the React component may not re-render properly because the stream object reference keeps changing.
+
+### Issue 3: Missing `addTransceiver` for Bidirectional Media
+
+**Problem**: The peer connection doesn't explicitly declare it wants to receive video. Without explicit transceivers, the SDP negotiation may not properly set up bidirectional video.
+
+---
 
 ## Solution
 
-Create a mobile-optimized layout with:
-1. **Fixed bottom controls** - Always visible call controls bar
-2. **Picture-in-picture style** - Small local video overlay on remote video
-3. **Compact timer** - Smaller, inline timer for mobile
-4. **Safe area padding** - Account for device notches/home indicators
+### Fix 1: Add Explicit Transceivers for Receiving Media
 
-### New Mobile Layout
+Before creating the offer, the staff must add transceivers that indicate "I want to receive video and audio":
 
+```typescript
+// Add transceivers for receiving media BEFORE creating offer
+pc.addTransceiver('video', { direction: 'sendrecv' });
+pc.addTransceiver('audio', { direction: 'sendrecv' });
 ```
-+---------------------------+
-|  Timer (compact inline)   |
-+---------------------------+
-|                           |
-|                           |
-|     Remote Video          |
-|     (Full screen)         |
-|        +-------+          |
-|        | Local |          |
-|        | Video |          |
-|        +-------+          |
-|                           |
-+---------------------------+
-| [Mic] [Video] [End Call]  |  <- Fixed position bottom
-+---------------------------+
+
+### Fix 2: Stabilize Remote Stream Reference
+
+Instead of creating new `MediaStream` objects, maintain a single stable reference and only update React state when tracks actually change:
+
+```typescript
+// Track remote tracks by ID to detect actual changes
+const remoteTrackIds = new Set<string>();
+
+pc.ontrack = (event) => {
+  const track = event.track;
+  if (!remoteTrackIds.has(track.id)) {
+    remoteTrackIds.add(track.id);
+    remoteStreamRef.current.addTrack(track);
+    // Trigger React update
+    setRemoteStream(new MediaStream(remoteStreamRef.current.getTracks()));
+  }
+};
 ```
+
+### Fix 3: Handle Stream from Event Properly
+
+The `ontrack` event provides `event.streams[0]` which is the actual remote stream. We should use this when available:
+
+```typescript
+pc.ontrack = (event) => {
+  if (event.streams && event.streams[0]) {
+    // Use the stream provided by WebRTC
+    remoteStreamRef.current = event.streams[0];
+    setRemoteStream(event.streams[0]);
+  } else {
+    // Fallback: manually add track
+    remoteStreamRef.current.addTrack(event.track);
+  }
+};
+```
+
+---
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/hooks/useWebRTC.ts` | Add transceivers, fix remote stream handling, use event.streams |
 
 ---
 
 ## Implementation Details
 
-### 1. Create Mobile Video Call Layout Component
-
-**New File: `src/components/video/MobileCallLayout.tsx`**
-
-A specialized layout component for mobile video calls:
-- Uses `useIsMobile()` hook to detect mobile
-- Fixed bottom control bar with safe area insets
-- Local video as small overlay (picture-in-picture)
-- Remote video takes full remaining height
-- Compact timer at top
+### Modified `createPeerConnection` function
 
 ```typescript
-interface MobileCallLayoutProps {
-  remoteStream: MediaStream | null;
-  localStream: MediaStream | null;
-  timer: { formattedTime: string; totalMinutes: number; ... };
-  controls: {
-    isAudioEnabled: boolean;
-    isVideoEnabled: boolean;
-    isConnected: boolean;
-    isConnecting: boolean;
-    onToggleAudio: () => void;
-    onToggleVideo: () => void;
-    onEndCall: () => void;
+const createPeerConnection = (stream: MediaStream) => {
+  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+  // CRITICAL: Add transceivers for bidirectional media
+  // This ensures the SDP includes "recvonly" or "sendrecv" for incoming tracks
+  pc.addTransceiver('audio', { direction: 'sendrecv' });
+  pc.addTransceiver('video', { direction: 'sendrecv' });
+
+  // Add local tracks
+  stream.getTracks().forEach(track => {
+    pc.addTrack(track, stream);
+  });
+
+  // Initialize remote stream ref if needed
+  if (!remoteStreamRef.current) {
+    remoteStreamRef.current = new MediaStream();
+  }
+
+  // Handle remote tracks - PROPERLY this time
+  pc.ontrack = (event) => {
+    console.log('[WebRTC] ontrack:', event.track.kind, event.streams);
+    
+    // Prefer using the stream from the event (if available)
+    if (event.streams && event.streams[0]) {
+      console.log('[WebRTC] Using stream from event');
+      remoteStreamRef.current = event.streams[0];
+      setRemoteStream(event.streams[0]);
+    } else {
+      // Fallback: add track to our managed stream
+      const existingTrack = remoteStreamRef.current?.getTracks()
+        .find(t => t.id === event.track.id);
+      
+      if (!existingTrack) {
+        console.log('[WebRTC] Adding track to managed stream:', event.track.kind);
+        remoteStreamRef.current.addTrack(event.track);
+        
+        // Create new reference to trigger React re-render
+        const updatedStream = new MediaStream(remoteStreamRef.current.getTracks());
+        remoteStreamRef.current = updatedStream;
+        setRemoteStream(updatedStream);
+      }
+    }
+
+    // Track lifecycle events
+    event.track.onended = () => console.log('[WebRTC] Track ended:', event.track.kind);
+    event.track.onmute = () => console.log('[WebRTC] Track muted:', event.track.kind);
+    event.track.onunmute = () => console.log('[WebRTC] Track unmuted:', event.track.kind);
   };
-  connectionStatus: ConnectionStatus;
-  // ... other props
-}
+
+  // ... rest remains same
+};
 ```
 
-### 2. Update CallControls for Mobile
+### Modified `startCall` function (Staff side)
 
-**File: `src/components/video/CallControls.tsx`**
-
-Add mobile-specific styling:
-- Larger touch targets (48px buttons)
-- Fixed positioning option
-- Higher z-index
-- Safe area bottom padding
-
-### 3. Update VideoCall.tsx and VideoCallStaff.tsx
-
-**Files to modify:**
-- `src/pages/VideoCall.tsx`
-- `src/pages/VideoCallStaff.tsx`
-
-Integrate mobile-responsive layout:
-- Detect mobile using `useIsMobile()` hook
-- Render `MobileCallLayout` for mobile screens
-- Keep desktop layout for larger screens
-
-### 4. Add Compact Timer for Mobile
-
-**File: `src/components/video/CallTimer.tsx`**
-
-Add `compact` prop for mobile display:
-- Single line layout
-- Smaller text
-- No extra details on mobile
+```typescript
+if (isStaff) {
+  console.log('[WebRTC] Creating offer with sendrecv transceivers...');
+  
+  // Create offer with explicit options to receive media
+  const offer = await pc.createOffer({
+    offerToReceiveAudio: true,
+    offerToReceiveVideo: true,
+  });
+  
+  await pc.setLocalDescription(offer);
+  currentOfferRef.current = offer;
+  console.log('[WebRTC] Offer created with receive capabilities');
+}
+```
 
 ---
 
-## Files to Create/Modify
+## Why Previous Fixes Didn't Work
 
-| File | Action | Changes |
-|------|--------|---------|
-| `src/components/video/MobileCallLayout.tsx` | CREATE | New mobile-optimized video call layout |
-| `src/components/video/CallControls.tsx` | MODIFY | Add fixed position option, larger touch targets |
-| `src/components/video/CallTimer.tsx` | MODIFY | Add compact mode for mobile |
-| `src/components/video/index.ts` | MODIFY | Export MobileCallLayout |
-| `src/pages/VideoCall.tsx` | MODIFY | Use MobileCallLayout on mobile |
-| `src/pages/VideoCallStaff.tsx` | MODIFY | Use MobileCallLayout on mobile |
+1. **Polling for offer** - The signaling worked, but the SDP itself didn't have proper receive capabilities
+2. **Track state checks** - The tracks weren't arriving at all because the SDP didn't negotiate receiving
+3. **Stream reference changes** - Didn't matter because no tracks were being received
+
+The core issue was always that **the staff's SDP offer didn't include transceivers for receiving media**.
 
 ---
 
-## Technical Details
+## Technical Background
 
-### Mobile Layout CSS
+WebRTC requires explicit negotiation of media directions:
+- `sendonly` - I will send but not receive
+- `recvonly` - I will receive but not send  
+- `sendrecv` - I will both send and receive
+- `inactive` - No media
 
-```css
-/* Fixed bottom controls */
-.mobile-controls {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 16px;
-  padding-bottom: env(safe-area-inset-bottom, 16px);
-  background: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(8px);
-  z-index: 50;
-}
+When you call `pc.addTrack()` without transceivers, WebRTC defaults to `sendrecv` for that track. BUT if the offer is created before the remote party adds their tracks, the negotiation may not properly include receiving capabilities.
 
-/* Local video overlay (picture-in-picture) */
-.local-video-pip {
-  position: absolute;
-  bottom: 80px; /* Above controls */
-  right: 16px;
-  width: 100px;
-  height: 140px;
-  border-radius: 12px;
-  overflow: hidden;
-  border: 2px solid white;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-}
-```
-
-### Touch-Friendly Button Sizes
-
-- Minimum touch target: 48x48px (WCAG requirement)
-- Current buttons: 48x48px (good for mic/video)
-- End call button: 56x56px (larger for primary action)
-
-### Safe Area Handling
-
-Using CSS `env()` for device safe areas:
-```css
-padding-bottom: calc(16px + env(safe-area-inset-bottom));
-```
+By explicitly adding transceivers with `direction: 'sendrecv'` AND using `offerToReceiveVideo: true` in the offer options, we guarantee the SDP will include the proper `m=` lines for receiving both audio and video.
 
 ---
 
 ## Summary
 
-This plan transforms the mobile video call experience by:
+This fix addresses the root cause by:
 
-1. **Fixed controls** - Call buttons always visible at bottom
-2. **Full-screen remote video** - Maximizes the doctor/patient view
-3. **PiP local video** - Small overlay showing yourself
-4. **Compact timer** - Minimal space usage at top
-5. **Touch-friendly** - Large buttons easy to tap
-6. **Safe areas** - Works on notched devices (iPhone, etc.)
+1. **Adding explicit transceivers** before creating the offer
+2. **Using `offerToReceiveVideo: true`** option when creating the offer
+3. **Properly handling `event.streams[0]`** in the ontrack handler
+4. **Stabilizing stream references** to prevent React rendering issues
 
-The desktop layout remains unchanged - only mobile screens get the optimized layout.
+This should finally resolve the issue where the doctor cannot see the patient's video.
 
