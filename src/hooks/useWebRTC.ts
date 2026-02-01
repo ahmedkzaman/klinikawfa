@@ -7,6 +7,13 @@ import type { ConnectionStatus } from '@/components/video/ConnectionStatusIndica
 const MAX_RETRY_ATTEMPTS = 3;
 const INITIAL_RETRY_DELAY = 2000; // 2 seconds
 
+// Answer retry configuration
+const MAX_ANSWER_RETRIES = 3;
+const ANSWER_RETRY_DELAY = 1000; // 1 second base delay
+
+// Connection timeout configuration
+const CONNECTION_TIMEOUT_MS = 30000; // 30 seconds
+
 interface UseWebRTCOptions {
   roomCode: string;
   isStaff: boolean;
@@ -64,12 +71,19 @@ export function useWebRTC({
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const offerPollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const answerRetryCountRef = useRef<number>(0);
+  const iceRestartInProgressRef = useRef<boolean>(false);
 
   const cleanup = useCallback(() => {
     console.log('[WebRTC] Cleaning up...');
     if (offerPollIntervalRef.current) {
       clearInterval(offerPollIntervalRef.current);
       offerPollIntervalRef.current = null;
+    }
+    if (connectionTimeoutRef.current) {
+      clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
     }
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
@@ -93,6 +107,8 @@ export function useWebRTC({
     setConnectionState('closed');
     currentOfferRef.current = null;
     pendingCandidatesRef.current = [];
+    answerRetryCountRef.current = 0;
+    iceRestartInProgressRef.current = false;
   }, []);
 
   const initializeMedia = async () => {
@@ -229,9 +245,15 @@ export function useWebRTC({
       setConnectionState(pc.connectionState);
       
       if (pc.connectionState === 'connected') {
+        // Clear connection timeout on success
+        if (connectionTimeoutRef.current) {
+          clearTimeout(connectionTimeoutRef.current);
+          connectionTimeoutRef.current = null;
+        }
         setConnectionStatus('connected');
         setIsConnected(true);
         setIsConnecting(false);
+        iceRestartInProgressRef.current = false;
         onCallStarted?.();
       } else if (pc.connectionState === 'connecting') {
         setConnectionStatus('establishing-connection');
@@ -247,8 +269,38 @@ export function useWebRTC({
       }
     };
 
-    pc.oniceconnectionstatechange = () => {
+    // ICE connection state handler with automatic ICE restart
+    pc.oniceconnectionstatechange = async () => {
       console.log('[WebRTC] ICE connection state:', pc.iceConnectionState);
+      
+      // Attempt ICE restart on failure
+      if (pc.iceConnectionState === 'failed' && !iceRestartInProgressRef.current) {
+        console.log('[WebRTC] ICE failed, attempting restart...');
+        iceRestartInProgressRef.current = true;
+        
+        try {
+          pc.restartIce();
+          
+          // Only staff creates new offer for ICE restart
+          if (isStaff) {
+            const offer = await pc.createOffer({ iceRestart: true });
+            await pc.setLocalDescription(offer);
+            currentOfferRef.current = offer;
+            
+            console.log('[WebRTC] Sending ICE restart offer');
+            channelRef.current?.send({
+              type: 'broadcast',
+              event: 'offer',
+              payload: { offer, from: 'staff', iceRestart: true },
+            });
+          }
+        } catch (err) {
+          console.error('[WebRTC] ICE restart failed:', err);
+          iceRestartInProgressRef.current = false;
+        }
+      } else if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        iceRestartInProgressRef.current = false;
+      }
     };
 
     peerConnectionRef.current = pc;
@@ -347,9 +399,16 @@ export function useWebRTC({
         })
         .on('broadcast', { event: 'offer' }, async ({ payload }) => {
           if (!isStaff && payload.from === 'staff') {
-            console.log('[WebRTC] Received offer from staff');
+            console.log('[WebRTC] Received offer from staff', payload.iceRestart ? '(ICE restart)' : '');
             try {
               await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
+              
+              // Send acknowledgement
+              channel.send({
+                type: 'broadcast',
+                event: 'offer-received',
+                payload: { from: 'patient' },
+              });
               
               // Process any pending ICE candidates
               for (const candidate of pendingCandidatesRef.current) {
@@ -372,11 +431,27 @@ export function useWebRTC({
             }
           }
         })
+        // Staff acknowledges offer was received (for debugging/logging)
+        .on('broadcast', { event: 'offer-received' }, ({ payload }) => {
+          if (isStaff && payload.from === 'patient') {
+            console.log('[WebRTC] Patient confirmed offer received');
+          }
+        })
         .on('broadcast', { event: 'answer' }, async ({ payload }) => {
           if (isStaff && payload.from === 'patient') {
             console.log('[WebRTC] Received answer from patient');
             try {
               await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
+              
+              // Send acknowledgement
+              channel.send({
+                type: 'broadcast',
+                event: 'answer-received',
+                payload: { from: 'staff' },
+              });
+              
+              // Reset retry count on success
+              answerRetryCountRef.current = 0;
               
               // Process any pending ICE candidates
               for (const candidate of pendingCandidatesRef.current) {
@@ -384,9 +459,43 @@ export function useWebRTC({
               }
               pendingCandidatesRef.current = [];
             } catch (err) {
-              console.error('[WebRTC] Error handling answer:', err);
-              onError?.('Failed to establish connection');
+              console.error('[WebRTC] Error handling answer, attempt', answerRetryCountRef.current + 1);
+              
+              // Retry logic: request new answer
+              if (answerRetryCountRef.current < MAX_ANSWER_RETRIES) {
+                answerRetryCountRef.current++;
+                const delay = ANSWER_RETRY_DELAY * answerRetryCountRef.current;
+                
+                console.log(`[WebRTC] Requesting new answer in ${delay}ms...`);
+                setTimeout(() => {
+                  channel.send({
+                    type: 'broadcast',
+                    event: 'request-answer',
+                    payload: { from: 'staff' },
+                  });
+                }, delay);
+              } else {
+                console.error('[WebRTC] Max answer retries exceeded');
+                onError?.('Failed to establish connection after multiple attempts');
+              }
             }
+          }
+        })
+        // Patient confirms answer was received
+        .on('broadcast', { event: 'answer-received' }, ({ payload }) => {
+          if (!isStaff && payload.from === 'staff') {
+            console.log('[WebRTC] Staff confirmed answer received');
+          }
+        })
+        // Staff can request patient to resend answer
+        .on('broadcast', { event: 'request-answer' }, async ({ payload }) => {
+          if (!isStaff && payload.from === 'staff' && pc.localDescription) {
+            console.log('[WebRTC] Staff requested new answer, resending...');
+            channel.send({
+              type: 'broadcast',
+              event: 'answer',
+              payload: { answer: pc.localDescription, from: 'patient' },
+            });
           }
         })
         .on('broadcast', { event: 'ice-candidate' }, async ({ payload }) => {
@@ -551,35 +660,25 @@ export function useWebRTC({
           payload: { offer: currentOfferRef.current, from: 'staff' },
         });
       } else {
-        // Patient: Poll for offer with multiple retries
+        // Patient: Poll for offer with exponential backoff
         let pollCount = 0;
         const maxPolls = 5;
-        const pollDelay = 3000; // 3 seconds between polls
         
         // Clear any existing poll interval
         if (offerPollIntervalRef.current) {
           clearInterval(offerPollIntervalRef.current);
         }
         
-        console.log('[WebRTC] Starting offer polling mechanism');
-        offerPollIntervalRef.current = setInterval(() => {
+        const pollForOffer = () => {
           // Stop polling if we have a remote description (offer received)
           if (peerConnectionRef.current?.remoteDescription) {
             console.log('[WebRTC] Offer received, stopping poll');
-            if (offerPollIntervalRef.current) {
-              clearInterval(offerPollIntervalRef.current);
-              offerPollIntervalRef.current = null;
-            }
             return;
           }
           
           pollCount++;
           if (pollCount > maxPolls) {
             console.log('[WebRTC] Max poll attempts reached, stopping');
-            if (offerPollIntervalRef.current) {
-              clearInterval(offerPollIntervalRef.current);
-              offerPollIntervalRef.current = null;
-            }
             return;
           }
           
@@ -589,8 +688,28 @@ export function useWebRTC({
             event: 'request-offer',
             payload: { from: 'patient' },
           });
-        }, pollDelay);
+          
+          // Exponential backoff: 1s, 2s, 4s, 8s, 16s (with jitter)
+          const delay = Math.min(1000 * Math.pow(2, pollCount - 1), 16000);
+          const jitter = Math.random() * 500;
+          setTimeout(pollForOffer, delay + jitter);
+        };
+        
+        console.log('[WebRTC] Starting offer polling with exponential backoff');
+        // Start first poll after 1 second
+        setTimeout(pollForOffer, 1000);
       }
+      
+      // Set connection timeout
+      connectionTimeoutRef.current = setTimeout(() => {
+        if (peerConnectionRef.current?.connectionState === 'connecting' || 
+            peerConnectionRef.current?.connectionState === 'new') {
+          console.log('[WebRTC] Connection timeout after', CONNECTION_TIMEOUT_MS / 1000, 'seconds');
+          setConnectionError('Connection timed out. Please try again.');
+          setConnectionStatus('failed');
+          onError?.('Connection timed out. Please try again.');
+        }
+      }, CONNECTION_TIMEOUT_MS);
     } catch (err) {
       console.error('[WebRTC] Failed to start call:', err);
       setConnectionStatus('failed');
