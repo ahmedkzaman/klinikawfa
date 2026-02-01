@@ -426,8 +426,8 @@ export default function VideoCallManagement() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="bg-popover">
-            {/* Copy Link - available for pending, paid, active */}
-            {(room.status === 'pending' || room.status === 'paid' || room.status === 'active') && (
+            {/* Copy Link - available for pending, paid, active, test */}
+            {(room.status === 'pending' || room.status === 'paid' || room.status === 'active' || room.status === 'test') && (
               <DropdownMenuItem onClick={() => copyPatientLink(room.room_code)}>
                 <Link className="h-4 w-4 mr-2" />
                 {language === 'ms' ? 'Salin Pautan' : 'Copy Link'}
@@ -783,8 +783,8 @@ export default function VideoCallManagement() {
                           variant="ghost"
                           size="icon"
                           className="h-6 w-6"
-                          onClick={() => copyRoomCode(room.room_code)}
-                          title={language === 'ms' ? 'Salin Kod' : 'Copy Code'}
+                          onClick={() => copyPatientLink(room.room_code)}
+                          title={language === 'ms' ? 'Salin Pautan' : 'Copy Link'}
                         >
                           <Copy className="h-3 w-3" />
                         </Button>
