@@ -149,15 +149,6 @@ export default function VideoCall() {
 
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('video-payment', {
-        body: {
-          room_code: roomData.room_code,
-        },
-      });
-
-      if (error) throw error;
-      
-      // Construct the URL with action parameter
       const paymentUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/video-payment?action=create-deposit`;
       
       const response = await fetch(paymentUrl, {
@@ -168,6 +159,10 @@ export default function VideoCall() {
       
       const result = await response.json();
       
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create payment session');
+      }
+      
       if (result.url) {
         window.location.href = result.url;
       } else {
@@ -176,7 +171,7 @@ export default function VideoCall() {
     } catch (error) {
       toast({
         title: language === 'ms' ? 'Ralat' : 'Error',
-        description: 'Failed to initiate payment',
+        description: error instanceof Error ? error.message : 'Failed to initiate payment',
         variant: 'destructive',
       });
     } finally {
