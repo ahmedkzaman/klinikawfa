@@ -1,20 +1,58 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Link } from 'react-router-dom';
-import { ArrowRight, ImageIcon, Camera, Expand } from 'lucide-react';
+import { ArrowRight, ImageIcon, Camera, Expand, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useGalleryImages } from '@/hooks/useGalleryImages';
 import { GalleryLightbox } from '@/components/gallery';
+import useEmblaCarousel from 'embla-carousel-react';
+import Autoplay from 'embla-carousel-autoplay';
+import { cn } from '@/lib/utils';
 
 export function GalleryStrip() {
   const { language, t } = useLanguage();
   const { allImages, isLoading } = useGalleryImages();
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const displayImages = allImages.slice(0, 6);
+  const displayImages = allImages.slice(0, 8);
+
+  const [emblaRef, emblaApi] = useEmblaCarousel(
+    { 
+      loop: true, 
+      align: 'start',
+      skipSnaps: false,
+      dragFree: false,
+    },
+    [Autoplay({ delay: 4000, stopOnInteraction: false, stopOnMouseEnter: true })]
+  );
+
+  const scrollPrev = useCallback(() => {
+    if (emblaApi) emblaApi.scrollPrev();
+  }, [emblaApi]);
+
+  const scrollNext = useCallback(() => {
+    if (emblaApi) emblaApi.scrollNext();
+  }, [emblaApi]);
+
+  const onSelect = useCallback(() => {
+    if (!emblaApi) return;
+    setSelectedIndex(emblaApi.selectedScrollSnap());
+  }, [emblaApi]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    onSelect();
+    emblaApi.on('select', onSelect);
+    emblaApi.on('reInit', onSelect);
+    return () => {
+      emblaApi.off('select', onSelect);
+      emblaApi.off('reInit', onSelect);
+    };
+  }, [emblaApi, onSelect]);
 
   const handleImageClick = (index: number) => {
     setCurrentImageIndex(index);
@@ -76,7 +114,7 @@ export function GalleryStrip() {
         </motion.div>
       </div>
 
-      {/* Horizontal scrollable gallery */}
+      {/* Carousel Gallery */}
       <motion.div
         initial={{ opacity: 0, y: 30 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -84,16 +122,18 @@ export function GalleryStrip() {
         transition={{ duration: 0.6, delay: 0.2 }}
         className="relative"
       >
-        <div className="flex gap-5 overflow-x-auto pb-4 pl-4 scrollbar-hide md:pl-[max(1rem,calc((100vw-1280px)/2+1rem))]">
-          {isLoading ? (
-            Array.from({ length: 6 }).map((_, i) => (
+        {isLoading ? (
+          <div className="flex gap-5 overflow-hidden pb-4 pl-4 md:pl-[max(1rem,calc((100vw-1280px)/2+1rem))]">
+            {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton 
                 key={i} 
                 className="aspect-[4/3] w-80 flex-shrink-0 rounded-2xl md:w-96" 
               />
-            ))
-          ) : displayImages.length === 0 ? (
-            <div className="flex aspect-[4/3] w-80 flex-shrink-0 items-center justify-center rounded-2xl bg-card border border-border/50 md:w-96">
+            ))}
+          </div>
+        ) : displayImages.length === 0 ? (
+          <div className="container">
+            <div className="flex aspect-[4/3] w-full max-w-md items-center justify-center rounded-2xl bg-card border border-border/50">
               <div className="text-center text-muted-foreground">
                 <ImageIcon className="mx-auto mb-3 h-12 w-12 opacity-40" />
                 <p className="text-sm font-medium">
@@ -101,58 +141,103 @@ export function GalleryStrip() {
                 </p>
               </div>
             </div>
-          ) : (
-            displayImages.map((image, index) => (
-              <motion.button
-                key={image.id}
-                whileHover={{ y: -8 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => handleImageClick(index)}
-                className="group relative aspect-[4/3] w-80 flex-shrink-0 cursor-pointer overflow-hidden rounded-2xl bg-muted shadow-card transition-all duration-500 hover:shadow-elevated focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 md:w-96"
-              >
-                <img
-                  src={image.url}
-                  alt={image.alt_text || ''}
-                  className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
-                  loading="lazy"
-                />
+          </div>
+        ) : (
+          <>
+            {/* Embla Carousel */}
+            <div className="overflow-hidden" ref={emblaRef}>
+              <div className="flex gap-5 pl-4 md:pl-[max(1rem,calc((100vw-1280px)/2+1rem))]">
+                {displayImages.map((image, index) => (
+                  <motion.button
+                    key={image.id}
+                    whileHover={{ y: -8 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => handleImageClick(index)}
+                    className="group relative aspect-[4/3] w-80 flex-shrink-0 cursor-pointer overflow-hidden rounded-2xl bg-muted shadow-card transition-all duration-500 hover:shadow-elevated focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 md:w-96"
+                  >
+                    <img
+                      src={image.url}
+                      alt={image.alt_text || ''}
+                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+                      loading="lazy"
+                    />
 
-                {/* Gradient overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-foreground/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    {/* Gradient overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-foreground/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-                {/* Hover icon */}
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 backdrop-blur-md text-white shadow-lg">
-                    <Expand className="h-6 w-6" />
+                    {/* Hover icon */}
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 backdrop-blur-md text-white shadow-lg">
+                        <Expand className="h-6 w-6" />
+                      </div>
+                    </div>
+                  </motion.button>
+                ))}
+
+                {/* View all card */}
+                <Link
+                  to="/gallery"
+                  className="group flex aspect-[4/3] w-80 flex-shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-border bg-card/50 text-muted-foreground transition-all duration-300 hover:border-primary hover:text-primary hover:bg-primary/5 md:w-96 mr-4"
+                >
+                  <div className="text-center">
+                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                      <ArrowRight className="h-6 w-6 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                    <p className="font-bold text-lg">{t('cta.viewAll')}</p>
+                    {allImages.length > 8 && (
+                      <p className="mt-1 text-sm opacity-70">
+                        +{allImages.length - 8} {language === 'ms' ? 'lagi' : 'more'}
+                      </p>
+                    )}
                   </div>
-                </div>
-              </motion.button>
-            ))
-          )}
-
-          {/* View all card */}
-          {!isLoading && displayImages.length > 0 && (
-            <Link
-              to="/gallery"
-              className="group flex aspect-[4/3] w-80 flex-shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-border bg-card/50 text-muted-foreground transition-all duration-300 hover:border-primary hover:text-primary hover:bg-primary/5 md:w-96"
-            >
-              <div className="text-center">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                  <ArrowRight className="h-6 w-6 group-hover:translate-x-1 transition-transform" />
-                </div>
-                <p className="font-bold text-lg">{t('cta.viewAll')}</p>
-                {allImages.length > 6 && (
-                  <p className="mt-1 text-sm opacity-70">
-                    +{allImages.length - 6} {language === 'ms' ? 'lagi' : 'more'}
-                  </p>
-                )}
+                </Link>
               </div>
-            </Link>
-          )}
-        </div>
+            </div>
+
+            {/* Navigation arrows */}
+            <div className="container mt-6 flex items-center justify-center gap-4">
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={scrollPrev}
+                className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-border bg-background/80 text-foreground backdrop-blur-sm transition-all duration-300 hover:border-primary hover:text-primary hover:bg-primary/5"
+                aria-label="Previous slide"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </motion.button>
+
+              {/* Dots indicator */}
+              <div className="flex gap-2">
+                {displayImages.map((_, index) => (
+                  <button
+                    key={index}
+                    onClick={() => emblaApi?.scrollTo(index)}
+                    className={cn(
+                      'h-2.5 rounded-full transition-all duration-300',
+                      selectedIndex === index
+                        ? 'w-8 bg-primary'
+                        : 'w-2.5 bg-primary/30 hover:bg-primary/50'
+                    )}
+                    aria-label={`Go to slide ${index + 1}`}
+                  />
+                ))}
+              </div>
+
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={scrollNext}
+                className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-border bg-background/80 text-foreground backdrop-blur-sm transition-all duration-300 hover:border-primary hover:text-primary hover:bg-primary/5"
+                aria-label="Next slide"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </motion.button>
+            </div>
+          </>
+        )}
 
         {/* Gradient fade on right */}
-        <div className="pointer-events-none absolute right-0 top-0 h-full w-32 bg-gradient-to-l from-background to-transparent" />
+        <div className="pointer-events-none absolute right-0 top-0 h-[calc(100%-4rem)] w-32 bg-gradient-to-l from-background to-transparent" />
       </motion.div>
 
       <div className="container relative z-10 mt-8 text-center sm:hidden">
