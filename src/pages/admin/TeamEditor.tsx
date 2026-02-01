@@ -24,7 +24,8 @@ import {
   X,
   User,
   Stethoscope,
-  Users
+  Users,
+  Sparkles
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -42,6 +43,7 @@ interface TeamMemberForm {
   bio_en: string;
   photo_url: string | null;
   is_active: boolean;
+  additional_notes: string;
 }
 
 const initialForm: TeamMemberForm = {
@@ -58,6 +60,7 @@ const initialForm: TeamMemberForm = {
   bio_en: '',
   photo_url: null,
   is_active: true,
+  additional_notes: '',
 };
 
 export default function TeamEditor() {
@@ -70,6 +73,7 @@ export default function TeamEditor() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [generatingBio, setGeneratingBio] = useState(false);
   const [form, setForm] = useState<TeamMemberForm>(initialForm);
   
   // Tag input states
@@ -111,6 +115,7 @@ export default function TeamEditor() {
         bio_en: data.bio_en || '',
         photo_url: data.photo_url,
         is_active: data.is_active,
+        additional_notes: '',
       });
     } catch (error) {
       console.error('Error fetching member:', error);
@@ -233,6 +238,73 @@ export default function TeamEditor() {
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault();
       addTag(field, value);
+    }
+  };
+
+  const handleGenerateBio = async () => {
+    // Check if we have minimum data needed
+    if (!form.name_en || !form.title_en || !form.title_ms) {
+      toast({
+        title: language === 'ms' ? 'Ralat' : 'Error',
+        description: language === 'ms' 
+          ? 'Sila isi nama dan jawatan terlebih dahulu.'
+          : 'Please fill in name and title first.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setGeneratingBio(true);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-bio`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            name: form.name_en,
+            title_ms: form.title_ms,
+            title_en: form.title_en,
+            qualifications: form.qualifications,
+            expertise_ms: form.expertise_ms,
+            expertise_en: form.expertise_en,
+            years_experience: form.years_experience,
+            additional_notes: form.additional_notes,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to generate biography');
+      }
+
+      const data = await response.json();
+      
+      setForm(prev => ({
+        ...prev,
+        bio_ms: data.bio_ms,
+        bio_en: data.bio_en,
+      }));
+
+      toast({
+        title: language === 'ms' ? 'Berjaya' : 'Success',
+        description: language === 'ms' 
+          ? 'Biografi telah dijana. Anda boleh mengeditnya.'
+          : 'Biography generated. You can edit it.',
+      });
+    } catch (error) {
+      console.error('Error generating bio:', error);
+      toast({
+        title: language === 'ms' ? 'Ralat' : 'Error',
+        description: error instanceof Error ? error.message : 'Failed to generate biography',
+        variant: 'destructive',
+      });
+    } finally {
+      setGeneratingBio(false);
     }
   };
 
@@ -611,12 +683,51 @@ export default function TeamEditor() {
 
           {/* Bio */}
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <CardTitle className="text-lg">
                 {language === 'ms' ? 'Biografi' : 'Biography'}
               </CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGenerateBio}
+                disabled={generatingBio}
+                className="gap-2"
+              >
+                {generatingBio ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                {language === 'ms' ? 'Jana dengan AI' : 'Generate with AI'}
+              </Button>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Additional Notes for AI */}
+              <div className="space-y-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-4">
+                <Label htmlFor="additional_notes" className="flex items-center gap-2 text-primary">
+                  <Sparkles className="h-4 w-4" />
+                  {language === 'ms' ? 'Nota Tambahan untuk AI' : 'Additional Notes for AI'}
+                </Label>
+                <Textarea
+                  id="additional_notes"
+                  value={form.additional_notes}
+                  onChange={(e) => setForm(prev => ({ ...prev, additional_notes: e.target.value }))}
+                  rows={2}
+                  placeholder={language === 'ms' 
+                    ? 'Contoh: Pernah bertugas di Hospital Besar selama 5 tahun, fokus kepada kesihatan warga emas...'
+                    : 'E.g.: Previously served at General Hospital for 5 years, focus on elderly health care...'
+                  }
+                  className="border-primary/20"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {language === 'ms' 
+                    ? 'Tambahkan sebarang maklumat yang ingin disertakan dalam biografi.'
+                    : 'Add any information you want included in the biography.'
+                  }
+                </p>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="bio_ms">
                   {language === 'ms' ? 'Bahasa Melayu' : 'Malay'}
