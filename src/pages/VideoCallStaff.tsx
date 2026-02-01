@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { VideoPlayer, CallControls, CallTimer, ConnectionStatusIndicator } from '@/components/video';
+import { VideoPlayer, CallControls, CallTimer, ConnectionStatusIndicator, MobileCallLayout } from '@/components/video';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { useCallTimer } from '@/hooks/useCallTimer';
 import { useToast } from '@/hooks/use-toast';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
 import { Video, Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
 
@@ -28,6 +29,7 @@ export default function VideoCallStaff() {
   const { language } = useLanguage();
   const { toast } = useToast();
   const { user, isStaffOrAdmin, isAdmin, loading: authLoading, rolesLoading } = useAuth();
+  const isMobile = useIsMobile();
   
   const roomCode = searchParams.get('room') || '';
   const [step, setStep] = useState<Step>('loading');
@@ -227,6 +229,43 @@ export default function VideoCallStaff() {
   }
 
   if (step === 'in-call') {
+    // Mobile layout with fixed controls and PiP
+    if (isMobile) {
+      return (
+        <MobileCallLayout
+          remoteStream={webrtc.remoteStream}
+          localStream={webrtc.localStream}
+          remoteLabel={roomData?.patient_name || 'Patient'}
+          localLabel={language === 'ms' ? 'Anda (Doktor)' : 'You (Doctor)'}
+          timer={{
+            formattedTime: timer.formattedTime,
+            totalMinutes: timer.totalMinutes,
+            currentCost: timer.currentCost,
+            additionalCost: timer.additionalCost,
+            isOverFreeTime: timer.isOverFreeTime,
+          }}
+          freeMinutes={10}
+          controls={{
+            isAudioEnabled: webrtc.isAudioEnabled,
+            isVideoEnabled: webrtc.isVideoEnabled,
+            isConnected: webrtc.isConnected,
+            isConnecting: webrtc.isConnecting,
+            onToggleAudio: webrtc.toggleAudio,
+            onToggleVideo: webrtc.toggleVideo,
+            onEndCall: webrtc.endCall,
+          }}
+          connectionStatus={webrtc.connectionStatus}
+          connectionError={webrtc.connectionError}
+          onRetry={webrtc.retryCall}
+          retryAttempt={webrtc.retryAttempt}
+          isStaff={true}
+          patientName={roomData?.patient_name}
+          roomCode={roomData?.room_code}
+        />
+      );
+    }
+
+    // Desktop layout
     return (
       <div className="min-h-screen bg-background flex flex-col">
         {/* Header with Timer */}
