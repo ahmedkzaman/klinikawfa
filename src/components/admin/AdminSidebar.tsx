@@ -8,7 +8,8 @@ import {
   LogOut,
   Home,
   Stethoscope,
-  Video
+  Video,
+  Settings
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
@@ -76,6 +77,13 @@ const menuItems = [
     titleEn: 'Users', 
     url: '/admin/users', 
     icon: Users,
+    staffAccess: false // Admin only
+  },
+  { 
+    titleMs: 'Tetapan', 
+    titleEn: 'Settings', 
+    url: '/admin/settings', 
+    icon: Settings,
     staffAccess: false // Admin only
   },
 ];
