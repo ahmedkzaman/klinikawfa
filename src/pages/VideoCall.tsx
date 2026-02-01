@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { VideoPlayer, CallControls, CallTimer } from '@/components/video';
+import { VideoPlayer, CallControls, CallTimer, ConnectionStatusIndicator } from '@/components/video';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { useCallTimer } from '@/hooks/useCallTimer';
 import { useToast } from '@/hooks/use-toast';
@@ -374,10 +374,14 @@ export default function VideoCall() {
                 onToggleVideo={webrtc.toggleVideo}
                 onEndCall={webrtc.endCall}
               />
-              {webrtc.isConnecting && (
-                <div className="text-center mt-4 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 inline mr-2 animate-spin" />
-                  {language === 'ms' ? 'Menunggu doktor...' : 'Waiting for doctor...'}
+              {!webrtc.isConnected && (
+                <div className="mt-4">
+                  <ConnectionStatusIndicator
+                    status={webrtc.connectionStatus}
+                    error={webrtc.connectionError}
+                    onRetry={webrtc.retryCall}
+                    isStaff={false}
+                  />
                 </div>
               )}
             </div>

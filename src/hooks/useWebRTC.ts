@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import type { ConnectionStatus } from '@/components/video/ConnectionStatusIndicator';
 
 interface UseWebRTCOptions {
   roomCode: string;
@@ -16,8 +17,11 @@ interface UseWebRTCReturn {
   isConnecting: boolean;
   isConnected: boolean;
   connectionState: string;
+  connectionStatus: ConnectionStatus;
+  connectionError: string | null;
   startCall: () => Promise<void>;
   endCall: () => void;
+  retryCall: () => Promise<void>;
   toggleAudio: () => void;
   toggleVideo: () => void;
   isAudioEnabled: boolean;
@@ -42,6 +46,8 @@ export function useWebRTC({
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionState, setConnectionState] = useState('new');
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
 
@@ -172,10 +178,19 @@ export function useWebRTC({
       setConnectionState(pc.connectionState);
       
       if (pc.connectionState === 'connected') {
+        setConnectionStatus('connected');
         setIsConnected(true);
         setIsConnecting(false);
         onCallStarted?.();
-      } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+      } else if (pc.connectionState === 'connecting') {
+        setConnectionStatus('establishing-connection');
+      } else if (pc.connectionState === 'disconnected') {
+        setConnectionStatus('disconnected');
+        setIsConnected(false);
+        onCallEnded?.();
+      } else if (pc.connectionState === 'failed') {
+        setConnectionStatus('failed');
+        setConnectionError('Connection to peer failed. Please try again.');
         setIsConnected(false);
         onCallEnded?.();
       }
@@ -344,10 +359,14 @@ export function useWebRTC({
 
   const startCall = async () => {
     console.log('[WebRTC] Starting call as', isStaff ? 'staff' : 'patient');
+    setConnectionStatus('initializing-media');
+    setConnectionError(null);
     setIsConnecting(true);
     
     try {
       const stream = await initializeMedia();
+      
+      setConnectionStatus('connecting-to-room');
       const pc = createPeerConnection(stream);
       
       // STAFF: Create offer BEFORE setting up signaling
@@ -363,6 +382,8 @@ export function useWebRTC({
       // Now set up signaling (presence events will have access to offer)
       await setupSignaling(pc);
       console.log('[WebRTC] Signaling channel ready');
+      
+      setConnectionStatus('waiting-for-peer');
 
       if (isStaff) {
         // Send offer immediately (patient may already be waiting)
@@ -387,11 +408,21 @@ export function useWebRTC({
       }
     } catch (err) {
       console.error('[WebRTC] Failed to start call:', err);
+      setConnectionStatus('failed');
+      setConnectionError(err instanceof Error ? err.message : 'Failed to start video call');
       cleanup(); // Clean up on failure so user can retry
       setIsConnecting(false);
       onError?.(err instanceof Error ? err.message : 'Failed to start video call');
     }
   };
+
+  const retryCall = useCallback(async () => {
+    console.log('[WebRTC] Retrying call...');
+    cleanup();
+    setConnectionError(null);
+    setConnectionStatus('idle');
+    await startCall();
+  }, [cleanup]);
 
   const endCall = () => {
     console.log('[WebRTC] Ending call');
@@ -439,8 +470,11 @@ export function useWebRTC({
     isConnecting,
     isConnected,
     connectionState,
+    connectionStatus,
+    connectionError,
     startCall,
     endCall,
+    retryCall,
     toggleAudio,
     toggleVideo,
     isAudioEnabled,
