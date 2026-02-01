@@ -186,7 +186,7 @@ export function AdminSidebar() {
           </div>
         )}
         <Button 
-          variant="outline" 
+          variant="destructive" 
           size="default"
           onClick={signOut}
           className="w-full gap-2"
