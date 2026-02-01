@@ -30,8 +30,8 @@ const doctors = [
     yearsExperience: 15,
     expertiseMs: ['Perubatan Keluarga', 'Pembedahan Minor', 'Rawatan Ketumbuhan & Ketuat', 'Khatan'],
     expertiseEn: ['Family Medicine', 'Minor Surgery', 'Lump & Wart Treatment', 'Circumcision'],
-    bioMs: 'Dr. Ahmad merupakan doktor berpengalaman lebih 15 tahun dalam bidang perubatan keluarga. Beliau pakar dalam pembedahan minor termasuk pembuangan ketumbuhan, rawatan ketuat, dan prosedur khatan. Pendekatan beliau yang mesra dan teliti menjadikan pesakit selesa sepanjang rawatan.',
-    bioEn: 'Dr. Ahmad has over 15 years of experience in family medicine. He specializes in minor surgeries including lump removal, wart treatment, and circumcision procedures. His friendly and thorough approach ensures patients feel comfortable throughout their treatment.',
+    bioMs: 'Dr. Ahmad merupakan doktor berpengalaman lebih 15 tahun dalam bidang perubatan keluarga. Beliau mempunyai minat khusus dan pengalaman luas dalam pembedahan minor termasuk pembuangan ketumbuhan, rawatan ketuat, dan prosedur khatan. Pendekatan beliau yang mesra dan teliti menjadikan pesakit selesa sepanjang rawatan.',
+    bioEn: 'Dr. Ahmad has over 15 years of experience in family medicine. He has a special interest and vast experience in minor surgeries including lump removal, wart treatment, and circumcision procedures. His friendly and thorough approach ensures patients feel comfortable throughout their treatment.',
     expertiseIcons: [Scissors, Stethoscope, Syringe],
   },
   {
