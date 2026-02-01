@@ -40,6 +40,7 @@ export default function Settings() {
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   const [isUploadingPoster, setIsUploadingPoster] = useState(false);
   const [isDeletingVideo, setIsDeletingVideo] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const posterInputRef = useRef<HTMLInputElement>(null);
 
@@ -117,16 +118,45 @@ export default function Settings() {
     }
 
     setIsUploadingVideo(true);
+    setUploadProgress(0);
+    
     try {
       const ext = file.name.split('.').pop();
       const filePath = `clinic/homepage-video.${ext}`;
 
-      // Upload to storage
-      const { error: uploadError } = await supabase.storage
-        .from('videos')
-        .upload(filePath, file, { upsert: true });
+      // Use XMLHttpRequest for progress tracking
+      const formData = new FormData();
+      formData.append('', file);
 
-      if (uploadError) throw uploadError;
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        
+        xhr.upload.addEventListener('progress', (event) => {
+          if (event.lengthComputable) {
+            const percent = Math.round((event.loaded / event.total) * 100);
+            setUploadProgress(percent);
+          }
+        });
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            reject(new Error(`Upload failed with status ${xhr.status}`));
+          }
+        });
+
+        xhr.addEventListener('error', () => reject(new Error('Upload failed')));
+        xhr.addEventListener('abort', () => reject(new Error('Upload aborted')));
+
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        xhr.open('POST', `${supabaseUrl}/storage/v1/object/videos/${filePath}`);
+        xhr.setRequestHeader('Authorization', `Bearer ${session?.access_token}`);
+        xhr.setRequestHeader('x-upsert', 'true');
+        xhr.send(file);
+      });
 
       // Get public URL
       const { data: urlData } = supabase.storage.from('videos').getPublicUrl(filePath);
@@ -157,6 +187,7 @@ export default function Settings() {
       });
     } finally {
       setIsUploadingVideo(false);
+      setUploadProgress(0);
       if (videoInputRef.current) videoInputRef.current.value = '';
     }
   };
@@ -560,22 +591,46 @@ export default function Settings() {
           <div className="space-y-2">
             <Label>{language === 'ms' ? 'Muat Naik Video' : 'Upload Video'}</Label>
             <div 
-              className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/25 p-8 transition-colors hover:border-primary/50"
-              onClick={() => videoInputRef.current?.click()}
+              className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 transition-colors ${
+                isUploadingVideo 
+                  ? 'border-primary/50 bg-primary/5' 
+                  : 'border-muted-foreground/25 hover:border-primary/50'
+              }`}
+              onClick={() => !isUploadingVideo && videoInputRef.current?.click()}
             >
               {isUploadingVideo ? (
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <div className="w-full max-w-xs space-y-3">
+                  <div className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                    <span className="text-sm font-medium text-primary">
+                      {language === 'ms' ? 'Memuat naik...' : 'Uploading...'}
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                      <div 
+                        className="h-full bg-primary transition-all duration-300 ease-out"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                    <p className="text-center text-xs text-muted-foreground">
+                      {uploadProgress}%
+                    </p>
+                  </div>
+                </div>
               ) : (
-                <Upload className="h-8 w-8 text-muted-foreground" />
+                <>
+                  <Upload className="h-8 w-8 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    {language === 'ms' 
+                      ? 'Klik atau seret fail untuk muat naik' 
+                      : 'Click or drag file to upload'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    MP4, WebM, MOV ({language === 'ms' ? 'maks' : 'max'} 500MB)
+                  </p>
+                </>
               )}
-              <p className="text-sm text-muted-foreground">
-                {language === 'ms' 
-                  ? 'Klik atau seret fail untuk muat naik' 
-                  : 'Click or drag file to upload'}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                MP4, WebM, MOV ({language === 'ms' ? 'maks' : 'max'} 500MB)
-              </p>
             </div>
             <input
               ref={videoInputRef}
