@@ -42,9 +42,15 @@ export const GALLERY_CATEGORIES: GalleryCategory[] = [
     labelEn: 'Staff', 
     tags: ['staff', 'team', 'doctor', 'nurse'] 
   },
+  { 
+    id: 'events', 
+    labelMs: 'Acara', 
+    labelEn: 'Events', 
+    tags: ['events', 'event', 'celebration', 'ceremony', 'activity'] 
+  },
 ];
 
-export type GalleryCategoryId = 'all' | 'waiting' | 'treatment' | 'exterior' | 'staff';
+export type GalleryCategoryId = 'all' | 'waiting' | 'treatment' | 'exterior' | 'staff' | 'events';
 
 async function fetchGalleryImages(): Promise<GalleryImage[]> {
   const { data, error } = await supabase
