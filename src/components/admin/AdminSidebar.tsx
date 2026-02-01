@@ -187,14 +187,12 @@ export function AdminSidebar() {
         )}
         <Button 
           variant="outline" 
-          size={collapsed ? 'icon' : 'default'}
+          size="default"
           onClick={signOut}
-          className="w-full"
+          className="w-full gap-2"
         >
-          <LogOut className="h-4 w-4" />
-          {!collapsed && (
-            <span className="ml-2">{language === 'ms' ? 'Log Keluar' : 'Logout'}</span>
-          )}
+          <LogOut className="h-4 w-4 shrink-0" />
+          <span>{language === 'ms' ? 'Log Keluar' : 'Logout'}</span>
         </Button>
       </SidebarFooter>
     </Sidebar>
