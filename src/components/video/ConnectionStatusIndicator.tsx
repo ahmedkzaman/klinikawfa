@@ -9,6 +9,7 @@ export type ConnectionStatus =
   | 'idle'
   | 'initializing-media'
   | 'connecting-to-room'
+  | 'retrying'
   | 'waiting-for-peer'
   | 'establishing-connection'
   | 'connected'
@@ -20,12 +21,14 @@ interface ConnectionStatusIndicatorProps {
   error: string | null;
   onRetry: () => void;
   isStaff: boolean;
+  retryAttempt?: number;
   className?: string;
 }
 
 const STATUS_STEPS: ConnectionStatus[] = [
   'initializing-media',
   'connecting-to-room',
+  'retrying',
   'waiting-for-peer',
   'establishing-connection',
   'connected',
@@ -36,15 +39,21 @@ export function ConnectionStatusIndicator({
   error,
   onRetry,
   isStaff,
+  retryAttempt = 0,
   className,
 }: ConnectionStatusIndicatorProps) {
   const { language } = useLanguage();
+  const maxRetries = 3;
 
   const getStatusMessage = () => {
     const messages: Record<ConnectionStatus, { en: string; ms: string }> = {
       'idle': { en: 'Ready to connect', ms: 'Sedia untuk sambung' },
       'initializing-media': { en: 'Initializing camera and microphone...', ms: 'Memulakan kamera dan mikrofon...' },
       'connecting-to-room': { en: 'Connecting to room...', ms: 'Menyambung ke bilik...' },
+      'retrying': { 
+        en: `Retrying connection (${retryAttempt + 1}/${maxRetries})...`, 
+        ms: `Cuba semula sambungan (${retryAttempt + 1}/${maxRetries})...` 
+      },
       'waiting-for-peer': { 
         en: isStaff ? 'Waiting for patient to join...' : 'Waiting for doctor to join...', 
         ms: isStaff ? 'Menunggu pesakit menyertai...' : 'Menunggu doktor menyertai...' 
@@ -64,6 +73,8 @@ export function ConnectionStatusIndicator({
         return <Video className="h-5 w-5" />;
       case 'connecting-to-room':
         return <Wifi className="h-5 w-5" />;
+      case 'retrying':
+        return <Loader2 className="h-5 w-5 animate-spin text-amber-500" />;
       case 'waiting-for-peer':
         return <Users className="h-5 w-5" />;
       case 'establishing-connection':
@@ -114,7 +125,8 @@ export function ConnectionStatusIndicator({
           "p-3 rounded-full",
           isError && "bg-destructive/10",
           isSuccess && "bg-green-500/10",
-          isLoading && "bg-primary/10"
+          status === 'retrying' && "bg-amber-500/10",
+          isLoading && status !== 'retrying' && "bg-primary/10"
         )}>
           {getStatusIcon()}
         </div>

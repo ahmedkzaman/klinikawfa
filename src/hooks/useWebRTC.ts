@@ -3,6 +3,10 @@ import { supabase } from '@/integrations/supabase/client';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { ConnectionStatus } from '@/components/video/ConnectionStatusIndicator';
 
+// Retry configuration for signaling channel
+const MAX_RETRY_ATTEMPTS = 3;
+const INITIAL_RETRY_DELAY = 2000; // 2 seconds
+
 interface UseWebRTCOptions {
   roomCode: string;
   isStaff: boolean;
@@ -19,6 +23,7 @@ interface UseWebRTCReturn {
   connectionState: string;
   connectionStatus: ConnectionStatus;
   connectionError: string | null;
+  retryAttempt: number;
   startCall: () => Promise<void>;
   endCall: () => void;
   retryCall: () => Promise<void>;
@@ -48,6 +53,7 @@ export function useWebRTC({
   const [connectionState, setConnectionState] = useState('new');
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [retryAttempt, setRetryAttempt] = useState(0);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
 
@@ -204,6 +210,26 @@ export function useWebRTC({
     return pc;
   };
 
+  // Check if backend is reachable before attempting signaling
+  const checkBackendConnectivity = async (): Promise<boolean> => {
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      
+      const response = await fetch(`${supabaseUrl}/rest/v1/`, {
+        method: 'HEAD',
+        headers: { 
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`
+        }
+      });
+      return response.ok || response.status === 400; // 400 is acceptable (no table specified)
+    } catch (err) {
+      console.error('[WebRTC] Backend connectivity check failed:', err);
+      return false;
+    }
+  };
+
   const setupSignaling = (pc: RTCPeerConnection): Promise<void> => {
     return new Promise((resolve, reject) => {
       console.log('[WebRTC] Setting up signaling channel for room:', roomCode);
@@ -337,11 +363,23 @@ export function useWebRTC({
               if (timeoutId) clearTimeout(timeoutId);
               reject(new Error('Failed to join room: presence tracking failed'));
             }
-          } else if (status === 'CHANNEL_ERROR' || status === 'CLOSED' || status === 'TIMED_OUT') {
-            console.error('[WebRTC] Channel error:', status);
+          } else if (status === 'TIMED_OUT') {
+            console.error('[WebRTC] Channel subscription timed out');
             isResolved = true;
             if (timeoutId) clearTimeout(timeoutId);
-            reject(new Error(`Failed to join signaling channel: ${status}. Please check your network connection.`));
+            supabase.removeChannel(channel);
+            reject(new Error('Connection timed out. Please check your internet connection and try again.'));
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('[WebRTC] Channel error occurred');
+            isResolved = true;
+            if (timeoutId) clearTimeout(timeoutId);
+            supabase.removeChannel(channel);
+            reject(new Error('Connection error. The signaling service may be temporarily unavailable.'));
+          } else if (status === 'CLOSED') {
+            console.error('[WebRTC] Channel was closed');
+            isResolved = true;
+            if (timeoutId) clearTimeout(timeoutId);
+            reject(new Error('Connection closed unexpectedly. Please try again.'));
           }
         });
 
@@ -357,10 +395,48 @@ export function useWebRTC({
     });
   };
 
+  // Wrapper with retry logic for setupSignaling
+  const setupSignalingWithRetry = async (pc: RTCPeerConnection): Promise<void> => {
+    let attempts = 0;
+    let lastError: Error | null = null;
+    
+    // First check if backend is reachable
+    const isReachable = await checkBackendConnectivity();
+    if (!isReachable) {
+      throw new Error('Cannot reach server. Please check your internet connection.');
+    }
+    
+    while (attempts < MAX_RETRY_ATTEMPTS) {
+      try {
+        setRetryAttempt(attempts);
+        await setupSignaling(pc);
+        setRetryAttempt(0); // Reset on success
+        return; // Success
+      } catch (err) {
+        lastError = err as Error;
+        attempts++;
+        
+        console.log(`[WebRTC] Signaling attempt ${attempts} failed:`, lastError.message);
+        
+        if (attempts < MAX_RETRY_ATTEMPTS) {
+          const delay = INITIAL_RETRY_DELAY * Math.pow(2, attempts - 1);
+          console.log(`[WebRTC] Retrying in ${delay}ms... (attempt ${attempts + 1}/${MAX_RETRY_ATTEMPTS})`);
+          setConnectionStatus('retrying');
+          setRetryAttempt(attempts);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    setRetryAttempt(0);
+    throw lastError || new Error('Failed to connect after multiple attempts');
+  };
+
   const startCall = async () => {
     console.log('[WebRTC] Starting call as', isStaff ? 'staff' : 'patient');
     setConnectionStatus('initializing-media');
     setConnectionError(null);
+    setRetryAttempt(0);
     setIsConnecting(true);
     
     try {
@@ -379,8 +455,8 @@ export function useWebRTC({
         console.log('[WebRTC] Offer created and stored');
       }
       
-      // Now set up signaling (presence events will have access to offer)
-      await setupSignaling(pc);
+      // Now set up signaling with retry logic
+      await setupSignalingWithRetry(pc);
       console.log('[WebRTC] Signaling channel ready');
       
       setConnectionStatus('waiting-for-peer');
@@ -472,6 +548,7 @@ export function useWebRTC({
     connectionState,
     connectionStatus,
     connectionError,
+    retryAttempt,
     startCall,
     endCall,
     retryCall,
