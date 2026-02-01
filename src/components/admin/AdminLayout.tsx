@@ -21,6 +21,7 @@ const breadcrumbMap: Record<string, { ms: string; en: string }> = {
   '/admin/blog/new': { ms: 'Post Baru', en: 'New Post' },
   '/admin/gallery': { ms: 'Galeri', en: 'Gallery' },
   '/admin/users': { ms: 'Pengguna', en: 'Users' },
+  '/admin/settings': { ms: 'Tetapan', en: 'Settings' },
 };
 
 export function AdminLayout() {

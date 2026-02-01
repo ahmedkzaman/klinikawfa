@@ -31,6 +31,7 @@ import {
   TeamManagement,
   TeamEditor,
   VideoCallManagement,
+  AdminSettings,
 } from "./pages/admin";
 
 const queryClient = new QueryClient();
@@ -66,6 +67,7 @@ const App = () => (
                 <Route path="blog/:id" element={<BlogEditor />} />
                 <Route path="gallery" element={<GalleryManagement />} />
                 <Route path="users" element={<UserManagement />} />
+                <Route path="settings" element={<AdminSettings />} />
               </Route>
 
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
