@@ -116,7 +116,7 @@ export function HeroCarousel({ autoPlayInterval = 5000 }: HeroCarouselProps) {
             </Button>
             <Button 
               size="lg" 
-              className="min-w-[180px] bg-whatsapp text-whatsapp-foreground hover:bg-whatsapp/90" 
+              className="min-w-[180px] bg-[hsl(142,70%,45%)] text-white hover:bg-[hsl(142,70%,40%)]" 
               asChild
             >
               <a href={CLINIC_INFO.whatsapp} target="_blank" rel="noopener noreferrer">
