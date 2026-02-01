@@ -1,55 +1,53 @@
 
-# Apply "Specialist/Pakar" Wording Updates (Excluding #4)
+# Add Admin Dashboard Access
 
-## Summary
-Update terminology from "specialist/pakar" to "special interest/pengkhususan" across 3 files, skipping the serviceContent.ts changes as requested.
+## Current Situation
+The admin dashboard exists at `/admin` with full functionality (leads, blog, gallery, user management), but there's no way to access it from the website UI. Users need to:
+1. Be logged in
+2. Have an admin or staff role assigned
+3. Manually type `/admin` in the URL
 
----
+## Implementation Plan
 
-## Changes to Apply
+### 1. Add Admin/Login Link to Header
+Add a conditional link in the header that shows:
+- "Login" button for unauthenticated users (links to `/auth`)
+- "Admin" button for staff/admin users (links to `/admin`)
+- User email/avatar with logout option for authenticated regular users
 
-### 1. HeroCarousel.tsx (Lines 37-38)
+**File:** `src/components/layout/Header.tsx`
 
-**Slide 3 Title Updates:**
-
-| Field | Current | New |
-|-------|---------|-----|
-| `titleMs` | "Pakar Minor Surgery" | "Pengkhususan Minor Surgery" |
-| `titleEn` | "Minor Surgery Specialists" | "Special Interest in Minor Surgery" |
-
----
-
-### 2. LanguageContext.tsx (Lines 46 & 110)
-
-**Translation Key Updates:**
-
-| Language | Key | Current | New |
-|----------|-----|---------|-----|
-| Malay (Line 46) | `why.minorSurgery` | "Pakar Minor Surgery" | "Pengkhususan Minor Surgery" |
-| English (Line 110) | `why.minorSurgery` | "Minor Surgery Specialist" | "Special Interest in Minor Surgery" |
-
----
-
-### 3. Doctors.tsx (Lines 47-48)
-
-**Dr. Nurul Bio Updates:**
-
-| Field | Current | New |
-|-------|---------|-----|
-| `bioMs` | "...dengan **kepakaran khusus** dalam penjagaan telinga..." | "...dengan **minat khusus dan pengalaman luas** dalam penjagaan telinga..." |
-| `bioEn` | "...with **specialized expertise** in ear care..." | "...with a **special interest and vast experience** in ear care..." |
-
----
-
-## Skipped (As Requested)
-
-- **serviceContent.ts** - Return to Work Assessment benefits (keeping "Specialist referral" / "Rujukan pakar")
+### 2. Quick Admin Access (Development)
+To test the admin panel immediately, you'll need an admin role. I can help you:
+- Create a database query to assign admin role to your account
+- Or set up auto-assignment for the first registered user
 
 ---
 
 ## Technical Details
 
-- **Files affected:** 3
-- **Total text changes:** 6 (2 per file)
-- **No structural changes** - only text content updates
-- **Both BM and EN versions updated** for consistency
+### Header Changes
+```
+- Import useAuth hook
+- Add conditional rendering:
+  - If not logged in: Show "Login" button
+  - If logged in + isStaffOrAdmin: Show "Admin Panel" button
+  - If logged in (regular user): Show user menu with logout
+```
+
+### Files to Modify
+1. `src/components/layout/Header.tsx` - Add login/admin links
+
+### Database Setup (One-time)
+To assign yourself as admin, run this SQL after registering:
+```sql
+INSERT INTO user_roles (user_id, role) 
+SELECT id, 'admin' FROM profiles WHERE email = 'your-email@example.com';
+```
+
+---
+
+## Summary
+- Add login/admin button to the website header
+- Show admin link only to users with staff/admin roles
+- Include user menu with logout option for authenticated users
