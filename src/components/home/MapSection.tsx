@@ -136,20 +136,20 @@ export function MapSection() {
             whileInView={{ opacity: 1, x: 0, scale: 1 }}
             viewport={{ once: true, margin: "-100px" }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="aspect-square overflow-hidden rounded-3xl bg-muted shadow-elevated border border-border/50 lg:aspect-auto lg:min-h-[500px] relative group"
+            className="relative overflow-hidden rounded-3xl bg-muted shadow-elevated border border-border/50 group"
           >
             {/* Decorative border gradient */}
-            <div className="absolute inset-0 rounded-3xl border-gradient pointer-events-none" />
+            <div className="absolute inset-0 rounded-3xl border-gradient pointer-events-none z-10" />
             <iframe
               src={CLINIC_INFO.googleMapsEmbed}
               width="100%"
-              height="100%"
-              style={{ border: 0, minHeight: '100%' }}
+              height="450"
+              style={{ border: 0, display: 'block' }}
               allowFullScreen
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
               title="Klinik Awfa Location"
-              className="h-full w-full transition-opacity"
+              className="w-full min-h-[400px] lg:min-h-[500px]"
             />
           </motion.div>
         </div>
