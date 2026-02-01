@@ -4,66 +4,73 @@ import { CLINIC_INFO } from '@/lib/constants';
 import { Phone, MessageCircle } from 'lucide-react';
 
 export function Footer() {
-  const { language, t } = useLanguage();
+  const { language } = useLanguage();
 
   return (
     <footer className="bg-primary text-primary-foreground">
       <div className="container py-12 md:py-16">
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-          {/* Appointment CTA */}
+          {/* Appointment CTA - Required verbatim copy */}
           <div className="space-y-4">
-            <h3 className="text-xl font-semibold">{t('footer.appointment')}</h3>
-            <p className="text-primary-foreground/80">{t('footer.contact')}</p>
+            <h3 className="text-xl font-semibold">
+              Nak buat temujanji dengan kami?
+            </h3>
+            <p className="text-primary-foreground/80">
+              Boleh hubungi kami untuk maklumat lanjut
+            </p>
             
             <div className="flex flex-col gap-3">
               <a
                 href={CLINIC_INFO.phoneLink}
                 className="inline-flex items-center gap-2 text-lg font-medium hover:underline"
+                aria-label="Hubungi kami melalui telefon"
               >
-                <Phone className="h-5 w-5" />
-                {CLINIC_INFO.phone}
+                <Phone className="h-5 w-5" aria-hidden="true" />
+                ☎️ +60 18-252 3531
               </a>
               <a
                 href={CLINIC_INFO.whatsapp}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 text-lg font-medium hover:underline"
+                aria-label="Hubungi kami melalui WhatsApp"
               >
-                <MessageCircle className="h-5 w-5" />
-                WhatsApp
+                <MessageCircle className="h-5 w-5" aria-hidden="true" />
+                📱 www.wasap.my/60182523531
               </a>
             </div>
           </div>
 
-          {/* Address */}
+          {/* Address - Required verbatim copy */}
           <div className="space-y-4">
-            <h3 className="text-xl font-semibold">{CLINIC_INFO.name}</h3>
+            <h3 className="text-xl font-semibold">Klinik Awfa, KotaSAS,</h3>
             <address className="not-italic text-primary-foreground/80 leading-relaxed">
-              {CLINIC_INFO.address.line1}
+              B2 & B4, Jalan KS 1/12,
               <br />
-              {CLINIC_INFO.address.line2}
+              KotaSAS Avenue,
               <br />
-              {CLINIC_INFO.address.city}, {CLINIC_INFO.address.state}
+              25200 Kuantan, Pahang
             </address>
             <a
               href={CLINIC_INFO.googleMapsUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-block text-sm font-medium underline underline-offset-4 hover:no-underline"
+              aria-label="Dapatkan arah ke Klinik Awfa menggunakan Google Maps"
             >
-              {t('cta.getDirections')} →
+              {language === 'ms' ? 'Dapatkan Arah' : 'Get Directions'} →
             </a>
           </div>
 
-          {/* Operating Hours */}
+          {/* Operating Hours - Required verbatim copy */}
           <div className="space-y-4">
-            <h3 className="text-xl font-semibold">{t('footer.hours')}</h3>
+            <h3 className="text-xl font-semibold">Waktu Operasi:</h3>
             <div className="text-primary-foreground/80">
-              <p className="font-medium">{t('footer.everyday')}</p>
-              <p>{language === 'ms' ? CLINIC_INFO.hours.timeMalay : CLINIC_INFO.hours.time}</p>
+              <p className="font-medium">Setiap Hari</p>
+              <p>8.00 pagi - 12.00 tengah malam</p>
             </div>
             <p className="text-lg font-semibold italic">
-              "{CLINIC_INFO.tagline[language]}"
+              "Klinik Keluarga Anda"
             </p>
           </div>
         </div>

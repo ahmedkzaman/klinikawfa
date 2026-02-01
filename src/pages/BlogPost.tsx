@@ -1,5 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import { MainLayout } from '@/components/layout';
+import { SEOHead, ArticleSchema } from '@/components/seo';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useBlogPost } from '@/hooks/useBlogPosts';
 import { Button } from '@/components/ui/button';
@@ -38,6 +39,11 @@ export default function BlogPost() {
   if (error || !post) {
     return (
       <MainLayout>
+        <SEOHead
+          title={language === 'ms' ? 'Artikel Tidak Dijumpai' : 'Article Not Found'}
+          description={language === 'ms' ? 'Artikel tidak wujud' : 'Article not found'}
+          noIndex
+        />
         <div className="container py-16 text-center">
           <BookOpen className="mx-auto mb-4 h-16 w-16 text-muted-foreground/50" />
           <h1 className="mb-4 text-2xl font-bold">
@@ -69,6 +75,23 @@ export default function BlogPost() {
 
   return (
     <MainLayout>
+      <SEOHead
+        title={title}
+        description={excerpt || title}
+        image={post.featured_image || undefined}
+        url={`/health-tips/${post.slug}`}
+        type="article"
+        publishedTime={post.published_at || undefined}
+        author="Klinik Awfa"
+      />
+      <ArticleSchema
+        title={title}
+        description={excerpt || title}
+        image={post.featured_image || undefined}
+        url={`/health-tips/${post.slug}`}
+        publishedTime={post.published_at || undefined}
+      />
+
       {/* Back button */}
       <div className="container pt-8">
         <Button variant="ghost" asChild className="mb-6 -ml-4">
@@ -86,6 +109,7 @@ export default function BlogPost() {
             <img
               src={post.featured_image}
               alt={title}
+              loading="lazy"
               className="h-full w-full object-cover"
             />
           </div>

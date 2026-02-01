@@ -1,4 +1,5 @@
 import { MainLayout } from '@/components/layout';
+import { SEOHead } from '@/components/seo';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -50,6 +51,14 @@ export default function Services() {
 
   return (
     <MainLayout>
+      <SEOHead
+        title={language === 'ms' ? 'Perkhidmatan' : 'Services'}
+        description={language === 'ms' 
+          ? 'Pelbagai perkhidmatan kesihatan untuk seluruh keluarga anda di Klinik Awfa Kuantan.'
+          : 'Wide range of health services for your entire family at Klinik Awfa Kuantan.'}
+        url="/services"
+      />
+
       {/* Hero */}
       <section className="bg-gradient-to-b from-background to-primary/5 py-16 md:py-24">
         <div className="container">

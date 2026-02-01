@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { MainLayout } from '@/components/layout';
+import { SEOHead } from '@/components/seo';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { CLINIC_INFO, SERVICES } from '@/lib/constants';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -146,6 +147,15 @@ Thank you.`;
 
   return (
     <MainLayout>
+      <SEOHead
+        title={language === 'ms' ? 'Buat Temujanji' : 'Book Appointment'}
+        description={language === 'ms' 
+          ? 'Buat temujanji dengan Klinik Awfa. Isi borang atau hubungi kami melalui WhatsApp.'
+          : 'Book an appointment with Klinik Awfa. Fill out the form or contact us via WhatsApp.'}
+        url="/appointment"
+      />
+
+      {/* Hero Section */}
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-to-b from-primary/10 via-background to-background py-16 md:py-20">
         <div className="container relative">

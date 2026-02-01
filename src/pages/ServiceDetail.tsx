@@ -1,5 +1,6 @@
 import { useParams, Link, Navigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout';
+import { SEOHead } from '@/components/seo';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getServiceBySlug } from '@/lib/serviceContent';
 import { CLINIC_INFO } from '@/lib/constants';
@@ -76,6 +77,12 @@ export default function ServiceDetail() {
 
   return (
     <MainLayout>
+      <SEOHead
+        title={title}
+        description={description}
+        url={`/services/${slug}`}
+      />
+
       {/* Hero Section */}
       <section className="relative bg-gradient-to-br from-primary/10 via-background to-accent/5 py-16 md:py-24">
         <div className="container">

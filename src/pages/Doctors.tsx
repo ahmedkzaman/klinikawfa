@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { MainLayout } from '@/components/layout';
+import { SEOHead } from '@/components/seo';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -152,6 +153,15 @@ export default function Doctors() {
 
   return (
     <MainLayout>
+      <SEOHead
+        title={language === 'ms' ? 'Doktor Kami' : 'Our Doctors'}
+        description={language === 'ms' 
+          ? 'Kenali pasukan doktor berpengalaman di Klinik Awfa yang sentiasa mengutamakan penjagaan pesakit.'
+          : 'Meet the experienced team of doctors at Klinik Awfa who always prioritize patient care.'}
+        url="/doctors"
+      />
+
+      {/* Hero Section */}
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-to-b from-background via-primary/5 to-background py-16 md:py-24">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,hsl(var(--primary)/0.1),transparent_50%)]" />

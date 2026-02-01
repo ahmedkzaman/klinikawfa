@@ -60,9 +60,11 @@ export function Header() {
         {/* Desktop Actions */}
         <div className="hidden items-center gap-2 lg:flex">
           {/* Language Toggle */}
-          <div className="flex items-center rounded-lg border border-border p-0.5">
+          <div className="flex items-center rounded-lg border border-border p-0.5" role="group" aria-label="Language selection">
             <button
               onClick={() => setLanguage('ms')}
+              aria-label="Tukar ke Bahasa Melayu"
+              aria-pressed={language === 'ms'}
               className={cn(
                 'px-2.5 py-1 text-xs font-medium rounded-md transition-colors',
                 language === 'ms'
@@ -74,6 +76,8 @@ export function Header() {
             </button>
             <button
               onClick={() => setLanguage('en')}
+              aria-label="Switch to English"
+              aria-pressed={language === 'en'}
               className={cn(
                 'px-2.5 py-1 text-xs font-medium rounded-md transition-colors',
                 language === 'en'
@@ -143,9 +147,11 @@ export function Header() {
         {/* Mobile Menu */}
         <div className="flex items-center gap-2 lg:hidden">
           {/* Language Toggle Mobile */}
-          <div className="flex items-center rounded-lg border border-border p-0.5">
+          <div className="flex items-center rounded-lg border border-border p-0.5" role="group" aria-label="Language selection">
             <button
               onClick={() => setLanguage('ms')}
+              aria-label="Tukar ke Bahasa Melayu"
+              aria-pressed={language === 'ms'}
               className={cn(
                 'px-2 py-1 text-xs font-medium rounded-md transition-colors',
                 language === 'ms'
@@ -157,6 +163,8 @@ export function Header() {
             </button>
             <button
               onClick={() => setLanguage('en')}
+              aria-label="Switch to English"
+              aria-pressed={language === 'en'}
               className={cn(
                 'px-2 py-1 text-xs font-medium rounded-md transition-colors',
                 language === 'en'

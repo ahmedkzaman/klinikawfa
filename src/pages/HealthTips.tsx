@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { MainLayout } from '@/components/layout';
+import { SEOHead } from '@/components/seo';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -34,6 +35,14 @@ export default function HealthTips() {
 
   return (
     <MainLayout>
+      <SEOHead
+        title={language === 'ms' ? 'Tips Kesihatan' : 'Health Tips'}
+        description={language === 'ms' 
+          ? 'Artikel dan panduan kesihatan daripada pakar Klinik Awfa. Baca tips kesihatan untuk seluruh keluarga.'
+          : 'Health articles and guides from Klinik Awfa experts. Read health tips for the whole family.'}
+        url="/health-tips"
+      />
+
       {/* Hero */}
       <section className="bg-gradient-to-b from-background to-primary/5 py-16 md:py-24">
         <div className="container">
