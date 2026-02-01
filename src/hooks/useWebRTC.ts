@@ -192,7 +192,15 @@ export function useWebRTC({
   const setupSignaling = (pc: RTCPeerConnection): Promise<void> => {
     return new Promise((resolve, reject) => {
       console.log('[WebRTC] Setting up signaling channel for room:', roomCode);
-      const channel = supabase.channel(`video-room-${roomCode}`);
+      
+      let isResolved = false;
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      
+      const channel = supabase.channel(`video-room-${roomCode}`, {
+        config: {
+          presence: { key: isStaff ? 'staff' : 'patient' },
+        },
+      });
 
       // Helper to send the current offer
       const sendOffer = () => {
@@ -294,32 +302,43 @@ export function useWebRTC({
           cleanup();
           onCallEnded?.();
         })
-      .subscribe(async (status) => {
+        .subscribe(async (status) => {
           console.log('[WebRTC] Channel subscription status:', status);
+          
+          if (isResolved) return; // Prevent double resolution
+          
           if (status === 'SUBSCRIBED') {
             const role = isStaff ? 'staff' : 'patient';
             console.log('[WebRTC] Tracking presence as:', role);
             try {
               await channel.track({ role, online_at: Date.now() });
               channelRef.current = channel;
+              isResolved = true;
+              if (timeoutId) clearTimeout(timeoutId);
               resolve();
             } catch (err) {
               console.error('[WebRTC] Failed to track presence:', err);
-              reject(new Error('Failed to join room'));
+              isResolved = true;
+              if (timeoutId) clearTimeout(timeoutId);
+              reject(new Error('Failed to join room: presence tracking failed'));
             }
           } else if (status === 'CHANNEL_ERROR' || status === 'CLOSED' || status === 'TIMED_OUT') {
             console.error('[WebRTC] Channel error:', status);
-            reject(new Error(`Failed to join signaling channel: ${status}`));
+            isResolved = true;
+            if (timeoutId) clearTimeout(timeoutId);
+            reject(new Error(`Failed to join signaling channel: ${status}. Please check your network connection.`));
           }
         });
 
-      // Timeout for subscription
-      setTimeout(() => {
-        if (!channelRef.current) {
-          console.error('[WebRTC] Channel subscription timeout');
-          reject(new Error('Channel subscription timeout'));
+      // Timeout for subscription - only reject if not already resolved
+      timeoutId = setTimeout(() => {
+        if (!isResolved) {
+          console.error('[WebRTC] Channel subscription timeout after 20s');
+          isResolved = true;
+          supabase.removeChannel(channel);
+          reject(new Error('Connection timeout. Please check your network and try again.'));
         }
-      }, 15000);
+      }, 20000);
     });
   };
 
