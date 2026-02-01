@@ -103,11 +103,13 @@ export default function Auth() {
       });
     } else {
       toast({
-        title: language === 'ms' ? 'Berjaya' : 'Success',
+        title: language === 'ms' ? '📧 Sahkan Email Anda' : '📧 Verify Your Email',
         description: language === 'ms'
-          ? 'Pendaftaran berjaya! Sila semak email anda untuk pengesahan.'
-          : 'Registration successful! Please check your email for confirmation.',
+          ? 'Pendaftaran berjaya! Kami telah menghantar pautan pengesahan ke email anda. Sila klik pautan tersebut untuk mengaktifkan akaun anda.'
+          : 'Registration successful! We have sent a verification link to your email. Please click the link to activate your account.',
+        duration: 10000, // Show for 10 seconds
       });
+      signUpForm.reset();
       setMode('login');
     }
   };
