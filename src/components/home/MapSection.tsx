@@ -1,20 +1,43 @@
+import { motion } from 'framer-motion';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { CLINIC_INFO } from '@/lib/constants';
-import { ArrowRight, MapPin, Clock, Phone } from 'lucide-react';
+import { ArrowRight, MapPin, Clock, Phone, Navigation } from 'lucide-react';
 
 export function MapSection() {
   const { language, t } = useLanguage();
 
   return (
-    <section className="py-16 md:py-24">
-      <div className="container">
-        <div className="grid gap-8 lg:grid-cols-2 lg:gap-12">
-          <div className="flex flex-col justify-center">
+    <section className="relative py-20 md:py-28 overflow-hidden gradient-section">
+      {/* Background decoration */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-0 right-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-1/4 w-80 h-80 bg-accent/5 rounded-full blur-3xl" />
+      </div>
+
+      <div className="container relative z-10">
+        <div className="grid gap-10 lg:grid-cols-2 lg:gap-16 items-center">
+          <motion.div
+            initial={{ opacity: 0, x: -30 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.6 }}
+            className="flex flex-col"
+          >
+            <motion.span
+              initial={{ opacity: 0, scale: 0.9 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true }}
+              className="inline-flex items-center gap-2 mb-4 w-fit px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium border border-primary/20"
+            >
+              <Navigation className="h-4 w-4" />
+              {language === 'ms' ? 'Cari Kami' : 'Find Us'}
+            </motion.span>
+            
             <h2 className="mb-4">
               {language === 'ms' ? 'Lokasi Kami' : 'Our Location'}
             </h2>
-            <p className="mb-8 text-muted-foreground">
+            <p className="mb-10 text-muted-foreground text-lg">
               {language === 'ms'
                 ? 'Mudah diakses di KotaSAS Avenue, Kuantan. Kami sedia menerima kunjungan anda.'
                 : 'Easily accessible at KotaSAS Avenue, Kuantan. We are ready to welcome your visit.'}
@@ -22,12 +45,18 @@ export function MapSection() {
             
             <div className="space-y-6">
               {/* Address */}
-              <div className="flex items-start gap-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <MapPin className="h-5 w-5" />
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.1 }}
+                className="flex items-start gap-4 p-4 rounded-2xl bg-card/50 border border-border/50 shadow-soft"
+              >
+                <div className="icon-gradient h-12 w-12 shrink-0 text-primary">
+                  <MapPin className="h-6 w-6" />
                 </div>
                 <div>
-                  <h4 className="font-semibold">{CLINIC_INFO.name}</h4>
+                  <h4 className="font-bold text-lg mb-1">{CLINIC_INFO.name}</h4>
                   <address className="not-italic text-muted-foreground">
                     {CLINIC_INFO.address.line1}
                     <br />
@@ -36,50 +65,81 @@ export function MapSection() {
                     {CLINIC_INFO.address.city}, {CLINIC_INFO.address.state}
                   </address>
                 </div>
-              </div>
+              </motion.div>
 
               {/* Operating Hours */}
-              <div className="flex items-start gap-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <Clock className="h-5 w-5" />
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.2 }}
+                className="flex items-start gap-4 p-4 rounded-2xl bg-card/50 border border-border/50 shadow-soft"
+              >
+                <div className="icon-gradient h-12 w-12 shrink-0 text-primary">
+                  <Clock className="h-6 w-6" />
                 </div>
                 <div>
-                  <h4 className="font-semibold">{t('footer.hours')}</h4>
+                  <h4 className="font-bold text-lg mb-1">{t('footer.hours')}</h4>
                   <p className="text-muted-foreground">
                     {t('footer.everyday')}
                     <br />
                     {language === 'ms' ? CLINIC_INFO.hours.timeMalay : CLINIC_INFO.hours.time}
                   </p>
                 </div>
-              </div>
+              </motion.div>
 
               {/* Phone */}
-              <div className="flex items-start gap-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <Phone className="h-5 w-5" />
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.3 }}
+                className="flex items-start gap-4 p-4 rounded-2xl bg-card/50 border border-border/50 shadow-soft"
+              >
+                <div className="icon-gradient h-12 w-12 shrink-0 text-primary">
+                  <Phone className="h-6 w-6" />
                 </div>
                 <div>
-                  <h4 className="font-semibold">{t('cta.call')}</h4>
+                  <h4 className="font-bold text-lg mb-1">{t('cta.call')}</h4>
                   <a 
                     href={CLINIC_INFO.phoneLink} 
-                    className="text-muted-foreground hover:text-primary transition-colors"
+                    className="text-muted-foreground hover:text-primary transition-colors font-medium"
                   >
                     {CLINIC_INFO.phone}
                   </a>
                 </div>
-              </div>
+              </motion.div>
             </div>
 
-            <Button className="mt-8 w-fit" asChild>
-              <a href={CLINIC_INFO.googleMapsUrl} target="_blank" rel="noopener noreferrer">
-                {t('cta.getDirections')}
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </a>
-            </Button>
-          </div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.4 }}
+            >
+              <Button 
+                className="mt-8 btn-primary-glow bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary group" 
+                size="lg"
+                asChild
+              >
+                <a href={CLINIC_INFO.googleMapsUrl} target="_blank" rel="noopener noreferrer">
+                  {t('cta.getDirections')}
+                  <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                </a>
+              </Button>
+            </motion.div>
+          </motion.div>
 
           {/* Map */}
-          <div className="aspect-square overflow-hidden rounded-2xl bg-muted shadow-card lg:aspect-auto lg:min-h-[400px]">
+          <motion.div
+            initial={{ opacity: 0, x: 30, scale: 0.95 }}
+            whileInView={{ opacity: 1, x: 0, scale: 1 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="aspect-square overflow-hidden rounded-3xl bg-muted shadow-elevated border border-border/50 lg:aspect-auto lg:min-h-[500px] relative group"
+          >
+            {/* Decorative border gradient */}
+            <div className="absolute inset-0 rounded-3xl border-gradient pointer-events-none" />
             <iframe
               src={CLINIC_INFO.googleMapsEmbed}
               width="100%"
@@ -89,9 +149,9 @@ export function MapSection() {
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
               title="Klinik Awfa Location"
-              className="h-full w-full"
+              className="h-full w-full transition-opacity"
             />
-          </div>
+          </motion.div>
         </div>
       </div>
     </section>

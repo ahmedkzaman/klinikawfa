@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { CLINIC_INFO } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Calendar, MessageCircle, Phone } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, MessageCircle, Phone, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface HeroSlide {
@@ -12,7 +13,6 @@ interface HeroSlide {
   titleEn: string;
   subtitleMs: string;
   subtitleEn: string;
-  gradient: string;
 }
 
 const slides: HeroSlide[] = [
@@ -22,7 +22,6 @@ const slides: HeroSlide[] = [
     titleEn: 'Your Family Clinic',
     subtitleMs: 'Rawatan berkualiti untuk seluruh keluarga di KotaSAS',
     subtitleEn: 'Quality healthcare for the whole family at KotaSAS',
-    gradient: 'from-primary/20 via-background to-background',
   },
   {
     id: 2,
@@ -30,7 +29,6 @@ const slides: HeroSlide[] = [
     titleEn: 'Open Every Day',
     subtitleMs: '8.00 pagi hingga 12.00 tengah malam untuk keselesaan anda',
     subtitleEn: '8:00 AM to 12:00 Midnight for your convenience',
-    gradient: 'from-accent/10 via-background to-background',
   },
   {
     id: 3,
@@ -38,7 +36,6 @@ const slides: HeroSlide[] = [
     titleEn: 'Special Interest in Minor Surgery',
     subtitleMs: 'Kepakaran dalam rawatan ketumbuhan, ketuat & khatan',
     subtitleEn: 'Expertise in lumps, warts & circumcision treatment',
-    gradient: 'from-success/10 via-background to-background',
   },
 ];
 
@@ -63,10 +60,8 @@ export function HeroCarousel({ autoPlayInterval = 5000 }: HeroCarouselProps) {
     setCurrentSlide(index);
   }, []);
 
-  // Auto-rotate
   useEffect(() => {
     if (isPaused) return;
-    
     const interval = setInterval(nextSlide, autoPlayInterval);
     return () => clearInterval(interval);
   }, [isPaused, nextSlide, autoPlayInterval]);
@@ -75,40 +70,93 @@ export function HeroCarousel({ autoPlayInterval = 5000 }: HeroCarouselProps) {
 
   return (
     <section
-      className={cn(
-        'relative overflow-hidden bg-gradient-to-b py-20 md:py-28 lg:py-36 transition-colors duration-700',
-        slide.gradient
-      )}
+      className="relative overflow-hidden py-24 md:py-32 lg:py-40"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
     >
+      {/* Animated background */}
+      <div className="absolute inset-0 gradient-section">
+        <motion.div 
+          className="floating-orb floating-orb-primary w-[600px] h-[600px] -top-40 -right-40"
+          animate={{ 
+            x: [0, 30, -20, 0],
+            y: [0, -20, 30, 0],
+          }}
+          transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div 
+          className="floating-orb floating-orb-accent w-[500px] h-[500px] -bottom-40 -left-40"
+          animate={{ 
+            x: [0, -30, 20, 0],
+            y: [0, 20, -30, 0],
+          }}
+          transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div 
+          className="floating-orb floating-orb-primary w-[300px] h-[300px] top-1/2 left-1/4"
+          animate={{ 
+            x: [0, 50, -30, 0],
+            y: [0, -40, 20, 0],
+          }}
+          transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
+        />
+      </div>
+
       <div className="container relative z-10">
         <div className="mx-auto max-w-4xl text-center">
-          {/* Clinic name */}
-          <p className="mb-4 text-lg font-semibold text-primary animate-fade-in">
+          {/* Clinic badge */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="mb-6 inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-sm font-medium text-primary border border-primary/20"
+          >
+            <Sparkles className="h-4 w-4" />
             {CLINIC_INFO.name}
-          </p>
+          </motion.div>
 
           {/* Main title */}
-          <h1 
-            key={`title-${currentSlide}`}
-            className="mb-6 text-4xl font-bold tracking-tight text-foreground md:text-5xl lg:text-6xl animate-fade-in"
-          >
-            {language === 'ms' ? slide.titleMs : slide.titleEn}
-          </h1>
+          <AnimatePresence mode="wait">
+            <motion.h1
+              key={`title-${currentSlide}`}
+              initial={{ opacity: 0, y: 30, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+              className="mb-6 text-4xl font-bold tracking-tight md:text-5xl lg:text-6xl xl:text-7xl"
+            >
+              <span className="gradient-text">
+                {language === 'ms' ? slide.titleMs : slide.titleEn}
+              </span>
+            </motion.h1>
+          </AnimatePresence>
 
           {/* Subtitle */}
-          <p 
-            key={`subtitle-${currentSlide}`}
-            className="mb-10 text-lg text-muted-foreground md:text-xl animate-fade-in"
-            style={{ animationDelay: '0.1s' }}
-          >
-            {language === 'ms' ? slide.subtitleMs : slide.subtitleEn}
-          </p>
+          <AnimatePresence mode="wait">
+            <motion.p
+              key={`subtitle-${currentSlide}`}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.4, delay: 0.1, ease: [0.4, 0, 0.2, 1] }}
+              className="mb-10 text-lg text-muted-foreground md:text-xl lg:text-2xl max-w-2xl mx-auto"
+            >
+              {language === 'ms' ? slide.subtitleMs : slide.subtitleEn}
+            </motion.p>
+          </AnimatePresence>
 
           {/* CTAs */}
-          <div className="flex flex-col items-center justify-center gap-4 sm:flex-row animate-fade-in" style={{ animationDelay: '0.2s' }}>
-            <Button size="lg" className="min-w-[180px]" asChild>
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="flex flex-col items-center justify-center gap-4 sm:flex-row"
+          >
+            <Button 
+              size="lg" 
+              className="min-w-[180px] btn-primary-glow bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary" 
+              asChild
+            >
               <Link to="/appointment">
                 <Calendar className="mr-2 h-5 w-5" />
                 {t('cta.bookAppointment')}
@@ -116,7 +164,7 @@ export function HeroCarousel({ autoPlayInterval = 5000 }: HeroCarouselProps) {
             </Button>
             <Button 
               size="lg" 
-              className="min-w-[180px] bg-[hsl(142,70%,45%)] text-white hover:bg-[hsl(142,70%,40%)]" 
+              className="min-w-[180px] bg-whatsapp text-whatsapp-foreground hover:bg-whatsapp/90 btn-primary-glow" 
               asChild
             >
               <a href={CLINIC_INFO.whatsapp} target="_blank" rel="noopener noreferrer">
@@ -124,52 +172,59 @@ export function HeroCarousel({ autoPlayInterval = 5000 }: HeroCarouselProps) {
                 WhatsApp
               </a>
             </Button>
-            <Button size="lg" variant="outline" className="min-w-[180px]" asChild>
+            <Button 
+              size="lg" 
+              variant="outline" 
+              className="min-w-[180px] border-2 hover:bg-primary/5 transition-all duration-300" 
+              asChild
+            >
               <a href={CLINIC_INFO.phoneLink}>
                 <Phone className="mr-2 h-5 w-5" />
                 {t('cta.call')}
               </a>
             </Button>
-          </div>
+          </motion.div>
         </div>
 
         {/* Navigation arrows */}
-        <button
+        <motion.button
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
           onClick={prevSlide}
-          className="absolute left-4 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-background/80 text-foreground shadow-soft backdrop-blur transition-all hover:bg-background hover:shadow-card md:left-8 md:h-12 md:w-12"
+          className="absolute left-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full glass border border-border/50 text-foreground shadow-card transition-all hover:shadow-elevated md:left-8 md:h-14 md:w-14"
           aria-label="Previous slide"
         >
           <ChevronLeft className="h-5 w-5 md:h-6 md:w-6" />
-        </button>
-        <button
+        </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
           onClick={nextSlide}
-          className="absolute right-4 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-background/80 text-foreground shadow-soft backdrop-blur transition-all hover:bg-background hover:shadow-card md:right-8 md:h-12 md:w-12"
+          className="absolute right-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full glass border border-border/50 text-foreground shadow-card transition-all hover:shadow-elevated md:right-8 md:h-14 md:w-14"
           aria-label="Next slide"
         >
           <ChevronRight className="h-5 w-5 md:h-6 md:w-6" />
-        </button>
+        </motion.button>
 
         {/* Dots indicator */}
-        <div className="absolute bottom-6 left-1/2 flex -translate-x-1/2 gap-2">
+        <div className="absolute bottom-8 left-1/2 flex -translate-x-1/2 gap-3">
           {slides.map((_, index) => (
-            <button
+            <motion.button
               key={index}
               onClick={() => goToSlide(index)}
+              whileHover={{ scale: 1.2 }}
+              whileTap={{ scale: 0.9 }}
               className={cn(
-                'h-2 rounded-full transition-all duration-300',
+                'h-3 rounded-full transition-all duration-500',
                 currentSlide === index
-                  ? 'w-8 bg-primary'
-                  : 'w-2 bg-primary/30 hover:bg-primary/50'
+                  ? 'w-10 bg-gradient-to-r from-primary to-primary-glow shadow-glow-primary'
+                  : 'w-3 bg-primary/30 hover:bg-primary/50'
               )}
               aria-label={`Go to slide ${index + 1}`}
             />
           ))}
         </div>
       </div>
-
-      {/* Decorative elements */}
-      <div className="absolute -top-24 -right-24 h-96 w-96 rounded-full bg-primary/5 blur-3xl" />
-      <div className="absolute -bottom-24 -left-24 h-96 w-96 rounded-full bg-primary/5 blur-3xl" />
     </section>
   );
 }
