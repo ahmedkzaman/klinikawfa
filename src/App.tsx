@@ -16,6 +16,8 @@ import Gallery from "./pages/Gallery";
 import HealthTips from "./pages/HealthTips";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
+import VideoCall from "./pages/VideoCall";
+import VideoCallStaff from "./pages/VideoCallStaff";
 
 // Admin
 import { AdminLayout } from "./components/admin";
@@ -28,6 +30,7 @@ import {
   UserManagement,
   TeamManagement,
   TeamEditor,
+  VideoCallManagement,
 } from "./pages/admin";
 
 const queryClient = new QueryClient();
@@ -49,6 +52,8 @@ const App = () => (
               <Route path="/gallery" element={<Gallery />} />
               <Route path="/health-tips" element={<HealthTips />} />
               <Route path="/auth" element={<Auth />} />
+              <Route path="/video-call" element={<VideoCall />} />
+              <Route path="/video-call/staff" element={<VideoCallStaff />} />
               
               {/* Admin Routes */}
               <Route path="/admin" element={<AdminLayout />}>
@@ -56,6 +61,7 @@ const App = () => (
                 <Route path="leads" element={<LeadsManagement />} />
                 <Route path="team" element={<TeamManagement />} />
                 <Route path="team/:id" element={<TeamEditor />} />
+                <Route path="video-calls" element={<VideoCallManagement />} />
                 <Route path="blog" element={<BlogManagement />} />
                 <Route path="blog/:id" element={<BlogEditor />} />
                 <Route path="gallery" element={<GalleryManagement />} />

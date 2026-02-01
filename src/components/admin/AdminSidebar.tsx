@@ -7,7 +7,8 @@ import {
   Users,
   LogOut,
   Home,
-  Stethoscope
+  Stethoscope,
+  Video
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
@@ -50,6 +51,13 @@ const menuItems = [
     staffAccess: true 
   },
   { 
+    titleMs: 'Panggilan Video', 
+    titleEn: 'Video Calls', 
+    url: '/admin/video-calls', 
+    icon: Video,
+    staffAccess: true 
+  },
+  {
     titleMs: 'Blog Posts', 
     titleEn: 'Blog Posts', 
     url: '/admin/blog', 

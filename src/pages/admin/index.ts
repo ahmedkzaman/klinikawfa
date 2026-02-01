@@ -6,3 +6,4 @@ export { default as GalleryManagement } from './GalleryManagement';
 export { default as UserManagement } from './UserManagement';
 export { default as TeamManagement } from './TeamManagement';
 export { default as TeamEditor } from './TeamEditor';
+export { default as VideoCallManagement } from './VideoCallManagement';

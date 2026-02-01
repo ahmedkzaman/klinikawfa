@@ -1,0 +1,443 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { supabase } from '@/integrations/supabase/client';
+import { 
+  Video, 
+  Plus, 
+  Copy, 
+  Phone, 
+  PhoneOff, 
+  Loader2, 
+  RefreshCw,
+  Users,
+  Clock,
+  DollarSign
+} from 'lucide-react';
+import { format } from 'date-fns';
+
+interface VideoRoom {
+  id: string;
+  room_code: string;
+  patient_name: string;
+  patient_phone: string;
+  patient_email: string | null;
+  status: string;
+  deposit_amount: number;
+  per_minute_rate: number;
+  call_started_at: string | null;
+  call_ended_at: string | null;
+  total_duration_seconds: number | null;
+  total_amount: number | null;
+  notes: string | null;
+  created_at: string;
+  video_payments: Array<{
+    id: string;
+    payment_type: string;
+    amount: number;
+    status: string;
+  }>;
+}
+
+export default function VideoCallManagement() {
+  const { language } = useLanguage();
+  const { toast } = useToast();
+  const navigate = useNavigate();
+
+  const [rooms, setRooms] = useState<VideoRoom[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [newRoom, setNewRoom] = useState({
+    patient_name: '',
+    patient_phone: '',
+    patient_email: '',
+    notes: '',
+  });
+
+  const fetchRooms = async () => {
+    setIsLoading(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session) {
+        toast({
+          title: 'Error',
+          description: 'Please login first',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/video-room?action=list`,
+        {
+          headers: {
+            'Authorization': `Bearer ${session.session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      const result = await response.json();
+      if (result.rooms) {
+        setRooms(result.rooms);
+      }
+    } catch (error) {
+      console.error('Error fetching rooms:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load video rooms',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRooms();
+  }, []);
+
+  const createRoom = async () => {
+    if (!newRoom.patient_name || !newRoom.patient_phone) {
+      toast({
+        title: language === 'ms' ? 'Ralat' : 'Error',
+        description: language === 'ms' ? 'Nama dan telefon diperlukan' : 'Name and phone required',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/video-room?action=create`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(newRoom),
+        }
+      );
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create room');
+      }
+
+      toast({
+        title: language === 'ms' ? 'Berjaya!' : 'Success!',
+        description: `Room created: ${result.room.room_code}`,
+      });
+
+      setShowCreateDialog(false);
+      setNewRoom({ patient_name: '', patient_phone: '', patient_email: '', notes: '' });
+      fetchRooms();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to create room',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const copyRoomCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    toast({
+      title: language === 'ms' ? 'Disalin!' : 'Copied!',
+      description: `Room code ${code} copied to clipboard`,
+    });
+  };
+
+  const startCall = (roomCode: string) => {
+    // Open in new tab for staff to join
+    window.open(`/video-call/staff?room=${roomCode}`, '_blank');
+  };
+
+  const getStatusBadge = (status: string) => {
+    const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+      pending: 'outline',
+      paid: 'secondary',
+      active: 'default',
+      ended: 'destructive',
+      cancelled: 'destructive',
+    };
+
+    const labels: Record<string, Record<string, string>> = {
+      pending: { ms: 'Menunggu', en: 'Pending' },
+      paid: { ms: 'Dibayar', en: 'Paid' },
+      active: { ms: 'Aktif', en: 'Active' },
+      ended: { ms: 'Tamat', en: 'Ended' },
+      cancelled: { ms: 'Dibatalkan', en: 'Cancelled' },
+    };
+
+    return (
+      <Badge variant={variants[status] || 'outline'}>
+        {labels[status]?.[language] || status}
+      </Badge>
+    );
+  };
+
+  const formatCurrency = (cents: number) => `RM ${(cents / 100).toFixed(2)}`;
+
+  const stats = {
+    total: rooms.length,
+    pending: rooms.filter(r => r.status === 'pending').length,
+    active: rooms.filter(r => r.status === 'active').length,
+    completed: rooms.filter(r => r.status === 'ended').length,
+    revenue: rooms
+      .filter(r => r.status === 'ended')
+      .reduce((sum, r) => sum + (r.total_amount || 0), 0),
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">
+            {language === 'ms' ? 'Panggilan Video' : 'Video Calls'}
+          </h1>
+          <p className="text-muted-foreground">
+            {language === 'ms' 
+              ? 'Urus sesi perundingan video' 
+              : 'Manage video consultation sessions'}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={fetchRooms} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            {language === 'ms' ? 'Muat Semula' : 'Refresh'}
+          </Button>
+          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                {language === 'ms' ? 'Bilik Baru' : 'New Room'}
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>
+                  {language === 'ms' ? 'Cipta Bilik Video' : 'Create Video Room'}
+                </DialogTitle>
+                <DialogDescription>
+                  {language === 'ms' 
+                    ? 'Cipta bilik video untuk pesakit. Kod bilik akan dijana secara automatik.'
+                    : 'Create a video room for a patient. Room code will be generated automatically.'}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="patient_name">
+                    {language === 'ms' ? 'Nama Pesakit' : 'Patient Name'} *
+                  </Label>
+                  <Input
+                    id="patient_name"
+                    value={newRoom.patient_name}
+                    onChange={(e) => setNewRoom({ ...newRoom, patient_name: e.target.value })}
+                    placeholder="John Doe"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="patient_phone">
+                    {language === 'ms' ? 'Telefon' : 'Phone'} *
+                  </Label>
+                  <Input
+                    id="patient_phone"
+                    value={newRoom.patient_phone}
+                    onChange={(e) => setNewRoom({ ...newRoom, patient_phone: e.target.value })}
+                    placeholder="+60123456789"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="patient_email">
+                    {language === 'ms' ? 'Emel (Pilihan)' : 'Email (Optional)'}
+                  </Label>
+                  <Input
+                    id="patient_email"
+                    type="email"
+                    value={newRoom.patient_email}
+                    onChange={(e) => setNewRoom({ ...newRoom, patient_email: e.target.value })}
+                    placeholder="patient@email.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="notes">
+                    {language === 'ms' ? 'Nota (Pilihan)' : 'Notes (Optional)'}
+                  </Label>
+                  <Textarea
+                    id="notes"
+                    value={newRoom.notes}
+                    onChange={(e) => setNewRoom({ ...newRoom, notes: e.target.value })}
+                    placeholder={language === 'ms' ? 'Nota tambahan...' : 'Additional notes...'}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+                  {language === 'ms' ? 'Batal' : 'Cancel'}
+                </Button>
+                <Button onClick={createRoom} disabled={isCreating}>
+                  {isCreating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {language === 'ms' ? 'Cipta' : 'Create'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              {language === 'ms' ? 'Jumlah Bilik' : 'Total Rooms'}
+            </CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.total}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              {language === 'ms' ? 'Menunggu Bayaran' : 'Pending Payment'}
+            </CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.pending}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              {language === 'ms' ? 'Panggilan Aktif' : 'Active Calls'}
+            </CardTitle>
+            <Video className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{stats.active}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              {language === 'ms' ? 'Jumlah Hasil' : 'Total Revenue'}
+            </CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(stats.revenue)}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Rooms Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{language === 'ms' ? 'Senarai Bilik' : 'Room List'}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : rooms.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              {language === 'ms' 
+                ? 'Tiada bilik video. Cipta bilik baru untuk bermula.'
+                : 'No video rooms. Create a new room to get started.'}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{language === 'ms' ? 'Kod Bilik' : 'Room Code'}</TableHead>
+                  <TableHead>{language === 'ms' ? 'Pesakit' : 'Patient'}</TableHead>
+                  <TableHead>{language === 'ms' ? 'Status' : 'Status'}</TableHead>
+                  <TableHead>{language === 'ms' ? 'Tempoh' : 'Duration'}</TableHead>
+                  <TableHead>{language === 'ms' ? 'Jumlah' : 'Amount'}</TableHead>
+                  <TableHead>{language === 'ms' ? 'Dicipta' : 'Created'}</TableHead>
+                  <TableHead className="text-right">{language === 'ms' ? 'Tindakan' : 'Actions'}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rooms.map((room) => (
+                  <TableRow key={room.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <code className="font-mono text-lg font-bold">{room.room_code}</code>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => copyRoomCode(room.room_code)}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">{room.patient_name}</div>
+                        <div className="text-sm text-muted-foreground">{room.patient_phone}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>{getStatusBadge(room.status)}</TableCell>
+                    <TableCell>
+                      {room.total_duration_seconds 
+                        ? `${Math.ceil(room.total_duration_seconds / 60)} min`
+                        : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {room.total_amount 
+                        ? formatCurrency(room.total_amount)
+                        : formatCurrency(room.deposit_amount)}
+                    </TableCell>
+                    <TableCell>
+                      {format(new Date(room.created_at), 'dd/MM/yyyy HH:mm')}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {(room.status === 'paid' || room.status === 'active') && (
+                        <Button
+                          size="sm"
+                          onClick={() => startCall(room.room_code)}
+                        >
+                          <Phone className="h-4 w-4 mr-1" />
+                          {language === 'ms' ? 'Mulakan' : 'Start'}
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

@@ -2,3 +2,12 @@ project_id = "ncysmppzfjtiekfnomdv"
 
 [functions.generate-bio]
 verify_jwt = false
+
+[functions.video-room]
+verify_jwt = false
+
+[functions.video-payment]
+verify_jwt = false
+
+[functions.video-webhook]
+verify_jwt = false
