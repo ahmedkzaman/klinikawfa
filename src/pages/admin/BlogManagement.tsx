@@ -46,6 +46,7 @@ interface BlogPost {
   slug: string;
   published: boolean;
   published_at: string | null;
+  scheduled_at: string | null;
   created_at: string;
 }
 
@@ -64,11 +65,11 @@ export default function BlogManagement() {
     try {
       const { data, error } = await supabase
         .from('blog_posts')
-        .select('id, title, title_ms, title_en, slug, published, published_at, created_at')
+        .select('id, title, title_ms, title_en, slug, published, published_at, scheduled_at, created_at')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setPosts(data || []);
+      setPosts((data as BlogPost[]) || []);
     } catch (error) {
       console.error('Error fetching posts:', error);
       toast({
@@ -232,11 +233,36 @@ export default function BlogManagement() {
                         {post.slug}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={post.published ? 'default' : 'secondary'}>
-                          {post.published 
-                            ? (language === 'ms' ? 'Diterbitkan' : 'Published')
-                            : (language === 'ms' ? 'Draf' : 'Draft')}
-                        </Badge>
+                        {(() => {
+                          const now = new Date();
+                          const isScheduled = post.published && post.scheduled_at && new Date(post.scheduled_at) > now;
+                          const isPublished = post.published && (!post.scheduled_at || new Date(post.scheduled_at) <= now);
+                          
+                          if (isScheduled) {
+                            return (
+                              <div className="space-y-1">
+                                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-700">
+                                  {language === 'ms' ? 'Dijadualkan' : 'Scheduled'}
+                                </Badge>
+                                <p className="text-xs text-muted-foreground">
+                                  {format(new Date(post.scheduled_at!), 'dd/MM/yyyy HH:mm')}
+                                </p>
+                              </div>
+                            );
+                          } else if (isPublished) {
+                            return (
+                              <Badge variant="default">
+                                {language === 'ms' ? 'Diterbitkan' : 'Published'}
+                              </Badge>
+                            );
+                          } else {
+                            return (
+                              <Badge variant="secondary">
+                                {language === 'ms' ? 'Draf' : 'Draft'}
+                              </Badge>
+                            );
+                          }
+                        })()}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         {format(new Date(post.created_at), 'dd/MM/yyyy')}
