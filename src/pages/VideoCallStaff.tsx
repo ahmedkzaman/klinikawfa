@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { VideoPlayer, CallControls, CallTimer, ConnectionStatusIndicator, MobileCallLayout } from '@/components/video';
+import { VideoPlayer, CallControls, CallTimer, ConnectionStatusIndicator, MobileCallLayout, TranscriptionPanel, TranscriptionSheet } from '@/components/video';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { useCallTimer } from '@/hooks/useCallTimer';
+import { useTranscription } from '@/hooks/useTranscription';
 import { useToast } from '@/hooks/use-toast';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -44,6 +45,18 @@ export default function VideoCallStaff() {
     depositAmount: roomData?.deposit_amount || 5000,
     perMinuteRate: roomData?.per_minute_rate || 500,
     freeMinutes: 10,
+  });
+
+  // Transcription hook for medical notes
+  const transcription = useTranscription({
+    roomId: roomData?.id || '',
+    onError: (error) => {
+      toast({
+        title: language === 'ms' ? 'Ralat Transkripsi' : 'Transcription Error',
+        description: error,
+        variant: 'destructive',
+      });
+    },
   });
 
   const webrtc = useWebRTC({
@@ -114,6 +127,17 @@ export default function VideoCallStaff() {
   };
 
   const handleCallEnded = useCallback(async (durationSeconds: number) => {
+    // Stop transcription and save notes
+    if (transcription.isTranscribing) {
+      await transcription.stopTranscription();
+    }
+    
+    // Structure and save the transcript if there's content
+    if (transcription.segments.length > 0) {
+      const notes = await transcription.structureNotes();
+      await transcription.saveTranscript(notes || undefined);
+    }
+    
     await updateRoomStatus('ended', durationSeconds);
 
     const totalMinutes = Math.ceil(durationSeconds / 60);
@@ -129,7 +153,7 @@ export default function VideoCallStaff() {
       totalCost: depositAmount + additionalCost,
     });
     setStep('ended');
-  }, [roomData]);
+  }, [roomData, transcription]);
 
   useEffect(() => {
     const loadRoom = async () => {
@@ -241,43 +265,62 @@ export default function VideoCallStaff() {
   }
 
   if (step === 'in-call') {
-    // Mobile layout with fixed controls and PiP
+    // Transcription props shared between mobile and desktop
+    const transcriptionProps = {
+      isTranscribing: transcription.isTranscribing,
+      isConnected: transcription.isConnected,
+      segments: transcription.segments,
+      partialText: transcription.partialText,
+      structuredNotes: transcription.structuredNotes,
+      isStructuring: transcription.isStructuring,
+      isSaving: transcription.isSaving,
+      onStartTranscription: transcription.startTranscription,
+      onStopTranscription: transcription.stopTranscription,
+      onStructureNotes: transcription.structureNotes,
+      onSave: () => transcription.saveTranscript(),
+      onUpdateNotes: transcription.updateNotes,
+    };
+
+    // Mobile layout with fixed controls, PiP, and transcription sheet
     if (isMobile) {
       return (
-        <MobileCallLayout
-          remoteStream={webrtc.remoteStream}
-          localStream={webrtc.localStream}
-          remoteLabel={roomData?.patient_name || 'Patient'}
-          localLabel={language === 'ms' ? 'Anda (Doktor)' : 'You (Doctor)'}
-          timer={{
-            formattedTime: timer.formattedTime,
-            totalMinutes: timer.totalMinutes,
-            currentCost: timer.currentCost,
-            additionalCost: timer.additionalCost,
-            isOverFreeTime: timer.isOverFreeTime,
-          }}
-          freeMinutes={10}
-          controls={{
-            isAudioEnabled: webrtc.isAudioEnabled,
-            isVideoEnabled: webrtc.isVideoEnabled,
-            isConnected: webrtc.isConnected,
-            isConnecting: webrtc.isConnecting,
-            onToggleAudio: webrtc.toggleAudio,
-            onToggleVideo: webrtc.toggleVideo,
-            onEndCall: webrtc.endCall,
-          }}
-          connectionStatus={webrtc.connectionStatus}
-          connectionError={webrtc.connectionError}
-          onRetry={webrtc.retryCall}
-          retryAttempt={webrtc.retryAttempt}
-          isStaff={true}
-          patientName={roomData?.patient_name}
-          roomCode={roomData?.room_code}
-        />
+        <>
+          <MobileCallLayout
+            remoteStream={webrtc.remoteStream}
+            localStream={webrtc.localStream}
+            remoteLabel={roomData?.patient_name || 'Patient'}
+            localLabel={language === 'ms' ? 'Anda (Doktor)' : 'You (Doctor)'}
+            timer={{
+              formattedTime: timer.formattedTime,
+              totalMinutes: timer.totalMinutes,
+              currentCost: timer.currentCost,
+              additionalCost: timer.additionalCost,
+              isOverFreeTime: timer.isOverFreeTime,
+            }}
+            freeMinutes={10}
+            controls={{
+              isAudioEnabled: webrtc.isAudioEnabled,
+              isVideoEnabled: webrtc.isVideoEnabled,
+              isConnected: webrtc.isConnected,
+              isConnecting: webrtc.isConnecting,
+              onToggleAudio: webrtc.toggleAudio,
+              onToggleVideo: webrtc.toggleVideo,
+              onEndCall: webrtc.endCall,
+            }}
+            connectionStatus={webrtc.connectionStatus}
+            connectionError={webrtc.connectionError}
+            onRetry={webrtc.retryCall}
+            retryAttempt={webrtc.retryAttempt}
+            isStaff={true}
+            patientName={roomData?.patient_name}
+            roomCode={roomData?.room_code}
+          />
+          <TranscriptionSheet {...transcriptionProps} />
+        </>
       );
     }
 
-    // Desktop layout
+    // Desktop layout with transcription panel
     return (
       <div className="min-h-screen bg-background flex flex-col">
         {/* Header with Timer */}
@@ -298,20 +341,28 @@ export default function VideoCallStaff() {
           />
         </div>
 
-        {/* Video Grid */}
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-          <VideoPlayer
-            stream={webrtc.remoteStream}
-            label={roomData?.patient_name || 'Patient'}
-            className="h-full min-h-[400px]"
-          />
-          <VideoPlayer
-            stream={webrtc.localStream}
-            muted
-            isLocal
-            label={language === 'ms' ? 'Anda (Doktor)' : 'You (Doctor)'}
-            className="h-full min-h-[400px]"
-          />
+        {/* Main Content: Video Grid + Transcription Panel */}
+        <div className="flex-1 flex gap-4 p-4 min-h-0">
+          {/* Video Grid */}
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-0">
+            <VideoPlayer
+              stream={webrtc.remoteStream}
+              label={roomData?.patient_name || 'Patient'}
+              className="h-full min-h-[300px]"
+            />
+            <VideoPlayer
+              stream={webrtc.localStream}
+              muted
+              isLocal
+              label={language === 'ms' ? 'Anda (Doktor)' : 'You (Doctor)'}
+              className="h-full min-h-[300px]"
+            />
+          </div>
+
+          {/* Transcription Panel */}
+          <div className="w-80 xl:w-96 flex-shrink-0 hidden md:block">
+            <TranscriptionPanel {...transcriptionProps} className="h-full" />
+          </div>
         </div>
 
         {/* Controls */}
