@@ -1,95 +1,70 @@
 
-
-# Plan: Schedule Blog Posts for Future Publishing
+# Plan: Show All Registered Users to Admin
 
 ## Overview
 
-Add the ability to schedule blog posts to be published at a specific date and time in the future. This feature will allow you to write content in advance and have it automatically become visible to readers at the scheduled time.
+Update the User Management page to display all registered users in the system, not just those who already have admin or staff roles. This will allow admins to easily see who has registered and assign roles to new users.
 
-## How It Will Work
+## Current Behavior
 
-1. **In the Blog Editor**: A new "Schedule Publication" option will appear in the Settings panel
-2. **Date/Time Picker**: Select the exact date and time you want the post to go live
-3. **Status Indicators**: Posts will show "Scheduled" status with the scheduled date in the admin panel
-4. **Automatic Publishing**: A background process will automatically publish posts when their scheduled time arrives
+- The table only shows users who have at least one role assigned
+- Users who register but have no roles are invisible in the admin panel
+- Admins must manually enter the email address to find and add roles to new users
 
-## User Interface Changes
+## Proposed Changes
 
-### Blog Editor (Settings Panel)
-- New toggle: "Schedule for later" (appears when post is not yet published)
-- Date picker: Select the publication date
-- Time picker: Select the publication time
-- Visual indicator showing scheduled date/time when set
+### User Interface Updates
 
-### Blog Management Table
-- New "Scheduled" badge for scheduled posts
-- Display scheduled date in the status column
-- Distinguish between Draft, Scheduled, and Published states
+The User Management page will be reorganized to show:
+
+1. **All registered users** in the main table (not just those with roles)
+2. **Clear role indicators** showing Admin, Staff, or "No Role" for each user
+3. **Quick role assignment** directly from the table without needing the "Add Role" dialog for existing users
+4. **User count** updated to show total registered users
+
+### Visual Changes
+
+```text
+Current:                          After:
++-------------------------+       +-------------------------+
+| 2 users with roles      |       | 3 registered users      |
++-------------------------+       +-------------------------+
+| user@admin.com | Admin  |       | user@admin.com | Admin  |
+| staff@clinic.com| Staff |       | staff@clinic.com| Staff |
++-------------------------+       | patient@mail.com| None  |
+                                  +-------------------------+
+```
 
 ## Technical Implementation
 
-### 1. Database Change
-Add a new column to store the scheduled publication date:
+### File: `src/pages/admin/UserManagement.tsx`
+
+| Change | Description |
+|--------|-------------|
+| Remove role filter on table | Show all users from `users` array instead of `users.filter(u => u.roles.length > 0)` |
+| Update header text | Change from "X users with roles" to "X registered users" |
+| Update empty state | Change message when no users exist at all |
+| Add "No Role" badge option | Display a muted badge for users without any role |
+| Keep role dropdown functional | Allow changing from "None" to Admin/Staff directly in the table |
+
+### Code Changes Summary
+
+1. **Line 300-301**: Update the subtitle to show total user count
+2. **Line 323**: Remove the filter on the empty state check  
+3. **Line 342**: Remove the `.filter(u => u.roles.length > 0)` from the table rows
+4. **Add visual indicator**: Show a muted "No Role" badge for users without roles
+
+## Security Note
+
+No database or RLS changes are needed. The existing RLS policy on `profiles` table already allows staff/admin to view all profiles:
 
 ```sql
-ALTER TABLE blog_posts 
-ADD COLUMN scheduled_at TIMESTAMP WITH TIME ZONE;
+Policy: "Staff/Admin can view all profiles"
+USING: is_staff_or_admin(auth.uid())
 ```
-
-### 2. Blog Editor Updates
-- Add `scheduled_at` to form state
-- Add schedule toggle and date/time picker UI
-- Update save logic to handle scheduled posts
-
-### 3. Blog Management Updates
-- Show "Scheduled" badge with date for scheduled posts
-- Update status display logic
-
-### 4. Frontend Query Updates
-- Modify `useBlogPosts.ts` to only show posts where:
-  - `published = true` AND
-  - (`scheduled_at` IS NULL OR `scheduled_at` <= now())
-
-### 5. Automatic Publishing (Cron Job)
-Create a scheduled task that runs every minute to:
-- Find posts where `published = true` AND `scheduled_at <= now()` AND `scheduled_at IS NOT NULL`
-- Clear the `scheduled_at` field (making them permanently published)
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| Database Migration | Add `scheduled_at` column to `blog_posts` table |
-| `src/pages/admin/BlogEditor.tsx` | Add schedule toggle, date picker, time picker; update form state and save logic |
-| `src/pages/admin/BlogManagement.tsx` | Add "Scheduled" badge, show scheduled date in table |
-| `src/hooks/useBlogPosts.ts` | Update queries to filter by scheduled date |
-| `supabase/functions/publish-scheduled-posts/index.ts` | New edge function for auto-publishing |
-| `supabase/config.toml` | Register new edge function |
-
-## Visual Mockup of Editor Changes
-
-```text
-Settings Card (Blog Editor)
-+----------------------------------+
-| Settings                         |
-+----------------------------------+
-| Publish            [Toggle: OFF] |
-|                                  |
-| Schedule for later [Toggle: ON ] |
-|                                  |
-| Scheduled Date                   |
-| [Feb 15, 2026    ] [14:00]       |
-|                                  |
-| Category                         |
-| [Select category     v]          |
-+----------------------------------+
-```
-
-## Status Badge Logic
-
-| Condition | Badge |
-|-----------|-------|
-| `published = false` | Draft |
-| `published = true` AND `scheduled_at > now()` | Scheduled (with date) |
-| `published = true` AND (`scheduled_at` IS NULL OR `scheduled_at <= now()`) | Published |
-
+| `src/pages/admin/UserManagement.tsx` | Remove role filters, update counts and labels, add "No Role" indicator |
