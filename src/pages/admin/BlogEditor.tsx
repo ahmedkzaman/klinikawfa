@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowLeft, Loader2, Save, Globe, Clock, Upload, X, ImageIcon, CalendarClock } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, Globe, Clock, Upload, X, ImageIcon, CalendarClock, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { AIWritingAssistant } from '@/components/blog';
 import { Calendar } from '@/components/ui/calendar';
@@ -76,6 +76,53 @@ export default function BlogEditor() {
   const [isScheduling, setIsScheduling] = useState(false);
   const [scheduledDate, setScheduledDate] = useState<Date | undefined>(undefined);
   const [scheduledTime, setScheduledTime] = useState('09:00');
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasRestoredDraft = useRef(false);
+
+  // Auto-save draft storage key
+  const draftKey = `blog-draft-${isNew ? 'new' : id}`;
+
+  // Auto-save form data to localStorage
+  const saveDraft = useCallback(() => {
+    const draftData = {
+      formData,
+      activeTab,
+      isScheduling,
+      scheduledDate: scheduledDate?.toISOString() || null,
+      scheduledTime,
+      savedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(draftKey, JSON.stringify(draftData));
+    setAutoSaveStatus('saved');
+  }, [formData, activeTab, isScheduling, scheduledDate, scheduledTime, draftKey]);
+
+  // Debounced auto-save effect
+  useEffect(() => {
+    // Don't auto-save during initial load
+    if (loading || !hasRestoredDraft.current) return;
+
+    setAutoSaveStatus('saving');
+    
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      saveDraft();
+    }, 2000);
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [formData, activeTab, isScheduling, scheduledDate, scheduledTime, loading, saveDraft]);
+
+  // Clear draft after successful save
+  const clearDraft = useCallback(() => {
+    localStorage.removeItem(draftKey);
+  }, [draftKey]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -85,6 +132,35 @@ export default function BlogEditor() {
         .select('id, name, name_ms, name_en, slug')
         .order('name');
       setCategories((cats as BlogCategory[]) || []);
+
+      // Check for saved draft first
+      const savedDraft = localStorage.getItem(draftKey);
+      if (savedDraft) {
+        try {
+          const draft = JSON.parse(savedDraft);
+          setFormData(draft.formData);
+          setActiveTab(draft.activeTab || 'ms');
+          setIsScheduling(draft.isScheduling || false);
+          if (draft.scheduledDate) {
+            setScheduledDate(parseISO(draft.scheduledDate));
+          }
+          setScheduledTime(draft.scheduledTime || '09:00');
+          
+          hasRestoredDraft.current = true;
+          setLoading(false);
+          
+          toast({
+            title: language === 'ms' ? 'Draf dipulihkan' : 'Draft restored',
+            description: language === 'ms' 
+              ? 'Kerja anda yang tidak disimpan telah dipulihkan.'
+              : 'Your unsaved work has been restored.',
+          });
+          return;
+        } catch (e) {
+          // Invalid draft, remove it
+          localStorage.removeItem(draftKey);
+        }
+      }
 
       // Fetch post if editing
       if (!isNew && id) {
@@ -130,11 +206,13 @@ export default function BlogEditor() {
           setScheduledTime(format(scheduledDateTime, 'HH:mm'));
         }
       }
+      
+      hasRestoredDraft.current = true;
       setLoading(false);
     };
 
     fetchData();
-  }, [id, isNew, navigate, toast, language]);
+  }, [id, isNew, navigate, toast, language, draftKey]);
 
   const generateSlug = (title: string) => {
     return title
@@ -329,6 +407,8 @@ export default function BlogEditor() {
         });
       }
 
+      // Clear draft on successful save
+      clearDraft();
       navigate('/admin/blog');
     } catch (error: any) {
       console.error('Error saving post:', error);
@@ -375,6 +455,12 @@ export default function BlogEditor() {
               ? 'Tulis kandungan dalam Bahasa Melayu dan Inggeris'
               : 'Write content in Malay and English'}
           </p>
+          {autoSaveStatus === 'saved' && (
+            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+              <CheckCircle2 className="h-3 w-3 text-green-500" />
+              {language === 'ms' ? 'Draf disimpan' : 'Draft saved'}
+            </div>
+          )}
         </div>
       </div>
 
