@@ -181,6 +181,71 @@ export type Database = {
           },
         ]
       }
+      consultation_transcripts: {
+        Row: {
+          additional_notes: string | null
+          allergies: string | null
+          assessment: string | null
+          chief_complaint: string | null
+          created_at: string
+          examination_findings: string | null
+          family_history: string | null
+          history_present_illness: string | null
+          id: string
+          is_finalized: boolean | null
+          past_medical_history: string | null
+          plan: string | null
+          raw_transcript: Json | null
+          room_id: string
+          social_history: string | null
+          updated_at: string
+        }
+        Insert: {
+          additional_notes?: string | null
+          allergies?: string | null
+          assessment?: string | null
+          chief_complaint?: string | null
+          created_at?: string
+          examination_findings?: string | null
+          family_history?: string | null
+          history_present_illness?: string | null
+          id?: string
+          is_finalized?: boolean | null
+          past_medical_history?: string | null
+          plan?: string | null
+          raw_transcript?: Json | null
+          room_id: string
+          social_history?: string | null
+          updated_at?: string
+        }
+        Update: {
+          additional_notes?: string | null
+          allergies?: string | null
+          assessment?: string | null
+          chief_complaint?: string | null
+          created_at?: string
+          examination_findings?: string | null
+          family_history?: string | null
+          history_present_illness?: string | null
+          id?: string
+          is_finalized?: boolean | null
+          past_medical_history?: string | null
+          plan?: string | null
+          raw_transcript?: Json | null
+          room_id?: string
+          social_history?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultation_transcripts_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "video_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gallery_images: {
         Row: {
           alt_text: string | null
