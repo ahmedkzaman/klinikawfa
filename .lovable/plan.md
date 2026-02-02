@@ -1,113 +1,151 @@
 
 
-# Plan: Fix Patient Unable to Connect to Doctor
+# Plan: Fix Persistent Connection Failures
 
-## Problem Found
+## Problem Identified
 
-The room is staying `active` (our previous fix worked!), but the WebRTC connection is failing due to a **signaling race condition**. Here's what's happening:
+After analyzing the code thoroughly, I found the **critical issue**: The WebRTC signaling is unreliable because Supabase Realtime broadcasts can be **silently dropped** when the recipient hasn't fully subscribed yet, even with our presence checks.
+
+### Current Flow Has a Fatal Flaw
 
 ```text
-1. Doctor clicks "Start Call"
-2. Doctor creates offer, joins channel, sends offer immediately
-3. Patient clicks "Join Call" 
-4. Patient is still setting up their channel subscription
-5. Doctor's offer arrives BEFORE patient finishes subscribing
-6. Patient MISSES the offer completely
-7. Patient starts polling with setTimeout, but...
-8. The polling delays (1s, 2s, 4s...) may be too slow
-9. Both sides wait forever - connection fails
+Staff: createOffer() -> setupSignaling() -> subscribe() -> SUBSCRIBED -> track() -> sends offer
+Patient: setupSignaling() -> subscribe() ... (still subscribing)
+                                          -> SUBSCRIBED -> track() -> request-offer
+
+PROBLEM: Staff's offer may arrive DURING patient's subscribe() phase
+         Supabase Realtime doesn't queue messages for not-yet-subscribed clients!
 ```
 
-## Root Cause
+Even with presence-based offer sending, there's still a timing window where:
+1. Staff detects patient presence
+2. Staff sends offer
+3. Patient is processing presence track (not listening to broadcasts yet)
+4. Offer is lost
 
-In `setupSignaling`, the `sendOffer()` helper checks `channelRef.current`, but this reference is only set AFTER `channel.track()` succeeds. Meanwhile:
+---
 
-- The initial offer is sent immediately after signaling setup
-- But the patient may still be in their own `subscribe()` call
-- Supabase Realtime broadcasts are NOT guaranteed to be received if the recipient isn't fully subscribed yet
+## Root Cause: Missing Database Fallback
 
-## Solution
+The Lovable Stack Overflow insight is correct: **Realtime alone is unreliable**. We need a database-backed signaling fallback.
 
-### Fix 1: Staff Must Wait for Patient Presence Before Sending Offer
+Current approach: Rely 100% on Realtime broadcasts
+Required approach: Realtime + Database polling fallback
 
-Currently the staff sends the offer immediately. Instead, staff should:
-1. Join the channel
-2. Wait until patient's presence is detected
-3. THEN send the offer
+---
 
-```typescript
-// In staff flow after signaling setup
-if (isStaff) {
-  // Start a presence-based offer sending loop
-  const checkAndSendOffer = () => {
-    const state = channelRef.current?.presenceState() || {};
-    const hasPatient = Object.keys(state).some(key => 
-      key === 'patient' || state[key]?.some?.((p: any) => p.role === 'patient')
-    );
-    
-    if (hasPatient && currentOfferRef.current) {
-      console.log('[WebRTC] Patient detected, sending offer');
-      sendOffer();
-    } else {
-      // Keep checking every 500ms
-      setTimeout(checkAndSendOffer, 500);
-    }
-  };
-  
-  // Start checking after 1 second
-  setTimeout(checkAndSendOffer, 1000);
-}
+## Solution: Hybrid Signaling with Database Persistence
+
+### 1. Store Offers in Database
+
+When staff creates an offer, save it to the `video_rooms` table:
+
+```sql
+-- Add column to store the current offer
+ALTER TABLE video_rooms ADD COLUMN current_offer JSONB;
 ```
 
-### Fix 2: Patient Should Request Offer IMMEDIATELY on Subscribe
-
-Currently patient waits 1 second before first poll. This should be immediate:
+### 2. Staff: Save Offer to Database + Broadcast
 
 ```typescript
-// Patient should request offer as soon as channel is subscribed
-if (!isStaff) {
-  // Request immediately, not after 1 second
-  channel.send({
-    type: 'broadcast',
-    event: 'request-offer',
-    payload: { from: 'patient' },
-  });
-}
+// After creating offer, save to DB
+await supabase.from('video_rooms')
+  .update({ current_offer: offer })
+  .eq('room_code', roomCode);
+
+// Also broadcast (for instant delivery if patient is ready)
+channel.send({ type: 'broadcast', event: 'offer', payload: { offer } });
 ```
 
-### Fix 3: Improve Presence-Based Offer Trigger
-
-The presence `join` event handler should be more reliable:
+### 3. Patient: Poll Database as Fallback
 
 ```typescript
-.on('presence', { event: 'join' }, ({ newPresences }) => {
-  console.log('[WebRTC] Presence join:', newPresences);
+// If no offer received via broadcast, check database
+const pollDatabaseForOffer = async () => {
+  const { data } = await supabase
+    .from('video_rooms')
+    .select('current_offer')
+    .eq('room_code', roomCode)
+    .single();
   
-  // Check if patient joined
-  const patientJoined = newPresences?.some((p: any) => 
-    p.role === 'patient' || p.presence_ref?.includes('patient')
-  );
-  
-  if (isStaff && patientJoined && currentOfferRef.current) {
-    console.log('[WebRTC] Patient presence detected, sending offer');
-    // Send offer immediately
-    sendOffer();
-    // And again after 500ms to ensure delivery
-    setTimeout(sendOffer, 500);
+  if (data?.current_offer) {
+    // Process the offer from database
+    await handleOffer(data.current_offer);
   }
-})
+};
 ```
 
-### Fix 4: More Aggressive Initial Polling
+### 4. Combined Approach
 
-Patient should poll more aggressively at first:
+```text
+Staff Flow:
+1. Create offer
+2. Save to database (persistent)
+3. Broadcast via Realtime (fast)
+4. Resend on patient presence
 
+Patient Flow:
+1. Subscribe to channel
+2. Request offer via broadcast
+3. ALSO poll database every 500ms
+4. Stop polling once offer received
+5. Process first offer received (broadcast OR database)
+```
+
+---
+
+## Implementation
+
+### File 1: Database Migration
+
+Add `current_offer` column to `video_rooms` table to persist the WebRTC offer.
+
+### File 2: `src/hooks/useWebRTC.ts`
+
+Changes:
+- Staff saves offer to database after creating it
+- Patient polls database for offer as fallback
+- Clear offer from database when call ends
+- Add deduplication to prevent processing same offer twice
+
+### Key Code Changes
+
+**Staff side - save offer:**
 ```typescript
-// First 3 polls at 500ms, then exponential backoff
-const getDelay = (count: number) => {
-  if (count <= 3) return 500; // Fast initial polling
-  return Math.min(1000 * Math.pow(2, count - 3), 16000);
+// After pc.setLocalDescription(offer)
+currentOfferRef.current = offer;
+
+// CRITICAL: Persist offer to database for reliability
+try {
+  await supabase.from('video_rooms')
+    .update({ current_offer: offer })
+    .eq('room_code', roomCode);
+  console.log('[WebRTC] Offer saved to database');
+} catch (err) {
+  console.error('[WebRTC] Failed to save offer to DB:', err);
+}
+```
+
+**Patient side - database polling fallback:**
+```typescript
+// Poll database for offer as fallback
+const pollDatabaseForOffer = async () => {
+  if (peerConnectionRef.current?.remoteDescription) return; // Already got it
+  
+  const { data } = await supabase
+    .from('video_rooms')
+    .select('current_offer')
+    .eq('room_code', roomCode)
+    .single();
+  
+  if (data?.current_offer && !peerConnectionRef.current?.remoteDescription) {
+    console.log('[WebRTC] Got offer from database fallback');
+    await processOffer(data.current_offer);
+  }
 };
+
+// Start polling alongside broadcast listening
+const dbPollInterval = setInterval(pollDatabaseForOffer, 800);
 ```
 
 ---
@@ -116,17 +154,30 @@ const getDelay = (count: number) => {
 
 | File | Changes |
 |------|---------|
-| `src/hooks/useWebRTC.ts` | Fix signaling timing, add presence-based offer sending, faster initial polling |
+| Database Migration | Add `current_offer JSONB` column to `video_rooms` |
+| `src/hooks/useWebRTC.ts` | Save offer to DB, poll DB as fallback |
 
 ---
 
-## Implementation Summary
+## Why This Will Work
 
-1. **Staff waits for patient presence** before sending initial offer
-2. **Patient requests offer immediately** on subscribe (not after 1s delay)
-3. **Staff resends offer on presence join** with a backup delayed resend
-4. **Patient polls faster initially** (500ms for first 3 attempts)
-5. **Both sides handle "ready" signals** more reliably
+1. **Database is persistent** - Offer won't be lost even if patient joins late
+2. **Dual delivery** - Broadcast for speed, database for reliability
+3. **Automatic deduplication** - Check `remoteDescription` before processing
+4. **No timing dependency** - Patient can always get offer from database
 
-This ensures that regardless of who joins first, the offer will be delivered once both parties are subscribed.
+This is the proven pattern from the troubleshooting guide: "Realtime is fast but unreliable; polling is slower but guaranteed. Use both for critical data."
+
+---
+
+## Summary
+
+The fix adds a database-backed fallback for WebRTC signaling:
+
+1. Staff **saves offer to database** after creating it
+2. Patient **polls database** as fallback if broadcast is missed
+3. **First one wins** - whether from broadcast or database
+4. **100% reliable** - database always has the offer
+
+This eliminates the race condition because the patient can ALWAYS retrieve the offer from the database, even if they missed the broadcast.
 
