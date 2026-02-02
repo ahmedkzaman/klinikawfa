@@ -1,70 +1,251 @@
 
-# Plan: Show All Registered Users to Admin
+# Plan: Medical Consultation Transcriber
 
 ## Overview
 
-Update the User Management page to display all registered users in the system, not just those who already have admin or staff roles. This will allow admins to easily see who has registered and assign roles to new users.
+Add a real-time speech-to-text transcription feature to video consultations that automatically captures and structures the conversation between doctor and patient according to standard medical interview format (SOAP-like notes).
 
-## Current Behavior
+## How It Will Work
 
-- The table only shows users who have at least one role assigned
-- Users who register but have no roles are invisible in the admin panel
-- Admins must manually enter the email address to find and add roles to new users
+1. **During the Call**: A transcription panel appears alongside the video call (collapsible on mobile)
+2. **Real-time Speech Recognition**: Audio from both doctor and patient is transcribed live using ElevenLabs Scribe API
+3. **Smart Categorization**: The AI analyzes the conversation and organizes it into medical sections
+4. **Post-Call Summary**: Structured medical notes are saved to the database and can be reviewed/edited
 
-## Proposed Changes
+## Medical Interview Structure
 
-### User Interface Updates
+The transcriber will organize content into these sections:
 
-The User Management page will be reorganized to show:
+| Section | Content |
+|---------|---------|
+| **Chief Complaint (CC)** | Primary reason for consultation |
+| **History of Present Illness (HPI)** | Details about current symptoms, onset, duration, severity |
+| **Past Medical History (PMH)** | Previous illnesses, surgeries, hospitalizations |
+| **Family History (FH)** | Relevant family medical conditions |
+| **Allergies** | Drug allergies, food allergies, other allergies |
+| **Social History** | Smoking, alcohol, occupation, lifestyle factors |
+| **Examination Findings** | Observations noted during video consultation |
+| **Assessment** | Doctor's clinical impression/diagnosis |
+| **Plan** | Treatment plan, medications, follow-up instructions |
 
-1. **All registered users** in the main table (not just those with roles)
-2. **Clear role indicators** showing Admin, Staff, or "No Role" for each user
-3. **Quick role assignment** directly from the table without needing the "Add Role" dialog for existing users
-4. **User count** updated to show total registered users
+## User Interface
 
-### Visual Changes
+### Desktop Layout (Staff View)
 
 ```text
-Current:                          After:
-+-------------------------+       +-------------------------+
-| 2 users with roles      |       | 3 registered users      |
-+-------------------------+       +-------------------------+
-| user@admin.com | Admin  |       | user@admin.com | Admin  |
-| staff@clinic.com| Staff |       | staff@clinic.com| Staff |
-+-------------------------+       | patient@mail.com| None  |
-                                  +-------------------------+
++------------------+------------------+-------------------+
+|                  |                  |                   |
+|   Remote Video   |   Local Video    |   Transcription   |
+|   (Patient)      |   (Doctor)       |   Panel           |
+|                  |                  |                   |
+|                  |                  | [Live transcript] |
+|                  |                  | [Structured notes]|
++------------------+------------------+-------------------+
+|              Call Controls              | [Transcript]  |
++-----------------------------------------+---------------+
 ```
+
+### Mobile Layout (Staff View)
+
+```text
++-------------------------+
+|     Call Header         |
++-------------------------+
+|                         |
+|     Remote Video        |
+|     (Full Screen)       |
+|            +--------+   |
+|            | PiP    |   |
+|            +--------+   |
+|                         |
+| [Transcript FAB Button] |
++-------------------------+
+|     Call Controls       |
++-------------------------+
+```
+
+Pressing the transcript button opens a bottom sheet with live transcription.
 
 ## Technical Implementation
 
-### File: `src/pages/admin/UserManagement.tsx`
+### 1. Database Changes
 
-| Change | Description |
-|--------|-------------|
-| Remove role filter on table | Show all users from `users` array instead of `users.filter(u => u.roles.length > 0)` |
-| Update header text | Change from "X users with roles" to "X registered users" |
-| Update empty state | Change message when no users exist at all |
-| Add "No Role" badge option | Display a muted badge for users without any role |
-| Keep role dropdown functional | Allow changing from "None" to Admin/Staff directly in the table |
-
-### Code Changes Summary
-
-1. **Line 300-301**: Update the subtitle to show total user count
-2. **Line 323**: Remove the filter on the empty state check  
-3. **Line 342**: Remove the `.filter(u => u.roles.length > 0)` from the table rows
-4. **Add visual indicator**: Show a muted "No Role" badge for users without roles
-
-## Security Note
-
-No database or RLS changes are needed. The existing RLS policy on `profiles` table already allows staff/admin to view all profiles:
+Add new table to store consultation transcripts:
 
 ```sql
-Policy: "Staff/Admin can view all profiles"
-USING: is_staff_or_admin(auth.uid())
+CREATE TABLE consultation_transcripts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_id UUID REFERENCES video_rooms(id) ON DELETE CASCADE,
+  
+  -- Raw transcript data
+  raw_transcript JSONB DEFAULT '[]',
+  
+  -- Structured medical notes (SOAP format)
+  chief_complaint TEXT,
+  history_present_illness TEXT,
+  past_medical_history TEXT,
+  family_history TEXT,
+  allergies TEXT,
+  social_history TEXT,
+  examination_findings TEXT,
+  assessment TEXT,
+  plan TEXT,
+  
+  -- Additional notes
+  additional_notes TEXT,
+  
+  -- Metadata
+  is_finalized BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- RLS policies
+ALTER TABLE consultation_transcripts ENABLE ROW LEVEL SECURITY;
+
+-- Staff/Admin can manage transcripts
+CREATE POLICY "Staff/Admin can view transcripts"
+  ON consultation_transcripts FOR SELECT
+  USING (is_staff_or_admin(auth.uid()));
+
+CREATE POLICY "Staff/Admin can insert transcripts"
+  ON consultation_transcripts FOR INSERT
+  WITH CHECK (is_staff_or_admin(auth.uid()));
+
+CREATE POLICY "Staff/Admin can update transcripts"
+  ON consultation_transcripts FOR UPDATE
+  USING (is_staff_or_admin(auth.uid()));
+
+CREATE POLICY "Staff/Admin can delete transcripts"
+  ON consultation_transcripts FOR DELETE
+  USING (is_staff_or_admin(auth.uid()));
 ```
 
-## Files to Modify
+### 2. ElevenLabs Integration
+
+Connect ElevenLabs for real-time speech-to-text:
+
+**Files to create:**
+- `supabase/functions/elevenlabs-scribe-token/index.ts` - Token generation for secure WebSocket connection
+
+**Edge Function Implementation:**
+```typescript
+// Generates single-use token for ElevenLabs Scribe API
+serve(async (req) => {
+  const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
+  
+  const response = await fetch(
+    "https://api.elevenlabs.io/v1/single-use-token/realtime_scribe",
+    {
+      method: "POST",
+      headers: { "xi-api-key": ELEVENLABS_API_KEY },
+    }
+  );
+  
+  const { token } = await response.json();
+  return new Response(JSON.stringify({ token }));
+});
+```
+
+### 3. AI-Powered Note Structuring
+
+Create an edge function that uses Lovable AI (Gemini) to analyze raw transcripts and organize them into medical sections:
+
+**File:** `supabase/functions/structure-medical-notes/index.ts`
+
+This function will:
+- Receive raw transcript text
+- Use AI to identify and categorize medical information
+- Return structured SOAP notes
+
+### 4. Frontend Components
+
+**New files to create:**
+
+| File | Purpose |
+|------|---------|
+| `src/hooks/useTranscription.ts` | Hook for managing ElevenLabs Scribe connection and transcription state |
+| `src/components/video/TranscriptionPanel.tsx` | Desktop panel showing live transcript and structured notes |
+| `src/components/video/TranscriptionSheet.tsx` | Mobile bottom sheet for transcription |
+| `src/components/video/TranscriptionToggle.tsx` | Toggle button to show/hide transcription |
+| `src/components/video/MedicalNotesEditor.tsx` | Editable form for structured medical notes |
+
+### 5. Integration with Existing Video Call
+
+**Files to modify:**
 
 | File | Changes |
 |------|---------|
-| `src/pages/admin/UserManagement.tsx` | Remove role filters, update counts and labels, add "No Role" indicator |
+| `src/pages/VideoCallStaff.tsx` | Add transcription panel, initialize hook, save notes on call end |
+| `src/components/video/MobileCallLayout.tsx` | Add transcript FAB button and bottom sheet |
+| `src/components/video/index.ts` | Export new components |
+| `supabase/config.toml` | Register new edge functions |
+
+### 6. Post-Call Transcript View
+
+Add transcript viewing to the Video Call Management:
+
+**File to modify:** `src/pages/admin/VideoCallManagement.tsx`
+- Add "View Transcript" option in the dropdown menu for ended calls
+- Show modal with structured notes that can be edited
+
+## Flow Diagram
+
+```text
+[Call Starts]
+      |
+      v
+[Audio Capture from WebRTC Streams]
+      |
+      v
+[ElevenLabs Scribe API (Real-time STT)]
+      |
+      v
+[Raw Transcript Stored in State]
+      |
+      +---> [Live Display in Panel]
+      |
+[Call Ends]
+      |
+      v
+[Send to Lovable AI for Structuring]
+      |
+      v
+[Save Structured Notes to Database]
+      |
+      v
+[View/Edit in Admin Panel]
+```
+
+## Implementation Steps
+
+1. **Set up ElevenLabs connector** - Connect ElevenLabs for API access
+2. **Database migration** - Create `consultation_transcripts` table with RLS
+3. **Edge functions** - Create token and structuring functions
+4. **Transcription hook** - Build `useTranscription` with ElevenLabs Scribe integration
+5. **UI components** - Create transcription panel and related components
+6. **Video call integration** - Add transcription to staff video call page
+7. **Post-call view** - Add transcript viewing/editing in admin
+
+## Files Summary
+
+| Category | Files |
+|----------|-------|
+| **Database** | 1 migration file |
+| **Edge Functions** | 2 new functions |
+| **Hooks** | 1 new hook |
+| **Components** | 4-5 new components |
+| **Modified Files** | 4 files |
+| **Config** | Update `config.toml` |
+
+## Privacy & Compliance Notes
+
+- Transcriptions are only stored in the database, not sent to external services beyond the STT provider
+- Only staff/admin can access transcripts (enforced via RLS)
+- Patients are not shown the transcription during the call
+- Consider adding a disclaimer at call start that the call may be transcribed for medical records
+
+## Dependencies Required
+
+- ElevenLabs API key (via connector)
+- `@elevenlabs/react` npm package (for useScribe hook)
