@@ -1,151 +1,93 @@
 
 
-# Plan: Fix Persistent Connection Failures
+# Plan: Fix Duplicate Offer Processing on Patient Side
 
 ## Problem Identified
 
-After analyzing the code thoroughly, I found the **critical issue**: The WebRTC signaling is unreliable because Supabase Realtime broadcasts can be **silently dropped** when the recipient hasn't fully subscribed yet, even with our presence checks.
+After analyzing the code, I found the **root cause**: The broadcast offer handler on line 435-467 does NOT check `offerProcessedRef.current` before processing the offer.
 
-### Current Flow Has a Fatal Flaw
-
-```text
-Staff: createOffer() -> setupSignaling() -> subscribe() -> SUBSCRIBED -> track() -> sends offer
-Patient: setupSignaling() -> subscribe() ... (still subscribing)
-                                          -> SUBSCRIBED -> track() -> request-offer
-
-PROBLEM: Staff's offer may arrive DURING patient's subscribe() phase
-         Supabase Realtime doesn't queue messages for not-yet-subscribed clients!
-```
-
-Even with presence-based offer sending, there's still a timing window where:
-1. Staff detects patient presence
-2. Staff sends offer
-3. Patient is processing presence track (not listening to broadcasts yet)
-4. Offer is lost
-
----
-
-## Root Cause: Missing Database Fallback
-
-The Lovable Stack Overflow insight is correct: **Realtime alone is unreliable**. We need a database-backed signaling fallback.
-
-Current approach: Rely 100% on Realtime broadcasts
-Required approach: Realtime + Database polling fallback
-
----
-
-## Solution: Hybrid Signaling with Database Persistence
-
-### 1. Store Offers in Database
-
-When staff creates an offer, save it to the `video_rooms` table:
-
-```sql
--- Add column to store the current offer
-ALTER TABLE video_rooms ADD COLUMN current_offer JSONB;
-```
-
-### 2. Staff: Save Offer to Database + Broadcast
-
-```typescript
-// After creating offer, save to DB
-await supabase.from('video_rooms')
-  .update({ current_offer: offer })
-  .eq('room_code', roomCode);
-
-// Also broadcast (for instant delivery if patient is ready)
-channel.send({ type: 'broadcast', event: 'offer', payload: { offer } });
-```
-
-### 3. Patient: Poll Database as Fallback
-
-```typescript
-// If no offer received via broadcast, check database
-const pollDatabaseForOffer = async () => {
-  const { data } = await supabase
-    .from('video_rooms')
-    .select('current_offer')
-    .eq('room_code', roomCode)
-    .single();
-  
-  if (data?.current_offer) {
-    // Process the offer from database
-    await handleOffer(data.current_offer);
-  }
-};
-```
-
-### 4. Combined Approach
+### What's Happening
 
 ```text
-Staff Flow:
-1. Create offer
-2. Save to database (persistent)
-3. Broadcast via Realtime (fast)
-4. Resend on patient presence
+Patient joins call:
+1. Database poll starts (every 800ms)
+2. Broadcast listener is active
+3. Staff sends offer
 
-Patient Flow:
-1. Subscribe to channel
-2. Request offer via broadcast
-3. ALSO poll database every 500ms
-4. Stop polling once offer received
-5. Process first offer received (broadcast OR database)
+Race condition:
+├── Path A: Broadcast arrives → calls setRemoteDescription() immediately
+└── Path B: Database poll finds offer → also tries setRemoteDescription()
+
+Result: Second call to setRemoteDescription() throws error:
+"Failed to execute 'setRemoteDescription' on 'RTCPeerConnection': 
+ Failed to set remote answer sdp: Called in wrong state: have-remote-offer"
 ```
+
+The error "failed to process call offer at patient side" comes from the catch block at line 464, which triggers when `setRemoteDescription` fails due to the duplicate processing attempt.
 
 ---
 
-## Implementation
+## Root Cause: Missing Deduplication Check
 
-### File 1: Database Migration
-
-Add `current_offer` column to `video_rooms` table to persist the WebRTC offer.
-
-### File 2: `src/hooks/useWebRTC.ts`
-
-Changes:
-- Staff saves offer to database after creating it
-- Patient polls database for offer as fallback
-- Clear offer from database when call ends
-- Add deduplication to prevent processing same offer twice
-
-### Key Code Changes
-
-**Staff side - save offer:**
+**Database fallback handler (line 779)** - HAS protection:
 ```typescript
-// After pc.setLocalDescription(offer)
-currentOfferRef.current = offer;
-
-// CRITICAL: Persist offer to database for reliability
-try {
-  await supabase.from('video_rooms')
-    .update({ current_offer: offer })
-    .eq('room_code', roomCode);
-  console.log('[WebRTC] Offer saved to database');
-} catch (err) {
-  console.error('[WebRTC] Failed to save offer to DB:', err);
+if (data?.current_offer && !offerProcessedRef.current && !peerConnectionRef.current?.remoteDescription) {
+  offerProcessedRef.current = true;  // ✓ Sets flag FIRST
+  // ... process offer
 }
 ```
 
-**Patient side - database polling fallback:**
+**Broadcast handler (line 435)** - MISSING protection:
 ```typescript
-// Poll database for offer as fallback
-const pollDatabaseForOffer = async () => {
-  if (peerConnectionRef.current?.remoteDescription) return; // Already got it
-  
-  const { data } = await supabase
-    .from('video_rooms')
-    .select('current_offer')
-    .eq('room_code', roomCode)
-    .single();
-  
-  if (data?.current_offer && !peerConnectionRef.current?.remoteDescription) {
-    console.log('[WebRTC] Got offer from database fallback');
-    await processOffer(data.current_offer);
+.on('broadcast', { event: 'offer' }, async ({ payload }) => {
+  if (!isStaff && payload.from === 'staff') {
+    // ✗ NO CHECK for offerProcessedRef.current
+    await pc.setRemoteDescription(...);  // Can fail if already processed!
   }
-};
+})
+```
 
-// Start polling alongside broadcast listening
-const dbPollInterval = setInterval(pollDatabaseForOffer, 800);
+---
+
+## Solution
+
+Add the same deduplication check to the broadcast handler:
+
+### Fix in Broadcast Offer Handler
+
+```typescript
+.on('broadcast', { event: 'offer' }, async ({ payload }) => {
+  if (!isStaff && payload.from === 'staff') {
+    // CRITICAL FIX: Check if offer already processed (by DB fallback or previous broadcast)
+    if (offerProcessedRef.current || pc.remoteDescription) {
+      console.log('[WebRTC] Offer already processed, ignoring duplicate');
+      return;
+    }
+    
+    // Mark as processed BEFORE async operations to prevent race
+    offerProcessedRef.current = true;
+    
+    console.log('[WebRTC] Received offer from staff', payload.iceRestart ? '(ICE restart)' : '');
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
+      // ... rest of handler
+    } catch (err) {
+      // Reset flag on error so retry can work
+      offerProcessedRef.current = false;
+      console.error('[WebRTC] Error handling offer:', err);
+      onError?.('Failed to process call offer');
+    }
+  }
+})
+```
+
+### Additional Safety: Check PC State Before Processing
+
+```typescript
+// Also check peer connection state - if already have remote description, skip
+if (pc.signalingState !== 'stable' && pc.signalingState !== 'have-local-offer') {
+  // Only process offer in valid states
+}
 ```
 
 ---
@@ -154,30 +96,25 @@ const dbPollInterval = setInterval(pollDatabaseForOffer, 800);
 
 | File | Changes |
 |------|---------|
-| Database Migration | Add `current_offer JSONB` column to `video_rooms` |
-| `src/hooks/useWebRTC.ts` | Save offer to DB, poll DB as fallback |
+| `src/hooks/useWebRTC.ts` | Add deduplication check to broadcast offer handler (lines 435-467) |
 
 ---
 
-## Why This Will Work
+## Implementation Details
 
-1. **Database is persistent** - Offer won't be lost even if patient joins late
-2. **Dual delivery** - Broadcast for speed, database for reliability
-3. **Automatic deduplication** - Check `remoteDescription` before processing
-4. **No timing dependency** - Patient can always get offer from database
-
-This is the proven pattern from the troubleshooting guide: "Realtime is fast but unreliable; polling is slower but guaranteed. Use both for critical data."
+1. **Add check at start of broadcast handler**: `if (offerProcessedRef.current || pc.remoteDescription) return;`
+2. **Set flag before async work**: `offerProcessedRef.current = true;` before `setRemoteDescription`
+3. **Reset flag on error**: Allow retry if processing fails
+4. **ICE restart handling**: Allow ICE restart offers even if previously processed by checking `payload.iceRestart`
 
 ---
 
-## Summary
+## Why This Will Fix the Error
 
-The fix adds a database-backed fallback for WebRTC signaling:
+The error "failed to process call offer at patient side" occurs when:
+1. Database poll processes the offer first
+2. Broadcast handler then tries to process the same offer
+3. `setRemoteDescription` fails because PC already has a remote description
 
-1. Staff **saves offer to database** after creating it
-2. Patient **polls database** as fallback if broadcast is missed
-3. **First one wins** - whether from broadcast or database
-4. **100% reliable** - database always has the offer
-
-This eliminates the race condition because the patient can ALWAYS retrieve the offer from the database, even if they missed the broadcast.
+Adding the deduplication check ensures only ONE path processes the offer, eliminating the race condition.
 
