@@ -4,7 +4,7 @@ project_id = "ncysmppzfjtiekfnomdv"
 verify_jwt = false
 
 [functions.generate-blog-content]
-verify_jwt = true
+verify_jwt = false
 
 [functions.video-room]
 verify_jwt = false
