@@ -434,7 +434,17 @@ export function useWebRTC({
         })
         .on('broadcast', { event: 'offer' }, async ({ payload }) => {
           if (!isStaff && payload.from === 'staff') {
-            console.log('[WebRTC] Received offer from staff', payload.iceRestart ? '(ICE restart)' : '');
+            // CRITICAL FIX: Check if offer already processed (by DB fallback or previous broadcast)
+            // Allow ICE restart offers even if previously processed
+            if (!payload.iceRestart && (offerProcessedRef.current || pc.remoteDescription)) {
+              console.log('[WebRTC] Offer already processed, ignoring duplicate broadcast');
+              return;
+            }
+            
+            // Mark as processed BEFORE async operations to prevent race condition
+            offerProcessedRef.current = true;
+            
+            console.log('[WebRTC] Received offer from staff via broadcast', payload.iceRestart ? '(ICE restart)' : '');
             try {
               await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
               
@@ -461,7 +471,9 @@ export function useWebRTC({
                 payload: { answer, from: 'patient' },
               });
             } catch (err) {
-              console.error('[WebRTC] Error handling offer:', err);
+              // Reset flag on error so retry can work
+              offerProcessedRef.current = false;
+              console.error('[WebRTC] Error handling offer from broadcast:', err);
               onError?.('Failed to process call offer');
             }
           }
