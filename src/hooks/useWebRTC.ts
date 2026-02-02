@@ -73,15 +73,21 @@ export function useWebRTC({
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const offerPollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const dbPollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const answerRetryCountRef = useRef<number>(0);
   const iceRestartInProgressRef = useRef<boolean>(false);
+  const offerProcessedRef = useRef<boolean>(false); // Prevent double processing
 
-  const cleanup = useCallback(() => {
+  const cleanup = useCallback(async () => {
     console.log('[WebRTC] Cleaning up...');
     if (offerPollIntervalRef.current) {
       clearInterval(offerPollIntervalRef.current);
       offerPollIntervalRef.current = null;
+    }
+    if (dbPollIntervalRef.current) {
+      clearInterval(dbPollIntervalRef.current);
+      dbPollIntervalRef.current = null;
     }
     if (connectionTimeoutRef.current) {
       clearTimeout(connectionTimeoutRef.current);
@@ -111,7 +117,20 @@ export function useWebRTC({
     pendingCandidatesRef.current = [];
     answerRetryCountRef.current = 0;
     iceRestartInProgressRef.current = false;
-  }, []);
+    offerProcessedRef.current = false;
+    
+    // Clear offer from database when cleaning up (staff only)
+    if (isStaff && roomCode) {
+      try {
+        await supabase.from('video_rooms')
+          .update({ current_offer: null } as any)
+          .eq('room_code', roomCode);
+        console.log('[WebRTC] Cleared offer from database');
+      } catch (err) {
+        console.warn('[WebRTC] Failed to clear offer from DB:', err);
+      }
+    }
+  }, [isStaff, roomCode]);
 
   const initializeMedia = async () => {
     try {
@@ -659,6 +678,18 @@ export function useWebRTC({
         await pc.setLocalDescription(offer);
         currentOfferRef.current = offer;
         console.log('[WebRTC] Offer created with sendrecv transceivers');
+        
+        // CRITICAL: Persist offer to database for reliable delivery
+        // This ensures patient can ALWAYS get the offer even if broadcast is missed
+        try {
+          const { error } = await supabase.from('video_rooms')
+            .update({ current_offer: offer } as any)
+            .eq('room_code', roomCode);
+          if (error) throw error;
+          console.log('[WebRTC] Offer saved to database for reliable delivery');
+        } catch (err) {
+          console.warn('[WebRTC] Failed to save offer to DB (will rely on broadcast):', err);
+        }
       }
       
       // Now set up signaling with retry logic
@@ -721,49 +752,111 @@ export function useWebRTC({
           payload: { from: 'patient' },
         });
         
-        // Patient: Poll for offer with aggressive initial polling, then exponential backoff
+        // CRITICAL: Database polling fallback for reliable offer delivery
+        // This ensures we get the offer even if the broadcast was missed
+        const pollDatabaseForOffer = async () => {
+          // Stop if already processed an offer
+          if (offerProcessedRef.current || peerConnectionRef.current?.remoteDescription) {
+            if (dbPollIntervalRef.current) {
+              clearInterval(dbPollIntervalRef.current);
+              dbPollIntervalRef.current = null;
+            }
+            return;
+          }
+          
+          try {
+            const { data, error } = await supabase
+              .from('video_rooms')
+              .select('current_offer')
+              .eq('room_code', roomCode)
+              .single();
+            
+            if (error) {
+              console.warn('[WebRTC] DB poll error:', error.message);
+              return;
+            }
+            
+            if (data?.current_offer && !offerProcessedRef.current && !peerConnectionRef.current?.remoteDescription) {
+              console.log('[WebRTC] Got offer from DATABASE FALLBACK');
+              offerProcessedRef.current = true;
+              
+              // Stop polling
+              if (dbPollIntervalRef.current) {
+                clearInterval(dbPollIntervalRef.current);
+                dbPollIntervalRef.current = null;
+              }
+              
+              // Process the offer
+              const offer = data.current_offer as unknown as RTCSessionDescriptionInit;
+              const currentPc = peerConnectionRef.current;
+              
+              if (currentPc && !currentPc.remoteDescription) {
+                await currentPc.setRemoteDescription(new RTCSessionDescription(offer));
+                
+                // Process pending ICE candidates
+                for (const candidate of pendingCandidatesRef.current) {
+                  await currentPc.addIceCandidate(new RTCIceCandidate(candidate));
+                }
+                pendingCandidatesRef.current = [];
+                
+                // Create and send answer
+                const answer = await currentPc.createAnswer();
+                await currentPc.setLocalDescription(answer);
+                
+                console.log('[WebRTC] Sending answer to staff (from DB fallback)');
+                channelRef.current?.send({
+                  type: 'broadcast',
+                  event: 'answer',
+                  payload: { answer, from: 'patient' },
+                });
+              }
+            }
+          } catch (err) {
+            console.warn('[WebRTC] DB poll exception:', err);
+          }
+        };
+        
+        // Start database polling immediately (runs every 800ms)
+        console.log('[WebRTC] Starting database polling fallback');
+        dbPollIntervalRef.current = setInterval(pollDatabaseForOffer, 800);
+        // Also poll immediately
+        pollDatabaseForOffer();
+        
+        // Patient: Also poll via broadcast with aggressive initial polling
         let pollCount = 0;
-        const maxPolls = 8; // More attempts
+        const maxPolls = 8;
         
-        // Clear any existing poll interval
-        if (offerPollIntervalRef.current) {
-          clearInterval(offerPollIntervalRef.current);
-        }
-        
-        // FIX: More aggressive initial polling - first 3 at 500ms
         const getDelay = (count: number): number => {
-          if (count <= 3) return 500; // Fast initial polling
+          if (count <= 3) return 500;
           return Math.min(1000 * Math.pow(2, count - 3), 16000);
         };
         
         const pollForOffer = () => {
           // Stop polling if we have a remote description (offer received)
-          if (peerConnectionRef.current?.remoteDescription) {
-            console.log('[WebRTC] Offer received, stopping poll');
+          if (peerConnectionRef.current?.remoteDescription || offerProcessedRef.current) {
+            console.log('[WebRTC] Offer received, stopping broadcast poll');
             return;
           }
           
           pollCount++;
           if (pollCount > maxPolls) {
-            console.log('[WebRTC] Max poll attempts reached, stopping');
+            console.log('[WebRTC] Max broadcast poll attempts reached');
             return;
           }
           
-          console.log(`[WebRTC] Polling for offer, attempt ${pollCount}/${maxPolls}`);
+          console.log(`[WebRTC] Broadcast poll for offer, attempt ${pollCount}/${maxPolls}`);
           channelRef.current?.send({
             type: 'broadcast',
             event: 'request-offer',
             payload: { from: 'patient' },
           });
           
-          // Get delay based on poll count (fast initially, then backoff)
           const delay = getDelay(pollCount);
-          const jitter = Math.random() * 200; // Less jitter for faster response
+          const jitter = Math.random() * 200;
           setTimeout(pollForOffer, delay + jitter);
         };
         
-        console.log('[WebRTC] Starting aggressive offer polling');
-        // FIX: Start first poll after just 300ms (not 1 second)
+        console.log('[WebRTC] Starting dual-path offer retrieval (broadcast + database)');
         setTimeout(pollForOffer, 300);
       }
       
