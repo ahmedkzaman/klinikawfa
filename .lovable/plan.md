@@ -1,111 +1,95 @@
 
-# Plan: Fix One-Way Video (Doctor Can't See Patient)
 
-## Problem Identified
+# Plan: Schedule Blog Posts for Future Publishing
 
-The doctor sees a placeholder where the patient's video should be, but the patient can see both feeds. This is a **one-way media flow problem** caused by incorrect transceiver setup on the patient side.
+## Overview
 
-## Root Cause Analysis
+Add the ability to schedule blog posts to be published at a specific date and time in the future. This feature will allow you to write content in advance and have it automatically become visible to readers at the scheduled time.
 
-In WebRTC, the **answerer (patient)** should NOT create their own transceivers before receiving the offer. The current code does this:
+## How It Will Work
 
-```text
-Patient Flow (Current - WRONG):
-1. createPeerConnection(stream)
-   -> addTransceiver('audio', sendrecv)  // Creates transceiver 0
-   -> addTransceiver('video', sendrecv)  // Creates transceiver 1
-   -> addTrack(audio) -> goes to transceiver 0
-   -> addTrack(video) -> goes to transceiver 1
-2. Receive offer from staff
-   -> setRemoteDescription(offer)
-   -> Offer has its OWN transceivers from staff
-   -> MISMATCH: Patient's pre-created transceivers don't align
-3. Create answer
-   -> Answer uses patient's transceivers, not staff's
-4. Result: Staff's transceiver for receiving patient video never gets the track
+1. **In the Blog Editor**: A new "Schedule Publication" option will appear in the Settings panel
+2. **Date/Time Picker**: Select the exact date and time you want the post to go live
+3. **Status Indicators**: Posts will show "Scheduled" status with the scheduled date in the admin panel
+4. **Automatic Publishing**: A background process will automatically publish posts when their scheduled time arrives
+
+## User Interface Changes
+
+### Blog Editor (Settings Panel)
+- New toggle: "Schedule for later" (appears when post is not yet published)
+- Date picker: Select the publication date
+- Time picker: Select the publication time
+- Visual indicator showing scheduled date/time when set
+
+### Blog Management Table
+- New "Scheduled" badge for scheduled posts
+- Display scheduled date in the status column
+- Distinguish between Draft, Scheduled, and Published states
+
+## Technical Implementation
+
+### 1. Database Change
+Add a new column to store the scheduled publication date:
+
+```sql
+ALTER TABLE blog_posts 
+ADD COLUMN scheduled_at TIMESTAMP WITH TIME ZONE;
 ```
 
-The correct flow for the answerer is:
+### 2. Blog Editor Updates
+- Add `scheduled_at` to form state
+- Add schedule toggle and date/time picker UI
+- Update save logic to handle scheduled posts
 
-```text
-Patient Flow (Correct):
-1. createPeerConnection(stream) - but DON'T add transceivers
-2. Receive offer -> setRemoteDescription(offer)
-   -> This creates transceivers FROM the offer
-3. Add local tracks
-   -> addTrack() associates tracks with existing transceivers
-4. Create answer
-   -> Answer correctly references staff's transceivers
-```
+### 3. Blog Management Updates
+- Show "Scheduled" badge with date for scheduled posts
+- Update status display logic
 
-## Solution
+### 4. Frontend Query Updates
+- Modify `useBlogPosts.ts` to only show posts where:
+  - `published = true` AND
+  - (`scheduled_at` IS NULL OR `scheduled_at` <= now())
 
-Modify `createPeerConnection()` to only add transceivers for the **offerer (staff)**, not the answerer (patient).
-
-### Changes to `src/hooks/useWebRTC.ts`
-
-**Before:**
-```typescript
-const createPeerConnection = (stream: MediaStream) => {
-  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-  
-  // ALWAYS adds transceivers - WRONG for answerer!
-  pc.addTransceiver('audio', { direction: 'sendrecv' });
-  pc.addTransceiver('video', { direction: 'sendrecv' });
-  
-  stream.getTracks().forEach(track => {
-    pc.addTrack(track, stream);
-  });
-  // ...
-};
-```
-
-**After:**
-```typescript
-const createPeerConnection = (stream: MediaStream) => {
-  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-  
-  // ONLY add transceivers for the OFFERER (staff)
-  // The answerer (patient) should NOT add transceivers - they come from the offer
-  if (isStaff) {
-    console.log('[WebRTC] Staff: Adding transceivers for bidirectional media...');
-    pc.addTransceiver('audio', { direction: 'sendrecv' });
-    pc.addTransceiver('video', { direction: 'sendrecv' });
-  }
-  
-  // Add local tracks
-  stream.getTracks().forEach(track => {
-    console.log('[WebRTC] Adding local track:', track.kind);
-    pc.addTrack(track, stream);
-  });
-  // ...
-};
-```
-
-This single change ensures:
-- Staff (offerer) creates transceivers that negotiate for bidirectional media
-- Patient (answerer) lets the offer's transceivers define the media flow
-- Patient's `addTrack()` associates with the correct transceiver from the offer
-- Staff receives the patient's video track properly
-
-## Technical Details
-
-The WebRTC `addTrack()` method will automatically:
-1. Look for an existing transceiver that can send the track type
-2. Associate the track with that transceiver
-3. Update the transceiver's direction as needed
-
-For the patient, after `setRemoteDescription(offer)`:
-- Transceivers from the offer are created with `recvonly` direction
-- `addTrack()` changes them to `sendrecv`
-- The answer includes the patient's track in the correct transceiver
+### 5. Automatic Publishing (Cron Job)
+Create a scheduled task that runs every minute to:
+- Find posts where `published = true` AND `scheduled_at <= now()` AND `scheduled_at IS NOT NULL`
+- Clear the `scheduled_at` field (making them permanently published)
 
 ## Files to Modify
 
-| File | Change |
-|------|--------|
-| `src/hooks/useWebRTC.ts` | Conditionally add transceivers only for staff (offerer) |
+| File | Changes |
+|------|---------|
+| Database Migration | Add `scheduled_at` column to `blog_posts` table |
+| `src/pages/admin/BlogEditor.tsx` | Add schedule toggle, date picker, time picker; update form state and save logic |
+| `src/pages/admin/BlogManagement.tsx` | Add "Scheduled" badge, show scheduled date in table |
+| `src/hooks/useBlogPosts.ts` | Update queries to filter by scheduled date |
+| `supabase/functions/publish-scheduled-posts/index.ts` | New edge function for auto-publishing |
+| `supabase/config.toml` | Register new edge function |
 
-## Summary
+## Visual Mockup of Editor Changes
 
-The fix is a 4-line conditional check that prevents the patient from creating duplicate transceivers. This ensures proper transceiver alignment between offer and answer, allowing bidirectional video to flow correctly.
+```text
+Settings Card (Blog Editor)
++----------------------------------+
+| Settings                         |
++----------------------------------+
+| Publish            [Toggle: OFF] |
+|                                  |
+| Schedule for later [Toggle: ON ] |
+|                                  |
+| Scheduled Date                   |
+| [Feb 15, 2026    ] [14:00]       |
+|                                  |
+| Category                         |
+| [Select category     v]          |
++----------------------------------+
+```
+
+## Status Badge Logic
+
+| Condition | Badge |
+|-----------|-------|
+| `published = false` | Draft |
+| `published = true` AND `scheduled_at > now()` | Scheduled (with date) |
+| `published = true` AND (`scheduled_at` IS NULL OR `scheduled_at <= now()`) | Published |
+
