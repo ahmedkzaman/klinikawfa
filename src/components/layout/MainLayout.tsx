@@ -1,6 +1,7 @@
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { SkipToContent } from './SkipToContent';
+import { MobileCTABar } from './MobileCTABar';
 import { SchemaMarkup } from '@/components/seo';
 
 interface MainLayoutProps {
@@ -17,6 +18,9 @@ export function MainLayout({ children }: MainLayoutProps) {
         {children}
       </main>
       <Footer />
+      {/* Spacer for fixed MobileCTABar on mobile */}
+      <div className="h-16 lg:hidden" aria-hidden="true" />
+      <MobileCTABar />
     </div>
   );
 }
