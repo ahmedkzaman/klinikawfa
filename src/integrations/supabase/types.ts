@@ -399,6 +399,7 @@ export type Database = {
           call_started_at: string | null
           created_at: string
           created_by: string | null
+          current_offer: Json | null
           deposit_amount: number
           ice_candidates: Json | null
           id: string
@@ -420,6 +421,7 @@ export type Database = {
           call_started_at?: string | null
           created_at?: string
           created_by?: string | null
+          current_offer?: Json | null
           deposit_amount?: number
           ice_candidates?: Json | null
           id?: string
@@ -441,6 +443,7 @@ export type Database = {
           call_started_at?: string | null
           created_at?: string
           created_by?: string | null
+          current_offer?: Json | null
           deposit_amount?: number
           ice_candidates?: Json | null
           id?: string
