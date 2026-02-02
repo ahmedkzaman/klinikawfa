@@ -372,10 +372,18 @@ export function useWebRTC({
         })
         .on('presence', { event: 'join' }, ({ newPresences }) => {
           console.log('[WebRTC] Presence join:', newPresences);
-          // Staff re-sends offer when patient joins
-          if (isStaff && currentOfferRef.current) {
-            console.log('[WebRTC] Patient joined, sending offer');
+          
+          // Check if patient joined (more robust detection)
+          const patientJoined = newPresences?.some((p: any) => 
+            p.role === 'patient' || p.presence_ref?.includes('patient')
+          );
+          
+          // Staff re-sends offer when patient joins - with backup resend
+          if (isStaff && patientJoined && currentOfferRef.current) {
+            console.log('[WebRTC] Patient presence detected, sending offer');
             sendOffer();
+            // Send again after 500ms to ensure delivery (in case first was missed)
+            setTimeout(sendOffer, 500);
           }
         })
         .on('presence', { event: 'leave' }, ({ leftPresences }) => {
@@ -660,22 +668,73 @@ export function useWebRTC({
       setConnectionStatus('waiting-for-peer');
 
       if (isStaff) {
-        // Send offer immediately (patient may already be waiting)
-        console.log('[WebRTC] Sending initial offer');
+        // FIX: Wait for patient presence before sending offer
+        // This prevents the race condition where offer is sent before patient subscribes
+        console.log('[WebRTC] Staff waiting for patient presence before sending offer...');
+        
+        const checkAndSendOffer = () => {
+          const state = channelRef.current?.presenceState() || {};
+          const hasPatient = Object.keys(state).some(key => 
+            key === 'patient' || state[key]?.some?.((p: any) => p.role === 'patient')
+          );
+          
+          if (hasPatient && currentOfferRef.current) {
+            console.log('[WebRTC] Patient detected via presence, sending offer');
+            channelRef.current?.send({
+              type: 'broadcast',
+              event: 'offer',
+              payload: { offer: currentOfferRef.current, from: 'staff' },
+            });
+            // Send again after 300ms to ensure delivery
+            setTimeout(() => {
+              if (currentOfferRef.current && channelRef.current) {
+                console.log('[WebRTC] Sending backup offer');
+                channelRef.current.send({
+                  type: 'broadcast',
+                  event: 'offer',
+                  payload: { offer: currentOfferRef.current, from: 'staff' },
+                });
+              }
+            }, 300);
+          } else {
+            // Keep checking every 500ms until patient joins
+            setTimeout(checkAndSendOffer, 500);
+          }
+        };
+        
+        // Also send immediately in case patient is already there
+        console.log('[WebRTC] Sending initial offer (patient may already be waiting)');
         channelRef.current?.send({
           type: 'broadcast',
           event: 'offer',
           payload: { offer: currentOfferRef.current, from: 'staff' },
         });
+        
+        // Start presence-based checking after 500ms
+        setTimeout(checkAndSendOffer, 500);
       } else {
-        // Patient: Poll for offer with exponential backoff
+        // FIX: Patient requests offer IMMEDIATELY on subscribe (not after 1s delay)
+        console.log('[WebRTC] Patient requesting offer immediately');
+        channelRef.current?.send({
+          type: 'broadcast',
+          event: 'request-offer',
+          payload: { from: 'patient' },
+        });
+        
+        // Patient: Poll for offer with aggressive initial polling, then exponential backoff
         let pollCount = 0;
-        const maxPolls = 5;
+        const maxPolls = 8; // More attempts
         
         // Clear any existing poll interval
         if (offerPollIntervalRef.current) {
           clearInterval(offerPollIntervalRef.current);
         }
+        
+        // FIX: More aggressive initial polling - first 3 at 500ms
+        const getDelay = (count: number): number => {
+          if (count <= 3) return 500; // Fast initial polling
+          return Math.min(1000 * Math.pow(2, count - 3), 16000);
+        };
         
         const pollForOffer = () => {
           // Stop polling if we have a remote description (offer received)
@@ -697,15 +756,15 @@ export function useWebRTC({
             payload: { from: 'patient' },
           });
           
-          // Exponential backoff: 1s, 2s, 4s, 8s, 16s (with jitter)
-          const delay = Math.min(1000 * Math.pow(2, pollCount - 1), 16000);
-          const jitter = Math.random() * 500;
+          // Get delay based on poll count (fast initially, then backoff)
+          const delay = getDelay(pollCount);
+          const jitter = Math.random() * 200; // Less jitter for faster response
           setTimeout(pollForOffer, delay + jitter);
         };
         
-        console.log('[WebRTC] Starting offer polling with exponential backoff');
-        // Start first poll after 1 second
-        setTimeout(pollForOffer, 1000);
+        console.log('[WebRTC] Starting aggressive offer polling');
+        // FIX: Start first poll after just 300ms (not 1 second)
+        setTimeout(pollForOffer, 300);
       }
       
       // Set connection timeout
