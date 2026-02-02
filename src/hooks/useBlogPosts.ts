@@ -54,11 +54,14 @@ export function useBlogPosts(options: UseBlogPostsOptions = {}): UseBlogPostsRet
         categoryId = catData?.id || null;
       }
 
-      // Build query for count
+      const now = new Date().toISOString();
+
+      // Build query for count - only show published posts that are either not scheduled or past their scheduled time
       let countQuery = supabase
         .from('blog_posts')
         .select('*', { count: 'exact', head: true })
-        .eq('published', true);
+        .eq('published', true)
+        .or(`scheduled_at.is.null,scheduled_at.lte.${now}`);
 
       if (categoryId) {
         countQuery = countQuery.eq('category_id', categoryId);
@@ -70,11 +73,12 @@ export function useBlogPosts(options: UseBlogPostsOptions = {}): UseBlogPostsRet
 
       const { count } = await countQuery;
 
-      // Build query for posts
+      // Build query for posts - only show published posts that are either not scheduled or past their scheduled time
       let postsQuery = supabase
         .from('blog_posts')
         .select('*')
         .eq('published', true)
+        .or(`scheduled_at.is.null,scheduled_at.lte.${now}`)
         .order('published_at', { ascending: false })
         .range((page - 1) * limit, page * limit - 1);
 
@@ -114,6 +118,7 @@ export function useBlogPost(slug: string) {
   return useQuery({
     queryKey: ['blog-post', slug],
     queryFn: async () => {
+      const now = new Date().toISOString();
       const { data, error } = await supabase
         .from('blog_posts')
         .select(`
@@ -122,6 +127,7 @@ export function useBlogPost(slug: string) {
         `)
         .eq('slug', slug)
         .eq('published', true)
+        .or(`scheduled_at.is.null,scheduled_at.lte.${now}`)
         .single();
       
       if (error) throw error;
@@ -138,11 +144,13 @@ export function useRelatedPosts(categoryId: string | null, currentPostId: string
     queryFn: async () => {
       if (!categoryId) return [];
 
+      const now = new Date().toISOString();
       const { data, error } = await supabase
         .from('blog_posts')
         .select('*')
         .eq('category_id', categoryId)
         .eq('published', true)
+        .or(`scheduled_at.is.null,scheduled_at.lte.${now}`)
         .neq('id', currentPostId)
         .order('published_at', { ascending: false })
         .limit(3);

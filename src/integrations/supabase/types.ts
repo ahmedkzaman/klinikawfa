@@ -122,6 +122,7 @@ export type Database = {
           published: boolean
           published_at: string | null
           reading_time: number | null
+          scheduled_at: string | null
           slug: string
           title: string
           title_en: string | null
@@ -142,6 +143,7 @@ export type Database = {
           published?: boolean
           published_at?: string | null
           reading_time?: number | null
+          scheduled_at?: string | null
           slug: string
           title: string
           title_en?: string | null
@@ -162,6 +164,7 @@ export type Database = {
           published?: boolean
           published_at?: string | null
           reading_time?: number | null
+          scheduled_at?: string | null
           slug?: string
           title?: string
           title_en?: string | null

@@ -17,9 +17,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowLeft, Loader2, Save, Globe, Clock, Upload, X, ImageIcon } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, Globe, Clock, Upload, X, ImageIcon, CalendarClock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { AIWritingAssistant } from '@/components/blog';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
+import { format, parseISO, set } from 'date-fns';
 
 interface BlogCategory {
   id: string;
@@ -67,7 +71,11 @@ export default function BlogEditor() {
     reading_time: 5,
     category_id: '',
     published: false,
+    scheduled_at: null as string | null,
   });
+  const [isScheduling, setIsScheduling] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState<Date | undefined>(undefined);
+  const [scheduledTime, setScheduledTime] = useState('09:00');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -96,6 +104,7 @@ export default function BlogEditor() {
           return;
         }
 
+        const scheduledAtValue = (post as any).scheduled_at;
         setFormData({
           title: post.title,
           title_ms: (post as any).title_ms || post.title || '',
@@ -110,7 +119,16 @@ export default function BlogEditor() {
           reading_time: (post as any).reading_time || 5,
           category_id: post.category_id || '',
           published: post.published,
+          scheduled_at: scheduledAtValue || null,
         });
+        
+        // Initialize scheduling state if post has scheduled_at
+        if (scheduledAtValue) {
+          const scheduledDateTime = parseISO(scheduledAtValue);
+          setIsScheduling(true);
+          setScheduledDate(scheduledDateTime);
+          setScheduledTime(format(scheduledDateTime, 'HH:mm'));
+        }
       }
       setLoading(false);
     };
@@ -259,6 +277,14 @@ export default function BlogEditor() {
 
     setSaving(true);
     try {
+      // Calculate scheduled_at datetime
+      let scheduledAtValue: string | null = null;
+      if (isScheduling && scheduledDate) {
+        const [hours, minutes] = scheduledTime.split(':').map(Number);
+        const scheduledDateTime = set(scheduledDate, { hours, minutes, seconds: 0 });
+        scheduledAtValue = scheduledDateTime.toISOString();
+      }
+
       const postData = {
         title: formData.title_ms.trim() || formData.title_en.trim(),
         title_ms: formData.title_ms.trim() || null,
@@ -272,8 +298,9 @@ export default function BlogEditor() {
         featured_image: formData.featured_image.trim() || null,
         reading_time: formData.reading_time,
         category_id: formData.category_id || null,
-        published: formData.published,
+        published: isScheduling ? true : formData.published, // Auto-set published for scheduled posts
         published_at: formData.published ? new Date().toISOString() : null,
+        scheduled_at: scheduledAtValue,
         author_id: user?.id || null,
       };
 
@@ -588,11 +615,108 @@ export default function BlogEditor() {
                   <Switch
                     id="published"
                     checked={formData.published}
-                    onCheckedChange={(checked) => 
-                      setFormData(prev => ({ ...prev, published: checked }))
-                    }
+                    onCheckedChange={(checked) => {
+                      setFormData(prev => ({ ...prev, published: checked }));
+                      if (checked) {
+                        setIsScheduling(false);
+                        setScheduledDate(undefined);
+                      }
+                    }}
+                    disabled={isScheduling}
                   />
                 </div>
+
+                {/* Schedule for later option */}
+                {!formData.published && (
+                  <div className="space-y-3 pt-2 border-t">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="schedule" className="flex items-center gap-2">
+                        <CalendarClock className="h-4 w-4" />
+                        {language === 'ms' ? 'Jadualkan' : 'Schedule for later'}
+                      </Label>
+                      <Switch
+                        id="schedule"
+                        checked={isScheduling}
+                        onCheckedChange={(checked) => {
+                          setIsScheduling(checked);
+                          if (!checked) {
+                            setScheduledDate(undefined);
+                            setScheduledTime('09:00');
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {isScheduling && (
+                      <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+                        <div className="space-y-2">
+                          <Label>{language === 'ms' ? 'Tarikh' : 'Date'}</Label>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  "w-full justify-start text-left font-normal",
+                                  !scheduledDate && "text-muted-foreground"
+                                )}
+                              >
+                                <CalendarClock className="mr-2 h-4 w-4" />
+                                {scheduledDate ? format(scheduledDate, 'PPP') : (
+                                  language === 'ms' ? 'Pilih tarikh' : 'Pick a date'
+                                )}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={scheduledDate}
+                                onSelect={setScheduledDate}
+                                disabled={(date) => date < new Date()}
+                                initialFocus
+                                className="p-3 pointer-events-auto"
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="scheduledTime">{language === 'ms' ? 'Masa' : 'Time'}</Label>
+                          <Input
+                            id="scheduledTime"
+                            type="time"
+                            value={scheduledTime}
+                            onChange={(e) => setScheduledTime(e.target.value)}
+                            className="w-full"
+                          />
+                        </div>
+
+                        {scheduledDate && (
+                          <div className="rounded-lg bg-primary/10 p-3 text-sm">
+                            <p className="text-primary font-medium">
+                              {language === 'ms' ? 'Dijadualkan untuk:' : 'Scheduled for:'}
+                            </p>
+                            <p className="text-muted-foreground">
+                              {format(scheduledDate, 'EEEE, d MMMM yyyy')} {language === 'ms' ? 'pada' : 'at'} {scheduledTime}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Show scheduled info if already scheduled */}
+                {formData.scheduled_at && new Date(formData.scheduled_at) > new Date() && (
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm dark:bg-amber-950 dark:border-amber-800">
+                    <p className="text-amber-800 dark:text-amber-200 font-medium flex items-center gap-2">
+                      <CalendarClock className="h-4 w-4" />
+                      {language === 'ms' ? 'Dijadualkan' : 'Scheduled'}
+                    </p>
+                    <p className="text-amber-700 dark:text-amber-300">
+                      {format(parseISO(formData.scheduled_at), 'PPP')} {language === 'ms' ? 'pada' : 'at'} {format(parseISO(formData.scheduled_at), 'HH:mm')}
+                    </p>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="category">
