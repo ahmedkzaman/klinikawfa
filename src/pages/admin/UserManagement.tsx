@@ -297,8 +297,8 @@ export default function UserManagement() {
           </h1>
           <p className="text-muted-foreground">
             {language === 'ms' 
-              ? `${users.filter(u => u.roles.length > 0).length} pengguna dengan peranan` 
-              : `${users.filter(u => u.roles.length > 0).length} users with roles`}
+              ? `${users.length} pengguna berdaftar` 
+              : `${users.length} registered users`}
           </p>
         </div>
 
@@ -320,11 +320,11 @@ export default function UserManagement() {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
-          ) : users.filter(u => u.roles.length > 0).length === 0 ? (
+          ) : users.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground">
               {language === 'ms' 
-                ? 'Tiada pengguna dengan peranan.' 
-                : 'No users with roles.'}
+                ? 'Tiada pengguna berdaftar.' 
+                : 'No registered users.'}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -339,7 +339,7 @@ export default function UserManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.filter(u => u.roles.length > 0).map((user) => (
+                  {users.map((user) => (
                     <TableRow key={user.id}>
                       <TableCell className="font-medium">{user.email}</TableCell>
                       <TableCell>{user.full_name || '-'}</TableCell>
@@ -350,7 +350,23 @@ export default function UserManagement() {
                           disabled={updating === user.id}
                         >
                           <SelectTrigger className="w-[130px]">
-                            <SelectValue />
+                            <SelectValue>
+                              {getUserCurrentRole(user) === 'none' ? (
+                                <span className="text-muted-foreground">
+                                  {language === 'ms' ? 'Tiada Peranan' : 'No Role'}
+                                </span>
+                              ) : getUserCurrentRole(user) === 'admin' ? (
+                                <div className="flex items-center gap-2">
+                                  <ShieldCheck className="h-4 w-4" />
+                                  Admin
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <Shield className="h-4 w-4" />
+                                  {language === 'ms' ? 'Staf' : 'Staff'}
+                                </div>
+                              )}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="admin">
@@ -366,7 +382,7 @@ export default function UserManagement() {
                               </div>
                             </SelectItem>
                             <SelectItem value="none">
-                              {language === 'ms' ? 'Tiada' : 'None'}
+                              {language === 'ms' ? 'Tiada Peranan' : 'No Role'}
                             </SelectItem>
                           </SelectContent>
                         </Select>
@@ -375,13 +391,15 @@ export default function UserManagement() {
                         {format(new Date(user.created_at), 'dd/MM/yyyy')}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          onClick={() => setDeleteUserId(user.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        {user.roles.length > 0 && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => setDeleteUserId(user.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
