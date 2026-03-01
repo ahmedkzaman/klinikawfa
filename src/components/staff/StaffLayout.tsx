@@ -29,15 +29,14 @@ const adminNavItems = [
 ];
 
 const contentNavItems = [
-  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, adminOnly: false },
-  { href: '/admin/leads', label: 'Leads / Appointments', icon: CalendarCheck, adminOnly: false },
-  { href: '/admin/team', label: 'Team', icon: Stethoscope, adminOnly: false },
-  { href: '/admin/video-calls', label: 'Video Calls', icon: Video, adminOnly: false },
-  { href: '/admin/blog', label: 'Blog Posts', icon: FileText, adminOnly: false },
-  { href: '/admin/gallery', label: 'Gallery', icon: Image, adminOnly: false },
-  { href: '/admin/reviews', label: 'Reviews', icon: Star, adminOnly: false },
-  { href: '/admin/users', label: 'Users', icon: Users, adminOnly: true },
-  { href: '/admin/settings', label: 'Settings', icon: Settings, adminOnly: false },
+  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/admin/leads', label: 'Leads / Appointments', icon: CalendarCheck },
+  { href: '/admin/team', label: 'Team', icon: Stethoscope },
+  { href: '/admin/video-calls', label: 'Video Calls', icon: Video },
+  { href: '/admin/blog', label: 'Blog Posts', icon: FileText },
+  { href: '/admin/gallery', label: 'Gallery', icon: Image },
+  { href: '/admin/reviews', label: 'Reviews', icon: Star },
+  { href: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 
 function SidebarNav({ isAdmin, pathname, onLinkClick }: { isAdmin: boolean; pathname: string; onLinkClick?: () => void }) {
@@ -94,35 +93,31 @@ function SidebarNav({ isAdmin, pathname, onLinkClick }: { isAdmin: boolean; path
         </>
       )}
 
-      {/* Content Management - Admin only */}
-      {isAdmin && (
-        <>
-          <div className="my-4 mx-4 border-t" />
-          <div className="px-4 mb-2">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Website</span>
-          </div>
-          <div className="space-y-1 px-2">
-            {contentNavItems
-              .filter(item => !item.adminOnly || isAdmin)
-              .map((item) => (
-                <Link
-                  key={item.href}
-                  to={item.href}
-                  onClick={onLinkClick}
-                  className={cn(
-                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
-                    isActive(item.href)
-                      ? 'bg-primary/10 text-primary font-medium'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                  )}
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              ))}
-          </div>
-        </>
-      )}
+      {/* Content Management - All Staff */}
+      <>
+        <div className="my-4 mx-4 border-t" />
+        <div className="px-4 mb-2">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Website</span>
+        </div>
+        <div className="space-y-1 px-2">
+          {contentNavItems.map((item) => (
+            <Link
+              key={item.href}
+              to={item.href}
+              onClick={onLinkClick}
+              className={cn(
+                'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                isActive(item.href)
+                  ? 'bg-primary/10 text-primary font-medium'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              )}
+            >
+              <item.icon className="h-4 w-4" />
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      </>
     </nav>
   );
 }
