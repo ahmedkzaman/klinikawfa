@@ -1,25 +1,36 @@
 
-# Plan: Add Staff Dashboard Link in Footer
+
+# Plan: Remove Duplicate User Role Management Page
 
 ## Overview
 
-Add a "Staff Portal" link in the footer's bottom bar (bottom-left area). The link will only be functional for staff and admin users -- guests will see a disabled/non-clickable version.
+Keep the **Employees** page at `/staff/admin/employees` and remove the **User Management** page at `/admin/users` to have only one place to manage user roles.
 
 ## Changes
 
-### 1. Update Footer (`src/components/layout/Footer.tsx`)
+### 1. Delete `src/pages/admin/UserManagement.tsx`
 
-- Import `useAuth` from `AuthContext` and `Link` (already imported)
-- In the bottom bar section, add a "Staff Portal" link on the left side (before the copyright text)
-- Logic:
-  - If user is staff or admin (`isStaffOrAdmin`): render a clickable `Link` to `/staff/dashboard`
-  - If user is a guest (`isGuest`): render a disabled span (grayed out, cursor-not-allowed)
-  - If user is not logged in: don't show the link at all
+Remove the file entirely.
 
-The link will appear subtly in the footer bottom bar, matching the existing text style (small, muted).
+### 2. Update `src/pages/admin/index.ts`
 
-## Files Modified
+Remove the `UserManagement` export from the admin pages barrel file.
+
+### 3. Update `src/App.tsx`
+
+- Remove the `UserManagement` import
+- Remove the route `<Route path="users" element={<UserManagement />} />`
+
+### 4. Update `src/components/admin/AdminSidebar.tsx`
+
+Remove the "User Management" / "Pengurusan Pengguna" link from the admin sidebar navigation.
+
+## Summary
 
 | File | Change |
 |------|--------|
-| `src/components/layout/Footer.tsx` | Add conditional Staff Portal link in bottom bar |
+| `src/pages/admin/UserManagement.tsx` | Delete file |
+| `src/pages/admin/index.ts` | Remove export |
+| `src/App.tsx` | Remove import and route |
+| `src/components/admin/AdminSidebar.tsx` | Remove sidebar link |
+
