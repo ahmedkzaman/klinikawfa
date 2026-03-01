@@ -1,13 +1,14 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { CLINIC_INFO } from '@/lib/constants';
 import { Phone, MessageCircle, Heart } from 'lucide-react';
 import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
 
 export function Footer() {
   const { language } = useLanguage();
-
+  const { user, isStaffOrAdmin, isGuest } = useAuth();
   return (
     <footer className="relative bg-gradient-to-br from-primary via-primary to-primary-glow text-primary-foreground overflow-hidden">
       {/* Decorative elements */}
@@ -121,7 +122,19 @@ export function Footer() {
           className="mt-14 border-t border-primary-foreground/20 pt-8"
         >
           <div className="flex flex-col items-center justify-between gap-4 text-sm text-primary-foreground/70 md:flex-row">
-            <p>© {new Date().getFullYear()} {CLINIC_INFO.name}. All rights reserved.</p>
+            <div className="flex items-center gap-4">
+              {user && isStaffOrAdmin && (
+                <Link to="/staff/dashboard" className="hover:text-primary-foreground transition-colors">
+                  Staff Portal
+                </Link>
+              )}
+              {user && isGuest && (
+                <span className="text-primary-foreground/40 cursor-not-allowed select-none">
+                  Staff Portal
+                </span>
+              )}
+              <p>© {new Date().getFullYear()} {CLINIC_INFO.name}. All rights reserved.</p>
+            </div>
             <div className="flex gap-6">
               <Link to="/privacy" className="hover:text-primary-foreground transition-colors">
                 Privacy Policy
