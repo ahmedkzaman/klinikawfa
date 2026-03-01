@@ -20,6 +20,20 @@ import BlogPost from "./pages/BlogPost";
 import VideoCall from "./pages/VideoCall";
 import VideoCallStaff from "./pages/VideoCallStaff";
 
+// Staff Portal
+import { StaffLayout } from "./components/staff/StaffLayout";
+import StaffDashboard from "./pages/staff/Dashboard";
+import StaffPunch from "./pages/staff/Punch";
+import StaffHistory from "./pages/staff/History";
+import StaffCalendar from "./pages/staff/Calendar";
+import StaffLeaveRequest from "./pages/staff/LeaveRequest";
+import StaffDocuments from "./pages/staff/Documents";
+import StaffAdminDashboard from "./pages/staff/admin/Dashboard";
+import AdminEmployees from "./pages/staff/admin/Employees";
+import AdminZones from "./pages/staff/admin/Zones";
+import AdminAssignments from "./pages/staff/admin/Assignments";
+import AdminRequests from "./pages/staff/admin/Requests";
+
 // Admin
 import { AdminLayout } from "./components/admin";
 import {
@@ -79,6 +93,21 @@ const App = () => (
                 <Route path="reviews" element={<ReviewsManagement />} />
                 <Route path="users" element={<UserManagement />} />
                 <Route path="settings" element={<AdminSettings />} />
+              </Route>
+
+              {/* Staff Portal Routes */}
+              <Route path="/staff" element={<StaffLayout />}>
+                <Route path="dashboard" element={<StaffDashboard />} />
+                <Route path="punch" element={<StaffPunch />} />
+                <Route path="history" element={<StaffHistory />} />
+                <Route path="calendar" element={<StaffCalendar />} />
+                <Route path="leave" element={<StaffLeaveRequest />} />
+                <Route path="documents" element={<StaffDocuments />} />
+                <Route path="admin" element={<StaffAdminDashboard />} />
+                <Route path="admin/employees" element={<AdminEmployees />} />
+                <Route path="admin/zones" element={<AdminZones />} />
+                <Route path="admin/assignments" element={<AdminAssignments />} />
+                <Route path="admin/requests" element={<AdminRequests />} />
               </Route>
 
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

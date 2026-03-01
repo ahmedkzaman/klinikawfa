@@ -1,0 +1,75 @@
+import { useEffect, useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Users, Shield, User, Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+
+interface Employee {
+  id: string;
+  full_name: string | null;
+  phone: string | null;
+  department: string | null;
+  position: string | null;
+  created_at: string;
+  role: 'admin' | 'staff';
+}
+
+export default function AdminEmployees() {
+  const { toast } = useToast();
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => { fetchEmployees(); }, []);
+
+  const fetchEmployees = async () => {
+    setIsLoading(true);
+    const { data: profiles, error } = await supabase.from('profiles').select('id, full_name, phone, department, position, created_at').order('full_name');
+    if (error) { toast({ title: 'Error', description: 'Failed to load employees', variant: 'destructive' }); setIsLoading(false); return; }
+    const { data: roles } = await supabase.from('user_roles').select('user_id, role');
+    const roleMap: Record<string, 'admin' | 'staff'> = {};
+    roles?.forEach((r) => { if (r.role === 'admin') roleMap[r.user_id] = 'admin'; else if (!roleMap[r.user_id]) roleMap[r.user_id] = 'staff'; });
+    setEmployees((profiles || []).map((p: any) => ({ ...p, role: roleMap[p.id] || 'staff' })));
+    setIsLoading(false);
+  };
+
+  const handleRoleChange = async (userId: string, newRole: 'admin' | 'staff') => {
+    await supabase.from('user_roles').delete().eq('user_id', userId);
+    const { error } = await supabase.from('user_roles').insert({ user_id: userId, role: newRole });
+    if (error) { toast({ title: 'Error', description: 'Failed to update role', variant: 'destructive' }); return; }
+    toast({ title: 'Role Updated', description: `User role changed to ${newRole}` });
+    fetchEmployees();
+  };
+
+  return (
+    <div className="space-y-6">
+      <div><h1 className="text-2xl font-bold tracking-tight">Employees</h1><p className="text-muted-foreground">Manage staff members and their roles</p></div>
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" />Staff Directory</CardTitle><CardDescription>{employees.length} employees registered</CardDescription></CardHeader>
+        <CardContent>
+          {isLoading ? <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+          : employees.length === 0 ? <div className="text-center py-8 text-muted-foreground"><Users className="h-12 w-12 mx-auto mb-4 opacity-50" /><p>No employees found.</p></div>
+          : (
+            <div className="space-y-4">{employees.map((e) => (
+              <div key={e.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 border rounded-lg">
+                <div className="flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">{e.role === 'admin' ? <Shield className="h-5 w-5 text-primary" /> : <User className="h-5 w-5 text-muted-foreground" />}</div>
+                  <div><p className="font-medium">{e.full_name || 'Unknown'}</p>{e.position && <p className="text-sm text-foreground/80">{e.position}</p>}<p className="text-sm text-muted-foreground">{e.department || 'No department'}{e.phone && ` • ${e.phone}`}</p></div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Badge variant={e.role === 'admin' ? 'default' : 'secondary'}>{e.role}</Badge>
+                  <Select value={e.role} onValueChange={(v: 'admin' | 'staff') => handleRoleChange(e.id, v)}>
+                    <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="staff">Staff</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent>
+                  </Select>
+                </div>
+              </div>
+            ))}</div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

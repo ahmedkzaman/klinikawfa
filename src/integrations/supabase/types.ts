@@ -77,6 +77,53 @@ export type Database = {
         }
         Relationships: []
       }
+      attendance_records: {
+        Row: {
+          accuracy_meters: number | null
+          created_at: string
+          face_verified: boolean
+          id: string
+          latitude: number | null
+          longitude: number | null
+          punch_time: string
+          punch_type: string
+          user_id: string
+          zone_id: string | null
+        }
+        Insert: {
+          accuracy_meters?: number | null
+          created_at?: string
+          face_verified?: boolean
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          punch_time?: string
+          punch_type: string
+          user_id: string
+          zone_id?: string | null
+        }
+        Update: {
+          accuracy_meters?: number | null
+          created_at?: string
+          face_verified?: boolean
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          punch_time?: string
+          punch_type?: string
+          user_id?: string
+          zone_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_records_zone_id_fkey"
+            columns: ["zone_id"]
+            isOneToOne: false
+            referencedRelation: "geofence_zones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       blog_categories: {
         Row: {
           created_at: string
@@ -273,26 +320,107 @@ export type Database = {
         }
         Relationships: []
       }
+      geofence_zones: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          latitude: number
+          longitude: number
+          name: string
+          radius_meters: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          latitude: number
+          longitude: number
+          name: string
+          radius_meters?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          latitude?: number
+          longitude?: number
+          name?: string
+          radius_meters?: number
+        }
+        Relationships: []
+      }
+      leave_requests: {
+        Row: {
+          created_at: string
+          end_date: string
+          id: string
+          leave_type: string
+          reason: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          start_date: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          end_date: string
+          id?: string
+          leave_type: string
+          reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          start_date: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          end_date?: string
+          id?: string
+          leave_type?: string
+          reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          start_date?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
+          department: string | null
           email: string
           full_name: string | null
           id: string
+          phone: string | null
+          position: string | null
           updated_at: string
         }
         Insert: {
           created_at?: string
+          department?: string | null
           email: string
           full_name?: string | null
           id: string
+          phone?: string | null
+          position?: string | null
           updated_at?: string
         }
         Update: {
           created_at?: string
+          department?: string | null
           email?: string
           full_name?: string | null
           id?: string
+          phone?: string | null
+          position?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -335,6 +463,171 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      staff_notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string | null
+          related_task_id: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string | null
+          related_task_id?: string | null
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string | null
+          related_task_id?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_notifications_related_task_id_fkey"
+            columns: ["related_task_id"]
+            isOneToOne: false
+            referencedRelation: "staff_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_tasks: {
+        Row: {
+          assigned_to: string
+          color: string
+          created_at: string
+          created_by: string
+          deadline: string | null
+          description: string | null
+          end_date: string | null
+          id: string
+          is_completed: boolean
+          start_date: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to: string
+          color?: string
+          created_at?: string
+          created_by: string
+          deadline?: string | null
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          is_completed?: boolean
+          start_date: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string
+          color?: string
+          created_at?: string
+          created_by?: string
+          deadline?: string | null
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          is_completed?: boolean
+          start_date?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      staff_zone_assignments: {
+        Row: {
+          created_at: string
+          days_of_week: number[]
+          end_time: string
+          id: string
+          is_active: boolean
+          start_time: string
+          user_id: string
+          zone_id: string
+        }
+        Insert: {
+          created_at?: string
+          days_of_week?: number[]
+          end_time?: string
+          id?: string
+          is_active?: boolean
+          start_time?: string
+          user_id: string
+          zone_id: string
+        }
+        Update: {
+          created_at?: string
+          days_of_week?: number[]
+          end_time?: string
+          id?: string
+          is_active?: boolean
+          start_time?: string
+          user_id?: string
+          zone_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_zone_assignments_zone_id_fkey"
+            columns: ["zone_id"]
+            isOneToOne: false
+            referencedRelation: "geofence_zones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_delete_requests: {
+        Row: {
+          created_at: string
+          id: string
+          requested_by: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          task_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          requested_by: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          task_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          requested_by?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_delete_requests_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "staff_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       team_members: {
         Row: {
