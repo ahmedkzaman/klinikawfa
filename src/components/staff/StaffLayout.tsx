@@ -97,7 +97,7 @@ function SidebarNav({ isAdmin, pathname, onLinkClick }: { isAdmin: boolean; path
       {/* Content Management */}
       <div className="my-4 mx-4 border-t" />
       <div className="px-4 mb-2">
-        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Content</span>
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Website</span>
       </div>
       <div className="space-y-1 px-2">
         {contentNavItems
