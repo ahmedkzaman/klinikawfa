@@ -42,7 +42,6 @@ import {
   BlogManagement,
   BlogEditor,
   GalleryManagement,
-  UserManagement,
   TeamManagement,
   TeamEditor,
   VideoCallManagement,
@@ -91,7 +90,6 @@ const App = () => (
                 <Route path="blog/:id" element={<BlogEditor />} />
                 <Route path="gallery" element={<GalleryManagement />} />
                 <Route path="reviews" element={<ReviewsManagement />} />
-                <Route path="users" element={<UserManagement />} />
                 <Route path="settings" element={<AdminSettings />} />
               </Route>
 

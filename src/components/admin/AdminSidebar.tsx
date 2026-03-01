@@ -4,7 +4,6 @@ import {
   CalendarCheck, 
   FileText, 
   Image, 
-  Users,
   LogOut,
   Home,
   Stethoscope,
@@ -80,13 +79,6 @@ const menuItems = [
     url: '/admin/reviews', 
     icon: Star,
     staffAccess: true 
-  },
-  {
-    titleMs: 'Pengguna', 
-    titleEn: 'Users', 
-    url: '/admin/users', 
-    icon: Users,
-    staffAccess: false // Admin only
   },
   { 
     titleMs: 'Tetapan', 
