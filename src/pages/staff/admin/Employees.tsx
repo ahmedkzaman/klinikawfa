@@ -14,7 +14,7 @@ interface Employee {
   department: string | null;
   position: string | null;
   created_at: string;
-  role: 'admin' | 'staff';
+  role: 'admin' | 'staff' | 'guest';
 }
 
 export default function AdminEmployees() {
@@ -29,13 +29,13 @@ export default function AdminEmployees() {
     const { data: profiles, error } = await supabase.from('profiles').select('id, full_name, phone, department, position, created_at').order('full_name');
     if (error) { toast({ title: 'Error', description: 'Failed to load employees', variant: 'destructive' }); setIsLoading(false); return; }
     const { data: roles } = await supabase.from('user_roles').select('user_id, role');
-    const roleMap: Record<string, 'admin' | 'staff'> = {};
-    roles?.forEach((r) => { if (r.role === 'admin') roleMap[r.user_id] = 'admin'; else if (!roleMap[r.user_id]) roleMap[r.user_id] = 'staff'; });
+    const roleMap: Record<string, 'admin' | 'staff' | 'guest'> = {};
+    roles?.forEach((r) => { if (r.role === 'admin') roleMap[r.user_id] = 'admin'; else if (r.role === 'staff' && roleMap[r.user_id] !== 'admin') roleMap[r.user_id] = 'staff'; else if (!roleMap[r.user_id]) roleMap[r.user_id] = r.role as 'guest'; });
     setEmployees((profiles || []).map((p: any) => ({ ...p, role: roleMap[p.id] || 'staff' })));
     setIsLoading(false);
   };
 
-  const handleRoleChange = async (userId: string, newRole: 'admin' | 'staff') => {
+  const handleRoleChange = async (userId: string, newRole: 'admin' | 'staff' | 'guest') => {
     await supabase.from('user_roles').delete().eq('user_id', userId);
     const { error } = await supabase.from('user_roles').insert({ user_id: userId, role: newRole });
     if (error) { toast({ title: 'Error', description: 'Failed to update role', variant: 'destructive' }); return; }
@@ -60,9 +60,9 @@ export default function AdminEmployees() {
                 </div>
                 <div className="flex items-center gap-3">
                   <Badge variant={e.role === 'admin' ? 'default' : 'secondary'}>{e.role}</Badge>
-                  <Select value={e.role} onValueChange={(v: 'admin' | 'staff') => handleRoleChange(e.id, v)}>
-                    <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="staff">Staff</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent>
+                  <Select value={e.role} onValueChange={(v: 'admin' | 'staff' | 'guest') => handleRoleChange(e.id, v)}>
+                     <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                     <SelectContent><SelectItem value="guest">Guest</SelectItem><SelectItem value="staff">Staff</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent>
                   </Select>
                 </div>
               </div>
