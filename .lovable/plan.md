@@ -1,40 +1,32 @@
 
 
-# Plan: Add Admin Menu Items to Staff Sidebar + Restrict Stripe in Settings
-
-## Overview
-
-Add the content management menu items (currently only in the Admin sidebar) to the Staff portal sidebar, so staff can access those pages from the Staff portal. Also ensure Settings is accessible to staff but with Stripe integration hidden (already implemented in Settings.tsx).
+# Plan: Auto-redirect to Staff Dashboard + Hide Admin Section for Non-Admins
 
 ## Changes
 
-### 1. Update StaffLayout sidebar (`src/components/staff/StaffLayout.tsx`)
+### 1. Add index redirect for `/staff` route (`src/App.tsx`)
 
-Add a new "Content Management" section to the staff sidebar with links to the admin pages:
-- Dashboard (`/admin`)
-- Leads / Appointments (`/admin/leads`)
-- Team (`/admin/team`)
-- Video Calls (`/admin/video-calls`)
-- Blog Posts (`/admin/blog`)
-- Gallery (`/admin/gallery`)
-- Reviews (`/admin/reviews`)
-- Users (`/admin/users`) -- admin only
-- Settings (`/admin/settings`) -- visible to all staff, but Stripe hidden for non-admins
+Add an index route under `/staff` that redirects to `/staff/dashboard` using React Router's `Navigate` component. This ensures that when an admin (or staff) navigates to `/staff`, they land on the dashboard automatically.
 
-Each item will use the same icons as the Admin sidebar. Items like Users will be filtered to admin-only, matching the existing AdminSidebar behavior.
+```
+<Route path="/staff" element={<StaffLayout />}>
+  <Route index element={<Navigate to="/staff/dashboard" replace />} />
+  ...
+</Route>
+```
 
-### 2. Update AdminSidebar (`src/components/admin/AdminSidebar.tsx`)
+### 2. Hide Admin section from non-admin staff (`src/components/staff/StaffLayout.tsx`)
 
-Change Settings `staffAccess` from `false` to `true` so staff can also access Settings from the Admin panel sidebar (Stripe is already hidden for non-admins in the Settings page itself).
+The "Admin" section (Employees, Zones, Assignments, Requests) is already wrapped in `{isAdmin && (...)}` -- this is correct.
 
-## What's already handled
+The "Website" section (content management links) is currently visible to all staff. Wrap it in the same `{isAdmin && (...)}` guard so only admins can see it.
 
-- **Stripe visibility**: The Settings page (`src/pages/admin/Settings.tsx` line 496) already wraps the Stripe Integration card with `{isAdmin && (...)}`, so staff will only see the Homepage Video settings when they visit Settings.
+Move the Website section inside the existing admin conditional block, or add a separate `{isAdmin && (...)}` wrapper around lines 97-121.
 
 ## Files Modified
 
 | File | Change |
 |------|--------|
-| `src/components/staff/StaffLayout.tsx` | Add "Content Management" nav section with admin page links |
-| `src/components/admin/AdminSidebar.tsx` | Change Settings `staffAccess` to `true` |
+| `src/App.tsx` | Add `<Route index element={<Navigate to="/staff/dashboard" replace />} />` under `/staff` |
+| `src/components/staff/StaffLayout.tsx` | Wrap "Website" nav section with `{isAdmin && (...)}` |
 
