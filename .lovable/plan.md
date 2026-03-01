@@ -1,32 +1,47 @@
 
+# Plan: Add "guest" Role
 
-# Plan: Auto-redirect to Staff Dashboard + Hide Admin Section for Non-Admins
+## Overview
+
+Add a `guest` role to the system. Guests are authenticated users who should NOT have access to the staff dashboard (`/staff/*`) or admin dashboard (`/admin/*`). They can only access public pages and their own profile.
 
 ## Changes
 
-### 1. Add index redirect for `/staff` route (`src/App.tsx`)
+### 1. Database Migration
 
-Add an index route under `/staff` that redirects to `/staff/dashboard` using React Router's `Navigate` component. This ensures that when an admin (or staff) navigates to `/staff`, they land on the dashboard automatically.
+Add `guest` to the `app_role` enum:
 
-```
-<Route path="/staff" element={<StaffLayout />}>
-  <Route index element={<Navigate to="/staff/dashboard" replace />} />
-  ...
-</Route>
+```sql
+ALTER TYPE public.app_role ADD VALUE 'guest';
 ```
 
-### 2. Hide Admin section from non-admin staff (`src/components/staff/StaffLayout.tsx`)
+### 2. Update AuthContext (`src/contexts/AuthContext.tsx`)
 
-The "Admin" section (Employees, Zones, Assignments, Requests) is already wrapped in `{isAdmin && (...)}` -- this is correct.
+- Add `'guest'` to the `AppRole` type: `'admin' | 'staff' | 'guest'`
+- Add a computed `isGuest` boolean to the context (true when user has only the `guest` role and no `staff`/`admin` role)
 
-The "Website" section (content management links) is currently visible to all staff. Wrap it in the same `{isAdmin && (...)}` guard so only admins can see it.
+### 3. Update ProtectedRoute (`src/components/ProtectedRoute.tsx`)
 
-Move the Website section inside the existing admin conditional block, or add a separate `{isAdmin && (...)}` wrapper around lines 97-121.
+No changes needed -- existing `requireStaffOrAdmin` already blocks guests since `isStaffOrAdmin` checks for `admin` or `staff` roles only, and guests have neither.
 
-## Files Modified
+### 4. Update StaffLayout (`src/components/staff/StaffLayout.tsx`)
+
+No changes needed -- the `isStaffOrAdmin` check at line 149 already blocks guests and redirects them to `/`.
+
+### 5. Update AdminLayout (`src/components/admin/AdminLayout.tsx`)
+
+No changes needed -- already wrapped with `<ProtectedRoute requireStaffOrAdmin>`.
+
+### 6. Update Admin Employees page (`src/pages/staff/admin/Employees.tsx`)
+
+Add `guest` as an assignable role option in the role dropdown so admins can assign the guest role to users.
+
+## Summary
 
 | File | Change |
 |------|--------|
-| `src/App.tsx` | Add `<Route index element={<Navigate to="/staff/dashboard" replace />} />` under `/staff` |
-| `src/components/staff/StaffLayout.tsx` | Wrap "Website" nav section with `{isAdmin && (...)}` |
+| Migration SQL | Add `guest` to `app_role` enum |
+| `src/contexts/AuthContext.tsx` | Add `guest` to `AppRole` type, add `isGuest` |
+| `src/pages/staff/admin/Employees.tsx` | Add `guest` to role assignment dropdown |
 
+The existing access control logic (`isStaffOrAdmin`) automatically excludes guests from `/staff/*` and `/admin/*` without any additional changes.
