@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { CLINIC_INFO } from '@/lib/constants';
 import { Phone, MessageCircle, Heart } from 'lucide-react';
+import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
 
 export function Footer() {
   const { language } = useLanguage();
@@ -16,6 +17,9 @@ export function Footer() {
       </div>
 
       <div className="container relative z-10 py-14 md:py-20">
+        <div className="mb-10">
+          <img src={logoKlinikAwfa} alt="Klinik Awfa Logo" className="h-14 w-auto brightness-0 invert opacity-90" />
+        </div>
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-3">
           {/* Appointment CTA */}
           <motion.div

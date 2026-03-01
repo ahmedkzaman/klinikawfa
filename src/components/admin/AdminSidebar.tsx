@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
 
 const menuItems = [
   { 
@@ -116,9 +117,10 @@ export function AdminSidebar() {
     <Sidebar collapsible="icon" className="border-r border-border">
       <SidebarContent>
         {/* Logo / Brand */}
-        <div className="flex h-14 items-center border-b border-border px-4">
+        <div className="flex h-14 items-center border-b border-border px-4 gap-2">
+          <img src={logoKlinikAwfa} alt="Klinik Awfa Logo" className={collapsed ? "h-8 w-auto" : "h-9 w-auto"} />
           {!collapsed && (
-            <span className="font-semibold text-primary">
+            <span className="font-semibold text-primary text-sm">
               {language === 'ms' ? 'Panel Admin' : 'Admin Panel'}
             </span>
           )}
