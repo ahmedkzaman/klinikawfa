@@ -1,36 +1,25 @@
 
 
-# Plan: Remove Duplicate User Role Management Page
+## Fix: Allow users to read their own role from `user_roles`
 
-## Overview
+### Problem
+The `user_roles` table currently only has a SELECT policy for admins (`is_admin(auth.uid())`). When a non-admin user (like staff) logs in, they cannot read their own role, so the app defaults to `roles = []` and hides the Staff Portal link.
 
-Keep the **Employees** page at `/staff/admin/employees` and remove the **User Management** page at `/admin/users` to have only one place to manage user roles.
+### Solution
+Add one new RLS policy to `user_roles`:
 
-## Changes
+```sql
+CREATE POLICY "Users can view own role"
+ON public.user_roles
+FOR SELECT
+TO authenticated
+USING (auth.uid() = user_id);
+```
 
-### 1. Delete `src/pages/admin/UserManagement.tsx`
+This allows any authenticated user to read their own role record, while the existing admin policies remain unchanged for full role management (insert/update/delete).
 
-Remove the file entirely.
-
-### 2. Update `src/pages/admin/index.ts`
-
-Remove the `UserManagement` export from the admin pages barrel file.
-
-### 3. Update `src/App.tsx`
-
-- Remove the `UserManagement` import
-- Remove the route `<Route path="users" element={<UserManagement />} />`
-
-### 4. Update `src/components/admin/AdminSidebar.tsx`
-
-Remove the "User Management" / "Pengurusan Pengguna" link from the admin sidebar navigation.
-
-## Summary
-
-| File | Change |
-|------|--------|
-| `src/pages/admin/UserManagement.tsx` | Delete file |
-| `src/pages/admin/index.ts` | Remove export |
-| `src/App.tsx` | Remove import and route |
-| `src/components/admin/AdminSidebar.tsx` | Remove sidebar link |
+### What stays the same
+- Admins keep full SELECT/INSERT/UPDATE/DELETE access to all roles
+- Only admins can assign, change, or remove roles
+- Users can only see their own role, not anyone else's
 
