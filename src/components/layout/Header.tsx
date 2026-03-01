@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Menu, Phone, MessageCircle, LogIn, Settings, LogOut, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
 
 export function Header() {
   const { language, setLanguage, t } = useLanguage();
@@ -37,13 +38,13 @@ export function Header() {
       <div className="container flex h-16 items-center justify-between md:h-18">
         {/* Logo */}
         <Link to="/" className="group flex items-center gap-3">
-          <motion.div
+          <motion.img
             whileHover={{ scale: 1.05, rotate: 2 }}
             whileTap={{ scale: 0.95 }}
-            className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-glow text-primary-foreground font-bold text-lg shadow-glow-primary transition-shadow"
-          >
-            KA
-          </motion.div>
+            src={logoKlinikAwfa}
+            alt="Klinik Awfa Logo"
+            className="h-11 w-auto object-contain"
+          />
           <span className="hidden font-display text-xl font-bold text-foreground sm:inline-block group-hover:text-primary transition-colors">
             {CLINIC_INFO.name}
           </span>
