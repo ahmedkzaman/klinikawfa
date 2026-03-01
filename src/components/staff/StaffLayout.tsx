@@ -94,31 +94,35 @@ function SidebarNav({ isAdmin, pathname, onLinkClick }: { isAdmin: boolean; path
         </>
       )}
 
-      {/* Content Management */}
-      <div className="my-4 mx-4 border-t" />
-      <div className="px-4 mb-2">
-        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Website</span>
-      </div>
-      <div className="space-y-1 px-2">
-        {contentNavItems
-          .filter(item => !item.adminOnly || isAdmin)
-          .map((item) => (
-            <Link
-              key={item.href}
-              to={item.href}
-              onClick={onLinkClick}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
-                isActive(item.href)
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              )}
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </Link>
-          ))}
-      </div>
+      {/* Content Management - Admin only */}
+      {isAdmin && (
+        <>
+          <div className="my-4 mx-4 border-t" />
+          <div className="px-4 mb-2">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Website</span>
+          </div>
+          <div className="space-y-1 px-2">
+            {contentNavItems
+              .filter(item => !item.adminOnly || isAdmin)
+              .map((item) => (
+                <Link
+                  key={item.href}
+                  to={item.href}
+                  onClick={onLinkClick}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                    isActive(item.href)
+                      ? 'bg-primary/10 text-primary font-medium'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                  )}
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.label}
+                </Link>
+              ))}
+          </div>
+        </>
+      )}
     </nav>
   );
 }
