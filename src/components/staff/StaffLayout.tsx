@@ -30,7 +30,6 @@ const adminNavItems = [
 
 const contentNavItems = [
   { href: '/admin/leads', label: 'Leads / Appointments', icon: CalendarCheck },
-  { href: '/admin/leads', label: 'Leads / Appointments', icon: CalendarCheck },
   { href: '/admin/team', label: 'Team', icon: Stethoscope },
   { href: '/admin/video-calls', label: 'Video Calls', icon: Video },
   { href: '/admin/blog', label: 'Blog Posts', icon: FileText },
