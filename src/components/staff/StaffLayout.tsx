@@ -4,7 +4,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import {
-  MapPin, Clock, History, Settings, LogOut, Menu, Home, Users, Map, CalendarDays, CalendarOff, Inbox, FileText
+  MapPin, Clock, History, Settings, LogOut, Menu, Home, Users, Map, CalendarDays, CalendarOff, Inbox, FileText,
+  LayoutDashboard, CalendarCheck, Stethoscope, Video, Image, Star
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
@@ -25,6 +26,18 @@ const adminNavItems = [
   { href: '/staff/admin/zones', label: 'Zones', icon: Map },
   { href: '/staff/admin/assignments', label: 'Assignments', icon: Clock },
   { href: '/staff/admin/requests', label: 'Requests', icon: Inbox },
+];
+
+const contentNavItems = [
+  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, adminOnly: false },
+  { href: '/admin/leads', label: 'Leads / Appointments', icon: CalendarCheck, adminOnly: false },
+  { href: '/admin/team', label: 'Team', icon: Stethoscope, adminOnly: false },
+  { href: '/admin/video-calls', label: 'Video Calls', icon: Video, adminOnly: false },
+  { href: '/admin/blog', label: 'Blog Posts', icon: FileText, adminOnly: false },
+  { href: '/admin/gallery', label: 'Gallery', icon: Image, adminOnly: false },
+  { href: '/admin/reviews', label: 'Reviews', icon: Star, adminOnly: false },
+  { href: '/admin/users', label: 'Users', icon: Users, adminOnly: true },
+  { href: '/admin/settings', label: 'Settings', icon: Settings, adminOnly: false },
 ];
 
 function SidebarNav({ isAdmin, pathname, onLinkClick }: { isAdmin: boolean; pathname: string; onLinkClick?: () => void }) {
@@ -80,6 +93,32 @@ function SidebarNav({ isAdmin, pathname, onLinkClick }: { isAdmin: boolean; path
           </div>
         </>
       )}
+
+      {/* Content Management */}
+      <div className="my-4 mx-4 border-t" />
+      <div className="px-4 mb-2">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Content</span>
+      </div>
+      <div className="space-y-1 px-2">
+        {contentNavItems
+          .filter(item => !item.adminOnly || isAdmin)
+          .map((item) => (
+            <Link
+              key={item.href}
+              to={item.href}
+              onClick={onLinkClick}
+              className={cn(
+                'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                isActive(item.href)
+                  ? 'bg-primary/10 text-primary font-medium'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              )}
+            >
+              <item.icon className="h-4 w-4" />
+              {item.label}
+            </Link>
+          ))}
+      </div>
     </nav>
   );
 }

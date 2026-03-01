@@ -93,7 +93,7 @@ const menuItems = [
     titleEn: 'Settings', 
     url: '/admin/settings', 
     icon: Settings,
-    staffAccess: false // Admin only
+    staffAccess: true // Staff can access, Stripe hidden for non-admins
   },
 ];
 
