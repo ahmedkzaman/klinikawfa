@@ -8,7 +8,7 @@ import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
 
 export function Footer() {
   const { language } = useLanguage();
-  const { user, isStaffOrAdmin, isGuest } = useAuth();
+  const { user, isStaffOrAdmin } = useAuth();
   return (
     <footer className="relative bg-gradient-to-br from-primary via-primary to-primary-glow text-primary-foreground overflow-hidden">
       {/* Decorative elements */}
@@ -127,11 +127,6 @@ export function Footer() {
                 <Link to="/staff/dashboard" className="hover:text-primary-foreground transition-colors">
                   Staff Portal
                 </Link>
-              )}
-              {user && isGuest && (
-                <span className="text-primary-foreground/40 cursor-not-allowed select-none">
-                  Staff Portal
-                </span>
               )}
               <p>© {new Date().getFullYear()} {CLINIC_INFO.name}. All rights reserved.</p>
             </div>
