@@ -47,7 +47,7 @@ export default function LeaveRequestPage() {
     setSubmitting(true);
     const { error } = await supabase.from('leave_requests').insert({ user_id: user.id, leave_type: leaveType, start_date: startDate, end_date: endDate, reason: reason || null });
     if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    else { toast({ title: 'Request submitted', description: 'Your leave request has been sent for admin approval.' }); setShowForm(false); setLeaveType('annual'); setStartDate(''); setEndDate(''); setReason(''); fetchData(); }
+    else { toast({ title: 'Request submitted', description: 'Your leave request has been sent for admin approval.' }); setShowForm(false); setLeaveType('Annual'); setStartDate(''); setEndDate(''); setReason(''); fetchData(); }
     setSubmitting(false);
   };
 
