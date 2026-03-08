@@ -94,7 +94,7 @@ export default function LeaveRequestPage() {
           {teamLeaves.length === 0 ? <p className="text-sm text-muted-foreground text-center py-6">No upcoming team leaves</p> : (
             <div className="space-y-2">{teamLeaves.map((req: any) => (
               <div key={req.id} className="flex items-center justify-between p-3 rounded-md border">
-                <div className="min-w-0 flex-1"><p className="text-sm font-medium">{req.requester_name}</p><p className="text-xs text-muted-foreground capitalize">{req.leave_type} · {format(new Date(req.start_date), 'MMM d')} – {format(new Date(req.end_date), 'MMM d')}</p></div>
+                <div className="min-w-0 flex-1"><p className="text-sm font-medium">{req.requester_name}</p><p className="text-xs text-muted-foreground">{req.leave_type} · {format(new Date(req.start_date), 'MMM d')} – {format(new Date(req.end_date), 'MMM d')}</p></div>
                 <Badge className="bg-green-600">Approved</Badge>
               </div>
             ))}</div>
