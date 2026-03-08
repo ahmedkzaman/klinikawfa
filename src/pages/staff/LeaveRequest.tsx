@@ -81,7 +81,7 @@ export default function LeaveRequestPage() {
           {myRequests.length === 0 ? <p className="text-sm text-muted-foreground text-center py-6">No leave requests yet</p> : (
             <div className="space-y-2">{myRequests.map((req: any) => (
               <div key={req.id} className="flex items-center justify-between p-3 rounded-md border">
-                <div className="min-w-0 flex-1"><p className="text-sm font-medium capitalize">{req.leave_type} Leave</p><p className="text-xs text-muted-foreground">{format(new Date(req.start_date), 'MMM d')} – {format(new Date(req.end_date), 'MMM d, yyyy')}</p>{req.reason && <p className="text-xs text-muted-foreground mt-0.5">"{req.reason}"</p>}</div>
+                <div className="min-w-0 flex-1"><p className="text-sm font-medium">{req.leave_type} Leave</p><p className="text-xs text-muted-foreground">{format(new Date(req.start_date), 'MMM d')} – {format(new Date(req.end_date), 'MMM d, yyyy')}</p>{req.reason && <p className="text-xs text-muted-foreground mt-0.5">"{req.reason}"</p>}</div>
                 {statusBadge(req.status)}
               </div>
             ))}</div>
