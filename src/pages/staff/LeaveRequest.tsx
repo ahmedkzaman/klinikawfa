@@ -12,7 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 
-const LEAVE_TYPES = ['annual', 'sick', 'emergency', 'unpaid'];
+const LEAVE_TYPES = ['Annual', 'Sick', 'Emergency'];
 
 export default function LeaveRequestPage() {
   const { user } = useAuth();
@@ -20,7 +20,7 @@ export default function LeaveRequestPage() {
   const [teamLeaves, setTeamLeaves] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [leaveType, setLeaveType] = useState('annual');
+  const [leaveType, setLeaveType] = useState('Annual');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [reason, setReason] = useState('');
@@ -47,7 +47,7 @@ export default function LeaveRequestPage() {
     setSubmitting(true);
     const { error } = await supabase.from('leave_requests').insert({ user_id: user.id, leave_type: leaveType, start_date: startDate, end_date: endDate, reason: reason || null });
     if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    else { toast({ title: 'Request submitted', description: 'Your leave request has been sent for admin approval.' }); setShowForm(false); setLeaveType('annual'); setStartDate(''); setEndDate(''); setReason(''); fetchData(); }
+    else { toast({ title: 'Request submitted', description: 'Your leave request has been sent for admin approval.' }); setShowForm(false); setLeaveType('Annual'); setStartDate(''); setEndDate(''); setReason(''); fetchData(); }
     setSubmitting(false);
   };
 
@@ -81,7 +81,7 @@ export default function LeaveRequestPage() {
           {myRequests.length === 0 ? <p className="text-sm text-muted-foreground text-center py-6">No leave requests yet</p> : (
             <div className="space-y-2">{myRequests.map((req: any) => (
               <div key={req.id} className="flex items-center justify-between p-3 rounded-md border">
-                <div className="min-w-0 flex-1"><p className="text-sm font-medium capitalize">{req.leave_type} Leave</p><p className="text-xs text-muted-foreground">{format(new Date(req.start_date), 'MMM d')} – {format(new Date(req.end_date), 'MMM d, yyyy')}</p>{req.reason && <p className="text-xs text-muted-foreground mt-0.5">"{req.reason}"</p>}</div>
+                <div className="min-w-0 flex-1"><p className="text-sm font-medium">{req.leave_type} Leave</p><p className="text-xs text-muted-foreground">{format(new Date(req.start_date), 'MMM d')} – {format(new Date(req.end_date), 'MMM d, yyyy')}</p>{req.reason && <p className="text-xs text-muted-foreground mt-0.5">"{req.reason}"</p>}</div>
                 {statusBadge(req.status)}
               </div>
             ))}</div>
@@ -94,7 +94,7 @@ export default function LeaveRequestPage() {
           {teamLeaves.length === 0 ? <p className="text-sm text-muted-foreground text-center py-6">No upcoming team leaves</p> : (
             <div className="space-y-2">{teamLeaves.map((req: any) => (
               <div key={req.id} className="flex items-center justify-between p-3 rounded-md border">
-                <div className="min-w-0 flex-1"><p className="text-sm font-medium">{req.requester_name}</p><p className="text-xs text-muted-foreground capitalize">{req.leave_type} · {format(new Date(req.start_date), 'MMM d')} – {format(new Date(req.end_date), 'MMM d')}</p></div>
+                <div className="min-w-0 flex-1"><p className="text-sm font-medium">{req.requester_name}</p><p className="text-xs text-muted-foreground">{req.leave_type} · {format(new Date(req.start_date), 'MMM d')} – {format(new Date(req.end_date), 'MMM d')}</p></div>
                 <Badge className="bg-green-600">Approved</Badge>
               </div>
             ))}</div>
