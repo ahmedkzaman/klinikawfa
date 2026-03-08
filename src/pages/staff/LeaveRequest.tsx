@@ -20,7 +20,7 @@ export default function LeaveRequestPage() {
   const [teamLeaves, setTeamLeaves] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [leaveType, setLeaveType] = useState('annual');
+  const [leaveType, setLeaveType] = useState('Annual');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [reason, setReason] = useState('');
