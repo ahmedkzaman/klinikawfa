@@ -12,7 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 
-const LEAVE_TYPES = ['annual', 'sick', 'emergency', 'unpaid'];
+const LEAVE_TYPES = ['Annual', 'Sick', 'Emergency'];
 
 export default function LeaveRequestPage() {
   const { user } = useAuth();
