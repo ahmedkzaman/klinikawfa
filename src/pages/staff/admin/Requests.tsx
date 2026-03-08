@@ -108,7 +108,7 @@ export default function AdminRequests() {
             <Card><CardHeader><CardTitle>Pending</CardTitle></CardHeader><CardContent className="space-y-3">
               {pendingLeaves.map((req: any) => (
                 <div key={req.id} className="flex items-center justify-between p-3 rounded-md border bg-card">
-                  <div className="min-w-0 flex-1"><p className="text-sm font-medium">{req.requester_name}</p><p className="text-xs text-muted-foreground capitalize">{req.leave_type} · {format(new Date(req.start_date), 'MMM d')} – {format(new Date(req.end_date), 'MMM d, yyyy')}</p>{req.reason && <p className="text-xs text-muted-foreground mt-1">"{req.reason}"</p>}</div>
+                  <div className="min-w-0 flex-1"><p className="text-sm font-medium">{req.requester_name}</p><p className="text-xs text-muted-foreground">{req.leave_type} · {format(new Date(req.start_date), 'MMM d')} – {format(new Date(req.end_date), 'MMM d, yyyy')}</p>{req.reason && <p className="text-xs text-muted-foreground mt-1">"{req.reason}"</p>}</div>
                   <div className="flex gap-2 ml-3"><Button size="sm" variant="outline" onClick={() => handleApproveLeave(req)} disabled={processing === req.id}><CheckCircle className="h-4 w-4 mr-1" />Approve</Button><Button size="sm" variant="ghost" onClick={() => handleRejectLeave(req)} disabled={processing === req.id}><XCircle className="h-4 w-4 mr-1" />Reject</Button></div>
                 </div>
               ))}
