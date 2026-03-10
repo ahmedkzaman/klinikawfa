@@ -1,19 +1,25 @@
 
 
-## Add collapsible "Applications" section to Staff sidebar
+## Fix: Allow users to read their own role from `user_roles`
 
-Replicate BioInnoTech's sidebar structure by moving "Leave" out of the Staff section into a new collapsible "Applications" section.
+### Problem
+The `user_roles` table currently only has a SELECT policy for admins (`is_admin(auth.uid())`). When a non-admin user (like staff) logs in, they cannot read their own role, so the app defaults to `roles = []` and hides the Staff Portal link.
 
-### Changes to `src/components/staff/StaffLayout.tsx`
+### Solution
+Add one new RLS policy to `user_roles`:
 
-1. **Add imports**: `Collapsible`, `CollapsibleContent`, `CollapsibleTrigger` from radix, and `ChevronDown` icon
-2. **Create `applicationsNavItems` array** with Leave (currently the only application feature)
-3. **Remove Leave** from `staffNavItems`
-4. **Add collapsible Applications section** in `SidebarNav` between Staff and Admin sections, matching BioInnoTech's pattern:
-   - Divider
-   - Collapsible wrapper with `defaultOpen` based on current route
-   - "APPLICATIONS" header as trigger with chevron icon
-   - Nav items inside collapsible content
+```sql
+CREATE POLICY "Users can view own role"
+ON public.user_roles
+FOR SELECT
+TO authenticated
+USING (auth.uid() = user_id);
+```
 
-This matches BioInnoTech's layout exactly. Additional application items (like Petty Cash or Appraisal) can be added later.
+This allows any authenticated user to read their own role record, while the existing admin policies remain unchanged for full role management (insert/update/delete).
+
+### What stays the same
+- Admins keep full SELECT/INSERT/UPDATE/DELETE access to all roles
+- Only admins can assign, change, or remove roles
+- Users can only see their own role, not anyone else's
 

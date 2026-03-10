@@ -3,9 +3,10 @@ import { useNavigate, Link, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   MapPin, Clock, History, Settings, LogOut, Menu, Home, Users, Map, CalendarDays, CalendarOff, Inbox, FileText,
-  LayoutDashboard, CalendarCheck, Stethoscope, Video, Image, Star
+  LayoutDashboard, CalendarCheck, Stethoscope, Video, Image, Star, ChevronDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
@@ -16,8 +17,11 @@ const staffNavItems = [
   { href: '/staff/punch', label: 'Punch In/Out', icon: MapPin },
   { href: '/staff/history', label: 'History', icon: History },
   { href: '/staff/calendar', label: 'Calendar', icon: CalendarDays },
-  { href: '/staff/leave', label: 'Leave', icon: CalendarOff },
   { href: '/staff/documents', label: 'Documents', icon: FileText },
+];
+
+const applicationsNavItems = [
+  { href: '/staff/leave', label: 'Leave', icon: CalendarOff },
 ];
 
 const adminNavItems = [
@@ -64,6 +68,37 @@ function SidebarNav({ isAdmin, pathname, onLinkClick }: { isAdmin: boolean; path
           </Link>
         ))}
       </div>
+
+      {/* Applications Section - Collapsible */}
+      <div className="my-4 mx-4 border-t" />
+      <Collapsible defaultOpen={applicationsNavItems.some(item => pathname.startsWith(item.href))}>
+        <div className="px-4 mb-2 flex items-center justify-between">
+          <CollapsibleTrigger className="flex items-center justify-between w-full group">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Applications</span>
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+          </CollapsibleTrigger>
+        </div>
+        <CollapsibleContent>
+          <div className="space-y-1 px-2">
+            {applicationsNavItems.map((item) => (
+              <Link
+                key={item.href}
+                to={item.href}
+                onClick={onLinkClick}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                  isActive(item.href)
+                    ? 'bg-primary/10 text-primary font-medium'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                )}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
 
       {isAdmin && (
         <>
