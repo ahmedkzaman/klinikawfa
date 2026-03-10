@@ -91,6 +91,7 @@ export default function AppraisalForm() {
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [kpis, setKpis] = useState<KpiResponse[]>([]);
   const [devObjectives, setDevObjectives] = useState<DevObjective[]>([]);
+  const [staffObjectives, setStaffObjectives] = useState<DevObjective[]>([]);
   const [addEvaluatorOpen, setAddEvaluatorOpen] = useState(false);
   const [newEvalId, setNewEvalId] = useState('');
   const [newEvalRole, setNewEvalRole] = useState('');
