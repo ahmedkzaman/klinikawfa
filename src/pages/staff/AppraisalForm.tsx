@@ -398,6 +398,7 @@ export default function AppraisalForm() {
               <TabsTrigger value="partE" className="text-xs">E: KPIs</TabsTrigger>
               <TabsTrigger value="partF" className="text-xs">F: Summary</TabsTrigger>
               <TabsTrigger value="partG" className="text-xs">G: Development</TabsTrigger>
+              {isAdmin && <TabsTrigger value="review" className="text-xs">📊 Review All</TabsTrigger>}
             </TabsList>
 
             {/* Part B */}
