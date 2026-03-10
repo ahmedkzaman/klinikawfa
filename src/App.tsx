@@ -28,6 +28,8 @@ import StaffHistory from "./pages/staff/History";
 import StaffCalendar from "./pages/staff/Calendar";
 import StaffLeaveRequest from "./pages/staff/LeaveRequest";
 import StaffDocuments from "./pages/staff/Documents";
+import PerformanceAppraisal from "./pages/staff/PerformanceAppraisal";
+import AppraisalForm from "./pages/staff/AppraisalForm";
 import StaffAdminDashboard from "./pages/staff/admin/Dashboard";
 import AdminEmployees from "./pages/staff/admin/Employees";
 import AdminZones from "./pages/staff/admin/Zones";
