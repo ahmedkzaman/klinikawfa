@@ -12,7 +12,8 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { ArrowLeft, Save, Send, Plus, UserPlus } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ArrowLeft, Save, Send, Plus, UserPlus, CheckCircle, ClipboardCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   RATING_LABELS, CLINICAL_CRITERIA, PATIENT_CRITERIA, ATTENDANCE_CRITERIA,
@@ -78,6 +79,274 @@ function CriteriaSection({
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function ReviewPanel({
+  responses,
+  appraisal,
+  getProfileName,
+  appraisalId,
+  queryClient,
+}: {
+  responses: any[];
+  appraisal: any;
+  getProfileName: (uid: string) => string;
+  appraisalId: string;
+  queryClient: any;
+}) {
+  const ROLES = ['Self', 'Manager', 'Peer', 'Nursing'] as const;
+  const submitted = responses.filter((r) => r.status === 'submitted');
+  const byRole = (role: string) => submitted.find((r) => r.evaluator_role === role);
+
+  function getRating(role: string, key: string): number | null {
+    const resp = byRole(role);
+    return resp?.[`${key}_rating`] ?? null;
+  }
+
+  function getAvg(key: string): string {
+    const vals = ROLES.map((r) => getRating(r, key)).filter((v): v is number => v != null);
+    if (!vals.length) return '—';
+    return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
+  }
+
+  function getSectionScore(role: string, section: string): number | null {
+    const resp = byRole(role);
+    return resp?.[`section_${section}_score`] ?? null;
+  }
+
+  function getOverallAvg(): number | null {
+    const scores = submitted
+      .map((r) => {
+        const b = r.section_b_score, c = r.section_c_score, d = r.section_d_score, e = r.section_e_score;
+        if (b == null || c == null || d == null || e == null) return null;
+        return b * SECTION_WEIGHTS.B + c * SECTION_WEIGHTS.C + d * SECTION_WEIGHTS.D + e * SECTION_WEIGHTS.E;
+      })
+      .filter((v): v is number => v != null);
+    if (!scores.length) return null;
+    return scores.reduce((a, b) => a + b, 0) / scores.length;
+  }
+
+  const finalizeMutation = useMutation({
+    mutationFn: async (newStatus: string) => {
+      const overall = getOverallAvg();
+      const { error } = await supabase
+        .from('performance_appraisals')
+        .update({
+          status: newStatus,
+          overall_weighted_score: overall,
+          date_of_appraisal: new Date().toISOString().split('T')[0],
+        })
+        .eq('id', appraisalId);
+      if (error) throw error;
+    },
+    onSuccess: (_, status) => {
+      toast.success(`Appraisal marked as ${status}`);
+      queryClient.invalidateQueries({ queryKey: ['appraisal', appraisalId] });
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  function CriteriaTable({ title, criteria }: { title: string; criteria: readonly { key: string; label: string }[] }) {
+    return (
+      <Card className="mb-6">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">{title}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[200px]">Criteria</TableHead>
+                {ROLES.map((r) => <TableHead key={r} className="text-center w-[80px]">{r}</TableHead>)}
+                <TableHead className="text-center w-[80px] font-bold">Avg</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {criteria.map((c) => (
+                <TableRow key={c.key}>
+                  <TableCell className="text-sm font-medium">{c.label}</TableCell>
+                  {ROLES.map((r) => {
+                    const val = getRating(r, c.key);
+                    return (
+                      <TableCell key={r} className="text-center">
+                        {val != null ? (
+                          <Badge variant={val >= 4 ? 'default' : val >= 3 ? 'secondary' : 'destructive'} className="text-xs">
+                            {val}
+                          </Badge>
+                        ) : '—'}
+                      </TableCell>
+                    );
+                  })}
+                  <TableCell className="text-center font-bold text-sm">{getAvg(c.key)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const selfResp = byRole('Self');
+  const selfKpis = selfResp?.kpi_responses as KpiResponse[] | null;
+
+  return (
+    <div className="space-y-6">
+      {/* Status controls */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <p className="text-sm text-muted-foreground">
+                {submitted.length} of {responses.length} evaluator(s) submitted
+              </p>
+              {getOverallAvg() != null && (
+                <p className="text-lg font-bold mt-1">
+                  Consolidated Score: <span className="text-primary">{getOverallAvg()!.toFixed(2)} / 5.0</span>
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => finalizeMutation.mutate('reviewed')}
+                disabled={finalizeMutation.isPending || appraisal.status === 'completed'}
+              >
+                <ClipboardCheck className="h-4 w-4 mr-2" />Mark as Reviewed
+              </Button>
+              <Button
+                onClick={() => finalizeMutation.mutate('completed')}
+                disabled={finalizeMutation.isPending || appraisal.status === 'completed'}
+              >
+                <CheckCircle className="h-4 w-4 mr-2" />Complete & Finalize
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <CriteriaTable title="Section B — Clinical Skills & Competency" criteria={CLINICAL_CRITERIA} />
+      <CriteriaTable title="Section C — Patient Satisfaction & Communication" criteria={PATIENT_CRITERIA} />
+      <CriteriaTable title="Section D — Attendance & Punctuality" criteria={ATTENDANCE_CRITERIA} />
+
+      {/* KPIs from Self */}
+      <Card className="mb-6">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Section E — KPIs (Self-Assessment)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {selfKpis && selfKpis.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>KPI</TableHead>
+                  <TableHead>Target</TableHead>
+                  <TableHead>Actual</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {selfKpis.map((k) => {
+                  const def = DOCTOR_KPIS.find((d) => d.number === k.kpi_number);
+                  return (
+                    <TableRow key={k.kpi_number}>
+                      <TableCell>{k.kpi_number}</TableCell>
+                      <TableCell className="text-sm">{def?.description}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{k.target}</TableCell>
+                      <TableCell className="text-sm">{k.actual_result || '—'}</TableCell>
+                      <TableCell>
+                        {k.status ? (
+                          <Badge variant={k.status === 'Met' ? 'default' : k.status === 'Partial' ? 'secondary' : 'destructive'}>
+                            {k.status}
+                          </Badge>
+                        ) : '—'}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">No KPI data from self-assessment yet.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Section Scores by Evaluator */}
+      <Card className="mb-6">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Overall Scores by Evaluator</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Section</TableHead>
+                {ROLES.map((r) => <TableHead key={r} className="text-center">{r}</TableHead>)}
+                <TableHead className="text-center font-bold">Avg</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {[
+                { key: 'b', label: 'B: Clinical (30%)', weight: SECTION_WEIGHTS.B },
+                { key: 'c', label: 'C: Patient (30%)', weight: SECTION_WEIGHTS.C },
+                { key: 'd', label: 'D: Attendance (20%)', weight: SECTION_WEIGHTS.D },
+                { key: 'e', label: 'E: KPIs (20%)', weight: SECTION_WEIGHTS.E },
+              ].map((s) => {
+                const vals = ROLES.map((r) => getSectionScore(r, s.key)).filter((v): v is number => v != null);
+                const avg = vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2) : '—';
+                return (
+                  <TableRow key={s.key}>
+                    <TableCell className="font-medium text-sm">{s.label}</TableCell>
+                    {ROLES.map((r) => {
+                      const v = getSectionScore(r, s.key);
+                      return <TableCell key={r} className="text-center">{v != null ? v.toFixed(2) : '—'}</TableCell>;
+                    })}
+                    <TableCell className="text-center font-bold">{avg}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Development Objectives */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Section G — Development Objectives</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {submitted.map((resp) => {
+            const objs = Array.isArray(resp.development_objectives) ? (resp.development_objectives as DevObjective[]) : [];
+            if (!objs.length) return null;
+            return (
+              <div key={resp.id}>
+                <h4 className="text-sm font-medium mb-2">
+                  {getProfileName(resp.evaluator_id)} ({resp.evaluator_role})
+                </h4>
+                <div className="space-y-2">
+                  {objs.map((obj, i) => (
+                    <div key={i} className="border rounded-lg p-3 text-sm space-y-1">
+                      <p><span className="font-medium">Objective:</span> {obj.objective || '—'}</p>
+                      <p><span className="font-medium">Action:</span> {obj.action || '—'}</p>
+                      <p><span className="font-medium">Resources:</span> {obj.resources || '—'}</p>
+                      <p><span className="font-medium">Target Date:</span> {obj.target_date || '—'}</p>
+                      <p><span className="font-medium">Success Measure:</span> {obj.success_measure || '—'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          {submitted.every((r) => !Array.isArray(r.development_objectives) || !(r.development_objectives as any[]).length) && (
+            <p className="text-sm text-muted-foreground text-center py-4">No development objectives submitted yet.</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -397,6 +666,7 @@ export default function AppraisalForm() {
               <TabsTrigger value="partE" className="text-xs">E: KPIs</TabsTrigger>
               <TabsTrigger value="partF" className="text-xs">F: Summary</TabsTrigger>
               <TabsTrigger value="partG" className="text-xs">G: Development</TabsTrigger>
+              {isAdmin && <TabsTrigger value="review" className="text-xs">📊 Review All</TabsTrigger>}
             </TabsList>
 
             {/* Part B */}
@@ -712,6 +982,19 @@ export default function AppraisalForm() {
                 </Card>
               )}
             </TabsContent>
+
+            {/* Review All (Admin only) */}
+            {isAdmin && (
+              <TabsContent value="review">
+                <ReviewPanel
+                  responses={responses || []}
+                  appraisal={appraisal}
+                  getProfileName={getProfileName}
+                  appraisalId={id!}
+                  queryClient={queryClient}
+                />
+              </TabsContent>
+            )}
           </Tabs>
 
           {!isReadOnly && (
