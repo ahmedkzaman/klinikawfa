@@ -28,6 +28,8 @@ import StaffHistory from "./pages/staff/History";
 import StaffCalendar from "./pages/staff/Calendar";
 import StaffLeaveRequest from "./pages/staff/LeaveRequest";
 import StaffDocuments from "./pages/staff/Documents";
+import PerformanceAppraisal from "./pages/staff/PerformanceAppraisal";
+import AppraisalForm from "./pages/staff/AppraisalForm";
 import StaffAdminDashboard from "./pages/staff/admin/Dashboard";
 import AdminEmployees from "./pages/staff/admin/Employees";
 import AdminZones from "./pages/staff/admin/Zones";
@@ -102,6 +104,8 @@ const App = () => (
                 <Route path="calendar" element={<StaffCalendar />} />
                 <Route path="leave" element={<StaffLeaveRequest />} />
                 <Route path="documents" element={<StaffDocuments />} />
+                <Route path="appraisal" element={<PerformanceAppraisal />} />
+                <Route path="appraisal/:id" element={<AppraisalForm />} />
                 <Route path="admin" element={<StaffAdminDashboard />} />
                 <Route path="admin/employees" element={<AdminEmployees />} />
                 <Route path="admin/zones" element={<AdminZones />} />

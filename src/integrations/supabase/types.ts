@@ -77,6 +77,212 @@ export type Database = {
         }
         Relationships: []
       }
+      appraisal_responses: {
+        Row: {
+          absence_notification_evidence: string | null
+          absence_notification_rating: number | null
+          appraisal_id: string
+          approved_leave_days: number | null
+          attendance_overall_comments: string | null
+          challenging_case_summary: string | null
+          clinical_development_summary: string | null
+          clinical_documentation_evidence: string | null
+          clinical_documentation_rating: number | null
+          clinical_knowledge_evidence: string | null
+          clinical_knowledge_rating: number | null
+          clinical_strength_summary: string | null
+          compassion_empathy_evidence: string | null
+          compassion_empathy_rating: number | null
+          complaints_pending: number | null
+          complaints_resolved: number | null
+          created_at: string
+          cultural_sensitivity_evidence: string | null
+          cultural_sensitivity_rating: number | null
+          days_present: number | null
+          development_objectives: Json | null
+          diagnostic_accuracy_evidence: string | null
+          diagnostic_accuracy_rating: number | null
+          early_departures: number | null
+          emergency_response_evidence: string | null
+          emergency_response_rating: number | null
+          evaluator_id: string
+          evaluator_role: string
+          guidelines_adherence_evidence: string | null
+          guidelines_adherence_rating: number | null
+          id: string
+          informed_consent_evidence: string | null
+          informed_consent_rating: number | null
+          kpi_responses: Json | null
+          late_arrivals: number | null
+          medication_management_evidence: string | null
+          medication_management_rating: number | null
+          oncall_compliance_evidence: string | null
+          oncall_compliance_rating: number | null
+          ontime_arrival_evidence: string | null
+          ontime_arrival_rating: number | null
+          patient_communication_evidence: string | null
+          patient_communication_rating: number | null
+          patient_complaints_count: number | null
+          patient_reviews_count: number | null
+          patient_satisfaction_score: number | null
+          patient_satisfaction_source: string | null
+          procedural_competence_evidence: string | null
+          procedural_competence_rating: number | null
+          response_complaints_evidence: string | null
+          response_complaints_rating: number | null
+          schedule_adherence_evidence: string | null
+          schedule_adherence_rating: number | null
+          section_b_score: number | null
+          section_c_score: number | null
+          section_d_score: number | null
+          section_e_score: number | null
+          status: string
+          total_working_days: number | null
+          treatment_planning_evidence: string | null
+          treatment_planning_rating: number | null
+          unapproved_absences: number | null
+          updated_at: string
+        }
+        Insert: {
+          absence_notification_evidence?: string | null
+          absence_notification_rating?: number | null
+          appraisal_id: string
+          approved_leave_days?: number | null
+          attendance_overall_comments?: string | null
+          challenging_case_summary?: string | null
+          clinical_development_summary?: string | null
+          clinical_documentation_evidence?: string | null
+          clinical_documentation_rating?: number | null
+          clinical_knowledge_evidence?: string | null
+          clinical_knowledge_rating?: number | null
+          clinical_strength_summary?: string | null
+          compassion_empathy_evidence?: string | null
+          compassion_empathy_rating?: number | null
+          complaints_pending?: number | null
+          complaints_resolved?: number | null
+          created_at?: string
+          cultural_sensitivity_evidence?: string | null
+          cultural_sensitivity_rating?: number | null
+          days_present?: number | null
+          development_objectives?: Json | null
+          diagnostic_accuracy_evidence?: string | null
+          diagnostic_accuracy_rating?: number | null
+          early_departures?: number | null
+          emergency_response_evidence?: string | null
+          emergency_response_rating?: number | null
+          evaluator_id: string
+          evaluator_role: string
+          guidelines_adherence_evidence?: string | null
+          guidelines_adherence_rating?: number | null
+          id?: string
+          informed_consent_evidence?: string | null
+          informed_consent_rating?: number | null
+          kpi_responses?: Json | null
+          late_arrivals?: number | null
+          medication_management_evidence?: string | null
+          medication_management_rating?: number | null
+          oncall_compliance_evidence?: string | null
+          oncall_compliance_rating?: number | null
+          ontime_arrival_evidence?: string | null
+          ontime_arrival_rating?: number | null
+          patient_communication_evidence?: string | null
+          patient_communication_rating?: number | null
+          patient_complaints_count?: number | null
+          patient_reviews_count?: number | null
+          patient_satisfaction_score?: number | null
+          patient_satisfaction_source?: string | null
+          procedural_competence_evidence?: string | null
+          procedural_competence_rating?: number | null
+          response_complaints_evidence?: string | null
+          response_complaints_rating?: number | null
+          schedule_adherence_evidence?: string | null
+          schedule_adherence_rating?: number | null
+          section_b_score?: number | null
+          section_c_score?: number | null
+          section_d_score?: number | null
+          section_e_score?: number | null
+          status?: string
+          total_working_days?: number | null
+          treatment_planning_evidence?: string | null
+          treatment_planning_rating?: number | null
+          unapproved_absences?: number | null
+          updated_at?: string
+        }
+        Update: {
+          absence_notification_evidence?: string | null
+          absence_notification_rating?: number | null
+          appraisal_id?: string
+          approved_leave_days?: number | null
+          attendance_overall_comments?: string | null
+          challenging_case_summary?: string | null
+          clinical_development_summary?: string | null
+          clinical_documentation_evidence?: string | null
+          clinical_documentation_rating?: number | null
+          clinical_knowledge_evidence?: string | null
+          clinical_knowledge_rating?: number | null
+          clinical_strength_summary?: string | null
+          compassion_empathy_evidence?: string | null
+          compassion_empathy_rating?: number | null
+          complaints_pending?: number | null
+          complaints_resolved?: number | null
+          created_at?: string
+          cultural_sensitivity_evidence?: string | null
+          cultural_sensitivity_rating?: number | null
+          days_present?: number | null
+          development_objectives?: Json | null
+          diagnostic_accuracy_evidence?: string | null
+          diagnostic_accuracy_rating?: number | null
+          early_departures?: number | null
+          emergency_response_evidence?: string | null
+          emergency_response_rating?: number | null
+          evaluator_id?: string
+          evaluator_role?: string
+          guidelines_adherence_evidence?: string | null
+          guidelines_adherence_rating?: number | null
+          id?: string
+          informed_consent_evidence?: string | null
+          informed_consent_rating?: number | null
+          kpi_responses?: Json | null
+          late_arrivals?: number | null
+          medication_management_evidence?: string | null
+          medication_management_rating?: number | null
+          oncall_compliance_evidence?: string | null
+          oncall_compliance_rating?: number | null
+          ontime_arrival_evidence?: string | null
+          ontime_arrival_rating?: number | null
+          patient_communication_evidence?: string | null
+          patient_communication_rating?: number | null
+          patient_complaints_count?: number | null
+          patient_reviews_count?: number | null
+          patient_satisfaction_score?: number | null
+          patient_satisfaction_source?: string | null
+          procedural_competence_evidence?: string | null
+          procedural_competence_rating?: number | null
+          response_complaints_evidence?: string | null
+          response_complaints_rating?: number | null
+          schedule_adherence_evidence?: string | null
+          schedule_adherence_rating?: number | null
+          section_b_score?: number | null
+          section_c_score?: number | null
+          section_d_score?: number | null
+          section_e_score?: number | null
+          status?: string
+          total_working_days?: number | null
+          treatment_planning_evidence?: string | null
+          treatment_planning_rating?: number | null
+          unapproved_absences?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appraisal_responses_appraisal_id_fkey"
+            columns: ["appraisal_id"]
+            isOneToOne: false
+            referencedRelation: "performance_appraisals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attendance_records: {
         Row: {
           accuracy_meters: number | null
@@ -391,6 +597,53 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      performance_appraisals: {
+        Row: {
+          appraisal_period_from: string
+          appraisal_period_to: string
+          created_at: string
+          created_by: string
+          date_of_appraisal: string | null
+          doctor_id: string
+          id: string
+          overall_weighted_score: number | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          appraisal_period_from: string
+          appraisal_period_to: string
+          created_at?: string
+          created_by: string
+          date_of_appraisal?: string | null
+          doctor_id: string
+          id?: string
+          overall_weighted_score?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          appraisal_period_from?: string
+          appraisal_period_to?: string
+          created_at?: string
+          created_by?: string
+          date_of_appraisal?: string | null
+          doctor_id?: string
+          id?: string
+          overall_weighted_score?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "performance_appraisals_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
