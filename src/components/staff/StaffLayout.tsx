@@ -22,6 +22,7 @@ const staffNavItems = [
 
 const applicationsNavItems = [
   { href: '/staff/leave', label: 'Leave', icon: CalendarOff },
+  { href: '/staff/appraisal', label: 'Performance Appraisal', icon: ClipboardCheck },
 ];
 
 const adminNavItems = [
