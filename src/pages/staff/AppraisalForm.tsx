@@ -714,6 +714,19 @@ export default function AppraisalForm() {
                 </Card>
               )}
             </TabsContent>
+
+            {/* Review All (Admin only) */}
+            {isAdmin && (
+              <TabsContent value="review">
+                <ReviewPanel
+                  responses={responses || []}
+                  appraisal={appraisal}
+                  getProfileName={getProfileName}
+                  appraisalId={id!}
+                  queryClient={queryClient}
+                />
+              </TabsContent>
+            )}
           </Tabs>
 
           {!isReadOnly && (
