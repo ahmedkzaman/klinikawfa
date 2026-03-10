@@ -100,6 +100,7 @@ function SidebarNav({ isAdmin, pathname, onLinkClick }: { isAdmin: boolean; path
         </CollapsibleContent>
       </Collapsible>
 
+      {isAdmin && (
         <>
           <div className="my-4 mx-4 border-t" />
           <div className="px-4 mb-2">
