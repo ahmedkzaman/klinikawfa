@@ -609,18 +609,22 @@ export default function AppraisalForm() {
 
             {/* Part G */}
             <TabsContent value="partG">
-              <Card>
+              {/* Staff's Own Development Plan */}
+              <Card className="mb-6">
                 <CardHeader>
-                  <CardTitle>Part G — Development Plan & Next Period Objectives</CardTitle>
-                  <CardDescription>Set SMART objectives for the next appraisal period.</CardDescription>
+                  <CardTitle>Staff's Own Development Plan</CardTitle>
+                  <CardDescription>The doctor's self-identified development objectives and goals.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {devObjectives.map((obj, idx) => (
+                  {staffObjectives.length === 0 && !isSelfEvaluator && (
+                    <p className="text-sm text-muted-foreground text-center py-4">The doctor has not submitted their development objectives yet.</p>
+                  )}
+                  {staffObjectives.map((obj, idx) => (
                     <div key={idx} className="border rounded-lg p-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="font-medium text-sm">Objective {idx + 1}</span>
-                        {!isReadOnly && (
-                          <Button variant="ghost" size="sm" onClick={() => setDevObjectives(devObjectives.filter((_, i) => i !== idx))}>
+                        {isSelfEvaluator && !isReadOnly && (
+                          <Button variant="ghost" size="sm" onClick={() => setStaffObjectives(staffObjectives.filter((_, i) => i !== idx))}>
                             Remove
                           </Button>
                         )}
@@ -628,34 +632,85 @@ export default function AppraisalForm() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
                           <Label className="text-xs">Objective / Goal</Label>
-                          <Input value={obj.objective} onChange={(e) => { const u = [...devObjectives]; u[idx] = { ...u[idx], objective: e.target.value }; setDevObjectives(u); }} disabled={isReadOnly} />
+                          <Input value={obj.objective} onChange={(e) => { const u = [...staffObjectives]; u[idx] = { ...u[idx], objective: e.target.value }; setStaffObjectives(u); }} disabled={!isSelfEvaluator || isReadOnly} />
                         </div>
                         <div>
                           <Label className="text-xs">Action / Development Activity</Label>
-                          <Input value={obj.action} onChange={(e) => { const u = [...devObjectives]; u[idx] = { ...u[idx], action: e.target.value }; setDevObjectives(u); }} disabled={isReadOnly} />
+                          <Input value={obj.action} onChange={(e) => { const u = [...staffObjectives]; u[idx] = { ...u[idx], action: e.target.value }; setStaffObjectives(u); }} disabled={!isSelfEvaluator || isReadOnly} />
                         </div>
                         <div>
                           <Label className="text-xs">Resources Needed</Label>
-                          <Input value={obj.resources} onChange={(e) => { const u = [...devObjectives]; u[idx] = { ...u[idx], resources: e.target.value }; setDevObjectives(u); }} disabled={isReadOnly} />
+                          <Input value={obj.resources} onChange={(e) => { const u = [...staffObjectives]; u[idx] = { ...u[idx], resources: e.target.value }; setStaffObjectives(u); }} disabled={!isSelfEvaluator || isReadOnly} />
                         </div>
                         <div>
                           <Label className="text-xs">Target Date</Label>
-                          <Input type="date" value={obj.target_date} onChange={(e) => { const u = [...devObjectives]; u[idx] = { ...u[idx], target_date: e.target.value }; setDevObjectives(u); }} disabled={isReadOnly} />
+                          <Input type="date" value={obj.target_date} onChange={(e) => { const u = [...staffObjectives]; u[idx] = { ...u[idx], target_date: e.target.value }; setStaffObjectives(u); }} disabled={!isSelfEvaluator || isReadOnly} />
                         </div>
                         <div className="md:col-span-2">
                           <Label className="text-xs">Success Measure</Label>
-                          <Input value={obj.success_measure} onChange={(e) => { const u = [...devObjectives]; u[idx] = { ...u[idx], success_measure: e.target.value }; setDevObjectives(u); }} disabled={isReadOnly} />
+                          <Input value={obj.success_measure} onChange={(e) => { const u = [...staffObjectives]; u[idx] = { ...u[idx], success_measure: e.target.value }; setStaffObjectives(u); }} disabled={!isSelfEvaluator || isReadOnly} />
                         </div>
                       </div>
                     </div>
                   ))}
-                  {!isReadOnly && (
-                    <Button variant="outline" onClick={() => setDevObjectives([...devObjectives, { objective: '', action: '', resources: '', target_date: '', success_measure: '' }])}>
-                      <Plus className="h-4 w-4 mr-2" />Add Objective
+                  {isSelfEvaluator && !isReadOnly && (
+                    <Button variant="outline" onClick={() => setStaffObjectives([...staffObjectives, { objective: '', action: '', resources: '', target_date: '', success_measure: '' }])}>
+                      <Plus className="h-4 w-4 mr-2" />Add My Objective
                     </Button>
                   )}
                 </CardContent>
               </Card>
+
+              {/* Evaluator's Recommendations (only for non-Self evaluators) */}
+              {!isSelfEvaluator && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Evaluator's Development Recommendations</CardTitle>
+                    <CardDescription>Your recommended objectives for the doctor's next appraisal period.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {devObjectives.map((obj, idx) => (
+                      <div key={idx} className="border rounded-lg p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-sm">Recommendation {idx + 1}</span>
+                          {!isReadOnly && (
+                            <Button variant="ghost" size="sm" onClick={() => setDevObjectives(devObjectives.filter((_, i) => i !== idx))}>
+                              Remove
+                            </Button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-xs">Objective / Goal</Label>
+                            <Input value={obj.objective} onChange={(e) => { const u = [...devObjectives]; u[idx] = { ...u[idx], objective: e.target.value }; setDevObjectives(u); }} disabled={isReadOnly} />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Action / Development Activity</Label>
+                            <Input value={obj.action} onChange={(e) => { const u = [...devObjectives]; u[idx] = { ...u[idx], action: e.target.value }; setDevObjectives(u); }} disabled={isReadOnly} />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Resources Needed</Label>
+                            <Input value={obj.resources} onChange={(e) => { const u = [...devObjectives]; u[idx] = { ...u[idx], resources: e.target.value }; setDevObjectives(u); }} disabled={isReadOnly} />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Target Date</Label>
+                            <Input type="date" value={obj.target_date} onChange={(e) => { const u = [...devObjectives]; u[idx] = { ...u[idx], target_date: e.target.value }; setDevObjectives(u); }} disabled={isReadOnly} />
+                          </div>
+                          <div className="md:col-span-2">
+                            <Label className="text-xs">Success Measure</Label>
+                            <Input value={obj.success_measure} onChange={(e) => { const u = [...devObjectives]; u[idx] = { ...u[idx], success_measure: e.target.value }; setDevObjectives(u); }} disabled={isReadOnly} />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {!isReadOnly && (
+                      <Button variant="outline" onClick={() => setDevObjectives([...devObjectives, { objective: '', action: '', resources: '', target_date: '', success_measure: '' }])}>
+                        <Plus className="h-4 w-4 mr-2" />Add Recommendation
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
           </Tabs>
 
