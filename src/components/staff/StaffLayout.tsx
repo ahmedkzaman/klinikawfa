@@ -17,8 +17,11 @@ const staffNavItems = [
   { href: '/staff/punch', label: 'Punch In/Out', icon: MapPin },
   { href: '/staff/history', label: 'History', icon: History },
   { href: '/staff/calendar', label: 'Calendar', icon: CalendarDays },
-  { href: '/staff/leave', label: 'Leave', icon: CalendarOff },
   { href: '/staff/documents', label: 'Documents', icon: FileText },
+];
+
+const applicationsNavItems = [
+  { href: '/staff/leave', label: 'Leave', icon: CalendarOff },
 ];
 
 const adminNavItems = [
