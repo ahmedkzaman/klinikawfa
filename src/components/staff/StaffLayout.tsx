@@ -3,9 +3,10 @@ import { useNavigate, Link, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   MapPin, Clock, History, Settings, LogOut, Menu, Home, Users, Map, CalendarDays, CalendarOff, Inbox, FileText,
-  LayoutDashboard, CalendarCheck, Stethoscope, Video, Image, Star
+  LayoutDashboard, CalendarCheck, Stethoscope, Video, Image, Star, ChevronDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
