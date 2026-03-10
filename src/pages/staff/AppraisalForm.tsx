@@ -135,6 +135,9 @@ export default function AppraisalForm() {
 
   // Current user's response
   const myResponse = responses?.find((r) => r.evaluator_id === user?.id);
+  const selfResponse = responses?.find((r) => r.evaluator_role === 'Self');
+  const isDoctor = user?.id === appraisal?.doctor_id;
+  const isSelfEvaluator = myResponse?.evaluator_role === 'Self';
   const isReadOnly = myResponse?.status === 'submitted' && !isAdmin;
 
   // Load form data from response
@@ -150,6 +153,17 @@ export default function AppraisalForm() {
       setKpis(initKpis());
     }
   }, [myResponse]);
+
+  // Load staff's own objectives from Self response
+  useEffect(() => {
+    if (selfResponse) {
+      setStaffObjectives(
+        Array.isArray(selfResponse.development_objectives) && (selfResponse.development_objectives as DevObjective[]).length > 0
+          ? (selfResponse.development_objectives as DevObjective[])
+          : []
+      );
+    }
+  }, [selfResponse]);
 
   function initKpis(): KpiResponse[] {
     return DOCTOR_KPIS.map((k) => ({
