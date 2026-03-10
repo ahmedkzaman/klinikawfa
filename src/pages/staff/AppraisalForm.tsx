@@ -250,7 +250,9 @@ export default function AppraisalForm() {
 
       // Part E & G
       payload.kpi_responses = kpis;
-      payload.development_objectives = devObjectives;
+      // If self-evaluator, save staff objectives as development_objectives
+      // If evaluator, save evaluator recommendations as development_objectives
+      payload.development_objectives = isSelfEvaluator ? staffObjectives : devObjectives;
 
       // Part F scores
       payload.section_b_score = sectionBScore;
