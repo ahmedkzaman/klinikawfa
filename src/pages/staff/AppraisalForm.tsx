@@ -140,7 +140,10 @@ export default function AppraisalForm() {
   useEffect(() => {
     if (myResponse) {
       setFormData(myResponse);
-      setKpis(Array.isArray(myResponse.kpi_responses) ? (myResponse.kpi_responses as KpiResponse[]) : initKpis());
+      const savedKpis = Array.isArray(myResponse.kpi_responses) && (myResponse.kpi_responses as KpiResponse[]).length > 0
+        ? (myResponse.kpi_responses as KpiResponse[])
+        : initKpis();
+      setKpis(savedKpis);
       setDevObjectives(Array.isArray(myResponse.development_objectives) ? (myResponse.development_objectives as DevObjective[]) : []);
     } else {
       setKpis(initKpis());

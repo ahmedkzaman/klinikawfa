@@ -1,24 +1,25 @@
 
 
-## Fix: KPI section showing empty in appraisal form
+## Fix: Allow users to read their own role from `user_roles`
 
-### Root Cause
-The database default for `kpi_responses` is `'[]'::jsonb` (empty array). When loading the form, the code checks `Array.isArray(myResponse.kpi_responses)` — this returns `true` for the empty array, so it uses `[]` instead of calling `initKpis()` which would populate the 13 doctor KPIs.
+### Problem
+The `user_roles` table currently only has a SELECT policy for admins (`is_admin(auth.uid())`). When a non-admin user (like staff) logs in, they cannot read their own role, so the app defaults to `roles = []` and hides the Staff Portal link.
 
-### Fix in `src/pages/staff/AppraisalForm.tsx`
+### Solution
+Add one new RLS policy to `user_roles`:
 
-Line 143: Change the condition to also check array length:
-
-```typescript
-// Before
-setKpis(Array.isArray(myResponse.kpi_responses) ? (myResponse.kpi_responses as KpiResponse[]) : initKpis());
-
-// After  
-const savedKpis = Array.isArray(myResponse.kpi_responses) && (myResponse.kpi_responses as KpiResponse[]).length > 0
-  ? (myResponse.kpi_responses as KpiResponse[])
-  : initKpis();
-setKpis(savedKpis);
+```sql
+CREATE POLICY "Users can view own role"
+ON public.user_roles
+FOR SELECT
+TO authenticated
+USING (auth.uid() = user_id);
 ```
 
-This ensures that when the DB returns an empty array (no KPIs saved yet), we initialize with the 13 default doctor KPIs instead of showing nothing.
+This allows any authenticated user to read their own role record, while the existing admin policies remain unchanged for full role management (insert/update/delete).
+
+### What stays the same
+- Admins keep full SELECT/INSERT/UPDATE/DELETE access to all roles
+- Only admins can assign, change, or remove roles
+- Users can only see their own role, not anyone else's
 
