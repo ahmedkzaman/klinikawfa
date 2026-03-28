@@ -68,7 +68,14 @@ export default function AdminEmployees() {
                   <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">{e.role === 'admin' ? <Shield className="h-5 w-5 text-primary" /> : <User className="h-5 w-5 text-muted-foreground" />}</div>
                   <div><p className="font-medium">{e.full_name || 'Unknown'}</p>{e.position && <p className="text-sm text-foreground/80">{e.position}</p>}<p className="text-sm text-muted-foreground">{e.department || 'No department'}{e.phone && ` • ${e.phone}`}</p></div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <Select value={e.position || '__none__'} onValueChange={(v) => handlePositionChange(e.id, v)}>
+                    <SelectTrigger className="w-40"><SelectValue placeholder="Set position" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">No position</SelectItem>
+                      {STAFF_POSITIONS.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                   <Badge variant={e.role === 'admin' ? 'default' : 'secondary'}>{e.role}</Badge>
                   <Select value={e.role} onValueChange={(v: 'admin' | 'staff' | 'guest') => handleRoleChange(e.id, v)}>
                      <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
