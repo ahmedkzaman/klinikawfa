@@ -893,15 +893,15 @@ export default function AppraisalForm() {
             <TabsContent value="partC">
               <Card>
                 <CardHeader>
-                  <CardTitle>{isCA ? 'Part C — Key Performance Indicators (KPIs)' : 'Part C — Patient Satisfaction & Communication'}</CardTitle>
-                  {isCA && <CardDescription>Evaluate performance against the {CA_KPIS.length} agreed KPIs.</CardDescription>}
+                  <CardTitle>{isCompetencyBased ? 'Part C — Key Performance Indicators (KPIs)' : 'Part C — Patient Satisfaction & Communication'}</CardTitle>
+                  {isCompetencyBased && <CardDescription>Evaluate performance against the {currentKpiDefs.length} agreed KPIs.</CardDescription>}
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {isCA ? (
-                    /* CA KPIs */
+                  {isCompetencyBased ? (
+                    /* Competency-based KPIs */
                     <div className="space-y-4">
                       {kpis.map((kpi, idx) => {
-                        const def = CA_KPIS.find((k) => k.number === kpi.kpi_number);
+                        const def = currentKpiDefs.find((k) => k.number === kpi.kpi_number);
                         return (
                           <div key={kpi.kpi_number} className="border rounded-lg p-4 space-y-3">
                             <div>
