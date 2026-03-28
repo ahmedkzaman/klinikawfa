@@ -684,9 +684,9 @@ export default function AppraisalForm() {
 
       // Scores
       payload.section_b_score = sectionBScore;
-      payload.section_c_score = isCA ? sectionCScore : calcSectionScore(PATIENT_CRITERIA);
+      payload.section_c_score = isCompetencyBased ? sectionCScore : calcSectionScore(PATIENT_CRITERIA);
       payload.section_d_score = sectionDScore;
-      payload.section_e_score = isCA ? caPatientFeedbackScore : sectionEScore;
+      payload.section_e_score = isCompetencyBased ? caPatientFeedbackScore : sectionEScore;
 
       if (submit) payload.status = 'submitted';
 
