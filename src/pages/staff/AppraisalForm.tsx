@@ -1013,11 +1013,11 @@ export default function AppraisalForm() {
             <TabsContent value="partE">
               <Card>
                 <CardHeader>
-                  <CardTitle>{isCA ? 'Part E — Patient Feedback' : 'Part E — Key Performance Indicators (KPIs)'}</CardTitle>
-                  {!isCA && <CardDescription>Evaluate performance against the 13 agreed KPIs.</CardDescription>}
+                  <CardTitle>{isCompetencyBased ? 'Part E — Patient Feedback' : 'Part E — Key Performance Indicators (KPIs)'}</CardTitle>
+                  {!isCompetencyBased && <CardDescription>Evaluate performance against the 13 agreed KPIs.</CardDescription>}
                 </CardHeader>
                 <CardContent>
-                  {isCA ? (
+                  {isCompetencyBased ? (
                     /* CA Patient Feedback */
                     <div className="space-y-6">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border rounded-lg p-4">
