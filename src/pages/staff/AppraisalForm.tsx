@@ -740,7 +740,7 @@ export default function AppraisalForm() {
   const formTitle = APPRAISAL_TYPE_LABELS[appraisalType] + ' Performance Appraisal';
 
   // Tab config based on type
-  const tabs = isCA
+  const tabs = isCompetencyBased
     ? [
         { value: 'partB', label: 'B: Competency' },
         { value: 'partC', label: 'C: KPIs' },
