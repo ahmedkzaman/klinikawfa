@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,11 +12,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import {
-  CalendarDays, Plus, Trash2, RefreshCw, Download, Printer, AlertTriangle, X, Users, Settings2, Shuffle, Stethoscope, UserCog
+  CalendarDays, Plus, Trash2, RefreshCw, Download, Printer, AlertTriangle, X, Users, Settings2, Shuffle, Stethoscope, UserCog, ChevronLeft, ChevronRight
 } from 'lucide-react';
-import { format, startOfWeek, addDays } from 'date-fns';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, getISOWeek, isWeekend } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 interface StaffMember {
@@ -26,12 +24,12 @@ interface StaffMember {
 }
 
 interface RosterCell {
-  staffId: string | null;
+  staffId: string;
   staffName: string;
 }
 
 interface RosterData {
-  [day: string]: { shift1: RosterCell[]; shift2: RosterCell[] };
+  [dateKey: string]: { shift1: RosterCell[]; shift2: RosterCell[] };
 }
 
 interface StaffSummary {
@@ -41,12 +39,16 @@ interface StaffSummary {
   isOvertime: boolean;
 }
 
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const SHIFT_HOURS = 8;
+const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const WEEKDAY_INDICES = [1, 2, 3, 4, 5]; // Mon-Fri
 
 const DOCTOR_POSITIONS = ['Doctor'];
 const SUPPORT_POSITIONS = ['Clinic Assistant', 'Staff Nurse', 'Medical Assistant'];
+
+function firstName(name: string) {
+  return name.split(' ')[0];
+}
 
 // ─── Reusable Roster Panel ───────────────────────────────────────────
 
@@ -63,15 +65,22 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
   const [weekdayConstraintEnabled, setWeekdayConstraintEnabled] = useState(false);
   const [constrainedStaffIds, setConstrainedStaffIds] = useState<string[]>([]);
 
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
+  // Month picker state
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   const [roster, setRoster] = useState<RosterData | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
   const [staffPerShift, setStaffPerShift] = useState(2);
 
-  // Sync when initialStaff changes
+  // Compute days of month
+  const monthDays = useMemo(() => {
+    const start = startOfMonth(new Date(selectedYear, selectedMonth, 1));
+    const end = endOfMonth(start);
+    return eachDayOfInterval({ start, end });
+  }, [selectedMonth, selectedYear]);
+
   useEffect(() => { setStaffList(initialStaff); }, [initialStaff]);
 
   const addStaff = () => {
@@ -98,54 +107,103 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
     setConstrainedStaffIds(prev => prev.includes(id) ? prev.filter(sid => sid !== id) : [...prev, id]);
   };
 
+  const prevMonth = () => {
+    if (selectedMonth === 0) { setSelectedMonth(11); setSelectedYear(y => y - 1); }
+    else setSelectedMonth(m => m - 1);
+  };
+
+  const nextMonth = () => {
+    if (selectedMonth === 11) { setSelectedMonth(0); setSelectedYear(y => y + 1); }
+    else setSelectedMonth(m => m + 1);
+  };
+
   const generateRoster = () => {
     if (staffList.length === 0) { toast.error('Add at least one staff member first'); return; }
 
     const newRoster: RosterData = {};
-    const staffHours: Record<string, number> = {};
-    const staffShifts: Record<string, number> = {};
+    // Track hours per staff per ISO week
+    const weekHours: Record<string, Record<number, number>> = {};
+    staffList.forEach(s => { weekHours[s.id] = {}; });
+
+    const getWeekHours = (staffId: string, week: number) => weekHours[staffId][week] || 0;
+    const addWeekHours = (staffId: string, week: number, hours: number) => {
+      weekHours[staffId][week] = (weekHours[staffId][week] || 0) + hours;
+    };
+
     const newWarnings: string[] = [];
 
-    staffList.forEach(s => { staffHours[s.id] = 0; staffShifts[s.id] = 0; });
-
-    for (const day of DAYS) {
-      const isWeekday = WEEKDAYS.includes(day);
+    for (const day of monthDays) {
+      const dateKey = format(day, 'yyyy-MM-dd');
+      const dayOfWeek = getDay(day);
+      const isWeekday = WEEKDAY_INDICES.includes(dayOfWeek);
+      const isoWeek = getISOWeek(day);
       const assignedToday = new Set<string>();
 
       const pickStaff = (shiftNum: 1 | 2): RosterCell[] => {
         const cells: RosterCell[] = [];
         for (let i = 0; i < staffPerShift; i++) {
           let eligible = staffList.filter(s => !assignedToday.has(s.id));
+
           if (weekdayConstraintEnabled && isWeekday && shiftNum === 2) {
             eligible = eligible.filter(s => !constrainedStaffIds.includes(s.id));
           }
+
           if (maxHoursEnabled) {
-            eligible = eligible.filter(s => staffHours[s.id] + SHIFT_HOURS <= 48);
+            eligible = eligible.filter(s => getWeekHours(s.id, isoWeek) + SHIFT_HOURS <= 48);
           }
+
+          // Fallback: if no eligible, relax hour cap
           if (eligible.length === 0) {
-            cells.push({ staffId: null, staffName: 'Unassigned' });
-            newWarnings.push(`${day} Shift ${shiftNum}: Not enough eligible staff (slot ${i + 1})`);
-            continue;
+            eligible = staffList.filter(s => !assignedToday.has(s.id));
+            if (weekdayConstraintEnabled && isWeekday && shiftNum === 2) {
+              eligible = eligible.filter(s => !constrainedStaffIds.includes(s.id));
+            }
           }
-          const pick = eligible[Math.floor(Math.random() * eligible.length)];
-          assignedToday.add(pick.id);
-          staffHours[pick.id] += SHIFT_HOURS;
-          staffShifts[pick.id] += 1;
-          cells.push({ staffId: pick.id, staffName: pick.name });
+
+          // Fallback 2: pick least-assigned from all staff not assigned today
+          if (eligible.length === 0) {
+            eligible = staffList.filter(s => !assignedToday.has(s.id));
+          }
+
+          // Final fallback: pick anyone (even if already assigned today)
+          if (eligible.length === 0) {
+            eligible = [...staffList];
+          }
+
+          // Pick the least-assigned staff member to keep balance
+          if (eligible.length > 0) {
+            // Sort by current week hours ascending, then random
+            eligible.sort((a, b) => getWeekHours(a.id, isoWeek) - getWeekHours(b.id, isoWeek));
+            const minHours = getWeekHours(eligible[0].id, isoWeek);
+            const leastAssigned = eligible.filter(s => getWeekHours(s.id, isoWeek) === minHours);
+            const pick = leastAssigned[Math.floor(Math.random() * leastAssigned.length)];
+
+            if (getWeekHours(pick.id, isoWeek) + SHIFT_HOURS > 48) {
+              newWarnings.push(`${format(day, 'dd MMM')} Shift ${shiftNum}: ${firstName(pick.name)} forced (exceeds 48h week ${isoWeek})`);
+            }
+
+            assignedToday.add(pick.id);
+            addWeekHours(pick.id, isoWeek, SHIFT_HOURS);
+            cells.push({ staffId: pick.id, staffName: pick.name });
+          }
         }
         return cells;
       };
 
-      newRoster[day] = { shift1: pickStaff(1), shift2: pickStaff(2) };
+      newRoster[dateKey] = { shift1: pickStaff(1), shift2: pickStaff(2) };
     }
 
+    // Check minimum hours warnings per week
     if (maxHoursEnabled) {
+      const allWeeks = new Set<number>();
+      monthDays.forEach(d => allWeeks.add(getISOWeek(d)));
       staffList.forEach(s => {
-        if (staffHours[s.id] < 45) {
-          newWarnings.push(`${s.name}: Only ${staffHours[s.id]}h assigned (below 45h minimum)`);
-        } else if (staffHours[s.id] > 48) {
-          newWarnings.push(`${s.name}: ${staffHours[s.id]}h assigned (exceeds 48h maximum)`);
-        }
+        allWeeks.forEach(week => {
+          const hrs = getWeekHours(s.id, week);
+          if (hrs > 0 && hrs < 45) {
+            newWarnings.push(`${s.name}: Only ${hrs}h in week ${week} (below 45h minimum)`);
+          }
+        });
       });
     }
 
@@ -157,13 +215,30 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
 
   const clearRoster = () => { setRoster(null); setWarnings([]); };
 
+  // Manual cell change
+  const updateCell = (dateKey: string, shift: 'shift1' | 'shift2', index: number, newStaffId: string) => {
+    if (!roster) return;
+    const staff = staffList.find(s => s.id === newStaffId);
+    if (!staff) return;
+    setRoster(prev => {
+      if (!prev) return prev;
+      const updated = { ...prev };
+      const dayData = { ...updated[dateKey] };
+      const cells = [...dayData[shift]];
+      cells[index] = { staffId: staff.id, staffName: staff.name };
+      dayData[shift] = cells;
+      updated[dateKey] = dayData;
+      return updated;
+    });
+  };
+
   const getSummary = (): StaffSummary[] => {
     if (!roster) return [];
     const hours: Record<string, number> = {};
     const shifts: Record<string, number> = {};
     staffList.forEach(s => { hours[s.id] = 0; shifts[s.id] = 0; });
-    for (const day of DAYS) {
-      const r = roster[day];
+    for (const dateKey of Object.keys(roster)) {
+      const r = roster[dateKey];
       [...r.shift1, ...r.shift2].forEach(cell => {
         if (cell.staffId) {
           hours[cell.staffId] = (hours[cell.staffId] || 0) + SHIFT_HOURS;
@@ -175,39 +250,45 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
       name: s.name,
       totalShifts: shifts[s.id] || 0,
       totalHours: hours[s.id] || 0,
-      isOvertime: (hours[s.id] || 0) > 48,
+      isOvertime: (hours[s.id] || 0) > 48 * Math.ceil(monthDays.length / 7),
     }));
   };
 
   const exportCSV = () => {
     if (!roster) return;
+    const monthLabel = format(new Date(selectedYear, selectedMonth, 1), 'MMMM yyyy');
     const rows: string[] = [];
-    rows.push(`${title} — Week of ${format(weekStart, 'dd MMM yyyy')}`);
-    rows.push(['Shift', ...DAYS].join(','));
+    rows.push(`${title} — ${monthLabel}`);
+    const headers = ['Shift', ...monthDays.map(d => format(d, 'dd'))];
+    rows.push(headers.join(','));
+
     const shift1Row = ['Shift 1 (8am-4pm)'];
     const shift2Row = ['Shift 2 (4pm-12am)'];
-    for (const day of DAYS) {
-      shift1Row.push(roster[day].shift1.map(c => c.staffName).join(' / '));
-      shift2Row.push(roster[day].shift2.map(c => c.staffName).join(' / '));
+    for (const day of monthDays) {
+      const key = format(day, 'yyyy-MM-dd');
+      const r = roster[key];
+      shift1Row.push(r ? r.shift1.map(c => firstName(c.staffName)).join('/') : '');
+      shift2Row.push(r ? r.shift2.map(c => firstName(c.staffName)).join('/') : '');
     }
     rows.push(shift1Row.join(','));
     rows.push(shift2Row.join(','));
     rows.push('');
-    rows.push('Staff,Total Shifts,Total Hours,Overtime');
+    rows.push('Staff,Total Shifts,Total Hours');
     getSummary().forEach(s => {
-      rows.push(`${s.name},${s.totalShifts},${s.totalHours},${s.isOvertime ? s.totalHours - 48 + 'h' : '-'}`);
+      rows.push(`${s.name},${s.totalShifts},${s.totalHours}`);
     });
     const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `roster-${rosterType}-${format(weekStart, 'yyyy-MM-dd')}.csv`;
+    a.download = `roster-${rosterType}-${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success('CSV exported');
   };
 
   const summary = getSummary();
+  const monthLabel = format(new Date(selectedYear, selectedMonth, 1), 'MMMM yyyy');
 
   return (
     <div className="space-y-6">
@@ -259,7 +340,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                 <Checkbox id={`maxHours-${rosterType}`} checked={maxHoursEnabled} onCheckedChange={(v) => setMaxHoursEnabled(!!v)} />
                 <div>
                    <Label htmlFor={`maxHours-${rosterType}`} className="text-sm font-medium">Working hours: 45–48 hours per week</Label>
-                   <p className="text-xs text-muted-foreground">Minimum 45h, maximum 48h. Hours beyond 48 will be flagged as overtime</p>
+                   <p className="text-xs text-muted-foreground">Minimum 45h, maximum 48h per calendar week. Hours beyond 48 will be flagged as overtime</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
@@ -317,17 +398,19 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <CardTitle className="text-lg flex items-center gap-2"><Shuffle className="h-5 w-5" /> {title}</CardTitle>
             <div className="flex items-center gap-2 flex-wrap">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <CalendarDays className="h-4 w-4" />
-                    Week of {format(weekStart, 'dd MMM yyyy')}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="end">
-                  <Calendar mode="single" selected={selectedDate} onSelect={(d) => d && setSelectedDate(d)} className={cn("p-3 pointer-events-auto")} />
-                </PopoverContent>
-              </Popover>
+              {/* Month Picker */}
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="icon" className="h-8 w-8" onClick={prevMonth}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="sm" className="gap-2 min-w-[140px] justify-center cursor-default">
+                  <CalendarDays className="h-4 w-4" />
+                  {monthLabel}
+                </Button>
+                <Button variant="outline" size="icon" className="h-8 w-8" onClick={nextMonth}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
               <Button onClick={generateRoster} className="gap-2"><Shuffle className="h-4 w-4" /> Generate</Button>
             </div>
           </div>
@@ -337,7 +420,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
             <Alert variant="destructive" className="mb-4">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                <ul className="text-xs space-y-1 list-disc list-inside">
+                <ul className="text-xs space-y-1 list-disc list-inside max-h-40 overflow-y-auto">
                   {warnings.map((w, i) => <li key={i}>{w}</li>)}
                 </ul>
               </AlertDescription>
@@ -350,41 +433,70 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-40 font-semibold">Shift</TableHead>
-                      {DAYS.map((day, i) => (
-                        <TableHead key={day} className="text-center min-w-[120px]">
-                          <div className="font-semibold">{day}</div>
-                          <div className="text-xs text-muted-foreground font-normal">{format(addDays(weekStart, i), 'dd/MM')}</div>
-                        </TableHead>
-                      ))}
+                      <TableHead className="w-32 font-semibold sticky left-0 bg-background z-10">Shift</TableHead>
+                      {monthDays.map(day => {
+                        const isWkend = isWeekend(day);
+                        return (
+                          <TableHead key={day.toISOString()} className={cn("text-center min-w-[80px]", isWkend && "bg-muted/30")}>
+                            <div className="font-semibold text-xs">{DAY_ABBR[getDay(day)]}</div>
+                            <div className="text-xs text-muted-foreground font-normal">{format(day, 'd')}</div>
+                          </TableHead>
+                        );
+                      })}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     <TableRow>
-                      <TableCell className="font-medium bg-muted/30">
-                        <div>Shift 1</div>
-                        <div className="text-xs text-muted-foreground">8am – 4pm</div>
+                      <TableCell className="font-medium bg-muted/30 sticky left-0 z-10">
+                        <div className="text-xs">Shift 1</div>
+                        <div className="text-[10px] text-muted-foreground">8am–4pm</div>
                       </TableCell>
-                      {DAYS.map(day => (
-                        <TableCell key={day} className="text-center">
-                          {roster[day].shift1.map((cell, i) => (
-                            <div key={i} className={cn("text-sm", cell.staffId ? '' : 'text-destructive font-medium')}>{cell.staffName}</div>
-                          ))}
-                        </TableCell>
-                      ))}
+                      {monthDays.map(day => {
+                        const dateKey = format(day, 'yyyy-MM-dd');
+                        const cells = roster[dateKey]?.shift1 || [];
+                        return (
+                          <TableCell key={dateKey} className={cn("text-center p-1", isWeekend(day) && "bg-muted/20")}>
+                            {cells.map((cell, i) => (
+                              <Select key={i} value={cell.staffId} onValueChange={v => updateCell(dateKey, 'shift1', i, v)}>
+                                <SelectTrigger className="h-6 text-[11px] border-0 bg-transparent shadow-none px-1 justify-center min-w-[60px]">
+                                  <span className="truncate">{firstName(cell.staffName)}</span>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {staffList.map(s => (
+                                    <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ))}
+                          </TableCell>
+                        );
+                      })}
                     </TableRow>
                     <TableRow>
-                      <TableCell className="font-medium bg-muted/30">
-                        <div>Shift 2</div>
-                        <div className="text-xs text-muted-foreground">4pm – 12am</div>
+                      <TableCell className="font-medium bg-muted/30 sticky left-0 z-10">
+                        <div className="text-xs">Shift 2</div>
+                        <div className="text-[10px] text-muted-foreground">4pm–12am</div>
                       </TableCell>
-                      {DAYS.map(day => (
-                        <TableCell key={day} className="text-center">
-                          {roster[day].shift2.map((cell, i) => (
-                            <div key={i} className={cn("text-sm", cell.staffId ? '' : 'text-destructive font-medium')}>{cell.staffName}</div>
-                          ))}
-                        </TableCell>
-                      ))}
+                      {monthDays.map(day => {
+                        const dateKey = format(day, 'yyyy-MM-dd');
+                        const cells = roster[dateKey]?.shift2 || [];
+                        return (
+                          <TableCell key={dateKey} className={cn("text-center p-1", isWeekend(day) && "bg-muted/20")}>
+                            {cells.map((cell, i) => (
+                              <Select key={i} value={cell.staffId} onValueChange={v => updateCell(dateKey, 'shift2', i, v)}>
+                                <SelectTrigger className="h-6 text-[11px] border-0 bg-transparent shadow-none px-1 justify-center min-w-[60px]">
+                                  <span className="truncate">{firstName(cell.staffName)}</span>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {staffList.map(s => (
+                                    <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ))}
+                          </TableCell>
+                        );
+                      })}
                     </TableRow>
                   </TableBody>
                 </Table>
@@ -392,14 +504,14 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
 
               {/* Summary */}
               <div>
-                <h3 className="text-sm font-semibold mb-2">Weekly Summary</h3>
+                <h3 className="text-sm font-semibold mb-2">Monthly Summary — {monthLabel}</h3>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Staff</TableHead>
                       <TableHead className="text-center">Total Shifts</TableHead>
                       <TableHead className="text-center">Total Hours</TableHead>
-                      <TableHead className="text-center">Overtime</TableHead>
+                      <TableHead className="text-center">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -410,9 +522,9 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                         <TableCell className="text-center">{s.totalHours}h</TableCell>
                         <TableCell className="text-center">
                           {s.isOvertime ? (
-                            <Badge variant="destructive" className="text-xs">{s.totalHours - 48}h OT</Badge>
+                            <Badge variant="destructive" className="text-xs">Overtime</Badge>
                           ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
+                            <Badge variant="secondary" className="text-xs">Normal</Badge>
                           )}
                         </TableCell>
                       </TableRow>
@@ -431,7 +543,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
           ) : (
             <div className="text-center py-12 text-muted-foreground">
               <Shuffle className="h-10 w-10 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">Select a week and click "Generate" to create a roster</p>
+              <p className="text-sm">Select a month and click "Generate" to create a roster</p>
             </div>
           )}
         </CardContent>
@@ -467,7 +579,7 @@ export default function Roster() {
         <CalendarDays className="h-7 w-7 text-primary" />
         <div>
           <h1 className="text-2xl font-bold">Roster Generator</h1>
-          <p className="text-sm text-muted-foreground">Generate weekly shift rosters with configurable rules</p>
+          <p className="text-sm text-muted-foreground">Generate monthly shift rosters with configurable rules</p>
         </div>
       </div>
 
