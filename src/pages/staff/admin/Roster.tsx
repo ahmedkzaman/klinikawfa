@@ -83,7 +83,7 @@ export default function Roster() {
       if (data) {
         setStaffList(data.map(p => ({
           id: p.id,
-          name: p.full_name || p.email || 'Unknown',
+          name: p.full_name || 'Unknown',
           position: p.position || '',
         })));
       }
