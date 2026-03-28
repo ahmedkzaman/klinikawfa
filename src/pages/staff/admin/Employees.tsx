@@ -7,6 +7,8 @@ import { Users, Shield, User, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
+const STAFF_POSITIONS = ['Clinic Assistant', 'Staff Nurse', 'Medical Assistant', 'Doctor', 'Manager'];
+
 interface Employee {
   id: string;
   full_name: string | null;
@@ -43,6 +45,14 @@ export default function AdminEmployees() {
     fetchEmployees();
   };
 
+  const handlePositionChange = async (userId: string, newPosition: string) => {
+    const position = newPosition === '__none__' ? null : newPosition;
+    const { error } = await supabase.from('profiles').update({ position }).eq('id', userId);
+    if (error) { toast({ title: 'Error', description: 'Failed to update position', variant: 'destructive' }); return; }
+    toast({ title: 'Position Updated', description: `Position changed to ${position || 'None'}` });
+    fetchEmployees();
+  };
+
   return (
     <div className="space-y-6">
       <div><h1 className="text-2xl font-bold tracking-tight">Employees</h1><p className="text-muted-foreground">Manage staff members and their roles</p></div>
@@ -58,7 +68,14 @@ export default function AdminEmployees() {
                   <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">{e.role === 'admin' ? <Shield className="h-5 w-5 text-primary" /> : <User className="h-5 w-5 text-muted-foreground" />}</div>
                   <div><p className="font-medium">{e.full_name || 'Unknown'}</p>{e.position && <p className="text-sm text-foreground/80">{e.position}</p>}<p className="text-sm text-muted-foreground">{e.department || 'No department'}{e.phone && ` • ${e.phone}`}</p></div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <Select value={e.position || '__none__'} onValueChange={(v) => handlePositionChange(e.id, v)}>
+                    <SelectTrigger className="w-40"><SelectValue placeholder="Set position" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">No position</SelectItem>
+                      {STAFF_POSITIONS.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                   <Badge variant={e.role === 'admin' ? 'default' : 'secondary'}>{e.role}</Badge>
                   <Select value={e.role} onValueChange={(v: 'admin' | 'staff' | 'guest') => handleRoleChange(e.id, v)}>
                      <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
