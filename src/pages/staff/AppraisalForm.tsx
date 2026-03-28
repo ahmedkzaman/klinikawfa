@@ -218,7 +218,7 @@ function ReviewPanel({
   });
 
   const selfResp = byRole('Self');
-  const kpiDefs = isCA ? CA_KPIS : DOCTOR_KPIS;
+  const kpiDefs = isCompetencyBased ? (isSN ? SN_KPIS : CA_KPIS) : DOCTOR_KPIS;
   const selfKpis = selfResp?.kpi_responses as KpiResponse[] | null;
 
   // Build section rows for the scores table
