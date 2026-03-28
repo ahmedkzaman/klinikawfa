@@ -140,9 +140,97 @@ export const CA_SECTION_WEIGHTS = {
   F: 0.1,
 } as const;
 
-export type AppraisalType = 'doctor' | 'clinic_assistant';
+// ─── Staff Nurse / Medical Assistant (SN/MA) Constants ──────────────────────
+
+export const SN_EVALUATOR_ROLES = ['Self', 'Manager', 'Peer'] as const;
+
+export const SN_COMPETENCY_CATEGORIES = [
+  {
+    key: 'core_competency',
+    label: 'B1. Core Competency & Professional Certification',
+    indicators: [
+      { key: 'sn_apc', label: 'Annual Practising Certificate (APC)', description: 'Maintains valid APC annually; ensures registration is current and compliant with regulatory requirements.' },
+      { key: 'sn_board_registration', label: 'Professional Board Registration', description: 'Complies with Malaysian Nursing Board or Medical Assistant Board registration requirements at all times.' },
+      { key: 'sn_credentialing', label: 'Credentialing & Privileging (C&P)', description: 'Completes required Credentialing & Privileging processes (e.g. Dorsal Slit Circumcision for MA) as applicable.' },
+      { key: 'sn_cpd', label: 'Continuing Professional Development', description: 'Keeps clinical knowledge current through CPD activities; attends required training and updates.' },
+    ],
+  },
+  {
+    key: 'patient_management',
+    label: 'B2. Patient Management & Administration',
+    indicators: [
+      { key: 'sn_greeting', label: 'Customer Service & Registration', description: 'Greets patients warmly; registers accurately; ensures zero duplicate registrations.' },
+      { key: 'sn_scheduling', label: 'Appointment Management', description: 'Manages appointments efficiently with ≤ 2% missed or wrongly scheduled rate.' },
+      { key: 'sn_financial', label: 'Financial Records & Billing', description: 'Handles daily financial records accurately with zero billing errors or discrepancies.' },
+      { key: 'sn_phone', label: 'Phone & Enquiry Handling', description: 'Answers phone calls promptly and courteously; manages appointment bookings and enquiries efficiently.' },
+    ],
+  },
+  {
+    key: 'clinical_procedures',
+    label: 'B3. Patient Care & Clinical Procedures',
+    indicators: [
+      { key: 'sn_vitals', label: 'Vital Signs Recording', description: 'Performs and documents vital signs (BP, temp, pulse, SpO2) accurately and consistently before consultation.' },
+      { key: 'sn_procedures', label: 'Clinical Procedures', description: 'Performs clinical procedures (wound care, injections, blood draws, swabs, cannulation, ECG) per SOP accurately and safely.' },
+      { key: 'sn_doctor_assist', label: 'Doctor Procedure Assistance', description: 'Assists doctor in clinical procedures (I&D, antenatal, emergencies) safely and competently.' },
+      { key: 'sn_preparation', label: 'Room & Equipment Preparation', description: 'Ensures 100% accuracy in room, injection, and equipment preparation before procedures.' },
+    ],
+  },
+  {
+    key: 'maintenance_inventory',
+    label: 'B4. Clinic Maintenance & Inventory',
+    indicators: [
+      { key: 'sn_cleanliness', label: 'Cleanliness & Hygiene', description: 'Maintains cleanliness of treatment rooms, counter area, and waiting area at all times.' },
+      { key: 'sn_stock', label: 'Stock & Supply Management', description: 'Supervises medication and medical supply stock with weekly checks; ensures no shortages.' },
+      { key: 'sn_equipment', label: 'Equipment Maintenance', description: 'Ensures medical equipment (nebulizer, ECG, etc.) is clean; reports faults within 24 hours.' },
+      { key: 'sn_data_entry', label: 'Investigation Data Entry', description: 'Ensures all investigation data is entered into the records system without errors.' },
+    ],
+  },
+  {
+    key: 'professionalism',
+    label: 'B5. Patient Education & Professionalism',
+    indicators: [
+      { key: 'sn_health_education', label: 'Health Education', description: 'Provides clear and effective health education to patients and families as directed.' },
+      { key: 'sn_emotional_support', label: 'Patient Comfort & Support', description: 'Provides emotional support to patients and ensures their comfort at all times.' },
+      { key: 'sn_promo_videos', label: 'Health Promotion Campaigns', description: 'Assists with clinic health promotion campaigns including monthly promotional videos.' },
+      { key: 'sn_ethics_dress', label: 'Ethics & Professionalism', description: 'Adheres to professional ethics, dress code, and patient confidentiality standards at all times.' },
+    ],
+  },
+] as const;
+
+export const SN_KPIS = [
+  { number: 1, description: 'Valid APC maintained annually', target: '100%' },
+  { number: 2, description: 'Positive patient feedback rate', target: '≥ 95%' },
+  { number: 3, description: 'Zero duplicate patient registrations', target: '0 cases' },
+  { number: 4, description: 'Missed or wrongly scheduled appointments', target: '≤ 2%' },
+  { number: 5, description: 'Phone answer rate (within 3 rings)', target: '≥ 95%' },
+  { number: 6, description: 'Vital signs recording accuracy', target: '≥ 95%' },
+  { number: 7, description: 'Billing accuracy (zero discrepancies)', target: '100%' },
+  { number: 8, description: 'Investigation data entered without errors', target: '100%' },
+  { number: 9, description: 'Zero cleanliness or hygiene complaints', target: '0 complaints' },
+  { number: 10, description: 'Weekly stock checks completed with no shortages', target: '100%' },
+  { number: 11, description: 'Equipment faults reported within 24 hours', target: '≤ 24 hrs' },
+  { number: 12, description: 'FBC/blood draw count per month', target: '> 30' },
+  { number: 13, description: 'Room/injection/equipment preparation accuracy', target: '100%' },
+  { number: 14, description: 'Zero errors assisting doctor in procedures', target: '0 errors' },
+  { number: 15, description: 'ILI swab compliance for eligible patients', target: '> 80%' },
+  { number: 16, description: 'Zero procedural errors during clinical procedures', target: '0 errors' },
+  { number: 17, description: 'Monthly promotional video produced', target: '1 per month' },
+  { number: 18, description: 'Daily cleanliness maintained to standard', target: '100%' },
+  { number: 19, description: 'C&P for Dorsal Slit Circumcision obtained', target: 'Obtained' },
+] as const;
+
+export const SN_SECTION_WEIGHTS = {
+  B: 0.3,
+  C: 0.4,
+  D: 0.1,
+  E: 0.1,
+  F: 0.1,
+} as const;
+
+export type AppraisalType = 'doctor' | 'clinic_assistant' | 'staff_nurse';
 
 export const APPRAISAL_TYPE_LABELS: Record<AppraisalType, string> = {
   doctor: 'Doctor',
   clinic_assistant: 'Clinic Assistant',
+  staff_nurse: 'Staff Nurse / MA',
 };

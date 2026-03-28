@@ -146,8 +146,9 @@ export default function PerformanceAppraisal() {
                   <Select value={appraisalType} onValueChange={(v) => setAppraisalType(v as AppraisalType)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="doctor">Doctor</SelectItem>
-                      <SelectItem value="clinic_assistant">Clinic Assistant</SelectItem>
+                      {(Object.entries(APPRAISAL_TYPE_LABELS) as [AppraisalType, string][]).map(([val, label]) => (
+                        <SelectItem key={val} value={val}>{label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
