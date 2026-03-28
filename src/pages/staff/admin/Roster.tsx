@@ -9,11 +9,12 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import {
-  CalendarDays, Plus, Trash2, RefreshCw, Download, Printer, AlertTriangle, X, Users, Settings2, Shuffle
+  CalendarDays, Plus, Trash2, RefreshCw, Download, Printer, AlertTriangle, X, Users, Settings2, Shuffle, Stethoscope, UserCog
 } from 'lucide-react';
-import { format, startOfWeek, addDays, parseISO } from 'date-fns';
+import { format, startOfWeek, addDays } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -44,60 +45,38 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const SHIFT_HOURS = 8;
 
-export default function Roster() {
-  // Staff list
-  const [staffList, setStaffList] = useState<StaffMember[]>([]);
+const DOCTOR_POSITIONS = ['Doctor'];
+const SUPPORT_POSITIONS = ['Clinic Assistant', 'Staff Nurse', 'Medical Assistant'];
+
+// ─── Reusable Roster Panel ───────────────────────────────────────────
+
+function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffMember[]; title: string; rosterType: string }) {
+  const [staffList, setStaffList] = useState<StaffMember[]>(initialStaff);
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffPosition, setNewStaffPosition] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editPosition, setEditPosition] = useState('');
 
-  // Rules
   const [maxHoursEnabled, setMaxHoursEnabled] = useState(true);
   const [fixedShiftEnabled, setFixedShiftEnabled] = useState(true);
   const [weekdayConstraintEnabled, setWeekdayConstraintEnabled] = useState(false);
-
-  // Constraints
   const [constrainedStaffIds, setConstrainedStaffIds] = useState<string[]>([]);
 
-  // Week picker
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
 
-  // Roster
   const [roster, setRoster] = useState<RosterData | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
-
-  // Staff per shift
   const [staffPerShift, setStaffPerShift] = useState(2);
 
-  // Seed from profiles
-  useEffect(() => {
-    const fetchProfiles = async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, full_name, position')
-        .not('position', 'is', null);
-      if (data) {
-        setStaffList(data.map(p => ({
-          id: p.id,
-          name: p.full_name || 'Unknown',
-          position: p.position || '',
-        })));
-      }
-    };
-    fetchProfiles();
-  }, []);
+  // Sync when initialStaff changes
+  useEffect(() => { setStaffList(initialStaff); }, [initialStaff]);
 
   const addStaff = () => {
     if (!newStaffName.trim()) return;
-    setStaffList(prev => [...prev, {
-      id: crypto.randomUUID(),
-      name: newStaffName.trim(),
-      position: newStaffPosition.trim(),
-    }]);
+    setStaffList(prev => [...prev, { id: crypto.randomUUID(), name: newStaffName.trim(), position: newStaffPosition.trim() }]);
     setNewStaffName('');
     setNewStaffPosition('');
   };
@@ -107,11 +86,7 @@ export default function Roster() {
     setConstrainedStaffIds(prev => prev.filter(sid => sid !== id));
   };
 
-  const startEdit = (s: StaffMember) => {
-    setEditingId(s.id);
-    setEditName(s.name);
-    setEditPosition(s.position);
-  };
+  const startEdit = (s: StaffMember) => { setEditingId(s.id); setEditName(s.name); setEditPosition(s.position); };
 
   const saveEdit = () => {
     if (!editingId) return;
@@ -120,17 +95,11 @@ export default function Roster() {
   };
 
   const toggleConstrained = (id: string) => {
-    setConstrainedStaffIds(prev =>
-      prev.includes(id) ? prev.filter(sid => sid !== id) : [...prev, id]
-    );
+    setConstrainedStaffIds(prev => prev.includes(id) ? prev.filter(sid => sid !== id) : [...prev, id]);
   };
 
-  // --- GENERATOR ---
   const generateRoster = () => {
-    if (staffList.length === 0) {
-      toast.error('Add at least one staff member first');
-      return;
-    }
+    if (staffList.length === 0) { toast.error('Add at least one staff member first'); return; }
 
     const newRoster: RosterData = {};
     const staffHours: Record<string, number> = {};
@@ -147,24 +116,17 @@ export default function Roster() {
         const cells: RosterCell[] = [];
         for (let i = 0; i < staffPerShift; i++) {
           let eligible = staffList.filter(s => !assignedToday.has(s.id));
-
           if (weekdayConstraintEnabled && isWeekday && shiftNum === 2) {
             eligible = eligible.filter(s => !constrainedStaffIds.includes(s.id));
           }
-
           if (maxHoursEnabled) {
-            // Allow assignment but flag overtime if > 45
-            // Still exclude those who would go over 56 (7 days * 8h) as truly impossible
             eligible = eligible.filter(s => staffHours[s.id] + SHIFT_HOURS <= 56);
           }
-
           if (eligible.length === 0) {
             cells.push({ staffId: null, staffName: 'Unassigned' });
             newWarnings.push(`${day} Shift ${shiftNum}: Not enough eligible staff (slot ${i + 1})`);
             continue;
           }
-
-          // Random pick
           const pick = eligible[Math.floor(Math.random() * eligible.length)];
           assignedToday.add(pick.id);
           staffHours[pick.id] += SHIFT_HOURS;
@@ -174,13 +136,9 @@ export default function Roster() {
         return cells;
       };
 
-      newRoster[day] = {
-        shift1: pickStaff(1),
-        shift2: pickStaff(2),
-      };
+      newRoster[day] = { shift1: pickStaff(1), shift2: pickStaff(2) };
     }
 
-    // Check overtime
     if (maxHoursEnabled) {
       staffList.forEach(s => {
         if (staffHours[s.id] > 45) {
@@ -197,13 +155,11 @@ export default function Roster() {
 
   const clearRoster = () => { setRoster(null); setWarnings([]); };
 
-  // Summary
   const getSummary = (): StaffSummary[] => {
     if (!roster) return [];
     const hours: Record<string, number> = {};
     const shifts: Record<string, number> = {};
     staffList.forEach(s => { hours[s.id] = 0; shifts[s.id] = 0; });
-
     for (const day of DAYS) {
       const r = roster[day];
       [...r.shift1, ...r.shift2].forEach(cell => {
@@ -213,7 +169,6 @@ export default function Roster() {
         }
       });
     }
-
     return staffList.map(s => ({
       name: s.name,
       totalShifts: shifts[s.id] || 0,
@@ -222,14 +177,11 @@ export default function Roster() {
     }));
   };
 
-  // Export CSV
   const exportCSV = () => {
     if (!roster) return;
     const rows: string[] = [];
-    const weekLabel = `Week of ${format(weekStart, 'dd MMM yyyy')}`;
-    rows.push(weekLabel);
+    rows.push(`${title} — Week of ${format(weekStart, 'dd MMM yyyy')}`);
     rows.push(['Shift', ...DAYS].join(','));
-
     const shift1Row = ['Shift 1 (8am-4pm)'];
     const shift2Row = ['Shift 2 (4pm-12am)'];
     for (const day of DAYS) {
@@ -238,39 +190,25 @@ export default function Roster() {
     }
     rows.push(shift1Row.join(','));
     rows.push(shift2Row.join(','));
-
     rows.push('');
     rows.push('Staff,Total Shifts,Total Hours,Overtime');
     getSummary().forEach(s => {
       rows.push(`${s.name},${s.totalShifts},${s.totalHours},${s.isOvertime ? s.totalHours - 45 + 'h' : '-'}`);
     });
-
     const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `roster-${format(weekStart, 'yyyy-MM-dd')}.csv`;
+    a.download = `roster-${rosterType}-${format(weekStart, 'yyyy-MM-dd')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success('CSV exported');
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   const summary = getSummary();
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="flex items-center gap-3">
-        <CalendarDays className="h-7 w-7 text-primary" />
-        <div>
-          <h1 className="text-2xl font-bold">Roster Generator</h1>
-          <p className="text-sm text-muted-foreground">Generate weekly shift rosters with configurable rules</p>
-        </div>
-      </div>
-
+    <div className="space-y-6">
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Staff List */}
         <Card>
@@ -303,7 +241,7 @@ export default function Roster() {
                   )}
                 </div>
               ))}
-              {staffList.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No staff added. Staff with positions set will be loaded automatically.</p>}
+              {staffList.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No staff found for this roster type.</p>}
             </div>
           </CardContent>
         </Card>
@@ -316,37 +254,32 @@ export default function Roster() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-start gap-3">
-                <Checkbox id="maxHours" checked={maxHoursEnabled} onCheckedChange={(v) => setMaxHoursEnabled(!!v)} />
+                <Checkbox id={`maxHours-${rosterType}`} checked={maxHoursEnabled} onCheckedChange={(v) => setMaxHoursEnabled(!!v)} />
                 <div>
-                  <Label htmlFor="maxHours" className="text-sm font-medium">Maximum 45 working hours per week</Label>
+                  <Label htmlFor={`maxHours-${rosterType}`} className="text-sm font-medium">Maximum 45 working hours per week</Label>
                   <p className="text-xs text-muted-foreground">Hours beyond 45 will be flagged as overtime in the summary</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <Checkbox id="fixedShift" checked={fixedShiftEnabled} onCheckedChange={(v) => setFixedShiftEnabled(!!v)} />
+                <Checkbox id={`fixedShift-${rosterType}`} checked={fixedShiftEnabled} onCheckedChange={(v) => setFixedShiftEnabled(!!v)} />
                 <div>
-                  <Label htmlFor="fixedShift" className="text-sm font-medium">Fixed shift hours</Label>
+                  <Label htmlFor={`fixedShift-${rosterType}`} className="text-sm font-medium">Fixed shift hours</Label>
                   <p className="text-xs text-muted-foreground">Shift 1: 8:00 AM – 4:00 PM · Shift 2: 4:00 PM – 12:00 AM</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <Checkbox id="weekdayConstraint" checked={weekdayConstraintEnabled} onCheckedChange={(v) => setWeekdayConstraintEnabled(!!v)} />
+                <Checkbox id={`weekdayConstraint-${rosterType}`} checked={weekdayConstraintEnabled} onCheckedChange={(v) => setWeekdayConstraintEnabled(!!v)} />
                 <div>
-                  <Label htmlFor="weekdayConstraint" className="text-sm font-medium">Weekday Shift 1 restriction</Label>
+                  <Label htmlFor={`weekdayConstraint-${rosterType}`} className="text-sm font-medium">Weekday Shift 1 restriction</Label>
                   <p className="text-xs text-muted-foreground">Selected staff can only work Shift 1 on weekdays, but can be assigned Shift 2 on weekends</p>
                 </div>
               </div>
-
               <div className="flex items-center gap-3 pt-2 border-t">
                 <Label className="text-sm font-medium whitespace-nowrap">Staff per shift:</Label>
                 <Select value={String(staffPerShift)} onValueChange={v => setStaffPerShift(Number(v))}>
-                  <SelectTrigger className="w-20">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {[1, 2, 3, 4, 5].map(n => (
-                      <SelectItem key={n} value={String(n)}>{n}</SelectItem>
-                    ))}
+                    {[1, 2, 3, 4, 5].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -363,12 +296,8 @@ export default function Roster() {
                 <div className="space-y-2 max-h-48 overflow-y-auto">
                   {staffList.map(s => (
                     <div key={s.id} className="flex items-center gap-3">
-                      <Checkbox
-                        id={`constrain-${s.id}`}
-                        checked={constrainedStaffIds.includes(s.id)}
-                        onCheckedChange={() => toggleConstrained(s.id)}
-                      />
-                      <Label htmlFor={`constrain-${s.id}`} className="text-sm">{s.name}</Label>
+                      <Checkbox id={`constrain-${rosterType}-${s.id}`} checked={constrainedStaffIds.includes(s.id)} onCheckedChange={() => toggleConstrained(s.id)} />
+                      <Label htmlFor={`constrain-${rosterType}-${s.id}`} className="text-sm">{s.name}</Label>
                       {s.position && <Badge variant="outline" className="text-xs">{s.position}</Badge>}
                     </div>
                   ))}
@@ -384,7 +313,7 @@ export default function Roster() {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <CardTitle className="text-lg flex items-center gap-2"><Shuffle className="h-5 w-5" /> Generated Roster</CardTitle>
+            <CardTitle className="text-lg flex items-center gap-2"><Shuffle className="h-5 w-5" /> {title}</CardTitle>
             <div className="flex items-center gap-2 flex-wrap">
               <Popover>
                 <PopoverTrigger asChild>
@@ -394,17 +323,10 @@ export default function Roster() {
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="end">
-                  <Calendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={(d) => d && setSelectedDate(d)}
-                    className={cn("p-3 pointer-events-auto")}
-                  />
+                  <Calendar mode="single" selected={selectedDate} onSelect={(d) => d && setSelectedDate(d)} className={cn("p-3 pointer-events-auto")} />
                 </PopoverContent>
               </Popover>
-              <Button onClick={generateRoster} className="gap-2">
-                <Shuffle className="h-4 w-4" /> Generate
-              </Button>
+              <Button onClick={generateRoster} className="gap-2"><Shuffle className="h-4 w-4" /> Generate</Button>
             </div>
           </div>
         </CardHeader>
@@ -444,9 +366,7 @@ export default function Roster() {
                       {DAYS.map(day => (
                         <TableCell key={day} className="text-center">
                           {roster[day].shift1.map((cell, i) => (
-                            <div key={i} className={cn("text-sm", cell.staffId ? '' : 'text-destructive font-medium')}>
-                              {cell.staffName}
-                            </div>
+                            <div key={i} className={cn("text-sm", cell.staffId ? '' : 'text-destructive font-medium')}>{cell.staffName}</div>
                           ))}
                         </TableCell>
                       ))}
@@ -459,9 +379,7 @@ export default function Roster() {
                       {DAYS.map(day => (
                         <TableCell key={day} className="text-center">
                           {roster[day].shift2.map((cell, i) => (
-                            <div key={i} className={cn("text-sm", cell.staffId ? '' : 'text-destructive font-medium')}>
-                              {cell.staffName}
-                            </div>
+                            <div key={i} className={cn("text-sm", cell.staffId ? '' : 'text-destructive font-medium')}>{cell.staffName}</div>
                           ))}
                         </TableCell>
                       ))}
@@ -501,20 +419,11 @@ export default function Roster() {
                 </Table>
               </div>
 
-              {/* Action buttons */}
               <div className="flex gap-2 flex-wrap print:hidden">
-                <Button variant="outline" onClick={generateRoster} className="gap-2">
-                  <RefreshCw className="h-4 w-4" /> Generate Again
-                </Button>
-                <Button variant="outline" onClick={clearRoster} className="gap-2">
-                  <X className="h-4 w-4" /> Clear Roster
-                </Button>
-                <Button variant="outline" onClick={exportCSV} className="gap-2">
-                  <Download className="h-4 w-4" /> Export CSV
-                </Button>
-                <Button variant="outline" onClick={handlePrint} className="gap-2">
-                  <Printer className="h-4 w-4" /> Print
-                </Button>
+                <Button variant="outline" onClick={generateRoster} className="gap-2"><RefreshCw className="h-4 w-4" /> Generate Again</Button>
+                <Button variant="outline" onClick={clearRoster} className="gap-2"><X className="h-4 w-4" /> Clear Roster</Button>
+                <Button variant="outline" onClick={exportCSV} className="gap-2"><Download className="h-4 w-4" /> Export CSV</Button>
+                <Button variant="outline" onClick={() => window.print()} className="gap-2"><Printer className="h-4 w-4" /> Print</Button>
               </div>
             </div>
           ) : (
@@ -525,6 +434,59 @@ export default function Roster() {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+// ─── Main Page ───────────────────────────────────────────────────────
+
+export default function Roster() {
+  const [doctorStaff, setDoctorStaff] = useState<StaffMember[]>([]);
+  const [supportStaff, setSupportStaff] = useState<StaffMember[]>([]);
+
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name, position')
+        .not('position', 'is', null);
+      if (data) {
+        const all = data.map(p => ({ id: p.id, name: p.full_name || 'Unknown', position: p.position || '' }));
+        setDoctorStaff(all.filter(s => DOCTOR_POSITIONS.includes(s.position)));
+        setSupportStaff(all.filter(s => SUPPORT_POSITIONS.includes(s.position)));
+      }
+    };
+    fetchProfiles();
+  }, []);
+
+  return (
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <div className="flex items-center gap-3">
+        <CalendarDays className="h-7 w-7 text-primary" />
+        <div>
+          <h1 className="text-2xl font-bold">Roster Generator</h1>
+          <p className="text-sm text-muted-foreground">Generate weekly shift rosters with configurable rules</p>
+        </div>
+      </div>
+
+      <Tabs defaultValue="doctor" className="w-full">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="doctor" className="gap-2">
+            <Stethoscope className="h-4 w-4" /> Doctor Roster
+          </TabsTrigger>
+          <TabsTrigger value="support" className="gap-2">
+            <UserCog className="h-4 w-4" /> Support Staff Roster
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="doctor" className="mt-6">
+          <RosterPanel initialStaff={doctorStaff} title="Doctor Roster" rosterType="doctor" />
+        </TabsContent>
+
+        <TabsContent value="support" className="mt-6">
+          <RosterPanel initialStaff={supportStaff} title="Support Staff Roster" rosterType="support" />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
