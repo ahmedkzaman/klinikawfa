@@ -410,7 +410,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                         <TableCell className="text-center">{s.totalHours}h</TableCell>
                         <TableCell className="text-center">
                           {s.isOvertime ? (
-                            <Badge variant="destructive" className="text-xs">{s.totalHours - 45}h OT</Badge>
+                            <Badge variant="destructive" className="text-xs">{s.totalHours - 48}h OT</Badge>
                           ) : (
                             <span className="text-muted-foreground text-xs">—</span>
                           )}
