@@ -1,47 +1,33 @@
-## Add Roster Generator to Admin Section
 
-### Overview
 
-Create a new page at `/staff/admin/roster` that allows admins to randomly generate weekly shift rosters with configurable rules and staff constraints. Entirely client-side logic — no database tables needed (roster data is generated on-the-fly, exportable via CSV/print).
+## Separate Roster into Doctor vs Support Staff
 
-### New Files
+### What changes
+Split the roster page into two independent rosters using tabs:
+1. **Doctor Roster** — only staff with position "Doctor"
+2. **Support Staff Roster** — only staff with positions "Clinic Assistant", "Staff Nurse", "Medical Assistant"
 
-`**src/pages/staff/admin/Roster.tsx**` — Main page with 4 sections:
+Each tab has its own staff list, rules, constraints, generation, and summary — completely independent. Managers are excluded from both rosters (they don't do shifts).
 
-1. **Staff List Section**: Add/edit/delete staff names in a card. Staff list stored in component state (seeded from `profiles` table where position is set). Each staff entry shows name and position.
-2. **Rule Selection Section**: Card with checkboxes:
-  - Maximum 45 working hours per week per staff. Any more than 45 hours will be considered as Over Time (this will be documented at a part of the roster)
-  - Use fixed shift hours (Shift 1: 8am–4pm, Shift 2: 4pm–12am)
-  - Selected staff can only work Shift 1 on weekdays (constraint toggle)
-  - Selected staff can still be assigned Shift 2 on weekends
-3. **Constraint Setup Section**: Multi-select dropdown to pick which staff members have the weekday Shift 1 restriction. Only visible when the constraint rule checkbox is enabled.
-4. **Generated Roster Section**:
-  - Week picker (select any Monday–Sunday week)
-  - "Generate Roster" button runs the randomization algorithm
-  - Weekly table: columns = Mon–Sun, rows = Shift 1 / Shift 2, cells = assigned staff names
-  - Summary table below: staff name, total shifts, total hours
-  - Warning banner if constraints make full assignment impossible
-  - Buttons: "Generate Again", "Clear Roster", "Export to CSV", "Print Roster"
+### Implementation — `src/pages/staff/admin/Roster.tsx`
 
-### Generator Algorithm (client-side)
+1. **Add Tabs** at the top of the page using `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent` from the existing UI components.
 
-```text
-For each day (Mon–Sun):
-  For each shift (1, 2):
-    - Build eligible staff pool (not already assigned that day)
-    - Apply constraint: if weekday + constrained staff → exclude from Shift 2
-    - If max-hours rule enabled, exclude staff at/over 45hrs
-    - Randomly pick one staff from eligible pool
-    - If no eligible staff, mark cell as "Unassigned" + add warning
-```
+2. **Filter staff by position** on load:
+   - `doctorStaff` = profiles where `position === 'Doctor'`
+   - `supportStaff` = profiles where position is `'Clinic Assistant'`, `'Staff Nurse'`, or `'Medical Assistant'`
 
-### Routing & Navigation
+3. **Duplicate state per roster type**: Each tab maintains its own independent state (staff list, rules, constraints, roster data, warnings, staffPerShift). Extract the current roster logic into a reusable `RosterPanel` component that accepts a filtered staff list and a label (e.g. "Doctor" or "Support Staff").
 
-- `**src/App.tsx**`: Add route `admin/roster` under staff portal
-- `**src/components/staff/StaffLayout.tsx**`: Add "Roster" nav item in admin section with `CalendarDays` icon
+4. **RosterPanel component** (extracted inline or as a sub-component):
+   - Receives `initialStaff`, `title`, `rosterType` props
+   - Contains all existing logic: staff list management, rules checkboxes, constraint setup, generator, roster table, summary, export/CSV/print
+   - Staff list is seeded from filtered profiles, not the full list
 
-### File Changes Summary
+5. **CSV export** includes roster type in filename (e.g. `roster-doctor-2026-03-30.csv`, `roster-support-2026-03-30.csv`)
 
-- 1 new file: `src/pages/staff/admin/Roster.tsx`
-- 2 edits: `App.tsx` (add route), `StaffLayout.tsx` (add nav item)
-- No database changes
+### File changes
+- 1 file edit: `src/pages/staff/admin/Roster.tsx` — refactor into tabbed layout with `RosterPanel` sub-component
+
+### No database or routing changes needed
+
