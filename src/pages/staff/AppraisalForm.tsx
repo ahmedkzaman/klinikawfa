@@ -222,7 +222,7 @@ function ReviewPanel({
   const selfKpis = selfResp?.kpi_responses as KpiResponse[] | null;
 
   // Build section rows for the scores table
-  const sectionRows = isCA
+  const sectionRows = isCompetencyBased
     ? [
         { key: 'b', label: 'B: Competency (30%)', weight: weights.B },
         { key: 'c', label: 'C: KPIs (40%)', weight: weights.C },
