@@ -581,8 +581,8 @@ export default function AppraisalForm() {
   }
 
   function calcCACompetencyScore(): number | null {
-    const allIndicators = CA_COMPETENCY_CATEGORIES.flatMap((c) => c.indicators);
-    const ratings = allIndicators.map((ind) => competencyData[ind.key]?.rating).filter((r): r is number => r != null);
+    const allIndicators = CA_COMPETENCY_CATEGORIES.flatMap((c) => [...c.indicators]);
+    const ratings = allIndicators.map((ind: { key: string }) => competencyData[ind.key]?.rating).filter((r): r is number => r != null);
     if (!ratings.length) return null;
     return ratings.reduce((a, b) => a + b, 0) / ratings.length;
   }
