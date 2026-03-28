@@ -45,6 +45,14 @@ export default function AdminEmployees() {
     fetchEmployees();
   };
 
+  const handlePositionChange = async (userId: string, newPosition: string) => {
+    const position = newPosition === '__none__' ? null : newPosition;
+    const { error } = await supabase.from('profiles').update({ position }).eq('id', userId);
+    if (error) { toast({ title: 'Error', description: 'Failed to update position', variant: 'destructive' }); return; }
+    toast({ title: 'Position Updated', description: `Position changed to ${position || 'None'}` });
+    fetchEmployees();
+  };
+
   return (
     <div className="space-y-6">
       <div><h1 className="text-2xl font-bold tracking-tight">Employees</h1><p className="text-muted-foreground">Manage staff members and their roles</p></div>
