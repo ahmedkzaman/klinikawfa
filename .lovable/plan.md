@@ -1,33 +1,46 @@
 
 
-## Separate Roster into Doctor vs Support Staff
+## Update Roster Generator — Monthly, First Names, No Unassigned, Manual Edits
 
-### What changes
-Split the roster page into two independent rosters using tabs:
-1. **Doctor Roster** — only staff with position "Doctor"
-2. **Support Staff Roster** — only staff with positions "Clinic Assistant", "Staff Nurse", "Medical Assistant"
+### Changes to `src/pages/staff/admin/Roster.tsx`
 
-Each tab has its own staff list, rules, constraints, generation, and summary — completely independent. Managers are excluded from both rosters (they don't do shifts).
+#### 1. First names only
+- When displaying staff in roster cells, show only the first name: `name.split(' ')[0]`
+- Staff list sidebar still shows full name for clarity
 
-### Implementation — `src/pages/staff/admin/Roster.tsx`
+#### 2. No unassigned slots
+- Change the generator algorithm: if no eligible staff remain (due to hour limits), relax constraints and pick the least-assigned staff member instead of leaving "Unassigned"
+- Fallback order: (1) skip hour-cap filter → (2) pick staff with fewest hours that week
+- Add a warning note when someone exceeds 48h due to forced assignment, but never leave a slot empty
 
-1. **Add Tabs** at the top of the page using `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent` from the existing UI components.
+#### 3. Manual editing of roster
+- Make each roster cell clickable — clicking opens a dropdown/select populated with all staff in that roster type
+- Selecting a different staff member updates the roster state in place
+- Summary table recalculates automatically on any manual change
 
-2. **Filter staff by position** on load:
-   - `doctorStaff` = profiles where `position === 'Doctor'`
-   - `supportStaff` = profiles where position is `'Clinic Assistant'`, `'Staff Nurse'`, or `'Medical Assistant'`
+#### 4. Monthly basis following current month's calendar
+- Replace the week picker with a **month picker** (month/year selector)
+- Generate roster for all days in the selected month (defaulting to current month)
+- Replace `DAYS` constant with dynamically computed days from `startOfMonth` to `endOfMonth`
+- Roster table columns = all days of the month (scrollable horizontally), with day name + date header
+- Each column header shows day abbreviation (Mon, Tue...) + date number
+- Summary recalculates for the full month (total shifts, total hours, weekly averages)
+- Update CSV export and print to reflect monthly data
 
-3. **Duplicate state per roster type**: Each tab maintains its own independent state (staff list, rules, constraints, roster data, warnings, staffPerShift). Extract the current roster logic into a reusable `RosterPanel` component that accepts a filtered staff list and a label (e.g. "Doctor" or "Support Staff").
+### Algorithm update
+```text
+For each day in month:
+  For each shift (1, 2):
+    - Build eligible pool (not assigned that day)
+    - Apply weekday constraint if enabled
+    - Apply hour cap if enabled (48h/week — tracked per ISO week)
+    - If eligible pool empty → pick least-assigned staff (force assign + add warning)
+    - Randomly pick from eligible pool
+```
 
-4. **RosterPanel component** (extracted inline or as a sub-component):
-   - Receives `initialStaff`, `title`, `rosterType` props
-   - Contains all existing logic: staff list management, rules checkboxes, constraint setup, generator, roster table, summary, export/CSV/print
-   - Staff list is seeded from filtered profiles, not the full list
-
-5. **CSV export** includes roster type in filename (e.g. `roster-doctor-2026-03-30.csv`, `roster-support-2026-03-30.csv`)
+Hours tracking changes from flat total to **per-week tracking** (since a month spans 4-5 weeks). The 45-48h rule applies per calendar week within the month.
 
 ### File changes
-- 1 file edit: `src/pages/staff/admin/Roster.tsx` — refactor into tabbed layout with `RosterPanel` sub-component
-
-### No database or routing changes needed
+- 1 file edit: `src/pages/staff/admin/Roster.tsx`
+- No database changes
 
