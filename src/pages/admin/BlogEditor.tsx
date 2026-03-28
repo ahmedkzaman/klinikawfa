@@ -176,7 +176,7 @@ export default function BlogEditor() {
             description: language === 'ms' ? 'Post tidak dijumpai.' : 'Post not found.',
             variant: 'destructive',
           });
-          navigate('/admin/blog');
+          navigate('/staff/website/blog');
           return;
         }
 
@@ -409,7 +409,7 @@ export default function BlogEditor() {
 
       // Clear draft on successful save
       clearDraft();
-      navigate('/admin/blog');
+      navigate('/staff/website/blog');
     } catch (error: any) {
       console.error('Error saving post:', error);
       
@@ -441,7 +441,7 @@ export default function BlogEditor() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/admin/blog')}>
+        <Button variant="ghost" size="icon" onClick={() => navigate('/staff/website/blog')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
