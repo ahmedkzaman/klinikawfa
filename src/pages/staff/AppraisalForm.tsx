@@ -87,19 +87,21 @@ function CriteriaSection({
   );
 }
 
-/* ─── Clinic Assistant Competency Section ─── */
+/* ─── Generic Competency Section (works for CA and SN) ─── */
 function CACompetencySection({
+  categories,
   competencyData,
   onChange,
   disabled,
 }: {
+  categories: readonly { key: string; label: string; indicators: readonly { key: string; label: string; description: string }[] }[];
   competencyData: CompetencyResponse;
   onChange: (key: string, field: 'rating' | 'evidence', value: any) => void;
   disabled?: boolean;
 }) {
   return (
     <div className="space-y-8">
-      {CA_COMPETENCY_CATEGORIES.map((cat) => (
+      {categories.map((cat) => (
         <div key={cat.key}>
           <h3 className="font-semibold text-base mb-4">{cat.label}</h3>
           <div className="space-y-4">
