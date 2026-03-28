@@ -258,8 +258,8 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
               <div className="flex items-start gap-3">
                 <Checkbox id={`maxHours-${rosterType}`} checked={maxHoursEnabled} onCheckedChange={(v) => setMaxHoursEnabled(!!v)} />
                 <div>
-                  <Label htmlFor={`maxHours-${rosterType}`} className="text-sm font-medium">Maximum 45 working hours per week</Label>
-                  <p className="text-xs text-muted-foreground">Hours beyond 45 will be flagged as overtime in the summary</p>
+                   <Label htmlFor={`maxHours-${rosterType}`} className="text-sm font-medium">Working hours: 45–48 hours per week</Label>
+                   <p className="text-xs text-muted-foreground">Minimum 45h, maximum 48h. Hours beyond 48 will be flagged as overtime</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
