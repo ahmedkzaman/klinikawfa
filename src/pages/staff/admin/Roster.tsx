@@ -146,8 +146,8 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
         } else if (staffHours[s.id] > 48) {
           newWarnings.push(`${s.name}: ${staffHours[s.id]}h assigned (exceeds 48h maximum)`);
         }
-        }
       });
+    }
     }
 
     setRoster(newRoster);
