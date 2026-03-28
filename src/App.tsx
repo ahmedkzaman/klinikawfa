@@ -35,6 +35,7 @@ import AdminEmployees from "./pages/staff/admin/Employees";
 import AdminZones from "./pages/staff/admin/Zones";
 import AdminAssignments from "./pages/staff/admin/Assignments";
 import AdminRequests from "./pages/staff/admin/Requests";
+import AdminRoster from "./pages/staff/admin/Roster";
 
 // Website Management (formerly /admin)
 import LeadsManagement from "./pages/admin/LeadsManagement";
