@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Plus, ClipboardCheck, Calendar, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { APPRAISAL_TYPE_LABELS, type AppraisalType } from '@/lib/appraisalConstants';
 
 const statusColors: Record<string, string> = {
   draft: 'bg-muted text-muted-foreground',
@@ -21,16 +22,21 @@ const statusColors: Record<string, string> = {
   completed: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
 };
 
+const typeColors: Record<string, string> = {
+  doctor: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+  clinic_assistant: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
+};
+
 export default function PerformanceAppraisal() {
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
-  const [selectedDoctor, setSelectedDoctor] = useState('');
+  const [selectedStaff, setSelectedStaff] = useState('');
+  const [appraisalType, setAppraisalType] = useState<AppraisalType>('doctor');
   const [periodFrom, setPeriodFrom] = useState('');
   const [periodTo, setPeriodTo] = useState('');
 
-  // Fetch appraisals
   const { data: appraisals, isLoading } = useQuery({
     queryKey: ['performance-appraisals'],
     queryFn: async () => {
@@ -43,7 +49,6 @@ export default function PerformanceAppraisal() {
     },
   });
 
-  // Fetch doctors (profiles) for admin create
   const { data: profiles } = useQuery({
     queryKey: ['profiles-for-appraisal'],
     queryFn: async () => {
@@ -54,7 +59,6 @@ export default function PerformanceAppraisal() {
     enabled: isAdmin,
   });
 
-  // Fetch responses to know which appraisals user is evaluator on
   const { data: myResponses } = useQuery({
     queryKey: ['my-appraisal-responses', user?.id],
     queryFn: async () => {
@@ -73,7 +77,8 @@ export default function PerformanceAppraisal() {
       const { data, error } = await supabase
         .from('performance_appraisals')
         .insert({
-          doctor_id: selectedDoctor,
+          doctor_id: selectedStaff,
+          appraisal_type: appraisalType,
           appraisal_period_from: periodFrom,
           appraisal_period_to: periodTo,
           created_by: user!.id,
@@ -82,12 +87,11 @@ export default function PerformanceAppraisal() {
         .single();
       if (error) throw error;
 
-      // Auto-create self-evaluation response for the doctor
       const { error: respError } = await supabase
         .from('appraisal_responses')
         .insert({
           appraisal_id: data.id,
-          evaluator_id: selectedDoctor,
+          evaluator_id: selectedStaff,
           evaluator_role: 'Self',
         });
       if (respError) throw respError;
@@ -98,7 +102,8 @@ export default function PerformanceAppraisal() {
       toast.success('Appraisal created successfully');
       queryClient.invalidateQueries({ queryKey: ['performance-appraisals'] });
       setCreateOpen(false);
-      setSelectedDoctor('');
+      setSelectedStaff('');
+      setAppraisalType('doctor');
       setPeriodFrom('');
       setPeriodTo('');
       navigate(`/staff/appraisal/${data.id}`);
@@ -106,14 +111,13 @@ export default function PerformanceAppraisal() {
     onError: (err: any) => toast.error(err.message),
   });
 
-  const getDoctorName = (doctorId: string) => {
-    const p = profiles?.find((pr) => pr.id === doctorId);
+  const getStaffName = (id: string) => {
+    const p = profiles?.find((pr) => pr.id === id);
     return p?.full_name || p?.email || 'Unknown';
   };
 
   const getMyRole = (appraisalId: string) => {
-    const resp = myResponses?.find((r) => r.appraisal_id === appraisalId);
-    return resp?.evaluator_role;
+    return myResponses?.find((r) => r.appraisal_id === appraisalId)?.evaluator_role;
   };
 
   return (
@@ -124,7 +128,7 @@ export default function PerformanceAppraisal() {
             <ClipboardCheck className="h-6 w-6 text-primary" />
             Performance Appraisal
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">360° Medical Doctor Evaluation</p>
+          <p className="text-muted-foreground text-sm mt-1">360° Staff Performance Evaluation</p>
         </div>
         {isAdmin && (
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -137,9 +141,19 @@ export default function PerformanceAppraisal() {
               </DialogHeader>
               <div className="space-y-4">
                 <div>
-                  <Label>Doctor</Label>
-                  <Select value={selectedDoctor} onValueChange={setSelectedDoctor}>
-                    <SelectTrigger><SelectValue placeholder="Select doctor" /></SelectTrigger>
+                  <Label>Appraisal Type</Label>
+                  <Select value={appraisalType} onValueChange={(v) => setAppraisalType(v as AppraisalType)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="doctor">Doctor</SelectItem>
+                      <SelectItem value="clinic_assistant">Clinic Assistant</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Staff Member</Label>
+                  <Select value={selectedStaff} onValueChange={setSelectedStaff}>
+                    <SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger>
                     <SelectContent>
                       {profiles?.map((p) => (
                         <SelectItem key={p.id} value={p.id}>{p.full_name || p.email}</SelectItem>
@@ -159,7 +173,7 @@ export default function PerformanceAppraisal() {
                 </div>
                 <Button
                   className="w-full"
-                  disabled={!selectedDoctor || !periodFrom || !periodTo || createMutation.isPending}
+                  disabled={!selectedStaff || !periodFrom || !periodTo || createMutation.isPending}
                   onClick={() => createMutation.mutate()}
                 >
                   {createMutation.isPending ? 'Creating...' : 'Create Appraisal'}
@@ -180,41 +194,49 @@ export default function PerformanceAppraisal() {
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {appraisals.map((appraisal) => (
-            <Card
-              key={appraisal.id}
-              className="cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => navigate(`/staff/appraisal/${appraisal.id}`)}
-            >
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">
-                    {isAdmin ? getDoctorName(appraisal.doctor_id) : 'My Appraisal'}
-                  </CardTitle>
-                  <Badge className={statusColors[appraisal.status] || ''}>
-                    {appraisal.status}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Calendar className="h-3.5 w-3.5" />
-                  {format(new Date(appraisal.appraisal_period_from), 'dd MMM yyyy')} – {format(new Date(appraisal.appraisal_period_to), 'dd MMM yyyy')}
-                </div>
-                {getMyRole(appraisal.id) && (
+          {appraisals.map((appraisal) => {
+            const aType = ((appraisal as any).appraisal_type || 'doctor') as AppraisalType;
+            return (
+              <Card
+                key={appraisal.id}
+                className="cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => navigate(`/staff/appraisal/${appraisal.id}`)}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">
+                      {isAdmin ? getStaffName(appraisal.doctor_id) : 'My Appraisal'}
+                    </CardTitle>
+                    <div className="flex gap-1.5">
+                      <Badge className={typeColors[aType] || ''}>
+                        {APPRAISAL_TYPE_LABELS[aType] || aType}
+                      </Badge>
+                      <Badge className={statusColors[appraisal.status] || ''}>
+                        {appraisal.status}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
                   <div className="flex items-center gap-2 text-muted-foreground">
-                    <User className="h-3.5 w-3.5" />
-                    Your role: {getMyRole(appraisal.id)}
+                    <Calendar className="h-3.5 w-3.5" />
+                    {format(new Date(appraisal.appraisal_period_from), 'dd MMM yyyy')} – {format(new Date(appraisal.appraisal_period_to), 'dd MMM yyyy')}
                   </div>
-                )}
-                {appraisal.overall_weighted_score != null && (
-                  <div className="font-semibold text-primary">
-                    Score: {Number(appraisal.overall_weighted_score).toFixed(2)} / 5.0
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                  {getMyRole(appraisal.id) && (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <User className="h-3.5 w-3.5" />
+                      Your role: {getMyRole(appraisal.id)}
+                    </div>
+                  )}
+                  {appraisal.overall_weighted_score != null && (
+                    <div className="font-semibold text-primary">
+                      Score: {Number(appraisal.overall_weighted_score).toFixed(2)} / 5.0
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
