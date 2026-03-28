@@ -737,7 +737,7 @@ export default function AppraisalForm() {
 
   if (!appraisal) return <div className="py-12 text-center text-muted-foreground">Loading...</div>;
 
-  const formTitle = isCA ? 'Clinic Assistant Performance Appraisal' : '360° Doctor Performance Appraisal';
+  const formTitle = APPRAISAL_TYPE_LABELS[appraisalType] + ' Performance Appraisal';
 
   // Tab config based on type
   const tabs = isCA
