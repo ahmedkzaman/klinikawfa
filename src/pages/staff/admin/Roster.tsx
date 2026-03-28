@@ -120,7 +120,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
             eligible = eligible.filter(s => !constrainedStaffIds.includes(s.id));
           }
           if (maxHoursEnabled) {
-            eligible = eligible.filter(s => staffHours[s.id] + SHIFT_HOURS <= 56);
+            eligible = eligible.filter(s => staffHours[s.id] + SHIFT_HOURS <= 48);
           }
           if (eligible.length === 0) {
             cells.push({ staffId: null, staffName: 'Unassigned' });
