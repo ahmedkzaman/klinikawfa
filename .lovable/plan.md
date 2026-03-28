@@ -1,44 +1,25 @@
 
 
-## Update Roster Generator — Monthly, First Names, No Unassigned, Manual Edits
+## Enforce 45h Minimum Per Week Per Staff
+
+### Problem
+The current generator only *warns* when a staff member has below 45 hours in a week. It doesn't actively ensure every staff member reaches the 45h minimum.
+
+### Solution — Add a "top-up" pass after initial generation
+
+After the main generation loop, iterate through each ISO week and each staff member. For any staff below 45h in a week where they have at least 1 shift, find days in that week where they're not yet assigned and swap them in (replacing the staff member with the most hours that week in that slot). Repeat until all staff hit 45h or no more swaps are possible.
 
 ### Changes to `src/pages/staff/admin/Roster.tsx`
 
-#### 1. First names only
-- When displaying staff in roster cells, show only the first name: `name.split(' ')[0]`
-- Staff list sidebar still shows full name for clarity
+1. **Post-generation top-up pass** (after line 194, before warning checks):
+   - For each ISO week, identify staff below 45h
+   - For each under-assigned staff member, find shift slots in that week where they're not already working that day
+   - Swap them in by replacing the staff member who has the *most* hours that week in that slot
+   - Continue until staff reaches 45h or no valid swaps remain
 
-#### 2. No unassigned slots
-- Change the generator algorithm: if no eligible staff remain (due to hour limits), relax constraints and pick the least-assigned staff member instead of leaving "Unassigned"
-- Fallback order: (1) skip hour-cap filter → (2) pick staff with fewest hours that week
-- Add a warning note when someone exceeds 48h due to forced assignment, but never leave a slot empty
+2. **Adjust the sorting preference** in the main `pickStaff` function to prioritize staff furthest from 45h, ensuring more even initial distribution
 
-#### 3. Manual editing of roster
-- Make each roster cell clickable — clicking opens a dropdown/select populated with all staff in that roster type
-- Selecting a different staff member updates the roster state in place
-- Summary table recalculates automatically on any manual change
-
-#### 4. Monthly basis following current month's calendar
-- Replace the week picker with a **month picker** (month/year selector)
-- Generate roster for all days in the selected month (defaulting to current month)
-- Replace `DAYS` constant with dynamically computed days from `startOfMonth` to `endOfMonth`
-- Roster table columns = all days of the month (scrollable horizontally), with day name + date header
-- Each column header shows day abbreviation (Mon, Tue...) + date number
-- Summary recalculates for the full month (total shifts, total hours, weekly averages)
-- Update CSV export and print to reflect monthly data
-
-### Algorithm update
-```text
-For each day in month:
-  For each shift (1, 2):
-    - Build eligible pool (not assigned that day)
-    - Apply weekday constraint if enabled
-    - Apply hour cap if enabled (48h/week — tracked per ISO week)
-    - If eligible pool empty → pick least-assigned staff (force assign + add warning)
-    - Randomly pick from eligible pool
-```
-
-Hours tracking changes from flat total to **per-week tracking** (since a month spans 4-5 weeks). The 45-48h rule applies per calendar week within the month.
+3. **Warning text update**: Change the below-45h warning to only fire after the top-up pass has exhausted all options (e.g., not enough days in a partial week at month boundaries)
 
 ### File changes
 - 1 file edit: `src/pages/staff/admin/Roster.tsx`
