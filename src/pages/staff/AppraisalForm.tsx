@@ -864,12 +864,12 @@ export default function AppraisalForm() {
             <TabsContent value="partB">
               <Card>
                 <CardHeader>
-                  <CardTitle>{isCA ? 'Part B — Competency Assessment' : 'Part B — Clinical Skills & Competency'}</CardTitle>
-                  <CardDescription>Rate each {isCA ? 'competency indicator' : 'competency'} using the 1–5 scale and provide evidence.</CardDescription>
+                  <CardTitle>{isCompetencyBased ? 'Part B — Competency Assessment' : 'Part B — Clinical Skills & Competency'}</CardTitle>
+                  <CardDescription>Rate each {isCompetencyBased ? 'competency indicator' : 'competency'} using the 1–5 scale and provide evidence.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {isCA ? (
-                    <CACompetencySection competencyData={competencyData} onChange={updateCompetencyField} disabled={isReadOnly} />
+                  {isCompetencyBased ? (
+                    <CACompetencySection categories={competencyCategories} competencyData={competencyData} onChange={updateCompetencyField} disabled={isReadOnly} />
                   ) : (
                     <>
                       <CriteriaSection criteria={CLINICAL_CRITERIA} data={formData} onChange={updateField} disabled={isReadOnly} />
