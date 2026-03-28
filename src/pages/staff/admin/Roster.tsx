@@ -148,7 +148,6 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
         }
       });
     }
-    }
 
     setRoster(newRoster);
     setWarnings(newWarnings);
