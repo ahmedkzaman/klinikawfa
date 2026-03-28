@@ -36,20 +36,16 @@ import AdminZones from "./pages/staff/admin/Zones";
 import AdminAssignments from "./pages/staff/admin/Assignments";
 import AdminRequests from "./pages/staff/admin/Requests";
 
-// Admin
-import { AdminLayout } from "./components/admin";
-import {
-  AdminDashboard,
-  LeadsManagement,
-  BlogManagement,
-  BlogEditor,
-  GalleryManagement,
-  TeamManagement,
-  TeamEditor,
-  VideoCallManagement,
-  ReviewsManagement,
-  AdminSettings,
-} from "./pages/admin";
+// Website Management (formerly /admin)
+import LeadsManagement from "./pages/admin/LeadsManagement";
+import BlogManagement from "./pages/admin/BlogManagement";
+import BlogEditor from "./pages/admin/BlogEditor";
+import GalleryManagement from "./pages/admin/GalleryManagement";
+import TeamManagement from "./pages/admin/TeamManagement";
+import TeamEditor from "./pages/admin/TeamEditor";
+import VideoCallManagement from "./pages/admin/VideoCallManagement";
+import ReviewsManagement from "./pages/admin/ReviewsManagement";
+import AdminSettings from "./pages/admin/Settings";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -80,20 +76,6 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/video-call" element={<VideoCall />} />
               <Route path="/video-call/staff" element={<VideoCallStaff />} />
-              
-              {/* Admin Routes */}
-              <Route path="/admin" element={<AdminLayout />}>
-                <Route index element={<AdminDashboard />} />
-                <Route path="leads" element={<LeadsManagement />} />
-                <Route path="team" element={<TeamManagement />} />
-                <Route path="team/:id" element={<TeamEditor />} />
-                <Route path="video-calls" element={<VideoCallManagement />} />
-                <Route path="blog" element={<BlogManagement />} />
-                <Route path="blog/:id" element={<BlogEditor />} />
-                <Route path="gallery" element={<GalleryManagement />} />
-                <Route path="reviews" element={<ReviewsManagement />} />
-                <Route path="settings" element={<AdminSettings />} />
-              </Route>
 
               {/* Staff Portal Routes */}
               <Route path="/staff" element={<StaffLayout />}>
@@ -111,7 +93,20 @@ const App = () => (
                 <Route path="admin/zones" element={<AdminZones />} />
                 <Route path="admin/assignments" element={<AdminAssignments />} />
                 <Route path="admin/requests" element={<AdminRequests />} />
+                {/* Website Management */}
+                <Route path="website/leads" element={<LeadsManagement />} />
+                <Route path="website/team" element={<TeamManagement />} />
+                <Route path="website/team/:id" element={<TeamEditor />} />
+                <Route path="website/video-calls" element={<VideoCallManagement />} />
+                <Route path="website/blog" element={<BlogManagement />} />
+                <Route path="website/blog/:id" element={<BlogEditor />} />
+                <Route path="website/gallery" element={<GalleryManagement />} />
+                <Route path="website/reviews" element={<ReviewsManagement />} />
+                <Route path="website/settings" element={<AdminSettings />} />
               </Route>
+
+              {/* Redirect old /admin routes */}
+              <Route path="/admin/*" element={<Navigate to="/staff/admin" replace />} />
 
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
