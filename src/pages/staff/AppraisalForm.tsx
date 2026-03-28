@@ -759,7 +759,7 @@ export default function AppraisalForm() {
       ];
 
   // Summary rows for Part F
-  const summaryRows = isCA
+  const summaryRows = isCompetencyBased
     ? [
         { label: 'Part B — Competency', score: sectionBScore, weight: '30%' },
         { label: 'Part C — KPIs', score: sectionCScore, weight: '40%' },
