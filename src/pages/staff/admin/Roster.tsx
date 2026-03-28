@@ -120,7 +120,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
             eligible = eligible.filter(s => !constrainedStaffIds.includes(s.id));
           }
           if (maxHoursEnabled) {
-            eligible = eligible.filter(s => staffHours[s.id] + SHIFT_HOURS <= 56);
+            eligible = eligible.filter(s => staffHours[s.id] + SHIFT_HOURS <= 48);
           }
           if (eligible.length === 0) {
             cells.push({ staffId: null, staffName: 'Unassigned' });
@@ -141,8 +141,10 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
 
     if (maxHoursEnabled) {
       staffList.forEach(s => {
-        if (staffHours[s.id] > 45) {
-          newWarnings.push(`${s.name}: ${staffHours[s.id]}h assigned (${staffHours[s.id] - 45}h overtime)`);
+        if (staffHours[s.id] < 45) {
+          newWarnings.push(`${s.name}: Only ${staffHours[s.id]}h assigned (below 45h minimum)`);
+        } else if (staffHours[s.id] > 48) {
+          newWarnings.push(`${s.name}: ${staffHours[s.id]}h assigned (exceeds 48h maximum)`);
         }
       });
     }
@@ -173,7 +175,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
       name: s.name,
       totalShifts: shifts[s.id] || 0,
       totalHours: hours[s.id] || 0,
-      isOvertime: (hours[s.id] || 0) > 45,
+      isOvertime: (hours[s.id] || 0) > 48,
     }));
   };
 
@@ -193,7 +195,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
     rows.push('');
     rows.push('Staff,Total Shifts,Total Hours,Overtime');
     getSummary().forEach(s => {
-      rows.push(`${s.name},${s.totalShifts},${s.totalHours},${s.isOvertime ? s.totalHours - 45 + 'h' : '-'}`);
+      rows.push(`${s.name},${s.totalShifts},${s.totalHours},${s.isOvertime ? s.totalHours - 48 + 'h' : '-'}`);
     });
     const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -256,8 +258,8 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
               <div className="flex items-start gap-3">
                 <Checkbox id={`maxHours-${rosterType}`} checked={maxHoursEnabled} onCheckedChange={(v) => setMaxHoursEnabled(!!v)} />
                 <div>
-                  <Label htmlFor={`maxHours-${rosterType}`} className="text-sm font-medium">Maximum 45 working hours per week</Label>
-                  <p className="text-xs text-muted-foreground">Hours beyond 45 will be flagged as overtime in the summary</p>
+                   <Label htmlFor={`maxHours-${rosterType}`} className="text-sm font-medium">Working hours: 45–48 hours per week</Label>
+                   <p className="text-xs text-muted-foreground">Minimum 45h, maximum 48h. Hours beyond 48 will be flagged as overtime</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
@@ -408,7 +410,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                         <TableCell className="text-center">{s.totalHours}h</TableCell>
                         <TableCell className="text-center">
                           {s.isOvertime ? (
-                            <Badge variant="destructive" className="text-xs">{s.totalHours - 45}h OT</Badge>
+                            <Badge variant="destructive" className="text-xs">{s.totalHours - 48}h OT</Badge>
                           ) : (
                             <span className="text-muted-foreground text-xs">—</span>
                           )}
