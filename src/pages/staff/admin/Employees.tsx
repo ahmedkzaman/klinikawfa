@@ -7,6 +7,8 @@ import { Users, Shield, User, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
+const STAFF_POSITIONS = ['Clinic Assistant', 'Staff Nurse', 'Medical Assistant', 'Doctor', 'Manager'];
+
 interface Employee {
   id: string;
   full_name: string | null;
