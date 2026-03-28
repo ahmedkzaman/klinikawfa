@@ -495,9 +495,12 @@ export default function AppraisalForm() {
 
   const appraisalType: AppraisalType = ((appraisal as any)?.appraisal_type || 'doctor') as AppraisalType;
   const isCA = appraisalType === 'clinic_assistant';
-  const currentKpiDefs = isCA ? CA_KPIS : DOCTOR_KPIS;
-  const currentWeights = isCA ? CA_SECTION_WEIGHTS : SECTION_WEIGHTS;
-  const currentEvalRoles = isCA ? CA_EVALUATOR_ROLES : EVALUATOR_ROLES;
+  const isSN = appraisalType === 'staff_nurse';
+  const isCompetencyBased = isCA || isSN;
+  const competencyCategories = isSN ? SN_COMPETENCY_CATEGORIES : CA_COMPETENCY_CATEGORIES;
+  const currentKpiDefs = isCompetencyBased ? (isSN ? SN_KPIS : CA_KPIS) : DOCTOR_KPIS;
+  const currentWeights = isCompetencyBased ? (isSN ? SN_SECTION_WEIGHTS : CA_SECTION_WEIGHTS) : SECTION_WEIGHTS;
+  const currentEvalRoles = isCompetencyBased ? (isSN ? SN_EVALUATOR_ROLES : CA_EVALUATOR_ROLES) : EVALUATOR_ROLES;
 
   const { data: responses } = useQuery({
     queryKey: ['appraisal-responses', id],
