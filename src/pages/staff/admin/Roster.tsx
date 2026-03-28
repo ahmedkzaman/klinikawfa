@@ -195,7 +195,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
     rows.push('');
     rows.push('Staff,Total Shifts,Total Hours,Overtime');
     getSummary().forEach(s => {
-      rows.push(`${s.name},${s.totalShifts},${s.totalHours},${s.isOvertime ? s.totalHours - 45 + 'h' : '-'}`);
+      rows.push(`${s.name},${s.totalShifts},${s.totalHours},${s.isOvertime ? s.totalHours - 48 + 'h' : '-'}`);
     });
     const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
