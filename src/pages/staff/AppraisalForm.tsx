@@ -157,8 +157,11 @@ function ReviewPanel({
   appraisalType: AppraisalType;
 }) {
   const isCA = appraisalType === 'clinic_assistant';
-  const ROLES = isCA ? CA_EVALUATOR_ROLES : EVALUATOR_ROLES;
-  const weights = isCA ? CA_SECTION_WEIGHTS : SECTION_WEIGHTS;
+  const isSN = appraisalType === 'staff_nurse';
+  const isCompetencyBased = isCA || isSN;
+  const competencyCategories = isSN ? SN_COMPETENCY_CATEGORIES : CA_COMPETENCY_CATEGORIES;
+  const ROLES = isCompetencyBased ? (isSN ? SN_EVALUATOR_ROLES : CA_EVALUATOR_ROLES) : EVALUATOR_ROLES;
+  const weights = isCompetencyBased ? (isSN ? SN_SECTION_WEIGHTS : CA_SECTION_WEIGHTS) : SECTION_WEIGHTS;
   const submitted = responses.filter((r) => r.status === 'submitted');
   const byRole = (role: string) => submitted.find((r) => r.evaluator_role === role);
 
