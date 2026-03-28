@@ -19,6 +19,7 @@ import {
   RATING_LABELS, CLINICAL_CRITERIA, PATIENT_CRITERIA, ATTENDANCE_CRITERIA,
   DOCTOR_KPIS, SECTION_WEIGHTS, EVALUATOR_ROLES,
   CA_COMPETENCY_CATEGORIES, CA_KPIS, CA_SECTION_WEIGHTS, CA_EVALUATOR_ROLES,
+  SN_COMPETENCY_CATEGORIES, SN_KPIS, SN_SECTION_WEIGHTS, SN_EVALUATOR_ROLES,
   APPRAISAL_TYPE_LABELS, type AppraisalType,
 } from '@/lib/appraisalConstants';
 
@@ -86,19 +87,21 @@ function CriteriaSection({
   );
 }
 
-/* ─── Clinic Assistant Competency Section ─── */
+/* ─── Generic Competency Section (works for CA and SN) ─── */
 function CACompetencySection({
+  categories,
   competencyData,
   onChange,
   disabled,
 }: {
+  categories: readonly { key: string; label: string; indicators: readonly { key: string; label: string; description: string }[] }[];
   competencyData: CompetencyResponse;
   onChange: (key: string, field: 'rating' | 'evidence', value: any) => void;
   disabled?: boolean;
 }) {
   return (
     <div className="space-y-8">
-      {CA_COMPETENCY_CATEGORIES.map((cat) => (
+      {categories.map((cat) => (
         <div key={cat.key}>
           <h3 className="font-semibold text-base mb-4">{cat.label}</h3>
           <div className="space-y-4">
@@ -154,14 +157,17 @@ function ReviewPanel({
   appraisalType: AppraisalType;
 }) {
   const isCA = appraisalType === 'clinic_assistant';
-  const ROLES = isCA ? CA_EVALUATOR_ROLES : EVALUATOR_ROLES;
-  const weights = isCA ? CA_SECTION_WEIGHTS : SECTION_WEIGHTS;
+  const isSN = appraisalType === 'staff_nurse';
+  const isCompetencyBased = isCA || isSN;
+  const competencyCategories = isSN ? SN_COMPETENCY_CATEGORIES : CA_COMPETENCY_CATEGORIES;
+  const ROLES = isCompetencyBased ? (isSN ? SN_EVALUATOR_ROLES : CA_EVALUATOR_ROLES) : EVALUATOR_ROLES;
+  const weights = isCompetencyBased ? (isSN ? SN_SECTION_WEIGHTS : CA_SECTION_WEIGHTS) : SECTION_WEIGHTS;
   const submitted = responses.filter((r) => r.status === 'submitted');
   const byRole = (role: string) => submitted.find((r) => r.evaluator_role === role);
 
   function getRating(role: string, key: string): number | null {
     const resp = byRole(role);
-    if (isCA) {
+    if (isCompetencyBased) {
       const cr = resp?.competency_responses as CompetencyResponse | null;
       return cr?.[key]?.rating ?? null;
     }
@@ -212,11 +218,11 @@ function ReviewPanel({
   });
 
   const selfResp = byRole('Self');
-  const kpiDefs = isCA ? CA_KPIS : DOCTOR_KPIS;
+  const kpiDefs = isCompetencyBased ? (isSN ? SN_KPIS : CA_KPIS) : DOCTOR_KPIS;
   const selfKpis = selfResp?.kpi_responses as KpiResponse[] | null;
 
   // Build section rows for the scores table
-  const sectionRows = isCA
+  const sectionRows = isCompetencyBased
     ? [
         { key: 'b', label: 'B: Competency (30%)', weight: weights.B },
         { key: 'c', label: 'C: KPIs (40%)', weight: weights.C },
@@ -258,8 +264,8 @@ function ReviewPanel({
       </Card>
 
       {/* Criteria tables */}
-      {isCA ? (
-        CA_COMPETENCY_CATEGORIES.map((cat) => (
+      {isCompetencyBased ? (
+        competencyCategories.map((cat) => (
           <Card key={cat.key} className="mb-6">
             <CardHeader className="pb-3"><CardTitle className="text-base">{cat.label}</CardTitle></CardHeader>
             <CardContent>
@@ -304,7 +310,7 @@ function ReviewPanel({
       {/* KPIs from Self */}
       <Card className="mb-6">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">{isCA ? 'KPIs (Self-Assessment)' : 'Section E — KPIs (Self-Assessment)'}</CardTitle>
+          <CardTitle className="text-base">{isCompetencyBased ? 'KPIs (Self-Assessment)' : 'Section E — KPIs (Self-Assessment)'}</CardTitle>
         </CardHeader>
         <CardContent>
           {selfKpis && selfKpis.length > 0 ? (
@@ -489,9 +495,12 @@ export default function AppraisalForm() {
 
   const appraisalType: AppraisalType = ((appraisal as any)?.appraisal_type || 'doctor') as AppraisalType;
   const isCA = appraisalType === 'clinic_assistant';
-  const currentKpiDefs = isCA ? CA_KPIS : DOCTOR_KPIS;
-  const currentWeights = isCA ? CA_SECTION_WEIGHTS : SECTION_WEIGHTS;
-  const currentEvalRoles = isCA ? CA_EVALUATOR_ROLES : EVALUATOR_ROLES;
+  const isSN = appraisalType === 'staff_nurse';
+  const isCompetencyBased = isCA || isSN;
+  const competencyCategories = isSN ? SN_COMPETENCY_CATEGORIES : CA_COMPETENCY_CATEGORIES;
+  const currentKpiDefs = isCompetencyBased ? (isSN ? SN_KPIS : CA_KPIS) : DOCTOR_KPIS;
+  const currentWeights = isCompetencyBased ? (isSN ? SN_SECTION_WEIGHTS : CA_SECTION_WEIGHTS) : SECTION_WEIGHTS;
+  const currentEvalRoles = isCompetencyBased ? (isSN ? SN_EVALUATOR_ROLES : CA_EVALUATOR_ROLES) : EVALUATOR_ROLES;
 
   const { data: responses } = useQuery({
     queryKey: ['appraisal-responses', id],
@@ -580,15 +589,15 @@ export default function AppraisalForm() {
     return ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length;
   }
 
-  function calcCACompetencyScore(): number | null {
-    const allIndicators = CA_COMPETENCY_CATEGORIES.flatMap((c) => [...c.indicators]);
+  function calcCompetencyScore(): number | null {
+    const allIndicators = competencyCategories.flatMap((c) => [...c.indicators]);
     const ratings = allIndicators.map((ind: { key: string }) => competencyData[ind.key]?.rating).filter((r): r is number => r != null);
     if (!ratings.length) return null;
     return ratings.reduce((a, b) => a + b, 0) / ratings.length;
   }
 
-  const sectionBScore = isCA ? calcCACompetencyScore() : calcSectionScore(CLINICAL_CRITERIA);
-  const sectionCScore = isCA ? calcKpiScore() : calcSectionScore(PATIENT_CRITERIA);
+  const sectionBScore = isCompetencyBased ? calcCompetencyScore() : calcSectionScore(CLINICAL_CRITERIA);
+  const sectionCScore = isCompetencyBased ? calcKpiScore() : calcSectionScore(PATIENT_CRITERIA);
   const sectionDScore = calcSectionScore(ATTENDANCE_CRITERIA);
 
   function calcKpiScore() {
@@ -598,19 +607,19 @@ export default function AppraisalForm() {
     const total = scored.reduce((sum, k) => sum + (statusMap[k.status] || 0), 0);
     return total / scored.length;
   }
-  const sectionEScore = isCA ? null : calcKpiScore(); // For doctors, E=KPIs; for CA, C=KPIs
+  const sectionEScore = isCompetencyBased ? null : calcKpiScore();
 
-  // For CA: patient feedback score from formData
-  const caPatientFeedbackScore = isCA ? (formData.patient_satisfaction_score ? Number(formData.patient_satisfaction_score) : null) : null;
+  const caPatientFeedbackScore = isCompetencyBased ? (formData.patient_satisfaction_score ? Number(formData.patient_satisfaction_score) : null) : null;
 
   function calcOverall() {
-    if (isCA) {
+    if (isCompetencyBased) {
+      const w = isSN ? SN_SECTION_WEIGHTS : CA_SECTION_WEIGHTS;
       const b = sectionBScore;
-      const c = sectionCScore; // KPI score
+      const c = sectionCScore;
       const d = sectionDScore;
-      const e = caPatientFeedbackScore; // patient feedback
+      const e = caPatientFeedbackScore;
       if (b == null || c == null || d == null || e == null) return null;
-      return b * CA_SECTION_WEIGHTS.B + c * CA_SECTION_WEIGHTS.C + d * CA_SECTION_WEIGHTS.D + e * CA_SECTION_WEIGHTS.E;
+      return b * w.B + c * w.C + d * w.D + e * w.E;
     }
     if (sectionBScore == null || sectionCScore == null || sectionDScore == null || sectionEScore == null) return null;
     return (
@@ -626,7 +635,7 @@ export default function AppraisalForm() {
       if (!myResponse) throw new Error('No response record found');
       const payload: Record<string, any> = {};
 
-      if (isCA) {
+      if (isCompetencyBased) {
         // Save competency data as JSONB
         payload.competency_responses = competencyData;
       } else {
@@ -662,7 +671,7 @@ export default function AppraisalForm() {
       payload.attendance_overall_comments = formData.attendance_overall_comments || null;
 
       // Patient feedback metrics (shared for CA too)
-      if (isCA) {
+      if (isCompetencyBased) {
         ['patient_satisfaction_score', 'patient_satisfaction_source', 'patient_reviews_count',
          'patient_complaints_count', 'complaints_resolved', 'complaints_pending'].forEach((k) => {
           payload[k] = formData[k] ?? null;
@@ -675,9 +684,9 @@ export default function AppraisalForm() {
 
       // Scores
       payload.section_b_score = sectionBScore;
-      payload.section_c_score = isCA ? sectionCScore : calcSectionScore(PATIENT_CRITERIA);
+      payload.section_c_score = isCompetencyBased ? sectionCScore : calcSectionScore(PATIENT_CRITERIA);
       payload.section_d_score = sectionDScore;
-      payload.section_e_score = isCA ? caPatientFeedbackScore : sectionEScore;
+      payload.section_e_score = isCompetencyBased ? caPatientFeedbackScore : sectionEScore;
 
       if (submit) payload.status = 'submitted';
 
@@ -728,10 +737,10 @@ export default function AppraisalForm() {
 
   if (!appraisal) return <div className="py-12 text-center text-muted-foreground">Loading...</div>;
 
-  const formTitle = isCA ? 'Clinic Assistant Performance Appraisal' : '360° Doctor Performance Appraisal';
+  const formTitle = APPRAISAL_TYPE_LABELS[appraisalType] + ' Performance Appraisal';
 
   // Tab config based on type
-  const tabs = isCA
+  const tabs = isCompetencyBased
     ? [
         { value: 'partB', label: 'B: Competency' },
         { value: 'partC', label: 'C: KPIs' },
@@ -750,7 +759,7 @@ export default function AppraisalForm() {
       ];
 
   // Summary rows for Part F
-  const summaryRows = isCA
+  const summaryRows = isCompetencyBased
     ? [
         { label: 'Part B — Competency', score: sectionBScore, weight: '30%' },
         { label: 'Part C — KPIs', score: sectionCScore, weight: '40%' },
@@ -855,12 +864,12 @@ export default function AppraisalForm() {
             <TabsContent value="partB">
               <Card>
                 <CardHeader>
-                  <CardTitle>{isCA ? 'Part B — Competency Assessment' : 'Part B — Clinical Skills & Competency'}</CardTitle>
-                  <CardDescription>Rate each {isCA ? 'competency indicator' : 'competency'} using the 1–5 scale and provide evidence.</CardDescription>
+                  <CardTitle>{isCompetencyBased ? 'Part B — Competency Assessment' : 'Part B — Clinical Skills & Competency'}</CardTitle>
+                  <CardDescription>Rate each {isCompetencyBased ? 'competency indicator' : 'competency'} using the 1–5 scale and provide evidence.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {isCA ? (
-                    <CACompetencySection competencyData={competencyData} onChange={updateCompetencyField} disabled={isReadOnly} />
+                  {isCompetencyBased ? (
+                    <CACompetencySection categories={competencyCategories} competencyData={competencyData} onChange={updateCompetencyField} disabled={isReadOnly} />
                   ) : (
                     <>
                       <CriteriaSection criteria={CLINICAL_CRITERIA} data={formData} onChange={updateField} disabled={isReadOnly} />
@@ -884,15 +893,15 @@ export default function AppraisalForm() {
             <TabsContent value="partC">
               <Card>
                 <CardHeader>
-                  <CardTitle>{isCA ? 'Part C — Key Performance Indicators (KPIs)' : 'Part C — Patient Satisfaction & Communication'}</CardTitle>
-                  {isCA && <CardDescription>Evaluate performance against the {CA_KPIS.length} agreed KPIs.</CardDescription>}
+                  <CardTitle>{isCompetencyBased ? 'Part C — Key Performance Indicators (KPIs)' : 'Part C — Patient Satisfaction & Communication'}</CardTitle>
+                  {isCompetencyBased && <CardDescription>Evaluate performance against the {currentKpiDefs.length} agreed KPIs.</CardDescription>}
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {isCA ? (
-                    /* CA KPIs */
+                  {isCompetencyBased ? (
+                    /* Competency-based KPIs */
                     <div className="space-y-4">
                       {kpis.map((kpi, idx) => {
-                        const def = CA_KPIS.find((k) => k.number === kpi.kpi_number);
+                        const def = currentKpiDefs.find((k) => k.number === kpi.kpi_number);
                         return (
                           <div key={kpi.kpi_number} className="border rounded-lg p-4 space-y-3">
                             <div>
@@ -1004,11 +1013,11 @@ export default function AppraisalForm() {
             <TabsContent value="partE">
               <Card>
                 <CardHeader>
-                  <CardTitle>{isCA ? 'Part E — Patient Feedback' : 'Part E — Key Performance Indicators (KPIs)'}</CardTitle>
-                  {!isCA && <CardDescription>Evaluate performance against the 13 agreed KPIs.</CardDescription>}
+                  <CardTitle>{isCompetencyBased ? 'Part E — Patient Feedback' : 'Part E — Key Performance Indicators (KPIs)'}</CardTitle>
+                  {!isCompetencyBased && <CardDescription>Evaluate performance against the 13 agreed KPIs.</CardDescription>}
                 </CardHeader>
                 <CardContent>
-                  {isCA ? (
+                  {isCompetencyBased ? (
                     /* CA Patient Feedback */
                     <div className="space-y-6">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border rounded-lg p-4">

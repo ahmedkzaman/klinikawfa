@@ -25,6 +25,7 @@ const statusColors: Record<string, string> = {
 const typeColors: Record<string, string> = {
   doctor: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
   clinic_assistant: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
+  staff_nurse: 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200',
 };
 
 export default function PerformanceAppraisal() {
@@ -145,8 +146,9 @@ export default function PerformanceAppraisal() {
                   <Select value={appraisalType} onValueChange={(v) => setAppraisalType(v as AppraisalType)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="doctor">Doctor</SelectItem>
-                      <SelectItem value="clinic_assistant">Clinic Assistant</SelectItem>
+                      {(Object.entries(APPRAISAL_TYPE_LABELS) as [AppraisalType, string][]).map(([val, label]) => (
+                        <SelectItem key={val} value={val}>{label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
