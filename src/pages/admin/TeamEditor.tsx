@@ -97,7 +97,7 @@ export default function TeamEditor() {
 
       if (error) throw error;
       if (!data) {
-        navigate('/admin/team');
+        navigate('/staff/website/team');
         return;
       }
 
@@ -124,7 +124,7 @@ export default function TeamEditor() {
         description: language === 'ms' ? 'Gagal memuatkan data.' : 'Failed to load data.',
         variant: 'destructive',
       });
-      navigate('/admin/team');
+      navigate('/staff/website/team');
     } finally {
       setLoading(false);
     }
@@ -368,7 +368,7 @@ export default function TeamEditor() {
         description: language === 'ms' ? 'Data disimpan.' : 'Data saved.',
       });
 
-      navigate('/admin/team');
+      navigate('/staff/website/team');
     } catch (error) {
       console.error('Error saving member:', error);
       toast({
@@ -393,7 +393,7 @@ export default function TeamEditor() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/admin/team')}>
+        <Button variant="ghost" size="icon" onClick={() => navigate('/staff/website/team')}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
@@ -760,7 +760,7 @@ export default function TeamEditor() {
 
           {/* Actions */}
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => navigate('/admin/team')}>
+            <Button variant="outline" onClick={() => navigate('/staff/website/team')}>
               {language === 'ms' ? 'Batal' : 'Cancel'}
             </Button>
             <Button onClick={handleSave} disabled={saving}>

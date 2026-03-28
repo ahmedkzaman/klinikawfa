@@ -1,2 +1,1 @@
-export { AdminLayout } from './AdminLayout';
-export { AdminSidebar } from './AdminSidebar';
+// Admin layout components removed — all pages now render inside StaffLayout

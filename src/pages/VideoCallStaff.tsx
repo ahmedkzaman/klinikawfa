@@ -166,7 +166,7 @@ export default function VideoCallStaff() {
           description: 'No room code provided',
           variant: 'destructive',
         });
-        navigate('/admin/video-calls');
+        navigate('/staff/website/video-calls');
         return;
       }
 
@@ -196,7 +196,7 @@ export default function VideoCallStaff() {
           description: error instanceof Error ? error.message : 'Failed to load room',
           variant: 'destructive',
         });
-        navigate('/admin/video-calls');
+        navigate('/staff/website/video-calls');
       }
     };
 
@@ -253,7 +253,7 @@ export default function VideoCallStaff() {
             <Button 
               variant="outline" 
               className="w-full"
-              onClick={() => navigate('/admin/video-calls')}
+              onClick={() => navigate('/staff/website/video-calls')}
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               {language === 'ms' ? 'Kembali' : 'Back'}
@@ -445,7 +445,7 @@ export default function VideoCallStaff() {
             )}
 
             <Button 
-              onClick={() => navigate('/admin/video-calls')}
+              onClick={() => navigate('/staff/website/video-calls')}
               className="w-full"
             >
               {language === 'ms' ? 'Kembali ke Dashboard' : 'Back to Dashboard'}

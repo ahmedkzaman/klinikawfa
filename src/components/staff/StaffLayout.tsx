@@ -34,13 +34,13 @@ const adminNavItems = [
 ];
 
 const contentNavItems = [
-  { href: '/admin/leads', label: 'Leads / Appointments', icon: CalendarCheck },
-  { href: '/admin/team', label: 'Team', icon: Stethoscope },
-  { href: '/admin/video-calls', label: 'Video Calls', icon: Video },
-  { href: '/admin/blog', label: 'Blog Posts', icon: FileText },
-  { href: '/admin/gallery', label: 'Gallery', icon: Image },
-  { href: '/admin/reviews', label: 'Reviews', icon: Star },
-  { href: '/admin/settings', label: 'Settings', icon: Settings },
+  { href: '/staff/website/leads', label: 'Leads / Appointments', icon: CalendarCheck },
+  { href: '/staff/website/team', label: 'Team', icon: Stethoscope },
+  { href: '/staff/website/video-calls', label: 'Video Calls', icon: Video },
+  { href: '/staff/website/blog', label: 'Blog Posts', icon: FileText },
+  { href: '/staff/website/gallery', label: 'Gallery', icon: Image },
+  { href: '/staff/website/reviews', label: 'Reviews', icon: Star },
+  { href: '/staff/website/settings', label: 'Settings', icon: Settings },
 ];
 
 function SidebarNav({ isAdmin, pathname, onLinkClick }: { isAdmin: boolean; pathname: string; onLinkClick?: () => void }) {

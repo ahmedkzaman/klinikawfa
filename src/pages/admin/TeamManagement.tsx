@@ -232,7 +232,7 @@ export default function TeamManagement() {
           <Button variant="outline" size="icon" onClick={fetchMembers} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
-          <Button onClick={() => navigate('/admin/team/new')}>
+          <Button onClick={() => navigate('/staff/website/team/new')}>
             <Plus className="mr-2 h-4 w-4" />
             {language === 'ms' ? 'Tambah' : 'Add'}
           </Button>
@@ -379,7 +379,7 @@ export default function TeamManagement() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          onClick={() => navigate(`/admin/team/${member.id}`)}
+                          onClick={() => navigate(`/staff/website/team/${member.id}`)}
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>

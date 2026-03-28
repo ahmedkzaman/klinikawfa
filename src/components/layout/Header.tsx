@@ -145,9 +145,9 @@ export function Header() {
                     {isStaffOrAdmin && (
                       <>
                         <DropdownMenuItem asChild>
-                          <Link to="/admin" className="flex items-center gap-2">
+                          <Link to="/staff/dashboard" className="flex items-center gap-2">
                             <Settings className="h-4 w-4" />
-                            {language === 'ms' ? 'Panel Admin' : 'Admin Panel'}
+                            {language === 'ms' ? 'Portal Staf' : 'Staff Portal'}
                           </Link>
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
@@ -251,9 +251,9 @@ export function Header() {
                         <>
                           {isStaffOrAdmin && (
                             <Button size="lg" variant="outline" className="border-2" asChild onClick={() => setIsOpen(false)}>
-                              <Link to="/admin">
+                              <Link to="/staff/dashboard">
                                 <Settings className="mr-2 h-5 w-5" />
-                                {language === 'ms' ? 'Panel Admin' : 'Admin Panel'}
+                                {language === 'ms' ? 'Portal Staf' : 'Staff Portal'}
                               </Link>
                             </Button>
                           )}

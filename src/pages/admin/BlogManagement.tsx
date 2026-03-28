@@ -182,7 +182,7 @@ export default function BlogManagement() {
           <Button variant="outline" size="icon" onClick={fetchPosts} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
-          <Button onClick={() => navigate('/admin/blog/new')}>
+          <Button onClick={() => navigate('/staff/website/blog/new')}>
             <Plus className="mr-2 h-4 w-4" />
             {language === 'ms' ? 'Post Baru' : 'New Post'}
           </Button>
@@ -284,7 +284,7 @@ export default function BlogManagement() {
                           <Button 
                             variant="ghost" 
                             size="icon"
-                            onClick={() => navigate(`/admin/blog/${post.id}`)}
+                            onClick={() => navigate(`/staff/website/blog/${post.id}`)}
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
