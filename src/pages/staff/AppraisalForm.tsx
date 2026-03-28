@@ -671,7 +671,7 @@ export default function AppraisalForm() {
       payload.attendance_overall_comments = formData.attendance_overall_comments || null;
 
       // Patient feedback metrics (shared for CA too)
-      if (isCA) {
+      if (isCompetencyBased) {
         ['patient_satisfaction_score', 'patient_satisfaction_source', 'patient_reviews_count',
          'patient_complaints_count', 'complaints_resolved', 'complaints_pending'].forEach((k) => {
           payload[k] = formData[k] ?? null;
