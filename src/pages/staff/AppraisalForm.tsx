@@ -310,7 +310,7 @@ function ReviewPanel({
       {/* KPIs from Self */}
       <Card className="mb-6">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">{isCA ? 'KPIs (Self-Assessment)' : 'Section E — KPIs (Self-Assessment)'}</CardTitle>
+          <CardTitle className="text-base">{isCompetencyBased ? 'KPIs (Self-Assessment)' : 'Section E — KPIs (Self-Assessment)'}</CardTitle>
         </CardHeader>
         <CardContent>
           {selfKpis && selfKpis.length > 0 ? (
