@@ -195,15 +195,103 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
       newRoster[dateKey] = { shift1: pickStaff(1), shift2: pickStaff(2) };
     }
 
-    // Check minimum hours warnings per week
+    // ─── Top-up pass: enforce 45h minimum per week per staff ───
     if (maxHoursEnabled) {
       const allWeeks = new Set<number>();
-      monthDays.forEach(d => allWeeks.add(getISOWeek(d)));
+      const weekDaysMap: Record<number, Date[]> = {};
+      monthDays.forEach(d => {
+        const w = getISOWeek(d);
+        allWeeks.add(w);
+        if (!weekDaysMap[w]) weekDaysMap[w] = [];
+        weekDaysMap[w].push(d);
+      });
+
+      // Recalculate weekHours from roster (in case of any drift)
+      staffList.forEach(s => { weekHours[s.id] = {}; });
+      for (const day of monthDays) {
+        const dateKey = format(day, 'yyyy-MM-dd');
+        const isoWeek = getISOWeek(day);
+        const r = newRoster[dateKey];
+        if (!r) continue;
+        [...r.shift1, ...r.shift2].forEach(cell => {
+          if (cell.staffId) addWeekHours(cell.staffId, isoWeek, SHIFT_HOURS);
+        });
+      }
+
+      // For each week, top up staff below 45h by swapping them into slots held by the most-assigned staff
+      let changed = true;
+      let iterations = 0;
+      while (changed && iterations < 100) {
+        changed = false;
+        iterations++;
+        for (const week of allWeeks) {
+          const daysInWeek = weekDaysMap[week] || [];
+          // Find staff below 45h this week who have at least 1 shift
+          const underStaff = staffList.filter(s => {
+            const hrs = getWeekHours(s.id, week);
+            return hrs > 0 && hrs < 45;
+          }).sort((a, b) => getWeekHours(a.id, week) - getWeekHours(b.id, week));
+
+          for (const under of underStaff) {
+            if (getWeekHours(under.id, week) >= 45) continue;
+
+            // Find slots in this week where under is not already assigned that day
+            for (const day of daysInWeek) {
+              if (getWeekHours(under.id, week) >= 45) break;
+              const dateKey = format(day, 'yyyy-MM-dd');
+              const r = newRoster[dateKey];
+              if (!r) continue;
+
+              // Check if under is already assigned today
+              const assignedTodayIds = [...r.shift1, ...r.shift2].map(c => c.staffId);
+              if (assignedTodayIds.includes(under.id)) continue;
+
+              // Find the cell with the staff member who has the most hours this week
+              for (const shiftKey of ['shift1', 'shift2'] as const) {
+                if (getWeekHours(under.id, week) >= 45) break;
+                const cells = r[shiftKey];
+                let bestIdx = -1;
+                let bestHours = -1;
+                for (let ci = 0; ci < cells.length; ci++) {
+                  const cellHrs = getWeekHours(cells[ci].staffId, week);
+                  // Only swap if the donor has more hours than the under-assigned staff AND donor won't go below 45h
+                  if (cellHrs > bestHours && cellHrs > getWeekHours(under.id, week) + SHIFT_HOURS) {
+                    bestIdx = ci;
+                    bestHours = cellHrs;
+                  }
+                }
+                if (bestIdx >= 0) {
+                  const donor = cells[bestIdx];
+                  const donorNewHrs = getWeekHours(donor.staffId, week) - SHIFT_HOURS;
+                  // Only swap if donor stays >= 45h or donor also needs hours (prefer keeping donor >= 45)
+                  if (donorNewHrs >= 45 || donorNewHrs >= getWeekHours(under.id, week)) {
+                    // Perform swap
+                    weekHours[donor.staffId][week] -= SHIFT_HOURS;
+                    weekHours[under.id][week] = (weekHours[under.id][week] || 0) + SHIFT_HOURS;
+                    const updatedCells = [...cells];
+                    updatedCells[bestIdx] = { staffId: under.id, staffName: under.name };
+                    newRoster[dateKey] = { ...newRoster[dateKey], [shiftKey]: updatedCells };
+                    changed = true;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Post top-up: warn only if still below 45h after all swaps
       staffList.forEach(s => {
         allWeeks.forEach(week => {
           const hrs = getWeekHours(s.id, week);
           if (hrs > 0 && hrs < 45) {
-            newWarnings.push(`${s.name}: Only ${hrs}h in week ${week} (below 45h minimum)`);
+            // Check if it's a partial week (start/end of month)
+            const daysInWeek = weekDaysMap[week]?.length || 0;
+            if (daysInWeek < 7) {
+              newWarnings.push(`${s.name}: ${hrs}h in week ${week} (partial week — ${daysInWeek} days in month)`);
+            } else {
+              newWarnings.push(`${s.name}: Only ${hrs}h in week ${week} (below 45h minimum)`);
+            }
           }
         });
       });
