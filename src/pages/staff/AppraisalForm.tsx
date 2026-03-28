@@ -264,8 +264,8 @@ function ReviewPanel({
       </Card>
 
       {/* Criteria tables */}
-      {isCA ? (
-        CA_COMPETENCY_CATEGORIES.map((cat) => (
+      {isCompetencyBased ? (
+        competencyCategories.map((cat) => (
           <Card key={cat.key} className="mb-6">
             <CardHeader className="pb-3"><CardTitle className="text-base">{cat.label}</CardTitle></CardHeader>
             <CardContent>
