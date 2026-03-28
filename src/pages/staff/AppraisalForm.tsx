@@ -589,15 +589,15 @@ export default function AppraisalForm() {
     return ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length;
   }
 
-  function calcCACompetencyScore(): number | null {
-    const allIndicators = CA_COMPETENCY_CATEGORIES.flatMap((c) => [...c.indicators]);
+  function calcCompetencyScore(): number | null {
+    const allIndicators = competencyCategories.flatMap((c) => [...c.indicators]);
     const ratings = allIndicators.map((ind: { key: string }) => competencyData[ind.key]?.rating).filter((r): r is number => r != null);
     if (!ratings.length) return null;
     return ratings.reduce((a, b) => a + b, 0) / ratings.length;
   }
 
-  const sectionBScore = isCA ? calcCACompetencyScore() : calcSectionScore(CLINICAL_CRITERIA);
-  const sectionCScore = isCA ? calcKpiScore() : calcSectionScore(PATIENT_CRITERIA);
+  const sectionBScore = isCompetencyBased ? calcCompetencyScore() : calcSectionScore(CLINICAL_CRITERIA);
+  const sectionCScore = isCompetencyBased ? calcKpiScore() : calcSectionScore(PATIENT_CRITERIA);
   const sectionDScore = calcSectionScore(ATTENDANCE_CRITERIA);
 
   function calcKpiScore() {
@@ -607,10 +607,9 @@ export default function AppraisalForm() {
     const total = scored.reduce((sum, k) => sum + (statusMap[k.status] || 0), 0);
     return total / scored.length;
   }
-  const sectionEScore = isCA ? null : calcKpiScore(); // For doctors, E=KPIs; for CA, C=KPIs
+  const sectionEScore = isCompetencyBased ? null : calcKpiScore();
 
-  // For CA: patient feedback score from formData
-  const caPatientFeedbackScore = isCA ? (formData.patient_satisfaction_score ? Number(formData.patient_satisfaction_score) : null) : null;
+  const caPatientFeedbackScore = isCompetencyBased ? (formData.patient_satisfaction_score ? Number(formData.patient_satisfaction_score) : null) : null;
 
   function calcOverall() {
     if (isCA) {
