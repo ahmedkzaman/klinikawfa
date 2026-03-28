@@ -93,6 +93,7 @@ export type Database = {
           clinical_strength_summary: string | null
           compassion_empathy_evidence: string | null
           compassion_empathy_rating: number | null
+          competency_responses: Json | null
           complaints_pending: number | null
           complaints_resolved: number | null
           created_at: string
@@ -158,6 +159,7 @@ export type Database = {
           clinical_strength_summary?: string | null
           compassion_empathy_evidence?: string | null
           compassion_empathy_rating?: number | null
+          competency_responses?: Json | null
           complaints_pending?: number | null
           complaints_resolved?: number | null
           created_at?: string
@@ -223,6 +225,7 @@ export type Database = {
           clinical_strength_summary?: string | null
           compassion_empathy_evidence?: string | null
           compassion_empathy_rating?: number | null
+          competency_responses?: Json | null
           complaints_pending?: number | null
           complaints_resolved?: number | null
           created_at?: string
@@ -602,6 +605,7 @@ export type Database = {
         Row: {
           appraisal_period_from: string
           appraisal_period_to: string
+          appraisal_type: string
           created_at: string
           created_by: string
           date_of_appraisal: string | null
@@ -614,6 +618,7 @@ export type Database = {
         Insert: {
           appraisal_period_from: string
           appraisal_period_to: string
+          appraisal_type?: string
           created_at?: string
           created_by: string
           date_of_appraisal?: string | null
@@ -626,6 +631,7 @@ export type Database = {
         Update: {
           appraisal_period_from?: string
           appraisal_period_to?: string
+          appraisal_type?: string
           created_at?: string
           created_by?: string
           date_of_appraisal?: string | null
