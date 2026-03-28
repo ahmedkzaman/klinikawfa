@@ -612,13 +612,14 @@ export default function AppraisalForm() {
   const caPatientFeedbackScore = isCompetencyBased ? (formData.patient_satisfaction_score ? Number(formData.patient_satisfaction_score) : null) : null;
 
   function calcOverall() {
-    if (isCA) {
+    if (isCompetencyBased) {
+      const w = isSN ? SN_SECTION_WEIGHTS : CA_SECTION_WEIGHTS;
       const b = sectionBScore;
-      const c = sectionCScore; // KPI score
+      const c = sectionCScore;
       const d = sectionDScore;
-      const e = caPatientFeedbackScore; // patient feedback
+      const e = caPatientFeedbackScore;
       if (b == null || c == null || d == null || e == null) return null;
-      return b * CA_SECTION_WEIGHTS.B + c * CA_SECTION_WEIGHTS.C + d * CA_SECTION_WEIGHTS.D + e * CA_SECTION_WEIGHTS.E;
+      return b * w.B + c * w.C + d * w.D + e * w.E;
     }
     if (sectionBScore == null || sectionCScore == null || sectionDScore == null || sectionEScore == null) return null;
     return (
