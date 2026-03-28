@@ -167,7 +167,7 @@ function ReviewPanel({
 
   function getRating(role: string, key: string): number | null {
     const resp = byRole(role);
-    if (isCA) {
+    if (isCompetencyBased) {
       const cr = resp?.competency_responses as CompetencyResponse | null;
       return cr?.[key]?.rating ?? null;
     }
