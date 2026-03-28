@@ -1,4 +1,3 @@
-export { default as AdminDashboard } from './Dashboard';
 export { default as LeadsManagement } from './LeadsManagement';
 export { default as BlogManagement } from './BlogManagement';
 export { default as BlogEditor } from './BlogEditor';
