@@ -635,7 +635,7 @@ export default function AppraisalForm() {
       if (!myResponse) throw new Error('No response record found');
       const payload: Record<string, any> = {};
 
-      if (isCA) {
+      if (isCompetencyBased) {
         // Save competency data as JSONB
         payload.competency_responses = competencyData;
       } else {
