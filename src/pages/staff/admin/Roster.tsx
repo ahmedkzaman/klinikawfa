@@ -170,12 +170,14 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
             eligible = [...staffList];
           }
 
-          // Pick the least-assigned staff member to keep balance
+          // Pick staff furthest from 45h minimum first, then least-assigned
           if (eligible.length > 0) {
-            // Sort by current week hours ascending, then random
-            eligible.sort((a, b) => getWeekHours(a.id, isoWeek) - getWeekHours(b.id, isoWeek));
-            const minHours = getWeekHours(eligible[0].id, isoWeek);
-            const leastAssigned = eligible.filter(s => getWeekHours(s.id, isoWeek) === minHours);
+            // Prioritize staff below 45h to help them reach minimum
+            const below45 = eligible.filter(s => getWeekHours(s.id, isoWeek) < 45);
+            const pool = below45.length > 0 ? below45 : eligible;
+            pool.sort((a, b) => getWeekHours(a.id, isoWeek) - getWeekHours(b.id, isoWeek));
+            const minHours = getWeekHours(pool[0].id, isoWeek);
+            const leastAssigned = pool.filter(s => getWeekHours(s.id, isoWeek) === minHours);
             const pick = leastAssigned[Math.floor(Math.random() * leastAssigned.length)];
 
             if (getWeekHours(pick.id, isoWeek) + SHIFT_HOURS > 48) {
