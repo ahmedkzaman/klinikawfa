@@ -25,6 +25,7 @@ const statusColors: Record<string, string> = {
 const typeColors: Record<string, string> = {
   doctor: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
   clinic_assistant: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
+  staff_nurse: 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200',
 };
 
 export default function PerformanceAppraisal() {
