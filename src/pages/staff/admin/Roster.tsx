@@ -141,8 +141,11 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
 
     if (maxHoursEnabled) {
       staffList.forEach(s => {
-        if (staffHours[s.id] > 45) {
-          newWarnings.push(`${s.name}: ${staffHours[s.id]}h assigned (${staffHours[s.id] - 45}h overtime)`);
+        if (staffHours[s.id] < 45) {
+          newWarnings.push(`${s.name}: Only ${staffHours[s.id]}h assigned (below 45h minimum)`);
+        } else if (staffHours[s.id] > 48) {
+          newWarnings.push(`${s.name}: ${staffHours[s.id]}h assigned (exceeds 48h maximum)`);
+        }
         }
       });
     }
