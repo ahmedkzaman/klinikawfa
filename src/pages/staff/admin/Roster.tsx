@@ -175,7 +175,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
       name: s.name,
       totalShifts: shifts[s.id] || 0,
       totalHours: hours[s.id] || 0,
-      isOvertime: (hours[s.id] || 0) > 45,
+      isOvertime: (hours[s.id] || 0) > 48,
     }));
   };
 
