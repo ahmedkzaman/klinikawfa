@@ -427,7 +427,9 @@ export default function PayrollSummary() {
                     <TableHead className="text-center">OT Hrs</TableHead>
                     <TableHead className="text-center">Unpaid Leave</TableHead>
                     <TableHead className="text-right">Gross (RM)</TableHead>
+                    <TableHead className="text-right">Deductions (RM)</TableHead>
                     <TableHead className="text-right">Net (RM)</TableHead>
+                    <TableHead className="text-right">Employer Cost (RM)</TableHead>
                     <TableHead className="text-center">Status</TableHead>
                     <TableHead className="text-center">Indicators</TableHead>
                   </TableRow>
