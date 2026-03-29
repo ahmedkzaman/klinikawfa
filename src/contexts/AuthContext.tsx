@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -28,6 +28,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [rolesLoading, setRolesLoading] = useState(true);
   const [roles, setRoles] = useState<AppRole[]>([]);
 
+  // Refs to track state across the auth listener closure
+  const authInitializedRef = useRef(false);
+  const currentUserIdRef = useRef<string | null>(null);
+
   const fetchUserRoles = useCallback(async (userId: string) => {
     setRolesLoading(true);
     try {
@@ -53,39 +57,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    let currentUserId: string | null = null;
-
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        // Skip token refreshes and redundant events when the user hasn't changed
-        if (
-          (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') &&
-          session?.user?.id === currentUserId &&
-          !loading
-        ) {
-          return;
-        }
-
-        currentUserId = session?.user?.id ?? null;
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-
-        // Defer role fetching to avoid deadlock
-        if (session?.user) {
-          setTimeout(() => {
-            fetchUserRoles(session.user.id);
-          }, 0);
-        } else {
-          setRoles([]);
-          setRolesLoading(false);
-        }
-      }
-    );
-
-    // THEN check for existing session
+    // Initialize session first
     supabase.auth.getSession().then(({ data: { session } }) => {
+      currentUserIdRef.current = session?.user?.id ?? null;
+      authInitializedRef.current = true;
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -96,6 +71,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setRolesLoading(false);
       }
     });
+
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        const newUserId = session?.user?.id ?? null;
+
+        // Skip redundant events when user hasn't changed and auth is already initialized
+        if (
+          authInitializedRef.current &&
+          (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') &&
+          newUserId === currentUserIdRef.current
+        ) {
+          return;
+        }
+
+        currentUserIdRef.current = newUserId;
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+
+        if (session?.user) {
+          // Only refetch roles when user actually changed
+          setTimeout(() => {
+            fetchUserRoles(session.user.id);
+          }, 0);
+        } else {
+          setRoles([]);
+          setRolesLoading(false);
+        }
+      }
+    );
 
     return () => subscription.unsubscribe();
   }, [fetchUserRoles]);
@@ -125,6 +131,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    currentUserIdRef.current = null;
+    authInitializedRef.current = false;
     await supabase.auth.signOut();
     setRoles([]);
   };
