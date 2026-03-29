@@ -93,6 +93,9 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
   const [manualOverrides, setManualOverrides] = useState<ManualOverrides>({});
   const [warnings, setWarnings] = useState<string[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
 
   const monthDays = useMemo(() => {
     const start = startOfMonth(new Date(selectedYear, selectedMonth, 1));
