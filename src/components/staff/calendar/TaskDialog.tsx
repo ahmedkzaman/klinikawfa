@@ -145,17 +145,20 @@ export function TaskDialog({ open, onClose, task, initialDate, profiles, onSave,
             </div>
             <div><Label>End Time</Label><Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} disabled={!canEdit} /></div>
           </div>
+          <div><Label>Deadline</Label>
+            {canEdit ? (
+              <Popover><PopoverTrigger asChild><Button variant="outline" className={cn('w-full justify-start text-left font-normal', !deadline && 'text-muted-foreground')}><CalendarIcon className="mr-2 h-4 w-4" />{deadline ? format(deadline, 'MMM d, yyyy') : 'No deadline'}</Button></PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={deadline} onSelect={setDeadline} className="p-3 pointer-events-auto" /></PopoverContent></Popover>
+            ) : (
+              <p className="text-sm text-muted-foreground mt-1">{deadline ? format(deadline, 'MMM d, yyyy') : 'No deadline'}</p>
+            )}
+          </div>
           {isAdmin && (
-            <>
-              <div><Label>Assign To (Admin)</Label>
-                <Select value={assignedTo} onValueChange={setAssignedTo}>
-                  <SelectTrigger><SelectValue placeholder="Self (unassigned)" /></SelectTrigger>
-                  <SelectContent><SelectItem value="none">Self (unassigned)</SelectItem>{staffList.map(([id, name]) => (<SelectItem key={id} value={id}>{name}</SelectItem>))}</SelectContent>
-                </Select></div>
-              <div><Label>Deadline (Admin)</Label>
-                <Popover><PopoverTrigger asChild><Button variant="outline" className={cn('w-full justify-start text-left font-normal', !deadline && 'text-muted-foreground')}><CalendarIcon className="mr-2 h-4 w-4" />{deadline ? format(deadline, 'MMM d, yyyy') : 'No deadline'}</Button></PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={deadline} onSelect={setDeadline} className="p-3 pointer-events-auto" /></PopoverContent></Popover></div>
-            </>
+            <div><Label>Assign To (Admin)</Label>
+              <Select value={assignedTo} onValueChange={setAssignedTo}>
+                <SelectTrigger><SelectValue placeholder="Self (unassigned)" /></SelectTrigger>
+                <SelectContent><SelectItem value="none">Self (unassigned)</SelectItem>{staffList.map(([id, name]) => (<SelectItem key={id} value={id}>{name}</SelectItem>))}</SelectContent>
+              </Select></div>
           )}
           <div><Label>Color</Label><div className="flex gap-2 mt-1">{COLORS.map((c) => (<button key={c} onClick={() => canEdit && setColor(c)} className={cn('w-6 h-6 rounded-full border-2 transition-transform', color === c ? 'border-foreground scale-125' : 'border-transparent')} style={{ backgroundColor: c }} disabled={!canEdit} />))}</div></div>
           {isEditing && canEdit && (<div className="flex items-center gap-2"><Checkbox id="completed" checked={isCompleted} onCheckedChange={(c) => setIsCompleted(!!c)} /><Label htmlFor="completed" className="cursor-pointer">Mark as completed</Label></div>)}
