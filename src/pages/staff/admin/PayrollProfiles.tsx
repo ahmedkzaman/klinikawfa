@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { DollarSign, Edit, Plus, Search, Save, X } from 'lucide-react';
+import { DollarSign, Edit, Plus, Search, Save, X, RefreshCw } from 'lucide-react';
 
 type PayrollProfile = {
   id?: string;
