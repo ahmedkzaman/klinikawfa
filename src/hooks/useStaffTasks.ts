@@ -121,6 +121,9 @@ export function useStaffTasks() {
     if (data.deadline !== undefined) updates.deadline = data.deadline?.toISOString() || null;
     if (data.color !== undefined) updates.color = data.color;
     if (data.is_completed !== undefined) updates.is_completed = data.is_completed;
+    if (data.board_column !== undefined) updates.board_column = data.board_column;
+    if (data.visibility !== undefined) updates.visibility = data.visibility;
+    if (data.last_edited_by !== undefined) updates.last_edited_by = data.last_edited_by;
     const { error } = await supabase.from('staff_tasks').update(updates).eq('id', id);
     return { error };
   };
