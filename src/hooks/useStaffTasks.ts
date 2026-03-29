@@ -109,7 +109,7 @@ export function useStaffTasks() {
     return { error };
   };
 
-  const updateTask = async (id: string, data: Partial<TaskFormData> & { is_completed?: boolean }) => {
+  const updateTask = async (id: string, data: Partial<TaskFormData> & { is_completed?: boolean; board_column?: string; visibility?: string; last_edited_by?: string }) => {
     const updates: Record<string, unknown> = {};
     if (data.title !== undefined) updates.title = data.title;
     if (data.description !== undefined) updates.description = data.description || null;
