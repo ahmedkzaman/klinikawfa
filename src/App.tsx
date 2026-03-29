@@ -44,6 +44,7 @@ import AdminAssignments from "./pages/staff/admin/Assignments";
 import AdminRequests from "./pages/staff/admin/Requests";
 import AdminRoster from "./pages/staff/admin/Roster";
 import AdminOnboarding from "./pages/staff/admin/Onboarding";
+import PayrollSummary from "./pages/staff/admin/PayrollSummary";
 
 // Website Management (formerly /admin)
 import LeadsManagement from "./pages/admin/LeadsManagement";
@@ -111,6 +112,7 @@ const App = () => (
                 <Route path="admin/onboarding" element={<AdminOnboarding />} />
                 <Route path="admin/attendance-review" element={<AdminAttendanceReview />} />
                 <Route path="admin/profile-approvals" element={<AdminProfileApprovals />} />
+                <Route path="admin/payroll-summary" element={<PayrollSummary />} />
                 {/* Website Management */}
                 <Route path="website/leads" element={<LeadsManagement />} />
                 <Route path="website/team" element={<TeamManagement />} />
