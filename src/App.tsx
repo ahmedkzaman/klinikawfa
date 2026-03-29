@@ -30,6 +30,8 @@ import StaffLeaveRequest from "./pages/staff/LeaveRequest";
 import StaffDocuments from "./pages/staff/Documents";
 import PerformanceAppraisal from "./pages/staff/PerformanceAppraisal";
 import AppraisalForm from "./pages/staff/AppraisalForm";
+import DrRosterView from "./pages/staff/DrRosterView";
+import StaffRosterView from "./pages/staff/StaffRosterView";
 import StaffAdminDashboard from "./pages/staff/admin/Dashboard";
 import AdminEmployees from "./pages/staff/admin/Employees";
 import AdminZones from "./pages/staff/admin/Zones";
