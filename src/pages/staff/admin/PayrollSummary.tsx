@@ -1,12 +1,15 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { DollarSign, Search, AlertTriangle } from 'lucide-react';
+import { DollarSign, Search, AlertTriangle, RefreshCw } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
+import { eachDayOfInterval, startOfMonth, endOfMonth, format } from 'date-fns';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -50,6 +53,7 @@ export default function PayrollSummary() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [search, setSearch] = useState('');
+  const queryClient = useQueryClient();
 
   const { data: summaries, isLoading } = useQuery({
     queryKey: ['payroll-summaries', month, year],
@@ -77,13 +81,13 @@ export default function PayrollSummary() {
     queryFn: async () => {
       const { data } = await (supabase as any)
         .from('staff_payroll_profiles')
-        .select('user_id, employment_type, payroll_status');
-      return (data || []) as { user_id: string; employment_type: string; payroll_status: string }[];
+        .select('*');
+      return (data || []) as any[];
     },
   });
 
   const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]));
-  const payrollMap = Object.fromEntries((payrollProfiles || []).map(p => [p.user_id, p]));
+  const payrollMap = Object.fromEntries((payrollProfiles || []).map((p: any) => [p.user_id, p]));
 
   const enriched = (summaries || []).map(s => ({
     ...s,
@@ -98,6 +102,229 @@ export default function PayrollSummary() {
   );
 
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
+
+  // --- Generate Summary Mutation ---
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      // 1. Get all active payroll profiles
+      const { data: allPayroll, error: ppErr } = await (supabase as any)
+        .from('staff_payroll_profiles')
+        .select('*')
+        .eq('payroll_status', 'active');
+      if (ppErr) throw ppErr;
+      if (!allPayroll || allPayroll.length === 0) throw new Error('No active payroll profiles found');
+
+      const userIds = allPayroll.map((p: any) => p.user_id);
+
+      // 2. Get attendance_payroll_records for this month
+      const monthStart = format(startOfMonth(new Date(year, month - 1)), 'yyyy-MM-dd');
+      const monthEnd = format(endOfMonth(new Date(year, month - 1)), 'yyyy-MM-dd');
+
+      const { data: attendanceRecords } = await (supabase as any)
+        .from('attendance_payroll_records')
+        .select('*')
+        .in('user_id', userIds)
+        .gte('date', monthStart)
+        .lte('date', monthEnd);
+
+      // 3. Get approved leave requests overlapping this month
+      const { data: leaveRecords } = await supabase
+        .from('leave_requests')
+        .select('*')
+        .in('user_id', userIds)
+        .eq('status', 'approved')
+        .lte('start_date', monthEnd)
+        .gte('end_date', monthStart);
+
+      // 4. Get rosters for scheduled days
+      const { data: rosters } = await supabase
+        .from('saved_rosters')
+        .select('roster_data, staff_list, roster_type')
+        .eq('month', month)
+        .eq('year', year);
+
+      // 5. Check existing locked/paid summaries to skip
+      const { data: existingSummaries } = await (supabase as any)
+        .from('monthly_payroll_summaries')
+        .select('user_id, payroll_status')
+        .eq('month', month)
+        .eq('year', year)
+        .in('payroll_status', ['paid']);
+
+      const lockedUsers = new Set((existingSummaries || []).map((s: any) => s.user_id));
+
+      // Build attendance map: user_id -> records[]
+      const attendanceByUser: Record<string, any[]> = {};
+      for (const r of (attendanceRecords || [])) {
+        if (!attendanceByUser[r.user_id]) attendanceByUser[r.user_id] = [];
+        attendanceByUser[r.user_id].push(r);
+      }
+
+      // Build scheduled days from roster
+      const scheduledDaysByUser: Record<string, number> = {};
+      if (rosters && rosters.length > 0) {
+        for (const roster of rosters) {
+          const rosterData = roster.roster_data as Record<string, any>;
+          const staffList = roster.staff_list as any[];
+          if (!rosterData || !staffList) continue;
+
+          for (const staff of staffList) {
+            const userId = staff.staffId;
+            if (!userId) continue;
+
+            for (const [dayKey, dayData] of Object.entries(rosterData)) {
+              if (!dayData || typeof dayData !== 'object') continue;
+              for (const [, cellData] of Object.entries(dayData as Record<string, any>)) {
+                if (!cellData) continue;
+                const cells = Array.isArray(cellData) ? cellData : [cellData];
+                if (cells.some((c: any) => c.staffId === userId)) {
+                  scheduledDaysByUser[userId] = (scheduledDaysByUser[userId] || 0) + 1;
+                  break; // count each day only once per user
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Count leave days per user in this month
+      const leaveDaysByUser: Record<string, { total: number; unpaid: number }> = {};
+      const monthDays = eachDayOfInterval({
+        start: startOfMonth(new Date(year, month - 1)),
+        end: endOfMonth(new Date(year, month - 1)),
+      });
+
+      for (const lr of (leaveRecords || [])) {
+        const userId = lr.user_id;
+        if (!leaveDaysByUser[userId]) leaveDaysByUser[userId] = { total: 0, unpaid: 0 };
+
+        const leaveStart = new Date(lr.start_date);
+        const leaveEnd = new Date(lr.end_date);
+        const isUnpaid = lr.leave_type === 'unpaid';
+
+        for (const day of monthDays) {
+          if (day >= leaveStart && day <= leaveEnd) {
+            leaveDaysByUser[userId].total += 1;
+            if (isUnpaid) leaveDaysByUser[userId].unpaid += 1;
+          }
+        }
+      }
+
+      // 6. Build summaries
+      const summariesToUpsert = [];
+      let skipped = 0;
+
+      for (const pp of allPayroll) {
+        if (lockedUsers.has(pp.user_id)) {
+          skipped++;
+          continue;
+        }
+
+        const records = attendanceByUser[pp.user_id] || [];
+        const leave = leaveDaysByUser[pp.user_id] || { total: 0, unpaid: 0 };
+
+        // Fallback scheduled days: weekdays in month if no roster
+        const totalDaysInMonth = monthDays.length;
+        const weekdaysInMonth = monthDays.filter(d => d.getDay() !== 0 && d.getDay() !== 6).length;
+        const scheduledDays = scheduledDaysByUser[pp.user_id] || weekdaysInMonth;
+
+        const presentRecords = records.filter((r: any) => r.working_status === 'present');
+        const absentRecords = records.filter((r: any) => r.working_status === 'absent');
+        const lateRecords = records.filter((r: any) => (r.late_minutes || 0) > 0);
+
+        const totalPresentDays = presentRecords.length;
+        const totalAbsentDays = absentRecords.length;
+        const totalLateIncidents = lateRecords.length;
+
+        const totalWorkedHours = records.reduce((sum: number, r: any) => sum + (Number(r.total_worked_hours) || 0), 0);
+        const totalOvertimeHours = records.reduce((sum: number, r: any) => sum + (Number(r.overtime_hours) || 0), 0);
+        const approvedOTHours = records.reduce((sum: number, r: any) => sum + (Number(r.approved_overtime_hours) || 0), 0);
+
+        // Employment Act 1955 calculations
+        const basicSalary = Number(pp.basic_salary) || 0;
+        const dailyRate = scheduledDays > 0 ? basicSalary / scheduledDays : 0;
+
+        // Allowances
+        const totalAllowances =
+          (Number(pp.fixed_allowance) || 0) +
+          (Number(pp.transport_allowance) || 0) +
+          (Number(pp.meal_allowance) || 0) +
+          (Number(pp.oncall_allowance) || 0) +
+          (Number(pp.custom_allowance) || 0);
+
+        // OT pay
+        const otRate = Number(pp.overtime_rate) || 0;
+        const otPay = approvedOTHours * otRate;
+
+        // Gross
+        const grossPay = basicSalary + totalAllowances + otPay;
+
+        // Deductions
+        const unpaidLeaveDeduction = leave.unpaid * dailyRate;
+        const latenessDeduction = totalLateIncidents * (Number(pp.lateness_deduction) || 0);
+        const absenceDeduction = totalAbsentDays * (Number(pp.absence_deduction) || dailyRate);
+        const customDeduction = Number(pp.custom_deduction) || 0;
+        const totalDeductions = unpaidLeaveDeduction + latenessDeduction + absenceDeduction + customDeduction;
+
+        // Net
+        const netPay = grossPay - totalDeductions;
+
+        // Normal hours capped at 8h/day per Employment Act
+        const totalPayableRegularHours = Math.min(totalWorkedHours, totalPresentDays * 8);
+        const totalPayableOTHours = approvedOTHours;
+
+        summariesToUpsert.push({
+          user_id: pp.user_id,
+          month,
+          year,
+          total_scheduled_days: scheduledDays,
+          total_present_days: totalPresentDays,
+          total_leave_days: leave.total,
+          total_absent_days: totalAbsentDays,
+          total_late_incidents: totalLateIncidents,
+          total_worked_hours: Math.round(totalWorkedHours * 100) / 100,
+          total_overtime_hours: Math.round(totalOvertimeHours * 100) / 100,
+          total_payable_regular_hours: Math.round(totalPayableRegularHours * 100) / 100,
+          total_payable_overtime_hours: Math.round(totalPayableOTHours * 100) / 100,
+          unpaid_leave_count: leave.unpaid,
+          unpaid_leave_deduction: Math.round(unpaidLeaveDeduction * 100) / 100,
+          lateness_deduction: Math.round(latenessDeduction * 100) / 100,
+          absence_deduction: Math.round(absenceDeduction * 100) / 100,
+          total_allowances: Math.round(totalAllowances * 100) / 100,
+          total_deductions: Math.round(totalDeductions * 100) / 100,
+          gross_pay: Math.round(grossPay * 100) / 100,
+          net_pay: Math.round(netPay * 100) / 100,
+          payroll_status: 'draft',
+        });
+      }
+
+      if (summariesToUpsert.length === 0) {
+        return { generated: 0, skipped };
+      }
+
+      // Upsert with conflict on (user_id, month, year)
+      const { error: upsertErr } = await (supabase as any)
+        .from('monthly_payroll_summaries')
+        .upsert(summariesToUpsert, { onConflict: 'user_id,month,year', ignoreDuplicates: false });
+      if (upsertErr) throw upsertErr;
+
+      return { generated: summariesToUpsert.length, skipped };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['payroll-summaries', month, year] });
+      toast({
+        title: 'Payroll summaries generated',
+        description: `${result.generated} summaries created/updated${result.skipped > 0 ? `, ${result.skipped} skipped (paid)` : ''}`,
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: 'Generation failed',
+        description: err.message,
+        variant: 'destructive',
+      });
+    },
+  });
 
   return (
     <div className="space-y-6">
@@ -134,6 +361,15 @@ export default function PayrollSummary() {
               </SelectContent>
             </Select>
 
+            <Button
+              onClick={() => generateMutation.mutate()}
+              disabled={generateMutation.isPending}
+              variant="default"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${generateMutation.isPending ? 'animate-spin' : ''}`} />
+              {generateMutation.isPending ? 'Generating...' : 'Generate Summary'}
+            </Button>
+
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -148,7 +384,10 @@ export default function PayrollSummary() {
           {isLoading ? (
             <p className="text-muted-foreground text-center py-8">Loading...</p>
           ) : filtered.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">No payroll data for {MONTHS[month - 1]} {year}</p>
+            <div className="text-center py-8 space-y-3">
+              <p className="text-muted-foreground">No payroll data for {MONTHS[month - 1]} {year}</p>
+              <p className="text-sm text-muted-foreground">Click "Generate Summary" to create payroll summaries from attendance and roster data.</p>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -162,6 +401,8 @@ export default function PayrollSummary() {
                     <TableHead className="text-center">Late</TableHead>
                     <TableHead className="text-center">OT Hrs</TableHead>
                     <TableHead className="text-center">Unpaid Leave</TableHead>
+                    <TableHead className="text-right">Gross (RM)</TableHead>
+                    <TableHead className="text-right">Net (RM)</TableHead>
                     <TableHead className="text-center">Status</TableHead>
                     <TableHead className="text-center">Indicators</TableHead>
                   </TableRow>
@@ -177,6 +418,8 @@ export default function PayrollSummary() {
                       <TableCell className="text-center">{s.total_late_incidents}</TableCell>
                       <TableCell className="text-center">{s.total_overtime_hours}</TableCell>
                       <TableCell className="text-center">{s.unpaid_leave_count}</TableCell>
+                      <TableCell className="text-right">{Number(s.gross_pay).toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{Number(s.net_pay).toFixed(2)}</TableCell>
                       <TableCell className="text-center">
                         <Badge className={statusColors[s.payroll_status] || ''}>
                           {s.payroll_status}
