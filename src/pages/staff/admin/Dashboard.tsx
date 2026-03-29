@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import KanbanBoard from '@/components/staff/KanbanBoard';
 import { Users, Map, Clock, TrendingUp, Inbox } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { format, startOfDay, endOfDay } from 'date-fns';
