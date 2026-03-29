@@ -1,42 +1,89 @@
 
 
-## Weighted Fairness-Based Roster Generator
+## Rebuild Doctor Roster with 3-Shift System
 
-### What changes
+### Overview
+Replace the current 2-shift doctor roster (shared `RosterPanel`) with a dedicated doctor roster that uses 3 shifts (8am-2pm, 2pm-8pm, 8pm-12am), enforces valid shift combinations, calculates overtime beyond 45h/week, and provides rich summary metrics. The support staff roster remains unchanged.
 
-Replace the current random selection logic with a **weighted random assignment** that prioritizes staff with fewer accumulated hours. Add a **fairness score** and **hour spread indicator** to the summary.
+### Data Model Changes
 
-### Algorithm Redesign — `pickStaff` function (lines 142-193)
+```typescript
+interface DoctorRosterData {
+  [dateKey: string]: {
+    shift1: RosterCell | null; // 8am-2pm, 6h
+    shift2: RosterCell | null; // 2pm-8pm, 6h
+    shift3: RosterCell | null; // 8pm-12am, 4h
+    manualOverrides: Set<'shift1' | 'shift2' | 'shift3'>;
+  };
+}
+```
 
-**Current**: Filters to staff below 45h, sorts by hours, picks randomly among tied-lowest.
+**Shift combination rules**: Per doctor per day, only two valid patterns:
+- Shift 1 + Shift 2 (same doctor) = 12h daytime block
+- Shift 3 only = 4h night block
+- A doctor cannot appear in Shift 1 or 2 AND Shift 3 on the same day
 
-**New weighted approach**:
-1. Build eligible pool (same filtering as now: not assigned today, constraint checks, hour cap)
-2. Calculate **weight** for each eligible staff: `weight = maxMonthHours - currentMonthHours + 1` (staff with fewer total monthly hours get higher weight)
-3. Use **weighted random selection** — probability proportional to weight
-4. This ensures staff with fewer hours are much more likely to be picked, but maintains some randomness for variety
-5. Still prioritize staff below 45h/week first (existing logic stays), but within that group use weighted selection instead of uniform random
+### Generator Algorithm
 
-### Top-up Pass Enhancement (lines 198-298)
+1. **For each day**: assign daytime blocks (S1+S2) and night blocks (S3) separately
+2. **Daytime assignment**: pick a doctor using weighted random (weight = `maxMonthHours - currentMonthHours + 1`); assign to both S1 and S2
+3. **Night assignment**: from remaining eligible doctors, pick using same weighted logic; assign to S3
+4. **Eligibility filters** (in order): not already assigned that day → weekday constraint check → weekly hour cap (48h) → fallback relaxation
+5. **Priority within eligible pool**: staff below 45h/week first → lowest monthly hours → weighted random
+6. **Top-up pass**: after generation, swap shifts between over/under-assigned doctors to reach 45h minimum per week
+7. **Global balance pass**: minimize monthly hour spread via swap iterations
 
-After the initial generation, add a **global balancing pass** that iterates the entire month:
-- Calculate total monthly hours per staff
-- Find the staff with the most hours and the staff with the fewest
-- Attempt swaps between them on days where neither has a conflict
-- Repeat until the hour spread (max - min) cannot be further reduced
-- This runs after the existing per-week 45h top-up pass
+### Weekly Hours & Overtime
+- Track hours per doctor per ISO week
+- S1+S2 day = 12h; S3 night = 4h
+- Regular hours = min(weekHours, 45)
+- Overtime = max(weekHours - 45, 0)
+- Summary shows both per-week and monthly totals
 
-### New: Fairness Score in Summary (after line 648)
+### Rules Checkboxes
+- Max 2 shifts per day (S1+S2 or S3 only)
+- Valid shift combinations enforcement
+- 45h/week minimum target
+- Overtime calculation (>45h)
+- Fair distribution
 
-Add a row below the summary table showing:
-- **Hour Spread**: `{maxHours}h - {minHours}h = {spread}h difference`
-- **Fairness Score**: Percentage indicator — `100 - ((spread / avgHours) * 100)`, clamped to 0-100%, displayed as a colored badge (green ≥90%, yellow ≥70%, red <70%)
+### Roster Table Display
+- 3 rows: Shift 1, Shift 2, Shift 3 + Off row + Week header row
+- When S1 and S2 have same doctor, highlight cells with a shared background color
+- Each cell is a `<Select>` dropdown for manual editing
+- Manually changed cells get a colored border/highlight
+- Manual changes validate against rules; show toast warning for invalid combos but allow override
 
-### CSV Export Update (lines 347-378)
+### Manual Editing Enhancements
+- Track `manualOverrides` per day per shift
+- "Reset Manual Changes" button restores original generated values
+- "Auto-fill Empty Shifts" button fills any null cells
+- Instant recalculation of all metrics on any edit
 
-Add fairness score and hour spread to the exported CSV.
+### Summary Table Columns
+Per doctor: Name | Regular Hours (week breakdown) | Overtime Hours | Total Monthly Hours | Daytime Blocks | Night Shifts | Diff from Avg
 
-### File changes
-- 1 file edit: `src/pages/staff/admin/Roster.tsx`
-- No database changes
+Footer metrics: Average hours | Highest | Lowest | Fairness gap | Fairness score badge | Total overtime by doctor
 
+### Action Buttons
+Generate | Generate Again | Clear | Reset Manual Changes | Auto-fill Empty | Export CSV | Print
+
+### Implementation
+
+**File**: `src/pages/staff/admin/Roster.tsx`
+
+1. Create a new `DoctorRosterPanel` component (separate from existing `RosterPanel` which continues to serve support staff)
+2. The `<TabsContent value="doctor">` renders `DoctorRosterPanel` instead of `RosterPanel`
+3. Support staff tab remains unchanged with existing `RosterPanel`
+
+**Key sections of `DoctorRosterPanel`**:
+- Staff list management (reuse pattern from existing)
+- Rules card with 5 checkboxes
+- Month picker (reuse pattern)
+- `generateDoctorRoster()` function with the 3-shift algorithm
+- Roster table with 3 shift rows + off row + week row
+- Summary table with overtime breakdown
+- Fairness metrics display
+- CSV export updated for 3 shifts + overtime data
+
+### No database or routing changes needed
