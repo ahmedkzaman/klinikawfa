@@ -18,6 +18,8 @@ const staffNavItems = [
   { href: '/staff/history', label: 'History', icon: History },
   { href: '/staff/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/staff/documents', label: 'Documents', icon: FileText },
+  { href: '/staff/dr-roster', label: 'Dr Roster', icon: Stethoscope },
+  { href: '/staff/staff-roster', label: 'Staff Roster', icon: Users },
 ];
 
 const applicationsNavItems = [
