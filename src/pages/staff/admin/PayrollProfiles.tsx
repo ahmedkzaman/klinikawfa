@@ -40,10 +40,25 @@ type PayrollProfile = {
   meal_allowance: number;
   oncall_allowance: number;
   custom_allowance: number;
+  apc_allowance: number;
+  telephone_allowance: number;
+  team_leader_allowance: number;
+  project_allowance: number;
+  admin_allowance: number;
+  other_allowance_amount: number;
+  other_allowance_name: string;
   unpaid_leave_deduction: number;
   lateness_deduction: number;
   absence_deduction: number;
   custom_deduction: number;
+  epf_employee: number;
+  epf_employer: number;
+  socso_employee: number;
+  socso_employer: number;
+  eis_employee: number;
+  eis_employer: number;
+  hrdf: number;
+  mtd: number;
   tax_id: string;
   epf_reference: string;
   socso_reference: string;
@@ -57,7 +72,11 @@ const emptyProfile: Omit<PayrollProfile, 'user_id'> = {
   bank_name: '', bank_account_number: '', account_holder_name: '', salary_payment_type: 'monthly',
   basic_salary: 0, daily_rate: 0, hourly_rate: 0, overtime_eligible: false, overtime_rate: 0,
   fixed_allowance: 0, transport_allowance: 0, meal_allowance: 0, oncall_allowance: 0, custom_allowance: 0,
+  apc_allowance: 0, telephone_allowance: 0, team_leader_allowance: 0, project_allowance: 0,
+  admin_allowance: 0, other_allowance_amount: 0, other_allowance_name: '',
   unpaid_leave_deduction: 0, lateness_deduction: 0, absence_deduction: 0, custom_deduction: 0,
+  epf_employee: 0, epf_employer: 0, socso_employee: 0, socso_employer: 0,
+  eis_employee: 0, eis_employer: 0, hrdf: 0, mtd: 0,
   tax_id: '', epf_reference: '', socso_reference: '', other_statutory_ref: '', payroll_notes: '',
 };
 
