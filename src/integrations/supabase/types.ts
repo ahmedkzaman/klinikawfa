@@ -803,6 +803,42 @@ export type Database = {
           },
         ]
       }
+      staff_onboarding: {
+        Row: {
+          company_policy_acknowledged: boolean | null
+          created_at: string | null
+          id: string
+          is_completed: boolean | null
+          job_description_acknowledged: boolean | null
+          job_scope_acknowledged: boolean | null
+          onboarding_data: Json | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          company_policy_acknowledged?: boolean | null
+          created_at?: string | null
+          id?: string
+          is_completed?: boolean | null
+          job_description_acknowledged?: boolean | null
+          job_scope_acknowledged?: boolean | null
+          onboarding_data?: Json | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          company_policy_acknowledged?: boolean | null
+          created_at?: string | null
+          id?: string
+          is_completed?: boolean | null
+          job_description_acknowledged?: boolean | null
+          job_scope_acknowledged?: boolean | null
+          onboarding_data?: Json | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       staff_tasks: {
         Row: {
           assigned_to: string | null
