@@ -44,6 +44,7 @@ import AdminAssignments from "./pages/staff/admin/Assignments";
 import AdminRequests from "./pages/staff/admin/Requests";
 import AdminRoster from "./pages/staff/admin/Roster";
 import AdminOnboarding from "./pages/staff/admin/Onboarding";
+import PayrollSummary from "./pages/staff/admin/PayrollSummary";
 
 // Website Management (formerly /admin)
 import LeadsManagement from "./pages/admin/LeadsManagement";
