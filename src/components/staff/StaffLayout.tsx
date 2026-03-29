@@ -224,8 +224,10 @@ export function StaffLayout() {
             <span className="font-semibold text-sm text-primary">Klinik Awfa Staff</span>
           </Link>
         </div>
-        <SidebarNav isAdmin={isAdmin} pathname={location.pathname} />
-        <div className="mt-auto p-4 border-t">
+        <div className="flex-1 overflow-y-auto">
+          <SidebarNav isAdmin={isAdmin} pathname={location.pathname} />
+        </div>
+        <div className="shrink-0 p-4 border-t">
           <div className="text-sm text-muted-foreground mb-2 truncate">{user.email}</div>
           <Button variant="ghost" size="sm" className="w-full justify-start" onClick={handleSignOut}>
             <LogOut className="h-4 w-4 mr-2" />
