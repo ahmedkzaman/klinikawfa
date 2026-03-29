@@ -12,7 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import {
-  CalendarDays, Plus, Trash2, RefreshCw, Download, Printer, AlertTriangle, X, Users, Settings2, Shuffle, Stethoscope, UserCog, ChevronLeft, ChevronRight
+  CalendarDays, Plus, Trash2, RefreshCw, Download, Printer, AlertTriangle, X, Users, Settings2, Shuffle, Stethoscope, UserCog, ChevronLeft, ChevronRight, Save
 } from 'lucide-react';
 import DoctorRosterPanel from '@/components/staff/roster/DoctorRosterPanel';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, getISOWeek, isWeekend } from 'date-fns';
@@ -74,6 +74,8 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
   const [warnings, setWarnings] = useState<string[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
   const [staffPerShift, setStaffPerShift] = useState(2);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
 
   // Compute days of month
   const monthDays = useMemo(() => {
@@ -83,6 +85,61 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
   }, [selectedMonth, selectedYear]);
 
   useEffect(() => { setStaffList(initialStaff); }, [initialStaff]);
+
+  // ─── Auto-load saved roster on month change ───
+  useEffect(() => {
+    const loadSaved = async () => {
+      const { data } = await supabase
+        .from('saved_rosters')
+        .select('*')
+        .eq('roster_type', rosterType)
+        .eq('month', selectedMonth)
+        .eq('year', selectedYear)
+        .maybeSingle();
+      if (data) {
+        setRoster(data.roster_data as unknown as RosterData);
+        if (data.staff_list && (data.staff_list as unknown as StaffMember[]).length > 0) {
+          setStaffList(data.staff_list as unknown as StaffMember[]);
+        }
+        setWarnings((data.warnings as unknown as string[]) || []);
+        setSavedAt(data.updated_at);
+        toast.info('Saved roster loaded');
+      } else {
+        setSavedAt(null);
+      }
+    };
+    loadSaved();
+  }, [selectedMonth, selectedYear, rosterType]);
+
+  const saveRoster = async () => {
+    if (!roster) { toast.error('No roster to save'); return; }
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { toast.error('Please sign in to save'); setSaving(false); return; }
+
+    const payload = {
+      roster_type: rosterType,
+      month: selectedMonth,
+      year: selectedYear,
+      roster_data: roster as unknown as Record<string, unknown>,
+      staff_list: staffList as unknown as Record<string, unknown>[],
+      warnings: warnings as unknown as Record<string, unknown>[],
+      created_by: user.id,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from('saved_rosters')
+      .upsert([payload] as any, { onConflict: 'roster_type,month,year' });
+
+    if (error) {
+      toast.error('Failed to save: ' + error.message);
+    } else {
+      setSavedAt(new Date().toISOString());
+      toast.success('Roster saved!');
+    }
+    setSaving(false);
+  };
 
   const addStaff = () => {
     if (!newStaffName.trim()) return;
@@ -777,11 +834,13 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                 )}
               </div>
 
-              <div className="flex gap-2 flex-wrap print:hidden">
+              <div className="flex gap-2 flex-wrap print:hidden items-center">
+                <Button onClick={saveRoster} disabled={saving} className="gap-2"><Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save Roster'}</Button>
                 <Button variant="outline" onClick={generateRoster} className="gap-2"><RefreshCw className="h-4 w-4" /> Generate Again</Button>
                 <Button variant="outline" onClick={clearRoster} className="gap-2"><X className="h-4 w-4" /> Clear Roster</Button>
                 <Button variant="outline" onClick={exportCSV} className="gap-2"><Download className="h-4 w-4" /> Export CSV</Button>
                 <Button variant="outline" onClick={() => window.print()} className="gap-2"><Printer className="h-4 w-4" /> Print</Button>
+                {savedAt && <span className="text-xs text-muted-foreground ml-2">Last saved: {format(new Date(savedAt), 'dd MMM yyyy, HH:mm')}</span>}
               </div>
             </div>
           ) : (
