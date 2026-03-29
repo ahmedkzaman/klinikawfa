@@ -8,7 +8,8 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   MapPin, Clock, History, Settings, LogOut, Menu, Home, Users, Map, CalendarDays, CalendarOff, Inbox, FileText,
-  LayoutDashboard, CalendarCheck, Stethoscope, Video, Image, Star, ChevronDown, ClipboardCheck, ClipboardList
+  LayoutDashboard, CalendarCheck, Stethoscope, Video, Image, Star, ChevronDown, ClipboardCheck, ClipboardList,
+  User, BarChart3, CheckSquare
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
@@ -22,6 +23,9 @@ const staffNavItems = [
   { href: '/staff/documents', label: 'Documents', icon: FileText },
   { href: '/staff/dr-roster', label: 'Dr Roster', icon: Stethoscope },
   { href: '/staff/staff-roster', label: 'Staff Roster', icon: Users },
+  { href: '/staff/attendance-review', label: 'Attendance Review', icon: BarChart3 },
+  { href: '/staff/profile', label: 'My Profile', icon: User },
+  { href: '/staff/settings', label: 'Settings', icon: Settings },
 ];
 
 const applicationsNavItems = [
@@ -37,6 +41,8 @@ const adminNavItems = [
   { href: '/staff/admin/requests', label: 'Requests', icon: Inbox },
   { href: '/staff/admin/roster', label: 'Roster', icon: CalendarDays },
   { href: '/staff/admin/onboarding', label: 'Onboarding', icon: ClipboardList },
+  { href: '/staff/admin/attendance-review', label: 'Attendance Review', icon: BarChart3 },
+  { href: '/staff/admin/profile-approvals', label: 'Profile Approvals', icon: CheckSquare },
 ];
 
 const contentNavItems = [

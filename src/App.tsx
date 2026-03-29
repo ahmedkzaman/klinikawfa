@@ -34,6 +34,11 @@ import DrRosterView from "./pages/staff/DrRosterView";
 import StaffRosterView from "./pages/staff/StaffRosterView";
 import StaffAdminDashboard from "./pages/staff/admin/Dashboard";
 import AdminEmployees from "./pages/staff/admin/Employees";
+import AdminAttendanceReview from "./pages/staff/admin/AttendanceReview";
+import AdminProfileApprovals from "./pages/staff/admin/ProfileApprovals";
+import StaffAttendanceReview from "./pages/staff/AttendanceReview";
+import StaffProfile from "./pages/staff/Profile";
+import StaffSettings from "./pages/staff/Settings";
 import AdminZones from "./pages/staff/admin/Zones";
 import AdminAssignments from "./pages/staff/admin/Assignments";
 import AdminRequests from "./pages/staff/admin/Requests";
@@ -92,6 +97,9 @@ const App = () => (
                 <Route path="dr-roster" element={<DrRosterView />} />
                 <Route path="staff-roster" element={<StaffRosterView />} />
                 <Route path="documents" element={<StaffDocuments />} />
+                <Route path="attendance-review" element={<StaffAttendanceReview />} />
+                <Route path="profile" element={<StaffProfile />} />
+                <Route path="settings" element={<StaffSettings />} />
                 <Route path="appraisal" element={<PerformanceAppraisal />} />
                 <Route path="appraisal/:id" element={<AppraisalForm />} />
                 <Route path="admin" element={<StaffAdminDashboard />} />
@@ -101,6 +109,8 @@ const App = () => (
                 <Route path="admin/requests" element={<AdminRequests />} />
                 <Route path="admin/roster" element={<AdminRoster />} />
                 <Route path="admin/onboarding" element={<AdminOnboarding />} />
+                <Route path="admin/attendance-review" element={<AdminAttendanceReview />} />
+                <Route path="admin/profile-approvals" element={<AdminProfileApprovals />} />
                 {/* Website Management */}
                 <Route path="website/leads" element={<LeadsManagement />} />
                 <Route path="website/team" element={<TeamManagement />} />
