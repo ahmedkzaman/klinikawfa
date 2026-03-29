@@ -94,9 +94,30 @@ export function useStaffTasks() {
     return () => { supabase.removeChannel(channel); };
   }, [user, fetchTasks, fetchProfiles, fetchLeaveEntries]);
 
+  const sendTaskNotifications = async (taskId: string, taskTitle: string, assignedTo: string | null | undefined) => {
+    if (!user) return;
+    const recipients: string[] = [];
+    if (assignedTo) {
+      if (assignedTo !== user.id) recipients.push(assignedTo);
+    } else {
+      // assigned to all staff
+      const allIds = Object.keys(profiles).filter((id) => id !== user.id);
+      recipients.push(...allIds);
+    }
+    if (recipients.length === 0) return;
+    const notifications = recipients.map((uid) => ({
+      user_id: uid,
+      title: 'New Task Assigned',
+      message: `You have been assigned a task: "${taskTitle}"`,
+      type: 'task_assigned',
+      related_task_id: taskId,
+    }));
+    await supabase.from('staff_notifications').insert(notifications);
+  };
+
   const createTask = async (data: TaskFormData) => {
     if (!user) return { error: new Error('Not authenticated') };
-    const { error } = await supabase.from('staff_tasks').insert({
+    const { data: inserted, error } = await supabase.from('staff_tasks').insert({
       title: data.title,
       description: data.description || null,
       created_by: user.id,
@@ -107,7 +128,10 @@ export function useStaffTasks() {
       color: data.color,
       board_column: data.board_column || 'todo',
       visibility: data.visibility || 'all',
-    });
+    }).select('id').single();
+    if (!error && inserted) {
+      await sendTaskNotifications(inserted.id, data.title, data.assigned_to === undefined ? user.id : data.assigned_to);
+    }
     return { error };
   };
 
