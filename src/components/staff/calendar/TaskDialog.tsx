@@ -154,11 +154,15 @@ export function TaskDialog({ open, onClose, task, initialDate, profiles, onSave,
               <p className="text-sm text-muted-foreground mt-1">{deadline ? format(deadline, 'MMM d, yyyy') : 'No deadline'}</p>
             )}
           </div>
-          {isAdmin && (
-            <div><Label>Assign To (Admin)</Label>
+          {canEdit && (
+            <div><Label>Assign To</Label>
               <Select value={assignedTo} onValueChange={setAssignedTo}>
                 <SelectTrigger><SelectValue placeholder="Self (unassigned)" /></SelectTrigger>
-                <SelectContent><SelectItem value="none">Self (unassigned)</SelectItem>{staffList.map(([id, name]) => (<SelectItem key={id} value={id}>{name}</SelectItem>))}</SelectContent>
+                <SelectContent>
+                  <SelectItem value="none">Self (unassigned)</SelectItem>
+                  <SelectItem value="all">All Staff</SelectItem>
+                  {staffList.map(([id, name]) => (<SelectItem key={id} value={id}>{name}</SelectItem>))}
+                </SelectContent>
               </Select></div>
           )}
           <div><Label>Color</Label><div className="flex gap-2 mt-1">{COLORS.map((c) => (<button key={c} onClick={() => canEdit && setColor(c)} className={cn('w-6 h-6 rounded-full border-2 transition-transform', color === c ? 'border-foreground scale-125' : 'border-transparent')} style={{ backgroundColor: c }} disabled={!canEdit} />))}</div></div>
