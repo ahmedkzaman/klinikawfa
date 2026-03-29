@@ -834,11 +834,13 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                 )}
               </div>
 
-              <div className="flex gap-2 flex-wrap print:hidden">
+              <div className="flex gap-2 flex-wrap print:hidden items-center">
+                <Button onClick={saveRoster} disabled={saving} className="gap-2"><Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save Roster'}</Button>
                 <Button variant="outline" onClick={generateRoster} className="gap-2"><RefreshCw className="h-4 w-4" /> Generate Again</Button>
                 <Button variant="outline" onClick={clearRoster} className="gap-2"><X className="h-4 w-4" /> Clear Roster</Button>
                 <Button variant="outline" onClick={exportCSV} className="gap-2"><Download className="h-4 w-4" /> Export CSV</Button>
                 <Button variant="outline" onClick={() => window.print()} className="gap-2"><Printer className="h-4 w-4" /> Print</Button>
+                {savedAt && <span className="text-xs text-muted-foreground ml-2">Last saved: {format(new Date(savedAt), 'dd MMM yyyy, HH:mm')}</span>}
               </div>
             </div>
           ) : (
