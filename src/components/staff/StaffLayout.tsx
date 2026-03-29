@@ -260,7 +260,7 @@ export function StaffLayout() {
       </Sheet>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-h-screen">
+      <div className="flex-1 flex flex-col h-screen overflow-y-auto">
         <header className="sticky top-0 z-40 h-12 flex items-center border-b bg-background/95 backdrop-blur px-4 md:px-6">
           <Button variant="ghost" size="icon" className="md:hidden mr-2" onClick={() => setMobileOpen(true)}>
             <Menu className="h-5 w-5" />
