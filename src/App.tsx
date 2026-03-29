@@ -38,6 +38,7 @@ import AdminZones from "./pages/staff/admin/Zones";
 import AdminAssignments from "./pages/staff/admin/Assignments";
 import AdminRequests from "./pages/staff/admin/Requests";
 import AdminRoster from "./pages/staff/admin/Roster";
+import AdminOnboarding from "./pages/staff/admin/Onboarding";
 
 // Website Management (formerly /admin)
 import LeadsManagement from "./pages/admin/LeadsManagement";
@@ -99,6 +100,7 @@ const App = () => (
                 <Route path="admin/assignments" element={<AdminAssignments />} />
                 <Route path="admin/requests" element={<AdminRequests />} />
                 <Route path="admin/roster" element={<AdminRoster />} />
+                <Route path="admin/onboarding" element={<AdminOnboarding />} />
                 {/* Website Management */}
                 <Route path="website/leads" element={<LeadsManagement />} />
                 <Route path="website/team" element={<TeamManagement />} />
