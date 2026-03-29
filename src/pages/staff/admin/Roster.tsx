@@ -438,6 +438,12 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
     getSummary().forEach(s => {
       rows.push(`${s.name},${s.totalShifts},${s.totalHours}`);
     });
+    if (fairnessMetrics) {
+      rows.push('');
+      rows.push(`Fairness Score,${fairnessMetrics.score}%`);
+      rows.push(`Hour Spread,${fairnessMetrics.spread}h (${fairnessMetrics.maxH}h - ${fairnessMetrics.minH}h)`);
+      rows.push(`Average Hours,${fairnessMetrics.avg}h`);
+    }
     const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
