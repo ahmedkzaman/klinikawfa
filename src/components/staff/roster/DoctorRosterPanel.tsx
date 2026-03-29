@@ -105,6 +105,65 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
 
   useEffect(() => { setStaffList(initialStaff); }, [initialStaff]);
 
+  // ─── Auto-load saved roster on month change ───
+  useEffect(() => {
+    const loadSaved = async () => {
+      setLoading(true);
+      const { data } = await supabase
+        .from('saved_rosters')
+        .select('*')
+        .eq('roster_type', 'doctor')
+        .eq('month', selectedMonth)
+        .eq('year', selectedYear)
+        .maybeSingle();
+      if (data) {
+        setRoster(data.roster_data as unknown as DoctorRosterData);
+        setOriginalRoster(data.roster_data as unknown as DoctorRosterData);
+        if (data.staff_list && (data.staff_list as unknown as StaffMember[]).length > 0) {
+          setStaffList(data.staff_list as unknown as StaffMember[]);
+        }
+        setWarnings((data.warnings as unknown as string[]) || []);
+        setManualOverrides({});
+        setSavedAt(data.updated_at);
+        toast.info('Saved roster loaded');
+      } else {
+        setSavedAt(null);
+      }
+      setLoading(false);
+    };
+    loadSaved();
+  }, [selectedMonth, selectedYear]);
+
+  const saveRoster = async () => {
+    if (!roster) { toast.error('No roster to save'); return; }
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { toast.error('Please sign in to save'); setSaving(false); return; }
+
+    const payload = {
+      roster_type: 'doctor' as string,
+      month: selectedMonth,
+      year: selectedYear,
+      roster_data: roster as unknown as Record<string, unknown>,
+      staff_list: staffList as unknown as Record<string, unknown>[],
+      warnings: warnings as unknown as Record<string, unknown>[],
+      created_by: user.id,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from('saved_rosters')
+      .upsert(payload, { onConflict: 'roster_type,month,year' });
+
+    if (error) {
+      toast.error('Failed to save: ' + error.message);
+    } else {
+      setSavedAt(new Date().toISOString());
+      toast.success('Roster saved!');
+    }
+    setSaving(false);
+  };
+
   // Staff management
   const addStaff = () => {
     if (!newStaffName.trim()) return;
