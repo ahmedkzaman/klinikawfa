@@ -44,6 +44,7 @@ const adminNavItems = [
   { href: '/staff/admin/attendance-review', label: 'Attendance Review', icon: BarChart3 },
   { href: '/staff/admin/profile-approvals', label: 'Profile Approvals', icon: CheckSquare },
   { href: '/staff/admin/payroll-summary', label: 'Payroll Summary', icon: LayoutDashboard },
+  { href: '/staff/admin/payroll-profiles', label: 'Payroll Profiles', icon: DollarSign },
 ];
 
 const contentNavItems = [
