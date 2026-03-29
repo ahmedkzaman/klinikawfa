@@ -23,6 +23,9 @@ const staffNavItems = [
   { href: '/staff/documents', label: 'Documents', icon: FileText },
   { href: '/staff/dr-roster', label: 'Dr Roster', icon: Stethoscope },
   { href: '/staff/staff-roster', label: 'Staff Roster', icon: Users },
+  { href: '/staff/attendance-review', label: 'Attendance Review', icon: BarChart3 },
+  { href: '/staff/profile', label: 'My Profile', icon: User },
+  { href: '/staff/settings', label: 'Settings', icon: Settings },
 ];
 
 const applicationsNavItems = [
