@@ -244,13 +244,19 @@ export default function PayrollSummary() {
         const basicSalary = Number(pp.basic_salary) || 0;
         const dailyRate = scheduledDays > 0 ? basicSalary / scheduledDays : 0;
 
-        // Allowances
+        // Allowances (legacy + new named)
         const totalAllowances =
           (Number(pp.fixed_allowance) || 0) +
           (Number(pp.transport_allowance) || 0) +
           (Number(pp.meal_allowance) || 0) +
           (Number(pp.oncall_allowance) || 0) +
-          (Number(pp.custom_allowance) || 0);
+          (Number(pp.custom_allowance) || 0) +
+          (Number(pp.apc_allowance) || 0) +
+          (Number(pp.telephone_allowance) || 0) +
+          (Number(pp.team_leader_allowance) || 0) +
+          (Number(pp.project_allowance) || 0) +
+          (Number(pp.admin_allowance) || 0) +
+          (Number(pp.other_allowance_amount) || 0);
 
         // OT pay
         const otRate = Number(pp.overtime_rate) || 0;
@@ -259,12 +265,19 @@ export default function PayrollSummary() {
         // Gross
         const grossPay = basicSalary + totalAllowances + otPay;
 
-        // Deductions
+        // Operational Deductions
         const unpaidLeaveDeduction = leave.unpaid * dailyRate;
         const latenessDeduction = totalLateIncidents * (Number(pp.lateness_deduction) || 0);
         const absenceDeduction = totalAbsentDays * (Number(pp.absence_deduction) || dailyRate);
         const customDeduction = Number(pp.custom_deduction) || 0;
-        const totalDeductions = unpaidLeaveDeduction + latenessDeduction + absenceDeduction + customDeduction;
+
+        // Statutory Deductions (employee portion only deducted from net)
+        const epfEmployee = Number(pp.epf_employee) || 0;
+        const socsoEmployee = Number(pp.socso_employee) || 0;
+        const eisEmployee = Number(pp.eis_employee) || 0;
+        const mtd = Number(pp.mtd) || 0;
+
+        const totalDeductions = unpaidLeaveDeduction + latenessDeduction + absenceDeduction + customDeduction + epfEmployee + socsoEmployee + eisEmployee + mtd;
 
         // Net
         const netPay = grossPay - totalDeductions;
