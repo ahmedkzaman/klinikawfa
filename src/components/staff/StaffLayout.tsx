@@ -43,6 +43,7 @@ const adminNavItems = [
   { href: '/staff/admin/onboarding', label: 'Onboarding', icon: ClipboardList },
   { href: '/staff/admin/attendance-review', label: 'Attendance Review', icon: BarChart3 },
   { href: '/staff/admin/profile-approvals', label: 'Profile Approvals', icon: CheckSquare },
+  { href: '/staff/admin/payroll-summary', label: 'Payroll Summary', icon: LayoutDashboard },
 ];
 
 const contentNavItems = [

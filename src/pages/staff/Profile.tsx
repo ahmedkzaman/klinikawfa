@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
-import { User, Edit, Send, AlertCircle, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { User, Edit, Send, CheckCircle, Clock, XCircle, DollarSign } from 'lucide-react';
 
 type ProfileData = {
   full_name: string;
@@ -26,6 +26,21 @@ type ProfileData = {
   department: string;
 };
 
+type PayrollProfile = {
+  employment_type: string;
+  date_joined: string | null;
+  salary_payment_type: string;
+  bank_name: string;
+  bank_account_number: string;
+  account_holder_name: string;
+  fixed_allowance: number;
+  transport_allowance: number;
+  meal_allowance: number;
+  oncall_allowance: number;
+  custom_allowance: number;
+  payroll_status: string;
+};
+
 const emptyProfile: ProfileData = {
   full_name: '', ic_passport: '', phone: '', email: '', home_address: '',
   bank_name: '', bank_account: '', emergency_contact_name: '', emergency_contact_phone: '',
@@ -37,13 +52,83 @@ function maskBankAccount(acc: string) {
   return '****' + acc.slice(-4);
 }
 
+function PayrollInfoSection({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
+  const { data: payrollProfile } = useQuery({
+    queryKey: ['my-payroll-profile', userId],
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from('staff_payroll_profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+      return data as PayrollProfile | null;
+    },
+  });
+
+  if (!payrollProfile) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5" /> Payroll Info</CardTitle>
+          <CardDescription>No payroll profile configured yet</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  const items: [string, string][] = [
+    ['Employment Type', payrollProfile.employment_type || '-'],
+    ['Date Joined', payrollProfile.date_joined || '-'],
+    ['Salary Payment Type', payrollProfile.salary_payment_type || '-'],
+    ['Bank Name', payrollProfile.bank_name || '-'],
+    ['Bank Account', isAdmin ? (payrollProfile.bank_account_number || '-') : maskBankAccount(payrollProfile.bank_account_number || '')],
+    ['Account Holder', payrollProfile.account_holder_name || '-'],
+    ['Payroll Status', payrollProfile.payroll_status || '-'],
+  ];
+
+  const allowances: [string, number][] = [
+    ['Fixed Allowance', payrollProfile.fixed_allowance],
+    ['Transport Allowance', payrollProfile.transport_allowance],
+    ['Meal Allowance', payrollProfile.meal_allowance],
+    ['On-Call Allowance', payrollProfile.oncall_allowance],
+    ['Custom Allowance', payrollProfile.custom_allowance],
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5" /> Payroll Info</CardTitle>
+        <CardDescription>Read-only payroll details{!isAdmin ? ' (limited view)' : ''}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {items.map(([label, value]) => (
+          <div key={label} className="space-y-1">
+            <Label>{label}</Label>
+            <p className="text-sm py-2 px-3 bg-muted rounded-md">{value}</p>
+          </div>
+        ))}
+        {isAdmin && (
+          <>
+            <Label className="mt-4 block font-semibold">Allowances</Label>
+            {allowances.map(([label, value]) => (
+              <div key={label} className="flex justify-between text-sm py-1">
+                <span className="text-muted-foreground">{label}</span>
+                <span>RM {(value || 0).toFixed(2)}</span>
+              </div>
+            ))}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function StaffProfile() {
   const { user, isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState<ProfileData>(emptyProfile);
 
-  // Get approved profile data from onboarding or latest approved submission
   const { data: onboarding } = useQuery({
     queryKey: ['my-onboarding', user?.id],
     queryFn: async () => {
@@ -77,7 +162,6 @@ export default function StaffProfile() {
     enabled: !!user,
   });
 
-  // Build current approved data
   const currentData = useMemo((): ProfileData => {
     const ob = onboarding?.onboarding_data as Record<string, any> | null;
     return {
@@ -137,7 +221,6 @@ export default function StaffProfile() {
         )}
       </div>
 
-      {/* Status Banners */}
       {pendingSubmission && (
         <Alert><Clock className="h-4 w-4" /><AlertTitle>Pending Review</AlertTitle>
           <AlertDescription>Your profile update is awaiting admin approval.</AlertDescription></Alert>
@@ -206,6 +289,9 @@ export default function StaffProfile() {
           </form>
         </CardContent>
       </Card>
+
+      {/* Payroll Info Section */}
+      {user && <PayrollInfoSection userId={user.id} isAdmin={isAdmin} />}
     </div>
   );
 }
