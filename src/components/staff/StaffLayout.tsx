@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import {
   MapPin, Clock, History, Settings, LogOut, Menu, Home, Users, Map, CalendarDays, CalendarOff, Inbox, FileText,
   LayoutDashboard, CalendarCheck, Stethoscope, Video, Image, Star, ChevronDown, ClipboardCheck, ClipboardList,
-  User, BarChart3, CheckSquare
+  User, BarChart3, CheckSquare, DollarSign
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
@@ -44,6 +44,7 @@ const adminNavItems = [
   { href: '/staff/admin/attendance-review', label: 'Attendance Review', icon: BarChart3 },
   { href: '/staff/admin/profile-approvals', label: 'Profile Approvals', icon: CheckSquare },
   { href: '/staff/admin/payroll-summary', label: 'Payroll Summary', icon: LayoutDashboard },
+  { href: '/staff/admin/payroll-profiles', label: 'Payroll Profiles', icon: DollarSign },
 ];
 
 const contentNavItems = [
