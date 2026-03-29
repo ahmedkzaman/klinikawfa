@@ -522,6 +522,31 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
+                    {/* Week number row */}
+                    <TableRow>
+                      <TableHead className="w-32 sticky left-0 bg-background z-10 text-center text-xs font-semibold">Week</TableHead>
+                      {(() => {
+                        const groups: { week: number; span: number }[] = [];
+                        monthDays.forEach(day => {
+                          const w = getISOWeek(day);
+                          if (groups.length > 0 && groups[groups.length - 1].week === w) {
+                            groups[groups.length - 1].span++;
+                          } else {
+                            groups.push({ week: w, span: 1 });
+                          }
+                        });
+                        return groups.map((g, i) => (
+                          <TableHead
+                            key={g.week}
+                            colSpan={g.span}
+                            className={cn("text-center text-xs font-semibold border-x", i % 2 === 0 ? "bg-primary/10" : "bg-accent/30")}
+                          >
+                            Week {g.week}
+                          </TableHead>
+                        ));
+                      })()}
+                    </TableRow>
+                    {/* Day headers row */}
                     <TableRow>
                       <TableHead className="w-32 font-semibold sticky left-0 bg-background z-10">Shift</TableHead>
                       {monthDays.map(day => {
