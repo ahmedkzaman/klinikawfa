@@ -36,6 +36,7 @@ const adminNavItems = [
   { href: '/staff/admin/assignments', label: 'Assignments', icon: Clock },
   { href: '/staff/admin/requests', label: 'Requests', icon: Inbox },
   { href: '/staff/admin/roster', label: 'Roster', icon: CalendarDays },
+  { href: '/staff/admin/onboarding', label: 'Onboarding', icon: ClipboardList },
 ];
 
 const contentNavItems = [

@@ -100,6 +100,7 @@ const App = () => (
                 <Route path="admin/assignments" element={<AdminAssignments />} />
                 <Route path="admin/requests" element={<AdminRequests />} />
                 <Route path="admin/roster" element={<AdminRoster />} />
+                <Route path="admin/onboarding" element={<AdminOnboarding />} />
                 {/* Website Management */}
                 <Route path="website/leads" element={<LeadsManagement />} />
                 <Route path="website/team" element={<TeamManagement />} />
