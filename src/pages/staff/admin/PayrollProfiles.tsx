@@ -93,8 +93,8 @@ export default function PayrollProfiles() {
   const { data: onboardingData } = useQuery({
     queryKey: ['all-onboarding-data'],
     queryFn: async () => {
-      const { data } = await supabase.from('staff_onboarding' as any).select('user_id, onboarding_data');
-      return (data || []) as { user_id: string; onboarding_data: Record<string, any> | null }[];
+      const { data } = await (supabase as any).from('staff_onboarding').select('user_id, onboarding_data');
+      return (data || []) as unknown as { user_id: string; onboarding_data: Record<string, any> | null }[];
     },
   });
 
