@@ -700,6 +700,27 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                         );
                       })}
                     </TableRow>
+                    {/* Off / Not working row */}
+                    <TableRow>
+                      <TableCell className="font-medium bg-destructive/10 sticky left-0 z-10">
+                        <div className="text-xs">Off</div>
+                        <div className="text-[10px] text-muted-foreground">Not assigned</div>
+                      </TableCell>
+                      {monthDays.map(day => {
+                        const dateKey = format(day, 'yyyy-MM-dd');
+                        const r = roster[dateKey];
+                        const assignedIds = new Set<string>();
+                        if (r) {
+                          [...r.shift1, ...r.shift2].forEach(c => assignedIds.add(c.staffId));
+                        }
+                        const offStaff = staffList.filter(s => !assignedIds.has(s.id));
+                        return (
+                          <TableCell key={dateKey} className={cn("text-center p-1 text-[10px] text-muted-foreground", isWeekend(day) && "bg-muted/20")}>
+                            {offStaff.length > 0 ? offStaff.map(s => firstName(s.name)).join(', ') : '—'}
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
                   </TableBody>
                 </Table>
               </div>
