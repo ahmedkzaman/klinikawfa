@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { format } from 'date-fns';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,7 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Plus, Eye, EyeOff, Trash2, User, Users, GripVertical } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
+import { Plus, Eye, EyeOff, Trash2, User, Users, GripVertical, CalendarIcon, AlertTriangle } from 'lucide-react';
 import { useStaffTasks, type StaffTask } from '@/hooks/useStaffTasks';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
