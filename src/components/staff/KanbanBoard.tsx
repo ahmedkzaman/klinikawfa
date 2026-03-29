@@ -35,6 +35,7 @@ export default function KanbanBoard() {
   const [newDesc, setNewDesc] = useState('');
   const [newAssignee, setNewAssignee] = useState<string>('all');
   const [newColumn, setNewColumn] = useState<ColumnId>('todo');
+  const [newDeadline, setNewDeadline] = useState<Date | undefined>();
   const [newAdminOnly, setNewAdminOnly] = useState(false);
 
   const profileList = useMemo(() => Object.entries(profiles).map(([id, name]) => ({ id, name })), [profiles]);
