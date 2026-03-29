@@ -314,6 +314,60 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
       });
     }
 
+    // ─── Global balancing pass: swap shifts to minimise monthly hour spread ───
+    {
+      const calcMonthHours = (sid: string) => {
+        let total = 0;
+        for (const dk of Object.keys(newRoster)) {
+          const r = newRoster[dk];
+          [...r.shift1, ...r.shift2].forEach(c => { if (c.staffId === sid) total += SHIFT_HOURS; });
+        }
+        return total;
+      };
+
+      let balanceIter = 0;
+      let improved = true;
+      while (improved && balanceIter < 200) {
+        improved = false;
+        balanceIter++;
+        const monthHrs = staffList.map(s => ({ id: s.id, name: s.name, hours: calcMonthHours(s.id) }));
+        monthHrs.sort((a, b) => b.hours - a.hours);
+        const highest = monthHrs[0];
+        const lowest = monthHrs[monthHrs.length - 1];
+        if (highest.hours - lowest.hours <= SHIFT_HOURS) break;
+
+        // Try to find a day where highest works but lowest doesn't, and swap
+        for (const day of monthDays) {
+          const dateKey = format(day, 'yyyy-MM-dd');
+          const r = newRoster[dateKey];
+          if (!r) continue;
+          const todayIds = [...r.shift1, ...r.shift2].map(c => c.staffId);
+          if (!todayIds.includes(highest.id)) continue;
+          if (todayIds.includes(lowest.id)) continue; // lowest already works today
+
+          for (const shiftKey of ['shift1', 'shift2'] as const) {
+            const cells = r[shiftKey];
+            const idx = cells.findIndex(c => c.staffId === highest.id);
+            if (idx < 0) continue;
+
+            // Check weekday constraint
+            const dayOfWeek = getDay(day);
+            const isWkday = WEEKDAY_INDICES.includes(dayOfWeek);
+            if (weekdayConstraintEnabled && isWkday && shiftKey === 'shift2' && constrainedStaffIds.includes(lowest.id)) continue;
+
+            // Perform swap
+            const updatedCells = [...cells];
+            const lowestStaff = staffList.find(s => s.id === lowest.id)!;
+            updatedCells[idx] = { staffId: lowest.id, staffName: lowestStaff.name };
+            newRoster[dateKey] = { ...newRoster[dateKey], [shiftKey]: updatedCells };
+            improved = true;
+            break;
+          }
+          if (improved) break;
+        }
+      }
+    }
+
     setRoster(newRoster);
     setWarnings(newWarnings);
     if (newWarnings.length === 0) toast.success('Roster generated successfully!');
