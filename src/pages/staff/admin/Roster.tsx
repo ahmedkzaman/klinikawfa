@@ -74,6 +74,8 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
   const [warnings, setWarnings] = useState<string[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
   const [staffPerShift, setStaffPerShift] = useState(2);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
 
   // Compute days of month
   const monthDays = useMemo(() => {
@@ -83,6 +85,61 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
   }, [selectedMonth, selectedYear]);
 
   useEffect(() => { setStaffList(initialStaff); }, [initialStaff]);
+
+  // ─── Auto-load saved roster on month change ───
+  useEffect(() => {
+    const loadSaved = async () => {
+      const { data } = await supabase
+        .from('saved_rosters')
+        .select('*')
+        .eq('roster_type', rosterType)
+        .eq('month', selectedMonth)
+        .eq('year', selectedYear)
+        .maybeSingle();
+      if (data) {
+        setRoster(data.roster_data as unknown as RosterData);
+        if (data.staff_list && (data.staff_list as unknown as StaffMember[]).length > 0) {
+          setStaffList(data.staff_list as unknown as StaffMember[]);
+        }
+        setWarnings((data.warnings as unknown as string[]) || []);
+        setSavedAt(data.updated_at);
+        toast.info('Saved roster loaded');
+      } else {
+        setSavedAt(null);
+      }
+    };
+    loadSaved();
+  }, [selectedMonth, selectedYear, rosterType]);
+
+  const saveRoster = async () => {
+    if (!roster) { toast.error('No roster to save'); return; }
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { toast.error('Please sign in to save'); setSaving(false); return; }
+
+    const payload = {
+      roster_type: rosterType,
+      month: selectedMonth,
+      year: selectedYear,
+      roster_data: roster as unknown as Record<string, unknown>,
+      staff_list: staffList as unknown as Record<string, unknown>[],
+      warnings: warnings as unknown as Record<string, unknown>[],
+      created_by: user.id,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from('saved_rosters')
+      .upsert([payload] as any, { onConflict: 'roster_type,month,year' });
+
+    if (error) {
+      toast.error('Failed to save: ' + error.message);
+    } else {
+      setSavedAt(new Date().toISOString());
+      toast.success('Roster saved!');
+    }
+    setSaving(false);
+  };
 
   const addStaff = () => {
     if (!newStaffName.trim()) return;
