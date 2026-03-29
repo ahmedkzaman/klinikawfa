@@ -449,6 +449,16 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
   };
 
   const summary = getSummary();
+  const fairnessMetrics = useMemo(() => {
+    if (summary.length === 0) return null;
+    const hours = summary.map(s => s.totalHours);
+    const maxH = Math.max(...hours);
+    const minH = Math.min(...hours);
+    const spread = maxH - minH;
+    const avg = hours.reduce((a, b) => a + b, 0) / hours.length;
+    const score = avg > 0 ? Math.max(0, Math.min(100, Math.round(100 - (spread / avg) * 100))) : 100;
+    return { maxH, minH, spread, avg: Math.round(avg), score };
+  }, [summary]);
   const monthLabel = format(new Date(selectedYear, selectedMonth, 1), 'MMMM yyyy');
 
   return (
