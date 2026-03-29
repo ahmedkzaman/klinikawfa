@@ -74,7 +74,10 @@ export default function StaffAdminDashboard() {
 
         const dutyMap: Record<string, string[]> = {};
         for (const [shiftKey, label] of Object.entries(shiftLabels)) {
-          const cells = (todayData as any)[shiftKey] as RosterCell[] | undefined;
+          const rawCells = (todayData as any)[shiftKey];
+          const cells: RosterCell[] | undefined = rawCells
+            ? Array.isArray(rawCells) ? rawCells : [rawCells]
+            : undefined;
           if (cells) {
             cells.forEach(c => {
               if (c.staffId) {
