@@ -1,27 +1,28 @@
 
 
-## Fix: End Date Not Syncing with Deadline on Task Load
+## Add "Assign to All" in Calendar + Task Assignment Notifications
 
-### Problem
-When opening an existing task for editing, if the task has a deadline but no `end_date` saved in the database, the End Date shows "Optional" instead of matching the deadline. The sync logic only runs when you **pick** a new deadline (line 151), but not when the dialog **loads** an existing task (line 60-62).
+### What changes
 
-### Fix: `src/components/staff/calendar/TaskDialog.tsx`
+1. **Calendar TaskDialog**: Add "All Staff" option to the assignment dropdown (currently only shows individual staff). When "All Staff" is selected, `assigned_to` is set to `null` (matching the Kanban convention).
 
-In the `useEffect` that loads task data (around line 60-62), add a fallback: if `task.end_date` is null but `task.deadline` exists, set `endDate` to the deadline value.
+2. **Notification on task assignment**: When a task is created or updated with an assignment, insert a notification into `staff_notifications` for the assigned user(s). If assigned to all, insert a notification for every staff member.
 
-**Change line 60-61 from:**
-```ts
-if (task.end_date) { ... setEndDate(ed); ... }
-else { setEndDate(undefined); setEndTime('10:00'); }
-```
+### Technical details
 
-**To:**
-```ts
-if (task.end_date) { ... setEndDate(ed); ... }
-else if (task.deadline) { setEndDate(new Date(task.deadline)); setEndTime('10:00'); }
-else { setEndDate(undefined); setEndTime('10:00'); }
-```
+**File: `src/components/staff/calendar/TaskDialog.tsx`**
+- Add an "All Staff" option (`value="all"`) to the Select dropdown in the Assign To section
+- When submitting, if `assignedTo === 'all'`, pass `null` as `assigned_to` (same as Kanban)
+- Show the Assign To field for all users who `canEdit`, not just admins (matching Kanban behavior — or keep admin-only if preferred)
 
-### Single file change
-- **Edit**: `src/components/staff/calendar/TaskDialog.tsx` (line 60-61 only)
+**File: `src/hooks/useStaffTasks.ts`**
+- After `createTask` and `updateTask` succeed, insert notification(s) into `staff_notifications`:
+  - If `assigned_to` is a specific user: insert one notification for that user
+  - If `assigned_to` is null (all staff): fetch all profile IDs and insert a notification for each
+  - Notification includes task title, type `'task_assigned'`, and `related_task_id`
+- Skip self-notification (don't notify the creator/editor if they assigned to themselves)
+
+### Files
+- **Edit**: `src/components/staff/calendar/TaskDialog.tsx` — add "All Staff" option to assignment select
+- **Edit**: `src/hooks/useStaffTasks.ts` — add notification insertion after create/update
 
