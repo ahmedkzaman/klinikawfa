@@ -840,7 +840,6 @@ export default function Roster() {
         <TabsContent value="doctor" className="mt-6">
           <DoctorRosterPanel initialStaff={doctorStaff} />
         </TabsContent>
-        </TabsContent>
 
         <TabsContent value="support" className="mt-6">
           <RosterPanel initialStaff={supportStaff} title="Support Staff Roster" rosterType="support" />
