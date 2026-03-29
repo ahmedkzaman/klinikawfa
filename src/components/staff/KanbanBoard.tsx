@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import { Plus, Eye, EyeOff, Trash2, User, Users, GripVertical, CalendarIcon, AlertTriangle } from 'lucide-react';
+import { Plus, Eye, EyeOff, Trash2, User, Users, GripVertical, CalendarIcon, AlertTriangle, Pencil } from 'lucide-react';
 import { useStaffTasks, type StaffTask } from '@/hooks/useStaffTasks';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -31,6 +31,7 @@ export default function KanbanBoard() {
   const { user, isAdmin } = useAuth();
   const { tasks, profiles, createTask, updateTask, deleteTask, requestDelete } = useStaffTasks();
   const [addOpen, setAddOpen] = useState(false);
+  const [editTask, setEditTask] = useState<StaffTask | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newAssignee, setNewAssignee] = useState<string>('all');
@@ -62,21 +63,57 @@ export default function KanbanBoard() {
     if (error) toast.error('Failed to move task');
   };
 
-  const handleAdd = async () => {
+  const resetForm = () => {
+    setNewTitle(''); setNewDesc(''); setNewAssignee('all'); setNewColumn('todo'); setNewDeadline(undefined); setNewAdminOnly(false);
+  };
+
+  const openAdd = () => {
+    resetForm();
+    setEditTask(null);
+    setAddOpen(true);
+  };
+
+  const openEdit = (task: StaffTask) => {
+    setNewTitle(task.title);
+    setNewDesc(task.description || '');
+    setNewAssignee(task.assigned_to || 'all');
+    setNewColumn((task.board_column as ColumnId) || 'todo');
+    setNewDeadline(task.deadline ? new Date(task.deadline) : undefined);
+    setNewAdminOnly(task.visibility === 'admin_only');
+    setEditTask(task);
+    setAddOpen(true);
+  };
+
+  const handleSubmit = async () => {
     if (!newTitle.trim()) return;
-    const { error } = await createTask({
-      title: newTitle.trim(),
-      description: newDesc.trim() || undefined,
-      assigned_to: newAssignee === 'all' ? null : newAssignee,
-      start_date: new Date(),
-      deadline: newDeadline || null,
-      color: '#3b82f6',
-      board_column: newColumn,
-      visibility: newAdminOnly ? 'admin_only' : 'all',
-    });
-    if (error) { toast.error('Failed to create task'); return; }
-    toast.success('Task created');
-    setNewTitle(''); setNewDesc(''); setNewAssignee('all'); setNewColumn('todo'); setNewDeadline(undefined); setNewAdminOnly(false); setAddOpen(false);
+    if (editTask) {
+      const { error } = await updateTask(editTask.id, {
+        title: newTitle.trim(),
+        description: newDesc.trim() || undefined,
+        assigned_to: newAssignee === 'all' ? null : newAssignee,
+        board_column: newColumn,
+        deadline: newDeadline || null,
+        is_completed: newColumn === 'done',
+        visibility: newAdminOnly ? 'admin_only' : 'all',
+        last_edited_by: user?.id,
+      });
+      if (error) { toast.error('Failed to update task'); return; }
+      toast.success('Task updated');
+    } else {
+      const { error } = await createTask({
+        title: newTitle.trim(),
+        description: newDesc.trim() || undefined,
+        assigned_to: newAssignee === 'all' ? null : newAssignee,
+        start_date: new Date(),
+        deadline: newDeadline || null,
+        color: '#3b82f6',
+        board_column: newColumn,
+        visibility: newAdminOnly ? 'admin_only' : 'all',
+      });
+      if (error) { toast.error('Failed to create task'); return; }
+      toast.success('Task created');
+    }
+    resetForm(); setEditTask(null); setAddOpen(false);
   };
 
   const handleDelete = async (task: StaffTask) => {
@@ -99,57 +136,76 @@ export default function KanbanBoard() {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <CardTitle className="text-lg">Task Board</CardTitle>
-        <Dialog open={addOpen} onOpenChange={setAddOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm"><Plus className="h-4 w-4 mr-1" />Add Task</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>New Task</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div><Label>Title</Label><Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Task title" /></div>
-              <div><Label>Description</Label><Textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="Optional description" rows={3} /></div>
-              <div><Label>Assign to</Label>
-                <Select value={newAssignee} onValueChange={setNewAssignee}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Staff</SelectItem>
-                    {profileList.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div><Label>Column</Label>
-                <Select value={newColumn} onValueChange={(v) => setNewColumn(v as ColumnId)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {COLUMNS.map((c) => <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div><Label>Deadline</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn('w-full justify-start text-left font-normal', !newDeadline && 'text-muted-foreground')}>
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {newDeadline ? format(newDeadline, 'MMM d, yyyy') : 'No deadline'}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" selected={newDeadline} onSelect={setNewDeadline} className="p-3 pointer-events-auto" />
-                  </PopoverContent>
-                </Popover>
-                {newDeadline && <Button variant="ghost" size="sm" className="mt-1 text-xs h-6" onClick={() => setNewDeadline(undefined)}>Clear deadline</Button>}
-              </div>
-              {isAdmin && (
-                <div className="flex items-center gap-2">
-                  <Switch checked={newAdminOnly} onCheckedChange={setNewAdminOnly} id="admin-only" />
-                  <Label htmlFor="admin-only">Admin only</Label>
-                </div>
-              )}
-            </div>
-            <DialogFooter><Button onClick={handleAdd} disabled={!newTitle.trim()}>Create</Button></DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Add Task</Button>
       </CardHeader>
+
+      {/* Add / Edit Dialog */}
+      <Dialog open={addOpen} onOpenChange={(o) => { if (!o) { setEditTask(null); resetForm(); } setAddOpen(o); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editTask ? 'Edit Task' : 'New Task'}</DialogTitle></DialogHeader>
+          {editTask && isAdmin && (
+            <p className="text-xs text-muted-foreground">
+              Created by <span className="font-medium">{editTask.creator_name}</span>
+              {editTask.last_edited_by && profiles[editTask.last_edited_by] && (
+                <> · Last edited by <span className="font-medium">{profiles[editTask.last_edited_by]}</span></>
+              )}
+              {editTask.updated_at && (
+                <> · {format(new Date(editTask.updated_at), 'MMM d, yyyy h:mm a')}</>
+              )}
+            </p>
+          )}
+          <div className="space-y-4">
+            <div><Label>Title</Label><Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Task title" /></div>
+            <div><Label>Description</Label><Textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="Optional description" rows={3} /></div>
+            <div><Label>Assign to</Label>
+              <Select value={newAssignee} onValueChange={setNewAssignee}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Staff</SelectItem>
+                  {profileList.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div><Label>Column</Label>
+              <Select value={newColumn} onValueChange={(v) => setNewColumn(v as ColumnId)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {COLUMNS.map((c) => <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div><Label>Deadline</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className={cn('w-full justify-start text-left font-normal', !newDeadline && 'text-muted-foreground')}>
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {newDeadline ? format(newDeadline, 'MMM d, yyyy') : 'No deadline'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={newDeadline} onSelect={setNewDeadline} className="p-3 pointer-events-auto" />
+                </PopoverContent>
+              </Popover>
+              {newDeadline && <Button variant="ghost" size="sm" className="mt-1 text-xs h-6" onClick={() => setNewDeadline(undefined)}>Clear deadline</Button>}
+            </div>
+            {isAdmin && (
+              <div className="flex items-center gap-2">
+                <Switch checked={newAdminOnly} onCheckedChange={setNewAdminOnly} id="admin-only" />
+                <Label htmlFor="admin-only">Admin only</Label>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            {editTask && (
+              <Button variant="destructive" size="sm" onClick={() => { handleDelete(editTask); setAddOpen(false); setEditTask(null); resetForm(); }} className="mr-auto">
+                <Trash2 className="h-4 w-4 mr-1" />{isAdmin ? 'Delete' : 'Request Delete'}
+              </Button>
+            )}
+            <Button onClick={handleSubmit} disabled={!newTitle.trim()}>{editTask ? 'Update' : 'Create'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <CardContent>
         <DragDropContext onDragEnd={handleDragEnd}>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -177,7 +233,7 @@ export default function KanbanBoard() {
                             >
                               <div className="flex items-start gap-1">
                                 <div {...prov.dragHandleProps} className="mt-0.5 cursor-grab"><GripVertical className="h-3.5 w-3.5 text-muted-foreground" /></div>
-                                <div className="flex-1 min-w-0">
+                                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEdit(task)}>
                                   <p className="font-medium truncate">{task.title}</p>
                                   {task.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{task.description}</p>}
                                   <div className="flex items-center gap-1 mt-2 flex-wrap">
@@ -205,6 +261,9 @@ export default function KanbanBoard() {
                                   )}
                                 </div>
                                 <div className="flex flex-col gap-1 shrink-0">
+                                  <button onClick={() => openEdit(task)} className="p-1 rounded hover:bg-accent" title="Edit task">
+                                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                                  </button>
                                   {isAdmin && (
                                     <button onClick={() => handleVisibilityToggle(task)} className="p-1 rounded hover:bg-accent" title={task.visibility === 'admin_only' ? 'Make visible to all' : 'Make admin only'}>
                                       {task.visibility === 'admin_only' ? <EyeOff className="h-3.5 w-3.5 text-amber-500" /> : <Eye className="h-3.5 w-3.5 text-muted-foreground" />}
