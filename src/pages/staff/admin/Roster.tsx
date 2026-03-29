@@ -727,6 +727,22 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                     ))}
                   </TableBody>
                 </Table>
+
+                {/* Fairness Score */}
+                {fairnessMetrics && (
+                  <div className="flex flex-wrap items-center gap-3 mt-3 p-3 rounded-lg bg-muted/50">
+                    <span className="text-sm font-medium">Fairness:</span>
+                    <Badge
+                      variant={fairnessMetrics.score >= 90 ? 'secondary' : 'destructive'}
+                      className={cn("text-xs", fairnessMetrics.score >= 90 ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : fairnessMetrics.score >= 70 ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" : "")}
+                    >
+                      {fairnessMetrics.score}% balanced
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      Spread: {fairnessMetrics.maxH}h − {fairnessMetrics.minH}h = {fairnessMetrics.spread}h difference · Avg: {fairnessMetrics.avg}h
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-2 flex-wrap print:hidden">
