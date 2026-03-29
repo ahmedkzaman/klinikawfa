@@ -805,7 +805,8 @@ export type Database = {
       }
       staff_tasks: {
         Row: {
-          assigned_to: string
+          assigned_to: string | null
+          board_column: string
           color: string
           created_at: string
           created_by: string
@@ -814,12 +815,15 @@ export type Database = {
           end_date: string | null
           id: string
           is_completed: boolean
+          last_edited_by: string | null
           start_date: string
           title: string
           updated_at: string
+          visibility: string
         }
         Insert: {
-          assigned_to: string
+          assigned_to?: string | null
+          board_column?: string
           color?: string
           created_at?: string
           created_by: string
@@ -828,12 +832,15 @@ export type Database = {
           end_date?: string | null
           id?: string
           is_completed?: boolean
+          last_edited_by?: string | null
           start_date: string
           title: string
           updated_at?: string
+          visibility?: string
         }
         Update: {
-          assigned_to?: string
+          assigned_to?: string | null
+          board_column?: string
           color?: string
           created_at?: string
           created_by?: string
@@ -842,9 +849,11 @@ export type Database = {
           end_date?: string | null
           id?: string
           is_completed?: boolean
+          last_edited_by?: string | null
           start_date?: string
           title?: string
           updated_at?: string
+          visibility?: string
         }
         Relationships: []
       }

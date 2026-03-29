@@ -7,12 +7,15 @@ export interface StaffTask {
   title: string;
   description: string | null;
   created_by: string;
-  assigned_to: string;
+  assigned_to: string | null;
   start_date: string;
   end_date: string | null;
   deadline: string | null;
   color: string;
   is_completed: boolean;
+  board_column: string;
+  visibility: string;
+  last_edited_by: string | null;
   created_at: string;
   updated_at: string;
   creator_name?: string;
@@ -27,6 +30,8 @@ export interface TaskFormData {
   end_date?: Date | null;
   deadline?: Date | null;
   color: string;
+  board_column?: string;
+  visibility?: string;
 }
 
 export interface LeaveEntry {
@@ -95,16 +100,18 @@ export function useStaffTasks() {
       title: data.title,
       description: data.description || null,
       created_by: user.id,
-      assigned_to: data.assigned_to || user.id,
+      assigned_to: data.assigned_to === undefined ? user.id : (data.assigned_to || null),
       start_date: data.start_date.toISOString(),
       end_date: data.end_date?.toISOString() || null,
       deadline: data.deadline?.toISOString() || null,
       color: data.color,
+      board_column: data.board_column || 'todo',
+      visibility: data.visibility || 'all',
     });
     return { error };
   };
 
-  const updateTask = async (id: string, data: Partial<TaskFormData> & { is_completed?: boolean }) => {
+  const updateTask = async (id: string, data: Partial<TaskFormData> & { is_completed?: boolean; board_column?: string; visibility?: string; last_edited_by?: string }) => {
     const updates: Record<string, unknown> = {};
     if (data.title !== undefined) updates.title = data.title;
     if (data.description !== undefined) updates.description = data.description || null;
@@ -114,6 +121,9 @@ export function useStaffTasks() {
     if (data.deadline !== undefined) updates.deadline = data.deadline?.toISOString() || null;
     if (data.color !== undefined) updates.color = data.color;
     if (data.is_completed !== undefined) updates.is_completed = data.is_completed;
+    if (data.board_column !== undefined) updates.board_column = data.board_column;
+    if (data.visibility !== undefined) updates.visibility = data.visibility;
+    if (data.last_edited_by !== undefined) updates.last_edited_by = data.last_edited_by;
     const { error } = await supabase.from('staff_tasks').update(updates).eq('id', id);
     return { error };
   };

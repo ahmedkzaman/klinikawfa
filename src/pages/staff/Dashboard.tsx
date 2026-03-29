@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MapPin, History, Clock, CheckCircle, XCircle, Bell, CalendarDays } from 'lucide-react';
+import KanbanBoard from '@/components/staff/KanbanBoard';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -77,6 +78,8 @@ export default function StaffDashboard() {
           </CardContent>
         </Card>
       )}
+
+      <KanbanBoard />
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
