@@ -411,21 +411,31 @@ export default function PayrollProfiles() {
                 </div>
               </fieldset>
 
-              {/* Allowances */}
+              {/* Named Allowances */}
               <fieldset className="space-y-3">
                 <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Allowances</legend>
                 <div className="grid grid-cols-2 gap-3">
+                  <div><Label>APC (RM)</Label><Input type="number" step="0.01" value={editingProfile.apc_allowance} onChange={e => updateField('apc_allowance', Number(e.target.value))} /></div>
+                  <div><Label>Telephone (RM)</Label><Input type="number" step="0.01" value={editingProfile.telephone_allowance} onChange={e => updateField('telephone_allowance', Number(e.target.value))} /></div>
+                  <div><Label>Team Leader (RM)</Label><Input type="number" step="0.01" value={editingProfile.team_leader_allowance} onChange={e => updateField('team_leader_allowance', Number(e.target.value))} /></div>
+                  <div><Label>Project (RM)</Label><Input type="number" step="0.01" value={editingProfile.project_allowance} onChange={e => updateField('project_allowance', Number(e.target.value))} /></div>
+                  <div><Label>Admin (RM)</Label><Input type="number" step="0.01" value={editingProfile.admin_allowance} onChange={e => updateField('admin_allowance', Number(e.target.value))} /></div>
                   <div><Label>Fixed (RM)</Label><Input type="number" step="0.01" value={editingProfile.fixed_allowance} onChange={e => updateField('fixed_allowance', Number(e.target.value))} /></div>
                   <div><Label>Transport (RM)</Label><Input type="number" step="0.01" value={editingProfile.transport_allowance} onChange={e => updateField('transport_allowance', Number(e.target.value))} /></div>
                   <div><Label>Meal (RM)</Label><Input type="number" step="0.01" value={editingProfile.meal_allowance} onChange={e => updateField('meal_allowance', Number(e.target.value))} /></div>
                   <div><Label>On-Call (RM)</Label><Input type="number" step="0.01" value={editingProfile.oncall_allowance} onChange={e => updateField('oncall_allowance', Number(e.target.value))} /></div>
                   <div><Label>Custom (RM)</Label><Input type="number" step="0.01" value={editingProfile.custom_allowance} onChange={e => updateField('custom_allowance', Number(e.target.value))} /></div>
                 </div>
+                <p className="text-xs text-muted-foreground font-medium mt-2">Other Allowance (custom name)</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label>Name</Label><Input value={editingProfile.other_allowance_name} onChange={e => updateField('other_allowance_name', e.target.value)} placeholder="e.g. Housing" /></div>
+                  <div><Label>Amount (RM)</Label><Input type="number" step="0.01" value={editingProfile.other_allowance_amount} onChange={e => updateField('other_allowance_amount', Number(e.target.value))} /></div>
+                </div>
               </fieldset>
 
-              {/* Deductions */}
+              {/* Operational Deductions */}
               <fieldset className="space-y-3">
-                <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Deductions</legend>
+                <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Operational Deductions</legend>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Unpaid Leave (RM)</Label><Input type="number" step="0.01" value={editingProfile.unpaid_leave_deduction} onChange={e => updateField('unpaid_leave_deduction', Number(e.target.value))} /></div>
                   <div><Label>Lateness (RM)</Label><Input type="number" step="0.01" value={editingProfile.lateness_deduction} onChange={e => updateField('lateness_deduction', Number(e.target.value))} /></div>
@@ -434,9 +444,24 @@ export default function PayrollProfiles() {
                 </div>
               </fieldset>
 
-              {/* Statutory */}
+              {/* Statutory Deductions */}
               <fieldset className="space-y-3">
-                <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Statutory / Tax</legend>
+                <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Statutory Deductions</legend>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label>EPF — Employee (RM)</Label><Input type="number" step="0.01" value={editingProfile.epf_employee} onChange={e => updateField('epf_employee', Number(e.target.value))} /></div>
+                  <div><Label>EPF — Employer (RM)</Label><Input type="number" step="0.01" value={editingProfile.epf_employer} onChange={e => updateField('epf_employer', Number(e.target.value))} /></div>
+                  <div><Label>SOCSO — Employee (RM)</Label><Input type="number" step="0.01" value={editingProfile.socso_employee} onChange={e => updateField('socso_employee', Number(e.target.value))} /></div>
+                  <div><Label>SOCSO — Employer (RM)</Label><Input type="number" step="0.01" value={editingProfile.socso_employer} onChange={e => updateField('socso_employer', Number(e.target.value))} /></div>
+                  <div><Label>EIS — Employee (RM)</Label><Input type="number" step="0.01" value={editingProfile.eis_employee} onChange={e => updateField('eis_employee', Number(e.target.value))} /></div>
+                  <div><Label>EIS — Employer (RM)</Label><Input type="number" step="0.01" value={editingProfile.eis_employer} onChange={e => updateField('eis_employer', Number(e.target.value))} /></div>
+                  <div><Label>HRDF (RM)</Label><Input type="number" step="0.01" value={editingProfile.hrdf} onChange={e => updateField('hrdf', Number(e.target.value))} /></div>
+                  <div><Label>MTD / PCB (RM)</Label><Input type="number" step="0.01" value={editingProfile.mtd} onChange={e => updateField('mtd', Number(e.target.value))} /></div>
+                </div>
+              </fieldset>
+
+              {/* Statutory References */}
+              <fieldset className="space-y-3">
+                <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Statutory References</legend>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Tax ID</Label><Input value={editingProfile.tax_id} onChange={e => updateField('tax_id', e.target.value)} /></div>
                   <div><Label>EPF Reference</Label><Input value={editingProfile.epf_reference} onChange={e => updateField('epf_reference', e.target.value)} /></div>

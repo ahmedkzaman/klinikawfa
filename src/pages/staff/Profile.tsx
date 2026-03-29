@@ -87,11 +87,28 @@ function PayrollInfoSection({ userId, isAdmin }: { userId: string; isAdmin: bool
   ];
 
   const allowances: [string, number][] = [
+    ['APC Allowance', (payrollProfile as any).apc_allowance],
+    ['Telephone Allowance', (payrollProfile as any).telephone_allowance],
+    ['Team Leader Allowance', (payrollProfile as any).team_leader_allowance],
+    ['Project Allowance', (payrollProfile as any).project_allowance],
+    ['Admin Allowance', (payrollProfile as any).admin_allowance],
     ['Fixed Allowance', payrollProfile.fixed_allowance],
     ['Transport Allowance', payrollProfile.transport_allowance],
     ['Meal Allowance', payrollProfile.meal_allowance],
     ['On-Call Allowance', payrollProfile.oncall_allowance],
     ['Custom Allowance', payrollProfile.custom_allowance],
+    ...(((payrollProfile as any).other_allowance_name && (payrollProfile as any).other_allowance_amount) ? [[(payrollProfile as any).other_allowance_name, (payrollProfile as any).other_allowance_amount] as [string, number]] : []),
+  ];
+
+  const statutoryDeductions: [string, number][] = [
+    ['EPF (Employee)', (payrollProfile as any).epf_employee],
+    ['EPF (Employer)', (payrollProfile as any).epf_employer],
+    ['SOCSO (Employee)', (payrollProfile as any).socso_employee],
+    ['SOCSO (Employer)', (payrollProfile as any).socso_employer],
+    ['EIS (Employee)', (payrollProfile as any).eis_employee],
+    ['EIS (Employer)', (payrollProfile as any).eis_employer],
+    ['HRDF', (payrollProfile as any).hrdf],
+    ['MTD / PCB', (payrollProfile as any).mtd],
   ];
 
   return (
