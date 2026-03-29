@@ -149,6 +149,9 @@ export function useStaffTasks() {
     if (data.visibility !== undefined) updates.visibility = data.visibility;
     if (data.last_edited_by !== undefined) updates.last_edited_by = data.last_edited_by;
     const { error } = await supabase.from('staff_tasks').update(updates).eq('id', id);
+    if (!error && data.assigned_to !== undefined) {
+      await sendTaskNotifications(id, data.title || 'Task', data.assigned_to);
+    }
     return { error };
   };
 
