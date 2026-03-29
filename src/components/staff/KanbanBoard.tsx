@@ -125,6 +125,20 @@ export default function KanbanBoard() {
                   </SelectContent>
                 </Select>
               </div>
+              <div><Label>Deadline</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={cn('w-full justify-start text-left font-normal', !newDeadline && 'text-muted-foreground')}>
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {newDeadline ? format(newDeadline, 'MMM d, yyyy') : 'No deadline'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={newDeadline} onSelect={setNewDeadline} className="p-3 pointer-events-auto" />
+                  </PopoverContent>
+                </Popover>
+                {newDeadline && <Button variant="ghost" size="sm" className="mt-1 text-xs h-6" onClick={() => setNewDeadline(undefined)}>Clear deadline</Button>}
+              </div>
               {isAdmin && (
                 <div className="flex items-center gap-2">
                   <Switch checked={newAdminOnly} onCheckedChange={setNewAdminOnly} id="admin-only" />
