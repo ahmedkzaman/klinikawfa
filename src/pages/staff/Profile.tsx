@@ -133,6 +133,13 @@ function PayrollInfoSection({ userId, isAdmin }: { userId: string; isAdmin: bool
                 <span>RM {(value || 0).toFixed(2)}</span>
               </div>
             ))}
+            <Label className="mt-4 block font-semibold">Statutory Deductions</Label>
+            {statutoryDeductions.map(([label, value]) => (
+              <div key={label} className="flex justify-between text-sm py-1">
+                <span className="text-muted-foreground">{label}</span>
+                <span>RM {(value || 0).toFixed(2)}</span>
+              </div>
+            ))}
           </>
         )}
       </CardContent>

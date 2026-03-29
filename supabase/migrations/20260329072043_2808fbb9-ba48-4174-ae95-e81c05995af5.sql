@@ -1,0 +1,16 @@
+ALTER TABLE public.staff_payroll_profiles
+  ADD COLUMN IF NOT EXISTS apc_allowance numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS telephone_allowance numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS team_leader_allowance numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS project_allowance numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS admin_allowance numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS other_allowance_amount numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS other_allowance_name text,
+  ADD COLUMN IF NOT EXISTS epf_employee numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS epf_employer numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS socso_employee numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS socso_employer numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS eis_employee numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS eis_employer numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS hrdf numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS mtd numeric DEFAULT 0;

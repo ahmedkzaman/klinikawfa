@@ -987,6 +987,8 @@ export type Database = {
         Row: {
           absence_deduction: number | null
           account_holder_name: string | null
+          admin_allowance: number | null
+          apc_allowance: number | null
           bank_account_number: string | null
           bank_name: string | null
           basic_salary: number | null
@@ -996,27 +998,40 @@ export type Database = {
           daily_rate: number | null
           date_joined: string | null
           department: string | null
+          eis_employee: number | null
+          eis_employer: number | null
           employee_id: string | null
           employment_type: string | null
+          epf_employee: number | null
+          epf_employer: number | null
           epf_reference: string | null
           fixed_allowance: number | null
           full_name: string | null
           hourly_rate: number | null
+          hrdf: number | null
           id: string
           job_title: string | null
           lateness_deduction: number | null
           meal_allowance: number | null
+          mtd: number | null
           nric_passport: string | null
           oncall_allowance: number | null
+          other_allowance_amount: number | null
+          other_allowance_name: string | null
           other_statutory_ref: string | null
           overtime_eligible: boolean | null
           overtime_rate: number | null
           payroll_notes: string | null
           payroll_status: string | null
+          project_allowance: number | null
           resignation_date: string | null
           salary_payment_type: string | null
+          socso_employee: number | null
+          socso_employer: number | null
           socso_reference: string | null
           tax_id: string | null
+          team_leader_allowance: number | null
+          telephone_allowance: number | null
           transport_allowance: number | null
           unpaid_leave_deduction: number | null
           updated_at: string | null
@@ -1025,6 +1040,8 @@ export type Database = {
         Insert: {
           absence_deduction?: number | null
           account_holder_name?: string | null
+          admin_allowance?: number | null
+          apc_allowance?: number | null
           bank_account_number?: string | null
           bank_name?: string | null
           basic_salary?: number | null
@@ -1034,27 +1051,40 @@ export type Database = {
           daily_rate?: number | null
           date_joined?: string | null
           department?: string | null
+          eis_employee?: number | null
+          eis_employer?: number | null
           employee_id?: string | null
           employment_type?: string | null
+          epf_employee?: number | null
+          epf_employer?: number | null
           epf_reference?: string | null
           fixed_allowance?: number | null
           full_name?: string | null
           hourly_rate?: number | null
+          hrdf?: number | null
           id?: string
           job_title?: string | null
           lateness_deduction?: number | null
           meal_allowance?: number | null
+          mtd?: number | null
           nric_passport?: string | null
           oncall_allowance?: number | null
+          other_allowance_amount?: number | null
+          other_allowance_name?: string | null
           other_statutory_ref?: string | null
           overtime_eligible?: boolean | null
           overtime_rate?: number | null
           payroll_notes?: string | null
           payroll_status?: string | null
+          project_allowance?: number | null
           resignation_date?: string | null
           salary_payment_type?: string | null
+          socso_employee?: number | null
+          socso_employer?: number | null
           socso_reference?: string | null
           tax_id?: string | null
+          team_leader_allowance?: number | null
+          telephone_allowance?: number | null
           transport_allowance?: number | null
           unpaid_leave_deduction?: number | null
           updated_at?: string | null
@@ -1063,6 +1093,8 @@ export type Database = {
         Update: {
           absence_deduction?: number | null
           account_holder_name?: string | null
+          admin_allowance?: number | null
+          apc_allowance?: number | null
           bank_account_number?: string | null
           bank_name?: string | null
           basic_salary?: number | null
@@ -1072,27 +1104,40 @@ export type Database = {
           daily_rate?: number | null
           date_joined?: string | null
           department?: string | null
+          eis_employee?: number | null
+          eis_employer?: number | null
           employee_id?: string | null
           employment_type?: string | null
+          epf_employee?: number | null
+          epf_employer?: number | null
           epf_reference?: string | null
           fixed_allowance?: number | null
           full_name?: string | null
           hourly_rate?: number | null
+          hrdf?: number | null
           id?: string
           job_title?: string | null
           lateness_deduction?: number | null
           meal_allowance?: number | null
+          mtd?: number | null
           nric_passport?: string | null
           oncall_allowance?: number | null
+          other_allowance_amount?: number | null
+          other_allowance_name?: string | null
           other_statutory_ref?: string | null
           overtime_eligible?: boolean | null
           overtime_rate?: number | null
           payroll_notes?: string | null
           payroll_status?: string | null
+          project_allowance?: number | null
           resignation_date?: string | null
           salary_payment_type?: string | null
+          socso_employee?: number | null
+          socso_employer?: number | null
           socso_reference?: string | null
           tax_id?: string | null
+          team_leader_allowance?: number | null
+          telephone_allowance?: number | null
           transport_allowance?: number | null
           unpaid_leave_deduction?: number | null
           updated_at?: string | null
