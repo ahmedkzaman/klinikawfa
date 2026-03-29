@@ -1,23 +1,27 @@
 
 
-## Fix: Show Deadline in Calendar Task Dialog for All Users
+## Fix: End Date Not Syncing with Deadline on Task Load
 
 ### Problem
-The deadline field in `TaskDialog.tsx` (line 148-158) is wrapped inside `{isAdmin && (...)}`, making it invisible to non-admin staff. Staff cannot see when a task is due.
+When opening an existing task for editing, if the task has a deadline but no `end_date` saved in the database, the End Date shows "Optional" instead of matching the deadline. The sync logic only runs when you **pick** a new deadline (line 151), but not when the dialog **loads** an existing task (line 60-62).
 
 ### Fix: `src/components/staff/calendar/TaskDialog.tsx`
 
-**Move the Deadline field outside the admin-only block** and make it visible to everyone:
-- For **admins**: deadline remains editable (date picker)
-- For **non-admin staff**: deadline is shown as **read-only text** (e.g., "Due: Mar 30, 2026") — no picker, just a label
+In the `useEffect` that loads task data (around line 60-62), add a fallback: if `task.end_date` is null but `task.deadline` exists, set `endDate` to the deadline value.
 
-**Specifically:**
-1. Extract the deadline section from the `{isAdmin && (...)}` block (lines 148-158)
-2. Place it after the End Date row (after line 147), available to all users
-3. If `canEdit` is true (admin or task owner), show the date picker as before
-4. If `canEdit` is false, show the deadline as plain text
-5. Keep the "Assign To" field admin-only
+**Change line 60-61 from:**
+```ts
+if (task.end_date) { ... setEndDate(ed); ... }
+else { setEndDate(undefined); setEndTime('10:00'); }
+```
+
+**To:**
+```ts
+if (task.end_date) { ... setEndDate(ed); ... }
+else if (task.deadline) { setEndDate(new Date(task.deadline)); setEndTime('10:00'); }
+else { setEndDate(undefined); setEndTime('10:00'); }
+```
 
 ### Single file change
-- **Edit**: `src/components/staff/calendar/TaskDialog.tsx`
+- **Edit**: `src/components/staff/calendar/TaskDialog.tsx` (line 60-61 only)
 
