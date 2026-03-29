@@ -61,7 +61,7 @@ export function TaskDialog({ open, onClose, task, initialDate, profiles, onSave,
       else if (task.deadline) { setEndDate(new Date(task.deadline)); setEndTime('10:00'); }
       else { setEndDate(undefined); setEndTime('10:00'); }
       setDeadline(task.deadline ? new Date(task.deadline) : undefined);
-      setAssignedTo(task.assigned_to || '');
+      setAssignedTo(task.assigned_to || 'all');
       setColor(task.color);
       setIsCompleted(task.is_completed);
       if (!isAdmin && open) {
@@ -87,7 +87,7 @@ export function TaskDialog({ open, onClose, task, initialDate, profiles, onSave,
     setSaving(true);
     const formData: TaskFormData = {
       title: title.trim(), description: description.trim() || undefined,
-      assigned_to: assignedTo || null,
+      assigned_to: assignedTo === 'all' ? null : (assignedTo || null),
       start_date: buildDate(startDate, startTime),
       end_date: endDate ? buildDate(endDate, endTime) : null,
       deadline: deadline || null, color,
@@ -154,11 +154,15 @@ export function TaskDialog({ open, onClose, task, initialDate, profiles, onSave,
               <p className="text-sm text-muted-foreground mt-1">{deadline ? format(deadline, 'MMM d, yyyy') : 'No deadline'}</p>
             )}
           </div>
-          {isAdmin && (
-            <div><Label>Assign To (Admin)</Label>
+          {canEdit && (
+            <div><Label>Assign To</Label>
               <Select value={assignedTo} onValueChange={setAssignedTo}>
                 <SelectTrigger><SelectValue placeholder="Self (unassigned)" /></SelectTrigger>
-                <SelectContent><SelectItem value="none">Self (unassigned)</SelectItem>{staffList.map(([id, name]) => (<SelectItem key={id} value={id}>{name}</SelectItem>))}</SelectContent>
+                <SelectContent>
+                  <SelectItem value="none">Self (unassigned)</SelectItem>
+                  <SelectItem value="all">All Staff</SelectItem>
+                  {staffList.map(([id, name]) => (<SelectItem key={id} value={id}>{name}</SelectItem>))}
+                </SelectContent>
               </Select></div>
           )}
           <div><Label>Color</Label><div className="flex gap-2 mt-1">{COLORS.map((c) => (<button key={c} onClick={() => canEdit && setColor(c)} className={cn('w-6 h-6 rounded-full border-2 transition-transform', color === c ? 'border-foreground scale-125' : 'border-transparent')} style={{ backgroundColor: c }} disabled={!canEdit} />))}</div></div>
