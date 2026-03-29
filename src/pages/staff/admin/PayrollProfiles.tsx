@@ -134,12 +134,22 @@ export default function PayrollProfiles() {
     if (existing) {
       setEditingProfile({ ...existing });
     } else {
+      const ob = onboardingMap[userId] || {};
       setEditingProfile({
         ...emptyProfile,
         user_id: userId,
-        full_name: staffProfile?.full_name || '',
-        department: staffProfile?.department || '',
-        job_title: staffProfile?.position || '',
+        full_name: ob.full_name || staffProfile?.full_name || '',
+        nric_passport: ob.ic_passport || '',
+        employment_type: ob.employment_type || 'permanent',
+        job_title: ob.position_title || staffProfile?.position || '',
+        department: ob.department || staffProfile?.department || '',
+        date_joined: ob.commencement_date || '',
+        bank_name: ob.bank_name || '',
+        bank_account_number: ob.bank_account_number || '',
+        account_holder_name: ob.account_holder_name || '',
+        tax_id: ob.tax_ref || '',
+        epf_reference: ob.epf_number || '',
+        socso_reference: ob.socso_number || '',
       });
     }
     setDialogOpen(true);
