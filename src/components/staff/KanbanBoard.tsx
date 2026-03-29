@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { format } from 'date-fns';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,7 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Plus, Eye, EyeOff, Trash2, User, Users, GripVertical } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
+import { Plus, Eye, EyeOff, Trash2, User, Users, GripVertical, CalendarIcon, AlertTriangle } from 'lucide-react';
 import { useStaffTasks, type StaffTask } from '@/hooks/useStaffTasks';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -31,6 +35,7 @@ export default function KanbanBoard() {
   const [newDesc, setNewDesc] = useState('');
   const [newAssignee, setNewAssignee] = useState<string>('all');
   const [newColumn, setNewColumn] = useState<ColumnId>('todo');
+  const [newDeadline, setNewDeadline] = useState<Date | undefined>();
   const [newAdminOnly, setNewAdminOnly] = useState(false);
 
   const profileList = useMemo(() => Object.entries(profiles).map(([id, name]) => ({ id, name })), [profiles]);
@@ -64,13 +69,14 @@ export default function KanbanBoard() {
       description: newDesc.trim() || undefined,
       assigned_to: newAssignee === 'all' ? null : newAssignee,
       start_date: new Date(),
+      deadline: newDeadline || null,
       color: '#3b82f6',
       board_column: newColumn,
       visibility: newAdminOnly ? 'admin_only' : 'all',
     });
     if (error) { toast.error('Failed to create task'); return; }
     toast.success('Task created');
-    setNewTitle(''); setNewDesc(''); setNewAssignee('all'); setNewColumn('todo'); setNewAdminOnly(false); setAddOpen(false);
+    setNewTitle(''); setNewDesc(''); setNewAssignee('all'); setNewColumn('todo'); setNewDeadline(undefined); setNewAdminOnly(false); setAddOpen(false);
   };
 
   const handleDelete = async (task: StaffTask) => {
@@ -118,6 +124,20 @@ export default function KanbanBoard() {
                     {COLUMNS.map((c) => <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+              <div><Label>Deadline</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={cn('w-full justify-start text-left font-normal', !newDeadline && 'text-muted-foreground')}>
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {newDeadline ? format(newDeadline, 'MMM d, yyyy') : 'No deadline'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={newDeadline} onSelect={setNewDeadline} className="p-3 pointer-events-auto" />
+                  </PopoverContent>
+                </Popover>
+                {newDeadline && <Button variant="ghost" size="sm" className="mt-1 text-xs h-6" onClick={() => setNewDeadline(undefined)}>Clear deadline</Button>}
               </div>
               {isAdmin && (
                 <div className="flex items-center gap-2">
@@ -167,6 +187,15 @@ export default function KanbanBoard() {
                                       <Badge variant="outline" className="text-[10px] gap-1"><Users className="h-2.5 w-2.5" />All Staff</Badge>
                                     )}
                                     {task.visibility === 'admin_only' && <Badge variant="secondary" className="text-[10px]">Admin Only</Badge>}
+                                    {task.deadline && (() => {
+                                      const isOverdue = new Date(task.deadline) < new Date() && task.board_column !== 'done';
+                                      return (
+                                        <Badge variant={isOverdue ? 'destructive' : 'outline'} className="text-[10px] gap-1">
+                                          {isOverdue && <AlertTriangle className="h-2.5 w-2.5" />}
+                                          {format(new Date(task.deadline), 'MMM d')}
+                                        </Badge>
+                                      );
+                                    })()}
                                   </div>
                                   {isAdmin && (
                                     <div className="text-[10px] text-muted-foreground mt-1.5 space-y-0.5">
