@@ -184,11 +184,49 @@ export default function PayrollProfiles() {
     upsertMutation.mutate(editingProfile);
   };
 
+  const bulkSyncMutation = useMutation({
+    mutationFn: async () => {
+      const staffWithOnboarding = (onboardingData || []).filter(o => o.onboarding_data && !payrollMap[o.user_id]);
+      if (staffWithOnboarding.length === 0) throw new Error('No staff to sync — all onboarded staff already have payroll profiles.');
+      for (const o of staffWithOnboarding) {
+        const ob = o.onboarding_data || {};
+        const staffProfile = profileMap[o.user_id];
+        await (supabase as any).from('staff_payroll_profiles').upsert({
+          user_id: o.user_id,
+          full_name: ob.full_name || staffProfile?.full_name || '',
+          nric_passport: ob.ic_passport || '',
+          employment_type: ob.employment_type || 'permanent',
+          job_title: ob.position_title || staffProfile?.position || '',
+          department: ob.department || staffProfile?.department || '',
+          date_joined: ob.commencement_date || null,
+          bank_name: ob.bank_name || '',
+          bank_account_number: ob.bank_account_number || '',
+          account_holder_name: ob.account_holder_name || '',
+          tax_id: ob.tax_ref || '',
+          epf_reference: ob.epf_number || '',
+          socso_reference: ob.socso_number || '',
+        }, { onConflict: 'user_id' });
+      }
+      return staffWithOnboarding.length;
+    },
+    onSuccess: (count) => {
+      toast.success(`Synced ${count} payroll profile(s) from onboarding data`);
+      queryClient.invalidateQueries({ queryKey: ['admin-payroll-profiles'] });
+    },
+    onError: (err: any) => toast.error(err.message || 'Bulk sync failed'),
+  });
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <DollarSign className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold">Payroll Profiles</h1>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <DollarSign className="h-6 w-6 text-primary" />
+          <h1 className="text-2xl font-bold">Payroll Profiles</h1>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => bulkSyncMutation.mutate()} disabled={bulkSyncMutation.isPending}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${bulkSyncMutation.isPending ? 'animate-spin' : ''}`} />
+          {bulkSyncMutation.isPending ? 'Syncing...' : 'Bulk Sync from Onboarding'}
+        </Button>
       </div>
 
       {/* Add new payroll profile */}
