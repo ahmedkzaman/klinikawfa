@@ -97,6 +97,9 @@ const App = () => (
                 <Route path="dr-roster" element={<DrRosterView />} />
                 <Route path="staff-roster" element={<StaffRosterView />} />
                 <Route path="documents" element={<StaffDocuments />} />
+                <Route path="attendance-review" element={<StaffAttendanceReview />} />
+                <Route path="profile" element={<StaffProfile />} />
+                <Route path="settings" element={<StaffSettings />} />
                 <Route path="appraisal" element={<PerformanceAppraisal />} />
                 <Route path="appraisal/:id" element={<AppraisalForm />} />
                 <Route path="admin" element={<StaffAdminDashboard />} />
