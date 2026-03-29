@@ -723,6 +723,45 @@ export type Database = {
         }
         Relationships: []
       }
+      saved_rosters: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          month: number
+          roster_data: Json
+          roster_type: string
+          staff_list: Json
+          updated_at: string
+          warnings: Json
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          month: number
+          roster_data?: Json
+          roster_type: string
+          staff_list?: Json
+          updated_at?: string
+          warnings?: Json
+          year: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          month?: number
+          roster_data?: Json
+          roster_type?: string
+          staff_list?: Json
+          updated_at?: string
+          warnings?: Json
+          year?: number
+        }
+        Relationships: []
+      }
       staff_notifications: {
         Row: {
           created_at: string
