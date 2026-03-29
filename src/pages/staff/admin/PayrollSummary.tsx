@@ -89,12 +89,21 @@ export default function PayrollSummary() {
   const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]));
   const payrollMap = Object.fromEntries((payrollProfiles || []).map((p: any) => [p.user_id, p]));
 
-  const enriched = (summaries || []).map(s => ({
-    ...s,
-    name: profileMap[s.user_id]?.full_name || 'Unknown',
-    department: profileMap[s.user_id]?.department || '-',
-    employment_type: payrollMap[s.user_id]?.employment_type || '-',
-  }));
+  const enriched = (summaries || []).map(s => {
+    const pp = payrollMap[s.user_id];
+    const employerCost =
+      (Number(pp?.epf_employer) || 0) +
+      (Number(pp?.socso_employer) || 0) +
+      (Number(pp?.eis_employer) || 0) +
+      (Number(pp?.hrdf) || 0);
+    return {
+      ...s,
+      name: profileMap[s.user_id]?.full_name || 'Unknown',
+      department: profileMap[s.user_id]?.department || '-',
+      employment_type: pp?.employment_type || '-',
+      employer_cost: employerCost,
+    };
+  });
 
   const filtered = enriched.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -418,7 +427,9 @@ export default function PayrollSummary() {
                     <TableHead className="text-center">OT Hrs</TableHead>
                     <TableHead className="text-center">Unpaid Leave</TableHead>
                     <TableHead className="text-right">Gross (RM)</TableHead>
+                    <TableHead className="text-right">Deductions (RM)</TableHead>
                     <TableHead className="text-right">Net (RM)</TableHead>
+                    <TableHead className="text-right">Employer Cost (RM)</TableHead>
                     <TableHead className="text-center">Status</TableHead>
                     <TableHead className="text-center">Indicators</TableHead>
                   </TableRow>
@@ -435,7 +446,9 @@ export default function PayrollSummary() {
                       <TableCell className="text-center">{s.total_overtime_hours}</TableCell>
                       <TableCell className="text-center">{s.unpaid_leave_count}</TableCell>
                       <TableCell className="text-right">{Number(s.gross_pay).toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{Number(s.net_pay).toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{Number(s.total_deductions).toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-semibold">{Number(s.net_pay).toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{s.employer_cost.toFixed(2)}</TableCell>
                       <TableCell className="text-center">
                         <Badge className={statusColors[s.payroll_status] || ''}>
                           {s.payroll_status}
