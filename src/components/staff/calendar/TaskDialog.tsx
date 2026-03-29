@@ -87,7 +87,7 @@ export function TaskDialog({ open, onClose, task, initialDate, profiles, onSave,
     setSaving(true);
     const formData: TaskFormData = {
       title: title.trim(), description: description.trim() || undefined,
-      assigned_to: assignedTo || null,
+      assigned_to: assignedTo === 'all' ? null : (assignedTo || null),
       start_date: buildDate(startDate, startTime),
       end_date: endDate ? buildDate(endDate, endTime) : null,
       deadline: deadline || null, color,
