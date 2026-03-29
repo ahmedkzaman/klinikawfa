@@ -69,13 +69,14 @@ export default function KanbanBoard() {
       description: newDesc.trim() || undefined,
       assigned_to: newAssignee === 'all' ? null : newAssignee,
       start_date: new Date(),
+      deadline: newDeadline || null,
       color: '#3b82f6',
       board_column: newColumn,
       visibility: newAdminOnly ? 'admin_only' : 'all',
     });
     if (error) { toast.error('Failed to create task'); return; }
     toast.success('Task created');
-    setNewTitle(''); setNewDesc(''); setNewAssignee('all'); setNewColumn('todo'); setNewAdminOnly(false); setAddOpen(false);
+    setNewTitle(''); setNewDesc(''); setNewAssignee('all'); setNewColumn('todo'); setNewDeadline(undefined); setNewAdminOnly(false); setAddOpen(false);
   };
 
   const handleDelete = async (task: StaffTask) => {
