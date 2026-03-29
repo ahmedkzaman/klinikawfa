@@ -167,8 +167,9 @@ export function StaffLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { data: onboardingData, isLoading: onboardingLoading, isCompleted: onboardingCompleted, refetch: refetchOnboarding } = useOnboardingStatus(user?.id);
 
-  if (loading || rolesLoading) {
+  if (loading || rolesLoading || onboardingLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -184,6 +185,19 @@ export function StaffLayout() {
   if (!isStaffOrAdmin) {
     navigate('/');
     return null;
+  }
+
+  // Gate non-admin staff behind onboarding
+  if (!isAdmin && !onboardingCompleted) {
+    return (
+      <div className="min-h-screen bg-background">
+        <OnboardingWizard
+          userId={user.id}
+          existingData={onboardingData || null}
+          onComplete={() => refetchOnboarding()}
+        />
+      </div>
+    );
   }
 
   const handleSignOut = async () => {
