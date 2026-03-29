@@ -224,8 +224,10 @@ export function StaffLayout() {
             <span className="font-semibold text-sm text-primary">Klinik Awfa Staff</span>
           </Link>
         </div>
-        <SidebarNav isAdmin={isAdmin} pathname={location.pathname} />
-        <div className="mt-auto p-4 border-t">
+        <div className="flex-1 overflow-y-auto">
+          <SidebarNav isAdmin={isAdmin} pathname={location.pathname} />
+        </div>
+        <div className="shrink-0 p-4 border-t">
           <div className="text-sm text-muted-foreground mb-2 truncate">{user.email}</div>
           <Button variant="ghost" size="sm" className="w-full justify-start" onClick={handleSignOut}>
             <LogOut className="h-4 w-4 mr-2" />
@@ -244,8 +246,10 @@ export function StaffLayout() {
               <span className="font-semibold text-sm">Klinik Awfa Staff</span>
             </Link>
           </div>
-          <SidebarNav isAdmin={isAdmin} pathname={location.pathname} onLinkClick={() => setMobileOpen(false)} />
-          <div className="mt-auto p-4 border-t">
+          <div className="flex-1 overflow-y-auto">
+            <SidebarNav isAdmin={isAdmin} pathname={location.pathname} onLinkClick={() => setMobileOpen(false)} />
+          </div>
+          <div className="shrink-0 p-4 border-t">
             <div className="text-sm text-muted-foreground mb-2 truncate">{user.email}</div>
             <Button variant="ghost" size="sm" className="w-full justify-start" onClick={handleSignOut}>
               <LogOut className="h-4 w-4 mr-2" />
@@ -256,7 +260,7 @@ export function StaffLayout() {
       </Sheet>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-h-screen">
+      <div className="flex-1 flex flex-col h-screen overflow-y-auto">
         <header className="sticky top-0 z-40 h-12 flex items-center border-b bg-background/95 backdrop-blur px-4 md:px-6">
           <Button variant="ghost" size="icon" className="md:hidden mr-2" onClick={() => setMobileOpen(true)}>
             <Menu className="h-5 w-5" />
