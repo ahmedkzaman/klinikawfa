@@ -162,7 +162,11 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
 
       const pickStaff = (shiftNum: 1 | 2): RosterCell[] => {
         const cells: RosterCell[] = [];
-        for (let i = 0; i < staffPerShift; i++) {
+        // If only 4 staff: shift 1 gets 1, shift 2 gets 2 (compulsory)
+        const countForShift = staffList.length <= 4
+          ? (shiftNum === 1 ? 1 : 2)
+          : staffPerShift;
+        for (let i = 0; i < countForShift; i++) {
           let eligible = staffList.filter(s => !assignedToday.has(s.id));
 
           if (weekdayConstraintEnabled && isWeekday && shiftNum === 2) {
