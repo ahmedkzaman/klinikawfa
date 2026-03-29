@@ -139,6 +139,27 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
       const isoWeek = getISOWeek(day);
       const assignedToday = new Set<string>();
 
+      // Track total monthly hours for weighted fairness
+      const getMonthHours = (staffId: string) => {
+        let total = 0;
+        for (const w of Object.values(weekHours[staffId] || {})) total += w;
+        return total;
+      };
+
+      const weightedRandomPick = (pool: StaffMember[]): StaffMember => {
+        if (pool.length === 1) return pool[0];
+        const monthHours = pool.map(s => getMonthHours(s.id));
+        const maxH = Math.max(...monthHours, 1);
+        const weights = pool.map((s, i) => maxH - monthHours[i] + 1);
+        const totalWeight = weights.reduce((a, b) => a + b, 0);
+        let r = Math.random() * totalWeight;
+        for (let i = 0; i < pool.length; i++) {
+          r -= weights[i];
+          if (r <= 0) return pool[i];
+        }
+        return pool[pool.length - 1];
+      };
+
       const pickStaff = (shiftNum: 1 | 2): RosterCell[] => {
         const cells: RosterCell[] = [];
         for (let i = 0; i < staffPerShift; i++) {
@@ -152,7 +173,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
             eligible = eligible.filter(s => getWeekHours(s.id, isoWeek) + SHIFT_HOURS <= 48);
           }
 
-          // Fallback: if no eligible, relax hour cap
+          // Fallback: relax hour cap
           if (eligible.length === 0) {
             eligible = staffList.filter(s => !assignedToday.has(s.id));
             if (weekdayConstraintEnabled && isWeekday && shiftNum === 2) {
@@ -160,25 +181,21 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
             }
           }
 
-          // Fallback 2: pick least-assigned from all staff not assigned today
+          // Fallback 2: anyone not assigned today
           if (eligible.length === 0) {
             eligible = staffList.filter(s => !assignedToday.has(s.id));
           }
 
-          // Final fallback: pick anyone (even if already assigned today)
+          // Final fallback: anyone
           if (eligible.length === 0) {
             eligible = [...staffList];
           }
 
-          // Pick staff furthest from 45h minimum first, then least-assigned
           if (eligible.length > 0) {
-            // Prioritize staff below 45h to help them reach minimum
+            // Prioritize staff below 45h/week, then use weighted random by monthly hours
             const below45 = eligible.filter(s => getWeekHours(s.id, isoWeek) < 45);
             const pool = below45.length > 0 ? below45 : eligible;
-            pool.sort((a, b) => getWeekHours(a.id, isoWeek) - getWeekHours(b.id, isoWeek));
-            const minHours = getWeekHours(pool[0].id, isoWeek);
-            const leastAssigned = pool.filter(s => getWeekHours(s.id, isoWeek) === minHours);
-            const pick = leastAssigned[Math.floor(Math.random() * leastAssigned.length)];
+            const pick = weightedRandomPick(pool);
 
             if (getWeekHours(pick.id, isoWeek) + SHIFT_HOURS > 48) {
               newWarnings.push(`${format(day, 'dd MMM')} Shift ${shiftNum}: ${firstName(pick.name)} forced (exceeds 48h week ${isoWeek})`);
@@ -297,6 +314,60 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
       });
     }
 
+    // ─── Global balancing pass: swap shifts to minimise monthly hour spread ───
+    {
+      const calcMonthHours = (sid: string) => {
+        let total = 0;
+        for (const dk of Object.keys(newRoster)) {
+          const r = newRoster[dk];
+          [...r.shift1, ...r.shift2].forEach(c => { if (c.staffId === sid) total += SHIFT_HOURS; });
+        }
+        return total;
+      };
+
+      let balanceIter = 0;
+      let improved = true;
+      while (improved && balanceIter < 200) {
+        improved = false;
+        balanceIter++;
+        const monthHrs = staffList.map(s => ({ id: s.id, name: s.name, hours: calcMonthHours(s.id) }));
+        monthHrs.sort((a, b) => b.hours - a.hours);
+        const highest = monthHrs[0];
+        const lowest = monthHrs[monthHrs.length - 1];
+        if (highest.hours - lowest.hours <= SHIFT_HOURS) break;
+
+        // Try to find a day where highest works but lowest doesn't, and swap
+        for (const day of monthDays) {
+          const dateKey = format(day, 'yyyy-MM-dd');
+          const r = newRoster[dateKey];
+          if (!r) continue;
+          const todayIds = [...r.shift1, ...r.shift2].map(c => c.staffId);
+          if (!todayIds.includes(highest.id)) continue;
+          if (todayIds.includes(lowest.id)) continue; // lowest already works today
+
+          for (const shiftKey of ['shift1', 'shift2'] as const) {
+            const cells = r[shiftKey];
+            const idx = cells.findIndex(c => c.staffId === highest.id);
+            if (idx < 0) continue;
+
+            // Check weekday constraint
+            const dayOfWeek = getDay(day);
+            const isWkday = WEEKDAY_INDICES.includes(dayOfWeek);
+            if (weekdayConstraintEnabled && isWkday && shiftKey === 'shift2' && constrainedStaffIds.includes(lowest.id)) continue;
+
+            // Perform swap
+            const updatedCells = [...cells];
+            const lowestStaff = staffList.find(s => s.id === lowest.id)!;
+            updatedCells[idx] = { staffId: lowest.id, staffName: lowestStaff.name };
+            newRoster[dateKey] = { ...newRoster[dateKey], [shiftKey]: updatedCells };
+            improved = true;
+            break;
+          }
+          if (improved) break;
+        }
+      }
+    }
+
     setRoster(newRoster);
     setWarnings(newWarnings);
     if (newWarnings.length === 0) toast.success('Roster generated successfully!');
@@ -367,6 +438,12 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
     getSummary().forEach(s => {
       rows.push(`${s.name},${s.totalShifts},${s.totalHours}`);
     });
+    if (fairnessMetrics) {
+      rows.push('');
+      rows.push(`Fairness Score,${fairnessMetrics.score}%`);
+      rows.push(`Hour Spread,${fairnessMetrics.spread}h (${fairnessMetrics.maxH}h - ${fairnessMetrics.minH}h)`);
+      rows.push(`Average Hours,${fairnessMetrics.avg}h`);
+    }
     const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -378,6 +455,16 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
   };
 
   const summary = getSummary();
+  const fairnessMetrics = useMemo(() => {
+    if (summary.length === 0) return null;
+    const hours = summary.map(s => s.totalHours);
+    const maxH = Math.max(...hours);
+    const minH = Math.min(...hours);
+    const spread = maxH - minH;
+    const avg = hours.reduce((a, b) => a + b, 0) / hours.length;
+    const score = avg > 0 ? Math.max(0, Math.min(100, Math.round(100 - (spread / avg) * 100))) : 100;
+    return { maxH, minH, spread, avg: Math.round(avg), score };
+  }, [summary]);
   const monthLabel = format(new Date(selectedYear, selectedMonth, 1), 'MMMM yyyy');
 
   return (
@@ -646,6 +733,22 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                     ))}
                   </TableBody>
                 </Table>
+
+                {/* Fairness Score */}
+                {fairnessMetrics && (
+                  <div className="flex flex-wrap items-center gap-3 mt-3 p-3 rounded-lg bg-muted/50">
+                    <span className="text-sm font-medium">Fairness:</span>
+                    <Badge
+                      variant={fairnessMetrics.score >= 90 ? 'secondary' : 'destructive'}
+                      className={cn("text-xs", fairnessMetrics.score >= 90 ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : fairnessMetrics.score >= 70 ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" : "")}
+                    >
+                      {fairnessMetrics.score}% balanced
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      Spread: {fairnessMetrics.maxH}h − {fairnessMetrics.minH}h = {fairnessMetrics.spread}h difference · Avg: {fairnessMetrics.avg}h
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-2 flex-wrap print:hidden">
