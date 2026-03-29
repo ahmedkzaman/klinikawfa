@@ -41,6 +41,8 @@ const adminNavItems = [
   { href: '/staff/admin/requests', label: 'Requests', icon: Inbox },
   { href: '/staff/admin/roster', label: 'Roster', icon: CalendarDays },
   { href: '/staff/admin/onboarding', label: 'Onboarding', icon: ClipboardList },
+  { href: '/staff/admin/attendance-review', label: 'Attendance Review', icon: BarChart3 },
+  { href: '/staff/admin/profile-approvals', label: 'Profile Approvals', icon: CheckSquare },
 ];
 
 const contentNavItems = [
