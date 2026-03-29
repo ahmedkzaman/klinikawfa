@@ -148,7 +148,7 @@ export function TaskDialog({ open, onClose, task, initialDate, profiles, onSave,
           <div><Label>Deadline</Label>
             {canEdit ? (
               <Popover><PopoverTrigger asChild><Button variant="outline" className={cn('w-full justify-start text-left font-normal', !deadline && 'text-muted-foreground')}><CalendarIcon className="mr-2 h-4 w-4" />{deadline ? format(deadline, 'MMM d, yyyy') : 'No deadline'}</Button></PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={deadline} onSelect={setDeadline} className="p-3 pointer-events-auto" /></PopoverContent></Popover>
+                <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={deadline} onSelect={(d) => { setDeadline(d); if (d) { setEndDate(d); } }} className="p-3 pointer-events-auto" /></PopoverContent></Popover>
             ) : (
               <p className="text-sm text-muted-foreground mt-1">{deadline ? format(deadline, 'MMM d, yyyy') : 'No deadline'}</p>
             )}
