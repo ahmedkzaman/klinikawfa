@@ -100,11 +100,13 @@ export function useStaffTasks() {
       title: data.title,
       description: data.description || null,
       created_by: user.id,
-      assigned_to: data.assigned_to || user.id,
+      assigned_to: data.assigned_to === undefined ? user.id : (data.assigned_to || null),
       start_date: data.start_date.toISOString(),
       end_date: data.end_date?.toISOString() || null,
       deadline: data.deadline?.toISOString() || null,
       color: data.color,
+      board_column: data.board_column || 'todo',
+      visibility: data.visibility || 'all',
     });
     return { error };
   };
