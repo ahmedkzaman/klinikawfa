@@ -271,11 +271,14 @@ export default function PayrollSummary() {
         const absenceDeduction = totalAbsentDays * (Number(pp.absence_deduction) || dailyRate);
         const customDeduction = Number(pp.custom_deduction) || 0;
 
-        // Statutory Deductions (employee portion only deducted from net)
+        // Statutory Deductions (employee portion only — deducted from employee net pay)
         const epfEmployee = Number(pp.epf_employee) || 0;
         const socsoEmployee = Number(pp.socso_employee) || 0;
         const eisEmployee = Number(pp.eis_employee) || 0;
         const mtd = Number(pp.mtd) || 0;
+
+        // Employer contributions are NOT deducted from employee pay — they are employer expenses
+        // epf_employer, socso_employer, eis_employer, hrdf are excluded from totalDeductions
 
         const totalDeductions = unpaidLeaveDeduction + latenessDeduction + absenceDeduction + customDeduction + epfEmployee + socsoEmployee + eisEmployee + mtd;
 
