@@ -152,6 +152,25 @@ export function OnboardingForm({ userId, onComplete }: OnboardingFormProps) {
                     onboarding_data: finalData,
                   } as any, { onConflict: 'user_id' });
                 if (error) throw error;
+
+                // Auto-sync to staff_payroll_profiles
+                await (supabase as any)
+                  .from('staff_payroll_profiles')
+                  .upsert({
+                    user_id: userId,
+                    full_name: finalData.full_name || '',
+                    nric_passport: finalData.ic_passport || '',
+                    employment_type: finalData.employment_type || 'permanent',
+                    job_title: finalData.position_title || '',
+                    department: finalData.department || '',
+                    date_joined: finalData.commencement_date || null,
+                    bank_name: finalData.bank_name || '',
+                    bank_account_number: finalData.bank_account_number || '',
+                    account_holder_name: finalData.account_holder_name || '',
+                    tax_id: finalData.tax_ref || '',
+                    epf_reference: finalData.epf_number || '',
+                    socso_reference: finalData.socso_number || '',
+                  }, { onConflict: 'user_id' });
                 toast.success('Onboarding form saved!');
                 onComplete();
               } catch (err: any) {

@@ -90,6 +90,16 @@ export default function PayrollProfiles() {
     },
   });
 
+  const { data: onboardingData } = useQuery({
+    queryKey: ['all-onboarding-data'],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from('staff_onboarding').select('user_id, onboarding_data');
+      return (data || []) as unknown as { user_id: string; onboarding_data: Record<string, any> | null }[];
+    },
+  });
+
+  const onboardingMap = Object.fromEntries((onboardingData || []).map(o => [o.user_id, o.onboarding_data]));
+
   const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]));
   const payrollMap = Object.fromEntries((payrollProfiles || []).map(p => [p.user_id, p]));
 
@@ -124,12 +134,22 @@ export default function PayrollProfiles() {
     if (existing) {
       setEditingProfile({ ...existing });
     } else {
+      const ob = onboardingMap[userId] || {};
       setEditingProfile({
         ...emptyProfile,
         user_id: userId,
-        full_name: staffProfile?.full_name || '',
-        department: staffProfile?.department || '',
-        job_title: staffProfile?.position || '',
+        full_name: ob.full_name || staffProfile?.full_name || '',
+        nric_passport: ob.ic_passport || '',
+        employment_type: ob.employment_type || 'permanent',
+        job_title: ob.position_title || staffProfile?.position || '',
+        department: ob.department || staffProfile?.department || '',
+        date_joined: ob.commencement_date || '',
+        bank_name: ob.bank_name || '',
+        bank_account_number: ob.bank_account_number || '',
+        account_holder_name: ob.account_holder_name || '',
+        tax_id: ob.tax_ref || '',
+        epf_reference: ob.epf_number || '',
+        socso_reference: ob.socso_number || '',
       });
     }
     setDialogOpen(true);
