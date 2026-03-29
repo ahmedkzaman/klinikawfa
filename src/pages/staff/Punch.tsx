@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { MapPin, Loader2, RefreshCw, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { MapPin, Loader2, RefreshCw, CheckCircle, AlertTriangle, XCircle, CalendarClock } from 'lucide-react';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useAuth } from '@/contexts/AuthContext';
 import { checkGeofence, formatDistance, getAccuracyStatus } from '@/lib/geofence';
+import { getUserShiftForDate, type ShiftInfo } from '@/lib/rosterUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -50,9 +52,20 @@ export default function StaffPunch() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [showFaceVerification, setShowFaceVerification] = useState(false);
   const [assignments, setAssignments] = useState<ZoneAssignment[]>([]);
+  const [todayShift, setTodayShift] = useState<ShiftInfo | null>(null);
+  const [shiftLoading, setShiftLoading] = useState(true);
 
   useEffect(() => { if (user) fetchData(); }, [user]);
   useEffect(() => { geo.getCurrentPosition(); }, []);
+  useEffect(() => {
+    if (user) {
+      setShiftLoading(true);
+      getUserShiftForDate(user.id, new Date()).then(shift => {
+        setTodayShift(shift);
+        setShiftLoading(false);
+      });
+    }
+  }, [user]);
 
   const fetchData = async () => {
     setIsLoadingData(true);
@@ -74,9 +87,25 @@ export default function StaffPunch() {
   const nextPunchType = isPunchedIn ? 'out' : 'in';
   const assignmentBlock = geofenceResult?.isWithinZone ? checkAssignment(assignments, geofenceResult.zone?.id) : null;
 
+  // Check if punch is within ±30 min of shift window
+  const isWithinShiftWindow = (): boolean => {
+    if (!todayShift) return true; // No roster = allow (fallback)
+    const now = new Date();
+    const [startH, startM] = todayShift.start.split(':').map(Number);
+    const [endH, endM] = todayShift.end.split(':').map(Number);
+    const shiftStart = new Date(now); shiftStart.setHours(startH, startM, 0, 0);
+    const shiftEnd = new Date(now); shiftEnd.setHours(endH, endM, 0, 0);
+    // Allow ±30 min buffer
+    const bufferMs = 30 * 60 * 1000;
+    return now.getTime() >= shiftStart.getTime() - bufferMs && now.getTime() <= shiftEnd.getTime() + bufferMs;
+  };
+
+  const shiftWindowBlock = !isWithinShiftWindow() ? `Outside your shift window (${todayShift?.label})` : null;
+
   const handlePunchClick = () => {
     if (!geo.latitude || !geo.longitude || !geofenceResult?.isWithinZone) { toast({ title: 'Cannot Punch', description: 'You must be within a valid zone.', variant: 'destructive' }); return; }
     if (assignmentBlock) { toast({ title: 'Cannot Punch', description: assignmentBlock, variant: 'destructive' }); return; }
+    if (shiftWindowBlock) { toast({ title: 'Cannot Punch', description: shiftWindowBlock, variant: 'destructive' }); return; }
     setShowFaceVerification(true);
   };
 
@@ -91,11 +120,31 @@ export default function StaffPunch() {
     setIsPunching(false);
   };
 
-  const canPunch = geofenceResult?.isWithinZone && !assignmentBlock && !geo.isLoading && !isPunching;
+  const canPunch = geofenceResult?.isWithinZone && !assignmentBlock && !shiftWindowBlock && !geo.isLoading && !isPunching;
 
   return (
     <div className="max-w-lg mx-auto space-y-6">
       <div><h1 className="text-2xl font-bold tracking-tight">Punch In/Out</h1><p className="text-muted-foreground">Record your attendance using GPS verification</p></div>
+
+      {/* Today's Shift Info */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base"><CalendarClock className="h-5 w-5" />Today's Shift</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {shiftLoading ? (
+            <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="h-4 w-4 animate-spin" />Loading roster...</div>
+          ) : todayShift ? (
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-sm">{todayShift.shiftKey}</Badge>
+              <span className="text-sm font-medium">{todayShift.label}</span>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No shift assigned today (roster not found)</p>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5" />Location Status</CardTitle><CardDescription>Your current GPS position and zone verification</CardDescription></CardHeader>
         <CardContent className="space-y-4">
@@ -119,6 +168,7 @@ export default function StaffPunch() {
                 </div>
               )}
               {assignmentBlock && geofenceResult?.isWithinZone && <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertDescription>{assignmentBlock}</AlertDescription></Alert>}
+              {shiftWindowBlock && geofenceResult?.isWithinZone && !assignmentBlock && <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertDescription>{shiftWindowBlock}</AlertDescription></Alert>}
               <Button variant="outline" size="sm" onClick={geo.getCurrentPosition} disabled={geo.isLoading}><RefreshCw className={cn('h-4 w-4 mr-2', geo.isLoading && 'animate-spin')} />Refresh Location</Button>
             </div>
           )}
@@ -134,7 +184,7 @@ export default function StaffPunch() {
             {isPunching ? <><Loader2 className="h-6 w-6 mr-2 animate-spin" />Recording...</> : <><MapPin className="h-6 w-6 mr-2" />Punch {nextPunchType === 'in' ? 'In' : 'Out'}</>}
           </Button>
           <FaceVerificationModal open={showFaceVerification} onOpenChange={setShowFaceVerification} onVerified={handleFaceVerified} punchType={nextPunchType} />
-          {!canPunch && !geo.isLoading && !isLoadingData && <p className="text-sm text-muted-foreground text-center mt-4">{assignmentBlock ? assignmentBlock : !geo.latitude ? 'Enable location access to punch' : 'Move to an allowed zone to punch'}</p>}
+          {!canPunch && !geo.isLoading && !isLoadingData && <p className="text-sm text-muted-foreground text-center mt-4">{shiftWindowBlock || assignmentBlock || (!geo.latitude ? 'Enable location access to punch' : 'Move to an allowed zone to punch')}</p>}
         </CardContent>
       </Card>
     </div>
