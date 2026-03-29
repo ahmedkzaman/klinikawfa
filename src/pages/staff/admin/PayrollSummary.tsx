@@ -89,12 +89,21 @@ export default function PayrollSummary() {
   const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]));
   const payrollMap = Object.fromEntries((payrollProfiles || []).map((p: any) => [p.user_id, p]));
 
-  const enriched = (summaries || []).map(s => ({
-    ...s,
-    name: profileMap[s.user_id]?.full_name || 'Unknown',
-    department: profileMap[s.user_id]?.department || '-',
-    employment_type: payrollMap[s.user_id]?.employment_type || '-',
-  }));
+  const enriched = (summaries || []).map(s => {
+    const pp = payrollMap[s.user_id];
+    const employerCost =
+      (Number(pp?.epf_employer) || 0) +
+      (Number(pp?.socso_employer) || 0) +
+      (Number(pp?.eis_employer) || 0) +
+      (Number(pp?.hrdf) || 0);
+    return {
+      ...s,
+      name: profileMap[s.user_id]?.full_name || 'Unknown',
+      department: profileMap[s.user_id]?.department || '-',
+      employment_type: pp?.employment_type || '-',
+      employer_cost: employerCost,
+    };
+  });
 
   const filtered = enriched.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase()) ||
