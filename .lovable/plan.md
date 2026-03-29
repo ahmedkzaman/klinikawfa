@@ -1,27 +1,18 @@
 
 
-## Enforce 45h Minimum Per Week Per Staff
+## Add Week Number Row to Roster Table
 
-### Problem
-The current generator only *warns* when a staff member has below 45 hours in a week. It doesn't actively ensure every staff member reaches the 45h minimum.
+### What changes
+Add a row above the day headers in the roster table that shows which ISO week each day belongs to (e.g., "Week 14", "Week 15"). The row will span columns that share the same week number using `colSpan`.
 
-### Solution — Add a "top-up" pass after initial generation
+### Implementation — `src/pages/staff/admin/Roster.tsx`
 
-After the main generation loop, iterate through each ISO week and each staff member. For any staff below 45h in a week where they have at least 1 shift, find days in that week where they're not yet assigned and swap them in (replacing the staff member with the most hours that week in that slot). Repeat until all staff hit 45h or no more swaps are possible.
-
-### Changes to `src/pages/staff/admin/Roster.tsx`
-
-1. **Post-generation top-up pass** (after line 194, before warning checks):
-   - For each ISO week, identify staff below 45h
-   - For each under-assigned staff member, find shift slots in that week where they're not already working that day
-   - Swap them in by replacing the staff member who has the *most* hours that week in that slot
-   - Continue until staff reaches 45h or no valid swaps remain
-
-2. **Adjust the sorting preference** in the main `pickStaff` function to prioritize staff furthest from 45h, ensuring more even initial distribution
-
-3. **Warning text update**: Change the below-45h warning to only fire after the top-up pass has exhausted all options (e.g., not enough days in a partial week at month boundaries)
+Insert a new `<TableRow>` before the existing day-header row (line 525) that:
+1. Computes week groups from `monthDays` using `getISOWeek(day)`
+2. Renders merged `<TableHead>` cells with `colSpan` for consecutive days in the same week
+3. Displays "Week {N}" centered across the span, with alternating background colors for visual distinction
+4. Includes the sticky "Shift" column header cell at the start (empty or labeled)
 
 ### File changes
-- 1 file edit: `src/pages/staff/admin/Roster.tsx`
-- No database changes
+- 1 file edit: `src/pages/staff/admin/Roster.tsx` (lines ~524-536)
 
