@@ -187,6 +187,15 @@ export default function KanbanBoard() {
                                       <Badge variant="outline" className="text-[10px] gap-1"><Users className="h-2.5 w-2.5" />All Staff</Badge>
                                     )}
                                     {task.visibility === 'admin_only' && <Badge variant="secondary" className="text-[10px]">Admin Only</Badge>}
+                                    {task.deadline && (() => {
+                                      const isOverdue = new Date(task.deadline) < new Date() && task.board_column !== 'done';
+                                      return (
+                                        <Badge variant={isOverdue ? 'destructive' : 'outline'} className="text-[10px] gap-1">
+                                          {isOverdue && <AlertTriangle className="h-2.5 w-2.5" />}
+                                          {format(new Date(task.deadline), 'MMM d')}
+                                        </Badge>
+                                      );
+                                    })()}
                                   </div>
                                   {isAdmin && (
                                     <div className="text-[10px] text-muted-foreground mt-1.5 space-y-0.5">
