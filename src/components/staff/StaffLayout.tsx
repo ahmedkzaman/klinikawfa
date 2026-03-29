@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate, Link, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOnboardingStatus } from '@/hooks/useOnboardingStatus';
+import { OnboardingWizard } from './onboarding/OnboardingWizard';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
