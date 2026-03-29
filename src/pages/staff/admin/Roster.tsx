@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import {
   CalendarDays, Plus, Trash2, RefreshCw, Download, Printer, AlertTriangle, X, Users, Settings2, Shuffle, Stethoscope, UserCog, ChevronLeft, ChevronRight
 } from 'lucide-react';
+import DoctorRosterPanel from '@/components/staff/roster/DoctorRosterPanel';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, getISOWeek, isWeekend } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -837,7 +838,7 @@ export default function Roster() {
         </TabsList>
 
         <TabsContent value="doctor" className="mt-6">
-          <RosterPanel initialStaff={doctorStaff} title="Doctor Roster" rosterType="doctor" />
+          <DoctorRosterPanel initialStaff={doctorStaff} />
         </TabsContent>
 
         <TabsContent value="support" className="mt-6">
