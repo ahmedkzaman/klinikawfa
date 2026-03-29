@@ -88,6 +88,8 @@ const App = () => (
                 <Route path="history" element={<StaffHistory />} />
                 <Route path="calendar" element={<StaffCalendar />} />
                 <Route path="leave" element={<StaffLeaveRequest />} />
+                <Route path="dr-roster" element={<DrRosterView />} />
+                <Route path="staff-roster" element={<StaffRosterView />} />
                 <Route path="documents" element={<StaffDocuments />} />
                 <Route path="appraisal" element={<PerformanceAppraisal />} />
                 <Route path="appraisal/:id" element={<AppraisalForm />} />
