@@ -153,7 +153,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
 
     const { error } = await supabase
       .from('saved_rosters')
-      .upsert(payload, { onConflict: 'roster_type,month,year' });
+      .upsert([payload] as any, { onConflict: 'roster_type,month,year' });
 
     if (error) {
       toast.error('Failed to save: ' + error.message);
