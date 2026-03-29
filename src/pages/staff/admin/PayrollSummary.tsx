@@ -444,7 +444,9 @@ export default function PayrollSummary() {
                       <TableCell className="text-center">{s.total_overtime_hours}</TableCell>
                       <TableCell className="text-center">{s.unpaid_leave_count}</TableCell>
                       <TableCell className="text-right">{Number(s.gross_pay).toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{Number(s.net_pay).toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{Number(s.total_deductions).toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-semibold">{Number(s.net_pay).toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{s.employer_cost.toFixed(2)}</TableCell>
                       <TableCell className="text-center">
                         <Badge className={statusColors[s.payroll_status] || ''}>
                           {s.payroll_status}
