@@ -7,8 +7,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { CalendarIcon, Clock, MapPin, Download } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { format, startOfMonth, endOfMonth, differenceInMinutes } from 'date-fns';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { cn } from '@/lib/utils';
+import {
+  getUserShiftsForMonth,
+  getAllShiftsForMonth,
+  calculateDailyWorkHours,
+  formatWorkHours,
+  calculateLatenessMinutes,
+  getLatenessSeverity,
+  getLatenessDotColor,
+  DEFAULT_SHIFT_START,
+  type ShiftInfo,
+} from '@/lib/rosterUtils';
 
 export default function StaffHistory() {
   const { user, isAdmin } = useAuth();
@@ -19,8 +30,23 @@ export default function StaffHistory() {
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
   const [employeeList, setEmployeeList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [shifts, setShifts] = useState<Record<string, Record<string, ShiftInfo>>>({});
 
   useEffect(() => { if (user) { fetchRecords(); fetchZones(); if (isAdmin) fetchProfiles(); } }, [user, selectedMonth, selectedEmployee, isAdmin]);
+
+  // Fetch roster shifts for the selected month
+  useEffect(() => {
+    if (!user) return;
+    const month = selectedMonth.getMonth();
+    const year = selectedMonth.getFullYear();
+    if (isAdmin) {
+      getAllShiftsForMonth(month, year).then(setShifts);
+    } else {
+      getUserShiftsForMonth(user.id, month, year).then(userShifts => {
+        setShifts({ [user.id]: userShifts });
+      });
+    }
+  }, [user, selectedMonth, isAdmin]);
 
   const fetchProfiles = async () => {
     const { data } = await supabase.from('profiles').select('id, full_name');
@@ -52,14 +78,47 @@ export default function StaffHistory() {
     return acc;
   }, {});
 
+  /** Akta Buruh 1955 compliant work hours calculation */
   const calculateWorkHours = (dayRecords: any[]): string => {
     const sorted = [...dayRecords].sort((a, b) => new Date(a.punch_time).getTime() - new Date(b.punch_time).getTime());
-    let totalMinutes = 0; let lastIn: Date | null = null;
+    let totalRaw = 0;
+    let totalBreak = 0;
+    let totalNormal = 0;
+    let totalOT = 0;
+    let lastIn: Date | null = null;
+
     for (const r of sorted) {
       if (r.punch_type === 'in') lastIn = new Date(r.punch_time);
-      else if (r.punch_type === 'out' && lastIn) { totalMinutes += differenceInMinutes(new Date(r.punch_time), lastIn); lastIn = null; }
+      else if (r.punch_type === 'out' && lastIn) {
+        const wh = calculateDailyWorkHours(lastIn, new Date(r.punch_time));
+        totalRaw += wh.rawMinutes;
+        totalBreak += wh.breakMinutes;
+        totalNormal += wh.normalMinutes;
+        totalOT += wh.overtimeMinutes;
+        lastIn = null;
+      }
     }
-    return `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
+
+    const result = { rawMinutes: totalRaw, breakMinutes: totalBreak, netMinutes: totalNormal + totalOT, normalMinutes: totalNormal, overtimeMinutes: totalOT };
+    return formatWorkHours(result);
+  };
+
+  /** Get the scheduled shift start for a record */
+  const getShiftStart = (record: any): string => {
+    const dateKey = format(new Date(record.punch_time), 'yyyy-MM-dd');
+    const userShifts = shifts[record.user_id];
+    return userShifts?.[dateKey]?.start || DEFAULT_SHIFT_START;
+  };
+
+  /** Get lateness dot color for a punch-in record */
+  const getPunchDotColor = (record: any): string => {
+    if (record.punch_type !== 'in') return 'bg-red-500'; // out = red dot
+    const shiftStart = getShiftStart(record);
+    const punchTime = new Date(record.punch_time);
+    const day = new Date(record.punch_time);
+    const lateMin = calculateLatenessMinutes(punchTime, shiftStart, day);
+    const severity = getLatenessSeverity(lateMin);
+    return getLatenessDotColor(severity);
   };
 
   const exportToCSV = () => {
@@ -112,7 +171,7 @@ export default function StaffHistory() {
                   <div className="space-y-2">
                     {dayRecords.sort((a: any, b: any) => new Date(a.punch_time).getTime() - new Date(b.punch_time).getTime()).map((r: any) => (
                       <div key={r.id} className="flex items-center gap-3 text-sm">
-                        <div className={cn('h-2 w-2 rounded-full', r.punch_type === 'in' ? 'bg-green-500' : 'bg-red-500')} />
+                        <div className={cn('h-2 w-2 rounded-full', getPunchDotColor(r))} />
                         <span className="font-medium w-16">{r.punch_type === 'in' ? 'In' : 'Out'}</span>
                         <span className="text-muted-foreground">{format(new Date(r.punch_time), 'h:mm a')}</span>
                         {r.zone_id && zones[r.zone_id] && <span className="text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" />{zones[r.zone_id].name}</span>}

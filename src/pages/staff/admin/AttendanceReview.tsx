@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
@@ -9,8 +9,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { PieChart, Pie, Cell } from 'recharts';
-import { Users, CalendarCheck, CalendarOff, AlertTriangle, Clock, Download, ChevronLeft } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isWeekend, parseISO } from 'date-fns';
+import { CalendarCheck, CalendarOff, AlertTriangle, Clock, Download, ChevronLeft } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isWeekend } from 'date-fns';
+import {
+  getAllShiftsForMonth,
+  calculateLatenessMinutes,
+  getLatenessSeverity,
+  getLatenessColorClasses,
+  calculateDailyWorkHours,
+  formatWorkHours,
+  DEFAULT_SHIFT_START,
+  type ShiftInfo,
+  type LatenessSeverity,
+} from '@/lib/rosterUtils';
 
 const COLORS = {
   working: 'hsl(142, 76%, 36%)',
@@ -33,6 +44,8 @@ type DetailRecord = {
   actualClockIn: string;
   latenessDuration: string;
   status: string;
+  severity: LatenessSeverity;
+  workHours: string;
 };
 
 export default function AdminAttendanceReview() {
@@ -43,9 +56,15 @@ export default function AdminAttendanceReview() {
   const [searchQuery, setSearchQuery] = useState('');
   const [positionFilter, setPositionFilter] = useState('all');
   const [drillDown, setDrillDown] = useState<string | null>(null);
+  const [allShifts, setAllShifts] = useState<Record<string, Record<string, ShiftInfo>>>({});
 
   const monthStart = startOfMonth(new Date(selectedYear, selectedMonth));
   const monthEnd = endOfMonth(monthStart);
+
+  // Fetch all roster shifts for the month
+  useEffect(() => {
+    getAllShiftsForMonth(selectedMonth, selectedYear).then(setAllShifts);
+  }, [selectedMonth, selectedYear]);
 
   const { data: profiles } = useQuery({
     queryKey: ['admin-profiles'],
@@ -80,21 +99,6 @@ export default function AdminAttendanceReview() {
     },
   });
 
-  const { data: thresholdSetting } = useQuery({
-    queryKey: ['lateness-threshold'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'lateness_threshold_minutes')
-        .single();
-      return parseInt(data?.value || '15', 10);
-    },
-  });
-
-  const threshold = thresholdSetting || 15;
-  const defaultShiftStart = '09:00';
-
   const positions = useMemo(() => {
     if (!profiles) return [];
     const pos = new Set(profiles.map(p => p.position).filter(Boolean));
@@ -114,10 +118,7 @@ export default function AdminAttendanceReview() {
     const workingDays = eachDayOfInterval({ start: monthStart, end: monthEnd > now ? now : monthEnd })
       .filter(d => !isWeekend(d));
 
-    let totalPresent = 0;
-    let totalLeave = 0;
-    let totalAbsent = 0;
-    let totalLate = 0;
+    let totalPresent = 0, totalLeave = 0, totalAbsent = 0, totalLate = 0;
     const details: { working: DetailRecord[]; leave: DetailRecord[]; absent: DetailRecord[]; late: DetailRecord[] } = {
       working: [], leave: [], absent: [], late: [],
     };
@@ -125,66 +126,52 @@ export default function AdminAttendanceReview() {
     filteredProfiles.forEach(profile => {
       const userAttendance = (attendance || []).filter(a => a.user_id === profile.id);
       const userLeaves = (leaveRequests || []).filter(l => l.user_id === profile.id);
+      const userShifts = allShifts[profile.id] || {};
 
       workingDays.forEach(day => {
         const dayStr = format(day, 'yyyy-MM-dd');
         const isOnLeave = userLeaves.some(l => l.start_date <= dayStr && l.end_date >= dayStr);
-        const punchIn = userAttendance.find(a => a.punch_type === 'in' && a.punch_time.startsWith(dayStr));
+        const dayRecords = userAttendance.filter(a => a.punch_time.startsWith(dayStr));
+        const punchIn = dayRecords.find(a => a.punch_type === 'in');
+        const punchOut = dayRecords.find(a => a.punch_type === 'out');
+        const shiftStart = userShifts[dayStr]?.start || DEFAULT_SHIFT_START;
+
+        // Calculate work hours
+        let workHoursStr = '-';
+        if (punchIn && punchOut) {
+          const wh = calculateDailyWorkHours(new Date(punchIn.punch_time), new Date(punchOut.punch_time));
+          workHoursStr = formatWorkHours(wh);
+        }
+
+        const fullName = profile.full_name || profile.email;
 
         if (isOnLeave) {
           totalLeave++;
-          details.leave.push({
-            fullName: profile.full_name || profile.email,
-            date: dayStr,
-            expectedClockIn: defaultShiftStart,
-            actualClockIn: '-',
-            latenessDuration: '-',
-            status: 'Leave',
-          });
+          details.leave.push({ fullName, date: dayStr, expectedClockIn: shiftStart, actualClockIn: '-', latenessDuration: '-', status: 'Leave', severity: 'on_time', workHours: '-' });
         } else if (punchIn) {
           const punchTime = new Date(punchIn.punch_time);
-          const [sh, sm] = defaultShiftStart.split(':').map(Number);
-          const shiftDate = new Date(day);
-          shiftDate.setHours(sh, sm, 0, 0);
-          const diffMin = (punchTime.getTime() - shiftDate.getTime()) / 60000;
+          const lateMin = calculateLatenessMinutes(punchTime, shiftStart, day);
+          const severity = getLatenessSeverity(lateMin);
 
-          if (diffMin > threshold) {
+          if (severity === 'late') {
             totalLate++;
-            details.late.push({
-              fullName: profile.full_name || profile.email,
-              date: dayStr,
-              expectedClockIn: defaultShiftStart,
-              actualClockIn: format(punchTime, 'HH:mm'),
-              latenessDuration: `${Math.round(diffMin)} min`,
-              status: 'Late',
-            });
+            details.late.push({ fullName, date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: `${Math.round(lateMin)} min`, status: 'Late (≥15 min)', severity, workHours: workHoursStr });
+          } else if (severity === 'minor_late') {
+            totalLate++;
+            details.late.push({ fullName, date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: `${Math.round(lateMin)} min`, status: 'Minor Late (1-14 min)', severity, workHours: workHoursStr });
           } else {
             totalPresent++;
-            details.working.push({
-              fullName: profile.full_name || profile.email,
-              date: dayStr,
-              expectedClockIn: defaultShiftStart,
-              actualClockIn: format(punchTime, 'HH:mm'),
-              latenessDuration: '-',
-              status: 'Working',
-            });
+            details.working.push({ fullName, date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: '-', status: 'On Time', severity, workHours: workHoursStr });
           }
         } else {
           totalAbsent++;
-          details.absent.push({
-            fullName: profile.full_name || profile.email,
-            date: dayStr,
-            expectedClockIn: defaultShiftStart,
-            actualClockIn: '-',
-            latenessDuration: '-',
-            status: 'Absent',
-          });
+          details.absent.push({ fullName, date: dayStr, expectedClockIn: shiftStart, actualClockIn: '-', latenessDuration: '-', status: 'Absent', severity: 'on_time', workHours: '-' });
         }
       });
     });
 
     return { totalPresent, totalLeave, totalAbsent, totalLate, details };
-  }, [filteredProfiles, attendance, leaveRequests, monthStart, monthEnd, threshold]);
+  }, [filteredProfiles, attendance, leaveRequests, monthStart, monthEnd, allShifts]);
 
   const chartData = [
     { name: 'working', value: stats.totalPresent },
@@ -196,8 +183,8 @@ export default function AdminAttendanceReview() {
   const exportCSV = () => {
     const allRecords = [...stats.details.working, ...stats.details.leave, ...stats.details.absent, ...stats.details.late];
     allRecords.sort((a, b) => a.date.localeCompare(b.date) || a.fullName.localeCompare(b.fullName));
-    const header = 'Full Name,Date,Expected Clock-In,Actual Clock-In,Lateness Duration,Status\n';
-    const rows = allRecords.map(r => `"${r.fullName}","${r.date}","${r.expectedClockIn}","${r.actualClockIn}","${r.latenessDuration}","${r.status}"`).join('\n');
+    const header = 'Full Name,Date,Expected Clock-In,Actual Clock-In,Lateness Duration,Work Hours,Status\n';
+    const rows = allRecords.map(r => `"${r.fullName}","${r.date}","${r.expectedClockIn}","${r.actualClockIn}","${r.latenessDuration}","${r.workHours}","${r.status}"`).join('\n');
     const blob = new Blob([header + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -223,7 +210,6 @@ export default function AdminAttendanceReview() {
         </Button>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-wrap gap-3">
         <Select value={String(selectedMonth)} onValueChange={v => setSelectedMonth(Number(v))}>
           <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
@@ -247,7 +233,6 @@ export default function AdminAttendanceReview() {
         </Select>
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="cursor-pointer hover:ring-2 ring-primary/30 transition" onClick={() => setDrillDown(drillDown === 'working' ? null : 'working')}>
           <CardContent className="p-4 flex items-center gap-3">
@@ -275,24 +260,14 @@ export default function AdminAttendanceReview() {
         </Card>
       </div>
 
-      {/* Donut Chart */}
       {chartData.length > 0 && (
         <Card>
           <CardHeader><CardTitle>Attendance Overview</CardTitle></CardHeader>
           <CardContent className="flex justify-center">
             <ChartContainer config={chartConfig} className="h-[300px] w-[300px]">
               <PieChart>
-                <Pie
-                  data={chartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  dataKey="value"
-                  onClick={(_, index) => {
-                    const key = chartData[index].name;
-                    setDrillDown(drillDown === key ? null : key);
-                  }}
+                <Pie data={chartData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="value"
+                  onClick={(_, index) => { const key = chartData[index].name; setDrillDown(drillDown === key ? null : key); }}
                   className="cursor-pointer"
                 >
                   {chartData.map((entry) => (
@@ -314,7 +289,6 @@ export default function AdminAttendanceReview() {
         </Card>
       )}
 
-      {/* Drill-down Table */}
       {drillDown && drillDownRecords && (
         <Card>
           <CardHeader className="flex flex-row items-center gap-2">
@@ -330,7 +304,8 @@ export default function AdminAttendanceReview() {
                     <TableHead>Date</TableHead>
                     <TableHead>Expected Clock-In</TableHead>
                     <TableHead>Actual Clock-In</TableHead>
-                    <TableHead>Lateness Duration</TableHead>
+                    <TableHead>Lateness</TableHead>
+                    <TableHead>Work Hours</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -342,13 +317,9 @@ export default function AdminAttendanceReview() {
                       <TableCell>{r.expectedClockIn}</TableCell>
                       <TableCell>{r.actualClockIn}</TableCell>
                       <TableCell>{r.latenessDuration}</TableCell>
+                      <TableCell className="text-xs">{r.workHours}</TableCell>
                       <TableCell>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          r.status === 'Working' ? 'bg-green-100 text-green-700' :
-                          r.status === 'Leave' ? 'bg-blue-100 text-blue-700' :
-                          r.status === 'Absent' ? 'bg-red-100 text-red-700' :
-                          'bg-yellow-100 text-yellow-700'
-                        }`}>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getLatenessColorClasses(r.severity)}`}>
                           {r.status}
                         </span>
                       </TableCell>

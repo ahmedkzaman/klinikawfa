@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
@@ -10,6 +10,17 @@ import { PieChart, Pie, Cell } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { CalendarCheck, CalendarOff, AlertTriangle, Clock, ChevronLeft } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isWeekend } from 'date-fns';
+import {
+  getUserShiftsForMonth,
+  calculateLatenessMinutes,
+  getLatenessSeverity,
+  getLatenessColorClasses,
+  calculateDailyWorkHours,
+  formatWorkHours,
+  DEFAULT_SHIFT_START,
+  type ShiftInfo,
+  type LatenessSeverity,
+} from '@/lib/rosterUtils';
 
 const COLORS = {
   working: 'hsl(142, 76%, 36%)',
@@ -31,6 +42,8 @@ type DetailRecord = {
   actualClockIn: string;
   latenessDuration: string;
   status: string;
+  severity: LatenessSeverity;
+  workHours: string;
   leaveReason?: string;
 };
 
@@ -40,9 +53,17 @@ export default function StaffAttendanceReview() {
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [drillDown, setDrillDown] = useState<string | null>(null);
+  const [shifts, setShifts] = useState<Record<string, ShiftInfo>>({});
 
   const monthStart = startOfMonth(new Date(selectedYear, selectedMonth));
   const monthEnd = endOfMonth(monthStart);
+
+  // Fetch roster shifts
+  useEffect(() => {
+    if (user) {
+      getUserShiftsForMonth(user.id, selectedMonth, selectedYear).then(setShifts);
+    }
+  }, [user, selectedMonth, selectedYear]);
 
   const { data: attendance } = useQuery({
     queryKey: ['my-attendance', selectedYear, selectedMonth],
@@ -73,17 +94,6 @@ export default function StaffAttendanceReview() {
     enabled: !!user,
   });
 
-  const { data: thresholdSetting } = useQuery({
-    queryKey: ['lateness-threshold'],
-    queryFn: async () => {
-      const { data } = await supabase.from('app_settings').select('value').eq('key', 'lateness_threshold_minutes').single();
-      return parseInt(data?.value || '15', 10);
-    },
-  });
-
-  const threshold = thresholdSetting || 15;
-  const defaultShiftStart = '09:00';
-
   const stats = useMemo(() => {
     const workingDays = eachDayOfInterval({ start: monthStart, end: monthEnd > now ? now : monthEnd })
       .filter(d => !isWeekend(d));
@@ -96,31 +106,44 @@ export default function StaffAttendanceReview() {
     workingDays.forEach(day => {
       const dayStr = format(day, 'yyyy-MM-dd');
       const leave = (leaveRequests || []).find(l => l.start_date <= dayStr && l.end_date >= dayStr);
-      const punchIn = (attendance || []).find(a => a.punch_type === 'in' && a.punch_time.startsWith(dayStr));
+      const dayAttendance = (attendance || []).filter(a => a.punch_time.startsWith(dayStr));
+      const punchIn = dayAttendance.find(a => a.punch_type === 'in');
+      const punchOut = dayAttendance.find(a => a.punch_type === 'out');
+      const shiftStart = shifts[dayStr]?.start || DEFAULT_SHIFT_START;
+
+      // Calculate work hours if we have both in and out
+      let workHoursStr = '-';
+      if (punchIn && punchOut) {
+        const wh = calculateDailyWorkHours(new Date(punchIn.punch_time), new Date(punchOut.punch_time));
+        workHoursStr = formatWorkHours(wh);
+      }
 
       if (leave) {
         totalLeave++;
-        details.leave.push({ date: dayStr, expectedClockIn: defaultShiftStart, actualClockIn: '-', latenessDuration: '-', status: 'Leave', leaveReason: leave.reason || leave.leave_type });
+        details.leave.push({ date: dayStr, expectedClockIn: shiftStart, actualClockIn: '-', latenessDuration: '-', status: 'Leave', severity: 'on_time', workHours: '-', leaveReason: leave.reason || leave.leave_type });
       } else if (punchIn) {
         const punchTime = new Date(punchIn.punch_time);
-        const [sh, sm] = defaultShiftStart.split(':').map(Number);
-        const shiftDate = new Date(day); shiftDate.setHours(sh, sm, 0, 0);
-        const diffMin = (punchTime.getTime() - shiftDate.getTime()) / 60000;
-        if (diffMin > threshold) {
+        const lateMin = calculateLatenessMinutes(punchTime, shiftStart, day);
+        const severity = getLatenessSeverity(lateMin);
+
+        if (severity === 'late') {
           totalLate++;
-          details.late.push({ date: dayStr, expectedClockIn: defaultShiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: `${Math.round(diffMin)} min`, status: 'Late' });
+          details.late.push({ date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: `${Math.round(lateMin)} min`, status: 'Late', severity, workHours: workHoursStr });
+        } else if (severity === 'minor_late') {
+          totalLate++;
+          details.late.push({ date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: `${Math.round(lateMin)} min`, status: 'Minor Late', severity, workHours: workHoursStr });
         } else {
           totalPresent++;
-          details.working.push({ date: dayStr, expectedClockIn: defaultShiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: '-', status: 'Working' });
+          details.working.push({ date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: '-', status: 'Working', severity, workHours: workHoursStr });
         }
       } else {
         totalAbsent++;
-        details.absent.push({ date: dayStr, expectedClockIn: defaultShiftStart, actualClockIn: '-', latenessDuration: '-', status: 'Absent' });
+        details.absent.push({ date: dayStr, expectedClockIn: shiftStart, actualClockIn: '-', latenessDuration: '-', status: 'Absent', severity: 'on_time', workHours: '-' });
       }
     });
 
     return { totalPresent, totalLeave, totalAbsent, totalLate, details };
-  }, [attendance, leaveRequests, monthStart, monthEnd, threshold]);
+  }, [attendance, leaveRequests, monthStart, monthEnd, shifts]);
 
   const chartData = [
     { name: 'working', value: stats.totalPresent },
@@ -219,7 +242,8 @@ export default function StaffAttendanceReview() {
                     <TableHead>Date</TableHead>
                     <TableHead>Expected Clock-In</TableHead>
                     <TableHead>Actual Clock-In</TableHead>
-                    <TableHead>Lateness Duration</TableHead>
+                    <TableHead>Lateness</TableHead>
+                    <TableHead>Work Hours</TableHead>
                     <TableHead>Status</TableHead>
                     {drillDown === 'leave' && <TableHead>Reason</TableHead>}
                   </TableRow>
@@ -231,12 +255,11 @@ export default function StaffAttendanceReview() {
                       <TableCell>{r.expectedClockIn}</TableCell>
                       <TableCell>{r.actualClockIn}</TableCell>
                       <TableCell>{r.latenessDuration}</TableCell>
+                      <TableCell className="text-xs">{r.workHours}</TableCell>
                       <TableCell>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          r.status === 'Working' ? 'bg-green-100 text-green-700' :
-                          r.status === 'Leave' ? 'bg-blue-100 text-blue-700' :
-                          r.status === 'Absent' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
-                        }`}>{r.status}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getLatenessColorClasses(r.severity)}`}>
+                          {r.status}
+                        </span>
                       </TableCell>
                       {drillDown === 'leave' && <TableCell>{r.leaveReason || '-'}</TableCell>}
                     </TableRow>
