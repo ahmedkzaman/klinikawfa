@@ -58,6 +58,7 @@ export function TaskDialog({ open, onClose, task, initialDate, profiles, onSave,
       setStartDate(sd);
       setStartTime(format(sd, 'HH:mm'));
       if (task.end_date) { const ed = new Date(task.end_date); setEndDate(ed); setEndTime(format(ed, 'HH:mm')); }
+      else if (task.deadline) { setEndDate(new Date(task.deadline)); setEndTime('10:00'); }
       else { setEndDate(undefined); setEndTime('10:00'); }
       setDeadline(task.deadline ? new Date(task.deadline) : undefined);
       setAssignedTo(task.assigned_to || '');
