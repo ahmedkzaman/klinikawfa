@@ -311,7 +311,7 @@ export default function PayrollProfiles() {
 
       {/* Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={v => { if (!v) { setDialogOpen(false); setEditingProfile(null); } }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Edit Payroll Profile — {editingProfile?.full_name || 'Staff'}</DialogTitle>
           </DialogHeader>
