@@ -139,6 +139,27 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
       const isoWeek = getISOWeek(day);
       const assignedToday = new Set<string>();
 
+      // Track total monthly hours for weighted fairness
+      const getMonthHours = (staffId: string) => {
+        let total = 0;
+        for (const w of Object.values(weekHours[staffId] || {})) total += w;
+        return total;
+      };
+
+      const weightedRandomPick = (pool: StaffMember[]): StaffMember => {
+        if (pool.length === 1) return pool[0];
+        const monthHours = pool.map(s => getMonthHours(s.id));
+        const maxH = Math.max(...monthHours, 1);
+        const weights = pool.map((s, i) => maxH - monthHours[i] + 1);
+        const totalWeight = weights.reduce((a, b) => a + b, 0);
+        let r = Math.random() * totalWeight;
+        for (let i = 0; i < pool.length; i++) {
+          r -= weights[i];
+          if (r <= 0) return pool[i];
+        }
+        return pool[pool.length - 1];
+      };
+
       const pickStaff = (shiftNum: 1 | 2): RosterCell[] => {
         const cells: RosterCell[] = [];
         for (let i = 0; i < staffPerShift; i++) {
@@ -152,7 +173,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
             eligible = eligible.filter(s => getWeekHours(s.id, isoWeek) + SHIFT_HOURS <= 48);
           }
 
-          // Fallback: if no eligible, relax hour cap
+          // Fallback: relax hour cap
           if (eligible.length === 0) {
             eligible = staffList.filter(s => !assignedToday.has(s.id));
             if (weekdayConstraintEnabled && isWeekday && shiftNum === 2) {
@@ -160,25 +181,21 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
             }
           }
 
-          // Fallback 2: pick least-assigned from all staff not assigned today
+          // Fallback 2: anyone not assigned today
           if (eligible.length === 0) {
             eligible = staffList.filter(s => !assignedToday.has(s.id));
           }
 
-          // Final fallback: pick anyone (even if already assigned today)
+          // Final fallback: anyone
           if (eligible.length === 0) {
             eligible = [...staffList];
           }
 
-          // Pick staff furthest from 45h minimum first, then least-assigned
           if (eligible.length > 0) {
-            // Prioritize staff below 45h to help them reach minimum
+            // Prioritize staff below 45h/week, then use weighted random by monthly hours
             const below45 = eligible.filter(s => getWeekHours(s.id, isoWeek) < 45);
             const pool = below45.length > 0 ? below45 : eligible;
-            pool.sort((a, b) => getWeekHours(a.id, isoWeek) - getWeekHours(b.id, isoWeek));
-            const minHours = getWeekHours(pool[0].id, isoWeek);
-            const leastAssigned = pool.filter(s => getWeekHours(s.id, isoWeek) === minHours);
-            const pick = leastAssigned[Math.floor(Math.random() * leastAssigned.length)];
+            const pick = weightedRandomPick(pool);
 
             if (getWeekHours(pick.id, isoWeek) + SHIFT_HOURS > 48) {
               newWarnings.push(`${format(day, 'dd MMM')} Shift ${shiftNum}: ${firstName(pick.name)} forced (exceeds 48h week ${isoWeek})`);
