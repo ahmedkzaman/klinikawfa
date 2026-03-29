@@ -286,6 +286,69 @@ export type Database = {
           },
         ]
       }
+      attendance_payroll_records: {
+        Row: {
+          actual_clock_in: string | null
+          actual_clock_out: string | null
+          approved_overtime_hours: number | null
+          created_at: string | null
+          date: string
+          id: string
+          late_minutes: number | null
+          overtime_hours: number | null
+          payable_day: boolean | null
+          payroll_locked: boolean | null
+          remarks: string | null
+          scheduled_end: string | null
+          scheduled_start: string | null
+          shift_assigned: string | null
+          total_worked_hours: number | null
+          unpaid_leave: boolean | null
+          user_id: string
+          working_status: string | null
+        }
+        Insert: {
+          actual_clock_in?: string | null
+          actual_clock_out?: string | null
+          approved_overtime_hours?: number | null
+          created_at?: string | null
+          date: string
+          id?: string
+          late_minutes?: number | null
+          overtime_hours?: number | null
+          payable_day?: boolean | null
+          payroll_locked?: boolean | null
+          remarks?: string | null
+          scheduled_end?: string | null
+          scheduled_start?: string | null
+          shift_assigned?: string | null
+          total_worked_hours?: number | null
+          unpaid_leave?: boolean | null
+          user_id: string
+          working_status?: string | null
+        }
+        Update: {
+          actual_clock_in?: string | null
+          actual_clock_out?: string | null
+          approved_overtime_hours?: number | null
+          created_at?: string | null
+          date?: string
+          id?: string
+          late_minutes?: number | null
+          overtime_hours?: number | null
+          payable_day?: boolean | null
+          payroll_locked?: boolean | null
+          remarks?: string | null
+          scheduled_end?: string | null
+          scheduled_start?: string | null
+          shift_assigned?: string | null
+          total_worked_hours?: number | null
+          unpaid_leave?: boolean | null
+          user_id?: string
+          working_status?: string | null
+        }
+        Relationships: []
+      }
       attendance_records: {
         Row: {
           accuracy_meters: number | null
@@ -601,6 +664,87 @@ export type Database = {
         }
         Relationships: []
       }
+      monthly_payroll_summaries: {
+        Row: {
+          absence_deduction: number | null
+          created_at: string | null
+          gross_pay: number | null
+          id: string
+          lateness_deduction: number | null
+          month: number
+          net_pay: number | null
+          payroll_status: string | null
+          total_absent_days: number | null
+          total_allowances: number | null
+          total_deductions: number | null
+          total_late_incidents: number | null
+          total_leave_days: number | null
+          total_overtime_hours: number | null
+          total_payable_overtime_hours: number | null
+          total_payable_regular_hours: number | null
+          total_present_days: number | null
+          total_scheduled_days: number | null
+          total_worked_hours: number | null
+          unpaid_leave_count: number | null
+          unpaid_leave_deduction: number | null
+          updated_at: string | null
+          user_id: string
+          year: number
+        }
+        Insert: {
+          absence_deduction?: number | null
+          created_at?: string | null
+          gross_pay?: number | null
+          id?: string
+          lateness_deduction?: number | null
+          month: number
+          net_pay?: number | null
+          payroll_status?: string | null
+          total_absent_days?: number | null
+          total_allowances?: number | null
+          total_deductions?: number | null
+          total_late_incidents?: number | null
+          total_leave_days?: number | null
+          total_overtime_hours?: number | null
+          total_payable_overtime_hours?: number | null
+          total_payable_regular_hours?: number | null
+          total_present_days?: number | null
+          total_scheduled_days?: number | null
+          total_worked_hours?: number | null
+          unpaid_leave_count?: number | null
+          unpaid_leave_deduction?: number | null
+          updated_at?: string | null
+          user_id: string
+          year: number
+        }
+        Update: {
+          absence_deduction?: number | null
+          created_at?: string | null
+          gross_pay?: number | null
+          id?: string
+          lateness_deduction?: number | null
+          month?: number
+          net_pay?: number | null
+          payroll_status?: string | null
+          total_absent_days?: number | null
+          total_allowances?: number | null
+          total_deductions?: number | null
+          total_late_incidents?: number | null
+          total_leave_days?: number | null
+          total_overtime_hours?: number | null
+          total_payable_overtime_hours?: number | null
+          total_payable_regular_hours?: number | null
+          total_present_days?: number | null
+          total_scheduled_days?: number | null
+          total_worked_hours?: number | null
+          unpaid_leave_count?: number | null
+          unpaid_leave_deduction?: number | null
+          updated_at?: string | null
+          user_id?: string
+          year?: number
+        }
+        Relationships: []
+      }
       performance_appraisals: {
         Row: {
           appraisal_period_from: string
@@ -834,6 +978,123 @@ export type Database = {
           job_description_acknowledged?: boolean | null
           job_scope_acknowledged?: boolean | null
           onboarding_data?: Json | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      staff_payroll_profiles: {
+        Row: {
+          absence_deduction: number | null
+          account_holder_name: string | null
+          bank_account_number: string | null
+          bank_name: string | null
+          basic_salary: number | null
+          created_at: string | null
+          custom_allowance: number | null
+          custom_deduction: number | null
+          daily_rate: number | null
+          date_joined: string | null
+          department: string | null
+          employee_id: string | null
+          employment_type: string | null
+          epf_reference: string | null
+          fixed_allowance: number | null
+          full_name: string | null
+          hourly_rate: number | null
+          id: string
+          job_title: string | null
+          lateness_deduction: number | null
+          meal_allowance: number | null
+          nric_passport: string | null
+          oncall_allowance: number | null
+          other_statutory_ref: string | null
+          overtime_eligible: boolean | null
+          overtime_rate: number | null
+          payroll_notes: string | null
+          payroll_status: string | null
+          resignation_date: string | null
+          salary_payment_type: string | null
+          socso_reference: string | null
+          tax_id: string | null
+          transport_allowance: number | null
+          unpaid_leave_deduction: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          absence_deduction?: number | null
+          account_holder_name?: string | null
+          bank_account_number?: string | null
+          bank_name?: string | null
+          basic_salary?: number | null
+          created_at?: string | null
+          custom_allowance?: number | null
+          custom_deduction?: number | null
+          daily_rate?: number | null
+          date_joined?: string | null
+          department?: string | null
+          employee_id?: string | null
+          employment_type?: string | null
+          epf_reference?: string | null
+          fixed_allowance?: number | null
+          full_name?: string | null
+          hourly_rate?: number | null
+          id?: string
+          job_title?: string | null
+          lateness_deduction?: number | null
+          meal_allowance?: number | null
+          nric_passport?: string | null
+          oncall_allowance?: number | null
+          other_statutory_ref?: string | null
+          overtime_eligible?: boolean | null
+          overtime_rate?: number | null
+          payroll_notes?: string | null
+          payroll_status?: string | null
+          resignation_date?: string | null
+          salary_payment_type?: string | null
+          socso_reference?: string | null
+          tax_id?: string | null
+          transport_allowance?: number | null
+          unpaid_leave_deduction?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          absence_deduction?: number | null
+          account_holder_name?: string | null
+          bank_account_number?: string | null
+          bank_name?: string | null
+          basic_salary?: number | null
+          created_at?: string | null
+          custom_allowance?: number | null
+          custom_deduction?: number | null
+          daily_rate?: number | null
+          date_joined?: string | null
+          department?: string | null
+          employee_id?: string | null
+          employment_type?: string | null
+          epf_reference?: string | null
+          fixed_allowance?: number | null
+          full_name?: string | null
+          hourly_rate?: number | null
+          id?: string
+          job_title?: string | null
+          lateness_deduction?: number | null
+          meal_allowance?: number | null
+          nric_passport?: string | null
+          oncall_allowance?: number | null
+          other_statutory_ref?: string | null
+          overtime_eligible?: boolean | null
+          overtime_rate?: number | null
+          payroll_notes?: string | null
+          payroll_status?: string | null
+          resignation_date?: string | null
+          salary_payment_type?: string | null
+          socso_reference?: string | null
+          tax_id?: string | null
+          transport_allowance?: number | null
+          unpaid_leave_deduction?: number | null
           updated_at?: string | null
           user_id?: string
         }

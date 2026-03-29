@@ -20,6 +20,31 @@ const statusColors: Record<string, string> = {
   paid: 'bg-blue-100 text-blue-800',
 };
 
+type PayrollSummaryRow = {
+  id: string;
+  user_id: string;
+  month: number;
+  year: number;
+  total_scheduled_days: number;
+  total_present_days: number;
+  total_leave_days: number;
+  total_absent_days: number;
+  total_late_incidents: number;
+  total_worked_hours: number;
+  total_overtime_hours: number;
+  total_payable_regular_hours: number;
+  total_payable_overtime_hours: number;
+  unpaid_leave_count: number;
+  unpaid_leave_deduction: number;
+  lateness_deduction: number;
+  absence_deduction: number;
+  total_allowances: number;
+  total_deductions: number;
+  gross_pay: number;
+  net_pay: number;
+  payroll_status: string;
+};
+
 export default function PayrollSummary() {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -29,13 +54,13 @@ export default function PayrollSummary() {
   const { data: summaries, isLoading } = useQuery({
     queryKey: ['payroll-summaries', month, year],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('monthly_payroll_summaries')
         .select('*')
         .eq('month', month)
         .eq('year', year);
       if (error) throw error;
-      return data || [];
+      return (data || []) as PayrollSummaryRow[];
     },
   });
 
@@ -50,8 +75,10 @@ export default function PayrollSummary() {
   const { data: payrollProfiles } = useQuery({
     queryKey: ['payroll-profiles-all'],
     queryFn: async () => {
-      const { data } = await supabase.from('staff_payroll_profiles').select('user_id, employment_type, payroll_status');
-      return data || [];
+      const { data } = await (supabase as any)
+        .from('staff_payroll_profiles')
+        .select('user_id, employment_type, payroll_status');
+      return (data || []) as { user_id: string; employment_type: string; payroll_status: string }[];
     },
   });
 
@@ -158,7 +185,7 @@ export default function PayrollSummary() {
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-1">
                           {(s.unpaid_leave_count > 0 || s.total_absent_days > 0 || s.total_late_incidents > 0) && (
-                            <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                            <AlertTriangle className="h-4 w-4 text-destructive" />
                           )}
                         </div>
                       </TableCell>
