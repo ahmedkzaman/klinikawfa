@@ -30,6 +30,8 @@ export interface TaskFormData {
   end_date?: Date | null;
   deadline?: Date | null;
   color: string;
+  board_column?: string;
+  visibility?: string;
 }
 
 export interface LeaveEntry {
