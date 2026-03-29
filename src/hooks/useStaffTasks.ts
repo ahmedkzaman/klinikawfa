@@ -7,12 +7,15 @@ export interface StaffTask {
   title: string;
   description: string | null;
   created_by: string;
-  assigned_to: string;
+  assigned_to: string | null;
   start_date: string;
   end_date: string | null;
   deadline: string | null;
   color: string;
   is_completed: boolean;
+  board_column: string;
+  visibility: string;
+  last_edited_by: string | null;
   created_at: string;
   updated_at: string;
   creator_name?: string;
