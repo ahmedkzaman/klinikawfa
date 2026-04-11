@@ -1,60 +1,64 @@
 
 
-## Roster Generator Enhancements
+## Daily Reporting Section on Dashboards
 
-### Requirements Summary
-1. **OT threshold**: Max normal hours = 45h/week; anything above = OT
-2. **Hybrid staff row**: New row for "Purchaser" and "Housecall Nurse" — assigned by admin, AM-only shift, counts as working hours
-3. **Permanent off days**: Admin can set which day(s) of the week each staff member is permanently off
-4. **Max 6 consecutive working days**: Enforce minimum 1 rest day per week in the generator
+### What We're Building
+A daily reporting card on the Staff Dashboard where each staff member submits three items:
+1. **Morning Briefing Selfie** — 1 photo upload, open 8am–9am only
+2. **Medication Stock Photos** — 2 photo uploads (must show timestamp/date stamp on photo), open 8am–10am only
+3. **WhatsApp Blast Count** — staff enters how many blasts they sent; admin sets the daily target
 
-### Changes
+The Admin Dashboard gets a summary card showing which staff have/haven't submitted each item today.
 
-**Database Migration**
-- Add a `staff_roster_settings` table to persist per-staff hybrid type and permanent off days:
-  - `id` (uuid PK)
-  - `user_id` (uuid, unique)
-  - `hybrid_type` (text, nullable — `'purchaser'` | `'housecall_nurse'` | null)
-  - `permanent_off_days` (integer array — day-of-week indices, e.g. `[0]` for Sunday)
-  - `created_at`, `updated_at`
-- RLS: admin full access, staff can view own
+### Database Changes
 
-**Edit: `src/pages/staff/admin/Roster.tsx` (Support Staff RosterPanel)**
-1. Add a **Staff Settings** card where admin can:
-   - Toggle hybrid type per staff (None / Purchaser / Housecall Nurse)
-   - Select permanent off day(s) per staff (checkboxes for Mon–Sun)
-2. Load/save these settings from `staff_roster_settings`
-3. Add a **Hybrid** row in the roster table (AM shift: 8am–2pm, 6h) — only hybrid staff appear here
-4. Update `generateRoster()`:
-   - Change OT threshold from 48h to 45h (normal ≤ 45h, >45h = OT)
-   - Skip assigning staff on their permanent off days
-   - Enforce max 6 consecutive working days — if a staff member has worked 6 days in a row, force a rest day
-   - Hybrid staff on hybrid-shift days get assigned to the Hybrid row (AM only), not regular shifts
-5. Update `RosterData` interface to include `hybrid: RosterCell[]`
-6. Update summary calculation to include hybrid shift hours
-7. Update the "Off" row to account for hybrid assignments
+**Migration: Create `daily_reports` table**
+```sql
+CREATE TABLE public.daily_reports (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  report_date date NOT NULL DEFAULT CURRENT_DATE,
+  briefing_selfie_url text,
+  stock_photo_1_url text,
+  stock_photo_2_url text,
+  whatsapp_blast_count integer DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, report_date)
+);
+```
+- RLS: staff can CRUD own rows, admin full access
 
-**Edit: `src/components/staff/roster/DoctorRosterPanel.tsx`**
-- Same enhancements for doctor roster: permanent off days, 6-day consecutive limit, 45h OT threshold
-- Hybrid row not applicable to doctors (only support staff)
+**Migration: Create `app_settings` row for WhatsApp blast target**
+- Insert a row: `key = 'daily_whatsapp_blast_target'`, `value = '5'` (admin-configurable)
 
-**Edit: `src/lib/rosterUtils.ts`**
-- Add `Hybrid` to `SHIFT_TIMES` map: `{ start: '08:00', end: '14:00', label: 'Hybrid (8am – 2pm)' }`
-- Update any shift lookup logic to handle hybrid shifts
+**Storage: Create `daily-reports` bucket** (public) for selfie and stock photo uploads.
 
-**Edit: `src/pages/staff/admin/Employees.tsx`**
-- Add "Purchaser" and "Housecall Nurse" to `STAFF_POSITIONS` array
+### File Changes
+
+**Edit: `src/pages/staff/Dashboard.tsx`**
+- Add a "Daily Reporting" card below notifications, above KanbanBoard
+- Three sections with upload buttons and status indicators:
+  - Briefing Selfie: single file input, disabled outside 8–9am, green check when uploaded
+  - Stock Photos: two file inputs, disabled outside 8–10am, green checks when uploaded
+  - WhatsApp Blasts: number input showing `X / target` with save button
+- Fetch today's `daily_reports` row on load; upsert on submit
+- Time-window logic uses `new Date().getHours()` to enable/disable upload buttons
+
+**Edit: `src/pages/staff/admin/Dashboard.tsx`**
+- Add a "Today's Daily Reports" summary card showing:
+  - Table/list of all staff with checkmarks for each completed item (selfie, stock 1, stock 2, blasts count vs target)
+  - Highlight missing submissions in red
+- Add a small "Set WhatsApp Target" input that updates `app_settings`
 
 ### Technical Details
-- Hybrid shift = 6 hours (8am–2pm), same as S1
-- The roster data structure gains a `hybrid` key per day: `{ shift1, shift2, hybrid }`
-- Consecutive-day tracking: during generation, maintain a counter per staff; reset on rest days; if counter reaches 6, force skip on next day
-- Permanent off days stored as integer array matching JS `getDay()` (0=Sun, 1=Mon, etc.)
+- Photos uploaded to `daily-reports/{user_id}/{date}/briefing.jpg`, `stock_1.jpg`, `stock_2.jpg`
+- Time windows enforced client-side (UI disables outside window) — sufficient since this is an internal staff tool
+- WhatsApp blast target stored in `app_settings` table (already exists with admin RLS)
+- The `daily_reports` table uses a unique constraint on `(user_id, report_date)` for upsert logic
 
 ### Files
-- **Migration**: Create `staff_roster_settings` table
-- **Edit**: `src/pages/staff/admin/Roster.tsx` — hybrid row, off days, consecutive limit, 45h OT
-- **Edit**: `src/components/staff/roster/DoctorRosterPanel.tsx` — off days, consecutive limit, 45h OT
-- **Edit**: `src/lib/rosterUtils.ts` — hybrid shift definition
-- **Edit**: `src/pages/staff/admin/Employees.tsx` — new positions
+- **Migration**: Create `daily_reports` table + storage bucket + insert blast target setting
+- **Edit**: `src/pages/staff/Dashboard.tsx` — daily reporting card with uploads and blast count
+- **Edit**: `src/pages/staff/admin/Dashboard.tsx` — summary overview + target configuration
 
