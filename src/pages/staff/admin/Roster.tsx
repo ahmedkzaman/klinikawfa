@@ -289,17 +289,8 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
         return total;
       };
 
-      // Check if staff has permanent off day
-      const isOffDay = (staffId: string) => {
-        const setting = rosterSettings[staffId];
-        return setting?.permanentOffDays?.includes(dayOfWeek) || false;
-      };
-
-      // Check if staff has off day on a specific day of week
-      const isOffDayOn = (staffId: string, dow: number) => {
-        const setting = rosterSettings[staffId];
-        return setting?.permanentOffDays?.includes(dow) || false;
-      };
+      // Check if staff has permanent off day (uses outer isOffDayOn)
+      const isOffDay = (staffId: string) => isOffDayOn(staffId, dayOfWeek);
 
       // Check if staff must rest (6 consecutive day limit)
       const mustRest = (staffId: string) => {
@@ -371,19 +362,14 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
             }
           }
 
-          // Fallback 2: relax consecutive but keep off day
+          // Fallback 2: relax consecutive but keep off day as HARD rule
           if (eligible.length === 0) {
             eligible = staffList.filter(s => !assignedToday.has(s.id) && !isOffDay(s.id) && !isHybrid(s.id));
           }
 
-          // Fallback 3: anyone not assigned today (except hybrid)
+          // No more unsafe fallbacks — off days are never bypassed
           if (eligible.length === 0) {
-            eligible = staffList.filter(s => !assignedToday.has(s.id) && !isHybrid(s.id));
-          }
-
-          // Final fallback: anyone non-hybrid
-          if (eligible.length === 0) {
-            eligible = staffList.filter(s => !isHybrid(s.id));
+            newWarnings.push(`${format(day, 'dd MMM')} Shift ${shiftNum}: Not enough eligible staff — slot left empty to respect off-day rules`);
           }
 
           if (eligible.length > 0) {
@@ -554,6 +540,10 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
           const todayIds = [...r.shift1, ...r.shift2].map(c => c.staffId);
           if (!todayIds.includes(highest.id)) continue;
           if (todayIds.includes(lowest.id)) continue;
+
+          // Hard rule: never swap someone onto their off day
+          const balanceDow = getDay(day);
+          if (isOffDayOn(lowest.id, balanceDow)) continue;
 
           for (const shiftKey of ['shift1', 'shift2'] as const) {
             const cells = r[shiftKey];
