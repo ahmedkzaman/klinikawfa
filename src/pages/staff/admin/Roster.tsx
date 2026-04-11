@@ -289,6 +289,12 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
         return setting?.permanentOffDays?.includes(dayOfWeek) || false;
       };
 
+      // Check if staff has off day on a specific day of week
+      const isOffDayOn = (staffId: string, dow: number) => {
+        const setting = rosterSettings[staffId];
+        return setting?.permanentOffDays?.includes(dow) || false;
+      };
+
       // Check if staff must rest (6 consecutive day limit)
       const mustRest = (staffId: string) => {
         return (consecutiveDays[staffId] || 0) >= MAX_CONSECUTIVE_DAYS;
