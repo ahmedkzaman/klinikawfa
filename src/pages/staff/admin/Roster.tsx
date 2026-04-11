@@ -466,6 +466,10 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
               const assignedTodayIds = [...r.shift1, ...r.shift2, ...(r.hybrid || [])].map(c => c.staffId);
               if (assignedTodayIds.includes(under.id)) continue;
 
+              // Respect permanent off days during balancing pass
+              const topUpDayOfWeek = getDay(day);
+              if (isOffDayOn(under.id, topUpDayOfWeek)) continue;
+
               for (const shiftKey of ['shift1', 'shift2'] as const) {
                 if (getWeekHours(under.id, week) >= OT_THRESHOLD) break;
                 const cells = r[shiftKey];
