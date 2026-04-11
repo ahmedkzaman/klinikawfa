@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Camera, Image, MessageSquare, CheckCircle, Clock, Upload, Loader2 } from 'lucide-react';
+import { Camera, Image, MessageSquare, CheckCircle, Clock, Upload, Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
@@ -29,6 +29,8 @@ export default function DailyReportingCard() {
   const [blastInput, setBlastInput] = useState('');
   const [uploading, setUploading] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
+  const [shiftInfo, setShiftInfo] = useState<string | null>(null); // 'AM' | 'PM' | null
+  const [rosterChecked, setRosterChecked] = useState(false);
   const selfieRef = useRef<HTMLInputElement>(null);
   const stock1Ref = useRef<HTMLInputElement>(null);
   const stock2Ref = useRef<HTMLInputElement>(null);
@@ -41,38 +43,63 @@ export default function DailyReportingCard() {
 
   useEffect(() => {
     if (user) {
-      fetchReport();
-      fetchBlastTarget();
+      fetchRosterAndReport();
     }
   }, [user]);
 
-  const fetchReport = async () => {
-    const { data } = await supabase
-      .from('daily_reports')
-      .select('*')
-      .eq('user_id', user!.id)
-      .eq('report_date', todayStr)
-      .maybeSingle();
-    if (data) {
-      setReport({
-        id: data.id,
-        briefing_selfie_url: data.briefing_selfie_url,
-        stock_photo_1_url: data.stock_photo_1_url,
-        stock_photo_2_url: data.stock_photo_2_url,
-        whatsapp_blast_count: data.whatsapp_blast_count || 0,
-      });
-      setBlastInput(String(data.whatsapp_blast_count || 0));
-    }
-    setLoading(false);
-  };
+  const fetchRosterAndReport = async () => {
+    const month = now.getMonth(); // 0-indexed (matches saved_rosters convention)
+    const year = now.getFullYear();
 
-  const fetchBlastTarget = async () => {
-    const { data } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'daily_whatsapp_blast_target')
-      .maybeSingle();
-    if (data) setBlastTarget(parseInt(data.value) || 5);
+    // Fetch roster, report, and blast target in parallel
+    const [rosterRes, reportRes, settingRes] = await Promise.all([
+      supabase
+        .from('saved_rosters')
+        .select('roster_data')
+        .eq('roster_type', 'support')
+        .eq('month', month)
+        .eq('year', year)
+        .maybeSingle(),
+      supabase
+        .from('daily_reports')
+        .select('*')
+        .eq('user_id', user!.id)
+        .eq('report_date', todayStr)
+        .maybeSingle(),
+      supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'daily_whatsapp_blast_target')
+        .maybeSingle(),
+    ]);
+
+    // Check roster
+    const rosterData = rosterRes.data?.roster_data as unknown as Record<string, { shift1?: { staffId: string }[]; shift2?: { staffId: string }[] }>;
+    const todayRoster = rosterData?.[todayStr];
+    let shift: string | null = null;
+    if (todayRoster) {
+      if (todayRoster.shift1?.some(s => s.staffId === user!.id)) shift = 'AM';
+      else if (todayRoster.shift2?.some(s => s.staffId === user!.id)) shift = 'PM';
+    }
+    setShiftInfo(shift);
+    setRosterChecked(true);
+
+    // Set report
+    if (reportRes.data) {
+      setReport({
+        id: reportRes.data.id,
+        briefing_selfie_url: reportRes.data.briefing_selfie_url,
+        stock_photo_1_url: reportRes.data.stock_photo_1_url,
+        stock_photo_2_url: reportRes.data.stock_photo_2_url,
+        whatsapp_blast_count: reportRes.data.whatsapp_blast_count || 0,
+      });
+      setBlastInput(String(reportRes.data.whatsapp_blast_count || 0));
+    }
+
+    // Set blast target
+    if (settingRes.data) setBlastTarget(parseInt(settingRes.data.value) || 5);
+
+    setLoading(false);
   };
 
   const uploadPhoto = async (file: File, field: 'briefing_selfie_url' | 'stock_photo_1_url' | 'stock_photo_2_url') => {
@@ -96,17 +123,14 @@ export default function DailyReportingCard() {
 
       const url = urlData.publicUrl;
 
-      // Upsert the report
-      const upsertData: any = {
-        user_id: user.id,
-        report_date: todayStr,
-        [field]: url,
-      };
-
       if (report.id) {
         await supabase.from('daily_reports').update({ [field]: url }).eq('id', report.id);
       } else {
-        const { data: inserted } = await supabase.from('daily_reports').insert(upsertData).select().single();
+        const { data: inserted } = await supabase.from('daily_reports').insert({
+          user_id: user.id,
+          report_date: todayStr,
+          [field]: url,
+        }).select().single();
         if (inserted) setReport(prev => ({ ...prev, id: inserted.id }));
       }
 
@@ -146,10 +170,32 @@ export default function DailyReportingCard() {
 
   if (loading) return null;
 
+  // Not on duty today
+  if (rosterChecked && !shiftInfo) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">📋 Daily Reporting — {format(now, 'dd MMM yyyy')}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3 p-4 rounded-lg border border-dashed text-muted-foreground">
+            <AlertCircle className="h-5 w-5 shrink-0" />
+            <p className="text-sm">You are not on duty today. No daily tasks required.</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">📋 Daily Reporting — {format(now, 'dd MMM yyyy')}</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">📋 Daily Reporting — {format(now, 'dd MMM yyyy')}</CardTitle>
+          <Badge variant="secondary" className="text-xs">
+            {shiftInfo === 'AM' ? '☀️ AM Shift (8am–2pm)' : '🌙 PM Shift (2pm–8pm)'}
+          </Badge>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Morning Briefing Selfie */}
