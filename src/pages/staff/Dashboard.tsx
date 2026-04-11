@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { MapPin, History, Clock, CheckCircle, XCircle, Bell, CalendarDays } from 'lucide-react';
 import KanbanBoard from '@/components/staff/KanbanBoard';
+import DailyReportingCard from '@/components/staff/DailyReportingCard';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -78,6 +79,8 @@ export default function StaffDashboard() {
           </CardContent>
         </Card>
       )}
+
+      <DailyReportingCard />
 
       <KanbanBoard />
 
