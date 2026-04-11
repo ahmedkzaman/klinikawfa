@@ -269,6 +269,12 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
     // Sort days chronologically for consecutive tracking
     const sortedDays = [...monthDays].sort((a, b) => a.getTime() - b.getTime());
 
+    // Helper: check if staff has off day on a specific day of week (used in both passes)
+    const isOffDayOn = (staffId: string, dow: number) => {
+      const setting = rosterSettings[staffId];
+      return setting?.permanentOffDays?.includes(dow) || false;
+    };
+
     for (const day of sortedDays) {
       const dateKey = format(day, 'yyyy-MM-dd');
       const dayOfWeek = getDay(day);
