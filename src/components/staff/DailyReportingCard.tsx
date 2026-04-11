@@ -37,9 +37,15 @@ export default function DailyReportingCard() {
 
   const now = new Date();
   const currentHour = now.getHours();
-  const isSelfieWindow = currentHour >= 8 && currentHour < 9;
-  const isStockWindow = currentHour >= 8 && currentHour < 10;
   const todayStr = format(now, 'yyyy-MM-dd');
+
+  // Shift-aware upload windows
+  // AM: selfie 8-9am, stock 8-10am
+  // PM: selfie 2-3pm, stock 2-3pm (single hour window)
+  const isAM = shiftInfo === 'AM';
+  const isPM = shiftInfo === 'PM';
+  const isSelfieWindow = isAM ? (currentHour >= 8 && currentHour < 9) : isPM ? (currentHour >= 14 && currentHour < 15) : false;
+  const isStockWindow = isAM ? (currentHour >= 8 && currentHour < 10) : isPM ? (currentHour >= 14 && currentHour < 15) : false;
 
   useEffect(() => {
     if (user) {
@@ -203,8 +209,8 @@ export default function DailyReportingCard() {
           <div className="flex items-center gap-3 min-w-0">
             <Camera className="h-5 w-5 text-primary shrink-0" />
             <div className="min-w-0">
-              <p className="text-sm font-medium">Morning Briefing Selfie</p>
-              <p className="text-xs text-muted-foreground">Upload window: 8:00 – 9:00 AM</p>
+              <p className="text-sm font-medium">{isPM ? 'Shift Briefing Selfie' : 'Morning Briefing Selfie'}</p>
+              <p className="text-xs text-muted-foreground">Upload window: {isPM ? '2:00 – 3:00 PM' : '8:00 – 9:00 AM'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -231,7 +237,7 @@ export default function DailyReportingCard() {
             <Image className="h-5 w-5 text-primary shrink-0" />
             <div>
               <p className="text-sm font-medium">Medication Stock Photos</p>
-              <p className="text-xs text-muted-foreground">Upload window: 8:00 – 10:00 AM • Must include timestamp & date stamp</p>
+              <p className="text-xs text-muted-foreground">Upload window: {isPM ? '2:00 – 3:00 PM' : '8:00 – 10:00 AM'} • Must include timestamp & date stamp</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
