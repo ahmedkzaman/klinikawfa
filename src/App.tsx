@@ -46,6 +46,7 @@ import AdminRoster from "./pages/staff/admin/Roster";
 import AdminOnboarding from "./pages/staff/admin/Onboarding";
 import PayrollSummary from "./pages/staff/admin/PayrollSummary";
 import PayrollProfiles from "./pages/staff/admin/PayrollProfiles";
+import DailyTaskReview from "./pages/staff/admin/DailyTaskReview";
 
 // Website Management (formerly /admin)
 import LeadsManagement from "./pages/admin/LeadsManagement";
@@ -115,6 +116,7 @@ const App = () => (
                 <Route path="admin/profile-approvals" element={<AdminProfileApprovals />} />
                 <Route path="admin/payroll-summary" element={<PayrollSummary />} />
                 <Route path="admin/payroll-profiles" element={<PayrollProfiles />} />
+                <Route path="admin/daily-tasks" element={<DailyTaskReview />} />
                 {/* Website Management */}
                 <Route path="website/leads" element={<LeadsManagement />} />
                 <Route path="website/team" element={<TeamManagement />} />
