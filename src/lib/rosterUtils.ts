@@ -17,6 +17,8 @@ const SHIFT_TIMES: Record<string, { start: string; end: string; label: string }>
   S3: { start: '20:00', end: '00:00', label: 'Shift 3 (8pm – 12am)' },
   // Combined (doctor daytime = S1+S2)
   Daytime: { start: '08:00', end: '20:00', label: 'Daytime (8am – 8pm)' },
+  // Hybrid shift (purchaser / housecall nurse) — AM only
+  Hybrid: { start: '08:00', end: '14:00', label: 'Hybrid (8am – 2pm)' },
 };
 
 export type ShiftInfo = {

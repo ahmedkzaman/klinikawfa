@@ -1181,6 +1181,33 @@ export type Database = {
         }
         Relationships: []
       }
+      staff_roster_settings: {
+        Row: {
+          created_at: string
+          hybrid_type: string | null
+          id: string
+          permanent_off_days: number[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          hybrid_type?: string | null
+          id?: string
+          permanent_off_days?: number[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          hybrid_type?: string | null
+          id?: string
+          permanent_off_days?: number[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       staff_tasks: {
         Row: {
           assigned_to: string | null

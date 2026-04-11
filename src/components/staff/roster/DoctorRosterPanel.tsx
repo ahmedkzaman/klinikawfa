@@ -41,12 +41,19 @@ interface ManualOverrides {
   [dateKey: string]: Set<'shift1' | 'shift2' | 'shift3'>;
 }
 
+interface RosterSettings {
+  [userId: string]: {
+    permanentOffDays: number[];
+  };
+}
+
 const SHIFT1_HOURS = 6;
 const SHIFT2_HOURS = 6;
 const SHIFT3_HOURS = 4;
 const DAYTIME_HOURS = SHIFT1_HOURS + SHIFT2_HOURS; // 12
 const WEEKLY_MIN = 45;
-const WEEKLY_MAX = 48;
+const WEEKLY_MAX = 45; // OT threshold changed to 45h
+const MAX_CONSECUTIVE_DAYS = 6;
 const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function firstName(name: string) {
@@ -97,6 +104,9 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
   const [loading, setLoading] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
+  // Roster settings (permanent off days)
+  const [rosterSettings, setRosterSettings] = useState<RosterSettings>({});
+
   const monthDays = useMemo(() => {
     const start = startOfMonth(new Date(selectedYear, selectedMonth, 1));
     const end = endOfMonth(start);
@@ -104,6 +114,47 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
   }, [selectedMonth, selectedYear]);
 
   useEffect(() => { setStaffList(initialStaff); }, [initialStaff]);
+
+  // Load roster settings
+  useEffect(() => {
+    const loadSettings = async () => {
+      const { data } = await supabase.from('staff_roster_settings').select('*');
+      if (data) {
+        const settings: RosterSettings = {};
+        data.forEach((r: any) => {
+          settings[r.user_id] = {
+            permanentOffDays: r.permanent_off_days || [],
+          };
+        });
+        setRosterSettings(settings);
+      }
+    };
+    loadSettings();
+  }, []);
+
+  // Save off day setting
+  const saveOffDaySetting = async (userId: string, permanentOffDays: number[]) => {
+    // We need to upsert — preserve hybrid_type if it exists
+    const { data: existing } = await supabase.from('staff_roster_settings').select('hybrid_type').eq('user_id', userId).maybeSingle();
+    const { error } = await supabase.from('staff_roster_settings').upsert({
+      user_id: userId,
+      hybrid_type: (existing as any)?.hybrid_type || null,
+      permanent_off_days: permanentOffDays,
+    } as any, { onConflict: 'user_id' });
+    if (error) {
+      toast.error('Failed to save setting');
+    } else {
+      setRosterSettings(prev => ({ ...prev, [userId]: { permanentOffDays } }));
+    }
+  };
+
+  const handleOffDayToggle = (userId: string, dayIndex: number) => {
+    const current = rosterSettings[userId] || { permanentOffDays: [] };
+    const newDays = current.permanentOffDays.includes(dayIndex)
+      ? current.permanentOffDays.filter(d => d !== dayIndex)
+      : [...current.permanentOffDays, dayIndex];
+    saveOffDaySetting(userId, newDays);
+  };
 
   // ─── Auto-load saved roster on month change ───
   useEffect(() => {
@@ -223,10 +274,28 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
     const weekHours: Record<string, Record<number, number>> = {};
     staffList.forEach(s => { weekHours[s.id] = {}; });
 
-    const getWH = (sid: string, w: number) => weekHours[sid][w] || 0;
-    const addWH = (sid: string, w: number, h: number) => { weekHours[sid][w] = (weekHours[sid][w] || 0) + h; };
+    // Track consecutive working days
+    const consecutiveDays: Record<string, number> = {};
+    staffList.forEach(s => { consecutiveDays[s.id] = 0; });
+
+    const getWH = (sid: string, w: number) => weekHours[sid]?.[w] || 0;
+    const addWH = (sid: string, w: number, h: number) => {
+      if (!weekHours[sid]) weekHours[sid] = {};
+      weekHours[sid][w] = (weekHours[sid][w] || 0) + h;
+    };
     const getMonthH = (sid: string) => {
       let t = 0; for (const v of Object.values(weekHours[sid] || {})) t += v; return t;
+    };
+
+    // Check permanent off day
+    const isOffDay = (staffId: string, dayOfWeek: number) => {
+      const setting = rosterSettings[staffId];
+      return setting?.permanentOffDays?.includes(dayOfWeek) || false;
+    };
+
+    // Check consecutive day limit
+    const mustRest = (staffId: string) => {
+      return (consecutiveDays[staffId] || 0) >= MAX_CONSECUTIVE_DAYS;
     };
 
     const newWarnings: string[] = [];
@@ -242,21 +311,30 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
       return pool[pool.length - 1];
     };
 
-    for (const day of monthDays) {
+    // Sort days chronologically for consecutive tracking
+    const sortedDays = [...monthDays].sort((a, b) => a.getTime() - b.getTime());
+
+    for (const day of sortedDays) {
       const dateKey = format(day, 'yyyy-MM-dd');
       const isoWeek = getISOWeek(day);
+      const dayOfWeek = getDay(day);
       const assignedToday = new Set<string>();
 
       // ─── Assign daytime block (S1+S2 = same doctor) ───
       let daytimeDoc: RosterCell | null = null;
       {
-        let eligible = staffList.filter(s => !assignedToday.has(s.id));
-        if (ruleMaxShifts && ruleValidCombos) {
-          // no extra filter needed for daytime
-        }
+        let eligible = staffList.filter(s =>
+          !assignedToday.has(s.id) &&
+          !isOffDay(s.id, dayOfWeek) &&
+          !mustRest(s.id)
+        );
         if (ruleMinHours) {
-          const under48 = eligible.filter(s => getWH(s.id, isoWeek) + DAYTIME_HOURS <= WEEKLY_MAX);
-          if (under48.length > 0) eligible = under48;
+          const under = eligible.filter(s => getWH(s.id, isoWeek) + DAYTIME_HOURS <= WEEKLY_MAX);
+          if (under.length > 0) eligible = under;
+        }
+        // Fallback: relax consecutive
+        if (eligible.length === 0) {
+          eligible = staffList.filter(s => !assignedToday.has(s.id) && !isOffDay(s.id, dayOfWeek));
         }
         if (eligible.length === 0) eligible = staffList.filter(s => !assignedToday.has(s.id));
         if (eligible.length === 0) eligible = [...staffList];
@@ -275,7 +353,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
           assignedToday.add(daytimeDoc.staffId);
           addWH(daytimeDoc.staffId, isoWeek, DAYTIME_HOURS);
           if (getWH(daytimeDoc.staffId, isoWeek) > WEEKLY_MAX) {
-            newWarnings.push(`${format(day, 'dd MMM')}: ${firstName(daytimeDoc.staffName)} daytime block exceeds ${WEEKLY_MAX}h in week ${isoWeek}`);
+            newWarnings.push(`${format(day, 'dd MMM')}: ${firstName(daytimeDoc.staffName)} daytime block exceeds ${WEEKLY_MAX}h in week ${isoWeek} (OT)`);
           }
         }
       }
@@ -283,14 +361,21 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
       // ─── Assign night shift (S3 = different doctor) ───
       let nightDoc: RosterCell | null = null;
       {
-        let eligible = staffList.filter(s => !assignedToday.has(s.id));
+        let eligible = staffList.filter(s =>
+          !assignedToday.has(s.id) &&
+          !isOffDay(s.id, dayOfWeek) &&
+          !mustRest(s.id)
+        );
         if (ruleMinHours) {
-          const under48 = eligible.filter(s => getWH(s.id, isoWeek) + SHIFT3_HOURS <= WEEKLY_MAX);
-          if (under48.length > 0) eligible = under48;
+          const under = eligible.filter(s => getWH(s.id, isoWeek) + SHIFT3_HOURS <= WEEKLY_MAX);
+          if (under.length > 0) eligible = under;
+        }
+        // Fallback: relax consecutive
+        if (eligible.length === 0) {
+          eligible = staffList.filter(s => !assignedToday.has(s.id) && !isOffDay(s.id, dayOfWeek));
         }
         if (eligible.length === 0) eligible = staffList.filter(s => !assignedToday.has(s.id));
         if (eligible.length === 0) {
-          // Force: pick someone not doing daytime
           eligible = staffList.filter(s => s.id !== daytimeDoc?.staffId);
           if (eligible.length === 0) eligible = [...staffList];
           newWarnings.push(`${format(day, 'dd MMM')}: Night shift forced — no ideal candidate`);
@@ -316,6 +401,15 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
         shift2: daytimeDoc, // same doctor for S1+S2
         shift3: nightDoc,
       };
+
+      // Update consecutive day counters
+      staffList.forEach(s => {
+        if (assignedToday.has(s.id)) {
+          consecutiveDays[s.id] = (consecutiveDays[s.id] || 0) + 1;
+        } else {
+          consecutiveDays[s.id] = 0;
+        }
+      });
     }
 
     // ─── Top-up pass: enforce 45h minimum per week ───
@@ -360,7 +454,6 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
               const dk = format(day, 'yyyy-MM-dd');
               const d = newRoster[dk];
 
-              // Check if under is already assigned today
               const todayIds = [d.shift1?.staffId, d.shift2?.staffId, d.shift3?.staffId].filter(Boolean);
               if (todayIds.includes(under.id)) continue;
 
@@ -370,7 +463,6 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                 const donorH = getWH(donor.staffId, week);
                 const underH = getWH(under.id, week);
                 if (donorH > underH + SHIFT3_HOURS && (donorH - SHIFT3_HOURS >= WEEKLY_MIN || donorH - SHIFT3_HOURS >= underH)) {
-                  // Also ensure under won't be assigned to S1/S2 same day (combo rule)
                   if (d.shift1?.staffId !== under.id && d.shift2?.staffId !== under.id) {
                     weekHours[donor.staffId][week] -= SHIFT3_HOURS;
                     weekHours[under.id][week] = (weekHours[under.id][week] || 0) + SHIFT3_HOURS;
@@ -387,7 +479,6 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                 const donorH = getWH(donor.staffId, week);
                 const underH = getWH(under.id, week);
                 if (donorH > underH + DAYTIME_HOURS && (donorH - DAYTIME_HOURS >= WEEKLY_MIN || donorH - DAYTIME_HOURS >= underH)) {
-                  // Ensure under is not doing night shift same day
                   if (d.shift3?.staffId !== under.id) {
                     weekHours[donor.staffId][week] -= DAYTIME_HOURS;
                     weekHours[under.id][week] = (weekHours[under.id][week] || 0) + DAYTIME_HOURS;
@@ -484,7 +575,6 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
       const dk = format(day, 'yyyy-MM-dd');
       const d = { ...updated[dk] };
       if (!d.shift1 || !d.shift2) {
-        // Pick least-assigned doctor not doing S3 today
         const eligible = staffList.filter(s => s.id !== d.shift3?.staffId);
         if (eligible.length > 0) {
           const sorted = eligible.sort((a, b) => calcMonthHoursFromRoster(updated, a.id) - calcMonthHoursFromRoster(updated, b.id));
@@ -516,10 +606,8 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
     const dayData = roster[dateKey];
     const cell: RosterCell = { staffId: staff.id, staffName: staff.name };
 
-    // Validate combo rules
     if (ruleValidCombos) {
       if (shift === 'shift1' || shift === 'shift2') {
-        // Check if this doctor is assigned to S3 same day
         if (dayData.shift3?.staffId === newStaffId) {
           toast.warning(`${firstName(staff.name)} is on night shift — invalid combo. Assigning anyway (override).`);
         }
@@ -538,7 +626,6 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
 
       if (shift === 'shift1') {
         dd.shift1 = cell;
-        // If combo rule: also set S2 to same doctor
         if (ruleValidCombos) dd.shift2 = cell;
       } else if (shift === 'shift2') {
         dd.shift2 = cell;
@@ -587,7 +674,6 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
         totalOT += ot;
       });
 
-      // Count daytime blocks and night shifts
       for (const dk of Object.keys(roster)) {
         const d = roster[dk];
         if (d.shift1?.staffId === s.id && d.shift2?.staffId === s.id) dayBlocks++;
@@ -741,8 +827,8 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
             <div className="flex items-start gap-3">
               <Checkbox id="rule-min-hrs" checked={ruleMinHours} onCheckedChange={v => setRuleMinHours(!!v)} />
               <div>
-                <Label htmlFor="rule-min-hrs" className="text-sm font-medium">45h/week minimum target</Label>
-                <p className="text-xs text-muted-foreground">Aim for every doctor to reach at least 45 hours per calendar week</p>
+                <Label htmlFor="rule-min-hrs" className="text-sm font-medium">45h/week target (OT beyond)</Label>
+                <p className="text-xs text-muted-foreground">Normal ≤ 45h/week. Hours beyond are overtime. Max 6 consecutive working days.</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
@@ -762,6 +848,49 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
           </CardContent>
         </Card>
       </div>
+
+      {/* Permanent Off Days Settings */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2"><Settings2 className="h-5 w-5" /> Permanent Off Days</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-muted-foreground mb-4">Select permanent weekly off days for each doctor. These settings are saved automatically.</p>
+          {staffList.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">Add doctors first</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Doctor</TableHead>
+                    {DAY_ABBR.map((d, i) => <TableHead key={i} className="text-center text-xs w-12">{d}</TableHead>)}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {staffList.map(s => {
+                    const setting = rosterSettings[s.id] || { permanentOffDays: [] };
+                    return (
+                      <TableRow key={s.id}>
+                        <TableCell className="font-medium text-sm">{firstName(s.name)}</TableCell>
+                        {DAY_ABBR.map((_, i) => (
+                          <TableCell key={i} className="text-center">
+                            <Checkbox
+                              checked={setting.permanentOffDays.includes(i)}
+                              onCheckedChange={() => handleOffDayToggle(s.id, i)}
+                              className="mx-auto"
+                            />
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Roster */}
       <Card>
