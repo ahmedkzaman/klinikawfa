@@ -37,9 +37,15 @@ export default function DailyReportingCard() {
 
   const now = new Date();
   const currentHour = now.getHours();
-  const isSelfieWindow = currentHour >= 8 && currentHour < 9;
-  const isStockWindow = currentHour >= 8 && currentHour < 10;
   const todayStr = format(now, 'yyyy-MM-dd');
+
+  // Shift-aware upload windows
+  // AM: selfie 8-9am, stock 8-10am
+  // PM: selfie 2-3pm, stock 2-3pm (single hour window)
+  const isAM = shiftInfo === 'AM';
+  const isPM = shiftInfo === 'PM';
+  const isSelfieWindow = isAM ? (currentHour >= 8 && currentHour < 9) : isPM ? (currentHour >= 14 && currentHour < 15) : false;
+  const isStockWindow = isAM ? (currentHour >= 8 && currentHour < 10) : isPM ? (currentHour >= 14 && currentHour < 15) : false;
 
   useEffect(() => {
     if (user) {
