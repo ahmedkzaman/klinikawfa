@@ -317,14 +317,18 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
         return pool[pool.length - 1];
       };
 
-      // ─── Assign hybrid shifts first (AM only, 8am-2pm) ───
+      // ─── Hybrid row is manual — preserve existing assignments, don't auto-populate ───
       const hybridCells: RosterCell[] = [];
-      for (const hs of hybridStaff) {
-        if (isOffDay(hs.id) || mustRest(hs.id)) continue;
-        // Hybrid staff work hybrid shift, count as working hours
-        hybridCells.push({ staffId: hs.id, staffName: hs.name });
-        assignedToday.add(hs.id);
-        addWeekHours(hs.id, isoWeek, HYBRID_HOURS);
+      // If re-generating and there are existing hybrid assignments, preserve them
+      if (roster && roster[dateKey]?.hybrid) {
+        for (const existing of roster[dateKey].hybrid!) {
+          // Only keep if still a valid hybrid staff and not on off day
+          if (hybridStaff.some(hs => hs.id === existing.staffId) && !isOffDay(existing.staffId)) {
+            hybridCells.push(existing);
+            assignedToday.add(existing.staffId);
+            addWeekHours(existing.staffId, isoWeek, HYBRID_HOURS);
+          }
+        }
       }
 
       const pickStaff = (shiftNum: 1 | 2): RosterCell[] => {
@@ -586,6 +590,38 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
       const cells = [...dayData[shift]];
       cells[index] = { staffId: staff.id, staffName: staff.name };
       dayData[shift] = cells;
+      updated[dateKey] = dayData;
+      return updated;
+    });
+  };
+
+  // Toggle a hybrid staff member on/off for a specific day
+  const toggleHybridStaff = (dateKey: string, staffId: string) => {
+    if (!roster) return;
+    const staff = hybridStaff.find(s => s.id === staffId);
+    if (!staff) return;
+
+    // Check off-day
+    const day = new Date(dateKey + 'T00:00:00');
+    const dow = getDay(day);
+    const setting = rosterSettings[staffId];
+    if (setting?.permanentOffDays?.includes(dow)) {
+      toast.error(`${firstName(staff.name)} has an off day on ${DAY_ABBR[dow]}`);
+      return;
+    }
+
+    setRoster(prev => {
+      if (!prev) return prev;
+      const updated = { ...prev };
+      const dayData = { ...updated[dateKey] };
+      const currentHybrid = [...(dayData.hybrid || [])];
+      const existingIdx = currentHybrid.findIndex(c => c.staffId === staffId);
+      if (existingIdx >= 0) {
+        currentHybrid.splice(existingIdx, 1);
+      } else {
+        currentHybrid.push({ staffId: staff.id, staffName: staff.name });
+      }
+      dayData.hybrid = currentHybrid.length > 0 ? currentHybrid : undefined;
       updated[dateKey] = dayData;
       return updated;
     });
@@ -970,7 +1006,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                         );
                       })}
                     </TableRow>
-                    {/* Hybrid Row — only if hybrid staff exist */}
+                    {/* Hybrid Row — manual assignment with checkboxes */}
                     {hybridStaff.length > 0 && (
                       <TableRow>
                         <TableCell className="font-medium bg-blue-50 dark:bg-blue-950/30 sticky left-0 z-10">
@@ -980,9 +1016,33 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                         {monthDays.map(day => {
                           const dateKey = format(day, 'yyyy-MM-dd');
                           const cells = roster[dateKey]?.hybrid || [];
+                          const assignedIds = new Set(cells.map(c => c.staffId));
+                          const dow = getDay(day);
                           return (
-                            <TableCell key={dateKey} className={cn("text-center p-1 text-[11px]", isWeekend(day) && "bg-muted/20")}>
-                              {cells.length > 0 ? cells.map(c => firstName(c.staffName)).join(', ') : '—'}
+                            <TableCell key={dateKey} className={cn("text-center p-0.5", isWeekend(day) && "bg-muted/20")}>
+                              <div className="flex flex-col gap-0.5 items-center">
+                                {hybridStaff.map(hs => {
+                                  const isOff = rosterSettings[hs.id]?.permanentOffDays?.includes(dow);
+                                  return (
+                                    <button
+                                      key={hs.id}
+                                      onClick={() => toggleHybridStaff(dateKey, hs.id)}
+                                      disabled={isOff}
+                                      className={cn(
+                                        "text-[10px] px-1 py-0.5 rounded cursor-pointer transition-colors w-full truncate",
+                                        assignedIds.has(hs.id)
+                                          ? "bg-primary text-primary-foreground font-medium"
+                                          : isOff
+                                            ? "text-muted-foreground/40 line-through cursor-not-allowed"
+                                            : "text-muted-foreground hover:bg-muted"
+                                      )}
+                                      title={isOff ? `${hs.name} — Off day` : assignedIds.has(hs.id) ? `Remove ${hs.name}` : `Assign ${hs.name}`}
+                                    >
+                                      {firstName(hs.name)}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </TableCell>
                           );
                         })}
