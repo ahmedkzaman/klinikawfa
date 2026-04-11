@@ -269,6 +269,12 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
     // Sort days chronologically for consecutive tracking
     const sortedDays = [...monthDays].sort((a, b) => a.getTime() - b.getTime());
 
+    // Helper: check if staff has off day on a specific day of week (used in both passes)
+    const isOffDayOn = (staffId: string, dow: number) => {
+      const setting = rosterSettings[staffId];
+      return setting?.permanentOffDays?.includes(dow) || false;
+    };
+
     for (const day of sortedDays) {
       const dateKey = format(day, 'yyyy-MM-dd');
       const dayOfWeek = getDay(day);
@@ -287,6 +293,12 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
       const isOffDay = (staffId: string) => {
         const setting = rosterSettings[staffId];
         return setting?.permanentOffDays?.includes(dayOfWeek) || false;
+      };
+
+      // Check if staff has off day on a specific day of week
+      const isOffDayOn = (staffId: string, dow: number) => {
+        const setting = rosterSettings[staffId];
+        return setting?.permanentOffDays?.includes(dow) || false;
       };
 
       // Check if staff must rest (6 consecutive day limit)
@@ -459,6 +471,10 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
 
               const assignedTodayIds = [...r.shift1, ...r.shift2, ...(r.hybrid || [])].map(c => c.staffId);
               if (assignedTodayIds.includes(under.id)) continue;
+
+              // Respect permanent off days during balancing pass
+              const topUpDayOfWeek = getDay(day);
+              if (isOffDayOn(under.id, topUpDayOfWeek)) continue;
 
               for (const shiftKey of ['shift1', 'shift2'] as const) {
                 if (getWeekHours(under.id, week) >= OT_THRESHOLD) break;
