@@ -565,6 +565,42 @@ export type Database = {
           },
         ]
       }
+      daily_reports: {
+        Row: {
+          briefing_selfie_url: string | null
+          created_at: string
+          id: string
+          report_date: string
+          stock_photo_1_url: string | null
+          stock_photo_2_url: string | null
+          updated_at: string
+          user_id: string
+          whatsapp_blast_count: number | null
+        }
+        Insert: {
+          briefing_selfie_url?: string | null
+          created_at?: string
+          id?: string
+          report_date?: string
+          stock_photo_1_url?: string | null
+          stock_photo_2_url?: string | null
+          updated_at?: string
+          user_id: string
+          whatsapp_blast_count?: number | null
+        }
+        Update: {
+          briefing_selfie_url?: string | null
+          created_at?: string
+          id?: string
+          report_date?: string
+          stock_photo_1_url?: string | null
+          stock_photo_2_url?: string | null
+          updated_at?: string
+          user_id?: string
+          whatsapp_blast_count?: number | null
+        }
+        Relationships: []
+      }
       gallery_images: {
         Row: {
           alt_text: string | null
