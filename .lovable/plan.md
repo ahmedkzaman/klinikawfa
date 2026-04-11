@@ -1,67 +1,36 @@
-## Daily Report Integration with Roster + Admin Daily Task Review
 
-### What We're Building
 
-1. **Staff Daily Report Card** — show tasks only for staff on duty today, separated by AM (S1: 8am–2pm) and PM (S2: 2pm–8pm) shift
-2. **Roster synchronization** — the `DailyReportsSummary` (admin) and `DailyReportingCard` (staff) both read from `saved_rosters` to determine who is working and on which shift
-3. **Admin Daily Task Review page** — new page at `/staff/admin/daily-tasks` with a month & staff filter to review all daily report submissions historically. allow admin to download report for filtered staff
-4. **Month filter on admin dashboard** — admin can filter the daily reports summary by month
+## Manual Hybrid Staff Assignment in Roster Generator
 
-### How Roster Integration Works
+### Problem
+Currently, hybrid staff (Purchaser/Housecall Nurse) are **automatically** assigned to the hybrid row every day they're not on an off day or rest day. The admin wants full manual control over which hybrid staff work and on which specific days.
 
-The `saved_rosters` table stores roster data keyed by date (e.g., `2026-03-01`) with `shift1` (AM) and `shift2` (PM) arrays containing `{staffId, staffName}`. We cross-reference today's date against the saved roster to:
+### Solution
 
-- Only show the daily reporting card to staff who are on duty today
-- Group staff by AM/PM shift in the admin summary
-- Hide the card entirely for staff who are off duty
+**Edit: `src/pages/staff/admin/Roster.tsx`**
 
-### File Changes
+1. **Add a hybrid schedule UI** — Below the existing "Staff Settings (Hybrid & Off Days)" card, add a new section (or inline with the existing settings) where the admin can tick which days each hybrid staff member should work their hybrid shift. This will be a per-staff, per-day-of-week checkbox grid (similar to the off-day grid but for "Hybrid Work Days").
 
-**Edit: `src/components/staff/DailyReportingCard.tsx**`
+   Alternatively (and simpler): after the roster is generated, make the **Hybrid row editable** — each cell becomes a multi-select or toggle showing which hybrid staff are assigned that day. The generator will leave the hybrid row **empty by default**, and the admin fills it in manually.
 
-- On mount, fetch today's roster from `saved_rosters` to check if current user is assigned a shift
-- If not on duty, show a message "You are not on duty today" instead of the reporting form
-- Display which shift the user is on (AM/PM) at the top of the card
+   **Recommended approach**: Make the hybrid row fully manual with selectable dropdowns (like Shift 1/Shift 2 already have). The generator will:
+   - Still mark hybrid staff so they're excluded from regular shift assignment
+   - But **not** auto-populate the hybrid row
+   - Admin manually assigns hybrid staff to specific days using dropdowns in the hybrid row cells
 
-**Edit: `src/components/staff/DailyReportsSummary.tsx**`
+2. **Remove auto-assignment in `generateRoster()`** — Delete the block (lines ~320-328) that automatically assigns all hybrid staff to every non-off day. Instead, preserve any existing hybrid assignments from the current roster state (if re-generating) or leave empty.
 
-- Fetch today's roster to get on-duty staff and their shifts
-- Replace the current "all profiles" query with roster-filtered staff only
-- Separate the table into two sections: AM Shift and PM Shift
-- Add a month/year picker to filter historical daily reports
-- When viewing past months, fetch that month's roster + daily reports
+3. **Make hybrid row cells editable** — Currently hybrid cells just display text. Change them to use a multi-select or per-cell dropdown (similar to shift cells) so admin can pick which hybrid staff work each day. Only hybrid-typed staff appear in the dropdown.
 
-**Create: `src/pages/staff/admin/DailyTaskReview.tsx**`
+4. **Keep hybrid staff excluded from regular shifts** — The `!isHybrid(s.id)` filter in `pickStaff()` stays, so hybrid staff don't get auto-assigned to Shift 1/2. But they only appear in the hybrid row when the admin manually places them.
 
-- Full-page admin view for daily task review
-- Month & staff selector (default: current month & all staffs)
-- Table showing each day of the selected month as rows
-- Columns: Date, then for each on-duty staff: Selfie, Stock 1, Stock 2, WA Blasts
-- Grouped by AM/PM shift per day
-- Color-coded completion status
-- Summary stats at bottom (completion rate per staff, per task type)
+5. **Update `updateCell`** — Extend it to support `'hybrid'` as a shift key, and allow adding/removing hybrid staff from a day.
 
-**Edit: `src/pages/staff/admin/Dashboard.tsx**`
-
-- Add a link/button to the new Daily Task Review page
-- Keep the existing `DailyReportsSummary` as a quick glance (today only)
-
-**Edit: `src/App.tsx**`
-
-- Add route: `/staff/admin/daily-tasks` pointing to `DailyTaskReview`
-
-**Edit: `src/components/staff/StaffLayout.tsx**`
-
-- Add "Daily Tasks" nav item under admin section
+6. **Hours tracking** — When calculating summary hours, hybrid hours still count (6h per assigned day). The summary and fairness metrics remain accurate based on what the admin manually assigned.
 
 ### Technical Details
+- No database changes needed
+- Single file edit: `src/pages/staff/admin/Roster.tsx`
+- The hybrid row cells will use a popover or multi-checkbox approach (since multiple hybrid staff can work the same day)
+- Off-day and rest-day rules still apply — the UI should visually disable or warn if admin tries to assign a hybrid staff member on their off day
 
-- Roster lookup: query `saved_rosters` where `roster_type = 'support'`, `month` and `year` match, then parse `roster_data[todayDateKey]` to get `shift1` (AM) and `shift2` (PM) arrays
-- For the month filter, fetch all `daily_reports` rows for that month + the corresponding roster, then cross-reference
-- No database changes needed — all data already exists in `daily_reports` and `saved_rosters`
-
-### Scope
-
-- No migrations needed
-- 1 new file: `DailyTaskReview.tsx`
-- 4 edited files: `DailyReportingCard.tsx`, `DailyReportsSummary.tsx`, `Dashboard.tsx` (admin), `App.tsx`, `StaffLayout.tsx`
