@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MapPin, History, Clock, CheckCircle, XCircle, Bell, CalendarDays } from 'lucide-react';
+import { MapPin, History, Clock, CheckCircle, XCircle, Bell, CalendarDays, Megaphone } from 'lucide-react';
 import KanbanBoard from '@/components/staff/KanbanBoard';
 import DailyReportingCard from '@/components/staff/DailyReportingCard';
 import { supabase } from '@/integrations/supabase/client';
