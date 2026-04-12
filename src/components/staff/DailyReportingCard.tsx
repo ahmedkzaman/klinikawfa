@@ -282,16 +282,16 @@ export default function DailyReportingCard() {
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <StatusIcon done={!!report.briefing_selfie_url} />
-              {report.briefing_selfie_url ? (
-                <PhotoPreviewBadge url={report.briefing_selfie_url} label={isPM ? 'Evening Passover Selfie' : 'Morning Briefing Selfie'} />
+              <StatusIcon done={!!selfieUrl} />
+              {selfieUrl ? (
+                <PhotoPreviewBadge url={selfieUrl} label={isPM ? 'Evening Passover Selfie' : 'Morning Briefing Selfie'} />
               ) : (
                 <>
                   <input ref={selfieRef} type="file" accept="image/*" capture="user" className="hidden"
-                    onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0], 'briefing_selfie_url')} />
-                  <Button size="sm" variant="outline" disabled={!isUploadWindow || uploading.briefing_selfie_url}
+                    onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0], selfieField as any)} />
+                  <Button size="sm" variant="outline" disabled={!isUploadWindow || uploading[selfieField]}
                     onClick={() => selfieRef.current?.click()}>
-                    {uploading.briefing_selfie_url ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                    {uploading[selfieField] ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
                     Upload
                   </Button>
                 </>
