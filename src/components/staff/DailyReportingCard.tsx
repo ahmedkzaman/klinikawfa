@@ -128,10 +128,17 @@ export default function DailyReportingCard() {
       if (todayDoctorRoster) {
         const isLocum = todayDoctorRoster.shift3?.staffId === user!.id;
         if (!isLocum) {
-          if (todayDoctorRoster.shift1?.staffId === user!.id) {
-            shift = 'AM'; detectedType = 'doctor';
-          } else if (todayDoctorRoster.shift2?.staffId === user!.id) {
-            shift = 'PM'; detectedType = 'doctor';
+          const onShift1 = todayDoctorRoster.shift1?.staffId === user!.id;
+          const onShift2 = todayDoctorRoster.shift2?.staffId === user!.id;
+          if (onShift1 || onShift2) {
+            detectedType = 'doctor';
+            if (onShift2 && currentHour >= 16) {
+              shift = 'PM';
+            } else if (onShift1) {
+              shift = 'AM';
+            } else {
+              shift = 'PM';
+            }
           }
         }
       }
