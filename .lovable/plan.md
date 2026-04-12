@@ -1,80 +1,89 @@
 
 
-## Refactor Roster Generator to Follow Staff Roster Criteria Framework
+## Include Hybrid Staff and Doctors in Daily Reporting + Real-time Sync
 
 ### Summary
 
-Rewrite the roster generation logic in `Roster.tsx` and update shift definitions in `rosterUtils.ts` to match the new criteria framework. Key changes: new shift times, hybrid staff back in regular pool, structured warning system, and strict rule priority enforcement.
+Three changes: (1) hybrid staff assigned in the support roster should see Shift 1 daily tasks, (2) non-locum doctors from the doctor roster should see selfie tasks for their assigned shifts, and (3) add real-time subscriptions so roster/report changes reflect immediately.
+
+### Current State
+
+- **DailyReportingCard** (staff-facing): Only checks support roster `shift1`/`shift2` arrays. Misses hybrid assignments and doctor roster entirely.
+- **DailyReportsSummary** (admin dashboard widget): Same — only support roster shifts.
+- **DailyTaskReview** (admin full review page): Same — only support roster shifts.
+- **Doctor roster structure**: `shift1` and `shift2` are single objects `{staffId, staffName}` (not arrays), `shift3` is locum.
+- **Support roster hybrid structure**: `hybrid?: {staffId, staffName}[]` — currently ignored by all daily reporting components.
 
 ### Changes
 
-**1. Update shift times** (`src/lib/rosterUtils.ts` + `src/pages/staff/admin/Roster.tsx`)
+**1. DailyReportingCard.tsx — Staff-facing card**
 
-| Shift | Current | New |
-|-------|---------|-----|
-| Shift 1 (AM) | 8am–2pm (6h) or 8am–4pm (8h, display only) | **8:00 AM – 4:00 PM = 8 hours** |
-| Shift 2 (PM) | 2pm–8pm (6h) or 4pm–12am (display only) | **4:00 PM – 12:00 AM = 8 hours** |
-| Hybrid | 8am–2pm (6h) | **8:00 AM – 1:00 PM = 5 hours** |
+- Fetch both `support` and `doctor` rosters in parallel
+- Check support roster: if user is in `hybrid` array → treat as AM shift (selfie only, no stock/blast tasks since hybrid = different role)
+- Check doctor roster: if user is in `shift1` or `shift2` (single objects, not arrays) AND user is not in `shift3` (locum) → show selfie task only for their shift
+- Doctors get **selfie task only** (no stock photos, no WhatsApp blasts)
+- Hybrid staff get **all Shift 1 tasks** (selfie, stock photos, WhatsApp blasts) — they work AM shift (8am–1pm)
+- Add a `userType` state: `'staff'` | `'hybrid'` | `'doctor'` to control which tasks are shown
+- Upload windows for hybrid: same as AM shift (selfie 8–9am, stock 8–10am)
+- Upload windows for doctors: shift-dependent (AM: 8–9am, PM: 4–5pm based on new shift times)
+- Add Supabase realtime subscription on `saved_rosters` and `daily_reports` tables to auto-refresh on changes
 
-- Update `SHIFT_HOURS` (already 8, correct), `HYBRID_HOURS` from 6 to 5
-- Update `SHIFT_TIMES` in `rosterUtils.ts`: S1 end to `16:00`, S2 start to `16:00` end to `00:00`, Hybrid end to `13:00`
-- Update all display labels in both files
+**2. DailyReportsSummary.tsx — Admin dashboard widget**
 
-**2. Hybrid staff back in regular shift pool** (`Roster.tsx`)
+- Fetch doctor roster alongside support roster
+- Include hybrid staff from support roster under AM shift
+- Include non-locum doctors under their respective shifts (selfie-only column tracking)
+- Add a "Type" indicator (Staff/Hybrid/Doctor) in the table
+- Add realtime subscription on `saved_rosters` and `daily_reports` for auto-refresh
 
-Currently `pickStaff()` filters out hybrid staff with `!isHybrid(s.id)`. Remove this filter so hybrid-designated staff are eligible for Shift 1/2 auto-assignment. The hybrid row remains manual-only (no change there).
+**3. DailyTaskReview.tsx — Admin full review page**
 
-**3. Rewrite `generateRoster()` with strict priority order** (`Roster.tsx`)
+- Fetch doctor roster alongside support roster
+- Merge hybrid staff into AM entries
+- Merge non-locum doctors into their shift entries
+- Add "Type" column to distinguish staff/hybrid/doctor
+- Doctor rows show selfie status only; stock and blast columns show "N/A"
+- Add realtime subscription for auto-refresh
 
-Restructure the generator to follow this priority:
+**4. Enable realtime on saved_rosters table** (migration)
 
-1. **Permanent off days** — absolute hard block, never bypassed
-2. **Minimum staffing** — Shift 1: min 1, Shift 2: min 2 (new defaults, replace current equal `staffPerShift` for both)
-3. **Max consecutive days** — 6-day limit; may breach only when all others unavailable AND slot would be understaffed AND breach is recorded as exception warning
-4. **Manual hybrid** — preserve existing hybrid assignments (already done)
-5. **Staff-per-shift config** — use configured number but apply min-staffing floor
-6. **OT threshold** — soft filter, relax if needed
-7. **Fairness** — weighted pick among eligible
+- `ALTER PUBLICATION supabase_realtime ADD TABLE public.saved_rosters;`
+- `daily_reports` may already need to be added too: `ALTER PUBLICATION supabase_realtime ADD TABLE public.daily_reports;`
 
-The `pickStaff()` function changes:
-- Accept separate min counts per shift (shift1: 1, shift2: 2 default)
-- Eligibility filter order: off day → already assigned → weekday S2 restriction → consecutive days (with exception logic) → OT threshold (soft)
-- When consecutive-day breach happens, add a compliance warning
+### Determining Locum Doctors
 
-**4. Add separate min staffing per shift** (`Roster.tsx`)
+The doctor roster `staff_list` includes all doctors. To identify locum:
+- Option A: Check if doctor is assigned to `shift3` in the roster (shift3 = locum slot). This is simpler and already available in roster data.
+- Option B: Query `staff_payroll_profiles.employment_type = 'locum'`.
 
-Replace single `staffPerShift` state with `staffPerShift1` (default 1) and `staffPerShift2` (default 2). Update UI to show two separate selectors. Keep the auto-adjust logic for ≤4 staff.
+Will use **Option A** — if a doctor only ever appears in `shift3`, they are locum and excluded. For `shift1`/`shift2` assignments, the doctor is non-locum by definition.
 
-**5. Structured warning system** (`Roster.tsx`)
+### Technical Details
 
-Replace flat `warnings` string array with categorized warnings:
-
+**Doctor roster data structure** (single objects, not arrays):
 ```typescript
-interface RosterWarning {
-  type: 'coverage' | 'compliance' | 'info';
-  message: string;
+{
+  "2026-04-12": {
+    "shift1": { "staffId": "...", "staffName": "..." },
+    "shift2": { "staffId": "...", "staffName": "..." },
+    "shift3": { "staffId": "...", "staffName": "Locum" }
+  }
 }
 ```
 
-- **Coverage**: empty slot, shift below minimum
-- **Compliance**: exceeded 6 consecutive days (exception), assigned despite restriction, OT exceeded
-- **Info**: partial week below threshold, manual hybrid affecting balance
-
-Display warnings grouped by type with color-coded badges (red for coverage, orange for compliance, blue for info).
-
-**6. Enhanced summary table** (`Roster.tsx`)
-
-Add columns: total Shift 1 count, total Shift 2 count, total working days. Currently only shows total shifts + hybrid shifts + total hours + OT status.
-
-**7. Update balancing passes** (`Roster.tsx`)
-
-- Top-up pass: must respect off days (already does), must also respect consecutive-day limit
-- Global balancing pass: must respect off days (already does), add consecutive-day check before swapping
+**Realtime subscription pattern:**
+```typescript
+const channel = supabase
+  .channel('roster-reports')
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'saved_rosters' }, () => fetchData())
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_reports' }, () => fetchData())
+  .subscribe();
+```
 
 ### Files Changed
 
-- `src/pages/staff/admin/Roster.tsx` — main refactor
-- `src/lib/rosterUtils.ts` — shift time definitions
-
-### No database changes needed
+- `src/components/staff/DailyReportingCard.tsx` — add hybrid + doctor roster checks, conditional task display, realtime
+- `src/components/staff/DailyReportsSummary.tsx` — merge doctor + hybrid data, realtime
+- `src/pages/staff/admin/DailyTaskReview.tsx` — merge doctor + hybrid data, type column, realtime
+- Migration: enable realtime on `saved_rosters` and `daily_reports`
 
