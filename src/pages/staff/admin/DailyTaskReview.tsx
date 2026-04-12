@@ -186,6 +186,7 @@ export default function DailyTaskReview() {
         if (!stats[entry.staffId]) {
           stats[entry.staffId] = { total: 0, selfie: 0, stock1: 0, stock2: 0, blastMet: 0, type: entry.type };
         }
+        stats[entry.staffId].total++;
         const r = reportMap.get(`${entry.staffId}-${dateKey}`);
         const selfieUrl = entry.shift === 'PM' ? r?.evening_selfie_url : r?.briefing_selfie_url;
         if (selfieUrl) stats[entry.staffId].selfie++;
@@ -211,7 +212,7 @@ export default function DailyTaskReview() {
           `"${entry.staffName}"`,
           entry.type,
           entry.shift,
-          r?.briefing_selfie_url ? 'Yes' : 'No',
+          (entry.shift === 'PM' ? r?.evening_selfie_url : r?.briefing_selfie_url) ? 'Yes' : 'No',
           isDoctor ? 'N/A' : (r?.stock_photo_1_url ? 'Yes' : 'No'),
           isDoctor ? 'N/A' : (r?.stock_photo_2_url ? 'Yes' : 'No'),
           isDoctor ? 'N/A' : String(r?.whatsapp_blast_count || 0),
