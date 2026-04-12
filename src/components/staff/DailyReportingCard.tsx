@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 interface DailyReport {
   id?: string;
   briefing_selfie_url: string | null;
+  evening_selfie_url: string | null;
   stock_photo_1_url: string | null;
   stock_photo_2_url: string | null;
   whatsapp_blast_count: number;
