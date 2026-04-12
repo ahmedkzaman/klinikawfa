@@ -12,7 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import {
-  CalendarDays, Plus, Trash2, RefreshCw, Download, Printer, AlertTriangle, X, Users, Settings2, Shuffle, Stethoscope, UserCog, ChevronLeft, ChevronRight, Save
+  CalendarDays, Plus, Trash2, RefreshCw, Download, Printer, AlertTriangle, X, Users, Settings2, Shuffle, Stethoscope, UserCog, ChevronLeft, ChevronRight, Save, Info, ShieldAlert
 } from 'lucide-react';
 import DoctorRosterPanel from '@/components/staff/roster/DoctorRosterPanel';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, getISOWeek, isWeekend } from 'date-fns';
@@ -35,9 +35,12 @@ interface RosterData {
 
 interface StaffSummary {
   name: string;
-  totalShifts: number;
-  totalHours: number;
+  shift1Count: number;
+  shift2Count: number;
   hybridShifts: number;
+  totalShifts: number;
+  totalWorkingDays: number;
+  totalHours: number;
   isOvertime: boolean;
 }
 
@@ -48,8 +51,13 @@ interface RosterSettings {
   };
 }
 
+interface RosterWarning {
+  type: 'coverage' | 'compliance' | 'info';
+  message: string;
+}
+
 const SHIFT_HOURS = 8;
-const HYBRID_HOURS = 6; // 8am-2pm
+const HYBRID_HOURS = 5; // 8am-1pm
 const OT_THRESHOLD = 45; // hours per week
 const MAX_CONSECUTIVE_DAYS = 6;
 const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -60,6 +68,54 @@ const SUPPORT_POSITIONS = ['Clinic Assistant', 'Staff Nurse', 'Medical Assistant
 
 function firstName(name: string) {
   return name.split(' ')[0];
+}
+
+// ─── Warning display helpers ────────────────────────────────────────
+
+function WarningSection({ warnings }: { warnings: RosterWarning[] }) {
+  const coverage = warnings.filter(w => w.type === 'coverage');
+  const compliance = warnings.filter(w => w.type === 'compliance');
+  const info = warnings.filter(w => w.type === 'info');
+
+  if (warnings.length === 0) return null;
+
+  return (
+    <div className="space-y-3 mb-4">
+      {coverage.length > 0 && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <p className="font-medium text-xs mb-1">Coverage Warnings ({coverage.length})</p>
+            <ul className="text-xs space-y-0.5 list-disc list-inside max-h-32 overflow-y-auto">
+              {coverage.map((w, i) => <li key={i}>{w.message}</li>)}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
+      {compliance.length > 0 && (
+        <Alert className="border-orange-300 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-800">
+          <ShieldAlert className="h-4 w-4 text-orange-600" />
+          <AlertDescription>
+            <p className="font-medium text-xs mb-1 text-orange-800 dark:text-orange-300">Compliance Warnings ({compliance.length})</p>
+            <ul className="text-xs space-y-0.5 list-disc list-inside max-h-32 overflow-y-auto text-orange-700 dark:text-orange-400">
+              {compliance.map((w, i) => <li key={i}>{w.message}</li>)}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
+      {info.length > 0 && (
+        <Alert className="border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800">
+          <Info className="h-4 w-4 text-blue-600" />
+          <AlertDescription>
+            <p className="font-medium text-xs mb-1 text-blue-800 dark:text-blue-300">Informational ({info.length})</p>
+            <ul className="text-xs space-y-0.5 list-disc list-inside max-h-32 overflow-y-auto text-blue-700 dark:text-blue-400">
+              {info.map((w, i) => <li key={i}>{w.message}</li>)}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
+    </div>
+  );
 }
 
 // ─── Reusable Roster Panel ───────────────────────────────────────────
@@ -82,9 +138,10 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   const [roster, setRoster] = useState<RosterData | null>(null);
-  const [warnings, setWarnings] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<RosterWarning[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
-  const [staffPerShift, setStaffPerShift] = useState(2);
+  const [staffPerShift1, setStaffPerShift1] = useState(1);
+  const [staffPerShift2, setStaffPerShift2] = useState(2);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
@@ -136,7 +193,17 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
         if (data.staff_list && (data.staff_list as unknown as StaffMember[]).length > 0) {
           setStaffList(data.staff_list as unknown as StaffMember[]);
         }
-        setWarnings((data.warnings as unknown as string[]) || []);
+        // Convert legacy flat warnings to structured format
+        const loadedWarnings = data.warnings as unknown as any[];
+        if (loadedWarnings && loadedWarnings.length > 0) {
+          if (typeof loadedWarnings[0] === 'string') {
+            setWarnings(loadedWarnings.map((w: string) => ({ type: 'info' as const, message: w })));
+          } else {
+            setWarnings(loadedWarnings as RosterWarning[]);
+          }
+        } else {
+          setWarnings([]);
+        }
         setSavedAt(data.updated_at);
         toast.info('Saved roster loaded');
       } else {
@@ -246,6 +313,8 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
     });
   }, [staffList, rosterSettings]);
 
+  // ─── ROSTER GENERATION — Staff Roster Criteria Framework ───────────
+
   const generateRoster = () => {
     if (staffList.length === 0) { toast.error('Add at least one staff member first'); return; }
 
@@ -264,16 +333,23 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
       weekHours[staffId][week] = (weekHours[staffId][week] || 0) + hours;
     };
 
-    const newWarnings: string[] = [];
+    const newWarnings: RosterWarning[] = [];
 
     // Sort days chronologically for consecutive tracking
     const sortedDays = [...monthDays].sort((a, b) => a.getTime() - b.getTime());
 
-    // Helper: check if staff has off day on a specific day of week (used in both passes)
+    // Helper: check if staff has off day on a specific day of week
     const isOffDayOn = (staffId: string, dow: number) => {
       const setting = rosterSettings[staffId];
       return setting?.permanentOffDays?.includes(dow) || false;
     };
+
+    // Determine effective staff per shift (auto-adjust for low headcount)
+    const effectiveS1Count = staffList.length <= 4 ? 1 : staffPerShift1;
+    const effectiveS2Count = staffList.length <= 4 ? 2 : staffPerShift2;
+    // Minimum staffing floors (hard rule 1.2)
+    const minS1 = 1;
+    const minS2 = 2;
 
     for (const day of sortedDays) {
       const dateKey = format(day, 'yyyy-MM-dd');
@@ -289,24 +365,19 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
         return total;
       };
 
-      // Check if staff has permanent off day (uses outer isOffDayOn)
+      // HARD RULE 1.1: Check permanent off day — never bypassed
       const isOffDay = (staffId: string) => isOffDayOn(staffId, dayOfWeek);
 
-      // Check if staff must rest (6 consecutive day limit)
-      const mustRest = (staffId: string) => {
+      // HARD RULE 1.3: Check consecutive day limit
+      const isAtConsecutiveLimit = (staffId: string) => {
         return (consecutiveDays[staffId] || 0) >= MAX_CONSECUTIVE_DAYS;
-      };
-
-      // Check if staff is hybrid
-      const isHybrid = (staffId: string) => {
-        const setting = rosterSettings[staffId];
-        return setting?.hybridType === 'purchaser' || setting?.hybridType === 'housecall_nurse';
       };
 
       const weightedRandomPick = (pool: StaffMember[]): StaffMember => {
         if (pool.length === 1) return pool[0];
         const monthHours = pool.map(s => getMonthHours(s.id));
         const maxH = Math.max(...monthHours, 1);
+        // Favor staff with lower monthly hours
         const weights = pool.map((s, i) => maxH - monthHours[i] + 1);
         const totalWeight = weights.reduce((a, b) => a + b, 0);
         let r = Math.random() * totalWeight;
@@ -317,12 +388,10 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
         return pool[pool.length - 1];
       };
 
-      // ─── Hybrid row is manual — preserve existing assignments, don't auto-populate ───
+      // ─── RULE 1.6: Hybrid row is manual — preserve existing, don't auto-populate ───
       const hybridCells: RosterCell[] = [];
-      // If re-generating and there are existing hybrid assignments, preserve them
       if (roster && roster[dateKey]?.hybrid) {
         for (const existing of roster[dateKey].hybrid!) {
-          // Only keep if still a valid hybrid staff and not on off day
           if (hybridStaff.some(hs => hs.id === existing.staffId) && !isOffDay(existing.staffId)) {
             hybridCells.push(existing);
             assignedToday.add(existing.staffId);
@@ -331,65 +400,97 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
         }
       }
 
+      // ─── pickStaff: strict priority-ordered eligibility ───
       const pickStaff = (shiftNum: 1 | 2): RosterCell[] => {
         const cells: RosterCell[] = [];
-        const countForShift = staffList.length <= 4
-          ? (shiftNum === 1 ? 1 : 2)
-          : staffPerShift;
-        for (let i = 0; i < countForShift; i++) {
-          // Filter: not assigned today, not on off day, not at consecutive limit, not hybrid (they do hybrid shift)
+        const targetCount = shiftNum === 1 ? effectiveS1Count : effectiveS2Count;
+        const minCount = shiftNum === 1 ? minS1 : minS2;
+        const slotsNeeded = Math.max(targetCount, minCount);
+
+        for (let i = 0; i < slotsNeeded; i++) {
+          // RULE 1.5: Hybrid staff ARE eligible for regular shifts (not excluded)
+          // Priority 1: Filter by permanent off day (NEVER bypassed)
           let eligible = staffList.filter(s =>
             !assignedToday.has(s.id) &&
-            !isOffDay(s.id) &&
-            !mustRest(s.id) &&
-            !isHybrid(s.id)
+            !isOffDay(s.id)
           );
 
+          // Priority 5: Apply weekday Shift 2 restriction (soft rule 2.2)
           if (weekdayConstraintEnabled && isWeekday && shiftNum === 2) {
-            eligible = eligible.filter(s => !constrainedStaffIds.includes(s.id));
+            const unrestricted = eligible.filter(s => !constrainedStaffIds.includes(s.id));
+            if (unrestricted.length > 0) eligible = unrestricted;
           }
 
+          // Priority 3: Apply consecutive day limit
+          const underLimit = eligible.filter(s => !isAtConsecutiveLimit(s.id));
+
+          // Priority 6: Apply OT threshold (soft)
+          let pool: StaffMember[];
           if (maxHoursEnabled) {
-            eligible = eligible.filter(s => getWeekHours(s.id, isoWeek) + SHIFT_HOURS <= OT_THRESHOLD);
+            const underOT = underLimit.filter(s => getWeekHours(s.id, isoWeek) + SHIFT_HOURS <= OT_THRESHOLD);
+            pool = underOT.length > 0 ? underOT : underLimit;
+          } else {
+            pool = underLimit;
           }
 
-          // Fallback: relax hour cap but keep off day + consecutive
-          if (eligible.length === 0) {
-            eligible = staffList.filter(s =>
-              !assignedToday.has(s.id) &&
-              !isOffDay(s.id) &&
-              !mustRest(s.id) &&
-              !isHybrid(s.id)
-            );
-            if (weekdayConstraintEnabled && isWeekday && shiftNum === 2) {
-              eligible = eligible.filter(s => !constrainedStaffIds.includes(s.id));
+          // RULE 1.3 exception: If no staff under consecutive limit, allow breach
+          // but ONLY if leaving empty would cause understaffing
+          if (pool.length === 0 && eligible.length > 0) {
+            const filledSoFar = cells.length;
+            const wouldBeUnderstaffed = filledSoFar < minCount;
+
+            if (wouldBeUnderstaffed) {
+              // Breach allowed — record as roster exception
+              pool = eligible;
+              const pick = weightedRandomPick(pool);
+              newWarnings.push({
+                type: 'compliance',
+                message: `${format(day, 'dd MMM')} Shift ${shiftNum}: ${firstName(pick.name)} exceeds ${MAX_CONSECUTIVE_DAYS} consecutive days (exception — no other eligible staff)`
+              });
+              assignedToday.add(pick.id);
+              addWeekHours(pick.id, isoWeek, SHIFT_HOURS);
+              cells.push({ staffId: pick.id, staffName: pick.name });
+              continue;
             }
+            // Not understaffed — prefer empty slot (RULE 1.4)
           }
 
-          // Fallback 2: relax consecutive but keep off day as HARD rule
-          if (eligible.length === 0) {
-            eligible = staffList.filter(s => !assignedToday.has(s.id) && !isOffDay(s.id) && !isHybrid(s.id));
-          }
-
-          // No more unsafe fallbacks — off days are never bypassed
-          if (eligible.length === 0) {
-            newWarnings.push(`${format(day, 'dd MMM')} Shift ${shiftNum}: Not enough eligible staff — slot left empty to respect off-day rules`);
-          }
-
-          if (eligible.length > 0) {
-            const below45 = eligible.filter(s => getWeekHours(s.id, isoWeek) < OT_THRESHOLD);
-            const pool = below45.length > 0 ? below45 : eligible;
-            const pick = weightedRandomPick(pool);
-
-            if (getWeekHours(pick.id, isoWeek) + SHIFT_HOURS > OT_THRESHOLD) {
-              newWarnings.push(`${format(day, 'dd MMM')} Shift ${shiftNum}: ${firstName(pick.name)} exceeds ${OT_THRESHOLD}h in week ${isoWeek} (OT)`);
+          // RULE 1.4: Empty slot over invalid assignment
+          if (pool.length === 0) {
+            if (cells.length < minCount) {
+              newWarnings.push({
+                type: 'coverage',
+                message: `${format(day, 'dd MMM')} Shift ${shiftNum}: Not enough eligible staff — slot left empty (minimum ${minCount} required)`
+              });
             }
-
-            assignedToday.add(pick.id);
-            addWeekHours(pick.id, isoWeek, SHIFT_HOURS);
-            cells.push({ staffId: pick.id, staffName: pick.name });
+            continue;
           }
+
+          // Priority 7: Weighted fair pick among eligible
+          const below45 = pool.filter(s => getWeekHours(s.id, isoWeek) < OT_THRESHOLD);
+          const finalPool = below45.length > 0 ? below45 : pool;
+          const pick = weightedRandomPick(finalPool);
+
+          if (getWeekHours(pick.id, isoWeek) + SHIFT_HOURS > OT_THRESHOLD) {
+            newWarnings.push({
+              type: 'compliance',
+              message: `${format(day, 'dd MMM')} Shift ${shiftNum}: ${firstName(pick.name)} exceeds ${OT_THRESHOLD}h in week ${isoWeek} (OT)`
+            });
+          }
+
+          assignedToday.add(pick.id);
+          addWeekHours(pick.id, isoWeek, SHIFT_HOURS);
+          cells.push({ staffId: pick.id, staffName: pick.name });
         }
+
+        // Check if minimum staffing met
+        if (cells.length < minCount) {
+          newWarnings.push({
+            type: 'coverage',
+            message: `${format(day, 'dd MMM')} Shift ${shiftNum}: Below minimum staffing (${cells.length}/${minCount})`
+          });
+        }
+
         return cells;
       };
 
@@ -404,7 +505,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
         if (assignedToday.has(s.id)) {
           consecutiveDays[s.id] = (consecutiveDays[s.id] || 0) + 1;
         } else {
-          consecutiveDays[s.id] = 0; // Reset on rest day
+          consecutiveDays[s.id] = 0;
         }
       });
     }
@@ -430,13 +531,29 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
         [...r.shift1, ...r.shift2].forEach(cell => {
           if (cell.staffId) addWeekHours(cell.staffId, isoWeek, SHIFT_HOURS);
         });
-        // Count hybrid hours
         if (r.hybrid) {
           r.hybrid.forEach(cell => {
             if (cell.staffId) addWeekHours(cell.staffId, isoWeek, HYBRID_HOURS);
           });
         }
       }
+
+      // Recalculate consecutive days for top-up pass checks
+      const recalcConsecutive = () => {
+        const cons: Record<string, number> = {};
+        staffList.forEach(s => { cons[s.id] = 0; });
+        for (const day of sortedDays) {
+          const dateKey = format(day, 'yyyy-MM-dd');
+          const r = newRoster[dateKey];
+          if (!r) continue;
+          const assignedIds = new Set([...r.shift1, ...r.shift2, ...(r.hybrid || [])].map(c => c.staffId));
+          staffList.forEach(s => {
+            if (assignedIds.has(s.id)) cons[s.id]++;
+            else cons[s.id] = 0;
+          });
+        }
+        return cons;
+      };
 
       let changed = true;
       let iterations = 0;
@@ -462,9 +579,13 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
               const assignedTodayIds = [...r.shift1, ...r.shift2, ...(r.hybrid || [])].map(c => c.staffId);
               if (assignedTodayIds.includes(under.id)) continue;
 
-              // Respect permanent off days during balancing pass
+              // HARD RULE: Respect permanent off days during balancing
               const topUpDayOfWeek = getDay(day);
               if (isOffDayOn(under.id, topUpDayOfWeek)) continue;
+
+              // Check consecutive day limit before swapping
+              const currentCons = recalcConsecutive();
+              if (currentCons[under.id] >= MAX_CONSECUTIVE_DAYS) continue;
 
               for (const shiftKey of ['shift1', 'shift2'] as const) {
                 if (getWeekHours(under.id, week) >= OT_THRESHOLD) break;
@@ -496,16 +617,16 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
         }
       }
 
-      // Post top-up warnings
+      // Post top-up info warnings
       staffList.forEach(s => {
         allWeeks.forEach(week => {
           const hrs = getWeekHours(s.id, week);
           if (hrs > 0 && hrs < OT_THRESHOLD) {
             const daysInWeek = weekDaysMap[week]?.length || 0;
             if (daysInWeek < 7) {
-              newWarnings.push(`${s.name}: ${hrs}h in week ${week} (partial week — ${daysInWeek} days in month)`);
+              newWarnings.push({ type: 'info', message: `${s.name}: ${hrs}h in week ${week} (partial week — ${daysInWeek} days in month)` });
             } else {
-              newWarnings.push(`${s.name}: Only ${hrs}h in week ${week} (below ${OT_THRESHOLD}h minimum)`);
+              newWarnings.push({ type: 'info', message: `${s.name}: Only ${hrs}h in week ${week} (below ${OT_THRESHOLD}h)` });
             }
           }
         });
@@ -524,14 +645,29 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
         return total;
       };
 
+      // Recalculate consecutive for balancing
+      const getConsecutiveOnDate = (sid: string, targetDate: Date): number => {
+        let count = 0;
+        for (const day of sortedDays) {
+          if (day > targetDate) break;
+          const dk = format(day, 'yyyy-MM-dd');
+          const r = newRoster[dk];
+          if (!r) continue;
+          const ids = [...r.shift1, ...r.shift2, ...(r.hybrid || [])].map(c => c.staffId);
+          if (ids.includes(sid)) count++;
+          else count = 0;
+        }
+        return count;
+      };
+
       let balanceIter = 0;
       let improved = true;
       while (improved && balanceIter < 200) {
         improved = false;
         balanceIter++;
-        const nonHybridStaff = staffList.filter(s => !rosterSettings[s.id]?.hybridType);
-        if (nonHybridStaff.length < 2) break;
-        const monthHrs = nonHybridStaff.map(s => ({ id: s.id, name: s.name, hours: calcMonthHours(s.id) }));
+        // Include all staff in balancing (hybrid staff are in regular pool now)
+        if (staffList.length < 2) break;
+        const monthHrs = staffList.map(s => ({ id: s.id, name: s.name, hours: calcMonthHours(s.id) }));
         monthHrs.sort((a, b) => b.hours - a.hours);
         const highest = monthHrs[0];
         const lowest = monthHrs[monthHrs.length - 1];
@@ -545,9 +681,13 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
           if (!todayIds.includes(highest.id)) continue;
           if (todayIds.includes(lowest.id)) continue;
 
-          // Hard rule: never swap someone onto their off day
+          // HARD RULE 1.1: Never swap someone onto their off day
           const balanceDow = getDay(day);
           if (isOffDayOn(lowest.id, balanceDow)) continue;
+
+          // Check consecutive day limit for the swap target
+          const consCount = getConsecutiveOnDate(lowest.id, day);
+          if (consCount >= MAX_CONSECUTIVE_DAYS) continue;
 
           for (const shiftKey of ['shift1', 'shift2'] as const) {
             const cells = r[shiftKey];
@@ -572,8 +712,10 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
 
     setRoster(newRoster);
     setWarnings(newWarnings);
+    const coverageCount = newWarnings.filter(w => w.type === 'coverage').length;
+    const complianceCount = newWarnings.filter(w => w.type === 'compliance').length;
     if (newWarnings.length === 0) toast.success('Roster generated successfully!');
-    else toast.warning(`Roster generated with ${newWarnings.length} warning(s)`);
+    else toast.warning(`Roster generated — ${coverageCount} coverage, ${complianceCount} compliance, ${newWarnings.length - coverageCount - complianceCount} info warning(s)`);
   };
 
   const clearRoster = () => { setRoster(null); setWarnings([]); };
@@ -601,7 +743,6 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
     const staff = hybridStaff.find(s => s.id === staffId);
     if (!staff) return;
 
-    // Check off-day
     const day = new Date(dateKey + 'T00:00:00');
     const dow = getDay(day);
     const setting = rosterSettings[staffId];
@@ -630,15 +771,28 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
   const getSummary = (): StaffSummary[] => {
     if (!roster) return [];
     const hours: Record<string, number> = {};
-    const shifts: Record<string, number> = {};
+    const s1Count: Record<string, number> = {};
+    const s2Count: Record<string, number> = {};
     const hybridShiftsCount: Record<string, number> = {};
-    staffList.forEach(s => { hours[s.id] = 0; shifts[s.id] = 0; hybridShiftsCount[s.id] = 0; });
+    const workingDays: Record<string, Set<string>> = {};
+    staffList.forEach(s => {
+      hours[s.id] = 0; s1Count[s.id] = 0; s2Count[s.id] = 0;
+      hybridShiftsCount[s.id] = 0; workingDays[s.id] = new Set();
+    });
     for (const dateKey of Object.keys(roster)) {
       const r = roster[dateKey];
-      [...r.shift1, ...r.shift2].forEach(cell => {
+      r.shift1.forEach(cell => {
         if (cell.staffId) {
           hours[cell.staffId] = (hours[cell.staffId] || 0) + SHIFT_HOURS;
-          shifts[cell.staffId] = (shifts[cell.staffId] || 0) + 1;
+          s1Count[cell.staffId] = (s1Count[cell.staffId] || 0) + 1;
+          workingDays[cell.staffId]?.add(dateKey);
+        }
+      });
+      r.shift2.forEach(cell => {
+        if (cell.staffId) {
+          hours[cell.staffId] = (hours[cell.staffId] || 0) + SHIFT_HOURS;
+          s2Count[cell.staffId] = (s2Count[cell.staffId] || 0) + 1;
+          workingDays[cell.staffId]?.add(dateKey);
         }
       });
       if (r.hybrid) {
@@ -646,15 +800,19 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
           if (cell.staffId) {
             hours[cell.staffId] = (hours[cell.staffId] || 0) + HYBRID_HOURS;
             hybridShiftsCount[cell.staffId] = (hybridShiftsCount[cell.staffId] || 0) + 1;
+            workingDays[cell.staffId]?.add(dateKey);
           }
         });
       }
     }
     return staffList.map(s => ({
       name: s.name,
-      totalShifts: shifts[s.id] || 0,
-      totalHours: hours[s.id] || 0,
+      shift1Count: s1Count[s.id] || 0,
+      shift2Count: s2Count[s.id] || 0,
+      totalShifts: (s1Count[s.id] || 0) + (s2Count[s.id] || 0),
       hybridShifts: hybridShiftsCount[s.id] || 0,
+      totalWorkingDays: workingDays[s.id]?.size || 0,
+      totalHours: hours[s.id] || 0,
       isOvertime: (hours[s.id] || 0) > OT_THRESHOLD * Math.ceil(monthDays.length / 7),
     }));
   };
@@ -669,7 +827,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
 
     const shift1Row = ['Shift 1 (8am-4pm)'];
     const shift2Row = ['Shift 2 (4pm-12am)'];
-    const hybridRow = ['Hybrid (8am-2pm)'];
+    const hybridRow = ['Hybrid (8am-1pm)'];
     for (const day of monthDays) {
       const key = format(day, 'yyyy-MM-dd');
       const r = roster[key];
@@ -681,9 +839,9 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
     rows.push(shift2Row.join(','));
     if (hybridStaff.length > 0) rows.push(hybridRow.join(','));
     rows.push('');
-    rows.push('Staff,Total Shifts,Hybrid Shifts,Total Hours');
+    rows.push('Staff,Shift 1,Shift 2,Hybrid,Working Days,Total Hours,Status');
     getSummary().forEach(s => {
-      rows.push(`${s.name},${s.totalShifts},${s.hybridShifts},${s.totalHours}`);
+      rows.push(`${s.name},${s.shift1Count},${s.shift2Count},${s.hybridShifts},${s.totalWorkingDays},${s.totalHours},${s.isOvertime ? 'OT' : 'Normal'}`);
     });
     if (fairnessMetrics) {
       rows.push('');
@@ -767,31 +925,45 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                 <Checkbox id={`maxHours-${rosterType}`} checked={maxHoursEnabled} onCheckedChange={(v) => setMaxHoursEnabled(!!v)} />
                 <div>
                    <Label htmlFor={`maxHours-${rosterType}`} className="text-sm font-medium">Working hours: max {OT_THRESHOLD} hours/week (OT beyond)</Label>
-                   <p className="text-xs text-muted-foreground">Normal ≤ {OT_THRESHOLD}h/week. Hours beyond are overtime. Max 6 consecutive working days enforced.</p>
+                   <p className="text-xs text-muted-foreground">Normal ≤ {OT_THRESHOLD}h/week. Hours beyond are overtime. Max {MAX_CONSECUTIVE_DAYS} consecutive working days enforced.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <Checkbox id={`fixedShift-${rosterType}`} checked={fixedShiftEnabled} onCheckedChange={(v) => setFixedShiftEnabled(!!v)} />
                 <div>
                   <Label htmlFor={`fixedShift-${rosterType}`} className="text-sm font-medium">Fixed shift hours</Label>
-                  <p className="text-xs text-muted-foreground">Shift 1: 8:00 AM – 4:00 PM · Shift 2: 4:00 PM – 12:00 AM</p>
+                  <p className="text-xs text-muted-foreground">Shift 1: 8:00 AM – 4:00 PM · Shift 2: 4:00 PM – 12:00 AM · Hybrid: 8:00 AM – 1:00 PM</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <Checkbox id={`weekdayConstraint-${rosterType}`} checked={weekdayConstraintEnabled} onCheckedChange={(v) => setWeekdayConstraintEnabled(!!v)} />
                 <div>
-                  <Label htmlFor={`weekdayConstraint-${rosterType}`} className="text-sm font-medium">Weekday Shift 1 restriction</Label>
-                  <p className="text-xs text-muted-foreground">Selected staff can only work Shift 1 on weekdays, but can be assigned Shift 2 on weekends</p>
+                  <Label htmlFor={`weekdayConstraint-${rosterType}`} className="text-sm font-medium">Weekday Shift 2 restriction</Label>
+                  <p className="text-xs text-muted-foreground">Selected staff shall not be assigned to Shift 2 from Monday to Friday</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 pt-2 border-t">
-                <Label className="text-sm font-medium whitespace-nowrap">Staff per shift:</Label>
-                <Select value={String(staffPerShift)} onValueChange={v => setStaffPerShift(Number(v))}>
-                  <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {[1, 2, 3, 4, 5].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+              <div className="flex flex-wrap items-center gap-3 pt-2 border-t">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-medium whitespace-nowrap">Shift 1 staff:</Label>
+                  <Select value={String(staffPerShift1)} onValueChange={v => setStaffPerShift1(Number(v))}>
+                    <SelectTrigger className="w-16"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-medium whitespace-nowrap">Shift 2 staff:</Label>
+                  <Select value={String(staffPerShift2)} onValueChange={v => setStaffPerShift2(Number(v))}>
+                    <SelectTrigger className="w-16"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {staffList.length <= 4 && staffList.length > 0 && (
+                  <span className="text-xs text-muted-foreground">(Auto-adjusted: S1=1, S2=2 due to ≤4 staff)</span>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -799,10 +971,10 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
           {weekdayConstraintEnabled && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Weekday Shift 1 Only Staff</CardTitle>
+                <CardTitle className="text-lg">Weekday Shift 2 Restricted Staff</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-xs text-muted-foreground mb-3">Select staff who can only work Shift 1 on weekdays (Mon–Fri). They can still be assigned Shift 2 on weekends.</p>
+                <p className="text-xs text-muted-foreground mb-3">Select staff who shall not be assigned to Shift 2 on weekdays (Mon–Fri).</p>
                 <div className="space-y-2 max-h-48 overflow-y-auto">
                   {staffList.map(s => (
                     <div key={s.id} className="flex items-center gap-3">
@@ -825,7 +997,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
           <CardTitle className="text-lg flex items-center gap-2"><Settings2 className="h-5 w-5" /> Staff Settings (Hybrid & Off Days)</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-xs text-muted-foreground mb-4">Configure hybrid roles and permanent weekly off days for each staff member. These settings are saved automatically.</p>
+          <p className="text-xs text-muted-foreground mb-4">Configure hybrid roles and permanent weekly off days. Hybrid staff remain eligible for regular shifts unless manually assigned via the hybrid row.</p>
           {settingsLoading ? (
             <p className="text-sm text-muted-foreground text-center py-4">Loading settings...</p>
           ) : staffList.length === 0 ? (
@@ -899,16 +1071,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
           </div>
         </CardHeader>
         <CardContent>
-          {warnings.length > 0 && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                <ul className="text-xs space-y-1 list-disc list-inside max-h-40 overflow-y-auto">
-                  {warnings.map((w, i) => <li key={i}>{w}</li>)}
-                </ul>
-              </AlertDescription>
-            </Alert>
-          )}
+          <WarningSection warnings={warnings} />
 
           {roster ? (
             <div ref={printRef} className="space-y-6">
@@ -1006,12 +1169,12 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                         );
                       })}
                     </TableRow>
-                    {/* Hybrid Row — manual assignment with checkboxes */}
+                    {/* Hybrid Row — manual assignment */}
                     {hybridStaff.length > 0 && (
                       <TableRow>
                         <TableCell className="font-medium bg-blue-50 dark:bg-blue-950/30 sticky left-0 z-10">
                           <div className="text-xs">Hybrid</div>
-                          <div className="text-[10px] text-muted-foreground">8am–2pm</div>
+                          <div className="text-[10px] text-muted-foreground">8am–1pm</div>
                         </TableCell>
                         {monthDays.map(day => {
                           const dateKey = format(day, 'yyyy-MM-dd');
@@ -1074,15 +1237,17 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                 </Table>
               </div>
 
-              {/* Summary */}
+              {/* Enhanced Summary */}
               <div>
                 <h3 className="text-sm font-semibold mb-2">Monthly Summary — {monthLabel}</h3>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Staff</TableHead>
-                      <TableHead className="text-center">Total Shifts</TableHead>
-                      {hybridStaff.length > 0 && <TableHead className="text-center">Hybrid Shifts</TableHead>}
+                      <TableHead className="text-center">Shift 1</TableHead>
+                      <TableHead className="text-center">Shift 2</TableHead>
+                      {hybridStaff.length > 0 && <TableHead className="text-center">Hybrid</TableHead>}
+                      <TableHead className="text-center">Working Days</TableHead>
                       <TableHead className="text-center">Total Hours</TableHead>
                       <TableHead className="text-center">Status</TableHead>
                     </TableRow>
@@ -1091,8 +1256,10 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                     {summary.map(s => (
                       <TableRow key={s.name}>
                         <TableCell className="font-medium">{s.name}</TableCell>
-                        <TableCell className="text-center">{s.totalShifts}</TableCell>
+                        <TableCell className="text-center">{s.shift1Count}</TableCell>
+                        <TableCell className="text-center">{s.shift2Count}</TableCell>
                         {hybridStaff.length > 0 && <TableCell className="text-center">{s.hybridShifts}</TableCell>}
+                        <TableCell className="text-center">{s.totalWorkingDays}</TableCell>
                         <TableCell className="text-center">{s.totalHours}h</TableCell>
                         <TableCell className="text-center">
                           {s.isOvertime ? (
