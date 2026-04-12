@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CheckCircle, XCircle, ClipboardList, Download, Sun, Moon, Minus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { format, getDaysInMonth } from 'date-fns';
@@ -43,6 +44,7 @@ export default function DailyTaskReview() {
   const [blastTarget, setBlastTarget] = useState(5);
   const [loading, setLoading] = useState(true);
   const [allStaff, setAllStaff] = useState<{ id: string; name: string; type: EntryType }[]>([]);
+  const [previewImage, setPreviewImage] = useState<{ url: string; label: string } | null>(null);
 
   useEffect(() => { fetchData(); }, [selectedMonth, selectedYear]);
 
@@ -226,7 +228,13 @@ export default function DailyTaskReview() {
     toast.success('Report downloaded');
   };
 
-  const Check = () => <CheckCircle className="h-3.5 w-3.5 text-green-500" />;
+  const Check = ({ url, label }: { url?: string | null; label?: string }) => (
+    url ? (
+      <button onClick={() => setPreviewImage({ url, label: label || 'Photo' })} className="hover:scale-110 transition-transform">
+        <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+      </button>
+    ) : <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+  );
   const Cross = () => <XCircle className="h-3.5 w-3.5 text-red-400" />;
   const NA = () => <Minus className="h-3.5 w-3.5 text-muted-foreground" />;
 
@@ -343,9 +351,21 @@ export default function DailyTaskReview() {
                               }
                             </Badge>
                           </td>
-                          <td className="py-1.5 px-2 text-center">{r?.briefing_selfie_url ? <Check /> : <Cross />}</td>
-                          <td className="py-1.5 px-2 text-center">{isDoctor ? <NA /> : (r?.stock_photo_1_url ? <Check /> : <Cross />)}</td>
-                          <td className="py-1.5 px-2 text-center">{isDoctor ? <NA /> : (r?.stock_photo_2_url ? <Check /> : <Cross />)}</td>
+                          <td className="py-1.5 px-2 text-center">
+                            {r?.briefing_selfie_url
+                              ? <Check url={r.briefing_selfie_url} label={`${entry.staffName} — ${entry.shift === 'AM' ? 'Morning Briefing' : 'Evening Passover'} Selfie — ${dateKey}`} />
+                              : <Cross />}
+                          </td>
+                          <td className="py-1.5 px-2 text-center">
+                            {isDoctor ? <NA /> : (r?.stock_photo_1_url
+                              ? <Check url={r.stock_photo_1_url} label={`${entry.staffName} — Stock Photo 1 — ${dateKey}`} />
+                              : <Cross />)}
+                          </td>
+                          <td className="py-1.5 px-2 text-center">
+                            {isDoctor ? <NA /> : (r?.stock_photo_2_url
+                              ? <Check url={r.stock_photo_2_url} label={`${entry.staffName} — Stock Photo 2 — ${dateKey}`} />
+                              : <Cross />)}
+                          </td>
                           <td className="py-1.5 px-2 text-center">
                             {isDoctor ? (
                               <span className="text-muted-foreground">—</span>
@@ -412,6 +432,20 @@ export default function DailyTaskReview() {
           </CardContent>
         </Card>
       )}
+
+      {/* Image Preview Dialog */}
+      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-sm">{previewImage?.label}</DialogTitle>
+          </DialogHeader>
+          {previewImage && (
+            <div className="flex items-center justify-center">
+              <img src={previewImage.url} alt={previewImage.label} className="max-h-[70vh] w-auto rounded-md object-contain" />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

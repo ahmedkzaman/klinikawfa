@@ -500,6 +500,71 @@ export type Database = {
           },
         ]
       }
+      circular_notice_acknowledgements: {
+        Row: {
+          acknowledged_at: string
+          id: string
+          notice_id: string
+          user_id: string
+        }
+        Insert: {
+          acknowledged_at?: string
+          id?: string
+          notice_id: string
+          user_id: string
+        }
+        Update: {
+          acknowledged_at?: string
+          id?: string
+          notice_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "circular_notice_acknowledgements_notice_id_fkey"
+            columns: ["notice_id"]
+            isOneToOne: false
+            referencedRelation: "circular_notices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      circular_notices: {
+        Row: {
+          content: string
+          created_at: string
+          created_by: string
+          id: string
+          is_active: boolean
+          priority: string
+          published_at: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          created_by: string
+          id?: string
+          is_active?: boolean
+          priority?: string
+          published_at?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          is_active?: boolean
+          priority?: string
+          published_at?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       consultation_transcripts: {
         Row: {
           additional_notes: string | null
