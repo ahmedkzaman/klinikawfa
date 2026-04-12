@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CheckCircle, XCircle, ClipboardList, Settings2, Sun, Moon } from 'lucide-react';
+import { CheckCircle, XCircle, ClipboardList, Settings2, Sun, Moon, Minus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -14,10 +14,11 @@ interface StaffReport {
   userId: string;
   fullName: string;
   shift: 'AM' | 'PM';
+  type: 'Staff' | 'Hybrid' | 'Doctor';
   selfie: boolean;
-  stock1: boolean;
-  stock2: boolean;
-  blastCount: number;
+  stock1: boolean | null; // null = N/A for doctors
+  stock2: boolean | null;
+  blastCount: number | null; // null = N/A for doctors
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -39,15 +40,33 @@ export default function DailyReportsSummary() {
     fetchData();
   }, [selectedMonth, selectedYear]);
 
+  // Real-time subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel('daily-reports-summary')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'saved_rosters' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_reports' }, () => fetchData())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [selectedMonth, selectedYear]);
+
   const fetchData = async () => {
     setLoading(true);
 
-    // Fetch roster, daily reports, and blast target setting
-    const [rosterRes, settingRes] = await Promise.all([
+    // Fetch support roster, doctor roster, and blast target setting
+    const [supportRosterRes, doctorRosterRes, settingRes] = await Promise.all([
       supabase
         .from('saved_rosters')
         .select('roster_data, staff_list')
         .eq('roster_type', 'support')
+        .eq('month', selectedMonth)
+        .eq('year', selectedYear)
+        .maybeSingle(),
+      supabase
+        .from('saved_rosters')
+        .select('roster_data, staff_list')
+        .eq('roster_type', 'doctor')
         .eq('month', selectedMonth)
         .eq('year', selectedYear)
         .maybeSingle(),
@@ -62,33 +81,50 @@ export default function DailyReportsSummary() {
     setBlastTarget(target);
     setTargetInput(String(target));
 
-    const rosterData = rosterRes.data?.roster_data as unknown as Record<string, { shift1?: { staffId: string; staffName: string }[]; shift2?: { staffId: string; staffName: string }[] }>;
+    const supportRosterData = supportRosterRes.data?.roster_data as unknown as Record<string, {
+      shift1?: { staffId: string; staffName: string }[];
+      shift2?: { staffId: string; staffName: string }[];
+      hybrid?: { staffId: string; staffName: string }[];
+    }>;
 
-    if (!rosterData) {
-      setReports([]);
-      setLoading(false);
-      return;
-    }
+    const doctorRosterData = doctorRosterRes.data?.roster_data as unknown as Record<string, {
+      shift1?: { staffId: string; staffName: string };
+      shift2?: { staffId: string; staffName: string };
+      shift3?: { staffId: string; staffName: string };
+    }>;
 
-    // For current month, use today. For past months, show latest available day
-    const dateKey = isCurrentMonth ? todayStr : Object.keys(rosterData).sort().pop();
+    // Determine date key
+    const dateKey = isCurrentMonth
+      ? todayStr
+      : (supportRosterData ? Object.keys(supportRosterData).sort().pop() : doctorRosterData ? Object.keys(doctorRosterData).sort().pop() : null);
+
     if (!dateKey) {
       setReports([]);
       setLoading(false);
       return;
     }
 
-    const dayRoster = rosterData[dateKey];
-    if (!dayRoster) {
-      setReports([]);
-      setLoading(false);
-      return;
+    // Collect staff entries from support roster
+    const staffEntries: { staffId: string; staffName: string; shift: 'AM' | 'PM'; type: 'Staff' | 'Hybrid' | 'Doctor' }[] = [];
+    const daySupportRoster = supportRosterData?.[dateKey];
+
+    if (daySupportRoster) {
+      daySupportRoster.shift1?.forEach(s => staffEntries.push({ staffId: s.staffId, staffName: s.staffName, shift: 'AM', type: 'Staff' }));
+      daySupportRoster.shift2?.forEach(s => staffEntries.push({ staffId: s.staffId, staffName: s.staffName, shift: 'PM', type: 'Staff' }));
+      daySupportRoster.hybrid?.forEach(s => staffEntries.push({ staffId: s.staffId, staffName: s.staffName, shift: 'AM', type: 'Hybrid' }));
     }
 
-    // Collect on-duty staff with shift info
-    const staffEntries: { staffId: string; staffName: string; shift: 'AM' | 'PM' }[] = [];
-    dayRoster.shift1?.forEach(s => staffEntries.push({ staffId: s.staffId, staffName: s.staffName, shift: 'AM' }));
-    dayRoster.shift2?.forEach(s => staffEntries.push({ staffId: s.staffId, staffName: s.staffName, shift: 'PM' }));
+    // Collect doctor entries (non-locum)
+    const dayDoctorRoster = doctorRosterData?.[dateKey];
+    if (dayDoctorRoster) {
+      const locumId = dayDoctorRoster.shift3?.staffId;
+      if (dayDoctorRoster.shift1 && dayDoctorRoster.shift1.staffId !== locumId) {
+        staffEntries.push({ staffId: dayDoctorRoster.shift1.staffId, staffName: dayDoctorRoster.shift1.staffName, shift: 'AM', type: 'Doctor' });
+      }
+      if (dayDoctorRoster.shift2 && dayDoctorRoster.shift2.staffId !== locumId) {
+        staffEntries.push({ staffId: dayDoctorRoster.shift2.staffId, staffName: dayDoctorRoster.shift2.staffName, shift: 'PM', type: 'Doctor' });
+      }
+    }
 
     if (staffEntries.length === 0) {
       setReports([]);
@@ -108,14 +144,16 @@ export default function DailyReportsSummary() {
 
     const staffReports: StaffReport[] = staffEntries.map(s => {
       const r = reportMap.get(s.staffId);
+      const isDoctor = s.type === 'Doctor';
       return {
         userId: s.staffId,
         fullName: s.staffName,
         shift: s.shift,
+        type: s.type,
         selfie: !!r?.briefing_selfie_url,
-        stock1: !!r?.stock_photo_1_url,
-        stock2: !!r?.stock_photo_2_url,
-        blastCount: r?.whatsapp_blast_count || 0,
+        stock1: isDoctor ? null : !!r?.stock_photo_1_url,
+        stock2: isDoctor ? null : !!r?.stock_photo_2_url,
+        blastCount: isDoctor ? null : (r?.whatsapp_blast_count || 0),
       };
     });
 
@@ -141,9 +179,16 @@ export default function DailyReportsSummary() {
 
   const Check = () => <CheckCircle className="h-4 w-4 text-green-500 mx-auto" />;
   const Cross = () => <XCircle className="h-4 w-4 text-red-400 mx-auto" />;
+  const NA = () => <Minus className="h-4 w-4 text-muted-foreground mx-auto" />;
 
   const amReports = reports.filter(r => r.shift === 'AM');
   const pmReports = reports.filter(r => r.shift === 'PM');
+
+  const TypeBadge = ({ type }: { type: string }) => {
+    if (type === 'Doctor') return <Badge variant="outline" className="text-[10px] px-1 py-0 ml-1">Dr</Badge>;
+    if (type === 'Hybrid') return <Badge variant="outline" className="text-[10px] px-1 py-0 ml-1">H</Badge>;
+    return null;
+  };
 
   const ShiftTable = ({ title, icon, data }: { title: string; icon: React.ReactNode; data: StaffReport[] }) => {
     if (data.length === 0) return null;
@@ -162,18 +207,25 @@ export default function DailyReportsSummary() {
           </thead>
           <tbody>
             {data.map(r => (
-              <tr key={r.userId} className="border-b last:border-0">
-                <td className="py-2 pr-3 font-medium">{r.fullName}</td>
+              <tr key={`${r.userId}-${r.type}`} className="border-b last:border-0">
+                <td className="py-2 pr-3 font-medium">
+                  {r.fullName}
+                  <TypeBadge type={r.type} />
+                </td>
                 <td className="py-2 px-2">{r.selfie ? <Check /> : <Cross />}</td>
-                <td className="py-2 px-2">{r.stock1 ? <Check /> : <Cross />}</td>
-                <td className="py-2 px-2">{r.stock2 ? <Check /> : <Cross />}</td>
+                <td className="py-2 px-2">{r.stock1 === null ? <NA /> : r.stock1 ? <Check /> : <Cross />}</td>
+                <td className="py-2 px-2">{r.stock2 === null ? <NA /> : r.stock2 ? <Check /> : <Cross />}</td>
                 <td className="py-2 pl-2 text-center">
-                  <Badge variant={r.blastCount >= blastTarget ? 'secondary' : 'destructive'}
-                    className={r.blastCount >= blastTarget
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs'
-                      : 'text-xs'}>
-                    {r.blastCount} / {blastTarget}
-                  </Badge>
+                  {r.blastCount === null ? (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  ) : (
+                    <Badge variant={r.blastCount >= blastTarget ? 'secondary' : 'destructive'}
+                      className={r.blastCount >= blastTarget
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs'
+                        : 'text-xs'}>
+                      {r.blastCount} / {blastTarget}
+                    </Badge>
+                  )}
                 </td>
               </tr>
             ))}
@@ -222,8 +274,8 @@ export default function DailyReportsSummary() {
           <p className="text-sm text-muted-foreground">No roster data found for this period.</p>
         ) : (
           <div className="space-y-4 overflow-x-auto">
-            <ShiftTable title="AM Shift (8am–2pm)" icon={<Sun className="h-3.5 w-3.5 text-amber-500" />} data={amReports} />
-            <ShiftTable title="PM Shift (2pm–8pm)" icon={<Moon className="h-3.5 w-3.5 text-indigo-500" />} data={pmReports} />
+            <ShiftTable title="AM Shift (8am–4pm)" icon={<Sun className="h-3.5 w-3.5 text-amber-500" />} data={amReports} />
+            <ShiftTable title="PM Shift (4pm–12am)" icon={<Moon className="h-3.5 w-3.5 text-indigo-500" />} data={pmReports} />
           </div>
         )}
         <div className="mt-3 pt-3 border-t">
