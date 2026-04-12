@@ -47,6 +47,8 @@ import AdminOnboarding from "./pages/staff/admin/Onboarding";
 import PayrollSummary from "./pages/staff/admin/PayrollSummary";
 import PayrollProfiles from "./pages/staff/admin/PayrollProfiles";
 import DailyTaskReview from "./pages/staff/admin/DailyTaskReview";
+import CircularNotices from "./pages/staff/admin/CircularNotices";
+import StaffInbox from "./pages/staff/Inbox";
 
 // Website Management (formerly /admin)
 import LeadsManagement from "./pages/admin/LeadsManagement";
@@ -100,6 +102,7 @@ const App = () => (
                 <Route path="dr-roster" element={<DrRosterView />} />
                 <Route path="staff-roster" element={<StaffRosterView />} />
                 <Route path="documents" element={<StaffDocuments />} />
+                <Route path="inbox" element={<StaffInbox />} />
                 <Route path="attendance-review" element={<StaffAttendanceReview />} />
                 <Route path="profile" element={<StaffProfile />} />
                 <Route path="settings" element={<StaffSettings />} />
@@ -117,6 +120,7 @@ const App = () => (
                 <Route path="admin/payroll-summary" element={<PayrollSummary />} />
                 <Route path="admin/payroll-profiles" element={<PayrollProfiles />} />
                 <Route path="admin/daily-tasks" element={<DailyTaskReview />} />
+                <Route path="admin/notices" element={<CircularNotices />} />
                 {/* Website Management */}
                 <Route path="website/leads" element={<LeadsManagement />} />
                 <Route path="website/team" element={<TeamManagement />} />
