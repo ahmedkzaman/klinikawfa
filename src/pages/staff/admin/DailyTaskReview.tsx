@@ -360,7 +360,6 @@ export default function DailyTaskReview() {
                                 : <Cross />;
                             })()}
                           </td>
-                          </td>
                           <td className="py-1.5 px-2 text-center">
                             {isDoctor ? <NA /> : (r?.stock_photo_1_url
                               ? <Check url={r.stock_photo_1_url} label={`${entry.staffName} — Stock Photo 1 — ${dateKey}`} />
