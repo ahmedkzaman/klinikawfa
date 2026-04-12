@@ -25,6 +25,7 @@ export default function DailyReportingCard() {
   const { user } = useAuth();
   const [report, setReport] = useState<DailyReport>({
     briefing_selfie_url: null,
+    evening_selfie_url: null,
     stock_photo_1_url: null,
     stock_photo_2_url: null,
     whatsapp_blast_count: 0,
@@ -49,6 +50,8 @@ export default function DailyReportingCard() {
   // Shift-aware upload windows (widened)
   const isAM = shiftInfo === 'AM';
   const isPM = shiftInfo === 'PM';
+  const selfieField = isPM ? 'evening_selfie_url' : 'briefing_selfie_url';
+  const selfieUrl = isPM ? report.evening_selfie_url : report.briefing_selfie_url;
 
   const getUploadWindow = () => {
     if (userType === 'doctor') {
@@ -153,6 +156,7 @@ export default function DailyReportingCard() {
       setReport({
         id: reportRes.data.id,
         briefing_selfie_url: reportRes.data.briefing_selfie_url,
+        evening_selfie_url: (reportRes.data as any).evening_selfie_url ?? null,
         stock_photo_1_url: reportRes.data.stock_photo_1_url,
         stock_photo_2_url: reportRes.data.stock_photo_2_url,
         whatsapp_blast_count: reportRes.data.whatsapp_blast_count || 0,
