@@ -1,36 +1,80 @@
 
 
-## Manual Hybrid Staff Assignment in Roster Generator
+## Refactor Roster Generator to Follow Staff Roster Criteria Framework
 
-### Problem
-Currently, hybrid staff (Purchaser/Housecall Nurse) are **automatically** assigned to the hybrid row every day they're not on an off day or rest day. The admin wants full manual control over which hybrid staff work and on which specific days.
+### Summary
 
-### Solution
+Rewrite the roster generation logic in `Roster.tsx` and update shift definitions in `rosterUtils.ts` to match the new criteria framework. Key changes: new shift times, hybrid staff back in regular pool, structured warning system, and strict rule priority enforcement.
 
-**Edit: `src/pages/staff/admin/Roster.tsx`**
+### Changes
 
-1. **Add a hybrid schedule UI** — Below the existing "Staff Settings (Hybrid & Off Days)" card, add a new section (or inline with the existing settings) where the admin can tick which days each hybrid staff member should work their hybrid shift. This will be a per-staff, per-day-of-week checkbox grid (similar to the off-day grid but for "Hybrid Work Days").
+**1. Update shift times** (`src/lib/rosterUtils.ts` + `src/pages/staff/admin/Roster.tsx`)
 
-   Alternatively (and simpler): after the roster is generated, make the **Hybrid row editable** — each cell becomes a multi-select or toggle showing which hybrid staff are assigned that day. The generator will leave the hybrid row **empty by default**, and the admin fills it in manually.
+| Shift | Current | New |
+|-------|---------|-----|
+| Shift 1 (AM) | 8am–2pm (6h) or 8am–4pm (8h, display only) | **8:00 AM – 4:00 PM = 8 hours** |
+| Shift 2 (PM) | 2pm–8pm (6h) or 4pm–12am (display only) | **4:00 PM – 12:00 AM = 8 hours** |
+| Hybrid | 8am–2pm (6h) | **8:00 AM – 1:00 PM = 5 hours** |
 
-   **Recommended approach**: Make the hybrid row fully manual with selectable dropdowns (like Shift 1/Shift 2 already have). The generator will:
-   - Still mark hybrid staff so they're excluded from regular shift assignment
-   - But **not** auto-populate the hybrid row
-   - Admin manually assigns hybrid staff to specific days using dropdowns in the hybrid row cells
+- Update `SHIFT_HOURS` (already 8, correct), `HYBRID_HOURS` from 6 to 5
+- Update `SHIFT_TIMES` in `rosterUtils.ts`: S1 end to `16:00`, S2 start to `16:00` end to `00:00`, Hybrid end to `13:00`
+- Update all display labels in both files
 
-2. **Remove auto-assignment in `generateRoster()`** — Delete the block (lines ~320-328) that automatically assigns all hybrid staff to every non-off day. Instead, preserve any existing hybrid assignments from the current roster state (if re-generating) or leave empty.
+**2. Hybrid staff back in regular shift pool** (`Roster.tsx`)
 
-3. **Make hybrid row cells editable** — Currently hybrid cells just display text. Change them to use a multi-select or per-cell dropdown (similar to shift cells) so admin can pick which hybrid staff work each day. Only hybrid-typed staff appear in the dropdown.
+Currently `pickStaff()` filters out hybrid staff with `!isHybrid(s.id)`. Remove this filter so hybrid-designated staff are eligible for Shift 1/2 auto-assignment. The hybrid row remains manual-only (no change there).
 
-4. **Keep hybrid staff excluded from regular shifts** — The `!isHybrid(s.id)` filter in `pickStaff()` stays, so hybrid staff don't get auto-assigned to Shift 1/2. But they only appear in the hybrid row when the admin manually places them.
+**3. Rewrite `generateRoster()` with strict priority order** (`Roster.tsx`)
 
-5. **Update `updateCell`** — Extend it to support `'hybrid'` as a shift key, and allow adding/removing hybrid staff from a day.
+Restructure the generator to follow this priority:
 
-6. **Hours tracking** — When calculating summary hours, hybrid hours still count (6h per assigned day). The summary and fairness metrics remain accurate based on what the admin manually assigned.
+1. **Permanent off days** — absolute hard block, never bypassed
+2. **Minimum staffing** — Shift 1: min 1, Shift 2: min 2 (new defaults, replace current equal `staffPerShift` for both)
+3. **Max consecutive days** — 6-day limit; may breach only when all others unavailable AND slot would be understaffed AND breach is recorded as exception warning
+4. **Manual hybrid** — preserve existing hybrid assignments (already done)
+5. **Staff-per-shift config** — use configured number but apply min-staffing floor
+6. **OT threshold** — soft filter, relax if needed
+7. **Fairness** — weighted pick among eligible
 
-### Technical Details
-- No database changes needed
-- Single file edit: `src/pages/staff/admin/Roster.tsx`
-- The hybrid row cells will use a popover or multi-checkbox approach (since multiple hybrid staff can work the same day)
-- Off-day and rest-day rules still apply — the UI should visually disable or warn if admin tries to assign a hybrid staff member on their off day
+The `pickStaff()` function changes:
+- Accept separate min counts per shift (shift1: 1, shift2: 2 default)
+- Eligibility filter order: off day → already assigned → weekday S2 restriction → consecutive days (with exception logic) → OT threshold (soft)
+- When consecutive-day breach happens, add a compliance warning
+
+**4. Add separate min staffing per shift** (`Roster.tsx`)
+
+Replace single `staffPerShift` state with `staffPerShift1` (default 1) and `staffPerShift2` (default 2). Update UI to show two separate selectors. Keep the auto-adjust logic for ≤4 staff.
+
+**5. Structured warning system** (`Roster.tsx`)
+
+Replace flat `warnings` string array with categorized warnings:
+
+```typescript
+interface RosterWarning {
+  type: 'coverage' | 'compliance' | 'info';
+  message: string;
+}
+```
+
+- **Coverage**: empty slot, shift below minimum
+- **Compliance**: exceeded 6 consecutive days (exception), assigned despite restriction, OT exceeded
+- **Info**: partial week below threshold, manual hybrid affecting balance
+
+Display warnings grouped by type with color-coded badges (red for coverage, orange for compliance, blue for info).
+
+**6. Enhanced summary table** (`Roster.tsx`)
+
+Add columns: total Shift 1 count, total Shift 2 count, total working days. Currently only shows total shifts + hybrid shifts + total hours + OT status.
+
+**7. Update balancing passes** (`Roster.tsx`)
+
+- Top-up pass: must respect off days (already does), must also respect consecutive-day limit
+- Global balancing pass: must respect off days (already does), add consecutive-day check before swapping
+
+### Files Changed
+
+- `src/pages/staff/admin/Roster.tsx` — main refactor
+- `src/lib/rosterUtils.ts` — shift time definitions
+
+### No database changes needed
 
