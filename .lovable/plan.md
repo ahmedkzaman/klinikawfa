@@ -1,35 +1,23 @@
+## Fix: Extend Selfie Upload Window for Staff
 
+### Issues Identified
 
-## Fix: Prevent Page Reset on Browser Tab Switch
+1. **"Why couldn't I click on the selfie?"** — On the staff dashboard, the Upload button is **disabled** because the upload time window has passed. There is no way to view a previously uploaded selfie either — the card only shows "Done" badge or the disabled Upload button.
+2. **"It's 4:27 PM, I'm on duty, why can't I upload?"** — You are detected as **Doctor AM Shift**. The AM selfie window is hardcoded to **8:00–9:00 AM only**. By 4:27 PM it's long closed. The upload windows are too restrictive:
+  - AM Selfie: 8:00–9:00 AM (1 hour only)
+  - PM Selfie: 2:00–3:00 PM (1 hour only)
 
-### Root Cause
+### Proposed Fix
 
-When you switch tabs and return, Supabase fires auth events (e.g., `SIGNED_IN` after token refresh). The current AuthContext filter only skips `TOKEN_REFRESHED` and `INITIAL_SESSION` — but `SIGNED_IN` events with the same user ID still pass through, calling `setUser()` with a new object reference. This causes `StaffLayout` to re-render with `noticesLoading` resetting to `true`, which triggers the full-page loading spinner at line 229.
+**1. Widen upload windows** — Allow uploads throughout the entire shift duration:
 
-### Fix
+- AM Shift: **8:00 AM – 2:00 PM** (selfie + stock photos)
+- PM Shift: **4:00 PM – 5:00 PM** (selfie + stock photos)
+- Doctor AM: **8:00 AM – 4:00 PM**
+- Doctor PM: **4:00 PM – 5:00 PM**
 
-**1. AuthContext.tsx** — Also skip `SIGNED_IN` events when user ID hasn't changed:
-
-```typescript
-if (
-  authInitializedRef.current &&
-  newUserId === currentUserIdRef.current
-) {
-  // Update session silently (for fresh tokens) without triggering re-renders
-  return;
-}
-```
-
-This catches ALL redundant events regardless of event type, not just TOKEN_REFRESHED and INITIAL_SESSION.
-
-**2. StaffLayout.tsx** — Don't reset `noticesLoading` on re-renders:
-
-- Use a ref to track whether notices have been fetched at least once
-- Only show loading spinner on initial load, not on subsequent re-fetches
-- This provides a safety net even if auth state does update
+**2. Allow viewing uploaded selfie** — When a selfie is already uploaded, make the "Done" badge or a thumbnail clickable to preview the image in a dialog (same pattern as admin daily task review).
 
 ### Files Changed
 
-- `src/contexts/AuthContext.tsx` — broaden the skip condition
-- `src/components/staff/StaffLayout.tsx` — prevent loading state flash on re-render
-
+- `src/components/staff/DailyReportingCard.tsx` — widen `isSelfieWindow` / `isStockWindow` time ranges, add image preview dialog for uploaded photos
