@@ -634,6 +634,7 @@ export type Database = {
         Row: {
           briefing_selfie_url: string | null
           created_at: string
+          evening_selfie_url: string | null
           id: string
           report_date: string
           stock_photo_1_url: string | null
@@ -645,6 +646,7 @@ export type Database = {
         Insert: {
           briefing_selfie_url?: string | null
           created_at?: string
+          evening_selfie_url?: string | null
           id?: string
           report_date?: string
           stock_photo_1_url?: string | null
@@ -656,6 +658,7 @@ export type Database = {
         Update: {
           briefing_selfie_url?: string | null
           created_at?: string
+          evening_selfie_url?: string | null
           id?: string
           report_date?: string
           stock_photo_1_url?: string | null

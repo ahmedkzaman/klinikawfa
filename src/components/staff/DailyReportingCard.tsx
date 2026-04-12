@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 interface DailyReport {
   id?: string;
   briefing_selfie_url: string | null;
+  evening_selfie_url: string | null;
   stock_photo_1_url: string | null;
   stock_photo_2_url: string | null;
   whatsapp_blast_count: number;
@@ -24,6 +25,7 @@ export default function DailyReportingCard() {
   const { user } = useAuth();
   const [report, setReport] = useState<DailyReport>({
     briefing_selfie_url: null,
+    evening_selfie_url: null,
     stock_photo_1_url: null,
     stock_photo_2_url: null,
     whatsapp_blast_count: 0,
@@ -48,6 +50,8 @@ export default function DailyReportingCard() {
   // Shift-aware upload windows (widened)
   const isAM = shiftInfo === 'AM';
   const isPM = shiftInfo === 'PM';
+  const selfieField = isPM ? 'evening_selfie_url' : 'briefing_selfie_url';
+  const selfieUrl = isPM ? report.evening_selfie_url : report.briefing_selfie_url;
 
   const getUploadWindow = () => {
     if (userType === 'doctor') {
@@ -152,6 +156,7 @@ export default function DailyReportingCard() {
       setReport({
         id: reportRes.data.id,
         briefing_selfie_url: reportRes.data.briefing_selfie_url,
+        evening_selfie_url: (reportRes.data as any).evening_selfie_url ?? null,
         stock_photo_1_url: reportRes.data.stock_photo_1_url,
         stock_photo_2_url: reportRes.data.stock_photo_2_url,
         whatsapp_blast_count: reportRes.data.whatsapp_blast_count || 0,
@@ -163,7 +168,7 @@ export default function DailyReportingCard() {
     setLoading(false);
   };
 
-  const uploadPhoto = async (file: File, field: 'briefing_selfie_url' | 'stock_photo_1_url' | 'stock_photo_2_url') => {
+  const uploadPhoto = async (file: File, field: 'briefing_selfie_url' | 'evening_selfie_url' | 'stock_photo_1_url' | 'stock_photo_2_url') => {
     if (!user) return;
     const fieldKey = field.replace('_url', '');
     setUploading(prev => ({ ...prev, [field]: true }));
@@ -277,16 +282,16 @@ export default function DailyReportingCard() {
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <StatusIcon done={!!report.briefing_selfie_url} />
-              {report.briefing_selfie_url ? (
-                <PhotoPreviewBadge url={report.briefing_selfie_url} label={isPM ? 'Evening Passover Selfie' : 'Morning Briefing Selfie'} />
+              <StatusIcon done={!!selfieUrl} />
+              {selfieUrl ? (
+                <PhotoPreviewBadge url={selfieUrl} label={isPM ? 'Evening Passover Selfie' : 'Morning Briefing Selfie'} />
               ) : (
                 <>
                   <input ref={selfieRef} type="file" accept="image/*" capture="user" className="hidden"
-                    onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0], 'briefing_selfie_url')} />
-                  <Button size="sm" variant="outline" disabled={!isUploadWindow || uploading.briefing_selfie_url}
+                    onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0], selfieField as any)} />
+                  <Button size="sm" variant="outline" disabled={!isUploadWindow || uploading[selfieField]}
                     onClick={() => selfieRef.current?.click()}>
-                    {uploading.briefing_selfie_url ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                    {uploading[selfieField] ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
                     Upload
                   </Button>
                 </>

@@ -1,0 +1,1 @@
+ALTER TABLE public.daily_reports ADD COLUMN evening_selfie_url text;
