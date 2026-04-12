@@ -17,6 +17,8 @@ interface DailyReport {
   whatsapp_blast_count: number;
 }
 
+type UserType = 'staff' | 'hybrid' | 'doctor';
+
 export default function DailyReportingCard() {
   const { user } = useAuth();
   const [report, setReport] = useState<DailyReport>({
@@ -30,6 +32,7 @@ export default function DailyReportingCard() {
   const [uploading, setUploading] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [shiftInfo, setShiftInfo] = useState<string | null>(null); // 'AM' | 'PM' | null
+  const [userType, setUserType] = useState<UserType>('staff');
   const [rosterChecked, setRosterChecked] = useState(false);
   const selfieRef = useRef<HTMLInputElement>(null);
   const stock1Ref = useRef<HTMLInputElement>(null);
@@ -40,12 +43,13 @@ export default function DailyReportingCard() {
   const todayStr = format(now, 'yyyy-MM-dd');
 
   // Shift-aware upload windows
-  // AM: selfie 8-9am, stock 8-10am
-  // PM: selfie 2-3pm, stock 2-3pm (single hour window)
   const isAM = shiftInfo === 'AM';
   const isPM = shiftInfo === 'PM';
   const isSelfieWindow = isAM ? (currentHour >= 8 && currentHour < 9) : isPM ? (currentHour >= 14 && currentHour < 15) : false;
   const isStockWindow = isAM ? (currentHour >= 8 && currentHour < 10) : isPM ? (currentHour >= 14 && currentHour < 15) : false;
+
+  // Doctors and hybrid only need selfie
+  const showStockAndBlast = userType === 'staff' || userType === 'hybrid';
 
   useEffect(() => {
     if (user) {
@@ -53,16 +57,40 @@ export default function DailyReportingCard() {
     }
   }, [user]);
 
+  // Real-time subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel('daily-reporting-card')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'saved_rosters' }, () => {
+        if (user) fetchRosterAndReport();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_reports' }, (payload: any) => {
+        if (payload.new?.user_id === user?.id || payload.old?.user_id === user?.id) {
+          if (user) fetchRosterAndReport();
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
+
   const fetchRosterAndReport = async () => {
-    const month = now.getMonth(); // 0-indexed (matches saved_rosters convention)
+    const month = now.getMonth();
     const year = now.getFullYear();
 
-    // Fetch roster, report, and blast target in parallel
-    const [rosterRes, reportRes, settingRes] = await Promise.all([
+    // Fetch support roster, doctor roster, report, and blast target in parallel
+    const [supportRosterRes, doctorRosterRes, reportRes, settingRes] = await Promise.all([
       supabase
         .from('saved_rosters')
         .select('roster_data')
         .eq('roster_type', 'support')
+        .eq('month', month)
+        .eq('year', year)
+        .maybeSingle(),
+      supabase
+        .from('saved_rosters')
+        .select('roster_data')
+        .eq('roster_type', 'doctor')
         .eq('month', month)
         .eq('year', year)
         .maybeSingle(),
@@ -79,15 +107,56 @@ export default function DailyReportingCard() {
         .maybeSingle(),
     ]);
 
-    // Check roster
-    const rosterData = rosterRes.data?.roster_data as unknown as Record<string, { shift1?: { staffId: string }[]; shift2?: { staffId: string }[] }>;
-    const todayRoster = rosterData?.[todayStr];
+    // Check support roster (shift1/shift2 arrays + hybrid array)
+    const supportRoster = supportRosterRes.data?.roster_data as unknown as Record<string, {
+      shift1?: { staffId: string }[];
+      shift2?: { staffId: string }[];
+      hybrid?: { staffId: string }[];
+    }>;
+    const todaySupportRoster = supportRoster?.[todayStr];
+
     let shift: string | null = null;
-    if (todayRoster) {
-      if (todayRoster.shift1?.some(s => s.staffId === user!.id)) shift = 'AM';
-      else if (todayRoster.shift2?.some(s => s.staffId === user!.id)) shift = 'PM';
+    let detectedType: UserType = 'staff';
+
+    if (todaySupportRoster) {
+      if (todaySupportRoster.shift1?.some(s => s.staffId === user!.id)) {
+        shift = 'AM';
+        detectedType = 'staff';
+      } else if (todaySupportRoster.shift2?.some(s => s.staffId === user!.id)) {
+        shift = 'PM';
+        detectedType = 'staff';
+      } else if (todaySupportRoster.hybrid?.some(s => s.staffId === user!.id)) {
+        shift = 'AM';
+        detectedType = 'hybrid';
+      }
     }
+
+    // Check doctor roster if not found in support roster
+    if (!shift) {
+      const doctorRoster = doctorRosterRes.data?.roster_data as unknown as Record<string, {
+        shift1?: { staffId: string };
+        shift2?: { staffId: string };
+        shift3?: { staffId: string };
+      }>;
+      const todayDoctorRoster = doctorRoster?.[todayStr];
+
+      if (todayDoctorRoster) {
+        // Exclude locum (shift3)
+        const isLocum = todayDoctorRoster.shift3?.staffId === user!.id;
+        if (!isLocum) {
+          if (todayDoctorRoster.shift1?.staffId === user!.id) {
+            shift = 'AM';
+            detectedType = 'doctor';
+          } else if (todayDoctorRoster.shift2?.staffId === user!.id) {
+            shift = 'PM';
+            detectedType = 'doctor';
+          }
+        }
+      }
+    }
+
     setShiftInfo(shift);
+    setUserType(detectedType);
     setRosterChecked(true);
 
     // Set report
@@ -193,14 +262,18 @@ export default function DailyReportingCard() {
     );
   }
 
+  const shiftLabel = userType === 'doctor'
+    ? (shiftInfo === 'AM' ? '🩺 Doctor AM Shift' : '🩺 Doctor PM Shift')
+    : userType === 'hybrid'
+    ? '🔄 Hybrid (8am–1pm)'
+    : (shiftInfo === 'AM' ? '☀️ AM Shift (8am–2pm)' : '🌙 PM Shift (2pm–8pm)');
+
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">📋 Daily Reporting — {format(now, 'dd MMM yyyy')}</CardTitle>
-          <Badge variant="secondary" className="text-xs">
-            {shiftInfo === 'AM' ? '☀️ AM Shift (8am–2pm)' : '🌙 PM Shift (2pm–8pm)'}
-          </Badge>
+          <Badge variant="secondary" className="text-xs">{shiftLabel}</Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -231,62 +304,66 @@ export default function DailyReportingCard() {
           </div>
         </div>
 
-        {/* Medication Stock Photos */}
-        <div className="p-3 rounded-lg border bg-muted/30 space-y-3">
-          <div className="flex items-center gap-3">
-            <Image className="h-5 w-5 text-primary shrink-0" />
-            <div>
-              <p className="text-sm font-medium">Medication Stock Photos</p>
-              <p className="text-xs text-muted-foreground">Upload window: {isPM ? '2:00 – 3:00 PM' : '8:00 – 10:00 AM'} • Must include timestamp & date stamp</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {(['stock_photo_1_url', 'stock_photo_2_url'] as const).map((field, i) => (
-              <div key={field} className="flex items-center justify-between gap-2 p-2 rounded border bg-background">
-                <span className="text-xs font-medium">Photo {i + 1}</span>
-                <div className="flex items-center gap-1.5">
-                  <StatusIcon done={!!report[field]} />
-                  {report[field] ? (
-                    <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs">Done</Badge>
-                  ) : (
-                    <>
-                      <input ref={i === 0 ? stock1Ref : stock2Ref} type="file" accept="image/*" className="hidden"
-                        onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0], field)} />
-                      <Button size="sm" variant="outline" disabled={!isStockWindow || uploading[field]}
-                        onClick={() => (i === 0 ? stock1Ref : stock2Ref).current?.click()}>
-                        {uploading[field] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3 mr-1" />}
-                        Upload
-                      </Button>
-                    </>
-                  )}
-                </div>
+        {/* Medication Stock Photos - only for staff and hybrid */}
+        {showStockAndBlast && (
+          <div className="p-3 rounded-lg border bg-muted/30 space-y-3">
+            <div className="flex items-center gap-3">
+              <Image className="h-5 w-5 text-primary shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Medication Stock Photos</p>
+                <p className="text-xs text-muted-foreground">Upload window: {isPM ? '2:00 – 3:00 PM' : '8:00 – 10:00 AM'} • Must include timestamp & date stamp</p>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* WhatsApp Blast Count */}
-        <div className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-muted/30">
-          <div className="flex items-center gap-3 min-w-0">
-            <MessageSquare className="h-5 w-5 text-primary shrink-0" />
-            <div className="min-w-0">
-              <p className="text-sm font-medium">WhatsApp Blasts</p>
-              <p className="text-xs text-muted-foreground">Target: {blastTarget} blasts/day</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {(['stock_photo_1_url', 'stock_photo_2_url'] as const).map((field, i) => (
+                <div key={field} className="flex items-center justify-between gap-2 p-2 rounded border bg-background">
+                  <span className="text-xs font-medium">Photo {i + 1}</span>
+                  <div className="flex items-center gap-1.5">
+                    <StatusIcon done={!!report[field]} />
+                    {report[field] ? (
+                      <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs">Done</Badge>
+                    ) : (
+                      <>
+                        <input ref={i === 0 ? stock1Ref : stock2Ref} type="file" accept="image/*" className="hidden"
+                          onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0], field)} />
+                        <Button size="sm" variant="outline" disabled={!isStockWindow || uploading[field]}
+                          onClick={() => (i === 0 ? stock1Ref : stock2Ref).current?.click()}>
+                          {uploading[field] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3 mr-1" />}
+                          Upload
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Input
-              type="number"
-              min={0}
-              value={blastInput}
-              onChange={(e) => setBlastInput(e.target.value)}
-              className="w-16 h-8 text-center text-sm"
-            />
-            <span className="text-xs text-muted-foreground">/ {blastTarget}</span>
-            <Button size="sm" variant="outline" onClick={saveBlastCount}>Save</Button>
-            <StatusIcon done={report.whatsapp_blast_count >= blastTarget} />
+        )}
+
+        {/* WhatsApp Blast Count - only for staff and hybrid */}
+        {showStockAndBlast && (
+          <div className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-muted/30">
+            <div className="flex items-center gap-3 min-w-0">
+              <MessageSquare className="h-5 w-5 text-primary shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium">WhatsApp Blasts</p>
+                <p className="text-xs text-muted-foreground">Target: {blastTarget} blasts/day</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Input
+                type="number"
+                min={0}
+                value={blastInput}
+                onChange={(e) => setBlastInput(e.target.value)}
+                className="w-16 h-8 text-center text-sm"
+              />
+              <span className="text-xs text-muted-foreground">/ {blastTarget}</span>
+              <Button size="sm" variant="outline" onClick={saveBlastCount}>Save</Button>
+              <StatusIcon done={report.whatsapp_blast_count >= blastTarget} />
+            </div>
           </div>
-        </div>
+        )}
       </CardContent>
     </Card>
   );
