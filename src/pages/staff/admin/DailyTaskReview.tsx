@@ -116,9 +116,9 @@ export default function DailyTaskReview() {
 
     const { data: reportsData } = await supabase
       .from('daily_reports')
-      .select('user_id, report_date, briefing_selfie_url, stock_photo_1_url, stock_photo_2_url, whatsapp_blast_count')
+      .select('user_id, report_date, briefing_selfie_url, stock_photo_1_url, stock_photo_2_url, whatsapp_blast_count, evening_selfie_url')
       .gte('report_date', startDate)
-      .lte('report_date', endDate);
+      .lte('report_date', endDate) as any;
 
     setReports(reportsData || []);
     setLoading(false);
@@ -187,8 +187,8 @@ export default function DailyTaskReview() {
           stats[entry.staffId] = { total: 0, selfie: 0, stock1: 0, stock2: 0, blastMet: 0, type: entry.type };
         }
         stats[entry.staffId].total++;
-        const r = reportMap.get(`${entry.staffId}-${dateKey}`);
-        if (r?.briefing_selfie_url) stats[entry.staffId].selfie++;
+        const selfieUrl = entry.shift === 'PM' ? r?.evening_selfie_url : r?.briefing_selfie_url;
+        if (selfieUrl) stats[entry.staffId].selfie++;
         if (entry.type !== 'Doctor') {
           if (r?.stock_photo_1_url) stats[entry.staffId].stock1++;
           if (r?.stock_photo_2_url) stats[entry.staffId].stock2++;
@@ -353,9 +353,13 @@ export default function DailyTaskReview() {
                             </Badge>
                           </td>
                           <td className="py-1.5 px-2 text-center">
-                            {r?.briefing_selfie_url
-                              ? <Check url={r.briefing_selfie_url} label={`${entry.staffName} — ${entry.shift === 'AM' ? 'Morning Briefing' : 'Evening Passover'} Selfie — ${dateKey}`} />
-                              : <Cross />}
+                            {(() => {
+                              const selfieUrl = entry.shift === 'PM' ? r?.evening_selfie_url : r?.briefing_selfie_url;
+                              return selfieUrl
+                                ? <Check url={selfieUrl} label={`${entry.staffName} — ${entry.shift === 'AM' ? 'Morning Briefing' : 'Evening Passover'} Selfie — ${dateKey}`} />
+                                : <Cross />;
+                            })()}
+                          </td>
                           </td>
                           <td className="py-1.5 px-2 text-center">
                             {isDoctor ? <NA /> : (r?.stock_photo_1_url
