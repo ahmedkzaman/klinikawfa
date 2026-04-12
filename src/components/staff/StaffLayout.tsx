@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOnboardingStatus } from '@/hooks/useOnboardingStatus';
@@ -189,12 +189,13 @@ export function StaffLayout() {
 
   // Circular notice blocking
   const [unacknowledgedNotices, setUnacknowledgedNotices] = useState<any[]>([]);
+  const noticesLoadedRef = useRef(false);
   const [noticesLoading, setNoticesLoading] = useState(true);
   const [acknowledging, setAcknowledging] = useState(false);
 
   useEffect(() => {
     if (user && !isAdmin) fetchUnacknowledgedNotices();
-    else setNoticesLoading(false);
+    else if (!noticesLoadedRef.current) setNoticesLoading(false);
   }, [user, isAdmin]);
 
   useEffect(() => {
@@ -216,6 +217,7 @@ export function StaffLayout() {
     const ackedIds = new Set((acksRes.data || []).map((a: any) => a.notice_id));
     const unacked = ((noticesRes.data as any[]) || []).filter((n: any) => !ackedIds.has(n.id));
     setUnacknowledgedNotices(unacked);
+    noticesLoadedRef.current = true;
     setNoticesLoading(false);
   };
 

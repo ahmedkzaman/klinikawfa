@@ -77,10 +77,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       (event, session) => {
         const newUserId = session?.user?.id ?? null;
 
-        // Skip redundant events when user hasn't changed and auth is already initialized
+        // Skip ALL redundant events when user hasn't changed and auth is already initialized
         if (
           authInitializedRef.current &&
-          (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') &&
           newUserId === currentUserIdRef.current
         ) {
           return;
