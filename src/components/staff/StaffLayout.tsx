@@ -189,12 +189,13 @@ export function StaffLayout() {
 
   // Circular notice blocking
   const [unacknowledgedNotices, setUnacknowledgedNotices] = useState<any[]>([]);
+  const noticesLoadedRef = useRef(false);
   const [noticesLoading, setNoticesLoading] = useState(true);
   const [acknowledging, setAcknowledging] = useState(false);
 
   useEffect(() => {
     if (user && !isAdmin) fetchUnacknowledgedNotices();
-    else setNoticesLoading(false);
+    else if (!noticesLoadedRef.current) setNoticesLoading(false);
   }, [user, isAdmin]);
 
   useEffect(() => {
