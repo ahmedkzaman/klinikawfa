@@ -217,6 +217,7 @@ export function StaffLayout() {
     const ackedIds = new Set((acksRes.data || []).map((a: any) => a.notice_id));
     const unacked = ((noticesRes.data as any[]) || []).filter((n: any) => !ackedIds.has(n.id));
     setUnacknowledgedNotices(unacked);
+    noticesLoadedRef.current = true;
     setNoticesLoading(false);
   };
 
