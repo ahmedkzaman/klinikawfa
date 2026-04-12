@@ -12,13 +12,13 @@ import { format } from 'date-fns';
 // ---------- Shift time map ----------
 
 const SHIFT_TIMES: Record<string, { start: string; end: string; label: string }> = {
-  S1: { start: '08:00', end: '14:00', label: 'Shift 1 (8am – 2pm)' },
-  S2: { start: '14:00', end: '20:00', label: 'Shift 2 (2pm – 8pm)' },
+  S1: { start: '08:00', end: '16:00', label: 'Shift 1 (8am – 4pm)' },
+  S2: { start: '16:00', end: '00:00', label: 'Shift 2 (4pm – 12am)' },
   S3: { start: '20:00', end: '00:00', label: 'Shift 3 (8pm – 12am)' },
   // Combined (doctor daytime = S1+S2)
-  Daytime: { start: '08:00', end: '20:00', label: 'Daytime (8am – 8pm)' },
+  Daytime: { start: '08:00', end: '00:00', label: 'Daytime (8am – 12am)' },
   // Hybrid shift (purchaser / housecall nurse) — AM only
-  Hybrid: { start: '08:00', end: '14:00', label: 'Hybrid (8am – 2pm)' },
+  Hybrid: { start: '08:00', end: '13:00', label: 'Hybrid (8am – 1pm)' },
 };
 
 export type ShiftInfo = {
