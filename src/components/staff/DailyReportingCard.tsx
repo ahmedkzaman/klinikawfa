@@ -168,7 +168,7 @@ export default function DailyReportingCard() {
     setLoading(false);
   };
 
-  const uploadPhoto = async (file: File, field: 'briefing_selfie_url' | 'stock_photo_1_url' | 'stock_photo_2_url') => {
+  const uploadPhoto = async (file: File, field: 'briefing_selfie_url' | 'evening_selfie_url' | 'stock_photo_1_url' | 'stock_photo_2_url') => {
     if (!user) return;
     const fieldKey = field.replace('_url', '');
     setUploading(prev => ({ ...prev, [field]: true }));
