@@ -1,23 +1,49 @@
-## Fix: Extend Selfie Upload Window for Staff
 
-### Issues Identified
 
-1. **"Why couldn't I click on the selfie?"** — On the staff dashboard, the Upload button is **disabled** because the upload time window has passed. There is no way to view a previously uploaded selfie either — the card only shows "Done" badge or the disabled Upload button.
-2. **"It's 4:27 PM, I'm on duty, why can't I upload?"** — You are detected as **Doctor AM Shift**. The AM selfie window is hardcoded to **8:00–9:00 AM only**. By 4:27 PM it's long closed. The upload windows are too restrictive:
-  - AM Selfie: 8:00–9:00 AM (1 hour only)
-  - PM Selfie: 2:00–3:00 PM (1 hour only)
+## Fix: Doctor Assigned to Multiple Shifts Can't Upload
 
-### Proposed Fix
+### Root Cause
 
-**1. Widen upload windows** — Allow uploads throughout the entire shift duration:
+Today's doctor roster assigns Ahmed to **both shift1 (AM) and shift2 (PM)**. The code in `DailyReportingCard.tsx` (line 131) finds him in shift1 first and sets `shift = 'AM'`, never checking shift2. After 4pm, the AM upload window (8–16) closes, so the upload button is disabled — even though he's actively on duty for his PM shift.
 
-- AM Shift: **8:00 AM – 2:00 PM** (selfie + stock photos)
-- PM Shift: **4:00 PM – 5:00 PM** (selfie + stock photos)
-- Doctor AM: **8:00 AM – 4:00 PM**
-- Doctor PM: **4:00 PM – 5:00 PM**
+### Fix
 
-**2. Allow viewing uploaded selfie** — When a selfie is already uploaded, make the "Done" badge or a thumbnail clickable to preview the image in a dialog (same pattern as admin daily task review).
+In `DailyReportingCard.tsx`, change the doctor roster detection logic to check **which shift matches the current time**:
+
+1. Collect all shifts the doctor is assigned to (shift1, shift2)
+2. Pick the shift whose upload window covers the current hour
+3. If currently in PM window and doctor is on shift2, set `shift = 'PM'`
+4. If currently in AM window and doctor is on shift1, set `shift = 'AM'`
+5. Fallback: if outside all windows but assigned to any shift, pick the nearest/most recent shift (so the card still shows rather than "not on duty")
+
+**Logic change** (lines 120-138):
+```typescript
+if (todayDoctorRoster) {
+  const isLocum = todayDoctorRoster.shift3?.staffId === user!.id;
+  if (!isLocum) {
+    const onShift1 = todayDoctorRoster.shift1?.staffId === user!.id;
+    const onShift2 = todayDoctorRoster.shift2?.staffId === user!.id;
+    if (onShift1 || onShift2) {
+      detectedType = 'doctor';
+      // Pick shift based on current time
+      if (onShift2 && currentHour >= 16) {
+        shift = 'PM';
+      } else if (onShift1) {
+        shift = 'AM';
+      } else {
+        shift = 'PM';
+      }
+    }
+  }
+}
+```
+
+This ensures:
+- Before 4pm → AM shift tasks shown (window 8am–4pm)
+- 4pm onwards → PM shift tasks shown (window 4pm–5pm)
+- Doctor always sees "on duty" when assigned to any shift
 
 ### Files Changed
 
-- `src/components/staff/DailyReportingCard.tsx` — widen `isSelfieWindow` / `isStockWindow` time ranges, add image preview dialog for uploaded photos
+- `src/components/staff/DailyReportingCard.tsx` — fix multi-shift doctor detection to pick the time-appropriate shift
+
