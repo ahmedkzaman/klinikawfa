@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import {
   MapPin, Clock, History, Settings, LogOut, Menu, Home, Users, Map, CalendarDays, CalendarOff, Inbox, FileText,
   LayoutDashboard, CalendarCheck, Stethoscope, Video, Image, Star, ChevronDown, ClipboardCheck, ClipboardList,
-  User, BarChart3, CheckSquare, DollarSign
+  User, BarChart3, CheckSquare, DollarSign, Megaphone, AlertTriangle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
@@ -17,6 +17,7 @@ import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
 
 const staffNavItems = [
   { href: '/staff/dashboard', label: 'Dashboard', icon: Home },
+  { href: '/staff/inbox', label: 'Inbox', icon: Inbox },
   { href: '/staff/punch', label: 'Punch In/Out', icon: MapPin },
   { href: '/staff/history', label: 'History', icon: History },
   { href: '/staff/calendar', label: 'Calendar', icon: CalendarDays },
@@ -46,6 +47,7 @@ const adminNavItems = [
   { href: '/staff/admin/payroll-summary', label: 'Payroll Summary', icon: LayoutDashboard },
   { href: '/staff/admin/payroll-profiles', label: 'Payroll Profiles', icon: DollarSign },
   { href: '/staff/admin/daily-tasks', label: 'Daily Tasks', icon: ClipboardList },
+  { href: '/staff/admin/notices', label: 'Circular Notices', icon: Megaphone },
 ];
 
 const contentNavItems = [
@@ -58,7 +60,7 @@ const contentNavItems = [
   { href: '/staff/website/settings', label: 'Settings', icon: Settings },
 ];
 
-function SidebarNav({ isAdmin, pathname, onLinkClick }: { isAdmin: boolean; pathname: string; onLinkClick?: () => void }) {
+function SidebarNav({ isAdmin, pathname, onLinkClick, unreadNoticeCount }: { isAdmin: boolean; pathname: string; onLinkClick?: () => void; unreadNoticeCount: number }) {
   const isActive = (href: string) => pathname === href;
 
   return (
@@ -81,6 +83,11 @@ function SidebarNav({ isAdmin, pathname, onLinkClick }: { isAdmin: boolean; path
           >
             <item.icon className="h-4 w-4" />
             {item.label}
+            {item.href === '/staff/inbox' && unreadNoticeCount > 0 && (
+              <span className="ml-auto inline-flex items-center justify-center rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-medium text-destructive-foreground">
+                {unreadNoticeCount}
+              </span>
+            )}
           </Link>
         ))}
       </div>
@@ -179,7 +186,46 @@ export function StaffLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { data: onboardingData, isLoading: onboardingLoading, isCompleted: onboardingCompleted, refetch: refetchOnboarding } = useOnboardingStatus(user?.id);
 
-  if (loading || rolesLoading || onboardingLoading) {
+  // Circular notice blocking
+  const [unacknowledgedNotices, setUnacknowledgedNotices] = useState<any[]>([]);
+  const [noticesLoading, setNoticesLoading] = useState(true);
+  const [acknowledging, setAcknowledging] = useState(false);
+
+  useEffect(() => {
+    if (user && !isAdmin) fetchUnacknowledgedNotices();
+    else setNoticesLoading(false);
+  }, [user, isAdmin]);
+
+  useEffect(() => {
+    if (!user || isAdmin) return;
+    const channel = supabase
+      .channel('notice-blocking')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'circular_notices' }, () => fetchUnacknowledgedNotices())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'circular_notice_acknowledgements' }, () => fetchUnacknowledgedNotices())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user, isAdmin]);
+
+  const fetchUnacknowledgedNotices = async () => {
+    if (!user) return;
+    const [noticesRes, acksRes] = await Promise.all([
+      supabase.from('circular_notices').select('*').eq('is_active', true).order('published_at', { ascending: true }),
+      supabase.from('circular_notice_acknowledgements').select('notice_id').eq('user_id', user.id),
+    ]);
+    const ackedIds = new Set((acksRes.data || []).map((a: any) => a.notice_id));
+    const unacked = ((noticesRes.data as any[]) || []).filter((n: any) => !ackedIds.has(n.id));
+    setUnacknowledgedNotices(unacked);
+    setNoticesLoading(false);
+  };
+
+  const acknowledgeNotice = async (noticeId: string) => {
+    setAcknowledging(true);
+    await supabase.from('circular_notice_acknowledgements').insert({ notice_id: noticeId, user_id: user!.id });
+    await fetchUnacknowledgedNotices();
+    setAcknowledging(false);
+  };
+
+  if (loading || rolesLoading || onboardingLoading || noticesLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -210,6 +256,35 @@ export function StaffLayout() {
     );
   }
 
+  // Block navigation if unacknowledged notices exist (non-admin)
+  if (!isAdmin && unacknowledgedNotices.length > 0) {
+    const notice = unacknowledgedNotices[0];
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="max-w-lg w-full">
+          <div className="flex items-center gap-3 mb-4">
+            <AlertTriangle className="h-6 w-6 text-amber-500" />
+            <h1 className="text-xl font-bold">Important Notice</h1>
+            {notice.priority === 'urgent' && (
+              <span className="inline-flex items-center rounded-full bg-destructive px-2.5 py-0.5 text-xs font-medium text-destructive-foreground">Urgent</span>
+            )}
+          </div>
+          <div className="rounded-lg border bg-card p-6 mb-4">
+            <h2 className="text-lg font-semibold mb-2">{notice.title}</h2>
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{notice.content}</p>
+          </div>
+          <p className="text-xs text-muted-foreground mb-4">
+            {unacknowledgedNotices.length > 1 && `${unacknowledgedNotices.length - 1} more notice(s) remaining after this.`}
+          </p>
+          <Button className="w-full" size="lg" disabled={acknowledging} onClick={() => acknowledgeNotice(notice.id)}>
+            <CheckSquare className="h-4 w-4 mr-2" />
+            I've read &amp; understood this notice/announcement
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   const handleSignOut = async () => {
     await signOut();
     navigate('/auth');
@@ -226,7 +301,7 @@ export function StaffLayout() {
           </Link>
         </div>
         <div className="flex-1 overflow-y-auto">
-          <SidebarNav isAdmin={isAdmin} pathname={location.pathname} />
+          <SidebarNav isAdmin={isAdmin} pathname={location.pathname} unreadNoticeCount={unacknowledgedNotices.length} />
         </div>
         <div className="shrink-0 p-4 border-t">
           <div className="text-sm text-muted-foreground mb-2 truncate">{user.email}</div>
@@ -248,7 +323,7 @@ export function StaffLayout() {
             </Link>
           </div>
           <div className="flex-1 overflow-y-auto">
-            <SidebarNav isAdmin={isAdmin} pathname={location.pathname} onLinkClick={() => setMobileOpen(false)} />
+            <SidebarNav isAdmin={isAdmin} pathname={location.pathname} onLinkClick={() => setMobileOpen(false)} unreadNoticeCount={unacknowledgedNotices.length} />
           </div>
           <div className="shrink-0 p-4 border-t">
             <div className="text-sm text-muted-foreground mb-2 truncate">{user.email}</div>
