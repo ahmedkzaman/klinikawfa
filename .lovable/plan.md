@@ -1,37 +1,17 @@
 
 
-## Fix: Separate AM/PM Selfie Tracking for Multi-Shift Doctors
+## Plan: Allow Admin to Remove Staff from Shift 1 Cells
 
 ### Problem
-
-The `daily_reports` table only has one `briefing_selfie_url` column per user per date. When Ahmed is assigned to both AM and PM shifts, the admin daily task review shows the same selfie checkmark on both rows. He only uploaded the PM evening selfie, but the AM row also shows green.
-
-### Root Cause
-
-1. **Database**: `daily_reports` has no shift distinction — one row per user per date
-2. **Admin view** (`DailyTaskReview.tsx`): Creates two entries for the same doctor (AM + PM) but both reference the same report via `userId-date` key
-3. **Staff upload** (`DailyReportingCard.tsx`): Uploads to `briefing_selfie_url` regardless of which shift is active
+The Shift 1 dropdown only lists staff members. There is no way to unassign a staff member from a Shift 1 slot (set it to empty/none).
 
 ### Fix
 
-**1. Database migration** — Add an `evening_selfie_url` column to `daily_reports`:
-```sql
-ALTER TABLE daily_reports ADD COLUMN evening_selfie_url text;
-```
+**File: `src/pages/staff/admin/Roster.tsx`**
 
-This keeps the existing `briefing_selfie_url` for AM (morning briefing) and adds `evening_selfie_url` for PM (evening passover).
+1. **Update `updateCell` function** (line 724-738) — Handle a special `"__none__"` value that removes the cell from the shift array instead of replacing it with a staff member.
 
-**2. `DailyReportingCard.tsx`** — When the detected shift is PM, upload to `evening_selfie_url` instead of `briefing_selfie_url`. Display the correct field based on current shift. The label already says "Evening Passover Selfie" for PM — now it maps to the correct column.
+2. **Add "None / Remove" option to Shift 1 Select dropdown** (line 1135-1138) — Add a `<SelectItem value="__none__">— None —</SelectItem>` before the staff list, only for `shift1`.
 
-**3. `DailyTaskReview.tsx`** — In `buildDayEntries` and the rendering logic:
-- AM entries check `briefing_selfie_url`
-- PM entries check `evening_selfie_url`
-- Update the `Check` component calls to reference the shift-appropriate URL
-- Fetch the new `evening_selfie_url` column in the query
-
-### Files Changed
-
-- **Database migration**: Add `evening_selfie_url` column
-- `src/components/staff/DailyReportingCard.tsx` — use `evening_selfie_url` for PM shift uploads/display
-- `src/pages/staff/admin/DailyTaskReview.tsx` — show correct selfie column per shift row
+No changes to Shift 2, Hybrid, or any other settings.
 
