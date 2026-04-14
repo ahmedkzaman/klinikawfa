@@ -729,7 +729,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
         const updated = { ...prev };
         const dayData = { ...updated[dateKey] };
         const cells = [...dayData[shift]];
-        cells.splice(index, 1);
+        cells[index] = { staffId: '', staffName: '' };
         dayData[shift] = cells;
         updated[dateKey] = dayData;
         return updated;
