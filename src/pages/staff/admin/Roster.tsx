@@ -723,6 +723,19 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
   // Manual cell change
   const updateCell = (dateKey: string, shift: 'shift1' | 'shift2', index: number, newStaffId: string) => {
     if (!roster) return;
+    if (newStaffId === '__none__') {
+      setRoster(prev => {
+        if (!prev) return prev;
+        const updated = { ...prev };
+        const dayData = { ...updated[dateKey] };
+        const cells = [...dayData[shift]];
+        cells.splice(index, 1);
+        dayData[shift] = cells;
+        updated[dateKey] = dayData;
+        return updated;
+      });
+      return;
+    }
     const staff = staffList.find(s => s.id === newStaffId);
     if (!staff) return;
     setRoster(prev => {
@@ -1133,6 +1146,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                                   <span className="truncate">{firstName(cell.staffName)}</span>
                                 </SelectTrigger>
                                 <SelectContent>
+                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>
                                   {staffList.map(s => (
                                     <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>
                                   ))}
