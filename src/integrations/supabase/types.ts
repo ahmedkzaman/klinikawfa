@@ -971,6 +971,50 @@ export type Database = {
         }
         Relationships: []
       }
+      roster_zone_assignments: {
+        Row: {
+          created_at: string
+          end_time: string
+          id: string
+          shift_key: string
+          source: string
+          start_time: string
+          user_id: string
+          work_date: string
+          zone_id: string
+        }
+        Insert: {
+          created_at?: string
+          end_time: string
+          id?: string
+          shift_key: string
+          source?: string
+          start_time: string
+          user_id: string
+          work_date: string
+          zone_id: string
+        }
+        Update: {
+          created_at?: string
+          end_time?: string
+          id?: string
+          shift_key?: string
+          source?: string
+          start_time?: string
+          user_id?: string
+          work_date?: string
+          zone_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roster_zone_assignments_zone_id_fkey"
+            columns: ["zone_id"]
+            isOneToOne: false
+            referencedRelation: "geofence_zones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       saved_rosters: {
         Row: {
           created_at: string
@@ -1653,6 +1697,10 @@ export type Database = {
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff_or_admin: { Args: { _user_id: string }; Returns: boolean }
+      sync_roster_zone_assignments: {
+        Args: { _month: number; _year: number }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "admin" | "staff" | "guest"
