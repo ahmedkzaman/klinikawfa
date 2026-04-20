@@ -69,14 +69,31 @@ export default function StaffPunch() {
 
   const fetchData = async () => {
     setIsLoadingData(true);
-    const [zonesRes, punchRes, assignRes] = await Promise.all([
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    // Roster-derived assignments (preferred) take precedence over manual recurring
+    const [zonesRes, punchRes, manualRes, rosterRes] = await Promise.all([
       supabase.from('geofence_zones').select('id, name, latitude, longitude, radius_meters').eq('is_active', true),
       supabase.from('attendance_records').select('punch_type, punch_time').eq('user_id', user?.id).order('punch_time', { ascending: false }).limit(1).single(),
       supabase.from('staff_zone_assignments').select('zone_id, start_time, end_time, days_of_week, is_active').eq('user_id', user?.id).eq('is_active', true),
+      supabase.from('roster_zone_assignments').select('zone_id, start_time, end_time').eq('user_id', user?.id).eq('work_date', todayStr),
     ]);
     if (zonesRes.data) setZones(zonesRes.data);
     if (punchRes.data) setLastPunch(punchRes.data);
-    setAssignments(assignRes.data || []);
+
+    // If today has roster-derived assignments, use them (mapped to recurring shape with today's day-of-week).
+    // Otherwise fall back to manual recurring assignments.
+    const todayDow = new Date().getDay();
+    if (rosterRes.data && rosterRes.data.length > 0) {
+      setAssignments(rosterRes.data.map((r: any) => ({
+        zone_id: r.zone_id,
+        start_time: r.start_time,
+        end_time: r.end_time,
+        days_of_week: [todayDow],
+        is_active: true,
+      })));
+    } else {
+      setAssignments(manualRes.data || []);
+    }
     setIsLoadingData(false);
   };
 
