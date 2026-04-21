@@ -1,48 +1,71 @@
 
-## Plan: Captcha + Rate Limit for Appointment Submissions
+## Plan: hCaptcha + Per-IP Rate Limit (3 / 10 min) on Appointment Form
 
-Lock down the public `appointments` insert by routing it through an edge function that verifies a Cloudflare Turnstile captcha and enforces a per-IP rate limit (3 per 10 min). Then revoke the public `INSERT` policy.
+Lock down the public `appointments` insert by routing through an edge function that:
+1. Verifies an hCaptcha token
+2. Enforces a per-IP rate limit (3 submissions / 10 minutes) via a DB log table
+3. Inserts via service role
 
-> Note: per Lovable guidance, the backend has no shared rate-limit primitives — this will be an ad-hoc in-memory + DB-fallback implementation, good enough for this lead form but not a hardened solution.
+Then drop the open public `INSERT` RLS policy.
+
+> Note: Per platform guidance, the backend has no shared rate-limit primitives. This implementation is ad-hoc (DB-backed log + best-effort in-memory cache) — sufficient for a public lead form, not hardened DDoS protection.
 
 ### 1. Database migration
-- New table `appointment_submission_log` (`id`, `ip_hash` text, `created_at` timestamptz default now()). Index on `(ip_hash, created_at)`. RLS enabled, no public policies (only service role writes/reads).
-- Drop policy `Anyone can submit appointments` on `appointments` so direct anon inserts are blocked. Staff/admin policies stay.
-- (No new policy needed — edge function uses `SUPABASE_SERVICE_ROLE_KEY` and bypasses RLS.)
+- New table `appointment_submission_log`:
+  - `id uuid pk`, `ip_hash text not null`, `created_at timestamptz default now()`
+  - Index on `(ip_hash, created_at desc)` for fast rate-limit lookups
+  - RLS enabled, **no public policies** (only service role accesses it)
+- Drop policy `Anyone can submit appointments` on `public.appointments`. Staff/admin policies stay.
+- Optional retention: a comment noting rows older than 1 day can be cleaned up later (not auto-purged for now).
 
 ### 2. New edge function `submit-appointment`
-- `verify_jwt = false` (public form).
-- CORS handled.
-- Zod validation on body: `name` (1–100), `phone` (regex, 8–20), `service` (whitelist), `preferred_date` (ISO date, not in past), `preferred_time` (HH:MM), `message` (≤500, optional), `turnstileToken` (string).
-- Extract client IP from `x-forwarded-for` / `cf-connecting-ip`. Hash with SHA-256 + a server-side salt before storing (privacy).
-- **Captcha verify**: POST `turnstileToken` + `TURNSTILE_SECRET_KEY` to `https://challenges.cloudflare.com/turnstile/v0/siteverify`. Reject on failure with 403.
-- **Rate limit**: 
-  - In-memory `Map<ipHash, timestamps[]>` for hot-path (per-instance).
-  - DB check: `select count(*) from appointment_submission_log where ip_hash=$1 and created_at > now() - interval '10 minutes'`. If `>= 3` → return 429 with bilingual message.
-- On success: insert into `appointments` (service role) + insert log row. Return `{ ok: true, id }`.
+- `verify_jwt = false` (public form) — added to `supabase/config.toml`.
+- Standard CORS headers on every response (including errors).
+- **Zod validation** on body:
+  - `name` (1–100, trimmed)
+  - `phone` (regex `^[+0-9 \-()]{8,20}$`)
+  - `service` (string, 1–100)
+  - `preferred_date` (ISO date, today or later)
+  - `preferred_time` (HH:MM)
+  - `message` (≤1000, optional)
+  - `hcaptchaToken` (string)
+- **Captcha verify**: POST form-urlencoded `response` + `secret` to `https://api.hcaptcha.com/siteverify`. Reject 403 on `success: false`.
+- **Rate limit (3 / 10 min per IP)**:
+  - Extract IP from `cf-connecting-ip` → `x-real-ip` → `x-forwarded-for` (first entry).
+  - Hash IP with SHA-256 + `APPT_IP_SALT` for privacy before storing/querying.
+  - Query: `select count(*) from appointment_submission_log where ip_hash=$1 and created_at > now() - interval '10 minutes'`.
+  - If `>= 3` → return **429** with bilingual message `{ error: "Too many requests / Terlalu banyak permintaan", retryAfterMinutes: 10 }`.
+- **On success**: insert into `appointments` (service role bypasses RLS) + insert log row. Return `{ ok: true, id }`.
 
 ### 3. Frontend changes (`src/pages/Appointment.tsx`)
-- Add `@marsidev/react-turnstile` widget above the submit button. Use `VITE_TURNSTILE_SITE_KEY` (public, safe in code/env).
-- Block submit until token present.
-- Replace direct `supabase.from('appointments').insert(...)` with `supabase.functions.invoke('submit-appointment', { body: {...formData, turnstileToken} })`.
-- Handle 429 → toast "Too many requests, try again in a few minutes" (BM/EN). Handle 403 → toast "Captcha failed, please retry".
-- Keep the existing post-submit WhatsApp redirect flow.
+- Install and add `@hcaptcha/react-hcaptcha` widget above the submit button.
+- Site key as `VITE_HCAPTCHA_SITE_KEY` in `.env` (publishable, safe).
+- Disable submit button until captcha token is captured.
+- Replace direct `supabase.from('appointments').insert(...)` with `supabase.functions.invoke('submit-appointment', { body: {...formData, hcaptchaToken} })`.
+- Toast handling (BM/EN):
+  - 429 → "Too many requests. Please try again in 10 minutes / Terlalu banyak permintaan. Sila cuba lagi dalam 10 minit"
+  - 403 → "Captcha verification failed. Please retry / Pengesahan captcha gagal. Sila cuba lagi"
+  - 400 → field-level validation errors
+- Reset captcha widget after every submit (success or fail).
+- Keep the existing post-submit WhatsApp redirect flow untouched.
 
-### 4. Secrets needed
-- `TURNSTILE_SECRET_KEY` (Cloudflare dashboard → Turnstile widget → secret key) — request via add_secret after approval.
-- `TURNSTILE_SITE_KEY` (public site key) — added to code as a constant or `VITE_TURNSTILE_SITE_KEY` in `.env` (publishable, fine to commit).
-- `APPT_IP_SALT` — random string for hashing IPs. Will be requested.
+### 4. Secrets needed (will request after approval)
+- `HCAPTCHA_SECRET_KEY` — from https://dashboard.hcaptcha.com → Sites → Settings → Secret Key (free, ~2 min signup)
+- `VITE_HCAPTCHA_SITE_KEY` — public site key from same page (committed in `.env`, safe)
+- `APPT_IP_SALT` — any random ≥32-char string (I'll suggest one) for privacy-preserving IP hashing
+- For local testing, hCaptcha provides always-pass test keys: site `10000000-ffff-ffff-ffff-000000000001`, secret `0x0000000000000000000000000000000000000000`
 
 ### 5. Security finding
-- After deploy, mark `SUPA_rls_policy_always_true` as fixed (the offending policy is removed).
+- After deploy, mark `SUPA_rls_policy_always_true` as fixed (offending policy removed).
 
 ### Files touched
 - New: `supabase/functions/submit-appointment/index.ts`
-- New: migration (drop policy + create log table)
-- New: `supabase/config.toml` block for the function
+- New: migration (drop policy + create `appointment_submission_log`)
+- Edited: `supabase/config.toml` (add `[functions.submit-appointment] verify_jwt = false`)
 - Edited: `src/pages/Appointment.tsx`
-- Edited: `package.json` (add `@marsidev/react-turnstile`)
+- Edited: `package.json` (add `@hcaptcha/react-hcaptcha`)
 
 ### Out of scope
-- Distributed rate limiting (would need Redis/Upstash).
-- Captcha on other public forms (lead capture etc.) — can extend later.
+- Distributed/global rate limiting (would need Redis/Upstash).
+- Auto-purge of old log rows (manual cleanup or future cron).
+- Captcha on other public forms — can extend later.
