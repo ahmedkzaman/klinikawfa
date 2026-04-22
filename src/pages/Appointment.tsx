@@ -70,18 +70,65 @@ export default function Appointment() {
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase.from('appointments').insert({
-        name: data.name.trim(),
-        phone: data.phone.trim(),
-        preferred_date: data.preferred_date,
-        preferred_time: data.preferred_time,
-        service: data.service,
-        message: data.message?.trim() || null,
-        status: 'pending',
-      });
+      const { data: result, error } = await supabase.functions.invoke(
+        'submit-appointment',
+        {
+          body: {
+            name: data.name.trim(),
+            phone: data.phone.trim(),
+            preferred_date: data.preferred_date,
+            preferred_time: data.preferred_time,
+            service: data.service,
+            message: data.message?.trim() || null,
+          },
+        }
+      );
 
+      // supabase.functions.invoke surfaces non-2xx as `error` with a `context` Response.
       if (error) {
+        let status = 0;
+        let payload: any = null;
+        const ctx: any = (error as any).context;
+        if (ctx && typeof ctx.json === 'function') {
+          status = ctx.status;
+          try {
+            payload = await ctx.json();
+          } catch {
+            payload = null;
+          }
+        }
+
+        if (status === 429) {
+          toast({
+            title: language === 'ms' ? 'Terlalu Banyak Permintaan' : 'Too Many Requests',
+            description: language === 'ms'
+              ? 'Terlalu banyak permintaan. Sila cuba lagi dalam 10 minit.'
+              : 'Too many requests. Please try again in 10 minutes.',
+            variant: 'destructive',
+          });
+          return;
+        }
+
+        if (status === 400 && payload?.fields) {
+          const firstField = Object.keys(payload.fields)[0];
+          const firstMsg = Array.isArray(payload.fields[firstField])
+            ? payload.fields[firstField][0]
+            : null;
+          toast({
+            title: language === 'ms' ? 'Maklumat Tidak Sah' : 'Invalid Information',
+            description: firstMsg ?? (language === 'ms'
+              ? 'Sila semak maklumat yang dimasukkan.'
+              : 'Please check your submitted information.'),
+            variant: 'destructive',
+          });
+          return;
+        }
+
         throw error;
+      }
+
+      if (!result?.ok) {
+        throw new Error('Submission failed');
       }
 
       setSubmittedData(data);
@@ -90,7 +137,7 @@ export default function Appointment() {
 
       toast({
         title: language === 'ms' ? 'Berjaya!' : 'Success!',
-        description: language === 'ms' 
+        description: language === 'ms'
           ? 'Permintaan temujanji anda telah dihantar.'
           : 'Your appointment request has been submitted.',
       });
