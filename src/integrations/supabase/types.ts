@@ -41,6 +41,24 @@ export type Database = {
         }
         Relationships: []
       }
+      appointment_submission_log: {
+        Row: {
+          created_at: string
+          id: string
+          ip_hash: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ip_hash: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ip_hash?: string
+        }
+        Relationships: []
+      }
       appointments: {
         Row: {
           created_at: string
