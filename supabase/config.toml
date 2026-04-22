@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.structure-medical-notes]
 verify_jwt = false
+
+[functions.submit-appointment]
+verify_jwt = false
