@@ -1706,6 +1706,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cleanup_appointment_submission_log: { Args: never; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1715,6 +1716,18 @@ export type Database = {
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff_or_admin: { Args: { _user_id: string }; Returns: boolean }
+      record_appointment_submission: {
+        Args: {
+          _ip_hash: string
+          _message: string
+          _name: string
+          _phone: string
+          _preferred_date: string
+          _preferred_time: string
+          _service: string
+        }
+        Returns: string
+      }
       sync_roster_zone_assignments: {
         Args: { _month: number; _year: number }
         Returns: undefined
