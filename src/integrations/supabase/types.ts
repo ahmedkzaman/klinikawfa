@@ -3025,6 +3025,7 @@ export type Database = {
         Args: { _item_id: string; _qty: number }
         Returns: undefined
       }
+      safe_reset_queue_number_seq: { Args: never; Returns: undefined }
       sync_roster_zone_assignments: {
         Args: { _month: number; _year: number }
         Returns: undefined
