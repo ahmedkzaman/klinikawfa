@@ -17,8 +17,7 @@ export type ClinicStatus =
   | 'sent_to_dispensary'
   | 'dispensing_payment'
   | 'on_hold'
-  | 'completed'
-  | 'cancelled';
+  | 'completed';
 
 export const STATUS_LABELS: Record<ClinicStatus, string> = {
   registered: 'Registered',
@@ -28,7 +27,6 @@ export const STATUS_LABELS: Record<ClinicStatus, string> = {
   dispensing_payment: 'Payment',
   on_hold: 'On Hold',
   completed: 'Completed',
-  cancelled: 'Cancelled',
 };
 
 /** Semantic-token Tailwind classes only — never raw colors. */
@@ -40,7 +38,6 @@ export const STATUS_COLORS: Record<ClinicStatus, string> = {
   dispensing_payment: 'bg-secondary text-secondary-foreground border-border',
   on_hold: 'bg-destructive/10 text-destructive border-destructive/20',
   completed: 'bg-primary/10 text-primary border-primary/20',
-  cancelled: 'bg-muted text-muted-foreground border-border',
 };
 
 /** Five visible columns for the kanban board (completed/cancelled drop off). */
