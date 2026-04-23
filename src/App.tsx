@@ -57,7 +57,9 @@ import { ClinicProtectedRoute } from "./components/ClinicProtectedRoute";
 import { ClinicLayout } from "./components/clinic/ClinicLayout";
 import QueueBoard from "./pages/clinic/QueueBoard";
 import PatientsList from "./pages/clinic/PatientsList";
-import ConsultationsList from "./pages/clinic/ConsultationsList";
+import Consultation from "./pages/clinic/Consultation";
+import ConsultationDetail from "./pages/clinic/ConsultationDetail";
+import Procurement from "./pages/clinic/Procurement";
 import Dispensary from "./pages/clinic/Dispensary";
 import Inventory from "./pages/clinic/Inventory";
 import VoidedRecords from "./pages/clinic/VoidedRecords";
@@ -157,7 +159,9 @@ const App = () => (
                 <Route index element={<Navigate to="queue" replace />} />
                 <Route path="queue" element={<QueueBoard />} />
                 <Route path="patients" element={<PatientsList />} />
-                <Route path="consultations" element={<ConsultationsList />} />
+                <Route path="consultation" element={<Consultation />} />
+                <Route path="consultation/:queueEntryId" element={<ConsultationDetail />} />
+                <Route path="procurement" element={<Procurement />} />
                 <Route path="dispensary" element={<Dispensary />} />
                 <Route path="inventory" element={<Inventory />} />
                 <Route
