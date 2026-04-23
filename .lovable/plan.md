@@ -1,23 +1,65 @@
 
-## Add Always-Visible "Register New Patient" Button to Walk-In Dialog
+## Hotfix: Consultation Save Failures
 
-**Problem:** The "Register new patient" action is hidden inside `PatientPicker`'s empty-state — only appears after typing a search that returns zero results. Easy to miss.
+Applying the approved three-part fix exactly as specified.
 
-**Fix:** Surface a clear, always-visible button next to the "Patient *" label inside `CheckInWalkInDialog`, which opens the existing `RegisterPatientDialog`. The wiring already exists (`registerOpen` state + `RegisterPatientDialog` render + `onCreated → setPatient`); we just expose the trigger upfront.
+### 1. Database migration — `vital_signs` write RLS
 
-### Change
+```sql
+CREATE POLICY vital_signs_ops_insert ON public.vital_signs
+  FOR INSERT TO authenticated
+  WITH CHECK (public.is_ops_or_admin(auth.uid()));
 
-**`src/components/clinic/CheckInWalkInDialog.tsx`** — modify the "Patient *" label row only:
+CREATE POLICY vital_signs_ops_update ON public.vital_signs
+  FOR UPDATE TO authenticated
+  USING (public.is_ops_or_admin(auth.uid()))
+  WITH CHECK (public.is_ops_or_admin(auth.uid()));
 
-- Replace the single `<Label>` with a flex row: `<Label>` on the left, a small `<Button variant="link" size="sm">` with a `UserPlus` icon and the text "Register new" on the right.
-- Button `onClick` → `setRegisterOpen(true)` (state already declared).
-- Hide the button when a patient is already selected (`!patient`) to keep the UI clean during the "Change" flow.
+CREATE POLICY vital_signs_ops_delete ON public.vital_signs
+  FOR DELETE TO authenticated
+  USING (public.is_special_admin(auth.uid()));
+```
 
-No other files touched. `PatientPicker`'s inline empty-state button stays as a secondary fallback.
+### 2. `src/pages/clinic/ConsultationDetail.tsx` — surface silent failures
+
+Replace the three silent early-returns with toasts:
+
+- `handleSaveNotes`, `handleBulkInsert`, `handleSendToDispensary`:
+  ```ts
+  if (!consultationId) {
+    toast.error('Doctor profile missing or consultation not created — contact admin');
+    return;
+  }
+  ```
+- `handleSaveVitals` — add guard before save:
+  ```ts
+  if (!entry || !patient?.id) {
+    toast.error('Missing patient or queue data');
+    return;
+  }
+  ```
+
+### 3. `src/hooks/clinic/*` — add `onError` toasts to mutations
+
+In each of the four mutation hooks, add a top-level `onError` to the `useMutation` config that surfaces the failure:
+
+- `useCreateConsultation` (`useConsultations.ts`)
+- `useUpdateConsultation` (`useConsultations.ts`)
+- `useRecordVitalSigns` (`useVitalSigns.ts`)
+- `useAddConsultationItem` (`useConsultationItems.ts`)
+
+```ts
+onError: (error: Error) => toast.error(error.message),
+```
+
+(For `useAddConsultationItem`, the existing `isInsufficientStock` toast already fires inside `mutationFn` and re-throws with the same message, so the `onError` fallback won't double-toast on stock errors — it just covers the RLS / validation cases.)
+
+`toast` is imported from `sonner` (already used in `useConsultationItems.ts`; will be added to the other two hook files).
 
 ### Verification
 
-1. Open Queue Board → Walk-In → dialog shows "Patient *" with "Register new" link-button on the right.
-2. Click "Register new" → `RegisterPatientDialog` opens on top.
-3. Submit registration → dialog closes, new patient auto-fills into the picker (existing `onCreated` path).
-4. Once a patient is selected, the "Register new" button is hidden (picker is in selected/Change state).
+1. Reload `/clinic/consultation/777d6308…`. With doctor profile still absent, clicking **Save notes** / **Record vitals** / **Add treatment** now shows a clear red toast instead of silent failure.
+2. Once a `doctors` row is seeded for the current user (separate follow-up), the same actions succeed and persist on reload.
+3. Any future RLS denial on `consultations`, `consultation_items`, or `vital_signs` produces a visible Postgres error toast instead of failing quietly.
+
+Stops after migration + the three file edits.
