@@ -1,163 +1,72 @@
 
-## Step 2 — Database Hardening (B.3 + B.4 + B.5)
+## Step 3 — Frontend Foundation (RBAC + Soft-Delete Helper + Protected Route)
 
-Three sequential migrations. SQL only. No frontend changes. Stop and confirm after all three apply cleanly.
-
----
-
-### Migration 4 — `<ts>_inventory_allocation.sql` (B.3)
-
-**Schema:**
-```sql
-ALTER TABLE public.inventory_items
-  ADD COLUMN allocated_quantity INTEGER NOT NULL DEFAULT 0
-    CHECK (allocated_quantity >= 0);
-```
-
-**Helper** — `available_quantity(_item_id uuid) → integer`, `STABLE`, `SECURITY DEFINER`, `search_path=public`:
-```sql
-SELECT GREATEST(stock - allocated_quantity, 0)
-FROM public.inventory_items WHERE id = _item_id;
-```
-
-**Three SECURITY DEFINER mutators** — `OWNER TO postgres`, `REVOKE ALL FROM PUBLIC`, `GRANT EXECUTE TO authenticated`. Each uses `SELECT ... FOR UPDATE` to serialize concurrent allocations:
-
-- `reserve_inventory(_item_id uuid, _qty integer)` → locks row, raises `insufficient_stock` (`P0001`) if `stock - allocated_quantity < _qty`, otherwise increments `allocated_quantity`.
-- `commit_inventory(_item_id uuid, _qty integer)` → locks row, decrements both `stock` and `allocated_quantity` by `_qty`. Used when consultation finalized + dispensed.
-- `release_inventory(_item_id uuid, _qty integer)` → locks row, decrements `allocated_quantity` by `_qty` (no stock change). Used on void / soft-delete.
-
-**Triggers on `consultation_items`:**
-- `AFTER INSERT` (active row, item resolves to inventory): call `reserve_inventory`.
-- `AFTER UPDATE` of `quantity` (active → active): diff and `reserve_inventory(diff)` or `release_inventory(-diff)`.
-- `AFTER UPDATE` where `OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL` (soft-delete transition): `release_inventory(quantity)`.
-
-**Trigger on `consultations`** for status transitions:
-- `AFTER UPDATE` where `NEW.status = 'completed' AND OLD.status <> 'completed'`: for each active `consultation_items` row, `commit_inventory(quantity)`.
-- `AFTER UPDATE` where `OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL`: for each still-active `consultation_items` row, `release_inventory(quantity)`.
-
-**Item resolution**: triggers must resolve `item_name` → `inventory_items.id`. Skip non-inventory items (free-text services) silently. Use a join `inventory_items WHERE name = item_name AND status = 'active' LIMIT 1`.
+Scope: Wire the new database primitives into the React app so subsequent clinic UI steps can rely on them. No clinic UI yet, no edge functions, no inventory screens.
 
 ---
 
-### Migration 5 — `<ts>_midnight_queue.sql` (B.4)
+### 3.1 — Extend `AuthContext` for new roles
 
-**Replace** any existing `reset_queue_number_seq()` (drop if present) with:
+File: `src/contexts/AuthContext.tsx`
 
-```sql
-CREATE OR REPLACE FUNCTION public.safe_reset_queue_number_seq()
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_max_active integer;
-  v_next integer;
-BEGIN
-  SELECT COALESCE(MAX(queue_number), 0) INTO v_max_active
-  FROM public.queue_entries
-  WHERE deleted_at IS NULL
-    AND clinic_status IN (
-      'registered','ready_for_doctor','with_doctor',
-      'sent_to_dispensary','dispensing_payment','on_hold'
-    );
-
-  IF v_max_active = 0 THEN
-    v_next := 1001;  -- queue fully drained: hard reset to anchor
-  ELSE
-    v_next := v_max_active + 1;  -- preserve continuity
-  END IF;
-
-  PERFORM setval('public.queue_number_seq', v_next, false);
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.safe_reset_queue_number_seq() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.safe_reset_queue_number_seq() TO authenticated;
-ALTER FUNCTION public.safe_reset_queue_number_seq() OWNER TO postgres;
-```
-
-If `queue_number_seq` doesn't exist yet, `CREATE SEQUENCE IF NOT EXISTS public.queue_number_seq START 1001;` first.
+- Extend the role union type to include `'special_admin' | 'operations'` alongside the existing `'admin' | 'staff' | 'user'`.
+- Add derived booleans exposed via context value:
+  - `isSpecialAdmin` — `role === 'special_admin'`
+  - `isOperations` — `role === 'operations'`
+  - `isOpsOrAdmin` — `['operations','admin','special_admin'].includes(role)`
+- Keep existing `isAdmin`, `isStaff`, `rolesLoading` semantics unchanged. No change to tab-switch persistence (`mem://tech/app-stability/tab-switch-persistence`).
+- No change to the `user_roles` query — single-role-per-user model already enforced (`mem://auth/role-system`).
 
 ---
 
-### Migration 6 — `<ts>_intake_rpc.sql` (B.5)
+### 3.2 — `ClinicProtectedRoute` component
 
-Single-transaction atomic intake — replaces two-call frontend pattern:
+New file: `src/components/ClinicProtectedRoute.tsx`
 
-```sql
-CREATE OR REPLACE FUNCTION public.intake_appointment_to_queue(
-  p_appointment_id uuid,
-  p_patient_id uuid,
-  p_visit_purpose text DEFAULT 'consultation',
-  p_notes text DEFAULT NULL
-)
-RETURNS uuid
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_queue_id uuid;
-  v_appt_status text;
-BEGIN
-  IF NOT public.is_ops_or_admin(auth.uid()) THEN
-    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
-  END IF;
-
-  SELECT status INTO v_appt_status
-  FROM public.appointments
-  WHERE id = p_appointment_id
-  FOR UPDATE;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'APPOINTMENT_NOT_FOUND' USING ERRCODE = 'P0001';
-  END IF;
-
-  IF v_appt_status = 'checked_in' THEN
-    RAISE EXCEPTION 'ALREADY_CHECKED_IN' USING ERRCODE = 'P0001';
-  END IF;
-
-  INSERT INTO public.queue_entries (
-    patient_id, visit_purpose, visit_notes,
-    source_appointment_id, created_by, clinic_status
-  )
-  VALUES (
-    p_patient_id, p_visit_purpose, p_notes,
-    p_appointment_id, auth.uid(), 'registered'
-  )
-  RETURNING id INTO v_queue_id;
-
-  UPDATE public.appointments
-     SET status = 'checked_in'
-   WHERE id = p_appointment_id;
-
-  RETURN v_queue_id;
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.intake_appointment_to_queue(uuid, uuid, text, text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.intake_appointment_to_queue(uuid, uuid, text, text) TO authenticated;
-ALTER FUNCTION public.intake_appointment_to_queue(uuid, uuid, text, text) OWNER TO postgres;
-```
-
-`SELECT ... FOR UPDATE` on the appointment row guarantees no two clerks can intake the same appointment concurrently. Whole operation is one transaction — if either insert or update fails, both roll back.
+- Mirror the structure of existing `ProtectedRoute.tsx` (loading state, redirect to `/auth`).
+- Accept prop `requiredRole?: 'ops_or_admin' | 'special_admin'` (default `'ops_or_admin'`).
+- While `rolesLoading`, render a centered spinner (no flicker, no premature redirect).
+- If unauthenticated → redirect `/auth?redirect=<current-path>`.
+- If role check fails → redirect `/staff/dashboard` (graceful fallback inside the portal, not a hard 403 page).
+- No clinic routes are wired yet — this component is created but not yet used in `App.tsx`. That wiring happens in Step 4 alongside the actual clinic pages.
 
 ---
 
-### Execution order
+### 3.3 — Soft-delete helper module
 
-```text
-4. <ts>_inventory_allocation.sql  -- column + helper + 3 mutators + triggers
-5. <ts>_midnight_queue.sql        -- safe_reset_queue_number_seq
-6. <ts>_intake_rpc.sql            -- intake_appointment_to_queue
-```
+New file: `src/lib/clinic/softDelete.ts`
 
-After all three apply: run the Supabase linter, confirm no new criticals, report success. **Stop. Do not begin Step 3 (frontend foundation work).**
+- Export `softDelete(table, id)` — a typed wrapper that performs `update({ deleted_at: new Date().toISOString(), deleted_by: user.id }).eq('id', id)`.
+- Restrict the `table` argument to a string-literal union of the four soft-deletable tables: `'consultations' | 'consultation_items' | 'payments' | 'queue_entries'`.
+- Resolve `user.id` from the current Supabase session (`supabase.auth.getUser()`); throw a typed error if no session — RLS would reject anyway, but failing fast gives better DX.
+- Return `{ data, error }` matching Supabase client conventions so callers can `if (error) toast(...)` uniformly.
+- Add JSDoc noting that this is the **only** sanctioned way to delete from these four tables — DB-level DELETE is now blocked by RLS (Migration 3).
 
-### Out of scope for Step 2
+---
 
-- Any frontend file (`App.tsx`, `AuthContext.tsx`, components, hooks).
-- Inventory UI (Stock/Allocated/Available columns).
-- Soft-delete helper wiring.
-- Edge functions and dependency additions.
+### 3.4 — Voided records query helper
+
+Same file: `src/lib/clinic/softDelete.ts`
+
+- Export `fetchVoided(table)` — gated query that returns soft-deleted rows. Will return empty array for non-`special_admin` users due to RLS; no client-side role check needed (DB is the source of truth).
+- Used in Step 5 by the voided-records admin page.
+
+---
+
+### Out of scope for Step 3
+
+- `App.tsx` route additions (clinic routes don't exist yet — added in Step 4 with the pages).
+- Any clinic page (`PatientsList`, `QueueBoard`, `ConsultationEditor`, etc.).
+- Inventory UI (Stock / Allocated / Available columns).
+- Edge functions (`intake-bridge`, `einvoice-submit`, etc.).
+- `package.json` additions.
+- Voided-records admin page UI (the data-layer helper is here; the page is Step 5).
+
+### Verification after Step 3
+
+1. TypeScript compiles cleanly.
+2. `useAuth()` exposes `isOpsOrAdmin` / `isSpecialAdmin` booleans.
+3. `ClinicProtectedRoute` renders a spinner while `rolesLoading`, then routes correctly.
+4. `softDelete('consultations', '<id>')` produces a network call with the expected `update` payload (manual smoke test only — no clinic UI to call it from yet).
+
+**Stop after these three files. Do not begin Step 4 (clinic page port).**
