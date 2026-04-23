@@ -48,6 +48,7 @@ export function useAddConsultationItem() {
     },
     onSuccess: (_, vars) =>
       qc.invalidateQueries({ queryKey: ['consultation_items', vars.consultation_id] }),
+    onError: (error: Error) => toast.error(error.message),
   });
 }
 

@@ -197,7 +197,10 @@ export default function ConsultationDetail() {
   }, [vitals?.id]);
 
   const handleSaveNotes = async () => {
-    if (!consultationId) return;
+    if (!consultationId) {
+      toast.error('Doctor profile missing or consultation not created — contact admin');
+      return;
+    }
     await updateConsultation.mutateAsync({
       id: consultationId,
       case_note: caseNote,
@@ -209,7 +212,10 @@ export default function ConsultationDetail() {
   };
 
   const handleSaveVitals = async () => {
-    if (!entry || !patient?.id) return;
+    if (!entry || !patient?.id) {
+      toast.error('Missing patient or queue data');
+      return;
+    }
     const toNum = (v: string) => (v ? Number(v) : null);
     await recordVitals.mutateAsync({
       id: vitals?.id,
@@ -232,7 +238,10 @@ export default function ConsultationDetail() {
   const handleBulkInsert = async (
     selectedItems: { id: string; name: string; price: number; type: string }[],
   ) => {
-    if (!consultationId) return;
+    if (!consultationId) {
+      toast.error('Doctor profile missing or consultation not created — contact admin');
+      return;
+    }
     for (const item of selectedItems) {
       await addItem.mutateAsync({
         consultation_id: consultationId,
@@ -245,7 +254,10 @@ export default function ConsultationDetail() {
   };
 
   const handleSendToDispensary = async () => {
-    if (!entry || !consultationId) return;
+    if (!entry || !consultationId) {
+      toast.error('Doctor profile missing or consultation not created — contact admin');
+      return;
+    }
     await updateConsultation.mutateAsync({
       id: consultationId,
       case_note: caseNote,

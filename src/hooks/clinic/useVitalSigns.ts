@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
 export function useVitalSigns(queueEntryId: string | undefined) {
@@ -47,6 +48,7 @@ export function useRecordVitalSigns() {
       qc.invalidateQueries({ queryKey: ['vital_signs', vars.queue_entry_id] });
       qc.invalidateQueries({ queryKey: ['vital_history', vars.patient_id] });
     },
+    onError: (error: Error) => toast.error(error.message),
   });
 }
 
