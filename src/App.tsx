@@ -52,6 +52,16 @@ import CircularNotices from "./pages/staff/admin/CircularNotices";
 import StaffInbox from "./pages/staff/Inbox";
 
 // Website Management (formerly /admin)
+// Clinic Portal
+import { ClinicProtectedRoute } from "./components/ClinicProtectedRoute";
+import { ClinicLayout } from "./components/clinic/ClinicLayout";
+import QueueBoard from "./pages/clinic/QueueBoard";
+import PatientsList from "./pages/clinic/PatientsList";
+import ConsultationsList from "./pages/clinic/ConsultationsList";
+import Dispensary from "./pages/clinic/Dispensary";
+import Inventory from "./pages/clinic/Inventory";
+import VoidedRecords from "./pages/clinic/VoidedRecords";
+
 import LeadsManagement from "./pages/admin/LeadsManagement";
 import BlogManagement from "./pages/admin/BlogManagement";
 import BlogEditor from "./pages/admin/BlogEditor";
@@ -133,6 +143,31 @@ const App = () => (
                 <Route path="website/gallery" element={<GalleryManagement />} />
                 <Route path="website/reviews" element={<ReviewsManagement />} />
                 <Route path="website/settings" element={<AdminSettings />} />
+              </Route>
+
+              {/* Clinic Portal Routes */}
+              <Route
+                path="/clinic"
+                element={
+                  <ClinicProtectedRoute>
+                    <ClinicLayout />
+                  </ClinicProtectedRoute>
+                }
+              >
+                <Route index element={<Navigate to="queue" replace />} />
+                <Route path="queue" element={<QueueBoard />} />
+                <Route path="patients" element={<PatientsList />} />
+                <Route path="consultations" element={<ConsultationsList />} />
+                <Route path="dispensary" element={<Dispensary />} />
+                <Route path="inventory" element={<Inventory />} />
+                <Route
+                  path="voided"
+                  element={
+                    <ClinicProtectedRoute requiredRole="special_admin">
+                      <VoidedRecords />
+                    </ClinicProtectedRoute>
+                  }
+                />
               </Route>
 
               {/* Redirect old /admin routes */}
