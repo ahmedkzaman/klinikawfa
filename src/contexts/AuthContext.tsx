@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
-export type AppRole = 'admin' | 'staff' | 'guest';
+export type AppRole = 'special_admin' | 'admin' | 'operations' | 'staff' | 'guest';
 
 interface AuthContextType {
   user: User | null;
@@ -13,6 +13,9 @@ interface AuthContextType {
   isAdmin: boolean;
   isStaffOrAdmin: boolean;
   isGuest: boolean;
+  isSpecialAdmin: boolean;
+  isOperations: boolean;
+  isOpsOrAdmin: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
