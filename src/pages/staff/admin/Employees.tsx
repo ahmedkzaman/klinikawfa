@@ -90,9 +90,13 @@ export default function AdminEmployees() {
                     </SelectContent>
                   </Select>
                   <Badge variant={e.role === 'admin' ? 'default' : 'secondary'}>{e.role}</Badge>
-                  <Select value={e.role} onValueChange={(v: 'admin' | 'staff' | 'guest') => handleRoleChange(e.id, v)}>
+                  <Select value={e.role} onValueChange={(v: AppRole) => handleRoleChange(e.id, v)}>
                      <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-                     <SelectContent><SelectItem value="guest">Guest</SelectItem><SelectItem value="staff">Staff</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent>
+                     <SelectContent>
+                       <SelectItem value="guest" disabled={e.id === user?.id && e.role === 'admin'}>Guest</SelectItem>
+                       <SelectItem value="staff" disabled={e.id === user?.id && e.role === 'admin'}>Staff</SelectItem>
+                       <SelectItem value="admin">Admin</SelectItem>
+                     </SelectContent>
                   </Select>
                 </div>
               </div>
