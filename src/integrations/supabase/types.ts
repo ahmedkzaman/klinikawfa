@@ -1678,6 +1678,53 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_methods: {
+        Row: {
+          account_details: string | null
+          created_at: string
+          display_order: number
+          id: string
+          name: string
+          provider_id: string | null
+          status: string
+          surcharge_percentage: number
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          account_details?: string | null
+          created_at?: string
+          display_order?: number
+          id?: string
+          name: string
+          provider_id?: string | null
+          status?: string
+          surcharge_percentage?: number
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          account_details?: string | null
+          created_at?: string
+          display_order?: number
+          id?: string
+          name?: string
+          provider_id?: string | null
+          status?: string
+          surcharge_percentage?: number
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_methods_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_providers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount: number
