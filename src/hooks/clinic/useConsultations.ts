@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
 export function useConsultation(queueEntryId: string | undefined) {
@@ -37,6 +38,7 @@ export function useCreateConsultation() {
     },
     onSuccess: (_, vars) =>
       qc.invalidateQueries({ queryKey: ['consultation', vars.queue_entry_id] }),
+    onError: (error: Error) => toast.error(error.message),
   });
 }
 
@@ -61,6 +63,7 @@ export function useUpdateConsultation() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['consultation'] }),
+    onError: (error: Error) => toast.error(error.message),
   });
 }
 
