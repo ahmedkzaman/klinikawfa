@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import {
   MapPin, Clock, History, Settings, LogOut, Menu, Home, Users, Map, CalendarDays, CalendarOff, Inbox, FileText,
   LayoutDashboard, CalendarCheck, Stethoscope, Video, Image, Star, ChevronDown, ClipboardCheck, ClipboardList,
-  User, BarChart3, CheckSquare, DollarSign, Megaphone, AlertTriangle
+  User, BarChart3, CheckSquare, DollarSign, Megaphone, AlertTriangle, Activity
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -61,7 +61,7 @@ const contentNavItems = [
   { href: '/staff/website/settings', label: 'Settings', icon: Settings },
 ];
 
-function SidebarNav({ isAdmin, pathname, onLinkClick, unreadNoticeCount }: { isAdmin: boolean; pathname: string; onLinkClick?: () => void; unreadNoticeCount: number }) {
+function SidebarNav({ isAdmin, isOpsOrAdmin, pathname, onLinkClick, unreadNoticeCount }: { isAdmin: boolean; isOpsOrAdmin: boolean; pathname: string; onLinkClick?: () => void; unreadNoticeCount: number }) {
   const isActive = (href: string) => pathname === href;
 
   return (
@@ -95,7 +95,7 @@ function SidebarNav({ isAdmin, pathname, onLinkClick, unreadNoticeCount }: { isA
 
       {/* Applications Section - Collapsible */}
       <div className="my-4 mx-4 border-t" />
-      <Collapsible defaultOpen={applicationsNavItems.some(item => pathname.startsWith(item.href))}>
+      <Collapsible defaultOpen={applicationsNavItems.some(item => pathname.startsWith(item.href)) || pathname.startsWith('/clinic')}>
         <div className="px-4 mb-2 flex items-center justify-between">
           <CollapsibleTrigger className="flex items-center justify-between w-full group">
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Applications</span>
@@ -120,6 +120,21 @@ function SidebarNav({ isAdmin, pathname, onLinkClick, unreadNoticeCount }: { isA
                 {item.label}
               </Link>
             ))}
+            {isOpsOrAdmin && (
+              <Link
+                to="/clinic/queue"
+                onClick={onLinkClick}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                  pathname.startsWith('/clinic')
+                    ? 'bg-primary/10 text-primary font-medium'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                )}
+              >
+                <Activity className="h-4 w-4" />
+                Open Clinic Portal
+              </Link>
+            )}
           </div>
         </CollapsibleContent>
       </Collapsible>
@@ -181,7 +196,7 @@ function SidebarNav({ isAdmin, pathname, onLinkClick, unreadNoticeCount }: { isA
 }
 
 export function StaffLayout() {
-  const { user, loading, rolesLoading, isAdmin, isStaffOrAdmin, signOut } = useAuth();
+  const { user, loading, rolesLoading, isAdmin, isStaffOrAdmin, isOpsOrAdmin, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -304,7 +319,7 @@ export function StaffLayout() {
           </Link>
         </div>
         <div className="flex-1 overflow-y-auto">
-          <SidebarNav isAdmin={isAdmin} pathname={location.pathname} unreadNoticeCount={unacknowledgedNotices.length} />
+          <SidebarNav isAdmin={isAdmin} isOpsOrAdmin={isOpsOrAdmin} pathname={location.pathname} unreadNoticeCount={unacknowledgedNotices.length} />
         </div>
         <div className="shrink-0 p-4 border-t">
           <div className="text-sm text-muted-foreground mb-2 truncate">{user.email}</div>
@@ -326,7 +341,7 @@ export function StaffLayout() {
             </Link>
           </div>
           <div className="flex-1 overflow-y-auto">
-            <SidebarNav isAdmin={isAdmin} pathname={location.pathname} onLinkClick={() => setMobileOpen(false)} unreadNoticeCount={unacknowledgedNotices.length} />
+            <SidebarNav isAdmin={isAdmin} isOpsOrAdmin={isOpsOrAdmin} pathname={location.pathname} onLinkClick={() => setMobileOpen(false)} unreadNoticeCount={unacknowledgedNotices.length} />
           </div>
           <div className="shrink-0 p-4 border-t">
             <div className="text-sm text-muted-foreground mb-2 truncate">{user.email}</div>
