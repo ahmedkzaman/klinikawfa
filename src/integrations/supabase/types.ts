@@ -2957,6 +2957,7 @@ export type Database = {
         Returns: undefined
       }
       cleanup_appointment_submission_log: { Args: never; Returns: undefined }
+      get_doctor_id_for_user: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -2965,6 +2966,8 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_ops_or_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_special_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff_or_admin: { Args: { _user_id: string }; Returns: boolean }
       record_appointment_submission: {
         Args: {
