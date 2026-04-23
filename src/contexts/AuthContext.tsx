@@ -26,31 +26,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [rolesLoading, setRolesLoading] = useState(true);
-  const [roles, setRoles] = useState<AppRole[]>([]);
+  const [role, setRole] = useState<AppRole | null>(null);
 
   // Refs to track state across the auth listener closure
   const authInitializedRef = useRef(false);
   const currentUserIdRef = useRef<string | null>(null);
 
-  const fetchUserRoles = useCallback(async (userId: string) => {
+  const fetchUserRole = useCallback(async (userId: string) => {
     setRolesLoading(true);
     try {
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .maybeSingle();
 
       if (error) {
-        console.error('Error fetching roles:', error);
-        setRoles([]);
+        console.error('Error fetching role:', error);
+        setRole(null);
         return;
       }
 
-      const userRoles = data?.map(r => r.role as AppRole) || [];
-      setRoles(userRoles);
+      setRole((data?.role as AppRole) ?? null);
     } catch (err) {
-      console.error('Error in fetchUserRoles:', err);
-      setRoles([]);
+      console.error('Error in fetchUserRole:', err);
+      setRole(null);
     } finally {
       setRolesLoading(false);
     }
@@ -66,7 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
 
       if (session?.user) {
-        fetchUserRoles(session.user.id);
+        fetchUserRole(session.user.id);
       } else {
         setRolesLoading(false);
       }
@@ -91,19 +91,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
 
         if (session?.user) {
-          // Only refetch roles when user actually changed
+          // Only refetch role when user actually changed
           setTimeout(() => {
-            fetchUserRoles(session.user.id);
+            fetchUserRole(session.user.id);
           }, 0);
         } else {
-          setRoles([]);
+          setRole(null);
           setRolesLoading(false);
         }
       }
     );
 
     return () => subscription.unsubscribe();
-  }, [fetchUserRoles]);
+  }, [fetchUserRole]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
