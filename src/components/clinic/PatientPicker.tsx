@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -13,22 +13,16 @@ interface PatientPickerProps {
 }
 
 /**
- * Search-as-you-type patient picker. 250ms debounce handled here
- * via local state — useQuery already memoizes by key.
+ * Search-as-you-type patient picker with 250ms debounce.
  */
 export function PatientPicker({ value, onChange, onRegisterNew }: PatientPickerProps) {
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
 
-  // Debounce
-  useState(() => {
+  useEffect(() => {
     const id = setTimeout(() => setDebounced(search), 250);
     return () => clearTimeout(id);
-  });
-
-  // Re-create debounce on every search change
-  // (useState init only fires once — use effect instead)
-  useDebounce(search, 250, setDebounced);
+  }, [search]);
 
   const { data: patients = [], isLoading } = usePatients(debounced);
 
@@ -111,13 +105,4 @@ export function PatientPicker({ value, onChange, onRegisterNew }: PatientPickerP
       </div>
     </div>
   );
-}
-
-// Tiny inline debounce hook to avoid an extra file.
-import { useEffect } from 'react';
-function useDebounce<T>(value: T, ms: number, setter: (v: T) => void) {
-  useEffect(() => {
-    const id = setTimeout(() => setter(value), ms);
-    return () => clearTimeout(id);
-  }, [value, ms, setter]);
 }
