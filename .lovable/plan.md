@@ -1,109 +1,141 @@
 
-## Step 4 — Clinic Portal Foundation (Routes + Layout + Empty Pages)
+## Step 5 — Clinic Portal Data Wiring (Queue + Patients + Voided Records)
 
-Scope: Wire `ClinicProtectedRoute` into `App.tsx`, add a `ClinicLayout` shell with sidebar navigation, and stub the six core clinic pages as empty-state placeholders. No business logic, no data fetching, no inventory UI. Each page renders a heading + "Coming in Step 5" empty state so the navigation graph is fully clickable and route guards are testable end-to-end.
+Scope: Replace three of the six placeholder pages with real, working UIs backed by the database primitives from Steps 1–2. Consultations, Dispensary, and Inventory remain placeholders — they involve the most complex flows (consultation editor, dispense + inventory commit, stock CRUD) and will be Step 6 / 7 / 8 to keep this step reviewable.
 
----
-
-### 4.1 — Clinic layout shell
-
-New file: `src/components/clinic/ClinicLayout.tsx`
-
-- Mirror the split-scroll pattern from `StaffLayout` (`mem://style/layout/independent-scrolling`): fixed sidebar (independently scrollable) + scrollable main content area.
-- Sidebar contains: clinic logo/title at top, nav items (see 4.2), back-link to `/staff/dashboard` at bottom.
-- Use semantic tokens only (`bg-background`, `text-foreground`, `border-border`, `bg-sidebar`, `text-sidebar-foreground`, `bg-sidebar-accent` for active state).
-- Active route highlighted via `NavLink`'s `isActive` callback.
-- Renders `<Outlet />` for nested routes.
-- Mobile (<768px): sidebar collapses to a `Sheet` triggered by a hamburger in a top bar — same pattern as existing `StaffLayout`.
-
-### 4.2 — Clinic navigation items
-
-Hard-coded inside `ClinicLayout`. Six entries, each with a `lucide-react` icon:
-
-| Path | Label | Icon |
-|---|---|---|
-| `/clinic/queue` | Queue Board | `ListOrdered` |
-| `/clinic/patients` | Patients | `Users` |
-| `/clinic/consultations` | Consultations | `Stethoscope` |
-| `/clinic/dispensary` | Dispensary | `Pill` |
-| `/clinic/inventory` | Inventory | `Package` |
-| `/clinic/voided` | Voided Records | `Archive` (special_admin only — hidden via `useAuth().isSpecialAdmin`) |
-
-### 4.3 — Six placeholder pages
-
-New folder: `src/pages/clinic/`
-
-Files (each ~25 lines, identical structure):
-- `QueueBoard.tsx`
-- `PatientsList.tsx`
-- `ConsultationsList.tsx`
-- `Dispensary.tsx`
-- `Inventory.tsx`
-- `VoidedRecords.tsx`
-
-Each page renders:
-- `<SEOHead>` with page-specific title.
-- An `h1` with the page name.
-- A muted-foreground subtitle ("Step 5 will wire this up").
-- A centered empty-state card with the page's icon + a one-line description.
-
-No data fetching, no buttons, no forms. These exist purely so route guards and navigation can be smoke-tested.
-
-### 4.4 — Wire clinic routes in `App.tsx`
-
-Add a single nested route block under the existing routes:
-
-```tsx
-<Route
-  path="/clinic"
-  element={
-    <ClinicProtectedRoute>
-      <ClinicLayout />
-    </ClinicProtectedRoute>
-  }
->
-  <Route index element={<Navigate to="queue" replace />} />
-  <Route path="queue" element={<QueueBoard />} />
-  <Route path="patients" element={<PatientsList />} />
-  <Route path="consultations" element={<ConsultationsList />} />
-  <Route path="dispensary" element={<Dispensary />} />
-  <Route path="inventory" element={<Inventory />} />
-  <Route
-    path="voided"
-    element={
-      <ClinicProtectedRoute requiredRole="special_admin">
-        <VoidedRecords />
-      </ClinicProtectedRoute>
-    }
-  />
-</Route>
-```
-
-The nested `ClinicProtectedRoute` on `/clinic/voided` adds the special_admin gate on top of the parent ops-or-admin gate.
-
-### 4.5 — Add "Open Clinic Portal" link in StaffLayout sidebar
-
-Single-line addition: a nav item visible only when `isOpsOrAdmin`, linking to `/clinic/queue`. Placed in the "Applications" group of the staff sidebar. Existing staff portal navigation untouched otherwise.
+The three pages chosen for Step 5 form a complete intake-and-audit loop:
+1. **Patients** — registration + lookup (prerequisite for queue intake).
+2. **Queue Board** — live board powered by `intake_appointment_to_queue` RPC + realtime.
+3. **Voided Records** — exercises `fetchVoided` and proves the special_admin RLS gate.
 
 ---
 
-### Out of scope for Step 4
+### 5.1 — Shared clinic types + query hooks
 
-- Any actual clinic logic: queue table, patient registration form, consultation editor, dispense flow, e-invoice submission, inventory CRUD.
-- Edge functions (`intake-bridge`, `einvoice-submit`).
-- Realtime subscriptions.
-- Inventory Stock/Allocated/Available column UI.
-- Voided records list rendering (the page exists but shows the empty state — `fetchVoided` wiring is Step 5).
-- `package.json` additions.
+New file: `src/types/clinic.ts`
 
-### Verification after Step 4
+- Re-export commonly used row shapes from `Database['public']['Tables']` for `patients`, `queue_entries`, `appointments`, `consultations`, `consultation_items`, `payments` — gives clinic components a single import surface and makes Step 6/7/8 easier.
+- Define `ClinicStatus` as a string-literal union mirroring the DB enum: `'registered' | 'ready_for_doctor' | 'with_doctor' | 'sent_to_dispensary' | 'dispensing_payment' | 'on_hold' | 'completed' | 'cancelled'`.
+- Define `STATUS_LABELS` and `STATUS_COLORS` maps (semantic-token classes only — `bg-primary/10`, `bg-muted`, `bg-destructive/10`, etc.).
+
+New file: `src/hooks/clinic/useQueueEntries.ts`
+
+- `useQueueEntries()` — `useQuery` returning today's active queue entries (clinic_status not in `('completed','cancelled')`, `deleted_at IS NULL`), joined with `patients(name, phone)` and `doctors(name)`.
+- Subscribe to `postgres_changes` on `queue_entries` and invalidate the query on any event. Channel cleanup on unmount.
+- Sort: urgent first, then `queue_number` ascending.
+
+New file: `src/hooks/clinic/usePatients.ts`
+
+- `usePatients(search?: string)` — `useQuery` keyed by search term. Empty search returns 50 most recent; non-empty does case-insensitive `ilike` match on `name`, `phone`, `national_id`.
+- `useCreatePatient()` — `useMutation` wrapping `supabase.from('patients').insert(...)`. Invalidates `['patients']` on success.
+
+New file: `src/hooks/clinic/useTodayAppointments.ts`
+
+- Returns today's appointments with `status = 'pending'` (i.e., not yet checked in) — feeds the "Check In" picker on the queue board.
+
+---
+
+### 5.2 — Patients page (real UI)
+
+Rewrite `src/pages/clinic/PatientsList.tsx`:
+
+**Layout:** header row with title + "Register Patient" primary button, search input below (debounced 250ms), then results table.
+
+**Table columns:** Name, Phone, National ID, DOB, Gender, Registered (date), row-action menu (`…` → "View profile" — Step 6 will wire profile drill-down; for Step 5 it's a stub that toasts "Coming soon").
+
+**Empty state:** When search returns zero results, show inline `<Card>` with "No patients found — register a new one?" + button that opens the same dialog as the header button.
+
+**Register dialog:** shadcn `Dialog` containing a react-hook-form + zod-validated form:
+- Required: `name` (min 2), `phone` (Malaysian-mobile regex from `src/lib/validations.ts`).
+- Optional: `national_id` (12-digit MyKad regex if provided), `date_of_birth` (date picker), `gender` (select: male/female/other), `email`, `allergies` (textarea), `underlying_conditions` (textarea).
+- Submit calls `useCreatePatient`; on success closes dialog, toasts, and refocuses the new patient in the table.
+
+**Search performance:** Hook handles debounce; component renders skeleton rows during fetch. No client-side filtering — all queries go through the DB.
+
+**Accessibility:** Form labels associated, dialog focus-trapped (shadcn handles), table has caption.
+
+---
+
+### 5.3 — Queue Board page (real UI)
+
+Rewrite `src/pages/clinic/QueueBoard.tsx`:
+
+**Top bar:** Date label (today), "Check In Walk-In" secondary button, "Check In Appointment" primary button (disabled if no pending appointments today).
+
+**Layout:** Five horizontal status columns (kanban-style), responsive — 5 cols on `xl`, 3 on `lg`, 1 stacked accordion on mobile:
+1. Registered
+2. Ready for Doctor
+3. With Doctor
+4. Dispensary / Payment (groups `sent_to_dispensary` + `dispensing_payment`)
+5. On Hold
+
+Each column shows:
+- Header with status label + count badge.
+- Card per entry: queue number (large, monospace), patient name, time waited (live, computed from `created_at`), urgency flag (red dot if `is_urgent`), assigned doctor name if any, visit purpose chip.
+- Card click opens a side `Sheet` with full details (patient info, visit notes, timeline) — actions (Call Next / Send to Doctor / Mark Done) are stubbed for Step 5 with a "Wired in Step 6" toast. The card itself is informational this step.
+
+**Realtime:** Cards animate in/out as the realtime subscription pushes changes. Use `framer-motion`'s `AnimatePresence` for column transitions.
+
+**"Check In Appointment" flow:**
+- Opens dialog listing today's pending appointments (from `useTodayAppointments`).
+- Each row: patient name, time, service, "Check In" button.
+- Button calls a new `useIntakeAppointment` mutation that wraps `supabase.rpc('intake_appointment_to_queue', { p_appointment_id, p_patient_id, p_visit_purpose, p_notes })`.
+- The RPC needs `p_patient_id`. Appointments don't link to patients directly, so the dialog includes a patient picker (search-as-you-type, reuses `usePatients`) per appointment row — operator confirms which `patients` row matches the walk-in. If no match exists, a "Register first" link opens the patient registration dialog inline.
+- On success: toasts `Queue #{n} created`, closes dialog. Realtime pushes the new card.
+
+**"Check In Walk-In" flow:**
+- Single dialog: patient picker (required) + visit purpose select + notes textarea.
+- Inserts directly into `queue_entries` (no appointment link). The DB trigger assigns `queue_number` from the sequence.
+
+**Empty queue state:** Centered illustration-style message in the column area: "No active patients. Check in an appointment or walk-in to get started."
+
+---
+
+### 5.4 — Voided Records page (real UI, special_admin only)
+
+Rewrite `src/pages/clinic/VoidedRecords.tsx`:
+
+**Layout:** Tabs for the four soft-deletable tables: Consultations | Items | Payments | Queue Entries.
+
+Each tab renders a table powered by `fetchVoided(table)` (already exists in `src/lib/clinic/softDelete.ts`). Columns vary per table but all include `deleted_at` (relative time + absolute on hover), `deleted_by` (resolved to profile email via a join — fall back to UUID if join fails), and a "View original" details popover.
+
+**No mutation surface** — voided records are read-only audit history. Step 6+ may add an "Unvoid" RPC for special_admin; out of scope here.
+
+**Gate:** Page is already wrapped in `<ClinicProtectedRoute requiredRole="special_admin">` from Step 4 — no additional client-side check needed. RLS guarantees non-special-admins receive `[]` even if they bypass the route guard.
+
+**Empty state:** Per-tab message: "No voided {entity} yet."
+
+---
+
+### 5.5 — Inventory column reveal (Stock / Allocated / Available)
+
+Touch the **existing** inventory admin page if one exists, OR add a minimal read-only table to `src/pages/clinic/Inventory.tsx`:
+
+- Three columns: Stock, Allocated, Available (computed client-side as `stock - allocated_quantity`, capped at 0).
+- This proves the B.3 inventory-allocation primitive is live and visible. Full inventory CRUD remains a future step.
+- If `src/pages/admin` already has inventory pages, defer to Step 7 instead and keep `Inventory.tsx` as placeholder — I'll check during implementation and report which path was taken.
+
+---
+
+### Out of scope for Step 5
+
+- Consultation editor (chief complaint, diagnosis, items, dispense note) — Step 6.
+- Dispense flow + payment capture + e-invoice trigger — Step 7.
+- Inventory CRUD (add/edit/delete items, expiry tracking, stock adjustments) — Step 8.
+- Edge functions (`einvoice-submit`, `intake-bridge`).
+- Doctor-facing "with patient" room view.
+- Unvoid / restore RPC.
+- Bulk operations (multi-select on patients/queue).
+
+### Verification after Step 5
 
 1. TypeScript compiles cleanly.
-2. Logged-out user visiting `/clinic/queue` → redirected to `/auth?redirect=%2Fclinic%2Fqueue`.
-3. Staff-role user visiting `/clinic/queue` → redirected to `/staff/dashboard`.
-4. Operations/admin user visiting `/clinic/queue` → sees the Queue Board placeholder with sidebar navigation.
-5. Admin (non-special) visiting `/clinic/voided` → redirected to `/staff/dashboard`.
-6. Special-admin sees the "Voided Records" sidebar entry; others do not.
-7. Sidebar links navigate between the six pages without full page reloads.
+2. Operations user can register a patient, see them in the search results.
+3. Operations user can check in a pending appointment → queue card appears in real time on a second browser tab.
+4. Operations user can check in a walk-in → queue card appears with auto-assigned queue number.
+5. Soft-deleting a queue entry via DB (`UPDATE queue_entries SET deleted_at = now(), deleted_by = '<id>' WHERE …`) → card disappears from queue board within 1s; appears in Voided Records for special_admin.
+6. Non-special admin loading `/clinic/voided` directly → redirected to `/staff/dashboard`.
+7. Special admin sees four tabs of voided data.
+8. Mobile (375px): queue board stacks columns into accordion; patient table scrolls horizontally.
 
-**Stop after these files. Do not begin Step 5 (data wiring + real clinic UI).**
+**Stop after these files. Do not begin Step 6 (Consultation editor).**
