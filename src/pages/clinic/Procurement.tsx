@@ -1,15 +1,12 @@
 import { useState, useMemo } from 'react';
-import { Pill, ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Pill, ExternalLink } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { StatusBadge } from '@/components/clinic/StatusBadge';
-import {
-  useConsultationQueueEntries,
-  useUpdateQueueEntry,
-} from '@/hooks/clinic/useQueueEntries';
+import { useConsultationQueueEntries } from '@/hooks/clinic/useQueueEntries';
 import type { ClinicStatus } from '@/types/clinic';
 
 const tabs: Array<{ label: string; filter: ClinicStatus[] }> = [
@@ -19,9 +16,9 @@ const tabs: Array<{ label: string; filter: ClinicStatus[] }> = [
 ];
 
 export default function Procurement() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Pending');
   const { data: entries, isLoading } = useConsultationQueueEntries();
-  const updateEntry = useUpdateQueueEntry();
 
   const filtered = useMemo(() => {
     if (!entries) return [];
@@ -29,21 +26,12 @@ export default function Procurement() {
     return tab ? entries.filter((e) => tab.filter.includes(e.clinic_status)) : [];
   }, [entries, activeTab]);
 
-  const handleAdvance = async (id: string, next: ClinicStatus) => {
-    try {
-      await updateEntry.mutateAsync({ id, clinic_status: next });
-      toast.success('Status updated');
-    } catch (err) {
-      toast.error((err as Error).message);
-    }
-  };
-
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
       <div>
         <h1 className="text-2xl font-semibold">Procurement</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Manage dispensing and payment processing.
+          Open a patient to dispense items and process payment.
         </p>
       </div>
 
@@ -90,51 +78,45 @@ export default function Procurement() {
         ) : !filtered.length ? (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <Pill className="h-12 w-12 mb-3 opacity-20" />
-            <p className="text-sm font-medium">No pending dispensary items</p>
+            <p className="text-sm font-medium">No patients in this view</p>
             <p className="text-xs mt-1">
               Patients will appear here once sent to dispensary.
             </p>
           </div>
         ) : (
-          filtered.map((entry) => (
-            <div
-              key={entry.id}
-              className="grid grid-cols-5 gap-2 px-4 py-3 border-b border-border last:border-0 items-center hover:bg-muted/50 transition-colors"
-            >
-              <span className="text-sm font-medium text-foreground truncate">
-                {entry.patients?.name ?? '—'}
-              </span>
-              <span className="text-sm text-muted-foreground">
-                {entry.doctors?.name || '—'}
-              </span>
-              <span className="text-sm text-muted-foreground">
-                {formatDistanceToNow(new Date(entry.created_at), { addSuffix: true })}
-              </span>
-              <StatusBadge status={entry.clinic_status} />
-              <div>
-                {entry.clinic_status === 'sent_to_dispensary' && (
+          filtered.map((entry) => {
+            const isPending = entry.clinic_status === 'sent_to_dispensary';
+            return (
+              <div
+                key={entry.id}
+                className="grid grid-cols-5 gap-2 px-4 py-3 border-b border-border last:border-0 items-center hover:bg-muted/50 transition-colors"
+              >
+                <span className="text-sm font-medium text-foreground truncate">
+                  {entry.patients?.name ?? '—'}
+                </span>
+                <span className="text-sm text-muted-foreground">
+                  {entry.doctors?.name || '—'}
+                </span>
+                <span className="text-sm text-muted-foreground">
+                  {formatDistanceToNow(new Date(entry.created_at), { addSuffix: true })}
+                </span>
+                <StatusBadge status={entry.clinic_status} />
+                <div>
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-7 text-xs"
-                    onClick={() => handleAdvance(entry.id, 'dispensing_payment')}
+                    onClick={() =>
+                      navigate(`/clinic/queue/checkout/${entry.id}`)
+                    }
                   >
-                    <ArrowRight className="h-3 w-3 mr-1" /> Start Payment
+                    <ExternalLink className="h-3 w-3 mr-1" />
+                    {isPending ? 'Start Payment' : 'Open'}
                   </Button>
-                )}
-                {entry.clinic_status === 'dispensing_payment' && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => handleAdvance(entry.id, 'completed')}
-                  >
-                    <ArrowRight className="h-3 w-3 mr-1" /> Complete
-                  </Button>
-                )}
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
