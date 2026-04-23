@@ -133,7 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     currentUserIdRef.current = null;
     authInitializedRef.current = false;
     await supabase.auth.signOut();
-    setRoles([]);
+    setRole(null);
   };
 
   const resetPassword = async (email: string) => {
@@ -145,9 +145,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error as Error | null };
   };
 
-  const isAdmin = roles.includes('admin');
-  const isStaffOrAdmin = roles.includes('admin') || roles.includes('staff');
-  const isGuest = roles.length > 0 && !isStaffOrAdmin;
+  const isAdmin = role === 'admin';
+  const isStaffOrAdmin = role === 'admin' || role === 'staff';
+  const isGuest = role === 'guest' || role === null;
 
   return (
     <AuthContext.Provider
@@ -156,7 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session,
         loading,
         rolesLoading,
-        roles,
+        role,
         isAdmin,
         isStaffOrAdmin,
         isGuest,

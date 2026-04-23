@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Users, Shield, User, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth, type AppRole } from '@/contexts/AuthContext';
 
 const STAFF_POSITIONS = ['Clinic Assistant', 'Staff Nurse', 'Medical Assistant', 'Doctor', 'Manager', 'Purchaser', 'Housecall Nurse'];
 
@@ -21,6 +21,7 @@ interface Employee {
 
 export default function AdminEmployees() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -31,16 +32,28 @@ export default function AdminEmployees() {
     const { data: profiles, error } = await supabase.from('profiles').select('id, full_name, phone, department, position, created_at').order('full_name');
     if (error) { toast({ title: 'Error', description: 'Failed to load employees', variant: 'destructive' }); setIsLoading(false); return; }
     const { data: roles } = await supabase.from('user_roles').select('user_id, role');
-    const roleMap: Record<string, 'admin' | 'staff' | 'guest'> = {};
-    roles?.forEach((r) => { if (r.role === 'admin') roleMap[r.user_id] = 'admin'; else if (r.role === 'staff' && roleMap[r.user_id] !== 'admin') roleMap[r.user_id] = 'staff'; else if (!roleMap[r.user_id]) roleMap[r.user_id] = r.role as 'guest'; });
+    const roleMap: Record<string, AppRole> = {};
+    roles?.forEach((r) => { roleMap[r.user_id] = r.role as AppRole; });
     setEmployees((profiles || []).map((p: any) => ({ ...p, role: roleMap[p.id] || 'staff' })));
     setIsLoading(false);
   };
 
-  const handleRoleChange = async (userId: string, newRole: 'admin' | 'staff' | 'guest') => {
-    await supabase.from('user_roles').delete().eq('user_id', userId);
-    const { error } = await supabase.from('user_roles').insert({ user_id: userId, role: newRole });
-    if (error) { toast({ title: 'Error', description: 'Failed to update role', variant: 'destructive' }); return; }
+  const handleRoleChange = async (userId: string, newRole: AppRole) => {
+    const { error } = await supabase.rpc('admin_assign_role', {
+      target_user_id: userId,
+      new_role: newRole,
+    });
+    if (error) {
+      const msg = error.message || '';
+      if (error.code === '42501' || msg.includes('NOT_AUTHORIZED')) {
+        toast({ title: 'Not allowed', description: 'You do not have permission to change roles', variant: 'destructive' });
+      } else if (msg.includes('CANNOT_DEMOTE_SELF')) {
+        toast({ title: 'Not allowed', description: 'You cannot demote your own admin account. Ask another admin.', variant: 'destructive' });
+      } else {
+        toast({ title: 'Error', description: 'Failed to update role', variant: 'destructive' });
+      }
+      return;
+    }
     toast({ title: 'Role Updated', description: `User role changed to ${newRole}` });
     fetchEmployees();
   };
