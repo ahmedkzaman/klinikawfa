@@ -1,49 +1,23 @@
 
-## Final Wiring — Step 7
+## Add Always-Visible "Register New Patient" Button to Walk-In Dialog
 
-Three atomic tasks to make the ported Consultation/Procurement work reachable.
+**Problem:** The "Register new patient" action is hidden inside `PatientPicker`'s empty-state — only appears after typing a search that returns zero results. Easy to miss.
 
-### 1. `src/App.tsx` — wire lazy routes
+**Fix:** Surface a clear, always-visible button next to the "Patient *" label inside `CheckInWalkInDialog`, which opens the existing `RegisterPatientDialog`. The wiring already exists (`registerOpen` state + `RegisterPatientDialog` render + `onCreated → setPatient`); we just expose the trigger upfront.
 
-Inside the existing `<Route path="/clinic" element={<ClinicProtectedRoute><ClinicLayout/></ClinicProtectedRoute>}>` block:
+### Change
 
-- Add three lazy imports near the other clinic page lazy imports:
-  ```ts
-  const Consultation = lazy(() => import('./pages/clinic/Consultation'));
-  const ConsultationDetail = lazy(() => import('./pages/clinic/ConsultationDetail'));
-  const Procurement = lazy(() => import('./pages/clinic/Procurement'));
-  ```
-- Add three child routes:
-  ```tsx
-  <Route path="consultation" element={<Suspense fallback={<Loader/>}><Consultation/></Suspense>} />
-  <Route path="consultation/:queueEntryId" element={<Suspense fallback={<Loader/>}><ConsultationDetail/></Suspense>} />
-  <Route path="procurement" element={<Suspense fallback={<Loader/>}><Procurement/></Suspense>} />
-  ```
-- Remove the existing `<Route path="consultations" …>` line and its lazy import for `ConsultationsList`.
+**`src/components/clinic/CheckInWalkInDialog.tsx`** — modify the "Patient *" label row only:
 
-(`ClinicProtectedRoute` already wraps the parent — no per-route gating needed.)
+- Replace the single `<Label>` with a flex row: `<Label>` on the left, a small `<Button variant="link" size="sm">` with a `UserPlus` icon and the text "Register new" on the right.
+- Button `onClick` → `setRegisterOpen(true)` (state already declared).
+- Hide the button when a patient is already selected (`!patient`) to keep the UI clean during the "Change" flow.
 
-### 2. Delete legacy placeholder
-
-- Delete `src/pages/clinic/ConsultationsList.tsx` (no other references — verified the file is only imported by `App.tsx`).
-
-### 3. `src/components/clinic/ClinicLayout.tsx` — sidebar
-
-In the `clinicNavItems` array:
-- Change `{ href: '/clinic/consultations', label: 'Consultations', icon: Stethoscope }` → `{ href: '/clinic/consultation', label: 'Consultation', icon: Stethoscope }`.
-- Insert new entry directly after Dispensary:
-  ```ts
-  { href: '/clinic/procurement', label: 'Procurement', icon: ClipboardList },
-  ```
-- Add `ClipboardList` to the `lucide-react` import.
+No other files touched. `PatientPicker`'s inline empty-state button stays as a secondary fallback.
 
 ### Verification
 
-1. `tsc --noEmit` passes.
-2. Sidebar shows: Queue Board · Patients · Consultation · Dispensary · Procurement · (Voided Records for special admin).
-3. `/clinic/consultation` renders the today's queue list.
-4. `/clinic/consultation/:id` renders the workspace.
-5. `/clinic/procurement` renders the pharmacist's queue.
-6. `/clinic/consultations` (old path) → 404 inside clinic shell (acceptable; no inbound links remain).
-
-Stop after these three edits.
+1. Open Queue Board → Walk-In → dialog shows "Patient *" with "Register new" link-button on the right.
+2. Click "Register new" → `RegisterPatientDialog` opens on top.
+3. Submit registration → dialog closes, new patient auto-fills into the picker (existing `onCreated` path).
+4. Once a patient is selected, the "Register new" button is hidden (picker is in selected/Change state).
