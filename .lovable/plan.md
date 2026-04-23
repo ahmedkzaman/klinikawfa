@@ -1,63 +1,146 @@
 
-## Plan: Per-IP Rate Limit (10 / 10 min) on Appointment Form — Final
+## Plan: Harden RBAC — Final (Self-Lockout Guard + Null-Safe Guest)
 
-Adds advisory-lock concurrency safety and removes the service-role escalation. The RPC's `SECURITY DEFINER` is the only privilege boundary needed.
+All prior items locked in. Two patches added.
 
-### 1. Database (already partially done)
-Already applied:
-- `appointment_submission_log` (`id`, `ip_hash`, `created_at`) with index on `(ip_hash, created_at desc)`, RLS enabled, no public policies.
-- `Anyone can submit appointments` policy dropped from `appointments`.
+### 1. Database migration
 
-New in this step:
-- Enable `pg_cron` only (no `pg_net`).
-- `SECURITY DEFINER` function `public.cleanup_appointment_submission_log()` running `DELETE FROM appointment_submission_log WHERE created_at < now() - interval '24 hours'`.
-- `cron.schedule('cleanup-appointment-submission-log', '0 3 * * *', $$SELECT public.cleanup_appointment_submission_log()$$)`.
-- `SECURITY DEFINER` RPC `public.record_appointment_submission(_ip_hash text, _name text, _phone text, _service text, _preferred_date date, _preferred_time time, _message text)` — `search_path = public`. Body, in order, inside an implicit transaction:
-  1. `PERFORM pg_advisory_xact_lock(hashtext(_ip_hash));` — serializes concurrent calls from the same IP for the duration of the transaction. Released automatically on commit/rollback.
-  2. `SELECT count(*) INTO v_count FROM appointment_submission_log WHERE ip_hash = _ip_hash AND created_at > now() - interval '10 minutes';`
-  3. If `v_count >= 10` → `RAISE EXCEPTION 'RATE_LIMIT' USING ERRCODE = 'P0001';`
-  4. `INSERT INTO appointment_submission_log (ip_hash) VALUES (_ip_hash);`
-  5. `INSERT INTO appointments (name, phone, service, preferred_date, preferred_time, message) VALUES (...) RETURNING id INTO v_id;`
-  6. `RETURN v_id;`
-- `GRANT EXECUTE ON FUNCTION public.record_appointment_submission(...) TO anon, authenticated;` — required because the edge function calls it as the anon role. The function body still runs with definer privileges, so it can write to `appointments` and `appointment_submission_log` despite their RLS.
-- Both inserts and the rate-limit check are atomic: any failure rolls back both rows together. The advisory lock is held only for that single transaction, so contention is minimal and self-cleaning.
+**a. Tie-safe deduplication** (oldest `ctid` wins on ties, highest privilege wins otherwise):
+```sql
+WITH ranked AS (
+  SELECT ctid, user_id,
+    ROW_NUMBER() OVER (
+      PARTITION BY user_id
+      ORDER BY
+        CASE role WHEN 'admin' THEN 3 WHEN 'staff' THEN 2 ELSE 1 END DESC,
+        ctid ASC
+    ) AS rn
+  FROM public.user_roles
+)
+DELETE FROM public.user_roles ur USING ranked r
+WHERE ur.ctid = r.ctid AND r.rn > 1;
+```
 
-### 2. New edge function `submit-appointment`
-- `verify_jwt = false` in `supabase/config.toml`.
-- CORS headers on every response (including errors).
-- **Anon Supabase client only** — built with `SUPABASE_URL` + `SUPABASE_ANON_KEY`. No service-role key is read or used in this function. The RPC's `SECURITY DEFINER` provides the write privileges; the anon client only needs `EXECUTE` on the function.
-- **Zod validation**: `name` (1–100, trimmed), `phone` (regex `^[+0-9 \-()]{8,20}$`), `service` (1–100), `preferred_date` (ISO date, today or later), `preferred_time` (HH:MM), `message` (≤1000, optional).
-- **Hardened IP extraction** (no `x-forwarded-for`):
-  - Use `cf-connecting-ip`, fall back to `x-real-ip` — both are gateway-set, not client-controllable.
-  - If neither is present → return 400 ("Unable to verify request origin"). Refuse rather than silently bypass.
-- Hash IP with SHA-256 + `APPT_IP_SALT` before passing to RPC.
-- Call `supabase.rpc('record_appointment_submission', { _ip_hash, _name, _phone, _service, _preferred_date, _preferred_time, _message })`.
-- Map errors:
-  - Error message/code matches `RATE_LIMIT` → return **429** with bilingual `{ error, retryAfterMinutes: 10 }`.
-  - Zod failure → 400 with field errors.
-  - Other DB errors → 500 generic message; log details server-side.
-- Return `{ ok: true, id }` on success.
+**b. Single-role constraint**
+- Drop existing `UNIQUE (user_id, role)` if present.
+- `ALTER TABLE public.user_roles ADD CONSTRAINT user_roles_user_id_unique UNIQUE (user_id);`
 
-### 3. Frontend (`src/pages/Appointment.tsx`)
-- Replace `supabase.from('appointments').insert(...)` with `supabase.functions.invoke('submit-appointment', { body: {...formData} })`.
-- Toast handling (BM/EN):
-  - 429 → "Too many requests. Please try again in 10 minutes / Terlalu banyak permintaan. Sila cuba lagi dalam 10 minit"
-  - 400 → field-level validation errors
-- Keep the post-submit WhatsApp redirect flow untouched.
+**c. Recursion-proof RLS helpers**
+`CREATE OR REPLACE` `has_role`, `is_admin`, `is_staff_or_admin` — `LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public`. Then explicitly:
+```sql
+ALTER FUNCTION public.has_role(uuid, app_role) OWNER TO postgres;
+ALTER FUNCTION public.is_admin(uuid) OWNER TO postgres;
+ALTER FUNCTION public.is_staff_or_admin(uuid) OWNER TO postgres;
+```
+Definer + `postgres` owner means helper queries on `user_roles` bypass RLS — no recursion risk if a future policy on `user_roles` calls `is_admin()`.
 
-### 4. Secrets needed
-- `APPT_IP_SALT` — random ≥32-char string for privacy-preserving IP hashing (will request after approval). `SUPABASE_URL` and `SUPABASE_ANON_KEY` are already set; service-role key is intentionally not used.
+**d. RPC `public.admin_assign_role(target_user_id uuid, new_role app_role)`**
+- `SECURITY DEFINER`, `SET search_path = public`, `LANGUAGE plpgsql`, `OWNER TO postgres`.
+- Body order:
+  1. Authorization gate:
+     ```sql
+     IF NOT public.is_admin(auth.uid()) THEN
+       RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
+     END IF;
+     ```
+  2. **Self-demotion guard** (new):
+     ```sql
+     IF target_user_id = auth.uid() AND new_role <> 'admin' THEN
+       RAISE EXCEPTION 'CANNOT_DEMOTE_SELF' USING ERRCODE = 'P0001';
+     END IF;
+     ```
+  3. Atomic upsert:
+     ```sql
+     INSERT INTO public.user_roles (user_id, role)
+     VALUES (target_user_id, new_role)
+     ON CONFLICT (user_id) DO UPDATE SET role = EXCLUDED.role;
+     ```
+- `GRANT EXECUTE ON FUNCTION public.admin_assign_role(uuid, app_role) TO authenticated;`
 
-### 5. Security finding
-- After deploy, mark `SUPA_rls_policy_always_true` as fixed.
+**e. Lock down `user_roles` writes**
+- Drop any existing INSERT/UPDATE/DELETE policies on `public.user_roles` (defensive — none currently exposed).
+- Ensure SELECT policies:
+  - `Users can view own roles` → `auth.uid() = user_id`
+  - `Admins can view all roles` → `public.is_admin(auth.uid())`
+- No write policies; mutation only via RPC.
+
+### 2. Frontend — `src/contexts/AuthContext.tsx`
+
+Migrate from `roles: AppRole[]` to `role: AppRole | null`.
+
+**Public API:**
+```ts
+interface AuthContextType {
+  // ...
+  role: AppRole | null;
+  isAdmin: boolean;
+  isStaffOrAdmin: boolean;
+  isGuest: boolean;        // null-safe
+  // ...
+}
+```
+
+**Internal:**
+- `const [role, setRole] = useState<AppRole | null>(null);`
+- Rename `fetchUserRoles` → `fetchUserRole`; use `.maybeSingle()`:
+  ```ts
+  const { data } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', userId)
+    .maybeSingle();
+  setRole((data?.role as AppRole) ?? null);
+  ```
+- Derived flags:
+  - `isAdmin = role === 'admin'`
+  - `isStaffOrAdmin = role === 'admin' || role === 'staff'`
+  - **`isGuest = role === 'guest' || role === null`** (null-safe — brand-new users with no row are treated as restricted)
+- Sign-out: `setRole(null)`.
+
+### 3. Frontend — `src/components/ProtectedRoute.tsx`
+
+Currently consumes `isAdmin` / `isStaffOrAdmin` only — those still resolve correctly. Confirm during implementation that any unauthenticated-but-known-role user lands on the guest waiting screen (see step 5).
+
+### 4. Frontend — `src/pages/staff/admin/Employees.tsx`
+
+- Replace delete-then-insert with RPC:
+  ```ts
+  const { error } = await supabase.rpc('admin_assign_role', {
+    target_user_id: userId,
+    new_role: newRole,
+  });
+  ```
+- Error mapping in toasts:
+  - `42501` / message contains `NOT_AUTHORIZED` → "You do not have permission to change roles"
+  - message contains `CANNOT_DEMOTE_SELF` → "You cannot demote your own admin account. Ask another admin."
+  - other → existing generic "Failed to update role"
+- UX guard: in the role `<Select>` for the currently logged-in admin row, disable the `staff` and `guest` options (compare row's `id` to `user.id`). Prevents the error-path round-trip for the common case while the DB remains the source of truth.
+- Simplify `fetchEmployees` aggregation — one row per user:
+  ```ts
+  const roleMap: Record<string, AppRole> = {};
+  roles?.forEach((r) => { roleMap[r.user_id] = r.role as AppRole; });
+  ```
+
+### 5. Guest / unassigned routing
+
+Audit `ProtectedRoute` flow: when `isGuest === true` (i.e. `role` is `'guest'` OR `null`), authenticated users hitting `/staff/*` routes are redirected to a generic guest landing (existing behavior for guests). New users with no `user_roles` row now follow the same path instead of falling through to a permission-denied flash.
+
+### 6. Audit other consumers
+
+Search for any remaining `useAuth()` consumers reading `roles` or using `.includes(`. Migrate each to the new `role` API. Most code already reads the derived booleans, so impact should be limited.
+
+### 7. Security follow-up
+
+After deploy, re-run the security scanner. Mark `SUPA_rls_policy_always_true` fixed if still flagged; confirm `user_roles` shows only the two SELECT policies.
 
 ### Files touched
-- New: `supabase/functions/submit-appointment/index.ts`
-- New migration: enable `pg_cron`, create cleanup function + cron schedule, create `record_appointment_submission()` RPC with advisory lock, grant EXECUTE to anon/authenticated
-- Edited: `supabase/config.toml` (add `[functions.submit-appointment] verify_jwt = false`)
-- Edited: `src/pages/Appointment.tsx`
+- New migration: dedup → `UNIQUE(user_id)` → recreate helpers (`OWNER TO postgres`, STABLE, SECURITY DEFINER, `search_path=public`) → create `admin_assign_role` RPC with auth gate + self-demotion guard + atomic upsert → grant EXECUTE → audit `user_roles` policies.
+- Edited: `src/contexts/AuthContext.tsx` — `role: AppRole | null` API, null-safe `isGuest`.
+- Edited: `src/pages/staff/admin/Employees.tsx` — RPC call, self-demote UI guard, error mapping, simplified aggregation.
+- Edited: any other file consuming `roles[]` from `useAuth()` (audit pass).
 
 ### Out of scope
-- Captcha.
-- Distributed/global rate limiting (would need Redis/Upstash).
-- IPv6 /64 prefix bucketing.
+- Multi-role support.
+- RLS write policies on `user_roles`.
+- Role-change audit log.
+- Cross-admin demotion guards (admins can still demote other admins by design).
