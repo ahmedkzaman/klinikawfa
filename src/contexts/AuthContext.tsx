@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
-export type AppRole = 'admin' | 'staff' | 'guest';
+export type AppRole = 'special_admin' | 'admin' | 'operations' | 'staff' | 'guest';
 
 interface AuthContextType {
   user: User | null;
@@ -13,6 +13,9 @@ interface AuthContextType {
   isAdmin: boolean;
   isStaffOrAdmin: boolean;
   isGuest: boolean;
+  isSpecialAdmin: boolean;
+  isOperations: boolean;
+  isOpsOrAdmin: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -145,9 +148,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error as Error | null };
   };
 
-  const isAdmin = role === 'admin';
-  const isStaffOrAdmin = role === 'admin' || role === 'staff';
+  const isAdmin = role === 'admin' || role === 'special_admin';
+  const isStaffOrAdmin =
+    role === 'admin' || role === 'staff' || role === 'special_admin' || role === 'operations';
   const isGuest = role === 'guest' || role === null;
+  const isSpecialAdmin = role === 'special_admin';
+  const isOperations = role === 'operations';
+  const isOpsOrAdmin = role === 'operations' || role === 'admin' || role === 'special_admin';
 
   return (
     <AuthContext.Provider
@@ -160,6 +167,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAdmin,
         isStaffOrAdmin,
         isGuest,
+        isSpecialAdmin,
+        isOperations,
+        isOpsOrAdmin,
         signIn,
         signUp,
         signOut,
