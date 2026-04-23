@@ -739,6 +739,8 @@ export type Database = {
         Row: {
           consultation_id: string
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           dosage: string | null
           dosage_qty: number | null
           dosage_unit: string | null
@@ -756,6 +758,8 @@ export type Database = {
         Insert: {
           consultation_id: string
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           dosage?: string | null
           dosage_qty?: number | null
           dosage_unit?: string | null
@@ -773,6 +777,8 @@ export type Database = {
         Update: {
           consultation_id?: string
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           dosage?: string | null
           dosage_qty?: number | null
           dosage_unit?: string | null
@@ -866,6 +872,8 @@ export type Database = {
         Row: {
           case_note: string
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           diagnosis_id: string | null
           diagnosis_text: string
           dispense_note: string
@@ -879,6 +887,8 @@ export type Database = {
         Insert: {
           case_note?: string
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           diagnosis_id?: string | null
           diagnosis_text?: string
           dispense_note?: string
@@ -892,6 +902,8 @@ export type Database = {
         Update: {
           case_note?: string
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           diagnosis_id?: string | null
           diagnosis_text?: string
           dispense_note?: string
@@ -1668,6 +1680,8 @@ export type Database = {
           amount: number
           consultation_id: string | null
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           notes: string | null
           payment_method: string
@@ -1679,6 +1693,8 @@ export type Database = {
           amount?: number
           consultation_id?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           notes?: string | null
           payment_method: string
@@ -1690,6 +1706,8 @@ export type Database = {
           amount?: number
           consultation_id?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           notes?: string | null
           payment_method?: string
@@ -1806,6 +1824,8 @@ export type Database = {
           clinic_status: Database["public"]["Enums"]["clinic_status"]
           created_at: string
           created_by: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           doctor_remarks: string | null
           id: string
           is_urgent: boolean
@@ -1825,6 +1845,8 @@ export type Database = {
           clinic_status?: Database["public"]["Enums"]["clinic_status"]
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           doctor_remarks?: string | null
           id?: string
           is_urgent?: boolean
@@ -1844,6 +1866,8 @@ export type Database = {
           clinic_status?: Database["public"]["Enums"]["clinic_status"]
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           doctor_remarks?: string | null
           id?: string
           is_urgent?: boolean
