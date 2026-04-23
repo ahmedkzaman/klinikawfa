@@ -1,141 +1,104 @@
 
-## Step 5 — Clinic Portal Data Wiring (Queue + Patients + Voided Records)
+## Step 6 (Option A) — Create `payment_methods` Table
 
-Scope: Replace three of the six placeholder pages with real, working UIs backed by the database primitives from Steps 1–2. Consultations, Dispensary, and Inventory remain placeholders — they involve the most complex flows (consultation editor, dispense + inventory commit, stock CRUD) and will be Step 6 / 7 / 8 to keep this step reviewable.
-
-The three pages chosen for Step 5 form a complete intake-and-audit loop:
-1. **Patients** — registration + lookup (prerequisite for queue intake).
-2. **Queue Board** — live board powered by `intake_appointment_to_queue` RPC + realtime.
-3. **Voided Records** — exercises `fetchVoided` and proves the special_admin RLS gate.
+Scope: One migration. Create the missing `payment_methods` table with a column shape that matches what the Clinic Flow frontend expects (verified against the reference project), apply 4 RLS policies, and stop. No frontend code. No changes to the six existing tables.
 
 ---
 
-### 5.1 — Shared clinic types + query hooks
+### Verification of expected schema (from Clinic Flow reference project `248fba2c-eed8-4623-a193-dd2f8b9226b4`)
 
-New file: `src/types/clinic.ts`
+I inspected the reference project's `usePaymentMethods` hook, `RecordPaymentDialog`, `DispenseCheckout`, and the `payment_methods` table type in `src/integrations/supabase/types.ts`. The columns the frontend reads/writes are:
 
-- Re-export commonly used row shapes from `Database['public']['Tables']` for `patients`, `queue_entries`, `appointments`, `consultations`, `consultation_items`, `payments` — gives clinic components a single import surface and makes Step 6/7/8 easier.
-- Define `ClinicStatus` as a string-literal union mirroring the DB enum: `'registered' | 'ready_for_doctor' | 'with_doctor' | 'sent_to_dispensary' | 'dispensing_payment' | 'on_hold' | 'completed' | 'cancelled'`.
-- Define `STATUS_LABELS` and `STATUS_COLORS` maps (semantic-token classes only — `bg-primary/10`, `bg-muted`, `bg-destructive/10`, etc.).
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | standard |
+| `name` | text NOT NULL | e.g. "Cash", "Visa", "TouchNGo" |
+| `type` | text NOT NULL | enum-like string: `'cash' \| 'card' \| 'ewallet' \| 'bank_transfer' \| 'panel' \| 'insurance' \| 'other'` |
+| `provider_id` | uuid NULL | FK → `insurance_providers(id)` (only set when `type = 'panel'` or `'insurance'`) |
+| `account_details` | text NULL | Free-text (last-4, terminal ID, etc.) — used by RecordPaymentDialog |
+| `surcharge_percentage` | numeric(5,2) NULL DEFAULT 0 | Card processor fee passed to patient |
+| `display_order` | integer NOT NULL DEFAULT 0 | Sort order on checkout panel |
+| `status` | text NOT NULL DEFAULT 'active' | `'active' \| 'inactive'` — matches the pattern used by other clinic tables (`services`, `packages`, etc.) |
+| `created_at` | timestamptz NOT NULL DEFAULT now() | standard |
+| `updated_at` | timestamptz NOT NULL DEFAULT now() | for `updated_at` trigger consistency |
 
-New file: `src/hooks/clinic/useQueueEntries.ts`
-
-- `useQueueEntries()` — `useQuery` returning today's active queue entries (clinic_status not in `('completed','cancelled')`, `deleted_at IS NULL`), joined with `patients(name, phone)` and `doctors(name)`.
-- Subscribe to `postgres_changes` on `queue_entries` and invalidate the query on any event. Channel cleanup on unmount.
-- Sort: urgent first, then `queue_number` ascending.
-
-New file: `src/hooks/clinic/usePatients.ts`
-
-- `usePatients(search?: string)` — `useQuery` keyed by search term. Empty search returns 50 most recent; non-empty does case-insensitive `ilike` match on `name`, `phone`, `national_id`.
-- `useCreatePatient()` — `useMutation` wrapping `supabase.from('patients').insert(...)`. Invalidates `['patients']` on success.
-
-New file: `src/hooks/clinic/useTodayAppointments.ts`
-
-- Returns today's appointments with `status = 'pending'` (i.e., not yet checked in) — feeds the "Check In" picker on the queue board.
+The richer shape (vs. the spec's `is_active` boolean) keeps the table consistent with sibling tables already in the database (`services.status`, `packages.status`, `insurance_providers.status`) and matches the frontend's filter `.eq('status', 'active')` instead of `.eq('is_active', true)`.
 
 ---
 
-### 5.2 — Patients page (real UI)
+### Migration SQL
 
-Rewrite `src/pages/clinic/PatientsList.tsx`:
+```sql
+-- 1. Table
+CREATE TABLE IF NOT EXISTS public.payment_methods (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  type text NOT NULL CHECK (type IN ('cash','card','ewallet','bank_transfer','panel','insurance','other')),
+  provider_id uuid NULL REFERENCES public.insurance_providers(id) ON DELETE SET NULL,
+  account_details text NULL,
+  surcharge_percentage numeric(5,2) NOT NULL DEFAULT 0,
+  display_order integer NOT NULL DEFAULT 0,
+  status text NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
 
-**Layout:** header row with title + "Register Patient" primary button, search input below (debounced 250ms), then results table.
+-- 2. Index for common lookup
+CREATE INDEX IF NOT EXISTS payment_methods_status_order_idx
+  ON public.payment_methods (status, display_order);
 
-**Table columns:** Name, Phone, National ID, DOB, Gender, Registered (date), row-action menu (`…` → "View profile" — Step 6 will wire profile drill-down; for Step 5 it's a stub that toasts "Coming soon").
+-- 3. updated_at trigger (reuses existing helper)
+DROP TRIGGER IF EXISTS trg_payment_methods_updated_at ON public.payment_methods;
+CREATE TRIGGER trg_payment_methods_updated_at
+  BEFORE UPDATE ON public.payment_methods
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
-**Empty state:** When search returns zero results, show inline `<Card>` with "No patients found — register a new one?" + button that opens the same dialog as the header button.
+-- 4. RLS
+ALTER TABLE public.payment_methods ENABLE ROW LEVEL SECURITY;
 
-**Register dialog:** shadcn `Dialog` containing a react-hook-form + zod-validated form:
-- Required: `name` (min 2), `phone` (Malaysian-mobile regex from `src/lib/validations.ts`).
-- Optional: `national_id` (12-digit MyKad regex if provided), `date_of_birth` (date picker), `gender` (select: male/female/other), `email`, `allergies` (textarea), `underlying_conditions` (textarea).
-- Submit calls `useCreatePatient`; on success closes dialog, toasts, and refocuses the new patient in the table.
+CREATE POLICY "payment_methods_authenticated_select"
+  ON public.payment_methods FOR SELECT TO authenticated
+  USING (true);
 
-**Search performance:** Hook handles debounce; component renders skeleton rows during fetch. No client-side filtering — all queries go through the DB.
+CREATE POLICY "payment_methods_ops_insert"
+  ON public.payment_methods FOR INSERT TO authenticated
+  WITH CHECK (public.is_ops_or_admin(auth.uid()));
 
-**Accessibility:** Form labels associated, dialog focus-trapped (shadcn handles), table has caption.
+CREATE POLICY "payment_methods_ops_update"
+  ON public.payment_methods FOR UPDATE TO authenticated
+  USING (public.is_ops_or_admin(auth.uid()))
+  WITH CHECK (public.is_ops_or_admin(auth.uid()));
 
----
-
-### 5.3 — Queue Board page (real UI)
-
-Rewrite `src/pages/clinic/QueueBoard.tsx`:
-
-**Top bar:** Date label (today), "Check In Walk-In" secondary button, "Check In Appointment" primary button (disabled if no pending appointments today).
-
-**Layout:** Five horizontal status columns (kanban-style), responsive — 5 cols on `xl`, 3 on `lg`, 1 stacked accordion on mobile:
-1. Registered
-2. Ready for Doctor
-3. With Doctor
-4. Dispensary / Payment (groups `sent_to_dispensary` + `dispensing_payment`)
-5. On Hold
-
-Each column shows:
-- Header with status label + count badge.
-- Card per entry: queue number (large, monospace), patient name, time waited (live, computed from `created_at`), urgency flag (red dot if `is_urgent`), assigned doctor name if any, visit purpose chip.
-- Card click opens a side `Sheet` with full details (patient info, visit notes, timeline) — actions (Call Next / Send to Doctor / Mark Done) are stubbed for Step 5 with a "Wired in Step 6" toast. The card itself is informational this step.
-
-**Realtime:** Cards animate in/out as the realtime subscription pushes changes. Use `framer-motion`'s `AnimatePresence` for column transitions.
-
-**"Check In Appointment" flow:**
-- Opens dialog listing today's pending appointments (from `useTodayAppointments`).
-- Each row: patient name, time, service, "Check In" button.
-- Button calls a new `useIntakeAppointment` mutation that wraps `supabase.rpc('intake_appointment_to_queue', { p_appointment_id, p_patient_id, p_visit_purpose, p_notes })`.
-- The RPC needs `p_patient_id`. Appointments don't link to patients directly, so the dialog includes a patient picker (search-as-you-type, reuses `usePatients`) per appointment row — operator confirms which `patients` row matches the walk-in. If no match exists, a "Register first" link opens the patient registration dialog inline.
-- On success: toasts `Queue #{n} created`, closes dialog. Realtime pushes the new card.
-
-**"Check In Walk-In" flow:**
-- Single dialog: patient picker (required) + visit purpose select + notes textarea.
-- Inserts directly into `queue_entries` (no appointment link). The DB trigger assigns `queue_number` from the sequence.
-
-**Empty queue state:** Centered illustration-style message in the column area: "No active patients. Check in an appointment or walk-in to get started."
+CREATE POLICY "payment_methods_special_admin_delete"
+  ON public.payment_methods FOR DELETE TO authenticated
+  USING (public.is_special_admin(auth.uid()));
+```
 
 ---
 
-### 5.4 — Voided Records page (real UI, special_admin only)
+### Notes on deviations from the original spec
 
-Rewrite `src/pages/clinic/VoidedRecords.tsx`:
-
-**Layout:** Tabs for the four soft-deletable tables: Consultations | Items | Payments | Queue Entries.
-
-Each tab renders a table powered by `fetchVoided(table)` (already exists in `src/lib/clinic/softDelete.ts`). Columns vary per table but all include `deleted_at` (relative time + absolute on hover), `deleted_by` (resolved to profile email via a join — fall back to UUID if join fails), and a "View original" details popover.
-
-**No mutation surface** — voided records are read-only audit history. Step 6+ may add an "Unvoid" RPC for special_admin; out of scope here.
-
-**Gate:** Page is already wrapped in `<ClinicProtectedRoute requiredRole="special_admin">` from Step 4 — no additional client-side check needed. RLS guarantees non-special-admins receive `[]` even if they bypass the route guard.
-
-**Empty state:** Per-tab message: "No voided {entity} yet."
+1. **`status` instead of `is_active`** — matches sibling tables (`services`, `packages`, `insurance_providers`) and the reference frontend's query pattern. Avoids two competing "is this row live?" conventions in one schema.
+2. **Added `account_details`, `surcharge_percentage`, `display_order`, `updated_at`** — required by `DispenseCheckout` and `RecordPaymentDialog` in the reference project. Adding them now avoids a follow-up `ALTER TABLE` in Step 7.
+3. **CHECK constraints on `type` and `status`** — string enums (immutable, safe under restore).
+4. **`updated_at` trigger** — uses the existing `public.update_updated_at_column()` function already in the database.
+5. **Policy names prefixed with `payment_methods_`** — matches the naming convention used on every other clinic table in the schema.
 
 ---
 
-### 5.5 — Inventory column reveal (Stock / Allocated / Available)
+### Out of scope
 
-Touch the **existing** inventory admin page if one exists, OR add a minimal read-only table to `src/pages/clinic/Inventory.tsx`:
+- The six existing tables (`insurance_providers`, `services`, `packages`, `vital_signs`, `stock_takes`, `stock_take_counts`) — untouched.
+- Seed data for default payment methods (Cash / Visa / TouchNGo) — Step 7 settings UI will let ops add these.
+- Any frontend code (`usePaymentMethods` hook, `RecordPaymentDialog`, settings panel) — Step 7+.
 
-- Three columns: Stock, Allocated, Available (computed client-side as `stock - allocated_quantity`, capped at 0).
-- This proves the B.3 inventory-allocation primitive is live and visible. Full inventory CRUD remains a future step.
-- If `src/pages/admin` already has inventory pages, defer to Step 7 instead and keep `Inventory.tsx` as placeholder — I'll check during implementation and report which path was taken.
+### Verification after migration
 
----
+1. `payment_methods` table exists with all 10 columns.
+2. RLS is enabled; 4 policies present (one per command).
+3. `updated_at` trigger fires on UPDATE.
+4. `provider_id` FK to `insurance_providers` works (insert with NULL succeeds; insert with valid uuid succeeds; insert with random uuid fails).
+5. `supabase--linter` returns no new criticals.
+6. Existing six tables are byte-identical (no policies, columns, or constraints touched).
 
-### Out of scope for Step 5
-
-- Consultation editor (chief complaint, diagnosis, items, dispense note) — Step 6.
-- Dispense flow + payment capture + e-invoice trigger — Step 7.
-- Inventory CRUD (add/edit/delete items, expiry tracking, stock adjustments) — Step 8.
-- Edge functions (`einvoice-submit`, `intake-bridge`).
-- Doctor-facing "with patient" room view.
-- Unvoid / restore RPC.
-- Bulk operations (multi-select on patients/queue).
-
-### Verification after Step 5
-
-1. TypeScript compiles cleanly.
-2. Operations user can register a patient, see them in the search results.
-3. Operations user can check in a pending appointment → queue card appears in real time on a second browser tab.
-4. Operations user can check in a walk-in → queue card appears with auto-assigned queue number.
-5. Soft-deleting a queue entry via DB (`UPDATE queue_entries SET deleted_at = now(), deleted_by = '<id>' WHERE …`) → card disappears from queue board within 1s; appears in Voided Records for special_admin.
-6. Non-special admin loading `/clinic/voided` directly → redirected to `/staff/dashboard`.
-7. Special admin sees four tabs of voided data.
-8. Mobile (375px): queue board stacks columns into accordion; patient table scrolls horizontally.
-
-**Stop after these files. Do not begin Step 6 (Consultation editor).**
+**Stop after the migration applies cleanly. No frontend code in this step.**
