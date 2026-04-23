@@ -1321,6 +1321,7 @@ export type Database = {
       }
       inventory_items: {
         Row: {
+          allocated_quantity: number
           category: string
           cost_price: number
           created_at: string
@@ -1344,6 +1345,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          allocated_quantity?: number
           category?: string
           cost_price?: number
           created_at?: string
@@ -1367,6 +1369,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          allocated_quantity?: number
           category?: string
           cost_price?: number
           created_at?: string
@@ -2973,6 +2976,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _resolve_inventory_item_id: {
+        Args: { _item_name: string }
+        Returns: string
+      }
       admin_assign_role: {
         Args: {
           new_role: Database["public"]["Enums"]["app_role"]
@@ -2980,7 +2987,12 @@ export type Database = {
         }
         Returns: undefined
       }
+      available_quantity: { Args: { _item_id: string }; Returns: number }
       cleanup_appointment_submission_log: { Args: never; Returns: undefined }
+      commit_inventory: {
+        Args: { _item_id: string; _qty: number }
+        Returns: undefined
+      }
       get_doctor_id_for_user: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
@@ -2988,6 +3000,15 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      intake_appointment_to_queue: {
+        Args: {
+          p_appointment_id: string
+          p_notes?: string
+          p_patient_id: string
+          p_visit_purpose?: string
+        }
+        Returns: string
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_ops_or_admin: { Args: { _user_id: string }; Returns: boolean }
@@ -3005,6 +3026,15 @@ export type Database = {
         }
         Returns: string
       }
+      release_inventory: {
+        Args: { _item_id: string; _qty: number }
+        Returns: undefined
+      }
+      reserve_inventory: {
+        Args: { _item_id: string; _qty: number }
+        Returns: undefined
+      }
+      safe_reset_queue_number_seq: { Args: never; Returns: undefined }
       sync_roster_zone_assignments: {
         Args: { _month: number; _year: number }
         Returns: undefined
