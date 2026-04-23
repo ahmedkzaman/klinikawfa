@@ -60,7 +60,8 @@ import PatientsList from "./pages/clinic/PatientsList";
 import Consultation from "./pages/clinic/Consultation";
 import ConsultationDetail from "./pages/clinic/ConsultationDetail";
 import Procurement from "./pages/clinic/Procurement";
-import Dispensary from "./pages/clinic/Dispensary";
+import DispenseCheckout from "./pages/clinic/DispenseCheckout";
+import Billings from "./pages/clinic/Billings";
 import Inventory from "./pages/clinic/Inventory";
 import VoidedRecords from "./pages/clinic/VoidedRecords";
 
@@ -162,7 +163,8 @@ const App = () => (
                 <Route path="consultation" element={<Consultation />} />
                 <Route path="consultation/:queueEntryId" element={<ConsultationDetail />} />
                 <Route path="procurement" element={<Procurement />} />
-                <Route path="dispensary" element={<Dispensary />} />
+                <Route path="queue/checkout/:queueEntryId" element={<DispenseCheckout />} />
+                <Route path="billings" element={<Billings />} />
                 <Route path="inventory" element={<Inventory />} />
                 <Route
                   path="voided"
