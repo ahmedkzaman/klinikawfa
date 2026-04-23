@@ -159,7 +159,9 @@ const App = () => (
                 <Route index element={<Navigate to="queue" replace />} />
                 <Route path="queue" element={<QueueBoard />} />
                 <Route path="patients" element={<PatientsList />} />
-                <Route path="consultations" element={<ConsultationsList />} />
+                <Route path="consultation" element={<Consultation />} />
+                <Route path="consultation/:queueEntryId" element={<ConsultationDetail />} />
+                <Route path="procurement" element={<Procurement />} />
                 <Route path="dispensary" element={<Dispensary />} />
                 <Route path="inventory" element={<Inventory />} />
                 <Route
