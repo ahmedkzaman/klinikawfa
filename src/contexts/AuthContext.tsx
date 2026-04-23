@@ -9,7 +9,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   rolesLoading: boolean;
-  roles: AppRole[];
+  role: AppRole | null;
   isAdmin: boolean;
   isStaffOrAdmin: boolean;
   isGuest: boolean;
@@ -26,31 +26,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [rolesLoading, setRolesLoading] = useState(true);
-  const [roles, setRoles] = useState<AppRole[]>([]);
+  const [role, setRole] = useState<AppRole | null>(null);
 
   // Refs to track state across the auth listener closure
   const authInitializedRef = useRef(false);
   const currentUserIdRef = useRef<string | null>(null);
 
-  const fetchUserRoles = useCallback(async (userId: string) => {
+  const fetchUserRole = useCallback(async (userId: string) => {
     setRolesLoading(true);
     try {
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .maybeSingle();
 
       if (error) {
-        console.error('Error fetching roles:', error);
-        setRoles([]);
+        console.error('Error fetching role:', error);
+        setRole(null);
         return;
       }
 
-      const userRoles = data?.map(r => r.role as AppRole) || [];
-      setRoles(userRoles);
+      setRole((data?.role as AppRole) ?? null);
     } catch (err) {
-      console.error('Error in fetchUserRoles:', err);
-      setRoles([]);
+      console.error('Error in fetchUserRole:', err);
+      setRole(null);
     } finally {
       setRolesLoading(false);
     }
@@ -66,7 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
 
       if (session?.user) {
-        fetchUserRoles(session.user.id);
+        fetchUserRole(session.user.id);
       } else {
         setRolesLoading(false);
       }
@@ -91,19 +91,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
 
         if (session?.user) {
-          // Only refetch roles when user actually changed
+          // Only refetch role when user actually changed
           setTimeout(() => {
-            fetchUserRoles(session.user.id);
+            fetchUserRole(session.user.id);
           }, 0);
         } else {
-          setRoles([]);
+          setRole(null);
           setRolesLoading(false);
         }
       }
     );
 
     return () => subscription.unsubscribe();
-  }, [fetchUserRoles]);
+  }, [fetchUserRole]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
@@ -133,7 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     currentUserIdRef.current = null;
     authInitializedRef.current = false;
     await supabase.auth.signOut();
-    setRoles([]);
+    setRole(null);
   };
 
   const resetPassword = async (email: string) => {
@@ -145,9 +145,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error as Error | null };
   };
 
-  const isAdmin = roles.includes('admin');
-  const isStaffOrAdmin = roles.includes('admin') || roles.includes('staff');
-  const isGuest = roles.length > 0 && !isStaffOrAdmin;
+  const isAdmin = role === 'admin';
+  const isStaffOrAdmin = role === 'admin' || role === 'staff';
+  const isGuest = role === 'guest' || role === null;
 
   return (
     <AuthContext.Provider
@@ -156,7 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session,
         loading,
         rolesLoading,
-        roles,
+        role,
         isAdmin,
         isStaffOrAdmin,
         isGuest,
