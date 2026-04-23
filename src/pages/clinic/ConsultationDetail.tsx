@@ -197,7 +197,10 @@ export default function ConsultationDetail() {
   }, [vitals?.id]);
 
   const handleSaveNotes = async () => {
-    if (!consultationId) return;
+    if (!consultationId) {
+      toast.error('Doctor profile missing or consultation not created — contact admin');
+      return;
+    }
     await updateConsultation.mutateAsync({
       id: consultationId,
       case_note: caseNote,
