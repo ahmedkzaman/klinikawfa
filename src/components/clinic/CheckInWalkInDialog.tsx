@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { UserPlus } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -76,7 +77,21 @@ export function CheckInWalkInDialog({ open, onOpenChange }: CheckInWalkInDialogP
 
           <div className="space-y-4">
             <div>
-              <Label className="mb-2 block">Patient *</Label>
+              <div className="mb-2 flex items-center justify-between">
+                <Label>Patient *</Label>
+                {!patient && (
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0"
+                    onClick={() => setRegisterOpen(true)}
+                  >
+                    <UserPlus className="mr-1" />
+                    Register new
+                  </Button>
+                )}
+              </div>
               <PatientPicker
                 value={patient}
                 onChange={setPatient}
