@@ -61,6 +61,14 @@ export const QUEUE_COLUMNS: Array<{
 ];
 
 export type QueueEntryWithJoins = QueueEntryRow & {
-  patients: { name: string; phone: string | null } | null;
-  doctors: { name: string } | null;
+  patients:
+    | (Partial<Database['public']['Tables']['patients']['Row']> & {
+        name: string;
+        phone: string | null;
+      })
+    | null;
+  doctors:
+    | { id?: string; name: string; avatar_url?: string | null }
+    | null;
+  rooms?: { id: string; label: string } | null;
 };
