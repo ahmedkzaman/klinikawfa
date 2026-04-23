@@ -1,130 +1,163 @@
 
-## Step 1 — Database Hardening (B.1 + B.2)
+## Step 2 — Database Hardening (B.3 + B.4 + B.5)
 
-Scope: SQL migrations only. No frontend changes. Stop and confirm after both migrations apply cleanly.
-
----
-
-### Migration 1 — `<ts>_rbac_enum_extend.sql`
-
-Enum-only migration (commit barrier required before new values can be referenced).
-
-```sql
-ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'special_admin';
-ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'operations';
-```
+Three sequential migrations. SQL only. No frontend changes. Stop and confirm after all three apply cleanly.
 
 ---
 
-### Migration 2 — `<ts>_rbac_helpers_rpc_bootstrap.sql`
-
-**Tie-safe dedup** (defensive; `UNIQUE(user_id)` already in place):
-```sql
-WITH ranked AS (
-  SELECT ctid, user_id, ROW_NUMBER() OVER (
-    PARTITION BY user_id
-    ORDER BY CASE role
-      WHEN 'special_admin' THEN 4 WHEN 'admin' THEN 3
-      WHEN 'operations' THEN 2 ELSE 1 END DESC,
-      ctid ASC
-  ) AS rn
-  FROM public.user_roles
-)
-DELETE FROM public.user_roles ur USING ranked r
-WHERE ur.ctid = r.ctid AND r.rn > 1;
-```
-
-**Helpers** — `SECURITY DEFINER`, `STABLE`, `search_path=public`, `OWNER TO postgres`:
-- `is_special_admin(_user_id uuid) → boolean`
-- `is_ops_or_admin(_user_id uuid) → boolean` (true for `operations` / `admin` / `special_admin`)
-- `get_doctor_id_for_user(_user_id uuid) → uuid` (looks up `doctors.id` where `user_id = _user_id`)
-
-**Rewrite `admin_assign_role`** — gate on `is_special_admin(auth.uid())` instead of `is_admin`; keep self-demotion guard (block `target = auth.uid() AND new_role <> 'special_admin'`); atomic upsert; `OWNER TO postgres`; `REVOKE ALL FROM PUBLIC`; `GRANT EXECUTE TO authenticated`.
-
-**Backfill write RLS on the new clinic tables** using `is_ops_or_admin`. Apply INSERT/UPDATE policies (no DELETE — those four tables get soft-delete in Migration 3) to:
-- `patients`, `doctors`, `inventory_items`, `inventory_item_prices`, `inventory_lists`, `inventory_locations`, `packages`, `diagnoses`, `panel_payment_methods`, `insurance_providers`, `clinic_appointments`, `clinic_preferences`, `clinic_feedback_form_fields`, `consultation_transcripts`, `einvoices`, `einvoice_credentials`, `google_business_tokens`, `consultations`, `consultation_items`, `payments`, `queue_entries`.
-- DELETE policies added only for non-soft-delete tables (e.g. `patients`, `doctors`, inventory tables).
-- `einvoice_credentials` and `google_business_tokens` restricted to `is_special_admin` only.
-
-**Environment-aware bootstrap** (non-fatal, local/CI safe):
-```sql
-DO $$
-DECLARE
-  v_uid uuid;
-BEGIN
-  SELECT id INTO v_uid FROM auth.users WHERE email = 'ahmedkzaman@gmail.com';
-  IF v_uid IS NULL THEN
-    RAISE WARNING 'Bootstrap bypassed: Admin email not found in auth.users (Expected in local dev).';
-    RETURN;
-  END IF;
-  INSERT INTO public.user_roles (user_id, role)
-  VALUES (v_uid, 'special_admin')
-  ON CONFLICT (user_id) DO UPDATE SET role = 'special_admin';
-END $$;
-```
-
----
-
-### Migration 3 — `<ts>_soft_delete.sql` (B.2)
-
-Applied to **`consultations`, `consultation_items`, `payments`, `queue_entries`**.
+### Migration 4 — `<ts>_inventory_allocation.sql` (B.3)
 
 **Schema:**
 ```sql
-ALTER TABLE public.<t>
-  ADD COLUMN deleted_at TIMESTAMPTZ NULL,
-  ADD COLUMN deleted_by UUID NULL REFERENCES auth.users(id);
-CREATE INDEX <t>_active_idx ON public.<t> (<hot_col>) WHERE deleted_at IS NULL;
+ALTER TABLE public.inventory_items
+  ADD COLUMN allocated_quantity INTEGER NOT NULL DEFAULT 0
+    CHECK (allocated_quantity >= 0);
 ```
 
-Hot columns indexed:
-- `consultations(queue_entry_id)`, `consultations(patient_id)`
-- `consultation_items(consultation_id)`
-- `payments(queue_entry_id)`, `payments(consultation_id)`
-- `queue_entries(clinic_status)`, `queue_entries(created_at)`
-
-**Partial unique indexes** — for every existing UNIQUE on these four tables (audited from B.0 schema during migration; notably `consultations.queue_entry_id` if present), drop the standard constraint and replace:
+**Helper** — `available_quantity(_item_id uuid) → integer`, `STABLE`, `SECURITY DEFINER`, `search_path=public`:
 ```sql
-ALTER TABLE public.consultations
-  DROP CONSTRAINT IF EXISTS consultations_queue_entry_id_key;
-CREATE UNIQUE INDEX consultations_queue_entry_id_active_uidx
-  ON public.consultations (queue_entry_id) WHERE deleted_at IS NULL;
+SELECT GREATEST(stock - allocated_quantity, 0)
+FROM public.inventory_items WHERE id = _item_id;
 ```
-Repeat for any other UNIQUE on the four tables. Rule: "one X per Y" → "one *active* X per Y".
 
-**RLS rewrite per table:**
-1. DROP every existing DELETE policy. DB-level deletion is forbidden going forward.
-2. DROP and recreate every SELECT policy with `AND deleted_at IS NULL` appended to its predicate. Keep the existing `Authenticated can read <t>` policies semantically intact.
-3. Add separate special-admin voided-read policy:
-   ```sql
-   CREATE POLICY "<t>_special_admin_read_voided" ON public.<t>
-     FOR SELECT TO authenticated
-     USING (public.is_special_admin(auth.uid()) AND deleted_at IS NOT NULL);
-   ```
-4. UPDATE policy split (USING vs WITH CHECK) so soft-delete transition is permitted:
-   ```sql
-   CREATE POLICY "<t>_update_active" ON public.<t>
-     FOR UPDATE TO authenticated
-     USING  (public.is_ops_or_admin(auth.uid()) AND deleted_at IS NULL)
-     WITH CHECK (public.is_ops_or_admin(auth.uid()));
-   ```
-   USING gates *which rows* may be targeted (active only). WITH CHECK validates the *post-update row* — intentionally omits `deleted_at IS NULL` so a `NULL → now()` transition succeeds. Hard updates of already-soft-deleted rows remain blocked by USING.
-5. INSERT policy (was missing): `WITH CHECK (public.is_ops_or_admin(auth.uid()))`.
+**Three SECURITY DEFINER mutators** — `OWNER TO postgres`, `REVOKE ALL FROM PUBLIC`, `GRANT EXECUTE TO authenticated`. Each uses `SELECT ... FOR UPDATE` to serialize concurrent allocations:
+
+- `reserve_inventory(_item_id uuid, _qty integer)` → locks row, raises `insufficient_stock` (`P0001`) if `stock - allocated_quantity < _qty`, otherwise increments `allocated_quantity`.
+- `commit_inventory(_item_id uuid, _qty integer)` → locks row, decrements both `stock` and `allocated_quantity` by `_qty`. Used when consultation finalized + dispensed.
+- `release_inventory(_item_id uuid, _qty integer)` → locks row, decrements `allocated_quantity` by `_qty` (no stock change). Used on void / soft-delete.
+
+**Triggers on `consultation_items`:**
+- `AFTER INSERT` (active row, item resolves to inventory): call `reserve_inventory`.
+- `AFTER UPDATE` of `quantity` (active → active): diff and `reserve_inventory(diff)` or `release_inventory(-diff)`.
+- `AFTER UPDATE` where `OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL` (soft-delete transition): `release_inventory(quantity)`.
+
+**Trigger on `consultations`** for status transitions:
+- `AFTER UPDATE` where `NEW.status = 'completed' AND OLD.status <> 'completed'`: for each active `consultation_items` row, `commit_inventory(quantity)`.
+- `AFTER UPDATE` where `OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL`: for each still-active `consultation_items` row, `release_inventory(quantity)`.
+
+**Item resolution**: triggers must resolve `item_name` → `inventory_items.id`. Skip non-inventory items (free-text services) silently. Use a join `inventory_items WHERE name = item_name AND status = 'active' LIMIT 1`.
+
+---
+
+### Migration 5 — `<ts>_midnight_queue.sql` (B.4)
+
+**Replace** any existing `reset_queue_number_seq()` (drop if present) with:
+
+```sql
+CREATE OR REPLACE FUNCTION public.safe_reset_queue_number_seq()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_max_active integer;
+  v_next integer;
+BEGIN
+  SELECT COALESCE(MAX(queue_number), 0) INTO v_max_active
+  FROM public.queue_entries
+  WHERE deleted_at IS NULL
+    AND clinic_status IN (
+      'registered','ready_for_doctor','with_doctor',
+      'sent_to_dispensary','dispensing_payment','on_hold'
+    );
+
+  IF v_max_active = 0 THEN
+    v_next := 1001;  -- queue fully drained: hard reset to anchor
+  ELSE
+    v_next := v_max_active + 1;  -- preserve continuity
+  END IF;
+
+  PERFORM setval('public.queue_number_seq', v_next, false);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.safe_reset_queue_number_seq() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.safe_reset_queue_number_seq() TO authenticated;
+ALTER FUNCTION public.safe_reset_queue_number_seq() OWNER TO postgres;
+```
+
+If `queue_number_seq` doesn't exist yet, `CREATE SEQUENCE IF NOT EXISTS public.queue_number_seq START 1001;` first.
+
+---
+
+### Migration 6 — `<ts>_intake_rpc.sql` (B.5)
+
+Single-transaction atomic intake — replaces two-call frontend pattern:
+
+```sql
+CREATE OR REPLACE FUNCTION public.intake_appointment_to_queue(
+  p_appointment_id uuid,
+  p_patient_id uuid,
+  p_visit_purpose text DEFAULT 'consultation',
+  p_notes text DEFAULT NULL
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_queue_id uuid;
+  v_appt_status text;
+BEGIN
+  IF NOT public.is_ops_or_admin(auth.uid()) THEN
+    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT status INTO v_appt_status
+  FROM public.appointments
+  WHERE id = p_appointment_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'APPOINTMENT_NOT_FOUND' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF v_appt_status = 'checked_in' THEN
+    RAISE EXCEPTION 'ALREADY_CHECKED_IN' USING ERRCODE = 'P0001';
+  END IF;
+
+  INSERT INTO public.queue_entries (
+    patient_id, visit_purpose, visit_notes,
+    source_appointment_id, created_by, clinic_status
+  )
+  VALUES (
+    p_patient_id, p_visit_purpose, p_notes,
+    p_appointment_id, auth.uid(), 'registered'
+  )
+  RETURNING id INTO v_queue_id;
+
+  UPDATE public.appointments
+     SET status = 'checked_in'
+   WHERE id = p_appointment_id;
+
+  RETURN v_queue_id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.intake_appointment_to_queue(uuid, uuid, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.intake_appointment_to_queue(uuid, uuid, text, text) TO authenticated;
+ALTER FUNCTION public.intake_appointment_to_queue(uuid, uuid, text, text) OWNER TO postgres;
+```
+
+`SELECT ... FOR UPDATE` on the appointment row guarantees no two clerks can intake the same appointment concurrently. Whole operation is one transaction — if either insert or update fails, both roll back.
 
 ---
 
 ### Execution order
 
 ```text
-1. <ts>_rbac_enum_extend.sql           -- enum-only; commit barrier
-2. <ts>_rbac_helpers_rpc_bootstrap.sql -- dedup + helpers + admin_assign_role + write RLS backfill + WARNING bootstrap
-3. <ts>_soft_delete.sql                -- columns + partial unique indexes + RLS USING/CHECK split
+4. <ts>_inventory_allocation.sql  -- column + helper + 3 mutators + triggers
+5. <ts>_midnight_queue.sql        -- safe_reset_queue_number_seq
+6. <ts>_intake_rpc.sql            -- intake_appointment_to_queue
 ```
 
-After all three apply: run the Supabase linter, confirm zero new criticals, and report success. **Stop. Do not begin Step 2 (B.3/B.4/B.5) or any frontend work.**
+After all three apply: run the Supabase linter, confirm no new criticals, report success. **Stop. Do not begin Step 3 (frontend foundation work).**
 
-### Out of scope for Step 1
+### Out of scope for Step 2
 
-- B.3 inventory allocation, B.4 midnight queue, B.5 atomic intake RPC.
 - Any frontend file (`App.tsx`, `AuthContext.tsx`, components, hooks).
+- Inventory UI (Stock/Allocated/Available columns).
+- Soft-delete helper wiring.
 - Edge functions and dependency additions.
