@@ -3001,6 +3001,15 @@ export type Database = {
         }
         Returns: boolean
       }
+      intake_appointment_to_queue: {
+        Args: {
+          p_appointment_id: string
+          p_notes?: string
+          p_patient_id: string
+          p_visit_purpose?: string
+        }
+        Returns: string
+      }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_ops_or_admin: { Args: { _user_id: string }; Returns: boolean }
       is_special_admin: { Args: { _user_id: string }; Returns: boolean }
