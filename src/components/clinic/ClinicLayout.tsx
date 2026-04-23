@@ -8,6 +8,7 @@ import {
   Users,
   Stethoscope,
   Pill,
+  ClipboardList,
   Package,
   Archive,
   ArrowLeft,
@@ -26,8 +27,9 @@ type ClinicNavItem = {
 const clinicNavItems: ClinicNavItem[] = [
   { href: '/clinic/queue', label: 'Queue Board', icon: ListOrdered },
   { href: '/clinic/patients', label: 'Patients', icon: Users },
-  { href: '/clinic/consultations', label: 'Consultations', icon: Stethoscope },
+  { href: '/clinic/consultation', label: 'Consultation', icon: Stethoscope },
   { href: '/clinic/dispensary', label: 'Dispensary', icon: Pill },
+  { href: '/clinic/procurement', label: 'Procurement', icon: ClipboardList },
   { href: '/clinic/inventory', label: 'Inventory', icon: Package },
   { href: '/clinic/voided', label: 'Voided Records', icon: Archive, specialAdminOnly: true },
 ];
