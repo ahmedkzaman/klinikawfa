@@ -338,458 +338,539 @@ export default function ConsultationDetail() {
     );
   }
 
-  return (
-    <div className="max-w-[1600px] mx-auto space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-3 flex-wrap">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/clinic/consultation')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          {doctor && (
-            <div className="flex items-center gap-2">
-              <Avatar className="h-8 w-8">
-                <AvatarImage src={doctor.avatar_url ?? undefined} />
-                <AvatarFallback>{doctor.name.charAt(0)}</AvatarFallback>
-              </Avatar>
-              <span className="font-medium text-sm">{doctor.name}</span>
-            </div>
-          )}
-          <Badge variant="secondary">{waitingCount} waiting</Badge>
-          <span className="text-xs text-muted-foreground">
-            Waiting: {formatDistanceToNow(new Date(entry.created_at))}
-          </span>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" className="gap-1">
-                <Phone className="h-3 w-3" /> Call In <ChevronDown className="h-3 w-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {rooms.map((room) => (
-                <DropdownMenuItem
-                  key={room.id}
-                  onClick={() => handleCallIn(room.id, room.label)}
-                >
-                  {room.label}
-                </DropdownMenuItem>
-              ))}
-              {rooms.length === 0 && (
-                <DropdownMenuItem disabled>No rooms configured</DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        <StatusBadge status={entry.clinic_status} />
-      </div>
+  const bento =
+    'bg-white border-none rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.03)]';
+  const bentoHeader =
+    'text-sm font-bold text-slate-800 uppercase tracking-wider mb-3';
+  const softInput =
+    'bg-slate-50 border-transparent focus-visible:bg-white focus-visible:border-blue-500 rounded-lg';
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        {/* LEFT */}
-        <div className="lg:col-span-3 space-y-4">
-          <Card>
-            <CardContent className="pt-4 space-y-2">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold">{patient.name}</h2>
-                  <p className="text-sm text-muted-foreground">
-                    {patient.date_of_birth
-                      ? format(new Date(patient.date_of_birth), 'dd MMM yyyy')
-                      : '—'}
-                  </p>
-                  <div className="flex gap-4 text-sm mt-1">
-                    <span>IC: {patient.national_id || '—'}</span>
-                    <span>Gender: {patient.gender || '—'}</span>
+  const total = items.reduce((sum, i) => sum + Number(i.price) * i.quantity, 0);
+
+  return (
+    <div className="min-h-full bg-slate-50 -m-4 md:-m-6 p-4 md:p-6">
+      <div className="max-w-[1600px] mx-auto space-y-4">
+        {/* Header bar */}
+        <div className={`${bento} p-4 flex items-center justify-between gap-3 flex-wrap`}>
+          <div className="flex items-center gap-3 flex-wrap">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/clinic/consultation')}
+              className="rounded-lg"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            {doctor && (
+              <div className="flex items-center gap-2">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={doctor.avatar_url ?? undefined} />
+                  <AvatarFallback>{doctor.name.charAt(0)}</AvatarFallback>
+                </Avatar>
+                <span className="font-medium text-sm text-slate-800">{doctor.name}</span>
+              </div>
+            )}
+            <Badge className="rounded-full bg-slate-50 text-slate-600 border-none hover:bg-slate-100">
+              {waitingCount} waiting
+            </Badge>
+            <span className="text-xs text-slate-500">
+              Waiting: {formatDistanceToNow(new Date(entry.created_at))}
+            </span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  className="gap-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <Phone className="h-3 w-3" /> Call In <ChevronDown className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {rooms.map((room) => (
+                  <DropdownMenuItem
+                    key={room.id}
+                    onClick={() => handleCallIn(room.id, room.label)}
+                  >
+                    {room.label}
+                  </DropdownMenuItem>
+                ))}
+                {rooms.length === 0 && (
+                  <DropdownMenuItem disabled>No rooms configured</DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          <StatusBadge status={entry.clinic_status} />
+        </div>
+
+        {/* Split-pane: workspace first in DOM (mobile), context second; visual order flipped on lg */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* MAIN — Workspace (right on desktop, first on mobile) */}
+          <main className="order-1 lg:order-2 lg:col-span-8 space-y-4 flex flex-col pb-24 relative">
+            {/* Consultation Notes — document canvas */}
+            <Card className={bento}>
+              <CardContent className="p-5 space-y-4">
+                <h2 className={bentoHeader}>CONSULTATION NOTES</h2>
+                <Textarea
+                  value={caseNote}
+                  onChange={(e) => setCaseNote(e.target.value)}
+                  placeholder="Write consultation notes…"
+                  className="min-h-[400px] resize-y bg-slate-50 border-transparent focus-visible:bg-white focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-200 rounded-xl p-4 text-base leading-relaxed text-slate-800"
+                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      Diagnosis
+                    </Label>
+                    <Input
+                      value={diagnosisText}
+                      onChange={(e) => setDiagnosisText(e.target.value)}
+                      placeholder="Type diagnosis…"
+                      className={softInput}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      Dispense Note
+                    </Label>
+                    <Textarea
+                      value={dispenseNote}
+                      onChange={(e) => setDispenseNote(e.target.value)}
+                      placeholder="Notes for dispensary staff…"
+                      rows={3}
+                      className={softInput}
+                    />
                   </div>
                 </div>
-                <Badge variant="outline" className="text-lg font-mono">
-                  Q{entry.queue_number ?? '—'}
-                </Badge>
-              </div>
-              <div className="flex gap-2 text-sm">
-                <span className="text-muted-foreground">Payment:</span>
-                <span className="font-medium">{entry.payment_method || 'Self-pay'}</span>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader className="py-3">
-              <CardTitle className="text-sm">Visit Note</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <p className="text-sm whitespace-pre-wrap">
-                {entry.visit_notes || 'No visit notes recorded.'}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="py-3 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm">Vital Signs</CardTitle>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowVitalForm(!showVitalForm)}
-              >
-                {showVitalForm ? (
-                  <ChevronUp className="h-3 w-3 mr-1" />
-                ) : (
-                  <ChevronDown className="h-3 w-3 mr-1" />
-                )}
-                {vitals ? 'Edit' : 'Record now'}
-              </Button>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {vitals && !showVitalForm && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                  {[
-                    ['Ht', vitals.height_cm, 'cm'],
-                    ['Wt', vitals.weight_kg, 'kg'],
-                    ['Temp', vitals.temperature_c, '°C'],
-                    [
-                      'BP',
-                      vitals.bp_systolic && vitals.bp_diastolic
-                        ? `${vitals.bp_systolic}/${vitals.bp_diastolic}`
-                        : null,
-                      'mmHg',
-                    ],
-                    ['HR', vitals.heart_rate, 'bpm'],
-                    ['SpO2', vitals.spo2, '%'],
-                    ['BG', vitals.blood_glucose, 'mmol/L'],
-                    ['RR', vitals.respiratory_rate, '/min'],
-                  ].map(([label, val, unit]) => (
-                    <div
-                      key={label as string}
-                      className="text-center p-2 rounded-md bg-muted/50"
-                    >
-                      <div className="text-xs text-muted-foreground">{label}</div>
-                      <div className="font-medium">{val ?? '—'}</div>
-                      {val && <div className="text-xs text-muted-foreground">{unit}</div>}
-                    </div>
-                  ))}
+            {/* Treatment Plan */}
+            <Card className={bento}>
+              <CardContent className="p-5 space-y-4">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <h2 className={`${bentoHeader} mb-0 mr-auto`}>TREATMENT PLAN</h2>
+                  <div className="relative flex-1 min-w-[200px]">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Input
+                      value={treatmentSearch}
+                      onChange={(e) => setTreatmentSearch(e.target.value)}
+                      placeholder="Search by name or group name"
+                      className={`${softInput} pl-9 h-9`}
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => setBulkDialogOpen(true)}
+                    className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    <Plus className="h-3 w-3 mr-1" /> Add in bulk
+                  </Button>
                 </div>
-              )}
-              {showVitalForm && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {(
+
+                <div className="flex gap-2 flex-wrap">
+                  {[
+                    { key: 'all', label: 'All' },
+                    { key: 'item', label: 'Items' },
+                    { key: 'service', label: 'Services' },
+                    { key: 'package', label: 'Packages' },
+                  ].map((cat) => {
+                    const active = treatmentCategory === cat.key;
+                    return (
+                      <button
+                        key={cat.key}
+                        type="button"
+                        onClick={() => setTreatmentCategory(cat.key)}
+                        className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                          active
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        {cat.label} ({itemCounts[cat.key as keyof typeof itemCounts] ?? 0})
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {filteredTreatmentItems.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-8">
+                    No items in treatment plan.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredTreatmentItems.map((item) => (
+                      <TreatmentItemCard
+                        key={item.id}
+                        item={item as TreatmentItemCardItem}
+                        priceTiers={PRICE_TIERS}
+                        onRemove={() =>
+                          consultationId &&
+                          removeItem.mutate({ id: item.id, consultationId })
+                        }
+                        onSave={async (updates) => {
+                          if (!consultationId) return;
+                          await updateItem.mutateAsync({
+                            id: item.id,
+                            consultationId,
+                            ...updates,
+                          });
+                          toast.success('Treatment item updated');
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {categorizedItems.length > 0 && (
+                  <div className="rounded-xl bg-slate-50 px-4 py-3 flex items-center justify-between text-sm">
+                    <span className="font-medium text-slate-500">
+                      Total · {categorizedItems.length} item
+                      {categorizedItems.length !== 1 ? 's' : ''}
+                    </span>
+                    <span className="font-semibold text-slate-800">
+                      RM {total.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Sticky action footer */}
+            <div className="sticky bottom-4 z-10 bg-white/90 backdrop-blur-md border border-slate-100 rounded-2xl shadow-lg p-4 flex items-center justify-between gap-3 flex-wrap">
+              <div className="text-sm">
+                <span className="text-slate-500">Total</span>{' '}
+                <span className="text-xl font-bold text-slate-800">
+                  RM {total.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleSaveNotes}
+                  disabled={updateConsultation.isPending}
+                  className="rounded-xl"
+                >
+                  <Save className="h-4 w-4 mr-1" /> Save Draft
+                </Button>
+                <Button
+                  onClick={handleSendToDispensary}
+                  disabled={updateQueue.isPending}
+                  className="px-8 py-6 rounded-xl text-base font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+                >
+                  Send to Dispensary
+                </Button>
+              </div>
+            </div>
+          </main>
+
+          {/* ASIDE — Context (left on desktop, second on mobile) */}
+          <aside className="order-2 lg:order-1 lg:col-span-4 space-y-4">
+            {/* Demographics */}
+            <Card className={bento}>
+              <CardContent className="p-5 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div className="bg-blue-50 text-blue-600 rounded-lg p-1.5 shrink-0 mt-0.5">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="text-base font-semibold text-slate-800 truncate">
+                        {patient.name}
+                      </h2>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {patient.date_of_birth
+                          ? format(new Date(patient.date_of_birth), 'dd MMM yyyy')
+                          : '—'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="rounded-xl bg-blue-50 text-blue-700 font-mono text-base px-2.5 py-1 shrink-0">
+                    Q{entry.queue_number ?? '—'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm text-slate-600">
+                  <div>
+                    <span className="text-xs text-slate-400 block">IC</span>
+                    {patient.national_id || '—'}
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-400 block">Gender</span>
+                    {patient.gender || '—'}
+                  </div>
+                </div>
+                <div>
+                  <span className="inline-flex items-center rounded-full bg-slate-50 text-slate-600 text-xs px-2 py-0.5">
+                    {entry.payment_method || 'Self-pay'}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Visit Note (intake) */}
+            <Card className={bento}>
+              <CardContent className="p-5">
+                <h3 className={bentoHeader}>VISIT NOTE</h3>
+                <p className="text-sm whitespace-pre-wrap text-slate-700">
+                  {entry.visit_notes || (
+                    <span className="text-slate-400">No visit notes recorded.</span>
+                  )}
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Vital Signs */}
+            <Card className={bento}>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className={`${bentoHeader} mb-0`}>VITAL SIGNS</h3>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowVitalForm(!showVitalForm)}
+                    className="rounded-lg"
+                  >
+                    {showVitalForm ? (
+                      <ChevronUp className="h-3 w-3 mr-1" />
+                    ) : (
+                      <ChevronDown className="h-3 w-3 mr-1" />
+                    )}
+                    {vitals ? 'Edit' : 'Record now'}
+                  </Button>
+                </div>
+                {vitals && !showVitalForm && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      ['Ht', vitals.height_cm, 'cm'],
+                      ['Wt', vitals.weight_kg, 'kg'],
+                      ['Temp', vitals.temperature_c, '°C'],
                       [
-                        'height_cm',
-                        'weight_kg',
-                        'temperature_c',
-                        'bp_systolic',
-                        'bp_diastolic',
-                        'heart_rate',
-                        'spo2',
-                        'blood_glucose',
-                        'respiratory_rate',
-                      ] as const
-                    ).map((k) => (
-                      <div key={k}>
-                        <label className="text-xs text-muted-foreground capitalize">
-                          {k.replace(/_/g, ' ')}
-                        </label>
-                        <Input
-                          type="number"
-                          value={vitalForm[k]}
-                          onChange={(e) =>
-                            setVitalForm((f) => ({ ...f, [k]: e.target.value }))
-                          }
-                          className="h-8"
-                        />
+                        'BP',
+                        vitals.bp_systolic && vitals.bp_diastolic
+                          ? `${vitals.bp_systolic}/${vitals.bp_diastolic}`
+                          : null,
+                        'mmHg',
+                      ],
+                      ['HR', vitals.heart_rate, 'bpm'],
+                      ['SpO2', vitals.spo2, '%'],
+                      ['BG', vitals.blood_glucose, 'mmol/L'],
+                      ['RR', vitals.respiratory_rate, '/min'],
+                    ].map(([label, val, unit]) => (
+                      <div
+                        key={label as string}
+                        className="bg-slate-50 rounded-xl p-3 text-center"
+                      >
+                        <div className="text-xl font-bold text-slate-800">{val ?? '—'}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          {label as string}
+                          {val ? ` (${unit as string})` : ''}
+                        </div>
                       </div>
                     ))}
                   </div>
-                  <Button size="sm" onClick={handleSaveVitals} disabled={recordVitals.isPending}>
-                    <Save className="h-3 w-3 mr-1" /> Save Vitals
-                  </Button>
-                </div>
-              )}
-              {!vitals && !showVitalForm && (
-                <p className="text-sm text-muted-foreground">No vitals recorded yet.</p>
-              )}
-              {patient.id && <VitalHistoryTrends patientId={patient.id} />}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="py-3">
-              <CardTitle className="text-sm">Consultation Notes</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 space-y-3">
-              <Textarea
-                value={caseNote}
-                onChange={(e) => setCaseNote(e.target.value)}
-                placeholder="Write consultation notes…"
-                rows={5}
-              />
-              <div>
-                <label className="text-xs text-muted-foreground font-medium">Diagnosis</label>
-                <Input
-                  value={diagnosisText}
-                  onChange={(e) => setDiagnosisText(e.target.value)}
-                  placeholder="Type diagnosis…"
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground font-medium">
-                  Dispense Note
-                </label>
-                <Textarea
-                  value={dispenseNote}
-                  onChange={(e) => setDispenseNote(e.target.value)}
-                  placeholder="Notes for dispensary staff…"
-                  rows={2}
-                  className="mt-1"
-                />
-              </div>
-              <Button
-                size="sm"
-                onClick={handleSaveNotes}
-                disabled={updateConsultation.isPending}
-              >
-                <Save className="h-3 w-3 mr-1" /> Save Notes
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="py-3">
-              <CardTitle className="text-sm">Upcoming Appointments</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {patientAppointments.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No upcoming appointments.</p>
-              ) : (
-                <div className="space-y-2">
-                  {patientAppointments.map((a) => (
-                    <div
-                      key={a.id}
-                      className="flex justify-between items-center text-sm p-2 rounded bg-muted/50"
-                    >
-                      <span>
-                        {format(new Date(a.appointment_date), 'dd MMM yyyy')} at{' '}
-                        {a.appointment_time}
-                      </span>
-                      <span className="text-muted-foreground">{a.doctors?.name ?? '—'}</span>
+                )}
+                {showVitalForm && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {(
+                        [
+                          'height_cm',
+                          'weight_kg',
+                          'temperature_c',
+                          'bp_systolic',
+                          'bp_diastolic',
+                          'heart_rate',
+                          'spo2',
+                          'blood_glucose',
+                          'respiratory_rate',
+                        ] as const
+                      ).map((k) => (
+                        <div key={k}>
+                          <label className="text-xs text-slate-500 capitalize">
+                            {k.replace(/_/g, ' ')}
+                          </label>
+                          <Input
+                            type="number"
+                            value={vitalForm[k]}
+                            onChange={(e) =>
+                              setVitalForm((f) => ({ ...f, [k]: e.target.value }))
+                            }
+                            className={`${softInput} h-8`}
+                          />
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                    <Button
+                      size="sm"
+                      onClick={handleSaveVitals}
+                      disabled={recordVitals.isPending}
+                      className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      <Save className="h-3 w-3 mr-1" /> Save Vitals
+                    </Button>
+                  </div>
+                )}
+                {!vitals && !showVitalForm && (
+                  <p className="text-sm text-slate-400">No vitals recorded yet.</p>
+                )}
+                {patient.id && <VitalHistoryTrends patientId={patient.id} />}
+              </CardContent>
+            </Card>
 
-        {/* RIGHT */}
-        <div className="lg:col-span-2 space-y-4">
-          <Tabs defaultValue="history">
-            <TabsList className="w-full">
-              <TabsTrigger value="history" className="flex-1">
-                Patient History
-              </TabsTrigger>
-              <TabsTrigger value="treatment" className="flex-1">
-                Treatment Plan
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="history" className="space-y-3 mt-3">
-              {history.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  No previous visits.
-                </p>
-              ) : (
-                <>
-                  {pagedHistory.map((c) => {
-                    const consult = c as {
-                      id: string;
-                      created_at: string;
-                      doctors?: { name?: string };
-                      diagnoses?: { name?: string };
-                      diagnosis_text?: string;
-                      case_note?: string;
-                      dispense_note?: string;
-                      consultation_items?: Array<{
-                        id: string;
-                        item_name: string;
-                        quantity: number;
-                        dosage?: string;
-                        price: number;
-                      }>;
-                    };
-                    return (
-                      <Card key={consult.id}>
-                        <CardContent className="pt-4 space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span className="font-medium">
-                              {format(new Date(consult.created_at), 'dd MMM yyyy')}
-                            </span>
-                            <span className="text-muted-foreground">
-                              {consult.doctors?.name ?? '—'}
-                            </span>
-                          </div>
-                          {consult.diagnoses?.name && (
-                            <Badge variant="secondary">{consult.diagnoses.name}</Badge>
-                          )}
-                          {consult.diagnosis_text && (
-                            <Badge variant="secondary">{consult.diagnosis_text}</Badge>
-                          )}
-                          {consult.case_note && (
-                            <p className="text-sm whitespace-pre-wrap">{consult.case_note}</p>
-                          )}
-                          {consult.dispense_note && (
-                            <div>
-                              <span className="text-xs text-muted-foreground">
-                                Dispense note:
+            {/* Past Visits */}
+            <Card className={bento}>
+              <CardContent className="p-5">
+                <h3 className={bentoHeader}>PAST VISITS</h3>
+                {history.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-4">
+                    No previous visits.
+                  </p>
+                ) : (
+                  <>
+                    <div className="divide-y divide-slate-100">
+                      {pagedHistory.map((c) => {
+                        const consult = c as {
+                          id: string;
+                          created_at: string;
+                          doctors?: { name?: string };
+                          diagnoses?: { name?: string };
+                          diagnosis_text?: string;
+                          case_note?: string;
+                          dispense_note?: string;
+                          consultation_items?: Array<{
+                            id: string;
+                            item_name: string;
+                            quantity: number;
+                            dosage?: string;
+                            price: number;
+                          }>;
+                        };
+                        return (
+                          <div key={consult.id} className="py-3 space-y-1.5 first:pt-0 last:pb-0">
+                            <div className="flex justify-between text-sm">
+                              <span className="font-medium text-slate-800">
+                                {format(new Date(consult.created_at), 'dd MMM yyyy')}
                               </span>
-                              <p className="text-sm">{consult.dispense_note}</p>
+                              <span className="text-slate-500">
+                                {consult.doctors?.name ?? '—'}
+                              </span>
                             </div>
-                          )}
-                          {consult.consultation_items &&
-                            consult.consultation_items.length > 0 && (
-                              <div className="space-y-1">
-                                <span className="text-xs text-muted-foreground">Items:</span>
-                                {consult.consultation_items.map((it) => (
-                                  <div
-                                    key={it.id}
-                                    className="flex justify-between text-sm pl-2"
-                                  >
-                                    <span>
-                                      {it.item_name} x{it.quantity}{' '}
-                                      {it.dosage && `(${it.dosage})`}
-                                    </span>
-                                    <span>RM {Number(it.price).toFixed(2)}</span>
-                                  </div>
-                                ))}
+                            {consult.diagnoses?.name && (
+                              <Badge className="rounded-full bg-blue-50 text-blue-700 border-none">
+                                {consult.diagnoses.name}
+                              </Badge>
+                            )}
+                            {consult.diagnosis_text && (
+                              <Badge className="rounded-full bg-blue-50 text-blue-700 border-none">
+                                {consult.diagnosis_text}
+                              </Badge>
+                            )}
+                            {consult.case_note && (
+                              <p className="text-sm whitespace-pre-wrap text-slate-700">
+                                {consult.case_note}
+                              </p>
+                            )}
+                            {consult.dispense_note && (
+                              <div>
+                                <span className="text-xs text-slate-400">Dispense note:</span>
+                                <p className="text-sm text-slate-700">{consult.dispense_note}</p>
                               </div>
                             )}
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                  {history.length > HISTORY_PER_PAGE && (
-                    <div className="flex justify-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={historyPage === 0}
-                        onClick={() => setHistoryPage((p) => p - 1)}
-                      >
-                        Previous
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={(historyPage + 1) * HISTORY_PER_PAGE >= history.length}
-                        onClick={() => setHistoryPage((p) => p + 1)}
-                      >
-                        Next
-                      </Button>
+                            {consult.consultation_items &&
+                              consult.consultation_items.length > 0 && (
+                                <div className="space-y-0.5 pt-1">
+                                  <span className="text-xs text-slate-400">Items:</span>
+                                  {consult.consultation_items.map((it) => (
+                                    <div
+                                      key={it.id}
+                                      className="flex justify-between text-sm pl-2 text-slate-600"
+                                    >
+                                      <span>
+                                        {it.item_name} x{it.quantity}{' '}
+                                        {it.dosage && `(${it.dosage})`}
+                                      </span>
+                                      <span>RM {Number(it.price).toFixed(2)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  )}
-                </>
-              )}
-            </TabsContent>
+                    {history.length > HISTORY_PER_PAGE && (
+                      <div className="flex justify-center gap-2 pt-3">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={historyPage === 0}
+                          onClick={() => setHistoryPage((p) => p - 1)}
+                          className="rounded-lg"
+                        >
+                          Previous
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={(historyPage + 1) * HISTORY_PER_PAGE >= history.length}
+                          onClick={() => setHistoryPage((p) => p + 1)}
+                          className="rounded-lg"
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
 
-            <TabsContent value="treatment" className="mt-3 space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    value={treatmentSearch}
-                    onChange={(e) => setTreatmentSearch(e.target.value)}
-                    placeholder="Search by name or group name"
-                    className="pl-9 h-9"
-                  />
-                </div>
-                <Button size="sm" variant="outline" onClick={() => setBulkDialogOpen(true)}>
-                  <Plus className="h-3 w-3 mr-1" /> Add in bulk
-                </Button>
-              </div>
-
-              <div className="flex gap-1 flex-wrap">
-                {[
-                  { key: 'all', label: 'All' },
-                  { key: 'item', label: 'Items' },
-                  { key: 'service', label: 'Services' },
-                  { key: 'package', label: 'Packages' },
-                ].map((cat) => (
-                  <Button
-                    key={cat.key}
-                    size="sm"
-                    variant={treatmentCategory === cat.key ? 'default' : 'outline'}
-                    onClick={() => setTreatmentCategory(cat.key)}
-                    className="h-7 text-xs"
-                  >
-                    {cat.label} ({itemCounts[cat.key as keyof typeof itemCounts] ?? 0})
-                  </Button>
-                ))}
-              </div>
-
-              {filteredTreatmentItems.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  No items in treatment plan.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {filteredTreatmentItems.map((item) => (
-                    <TreatmentItemCard
-                      key={item.id}
-                      item={item as TreatmentItemCardItem}
-                      priceTiers={PRICE_TIERS}
-                      onRemove={() =>
-                        consultationId &&
-                        removeItem.mutate({ id: item.id, consultationId })
-                      }
-                      onSave={async (updates) => {
-                        if (!consultationId) return;
-                        await updateItem.mutateAsync({
-                          id: item.id,
-                          consultationId,
-                          ...updates,
-                        });
-                        toast.success('Treatment item updated');
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {categorizedItems.length > 0 && (
-                <div className="flex items-center justify-between rounded-lg border bg-muted/50 px-4 py-2">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Total · {categorizedItems.length} item
-                    {categorizedItems.length !== 1 ? 's' : ''}
-                  </span>
-                  <span className="text-sm font-semibold">
-                    RM{' '}
-                    {categorizedItems
-                      .reduce((sum, i) => sum + Number(i.price) * i.quantity, 0)
-                      .toFixed(2)}
-                  </span>
-                </div>
-              )}
-            </TabsContent>
-          </Tabs>
-
-          <Separator />
-          <div className="flex justify-between items-center gap-2 flex-wrap">
-            <div className="text-sm font-medium">
-              Total: RM{' '}
-              {items.reduce((sum, i) => sum + Number(i.price) * i.quantity, 0).toFixed(2)}
-            </div>
-            <Button onClick={handleSendToDispensary} disabled={updateQueue.isPending}>
-              Send to Dispensary
-            </Button>
-          </div>
+            {/* Upcoming Appointments */}
+            <Card className={bento}>
+              <CardContent className="p-5">
+                <h3 className={bentoHeader}>UPCOMING</h3>
+                {patientAppointments.length === 0 ? (
+                  <p className="text-sm text-slate-400">No upcoming appointments.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {patientAppointments.map((a) => (
+                      <div
+                        key={a.id}
+                        className="flex justify-between items-center text-sm rounded-lg bg-slate-50 px-3 py-2"
+                      >
+                        <span className="text-slate-700">
+                          {format(new Date(a.appointment_date), 'dd MMM yyyy')} at{' '}
+                          {a.appointment_time}
+                        </span>
+                        <span className="text-slate-500">{a.doctors?.name ?? '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </aside>
         </div>
-      </div>
 
-      <AddTreatmentBulkDialog
-        open={bulkDialogOpen}
-        onOpenChange={setBulkDialogOpen}
-        onInsert={handleBulkInsert}
-      />
+        <AddTreatmentBulkDialog
+          open={bulkDialogOpen}
+          onOpenChange={setBulkDialogOpen}
+          onInsert={handleBulkInsert}
+        />
+      </div>
     </div>
   );
 }
