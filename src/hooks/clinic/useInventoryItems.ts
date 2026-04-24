@@ -59,8 +59,10 @@ export function useInventoryItems() {
 export interface InventoryItemInput {
   name: string;
   cost_price: number;
-  /** Maps to DB column `price_to_patient_max` */
+  /** Self-pay price. Maps to DB columns `price_to_patient_max` and `price_to_patient_min` (mirrored). */
   selling_price: number;
+  /** Standard panel rate. Maps to DB column `standard_panel_price`. */
+  standard_panel_price: number;
   /** Maps to DB column `stock` */
   current_stock: number;
   status: 'active' | 'inactive';
@@ -74,6 +76,9 @@ function mapItemPayload(input: Partial<InventoryItemInput>) {
     payload.price_to_patient_max = input.selling_price;
     payload.price_to_patient_min = input.selling_price;
   }
+  if (input.standard_panel_price !== undefined) {
+    payload.standard_panel_price = input.standard_panel_price;
+  }
   if (input.current_stock !== undefined) payload.stock = input.current_stock;
   if (input.status !== undefined) payload.status = input.status;
   return payload;
@@ -82,12 +87,15 @@ function mapItemPayload(input: Partial<InventoryItemInput>) {
 export function useAddInventoryItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: InventoryItemInput) => {
-      const { error } = await supabase
+    mutationFn: async (input: InventoryItemInput): Promise<{ id: string }> => {
+      const { data, error } = await supabase
         .from('inventory_items')
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .insert(mapItemPayload(input) as any);
+        .insert(mapItemPayload(input) as any)
+        .select('id')
+        .single();
       if (error) throw error;
+      return { id: (data as { id: string }).id };
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
   });
@@ -96,13 +104,14 @@ export function useAddInventoryItem() {
 export function useUpdateInventoryItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...input }: { id: string } & Partial<InventoryItemInput>) => {
+    mutationFn: async ({ id, ...input }: { id: string } & Partial<InventoryItemInput>): Promise<{ id: string }> => {
       const { error } = await supabase
         .from('inventory_items')
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .update(mapItemPayload(input) as any)
         .eq('id', id);
       if (error) throw error;
+      return { id };
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
   });
