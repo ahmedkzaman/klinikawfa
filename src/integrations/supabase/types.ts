@@ -973,6 +973,13 @@ export type Database = {
             foreignKeyName: "consultations_queue_entry_id_fkey"
             columns: ["queue_entry_id"]
             isOneToOne: false
+            referencedRelation: "insight_financials_view"
+            referencedColumns: ["queue_entry_id"]
+          },
+          {
+            foreignKeyName: "consultations_queue_entry_id_fkey"
+            columns: ["queue_entry_id"]
+            isOneToOne: false
             referencedRelation: "queue_entries"
             referencedColumns: ["id"]
           },
@@ -1153,6 +1160,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "consultations"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "einvoices_queue_entry_id_fkey"
+            columns: ["queue_entry_id"]
+            isOneToOne: false
+            referencedRelation: "insight_financials_view"
+            referencedColumns: ["queue_entry_id"]
           },
           {
             foreignKeyName: "einvoices_queue_entry_id_fkey"
@@ -1725,6 +1739,13 @@ export type Database = {
             foreignKeyName: "panel_claims_queue_entry_id_fkey"
             columns: ["queue_entry_id"]
             isOneToOne: false
+            referencedRelation: "insight_financials_view"
+            referencedColumns: ["queue_entry_id"]
+          },
+          {
+            foreignKeyName: "panel_claims_queue_entry_id_fkey"
+            columns: ["queue_entry_id"]
+            isOneToOne: false
             referencedRelation: "queue_entries"
             referencedColumns: ["id"]
           },
@@ -1902,6 +1923,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "consultations"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_queue_entry_id_fkey"
+            columns: ["queue_entry_id"]
+            isOneToOne: false
+            referencedRelation: "insight_financials_view"
+            referencedColumns: ["queue_entry_id"]
           },
           {
             foreignKeyName: "payments_queue_entry_id_fkey"
@@ -3151,6 +3179,13 @@ export type Database = {
             foreignKeyName: "vital_signs_queue_entry_id_fkey"
             columns: ["queue_entry_id"]
             isOneToOne: false
+            referencedRelation: "insight_financials_view"
+            referencedColumns: ["queue_entry_id"]
+          },
+          {
+            foreignKeyName: "vital_signs_queue_entry_id_fkey"
+            columns: ["queue_entry_id"]
+            isOneToOne: false
             referencedRelation: "queue_entries"
             referencedColumns: ["id"]
           },
@@ -3158,6 +3193,18 @@ export type Database = {
       }
     }
     Views: {
+      insight_financials_view: {
+        Row: {
+          id: string | null
+          item_name: string | null
+          payment_method: string | null
+          profit: number | null
+          queue_entry_id: string | null
+          revenue: number | null
+          visit_date: string | null
+        }
+        Relationships: []
+      }
       panel_claims_view: {
         Row: {
           amount: number | null
@@ -3231,6 +3278,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "patients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_claims_queue_entry_id_fkey"
+            columns: ["queue_entry_id"]
+            isOneToOne: false
+            referencedRelation: "insight_financials_view"
+            referencedColumns: ["queue_entry_id"]
           },
           {
             foreignKeyName: "panel_claims_queue_entry_id_fkey"
