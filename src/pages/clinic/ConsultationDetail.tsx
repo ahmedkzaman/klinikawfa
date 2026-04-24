@@ -8,6 +8,7 @@ import {
   Search,
   Plus,
   Phone,
+  PauseCircle,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
