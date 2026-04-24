@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Sliders, Users, Archive, ChevronRight } from 'lucide-react';
+import { Sliders, Users, Archive, Package, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -13,7 +13,7 @@ interface SettingsCard {
 }
 
 export default function SettingsPage() {
-  const { isAdmin, isSpecialAdmin } = useAuth();
+  const { isAdmin, isSpecialAdmin, isOpsOrAdmin } = useAuth();
   const adminAccess = isAdmin || isSpecialAdmin;
 
   const cards: SettingsCard[] = [
@@ -23,6 +23,13 @@ export default function SettingsPage() {
       description: 'Default consultation fee name and price.',
       icon: Sliders,
       visible: true,
+    },
+    {
+      href: '/clinic/settings/inventory',
+      title: 'Inventory & Services',
+      description: 'Manage practice items, services, packages, and pricing.',
+      icon: Package,
+      visible: isOpsOrAdmin,
     },
     {
       href: '/clinic/settings/users',
