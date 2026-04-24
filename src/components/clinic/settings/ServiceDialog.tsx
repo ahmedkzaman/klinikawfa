@@ -1,4 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Loader2 } from 'lucide-react';
 import {
   Dialog,
@@ -19,6 +22,7 @@ export interface ServiceRow {
   name: string;
   cost: number;
   price_to_patient: number;
+  status?: 'active' | 'inactive' | string;
 }
 
 interface Props {
@@ -27,46 +31,65 @@ interface Props {
   service: ServiceRow | null;
 }
 
-interface FormState {
-  name: string;
-  cost: string;
-  price: string;
-}
+const moneyField = z.preprocess(
+  (v) => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+  z
+    .number({ invalid_type_error: 'Enter a valid amount' })
+    .nonnegative('Must be 0 or more'),
+);
 
-const EMPTY: FormState = { name: '', cost: '0', price: '0' };
+const serviceSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required').max(120),
+  cost: moneyField,
+  price: moneyField,
+  // Hidden in UI but preserved through edit so existing status survives.
+  status: z.enum(['active', 'inactive']).optional(),
+});
+
+type ServiceFormData = z.infer<typeof serviceSchema>;
+
+const EMPTY: ServiceFormData = { name: '', cost: 0, price: 0, status: 'active' };
 
 export function ServiceDialog({ open, onOpenChange, service }: Props) {
   const addService = useAddService();
   const updateService = useUpdateService();
   const isEdit = !!service;
-  const [form, setForm] = useState<FormState>(EMPTY);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<ServiceFormData>({
+    resolver: zodResolver(serviceSchema),
+    defaultValues: EMPTY,
+  });
 
   useEffect(() => {
     if (!open) return;
     if (service) {
-      setForm({
+      reset({
         name: service.name,
-        cost: String(service.cost ?? 0),
-        price: String(service.price_to_patient ?? 0),
+        cost: Number(service.cost) || 0,
+        price: Number(service.price_to_patient) || 0,
+        status:
+          service.status === 'inactive' ? 'inactive' : 'active',
       });
     } else {
-      setForm(EMPTY);
+      reset(EMPTY);
     }
-  }, [open, service]);
+  }, [open, service, reset]);
 
   const submitting = addService.isPending || updateService.isPending;
 
-  async function handleSave() {
-    if (!form.name.trim()) {
-      toast.error('Name is required');
-      return;
-    }
-    const payload = {
-      name: form.name.trim(),
-      cost: Number(form.cost) || 0,
-      price: Number(form.price) || 0,
-    };
+  const onSubmit = handleSubmit(async (data) => {
     try {
+      const payload = {
+        name: data.name,
+        cost: data.cost,
+        price: data.price,
+        status: data.status,
+      };
       if (isEdit && service) {
         await updateService.mutateAsync({ id: service.id, ...payload });
         toast.success('Service updated');
@@ -78,7 +101,7 @@ export function ServiceDialog({ open, onOpenChange, service }: Props) {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save service');
     }
-  }
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -90,15 +113,13 @@ export function ServiceDialog({ open, onOpenChange, service }: Props) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        <form onSubmit={onSubmit} className="space-y-4 py-2">
           <div className="space-y-1.5">
             <Label htmlFor="svc-name">Name</Label>
-            <Input
-              id="svc-name"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="e.g. Wound Dressing"
-            />
+            <Input id="svc-name" placeholder="e.g. Wound Dressing" {...register('name')} />
+            {errors.name && (
+              <p className="text-sm text-destructive">{errors.name.message}</p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -109,9 +130,11 @@ export function ServiceDialog({ open, onOpenChange, service }: Props) {
                 type="number"
                 step="0.01"
                 min="0"
-                value={form.cost}
-                onChange={(e) => setForm((f) => ({ ...f, cost: e.target.value }))}
+                {...register('cost')}
               />
+              {errors.cost && (
+                <p className="text-sm text-destructive">{errors.cost.message}</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="svc-price">Price (RM)</Label>
@@ -120,22 +143,29 @@ export function ServiceDialog({ open, onOpenChange, service }: Props) {
                 type="number"
                 step="0.01"
                 min="0"
-                value={form.price}
-                onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+                {...register('price')}
               />
+              {errors.price && (
+                <p className="text-sm text-destructive">{errors.price.message}</p>
+              )}
             </div>
           </div>
-        </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={submitting}>
-            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isEdit ? 'Save Changes' : 'Add Service'}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isEdit ? 'Save Changes' : 'Add Service'}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

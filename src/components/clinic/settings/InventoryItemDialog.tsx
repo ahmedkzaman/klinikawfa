@@ -1,4 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Loader2 } from 'lucide-react';
 import {
   Dialog,
@@ -39,19 +42,38 @@ interface Props {
   item: InventoryItemRow | null;
 }
 
-interface FormState {
-  name: string;
-  cost_price: string;
-  selling_price: string;
-  current_stock: string;
-  status: 'active' | 'inactive';
-}
+// Coerce empty string -> undefined so blank fields fail validation instead of
+// silently becoming 0.
+const moneyField = z.preprocess(
+  (v) => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+  z
+    .number({ invalid_type_error: 'Enter a valid amount' })
+    .nonnegative('Must be 0 or more'),
+);
 
-const EMPTY: FormState = {
+const intField = z.preprocess(
+  (v) => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+  z
+    .number({ invalid_type_error: 'Enter a valid number' })
+    .int('Must be a whole number')
+    .nonnegative('Must be 0 or more'),
+);
+
+const itemSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required').max(120),
+  cost_price: moneyField,
+  selling_price: moneyField,
+  current_stock: intField,
+  status: z.enum(['active', 'inactive']),
+});
+
+type ItemFormData = z.infer<typeof itemSchema>;
+
+const EMPTY_VALUES: ItemFormData = {
   name: '',
-  cost_price: '0',
-  selling_price: '0',
-  current_stock: '0',
+  cost_price: 0,
+  selling_price: 0,
+  current_stock: 0,
   status: 'active',
 };
 
@@ -59,38 +81,46 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
   const addItem = useAddInventoryItem();
   const updateItem = useUpdateInventoryItem();
   const isEdit = !!item;
-  const [form, setForm] = useState<FormState>(EMPTY);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<ItemFormData>({
+    resolver: zodResolver(itemSchema),
+    defaultValues: EMPTY_VALUES,
+  });
 
   useEffect(() => {
     if (!open) return;
     if (item) {
-      setForm({
+      reset({
         name: item.name,
-        cost_price: String(item.cost_price ?? 0),
-        selling_price: String(item.price_to_patient_max ?? 0),
-        current_stock: String(item.stock ?? 0),
+        cost_price: Number(item.cost_price) || 0,
+        selling_price: Number(item.price_to_patient_max) || 0,
+        current_stock: Number(item.stock) || 0,
         status: (item.status as 'active' | 'inactive') ?? 'active',
       });
     } else {
-      setForm(EMPTY);
+      reset(EMPTY_VALUES);
     }
-  }, [open, item]);
+  }, [open, item, reset]);
 
   const submitting = addItem.isPending || updateItem.isPending;
+  const status = watch('status');
 
-  async function handleSave() {
-    if (!form.name.trim()) {
-      toast.error('Name is required');
-      return;
-    }
-    const payload = {
-      name: form.name.trim(),
-      cost_price: Number(form.cost_price) || 0,
-      selling_price: Number(form.selling_price) || 0,
-      current_stock: parseInt(form.current_stock, 10) || 0,
-      status: form.status,
-    };
+  const onSubmit = handleSubmit(async (data) => {
     try {
+      const payload = {
+        name: data.name,
+        cost_price: data.cost_price,
+        selling_price: data.selling_price,
+        current_stock: data.current_stock,
+        status: data.status,
+      };
       if (isEdit && item) {
         await updateItem.mutateAsync({ id: item.id, ...payload });
         toast.success('Item updated');
@@ -102,7 +132,7 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save item');
     }
-  }
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -114,15 +144,13 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        <form onSubmit={onSubmit} className="space-y-4 py-2">
           <div className="space-y-1.5">
             <Label htmlFor="item-name">Name</Label>
-            <Input
-              id="item-name"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="e.g. Paracetamol 500mg"
-            />
+            <Input id="item-name" placeholder="e.g. Paracetamol 500mg" {...register('name')} />
+            {errors.name && (
+              <p className="text-sm text-destructive">{errors.name.message}</p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -133,9 +161,11 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
                 type="number"
                 step="0.01"
                 min="0"
-                value={form.cost_price}
-                onChange={(e) => setForm((f) => ({ ...f, cost_price: e.target.value }))}
+                {...register('cost_price')}
               />
+              {errors.cost_price && (
+                <p className="text-sm text-destructive">{errors.cost_price.message}</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="item-selling">Selling Price (RM)</Label>
@@ -144,9 +174,11 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
                 type="number"
                 step="0.01"
                 min="0"
-                value={form.selling_price}
-                onChange={(e) => setForm((f) => ({ ...f, selling_price: e.target.value }))}
+                {...register('selling_price')}
               />
+              {errors.selling_price && (
+                <p className="text-sm text-destructive">{errors.selling_price.message}</p>
+              )}
             </div>
           </div>
 
@@ -158,17 +190,17 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
                 type="number"
                 step="1"
                 min="0"
-                value={form.current_stock}
-                onChange={(e) => setForm((f) => ({ ...f, current_stock: e.target.value }))}
+                {...register('current_stock')}
               />
+              {errors.current_stock && (
+                <p className="text-sm text-destructive">{errors.current_stock.message}</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="item-status">Status</Label>
               <Select
-                value={form.status}
-                onValueChange={(v) =>
-                  setForm((f) => ({ ...f, status: v as 'active' | 'inactive' }))
-                }
+                value={status}
+                onValueChange={(v) => setValue('status', v as 'active' | 'inactive')}
               >
                 <SelectTrigger id="item-status">
                   <SelectValue />
@@ -180,17 +212,22 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
               </Select>
             </div>
           </div>
-        </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={submitting}>
-            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isEdit ? 'Save Changes' : 'Add Item'}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isEdit ? 'Save Changes' : 'Add Item'}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

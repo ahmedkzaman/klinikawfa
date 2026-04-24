@@ -55,6 +55,7 @@ export interface PackageInput {
   name: string;
   cost: number;
   price: number;
+  status?: 'active' | 'inactive';
 }
 
 function mapPackagePayload(input: Partial<PackageInput>) {
@@ -62,6 +63,7 @@ function mapPackagePayload(input: Partial<PackageInput>) {
   if (input.name !== undefined) payload.name = input.name;
   if (input.cost !== undefined) payload.cost = input.cost;
   if (input.price !== undefined) payload.price = input.price;
+  if (input.status !== undefined) payload.status = input.status;
   return payload;
 }
 
