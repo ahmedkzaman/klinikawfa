@@ -1,77 +1,118 @@
 
 
-## Role-Based Queue Board Actions & Strict Workflow Enforcement
+## Patient Profile Sheet — Final Plan (with PostgREST array handling)
 
-Two-file edit splitting responsibility: front desk (`QueueBoard.tsx`) gets a strict, status-gated action panel with **no `on_hold` recovery**; the doctor's view (`Consultation.tsx`) gains the **only** `on_hold` recovery hatch via a "Resume Patient" row action. This removes state amnesia (front desk can't blindly push paused patients back to the doctor queue) and gives the attending doctor — who knows the clinical context — the sole authority to resume.
-
----
-
-### Part A — `src/pages/clinic/QueueBoard.tsx` (front desk)
-
-**Imports** (extend existing): add `useNavigate` from `react-router-dom`. `useUpdateQueueEntry`, `toast`, and `updateQueue` are already wired.
-
-**Instantiate**: `const navigate = useNavigate();` alongside the existing `updateQueue`.
-
-**Visuals**: Kanban card (`QueueCard`) untouched — no extra badges.
-
-**Sheet footer action block** (current lines 268–313) is replaced with strict per-status branching:
-
-| `activeEntry.clinic_status` | Rendered control |
-|---|---|
-| `registered` | **Send to Doctor** button — `disabled={updateQueue.isPending \|\| !activeEntry}`; label flips to `Updating...` only when `updateQueue.variables?.clinic_status === 'ready_for_doctor'`; `onClick` null-guards then `updateQueue.mutate({ id, clinic_status: 'ready_for_doctor' }, { onSuccess: close sheet + `toast.success('Patient called to doctor')`, onError: `toast.error('Update failed: ' + err.message)` })`. |
-| `sent_to_dispensary` or `dispensing_payment` | **Open Checkout** button (`variant="outline"`) — `onClick` calls `navigate('/clinic/queue/checkout/' + activeEntry.id)` then `setActiveEntry(null)`. |
-| `on_hold` | **No buttons.** Render a read-only muted `<p>`: *"Patient is on hold. Status can only be resumed by the attending doctor."* |
-| `ready_for_doctor`, `with_doctor`, `completed` | Render nothing in the action block. |
-
-The existing "Mark Done" omission comment is dropped (superseded by the new branching). `wasOnHold` resume logic is removed entirely from this file — it now lives only in Consultation.
+Adds a right-side drawer to `PatientsList` showing demographics + last 10 visits, with a clean handoff to the existing walk-in check-in flow (pre-filled patient).
 
 ---
 
-### Part B — `src/pages/clinic/Consultation.tsx` (doctor's view)
+### 1. New hook — `src/hooks/patients/usePatientVisitHistory.ts`
 
-**Imports** (extend existing line 20): also import `useUpdateQueueEntry`. Add `import { toast } from 'sonner';`. `useNavigate` is already imported.
-
-**Instantiate**: `const resumeQueue = useUpdateQueueEntry();` alongside the existing `callPatient`.
-
-**Row action cell** (current lines 272–310) — restructure the leading branch so `on_hold` takes precedence over the existing checkout/view fork:
-
-```text
-if entry.clinic_status === 'on_hold'
-    → <Button size="sm" variant="default">  // Resume Patient
-        disabled = resumeQueue.isPending && resumeQueue.variables?.id === entry.id
-        label    = same condition ? 'Resuming...' : 'Resume Patient'
-        onClick  = resumeQueue.mutate(
-                     { id: entry.id, clinic_status: 'with_doctor' },
-                     { onSuccess: toast.success('Patient resumed — back with doctor')
-                                  + navigate('/clinic/consultation/' + entry.id),
-                       onError:   toast.error('Resume failed: ' + err.message) }
-                   )
-else if ['sent_to_dispensary','dispensing_payment'].includes(entry.clinic_status)
-    → existing "Checkout" button (unchanged)
-else
-    → existing "View" button (unchanged)
+```ts
+useQuery(['clinic','patient-visit-history', patientId], …)
+  enabled: !!patientId
+  staleTime: 30_000
 ```
 
-The doctor-only **Call In** button (current lines 293–309) for `registered` / `ready_for_doctor` patients stays untouched.
+Left-join `queue_entries` → `consultations` → `doctors` so visits without a started consultation still surface:
+
+```ts
+supabase
+  .from('queue_entries')
+  .select(`
+    id, created_at, queue_number, clinic_status, visit_notes,
+    consultations:consultations!consultations_queue_entry_id_fkey (
+      id, doctor_id, diagnosis_text, case_note,
+      doctors:doctor_id ( id, name )
+    )
+  `)
+  .eq('patient_id', patientId)
+  .is('deleted_at', null)
+  .order('created_at', { ascending: false })
+  .limit(10);
+```
+
+Exports `PatientVisitHistoryRow`. `consultations` is typed as the joined object **or array** (PostgREST returns an array because the FK lives on `consultations`).
+
+### 2. New component — `src/components/patients/PatientProfileSheet.tsx`
+
+Props:
+```ts
+{ patient: PatientRow | null; isOpen: boolean; onClose: () => void; onRegisterVisit: (p: PatientRow) => void; }
+```
+
+Layout: shadcn `Sheet`, `side="right"`, content `className="w-full sm:max-w-lg flex flex-col"`.
+
+- **Header**: `SheetTitle` = `patient.name`; `SheetDescription` = `IC: {patient.national_id ?? '—'}`.
+- **Details grid** (2-col, `text-sm`): Phone, DOB (`format(..., 'd MMM yyyy')` with null guard), Gender (capitalised), Registered.
+- **Visit history**: heading "Recent visits" + count badge. Loading → 3 skeletons. Empty → muted "No visits yet." Otherwise stack of cards.
+
+**Inside the `.map()` — mandatory PostgREST array safety:**
+```ts
+const consultation = Array.isArray(row.consultations)
+  ? row.consultations[0]
+  : row.consultations;
+const doctorName = consultation?.doctors?.name ?? '—';
+const notes = row.visit_notes || consultation?.case_note || consultation?.diagnosis_text;
+```
+
+Each card renders:
+- Top line: `format(row.created_at, 'd MMM yyyy, h:mma')` · `#${row.queue_number}` · `<StatusBadge status={row.clinic_status} />`.
+- Sub-line: `Dr. {doctorName}`.
+- Snippet: `{notes}` with `line-clamp-2`. Hidden when falsy.
+
+**Footer**: pinned `<Button>` "Register new visit". `onClick` fires `onClose(); onRegisterVisit(patient);` synchronously. **No `CheckInWalkInDialog` rendered inside this component.**
+
+### 3. Extend `src/components/clinic/CheckInWalkInDialog.tsx`
+
+Add optional prop `initialPatient?: PatientRow | null`. `useEffect` keyed on `[open, initialPatient]`: when dialog opens with a value, `setPatient(initialPatient)`. Existing `reset()` on close still clears state. No other behaviour changes.
+
+### 4. Wire up `src/pages/clinic/PatientsList.tsx`
+
+New state:
+```ts
+const [selectedPatient, setSelectedPatient] = useState<PatientRow | null>(null);
+const [sheetOpen, setSheetOpen] = useState(false);
+const [checkInOpen, setCheckInOpen] = useState(false);
+const [prefillPatient, setPrefillPatient] = useState<PatientRow | null>(null);
+```
+
+- Replace stub `toast('Patient profile drill-down — Step 6')` with `setSelectedPatient(p); setSheetOpen(true);`.
+- Render `PatientProfileSheet` and `CheckInWalkInDialog` as **siblings** (separate Radix portals → no stacking conflicts):
+  ```tsx
+  <PatientProfileSheet
+    patient={selectedPatient}
+    isOpen={sheetOpen}
+    onClose={() => setSheetOpen(false)}
+    onRegisterVisit={(p) => { setPrefillPatient(p); setCheckInOpen(true); }}
+  />
+  <CheckInWalkInDialog
+    open={checkInOpen}
+    onOpenChange={(o) => { setCheckInOpen(o); if (!o) setPrefillPatient(null); }}
+    initialPatient={prefillPatient}
+  />
+  ```
+- `RegisterPatientDialog` block untouched.
 
 ---
 
-### Resulting workflow guarantees
+### File checklist
 
-- Front desk **cannot** resume `on_hold` patients → no state amnesia, no accidental dispensary→doctor regression.
-- Front desk **cannot** force `completed` from any status → revenue-leak loophole stays sealed; dispensary patients can only progress through `/clinic/queue/checkout/:id`.
-- Doctor's table is the single, clinically-aware exit from `on_hold`, landing the patient back in `with_doctor` and routing the doctor straight into the consultation page.
-- Per-button loading labels keyed off `mutation.variables` prevent the shared-state UX bug in both files.
-- All mutations have `onError` toasts surfacing the underlying message; sheets/rows stay open on failure for retry.
+| File | Action |
+|---|---|
+| `src/hooks/patients/usePatientVisitHistory.ts` | **Create** |
+| `src/components/patients/PatientProfileSheet.tsx` | **Create** (with array-safe extraction) |
+| `src/components/clinic/CheckInWalkInDialog.tsx` | **Edit** — add `initialPatient` + seed effect |
+| `src/pages/clinic/PatientsList.tsx` | **Edit** — selection state, sibling Sheet + Dialog |
 
 ### Verification
 
 1. `tsc --noEmit` passes.
-2. QueueBoard, `registered` patient → **Send to Doctor** only; advances to `ready_for_doctor`, sheet closes, success toast.
-3. QueueBoard, `sent_to_dispensary` / `dispensing_payment` → **Open Checkout** only; navigates to `/clinic/queue/checkout/:id`, sheet closes.
-4. QueueBoard, `on_hold` → no buttons; only the read-only "resumed by the attending doctor" message visible.
-5. QueueBoard, `ready_for_doctor` / `with_doctor` / `completed` → no action controls.
-6. Consultation table, `on_hold` row → **Resume Patient** button; click sets status to `with_doctor`, success toast, navigates to `/clinic/consultation/:id`. Per-row loading state isolated by `variables.id`.
-7. Consultation table, dispensary statuses → **Checkout** (unchanged). All other statuses → **View** (unchanged). **Call In** still appears for doctors on `registered`/`ready_for_doctor` rows.
-8. Forced RLS denial on either mutation → red error toast surfaces the message; UI stays open for retry.
+2. "View profile" opens sheet with demographics; visit list loads (skeleton → data / empty).
+3. Visits with **no consultation row** still render — doctor `'—'`, `visit_notes` snippet only.
+4. Visits with consultation render `Dr. {name}` and prefer `visit_notes`, falling back to `case_note` / `diagnosis_text`.
+5. Array-safety verified: no runtime errors from `consultations` being an array; no direct `row.consultations?.doctors?.name` access anywhere.
+6. "Register new visit" closes sheet, opens check-in dialog with patient pre-selected in `PatientPicker`. Submitting works; cancelling clears `prefillPatient`.
+7. Switching between patients re-runs the query (key includes `patientId`); no stale data.
+8. No Radix nested-dialog / focus-trap warnings in console.
 
