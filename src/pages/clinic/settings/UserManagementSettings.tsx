@@ -61,7 +61,7 @@ export default function UserManagementSettings() {
     );
   }
 
-  const filtered = useMemo(() => {
+  const filtered = (() => {
     const q = search.trim().toLowerCase();
     if (!q) return users;
     return users.filter(
@@ -69,7 +69,7 @@ export default function UserManagementSettings() {
         (u.full_name ?? '').toLowerCase().includes(q) ||
         u.email.toLowerCase().includes(q),
     );
-  }, [users, search]);
+  })();
 
   const handleRoleChange = async (row: ClinicUserRow, newRole: AppRole) => {
     if (newRole === row.role) return;
