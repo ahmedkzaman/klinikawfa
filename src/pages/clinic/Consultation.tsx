@@ -271,13 +271,25 @@ export default function Consultation() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => navigate(`/clinic/consultation/${entry.id}`)}
-                      >
-                        View
-                      </Button>
+                      {(['sent_to_dispensary', 'dispensing_payment'] as ClinicStatus[]).includes(
+                        entry.clinic_status,
+                      ) ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigate(`/clinic/queue/checkout/${entry.id}`)}
+                        >
+                          Checkout
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigate(`/clinic/consultation/${entry.id}`)}
+                        >
+                          View
+                        </Button>
+                      )}
                       {doctor &&
                         ['registered', 'ready_for_doctor'].includes(entry.clinic_status) && (
                           <Button
