@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   Menu,
   Settings,
+  LineChart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
@@ -24,6 +25,7 @@ type ClinicNavItem = {
   label: string;
   icon: typeof ListOrdered;
   specialAdminOnly?: boolean;
+  adminOnly?: boolean;
 };
 
 const clinicNavItems: ClinicNavItem[] = [
@@ -35,20 +37,27 @@ const clinicNavItems: ClinicNavItem[] = [
   { href: '/clinic/procurement', label: 'Procurement', icon: ClipboardList },
   { href: '/clinic/inventory', label: 'Inventory', icon: Package },
   { href: '/clinic/voided', label: 'Voided Records', icon: Archive, specialAdminOnly: true },
+  { href: '/clinic/insight', label: 'Insight', icon: LineChart, adminOnly: true },
   { href: '/clinic/settings', label: 'Settings', icon: Settings },
 ];
 
 function SidebarNav({
   pathname,
   isSpecialAdmin,
+  isAdmin,
   onLinkClick,
 }: {
   pathname: string;
   isSpecialAdmin: boolean;
+  isAdmin: boolean;
   onLinkClick?: () => void;
 }) {
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
-  const visibleItems = clinicNavItems.filter((item) => !item.specialAdminOnly || isSpecialAdmin);
+  const visibleItems = clinicNavItems.filter((item) => {
+    if (item.specialAdminOnly && !isSpecialAdmin) return false;
+    if (item.adminOnly && !(isAdmin || isSpecialAdmin)) return false;
+    return true;
+  });
 
   return (
     <nav className="flex flex-col flex-1 py-4">
@@ -80,7 +89,7 @@ function SidebarNav({
 }
 
 export function ClinicLayout() {
-  const { user, isSpecialAdmin } = useAuth();
+  const { user, isSpecialAdmin, isAdmin } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -95,7 +104,11 @@ export function ClinicLayout() {
           </Link>
         </div>
         <div className="flex-1 overflow-y-auto">
-          <SidebarNav pathname={location.pathname} isSpecialAdmin={isSpecialAdmin} />
+          <SidebarNav
+            pathname={location.pathname}
+            isSpecialAdmin={isSpecialAdmin}
+            isAdmin={isAdmin}
+          />
         </div>
         <div className="shrink-0 p-4 border-t">
           {user?.email && (
@@ -128,6 +141,7 @@ export function ClinicLayout() {
             <SidebarNav
               pathname={location.pathname}
               isSpecialAdmin={isSpecialAdmin}
+              isAdmin={isAdmin}
               onLinkClick={() => setMobileOpen(false)}
             />
           </div>
