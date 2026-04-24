@@ -84,11 +84,17 @@ export function ServiceDialog({ open, onOpenChange, service }: Props) {
 
   const onSubmit = handleSubmit(async (data) => {
     try {
+      const payload = {
+        name: data.name,
+        cost: data.cost,
+        price: data.price,
+        status: data.status,
+      };
       if (isEdit && service) {
-        await updateService.mutateAsync({ id: service.id, ...data });
+        await updateService.mutateAsync({ id: service.id, ...payload });
         toast.success('Service updated');
       } else {
-        await addService.mutateAsync(data);
+        await addService.mutateAsync(payload);
         toast.success('Service added');
       }
       onOpenChange(false);

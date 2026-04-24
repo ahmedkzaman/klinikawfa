@@ -82,11 +82,17 @@ export function PackageDialog({ open, onOpenChange, pkg }: Props) {
 
   const onSubmit = handleSubmit(async (data) => {
     try {
+      const payload = {
+        name: data.name,
+        cost: data.cost,
+        price: data.price,
+        status: data.status,
+      };
       if (isEdit && pkg) {
-        await updatePackage.mutateAsync({ id: pkg.id, ...data });
+        await updatePackage.mutateAsync({ id: pkg.id, ...payload });
         toast.success('Package updated');
       } else {
-        await addPackage.mutateAsync(data);
+        await addPackage.mutateAsync(payload);
         toast.success('Package added');
       }
       onOpenChange(false);

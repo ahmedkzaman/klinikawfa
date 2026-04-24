@@ -114,11 +114,18 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
 
   const onSubmit = handleSubmit(async (data) => {
     try {
+      const payload = {
+        name: data.name,
+        cost_price: data.cost_price,
+        selling_price: data.selling_price,
+        current_stock: data.current_stock,
+        status: data.status,
+      };
       if (isEdit && item) {
-        await updateItem.mutateAsync({ id: item.id, ...data });
+        await updateItem.mutateAsync({ id: item.id, ...payload });
         toast.success('Item updated');
       } else {
-        await addItem.mutateAsync(data);
+        await addItem.mutateAsync(payload);
         toast.success('Item added');
       }
       onOpenChange(false);

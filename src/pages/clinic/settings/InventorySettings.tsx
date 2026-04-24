@@ -209,6 +209,7 @@ export default function InventorySettings() {
                                 name: s.name,
                                 cost: Number(s.cost) || 0,
                                 price_to_patient: Number(s.price_to_patient) || 0,
+                                status: s.status,
                               },
                             })
                           }
@@ -273,6 +274,7 @@ export default function InventorySettings() {
                                 name: p.name,
                                 cost: Number(p.cost) || 0,
                                 price: Number(p.price) || 0,
+                                status: p.status,
                               },
                             })
                           }
