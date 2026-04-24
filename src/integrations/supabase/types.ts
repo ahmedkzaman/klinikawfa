@@ -749,11 +749,15 @@ export type Database = {
           id: string
           indication: string | null
           instruction: string | null
+          item_id: string | null
           item_name: string
+          package_id: string | null
           precaution: string | null
           price: number
           price_tier: string | null
           quantity: number
+          service_id: string | null
+          unit_cost: number
         }
         Insert: {
           consultation_id: string
@@ -768,11 +772,15 @@ export type Database = {
           id?: string
           indication?: string | null
           instruction?: string | null
+          item_id?: string | null
           item_name: string
+          package_id?: string | null
           precaution?: string | null
           price?: number
           price_tier?: string | null
           quantity?: number
+          service_id?: string | null
+          unit_cost?: number
         }
         Update: {
           consultation_id?: string
@@ -787,11 +795,15 @@ export type Database = {
           id?: string
           indication?: string | null
           instruction?: string | null
+          item_id?: string | null
           item_name?: string
+          package_id?: string | null
           precaution?: string | null
           price?: number
           price_tier?: string | null
           quantity?: number
+          service_id?: string | null
+          unit_cost?: number
         }
         Relationships: [
           {
@@ -799,6 +811,27 @@ export type Database = {
             columns: ["consultation_id"]
             isOneToOne: false
             referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultation_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultation_items_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultation_items_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
             referencedColumns: ["id"]
           },
         ]
@@ -987,6 +1020,7 @@ export type Database = {
       diagnoses: {
         Row: {
           created_at: string
+          group_category: string
           id: string
           name: string
           status: string
@@ -994,6 +1028,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          group_category?: string
           id?: string
           name: string
           status?: string
@@ -1001,6 +1036,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          group_category?: string
           id?: string
           name?: string
           status?: string
@@ -1583,6 +1619,7 @@ export type Database = {
       }
       packages: {
         Row: {
+          cost: number
           created_at: string
           id: string
           items: Json | null
@@ -1592,6 +1629,7 @@ export type Database = {
           stock: number
         }
         Insert: {
+          cost?: number
           created_at?: string
           id?: string
           items?: Json | null
@@ -1601,6 +1639,7 @@ export type Database = {
           stock?: number
         }
         Update: {
+          cost?: number
           created_at?: string
           id?: string
           items?: Json | null
