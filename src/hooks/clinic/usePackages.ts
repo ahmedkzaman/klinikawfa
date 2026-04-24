@@ -76,12 +76,15 @@ function mapPackagePayload(input: Partial<PackageInput>) {
 export function useAddPackage() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: PackageInput) => {
-      const { error } = await supabase
+    mutationFn: async (input: PackageInput): Promise<{ id: string }> => {
+      const { data, error } = await supabase
         .from('packages')
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .insert(mapPackagePayload(input) as any);
+        .insert(mapPackagePayload(input) as any)
+        .select('id')
+        .single();
       if (error) throw error;
+      return { id: (data as { id: string }).id };
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
   });
@@ -90,13 +93,17 @@ export function useAddPackage() {
 export function useUpdatePackage() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...input }: { id: string } & Partial<PackageInput>) => {
+    mutationFn: async ({
+      id,
+      ...input
+    }: { id: string } & Partial<PackageInput>): Promise<{ id: string }> => {
       const { error } = await supabase
         .from('packages')
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .update(mapPackagePayload(input) as any)
         .eq('id', id);
       if (error) throw error;
+      return { id };
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
   });

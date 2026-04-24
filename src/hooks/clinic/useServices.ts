@@ -76,12 +76,15 @@ function mapServicePayload(input: Partial<ServiceInput>) {
 export function useAddService() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: ServiceInput) => {
-      const { error } = await supabase
+    mutationFn: async (input: ServiceInput): Promise<{ id: string }> => {
+      const { data, error } = await supabase
         .from('services')
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .insert(mapServicePayload(input) as any);
+        .insert(mapServicePayload(input) as any)
+        .select('id')
+        .single();
       if (error) throw error;
+      return { id: (data as { id: string }).id };
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
   });
@@ -90,13 +93,17 @@ export function useAddService() {
 export function useUpdateService() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...input }: { id: string } & Partial<ServiceInput>) => {
+    mutationFn: async ({
+      id,
+      ...input
+    }: { id: string } & Partial<ServiceInput>): Promise<{ id: string }> => {
       const { error } = await supabase
         .from('services')
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .update(mapServicePayload(input) as any)
         .eq('id', id);
       if (error) throw error;
+      return { id };
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
   });

@@ -56,6 +56,42 @@ export function usePriceOverridesForItem(itemId?: string) {
   });
 }
 
+export function usePriceOverridesForService(serviceId?: string) {
+  return useQuery({
+    enabled: !!serviceId,
+    queryKey: serviceId
+      ? OVERRIDES_KEY({ serviceId })
+      : ['panel_price_overrides', 'service', 'none'],
+    queryFn: async (): Promise<PanelOverrideRow[]> => {
+      if (!serviceId) return [];
+      const { data, error } = await supabase
+        .from('panel_price_overrides')
+        .select('id, panel_id, item_id, service_id, package_id, override_price')
+        .eq('service_id', serviceId);
+      if (error) throw error;
+      return (data ?? []) as PanelOverrideRow[];
+    },
+  });
+}
+
+export function usePriceOverridesForPackage(packageId?: string) {
+  return useQuery({
+    enabled: !!packageId,
+    queryKey: packageId
+      ? OVERRIDES_KEY({ packageId })
+      : ['panel_price_overrides', 'package', 'none'],
+    queryFn: async (): Promise<PanelOverrideRow[]> => {
+      if (!packageId) return [];
+      const { data, error } = await supabase
+        .from('panel_price_overrides')
+        .select('id, panel_id, item_id, service_id, package_id, override_price')
+        .eq('package_id', packageId);
+      if (error) throw error;
+      return (data ?? []) as PanelOverrideRow[];
+    },
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /* Reconcile (diff existing vs desired → batch upsert + delete)       */
 /* ------------------------------------------------------------------ */
