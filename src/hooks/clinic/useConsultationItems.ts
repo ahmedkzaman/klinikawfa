@@ -36,6 +36,9 @@ export function useAddConsultationItem() {
       quantity?: number;
       dosage?: string;
       price?: number;
+      item_id?: string | null;
+      service_id?: string | null;
+      package_id?: string | null;
     }) => {
       const { error } = await supabase.from('consultation_items').insert(item);
       if (error) {
