@@ -15,7 +15,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { useQueueEntries } from '@/hooks/clinic/useQueueEntries';
+import { useQueueEntries, useUpdateQueueEntry } from '@/hooks/clinic/useQueueEntries';
 import { useTodayAppointments } from '@/hooks/clinic/useTodayAppointments';
 import { CheckInAppointmentDialog } from '@/components/clinic/CheckInAppointmentDialog';
 import { CheckInWalkInDialog } from '@/components/clinic/CheckInWalkInDialog';
