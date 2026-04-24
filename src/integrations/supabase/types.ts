@@ -1398,6 +1398,7 @@ export type Database = {
           price_to_patient_max: number
           price_to_patient_min: number
           remarks: string | null
+          standard_panel_price: number
           status: string
           stock: number
           stock_amount_warning: number | null
@@ -1422,6 +1423,7 @@ export type Database = {
           price_to_patient_max?: number
           price_to_patient_min?: number
           remarks?: string | null
+          standard_panel_price?: number
           status?: string
           stock?: number
           stock_amount_warning?: number | null
@@ -1446,6 +1448,7 @@ export type Database = {
           price_to_patient_max?: number
           price_to_patient_min?: number
           remarks?: string | null
+          standard_panel_price?: number
           status?: string
           stock?: number
           stock_amount_warning?: number | null
@@ -1639,6 +1642,7 @@ export type Database = {
           items: Json | null
           name: string
           price: number
+          standard_panel_price: number
           status: string
           stock: number
         }
@@ -1649,6 +1653,7 @@ export type Database = {
           items?: Json | null
           name: string
           price?: number
+          standard_panel_price?: number
           status?: string
           stock?: number
         }
@@ -1659,6 +1664,7 @@ export type Database = {
           items?: Json | null
           name?: string
           price?: number
+          standard_panel_price?: number
           status?: string
           stock?: number
         }
@@ -1777,6 +1783,68 @@ export type Database = {
           verify_link?: string | null
         }
         Relationships: []
+      }
+      panel_price_overrides: {
+        Row: {
+          created_at: string
+          id: string
+          item_id: string | null
+          override_price: number
+          package_id: string | null
+          panel_id: string
+          service_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          item_id?: string | null
+          override_price: number
+          package_id?: string | null
+          panel_id: string
+          service_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item_id?: string | null
+          override_price?: number
+          package_id?: string | null
+          panel_id?: string
+          service_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "panel_price_overrides_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_price_overrides_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_price_overrides_panel_id_fkey"
+            columns: ["panel_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_price_overrides_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       patients: {
         Row: {
@@ -2333,6 +2401,7 @@ export type Database = {
           id: string
           name: string
           price_to_patient: number
+          standard_panel_price: number
           status: string
           type: string
         }
@@ -2343,6 +2412,7 @@ export type Database = {
           id?: string
           name: string
           price_to_patient?: number
+          standard_panel_price?: number
           status?: string
           type?: string
         }
@@ -2353,6 +2423,7 @@ export type Database = {
           id?: string
           name?: string
           price_to_patient?: number
+          standard_panel_price?: number
           status?: string
           type?: string
         }

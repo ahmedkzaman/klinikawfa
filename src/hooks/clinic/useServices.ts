@@ -54,8 +54,10 @@ export function useServices() {
 export interface ServiceInput {
   name: string;
   cost: number;
-  /** Maps to DB column `price_to_patient` */
+  /** Self-pay price. Maps to DB column `price_to_patient`. */
   price: number;
+  /** Standard panel rate. Maps to DB column `standard_panel_price`. */
+  standard_panel_price?: number;
   status?: 'active' | 'inactive';
 }
 
@@ -64,6 +66,9 @@ function mapServicePayload(input: Partial<ServiceInput>) {
   if (input.name !== undefined) payload.name = input.name;
   if (input.cost !== undefined) payload.cost = input.cost;
   if (input.price !== undefined) payload.price_to_patient = input.price;
+  if (input.standard_panel_price !== undefined) {
+    payload.standard_panel_price = input.standard_panel_price;
+  }
   if (input.status !== undefined) payload.status = input.status;
   return payload;
 }

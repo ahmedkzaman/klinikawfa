@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus, X } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -21,10 +21,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 import {
   useAddInventoryItem,
   useUpdateInventoryItem,
 } from '@/hooks/clinic/useInventoryItems';
+import {
+  usePriceOverridesForItem,
+  useReconcileOverrides,
+  useActivePanels,
+  type OverrideDraft,
+} from '@/hooks/clinic/usePriceOverrides';
 import { toast } from 'sonner';
 
 export interface InventoryItemRow {
@@ -32,6 +40,7 @@ export interface InventoryItemRow {
   name: string;
   cost_price: number;
   price_to_patient_max: number;
+  standard_panel_price?: number | null;
   stock: number;
   status: string;
 }
@@ -42,8 +51,6 @@ interface Props {
   item: InventoryItemRow | null;
 }
 
-// Coerce empty string -> undefined so blank fields fail validation instead of
-// silently becoming 0.
 const moneyField = z.preprocess(
   (v) => (v === '' || v === null || v === undefined ? undefined : Number(v)),
   z
@@ -63,6 +70,7 @@ const itemSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(120),
   cost_price: moneyField,
   selling_price: moneyField,
+  standard_panel_price: moneyField,
   current_stock: intField,
   status: z.enum(['active', 'inactive']),
 });
@@ -73,6 +81,7 @@ const EMPTY_VALUES: ItemFormData = {
   name: '',
   cost_price: 0,
   selling_price: 0,
+  standard_panel_price: 0,
   current_stock: 0,
   status: 'active',
 };
@@ -80,7 +89,15 @@ const EMPTY_VALUES: ItemFormData = {
 export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
   const addItem = useAddInventoryItem();
   const updateItem = useUpdateInventoryItem();
+  const reconcileOverrides = useReconcileOverrides();
+  const { data: panels = [] } = useActivePanels();
+  const { data: existingOverrides = [] } = usePriceOverridesForItem(item?.id);
   const isEdit = !!item;
+
+  // Local state for the bespoke overrides editor
+  const [overrides, setOverrides] = useState<OverrideDraft[]>([]);
+  const [draftPanelId, setDraftPanelId] = useState<string>('');
+  const [draftPrice, setDraftPrice] = useState<string>('');
 
   const {
     register,
@@ -94,6 +111,7 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
     defaultValues: EMPTY_VALUES,
   });
 
+  // Hydrate form when dialog opens / item changes
   useEffect(() => {
     if (!open) return;
     if (item) {
@@ -101,16 +119,64 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
         name: item.name,
         cost_price: Number(item.cost_price) || 0,
         selling_price: Number(item.price_to_patient_max) || 0,
+        standard_panel_price: Number(item.standard_panel_price ?? 0) || 0,
         current_stock: Number(item.stock) || 0,
         status: (item.status as 'active' | 'inactive') ?? 'active',
       });
     } else {
       reset(EMPTY_VALUES);
+      setOverrides([]);
     }
+    setDraftPanelId('');
+    setDraftPrice('');
   }, [open, item, reset]);
 
-  const submitting = addItem.isPending || updateItem.isPending;
+  // Hydrate overrides whenever the existing list arrives for an edit
+  useEffect(() => {
+    if (!open || !item) return;
+    setOverrides(
+      existingOverrides.map((row) => ({
+        panel_id: row.panel_id,
+        override_price: Number(row.override_price) || 0,
+      })),
+    );
+  }, [open, item, existingOverrides]);
+
+  const submitting =
+    addItem.isPending || updateItem.isPending || reconcileOverrides.isPending;
   const status = watch('status');
+
+  const usedPanelIds = new Set(overrides.map((o) => o.panel_id));
+  const availablePanels = panels.filter((p) => !usedPanelIds.has(p.id));
+
+  const handleAddOverride = () => {
+    if (!draftPanelId) {
+      toast.error('Select a panel first');
+      return;
+    }
+    const priceNum = Number(draftPrice);
+    if (draftPrice === '' || Number.isNaN(priceNum) || priceNum < 0) {
+      toast.error('Enter a valid override price');
+      return;
+    }
+    if (usedPanelIds.has(draftPanelId)) {
+      toast.error('This panel already has an override');
+      return;
+    }
+    setOverrides((prev) => [
+      ...prev,
+      { panel_id: draftPanelId, override_price: priceNum },
+    ]);
+    setDraftPanelId('');
+    setDraftPrice('');
+  };
+
+  const handleRemoveOverride = (panelId: string) => {
+    setOverrides((prev) => prev.filter((o) => o.panel_id !== panelId));
+  };
+
+  const panelName = (id: string) =>
+    panels.find((p) => p.id === id)?.name ?? 'Unknown panel';
 
   const onSubmit = handleSubmit(async (data) => {
     try {
@@ -118,16 +184,38 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
         name: data.name,
         cost_price: data.cost_price,
         selling_price: data.selling_price,
+        standard_panel_price: data.standard_panel_price,
         current_stock: data.current_stock,
         status: data.status,
       };
+
+      // Step 1: persist the item itself
+      let itemId: string;
       if (isEdit && item) {
-        await updateItem.mutateAsync({ id: item.id, ...payload });
+        const res = await updateItem.mutateAsync({ id: item.id, ...payload });
+        itemId = res.id;
         toast.success('Item updated');
       } else {
-        await addItem.mutateAsync(payload);
+        const res = await addItem.mutateAsync(payload);
+        itemId = res.id;
         toast.success('Item added');
       }
+
+      // Step 2: reconcile bespoke panel overrides
+      try {
+        await reconcileOverrides.mutateAsync({
+          target: { itemId },
+          overrides,
+        });
+      } catch (overrideErr) {
+        toast.error(
+          overrideErr instanceof Error
+            ? `Item saved, but overrides failed: ${overrideErr.message}`
+            : 'Item saved, but overrides failed',
+        );
+        return; // keep dialog open so the user sees the issue
+      }
+
       onOpenChange(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save item');
@@ -136,82 +224,227 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit Item' : 'Add Item'}</DialogTitle>
           <DialogDescription>
-            Manage inventory items used in consultations and dispensing.
+            Configure inventory details, pricing tiers, and bespoke panel overrides.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="space-y-4 py-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="item-name">Name</Label>
-            <Input id="item-name" placeholder="e.g. Paracetamol 500mg" {...register('name')} />
-            {errors.name && (
-              <p className="text-sm text-destructive">{errors.name.message}</p>
-            )}
-          </div>
+          {/* ─────────────── Section 1: Details ─────────────── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="item-name">Name</Label>
+                <Input
+                  id="item-name"
+                  placeholder="e.g. Paracetamol 500mg"
+                  {...register('name')}
+                />
+                {errors.name && (
+                  <p className="text-sm text-destructive">{errors.name.message}</p>
+                )}
+              </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="item-cost">Cost Price (RM)</Label>
-              <Input
-                id="item-cost"
-                type="number"
-                step="0.01"
-                min="0"
-                {...register('cost_price')}
-              />
-              {errors.cost_price && (
-                <p className="text-sm text-destructive">{errors.cost_price.message}</p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="item-selling">Selling Price (RM)</Label>
-              <Input
-                id="item-selling"
-                type="number"
-                step="0.01"
-                min="0"
-                {...register('selling_price')}
-              />
-              {errors.selling_price && (
-                <p className="text-sm text-destructive">{errors.selling_price.message}</p>
-              )}
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="item-cost">Cost Price (RM)</Label>
+                  <Input
+                    id="item-cost"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    {...register('cost_price')}
+                  />
+                  {errors.cost_price && (
+                    <p className="text-sm text-destructive">
+                      {errors.cost_price.message}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="item-stock">Current Stock</Label>
+                  <Input
+                    id="item-stock"
+                    type="number"
+                    step="1"
+                    min="0"
+                    {...register('current_stock')}
+                  />
+                  {errors.current_stock && (
+                    <p className="text-sm text-destructive">
+                      {errors.current_stock.message}
+                    </p>
+                  )}
+                </div>
+              </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="item-stock">Current Stock</Label>
-              <Input
-                id="item-stock"
-                type="number"
-                step="1"
-                min="0"
-                {...register('current_stock')}
-              />
-              {errors.current_stock && (
-                <p className="text-sm text-destructive">{errors.current_stock.message}</p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="item-status">Status</Label>
-              <Select
-                value={status}
-                onValueChange={(v) => setValue('status', v as 'active' | 'inactive')}
-              >
-                <SelectTrigger id="item-status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="item-status">Status</Label>
+                <Select
+                  value={status}
+                  onValueChange={(v) =>
+                    setValue('status', v as 'active' | 'inactive')
+                  }
+                >
+                  <SelectTrigger id="item-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ─────────────── Section 2: Pricing ─────────────── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Pricing</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="item-selling">Self Pay (RM)</Label>
+                  <Input
+                    id="item-selling"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    {...register('selling_price')}
+                  />
+                  {errors.selling_price && (
+                    <p className="text-sm text-destructive">
+                      {errors.selling_price.message}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Price for walk-in / cash patients.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="item-panel-price">Standard Panel (RM)</Label>
+                  <Input
+                    id="item-panel-price"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    {...register('standard_panel_price')}
+                  />
+                  {errors.standard_panel_price && (
+                    <p className="text-sm text-destructive">
+                      {errors.standard_panel_price.message}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Default price for insurance panels.
+                  </p>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Bespoke Panel Overrides */}
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-sm font-medium">
+                    Bespoke Panel Prices
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Set custom prices for specific panels that differ from the
+                    standard panel rate.
+                  </p>
+                </div>
+
+                {/* Inline add row */}
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Select
+                    value={draftPanelId}
+                    onValueChange={setDraftPanelId}
+                    disabled={availablePanels.length === 0}
+                  >
+                    <SelectTrigger className="sm:flex-1">
+                      <SelectValue
+                        placeholder={
+                          availablePanels.length === 0
+                            ? 'All panels added'
+                            : 'Select panel'
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availablePanels.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Override price (RM)"
+                    value={draftPrice}
+                    onChange={(e) => setDraftPrice(e.target.value)}
+                    className="sm:w-44"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleAddOverride}
+                    disabled={!draftPanelId || draftPrice === ''}
+                  >
+                    <Plus className="mr-1 h-4 w-4" />
+                    Add
+                  </Button>
+                </div>
+
+                {/* List of current overrides */}
+                {overrides.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">
+                    No bespoke overrides — all panels will use the Standard Panel
+                    rate above.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {overrides.map((o) => (
+                      <div
+                        key={o.panel_id}
+                        className="flex items-center justify-between rounded-md border bg-muted/40 px-3 py-2 text-sm"
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-medium">
+                            {panelName(o.panel_id)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            RM {Number(o.override_price).toFixed(2)}
+                          </span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => handleRemoveOverride(o.panel_id)}
+                          aria-label={`Remove override for ${panelName(o.panel_id)}`}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
           <DialogFooter>
             <Button
