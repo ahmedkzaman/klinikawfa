@@ -1015,6 +1015,7 @@ export type Database = {
           id: string
           name: string
           on_duty: boolean
+          status: string
           updated_at: string
           user_id: string | null
         }
@@ -1024,6 +1025,7 @@ export type Database = {
           id?: string
           name: string
           on_duty?: boolean
+          status?: string
           updated_at?: string
           user_id?: string | null
         }
@@ -1033,10 +1035,19 @@ export type Database = {
           id?: string
           name?: string
           on_duty?: boolean
+          status?: string
           updated_at?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_doctors_profile"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       einvoice_credentials: {
         Row: {
@@ -2917,7 +2928,15 @@ export type Database = {
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_user_roles_profile"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       video_payments: {
         Row: {
