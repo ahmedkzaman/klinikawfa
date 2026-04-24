@@ -8,6 +8,7 @@ import {
   Search,
   Plus,
   Phone,
+  PauseCircle,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
@@ -271,6 +272,32 @@ export default function ConsultationDetail() {
     });
     toast.success('Sent to dispensary');
     navigate('/clinic/consultation');
+  };
+
+  const handlePutOnHold = async () => {
+    if (!entry) return;
+
+    try {
+      if (consultationId) {
+        await updateConsultation.mutateAsync({
+          id: consultationId,
+          case_note: caseNote,
+          dispense_note: dispenseNote,
+          diagnosis_id: null,
+          diagnosis_text: diagnosisText,
+        });
+      }
+
+      await updateQueue.mutateAsync({
+        id: entry.id,
+        clinic_status: 'on_hold',
+      });
+
+      toast.success(`${patient?.name ?? 'Patient'} placed on hold`);
+      navigate('/clinic/consultation');
+    } catch (error: any) {
+      toast.error(`Failed to place on hold: ${error.message || 'Unknown error'}`);
+    }
   };
 
   const handleCallIn = async (roomId: string, roomLabel: string) => {
@@ -544,7 +571,7 @@ export default function ConsultationDetail() {
                   RM {total.toFixed(2)}
                 </span>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2 justify-end">
                 <Button
                   variant="outline"
                   onClick={handleSaveNotes}
@@ -552,6 +579,18 @@ export default function ConsultationDetail() {
                   className="rounded-xl"
                 >
                   <Save className="h-4 w-4 mr-1" /> Save Draft
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handlePutOnHold}
+                  disabled={
+                    updateQueue.isPending ||
+                    updateConsultation.isPending ||
+                    entry.clinic_status === 'on_hold'
+                  }
+                  className="rounded-xl border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                >
+                  <PauseCircle className="h-4 w-4 mr-1" /> Put on Hold
                 </Button>
                 <Button
                   onClick={handleSendToDispensary}
