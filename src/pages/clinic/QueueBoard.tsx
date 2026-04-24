@@ -94,6 +94,7 @@ export default function QueueBoard() {
   useTickEveryMinute();
   const { data: entries = [], isLoading } = useQueueEntries();
   const { data: appointments = [] } = useTodayAppointments();
+  const updateQueue = useUpdateQueueEntry();
 
   const [appointmentDialog, setAppointmentDialog] = useState(false);
   const [walkInDialog, setWalkInDialog] = useState(false);
