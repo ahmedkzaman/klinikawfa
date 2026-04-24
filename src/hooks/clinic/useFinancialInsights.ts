@@ -30,11 +30,21 @@ export interface LtvSegmentRow {
   avgProfitPerPatient: number;
 }
 
+export interface RawFinancialRow {
+  visit_date: string;
+  queue_entry_id: string;
+  payment_method: string | null;
+  item_name: string;
+  revenue: number;
+  profit: number;
+}
+
 export interface FinancialInsights {
   summary: InsightSummary;
   dailyTrends: DailyTrendPoint[];
   topItems: TopItemRow[];
   ltvSegment: LtvSegmentRow[];
+  rows: RawFinancialRow[];
 }
 
 interface ViewRow {
@@ -169,7 +179,16 @@ export function useFinancialInsights(startDate: Date, endDate: Date) {
         }))
         .sort((a, b) => b.totalProfit - a.totalProfit);
 
-      return { summary, dailyTrends, topItems, ltvSegment };
+      const rawRows: RawFinancialRow[] = rows.map((r) => ({
+        visit_date: r.visit_date,
+        queue_entry_id: r.queue_entry_id,
+        payment_method: r.payment_method,
+        item_name: r.item_name,
+        revenue: Number(r.revenue ?? 0),
+        profit: Number(r.profit ?? 0),
+      }));
+
+      return { summary, dailyTrends, topItems, ltvSegment, rows: rawRows };
     },
   });
 }
