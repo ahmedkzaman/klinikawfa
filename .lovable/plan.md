@@ -1,130 +1,153 @@
 
 
-## Admin Dashboard — "High-Density Bento Box" Refactor
+## Consultation View — "High-Density Clinical Bento" Refactor (with mobile + sticky-footer patches)
 
-Pure presentational refactor of `src/pages/staff/admin/Dashboard.tsx`. **No data, hooks, state, queries, or routes are touched.** Every existing data point (4 stat tiles, doctors/support duty cards with on/off badges, `DailyReportsSummary`, `KanbanBoard`, 3 quick-action cards with pending badge) stays in place — only Tailwind classes and minor JSX wrapping change.
+Pure presentational refactor of **`src/pages/clinic/ConsultationDetail.tsx`**. Logic, hooks, mutations, routing, and child components are untouched. Tailwind + JSX wrapping only.
 
 ---
 
-### 1. Page canvas
-
-Wrap the current root `<div className="space-y-6">` in a soft-canvas shell:
+### 1. Page canvas & header strip
 
 ```tsx
-<div className="min-h-full bg-slate-50 -m-6 p-6 md:p-8">
-  <div className="space-y-6 max-w-[1600px] mx-auto">
-    …existing content…
+<div className="min-h-full bg-slate-50 -m-4 md:-m-6 p-4 md:p-6">
+  <div className="max-w-[1600px] mx-auto space-y-4">
+    {/* Header bar — wrapped in white bento */}
+    <div className="bg-white border-none rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.03)] p-4 flex items-center justify-between gap-3 flex-wrap">
+      …existing back button, doctor avatar, waiting badge, Call In dropdown, StatusBadge…
+    </div>
+    {/* Split-pane grid below */}
   </div>
 </div>
 ```
 
-The `-m-6` neutralises StaffLayout's existing padding so the off-white canvas bleeds edge-to-edge, then re-applies generous internal padding. White cards will visually pop.
+Header tweaks (class-only): queue badge `Q{n}` → `rounded-xl bg-blue-50 text-blue-700 border-none font-mono text-base`; "Call In" button → `rounded-xl bg-blue-600 hover:bg-blue-700 text-white`.
 
-### 2. Shared "bento" card treatment
+### 2. Split-pane grid — **mobile order swapped (PATCH 1)**
 
-Every `<Card>` on this page gets the same class set (applied per-instance, no new component):
-
-```
-bg-white border-none rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)]
-```
-
-Internal `CardHeader` / `CardContent` padding tightened to `p-5` (overriding the default `p-6`) for high data density.
-
-### 3. Top-level header
+DOM order: **workspace first, context second.** Visual order on `lg:` flipped via `order-*`:
 
 ```tsx
-<h1 className="text-2xl font-bold tracking-tight text-slate-800">Admin Dashboard</h1>
-<p className="text-sm text-slate-500">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
-```
-
-### 4. Stats bento grid (4 tiles — lines 195–200)
-
-Grid: `grid grid-cols-2 md:grid-cols-4 gap-4`.
-
-Each stat card pattern (kept inline, one per existing card — no shared component to keep diff minimal):
-
-```tsx
-<Card className="bento-card">
-  <CardContent className="p-5">
-    <div className="flex items-start justify-between">
-      <div className="h-12 w-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
-        <Users className="h-6 w-6" />
-      </div>
-    </div>
-    <div className="mt-4">
-      <div className="text-3xl font-bold text-slate-800">{stats.totalEmployees}</div>
-      <p className="text-sm font-medium text-slate-500 mt-1">Total Employees</p>
-    </div>
-  </CardContent>
-</Card>
-```
-
-Per-tile pastel + icon colour pairing (one-line difference each):
-
-| Tile | Icon container | Icon |
-|---|---|---|
-| Total Employees | `bg-blue-50 text-blue-600` | `Users` |
-| Active Zones | `bg-emerald-50 text-emerald-600` | `Map` |
-| Today's Punches | `bg-amber-50 text-amber-600` | `Clock` |
-| Currently In | `bg-violet-50 text-violet-600` | `TrendingUp` |
-
-### 5. Doctors / Support Staff "Today" cards (lines 117–193)
-
-Keep the existing 2-column grid + all conditional rendering and badge logic untouched. Only:
-
-- Apply the shared bento card class set.
-- Tighten `CardHeader` to `pb-2`.
-- Title: `text-base font-semibold text-slate-800`, icon container becomes `h-10 w-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center` wrapping `Stethoscope` / `HardHat`.
-- Section sub-labels ("On Duty" / "Off Duty") stay; tighten to `text-xs font-semibold text-slate-500 uppercase tracking-wide`.
-- "On Duty" badges: `rounded-full bg-emerald-50 text-emerald-700 border-none` (replacing the green-100/green-800 pair, matching the soft-pastel system).
-- "Off Duty" badges: `rounded-full bg-slate-50 text-slate-500 border-none`.
-- Loading / empty paragraphs become `text-sm text-slate-400`.
-
-### 6. `DailyReportsSummary` & `KanbanBoard` (lines 201–202)
-
-Both are existing self-contained components — wrap each in a bento shell **without modifying the components themselves** (CRITICAL RULE):
-
-```tsx
-<div className="bg-white border-none rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-5">
-  <DailyReportsSummary />
-</div>
-<div className="bg-white border-none rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-5">
-  <KanbanBoard />
+<div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+  <main  className="order-1 lg:order-2 lg:col-span-8 space-y-4 flex flex-col pb-24 relative">
+    …workspace cards…
+  </main>
+  <aside className="order-2 lg:order-1 lg:col-span-4 space-y-4">
+    …context cards…
+  </aside>
 </div>
 ```
 
-This guarantees zero behavioural change inside those components while still giving them the bento aesthetic on this page.
+Result: on mobile (single column), the doctor lands on the workspace immediately; demographics/vitals/history flow below. On `lg:` and up, context sits on the left (4/12), workspace on the right (8/12).
 
-### 7. Quick Actions cards (lines 203–207)
+### 3. Shared bento class
 
-Grid stays `md:grid-cols-2 lg:grid-cols-3 gap-4`. Each card:
+```ts
+const bento = "bg-white border-none rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.03)]";
+const bentoHeader = "text-sm font-bold text-slate-800 uppercase tracking-wider mb-3";
+```
+
+`CardHeader` → `pb-2`; `CardContent` → `p-5`.
+
+### 4. LEFT column (`<aside>`, `lg:col-span-4`) — read-only context
+
+In this top-down order:
+
+- **Demographics** — `bento`, `p-5`. Patient name `text-base font-semibold text-slate-800` with a `User` icon in `bg-blue-50 text-blue-600 rounded-lg p-1.5`. DOB / IC / Gender as a 2-col `text-sm text-slate-600` grid. Payment chip `inline-flex rounded-full bg-slate-50 text-slate-600 text-xs px-2 py-0.5`.
+- **Visit Note** (receptionist intake) — `bento`. Header `VISIT NOTE`. Body `text-sm whitespace-pre-wrap text-slate-700`.
+- **Vital Signs** — `bento`. Header `VITAL SIGNS` + Edit/Record button (`rounded-lg`). The 8-tile vitals grid → mini-bento tiles:
+  ```tsx
+  <div className="bg-slate-50 rounded-xl p-3 text-center">
+    <div className="text-xl font-bold text-slate-800">{val ?? '—'}</div>
+    <div className="text-xs text-slate-500 mt-0.5">{label}{unit ? ` (${unit})` : ''}</div>
+  </div>
+  ```
+  Edit-form inputs gain `bg-slate-50 border-transparent focus:bg-white focus:border-blue-500 rounded-lg`. `<VitalHistoryTrends />` rendered as-is.
+- **Patient History** — moved here from the right tab. `bento`, header `PAST VISITS`. Strip per-row inner cards; render as `divide-y divide-slate-100` list. Pagination buttons → `rounded-lg`.
+- **Upcoming Appointments** — `bento`, header `UPCOMING`. Row pills `rounded-lg bg-slate-50 px-3 py-2`.
+
+### 5. RIGHT column (`<main>`, `lg:col-span-8`) — active workspace
+
+Tabs wrapper removed (history moved left). Stack:
+
+**a. Consultation Notes — document canvas**
 
 ```tsx
-<Card className="bento-card">
-  <CardContent className="p-5">
-    <div className="flex items-center gap-3">
-      <div className="h-12 w-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
-        <Users className="h-6 w-6" />
+<Card className={bento}>
+  <CardContent className="p-5 space-y-4">
+    <h2 className={bentoHeader}>CONSULTATION NOTES</h2>
+    <Textarea
+      value={caseNote}
+      onChange={…}
+      className="min-h-[400px] resize-y bg-slate-50 border-transparent focus-visible:bg-white focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-200 rounded-xl p-4 text-base leading-relaxed text-slate-800"
+    />
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div>
+        <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Diagnosis</Label>
+        <Input … className="bg-slate-50 border-transparent focus-visible:bg-white focus-visible:border-blue-500 rounded-lg" />
       </div>
       <div>
-        <h3 className="font-semibold text-slate-800">Manage Employees</h3>
-        <p className="text-sm text-slate-500">Add, edit, or remove staff</p>
+        <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Dispense Note</Label>
+        <Textarea rows={3} … className="bg-slate-50 border-transparent focus-visible:bg-white focus-visible:border-blue-500 rounded-lg" />
       </div>
     </div>
-    <Button asChild className="w-full mt-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white">
-      <Link to="/staff/admin/employees">View Employees</Link>
-    </Button>
   </CardContent>
 </Card>
 ```
 
-Per-card icon palette: Employees `blue`, Zones `emerald`, Requests `amber`. The pending-count chip on the Requests card stays (logic untouched) but restyled to `inline-flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-semibold px-2 py-0.5 ml-auto`.
+The in-card "Save Notes" button is removed (deduped — see footer below; same `handleSaveNotes` handler reused).
 
-### 8. Accent system summary
+**b. Treatment Plan**
 
-- Primary buttons: `rounded-xl bg-blue-600 hover:bg-blue-700 text-white`.
-- Pastel icon tiles: `rounded-2xl bg-{color}-50 text-{color}-600`.
-- Soft list dividers (used wherever rows appear inside this page's bento cards): `divide-y divide-slate-100` — applied to any row container if/when present (no new lists are introduced; rule documented for the doctor/support badge stacks which already use flex-wrap, so no dividers needed there).
+`bento`, `p-5`. Header row horizontal: `TREATMENT PLAN` label + search + "Add in bulk" on one line.
+- Search: `bg-slate-50 border-transparent rounded-lg pl-9`.
+- Category pills: active `rounded-full bg-blue-600 text-white`, idle `rounded-full bg-slate-50 text-slate-600 border-none hover:bg-slate-100`.
+- `<TreatmentItemCard>` rows untouched.
+- Total row: `rounded-xl bg-slate-50 px-4 py-3 flex items-center justify-between text-sm`.
+
+**c. Sticky action footer (PATCH 2)**
+
+Replaces the old `<Separator />` + button row. **No `mt-auto`** — uses `sticky bottom-4` so it floats above scrolling workspace content. Parent `<main>` has `pb-24` so the last Treatment Plan row clears the floating footer.
+
+```tsx
+<div className="sticky bottom-4 z-10 bg-white/90 backdrop-blur-md border border-slate-100 rounded-2xl shadow-lg p-4 flex items-center justify-between gap-3 flex-wrap">
+  <div className="text-sm">
+    <span className="text-slate-500">Total</span>{' '}
+    <span className="text-xl font-bold text-slate-800">RM {total.toFixed(2)}</span>
+  </div>
+  <div className="flex gap-2">
+    <Button
+      variant="outline"
+      onClick={handleSaveNotes}
+      disabled={updateConsultation.isPending}
+      className="rounded-xl"
+    >
+      Save Draft
+    </Button>
+    <Button
+      onClick={handleSendToDispensary}
+      disabled={updateQueue.isPending}
+      className="px-8 py-6 rounded-xl text-base font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+    >
+      Send to Dispensary
+    </Button>
+  </div>
+</div>
+```
+
+### 6. Accent system (this page)
+
+| Element | Class |
+|---|---|
+| Bento card | `bg-white border-none rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.03)]` |
+| Section header | `text-sm font-bold text-slate-800 uppercase tracking-wider mb-3` |
+| Pastel icon tile | `bg-blue-50 text-blue-600 rounded-lg p-1.5` |
+| Mini-bento metric | `bg-slate-50 rounded-xl p-3 text-center` |
+| Soft input | `bg-slate-50 border-transparent focus-visible:bg-white focus-visible:border-blue-500 rounded-lg` |
+| Notes canvas | adds `min-h-[400px] focus-visible:ring-2 focus-visible:ring-blue-200 p-4 text-base leading-relaxed` |
+| Primary button | `rounded-xl bg-blue-600 hover:bg-blue-700 text-white` |
+| Sticky footer | `sticky bottom-4 z-10 bg-white/90 backdrop-blur-md border border-slate-100 rounded-2xl shadow-lg` |
+| Pill (active / idle) | `rounded-full bg-blue-600 text-white` / `rounded-full bg-slate-50 text-slate-600` |
+| Dividers | `divide-y divide-slate-100` |
 
 ---
 
@@ -132,21 +155,26 @@ Per-card icon palette: Employees `blue`, Zones `emerald`, Requests `amber`. The 
 
 | File | Action |
 |---|---|
-| `src/pages/staff/admin/Dashboard.tsx` | **Edit only** — Tailwind class changes, minor JSX wrapping. No import changes beyond what's already imported. |
+| `src/pages/clinic/ConsultationDetail.tsx` | **Edit only** — Tailwind + JSX restructure (column DOM-order swap, tabs removed, sticky footer added, `pb-24` on `<main>`). No new imports. |
 
-### Out of scope (per CRITICAL RULE)
+### Out of scope
 
-- `DailyReportsSummary`, `KanbanBoard`, `Card`, `Button`, `Badge` components — untouched.
-- All `useEffect`s, fetchers, state, types — untouched.
-- Routing, links, pending-count logic — untouched.
+- All child components (`TreatmentItemCard`, `AddTreatmentBulkDialog`, `VitalHistoryTrends`, `StatusBadge`, shadcn primitives) — untouched.
+- All hooks, mutations, `useState`/`useEffect`/`useMemo`, handlers (`handleSaveNotes`, `handleSaveVitals`, `handleBulkInsert`, `handleSendToDispensary`, `handleCallIn`) — untouched.
+- Routing, auto-create-consultation effect — untouched.
 
 ### Verification
 
 1. `tsc --noEmit` passes.
-2. `/staff/admin` renders with off-white canvas, white rounded-3xl bento cards, soft diffuse shadows.
-3. All four stat tiles show the same numbers as before, with pastel icon chips and `text-3xl` figures.
-4. Doctors/Support cards still show on-duty badges with shift labels and off-duty muted badges; loading and empty states still render.
-5. Daily reports + Kanban board render unchanged inside their new white shells.
-6. Quick-action buttons navigate to `/staff/admin/employees`, `/staff/admin/zones`, `/staff/admin/requests`; pending-count chip still appears when `pendingCount > 0`.
-7. No console errors; no layout shift on the existing 1391×861 viewport; responsive grid collapses correctly at `md` and below.
+2. **Mobile (<lg)**: workspace (notes → treatment plan → sticky footer) appears first; context (demographics, vitals, history, upcoming) stacks below. Doctor lands on the editable canvas without scrolling past patient context.
+3. **Desktop (≥lg)**: visual layout is context-left (4/12), workspace-right (8/12), thanks to `order-1 lg:order-2` / `order-2 lg:order-1`.
+4. The action footer **floats** above workspace content as the user scrolls (`sticky bottom-4`), with translucent white blur and shadow; never gets pushed below the fold.
+5. `<main>` has `pb-24`, so the bottom of the Treatment Plan card is fully readable above the floating footer.
+6. `caseNote` textarea is ≥400px tall, slate-50 idle, white-with-blue-ring on focus.
+7. Vitals render as mini-bento tiles; edit form still saves; trends render.
+8. Patient history paginates as before, just unboxed.
+9. Treatment plan: search, category pills, "Add in bulk", per-row save/remove all work via existing mutations.
+10. "Save Draft" persists notes via `handleSaveNotes`; "Send to Dispensary" still completes consultation, sets queue `sent_to_dispensary`, navigates back.
+11. "Call In" dropdown unchanged.
+12. No console errors.
 
