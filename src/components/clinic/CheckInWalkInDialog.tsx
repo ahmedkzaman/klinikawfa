@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { UserPlus } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -29,14 +29,25 @@ const VISIT_PURPOSES = [
 interface CheckInWalkInDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialPatient?: PatientRow | null;
 }
 
-export function CheckInWalkInDialog({ open, onOpenChange }: CheckInWalkInDialogProps) {
+export function CheckInWalkInDialog({
+  open,
+  onOpenChange,
+  initialPatient,
+}: CheckInWalkInDialogProps) {
   const [patient, setPatient] = useState<PatientRow | null>(null);
   const [purpose, setPurpose] = useState('consultation');
   const [notes, setNotes] = useState('');
   const [registerOpen, setRegisterOpen] = useState(false);
   const checkIn = useCheckInWalkIn();
+
+  useEffect(() => {
+    if (open && initialPatient) {
+      setPatient(initialPatient);
+    }
+  }, [open, initialPatient]);
 
   const reset = () => {
     setPatient(null);

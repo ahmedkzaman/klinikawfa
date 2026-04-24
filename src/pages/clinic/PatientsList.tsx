@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { MoreHorizontal, Plus, Search, UserPlus } from 'lucide-react';
-import { toast } from 'sonner';
 import { SEOHead } from '@/components/seo/SEOHead';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -24,11 +23,18 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePatients } from '@/hooks/clinic/usePatients';
 import { RegisterPatientDialog } from '@/components/clinic/RegisterPatientDialog';
+import { PatientProfileSheet } from '@/components/patients/PatientProfileSheet';
+import { CheckInWalkInDialog } from '@/components/clinic/CheckInWalkInDialog';
+import type { PatientRow } from '@/types/clinic';
 
 export default function PatientsList() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState<PatientRow | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [checkInOpen, setCheckInOpen] = useState(false);
+  const [prefillPatient, setPrefillPatient] = useState<PatientRow | null>(null);
 
   useEffect(() => {
     const id = setTimeout(() => setDebouncedSearch(search), 250);
@@ -137,7 +143,10 @@ export default function PatientsList() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
-                                onClick={() => toast('Patient profile drill-down — Step 6')}
+                                onClick={() => {
+                                  setSelectedPatient(p);
+                                  setSheetOpen(true);
+                                }}
                               >
                                 View profile
                               </DropdownMenuItem>
@@ -164,6 +173,25 @@ export default function PatientsList() {
           setSearch('');
           setDebouncedSearch('');
         }}
+      />
+
+      <PatientProfileSheet
+        patient={selectedPatient}
+        isOpen={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onRegisterVisit={(p) => {
+          setPrefillPatient(p);
+          setCheckInOpen(true);
+        }}
+      />
+
+      <CheckInWalkInDialog
+        open={checkInOpen}
+        onOpenChange={(o) => {
+          setCheckInOpen(o);
+          if (!o) setPrefillPatient(null);
+        }}
+        initialPatient={prefillPatient}
       />
     </>
   );

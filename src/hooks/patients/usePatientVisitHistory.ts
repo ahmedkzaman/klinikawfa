@@ -1,0 +1,51 @@
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import type { ClinicStatus } from '@/types/clinic';
+
+export interface PatientVisitConsultation {
+  id: string;
+  doctor_id: string | null;
+  diagnosis_text: string | null;
+  case_note: string | null;
+  doctors: { id: string; name: string } | { id: string; name: string }[] | null;
+}
+
+export interface PatientVisitHistoryRow {
+  id: string;
+  created_at: string;
+  queue_number: number | null;
+  clinic_status: ClinicStatus;
+  visit_notes: string | null;
+  consultations:
+    | PatientVisitConsultation
+    | PatientVisitConsultation[]
+    | null;
+}
+
+export function usePatientVisitHistory(patientId: string | null) {
+  return useQuery<PatientVisitHistoryRow[]>({
+    queryKey: ['clinic', 'patient-visit-history', patientId],
+    enabled: !!patientId,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('queue_entries')
+        .select(
+          `
+          id, created_at, queue_number, clinic_status, visit_notes,
+          consultations:consultations!consultations_queue_entry_id_fkey (
+            id, doctor_id, diagnosis_text, case_note,
+            doctors:doctor_id ( id, name )
+          )
+        `,
+        )
+        .eq('patient_id', patientId as string)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      return (data ?? []) as unknown as PatientVisitHistoryRow[];
+    },
+  });
+}
