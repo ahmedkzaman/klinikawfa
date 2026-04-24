@@ -266,18 +266,50 @@ export default function QueueBoard() {
               </div>
 
               <div className="pt-4 border-t flex flex-col gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => toast('Send to Doctor — wired in Step 6')}
-                >
-                  Send to Doctor
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => toast('Mark Done — wired in Step 6')}
-                >
-                  Mark Done
-                </Button>
+                {/* STRICT GUARD: Only fresh registrations and on_hold patients can be sent
+                    to the doctor from this sheet. on_hold acts as a recovery hatch so paused
+                    waiting-room patients aren't permanently stuck on the board. */}
+                {(activeEntry.clinic_status === 'registered' ||
+                  activeEntry.clinic_status === 'on_hold') && (
+                  <Button
+                    disabled={updateQueue.isPending || !activeEntry}
+                    onClick={() => {
+                      if (!activeEntry) return;
+                      const wasOnHold = activeEntry.clinic_status === 'on_hold';
+                      updateQueue.mutate(
+                        { id: activeEntry.id, clinic_status: 'ready_for_doctor' },
+                        {
+                          onSuccess: () => {
+                            setActiveEntry(null);
+                            toast.success(
+                              wasOnHold
+                                ? 'Patient resumed — sent to doctor'
+                                : 'Patient called to doctor',
+                            );
+                          },
+                          onError: (error: unknown) => {
+                            const message =
+                              error instanceof Error ? error.message : 'Unknown error';
+                            toast.error(`Update failed: ${message}`);
+                          },
+                        },
+                      );
+                    }}
+                  >
+                    {updateQueue.isPending &&
+                    updateQueue.variables?.clinic_status === 'ready_for_doctor'
+                      ? 'Updating…'
+                      : activeEntry.clinic_status === 'on_hold'
+                        ? 'Resume → Send to Doctor'
+                        : 'Send to Doctor'}
+                  </Button>
+                )}
+
+                {/* NOTE: The "Mark Done" button has been intentionally omitted.
+                    Patients past the consultation phase must be processed and completed
+                    via the dedicated /clinic/queue/checkout/:id route to ensure invoices
+                    are reconciled before the queue status advances to `completed`. This
+                    keeps the queue board strictly in lockstep with the payment ledger. */}
               </div>
             </div>
           )}
