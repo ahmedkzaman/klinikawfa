@@ -166,7 +166,15 @@ export default function DispenseCheckout() {
             value={patient?.gender ? String(patient.gender) : '—'}
           />
           <div className="border-t border-border pt-2 mt-2">
-            <Field label="Doctor" value={entry.doctors?.name ?? '—'} />
+            <Field
+              label="Doctor"
+              value={
+                (consultation as { doctors?: { name?: string } } | undefined)
+                  ?.doctors?.name ??
+                entry.doctors?.name ??
+                '—'
+              }
+            />
             <Field
               label="Diagnosis"
               value={
