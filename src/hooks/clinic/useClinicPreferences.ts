@@ -47,3 +47,20 @@ export function useClinicPreferences() {
 
   return { preferences, isLoading, getPreference, setPreference };
 }
+
+/**
+ * Mutation hook for upserting a single clinic preference by `key`.
+ * Used by Settings → General Preferences to save individual fields.
+ */
+export function useUpdateClinicPreference() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ key, value }: { key: string; value: string }) => {
+      const { error } = await supabase
+        .from('clinic_preferences')
+        .upsert({ key, value }, { onConflict: 'key' });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['clinic_preferences'] }),
+  });
+}

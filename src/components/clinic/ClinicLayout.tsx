@@ -14,6 +14,7 @@ import {
   Archive,
   ArrowLeft,
   Menu,
+  Settings,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
@@ -34,6 +35,7 @@ const clinicNavItems: ClinicNavItem[] = [
   { href: '/clinic/procurement', label: 'Procurement', icon: ClipboardList },
   { href: '/clinic/inventory', label: 'Inventory', icon: Package },
   { href: '/clinic/voided', label: 'Voided Records', icon: Archive, specialAdminOnly: true },
+  { href: '/clinic/settings', label: 'Settings', icon: Settings },
 ];
 
 function SidebarNav({
