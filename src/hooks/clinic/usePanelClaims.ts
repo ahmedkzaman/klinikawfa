@@ -77,9 +77,11 @@ export function usePanelClaims(tab: PanelClaimsTab, page: number) {
         .range(from, to);
 
       if (tab === 'overdue') {
-        query = query.eq('is_overdue', true);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        query = (query as any).eq('is_overdue', true);
       } else if (tab !== 'all') {
-        query = query.eq('status', tab);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        query = (query as any).eq('status', tab);
       }
 
       const { data, error, count } = await query;
