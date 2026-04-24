@@ -1,0 +1,239 @@
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowLeft, Users, Search } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuth, type AppRole } from '@/contexts/AuthContext';
+import { useClinicUsers, type ClinicUserRow } from '@/hooks/clinic/useClinicUsers';
+import { supabase } from '@/integrations/supabase/client';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { DoctorProfileDialog } from '@/components/clinic/settings/DoctorProfileDialog';
+import { toast } from 'sonner';
+
+const ROLE_OPTIONS: AppRole[] = ['guest', 'staff', 'operations', 'admin', 'special_admin'];
+
+const ROLE_LABEL: Record<AppRole, string> = {
+  guest: 'Guest',
+  staff: 'Staff',
+  operations: 'Operations',
+  admin: 'Admin',
+  special_admin: 'Special Admin',
+};
+
+export default function UserManagementSettings() {
+  const { user, isAdmin, isSpecialAdmin } = useAuth();
+  const { data: users = [], isLoading } = useClinicUsers();
+  const qc = useQueryClient();
+
+  const [search, setSearch] = useState('');
+  const [pendingUserId, setPendingUserId] = useState<string | null>(null);
+  const [profileDialogUser, setProfileDialogUser] = useState<ClinicUserRow | null>(null);
+
+  if (!isAdmin && !isSpecialAdmin) {
+    return (
+      <div className="max-w-xl">
+        <Alert variant="destructive">
+          <AlertTitle>Admin access required</AlertTitle>
+          <AlertDescription>
+            You need admin privileges to manage users.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter(
+      (u) =>
+        (u.full_name ?? '').toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q),
+    );
+  }, [users, search]);
+
+  const handleRoleChange = async (row: ClinicUserRow, newRole: AppRole) => {
+    if (newRole === row.role) return;
+    setPendingUserId(row.id);
+    try {
+      const { error } = await supabase.rpc('admin_assign_role', {
+        target_user_id: row.id,
+        new_role: newRole,
+      });
+      if (error) throw error;
+      toast.success(`Role updated to ${ROLE_LABEL[newRole]}`);
+      qc.invalidateQueries({ queryKey: ['clinic_users'] });
+    } catch (err: any) {
+      const msg = err?.message ?? '';
+      if (msg.includes('NOT_AUTHORIZED')) {
+        toast.error('Only special admins can change roles');
+      } else if (msg.includes('CANNOT_DEMOTE_SELF')) {
+        toast.error('You cannot change your own role');
+      } else {
+        toast.error(msg || 'Failed to update role');
+      }
+    } finally {
+      setPendingUserId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <Button variant="ghost" size="sm" asChild className="mb-2 -ml-2">
+          <Link to="/clinic/settings">
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Back to Settings
+          </Link>
+        </Button>
+        <h1 className="text-2xl font-semibold tracking-tight">User Management</h1>
+        <p className="text-sm text-muted-foreground">
+          Assign roles and manage locum doctor profiles.
+        </p>
+      </div>
+
+      <Card className="p-4 space-y-4">
+        <div className="relative max-w-sm">
+          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by name or email…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
+        <div className="border rounded-md">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="min-w-[220px]">Name / Email</TableHead>
+                <TableHead className="min-w-[200px]">Current Role</TableHead>
+                <TableHead className="min-w-[180px]">Doctor Profile</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell>
+                      <Skeleton className="h-4 w-40 mb-1" />
+                      <Skeleton className="h-3 w-56" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-9 w-40" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-5 w-20" />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Skeleton className="h-8 w-32 ml-auto" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4}>
+                    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                      <Users className="h-10 w-10 mb-2 opacity-50" />
+                      <p className="text-sm">No users found</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filtered.map((row) => {
+                  const isSelf = row.id === user?.id;
+                  const roleSelectDisabled =
+                    !isSpecialAdmin || isSelf || pendingUserId === row.id;
+                  return (
+                    <TableRow key={row.id}>
+                      <TableCell>
+                        <div className="font-medium text-foreground">
+                          {row.full_name || '—'}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{row.email}</div>
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={row.role ?? ''}
+                          onValueChange={(v) => handleRoleChange(row, v as AppRole)}
+                          disabled={roleSelectDisabled}
+                        >
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="No role" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ROLE_OPTIONS.map((r) => (
+                              <SelectItem key={r} value={r}>
+                                {ROLE_LABEL[r]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {row.doctor ? (
+                            <Badge
+                              variant={
+                                row.doctor.status === 'active' ? 'default' : 'secondary'
+                              }
+                            >
+                              {row.doctor.status === 'active' ? 'Active' : 'Inactive'}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">—</span>
+                          )}
+                          {row.doctor?.on_duty && (
+                            <Badge variant="outline" className="text-xs">
+                              On duty
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setProfileDialogUser(row)}
+                        >
+                          Manage Profile
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
+
+      <DoctorProfileDialog
+        open={!!profileDialogUser}
+        onOpenChange={(open) => !open && setProfileDialogUser(null)}
+        user={profileDialogUser}
+      />
+    </div>
+  );
+}

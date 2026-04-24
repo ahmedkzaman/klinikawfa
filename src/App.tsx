@@ -65,6 +65,9 @@ import Billings from "./pages/clinic/Billings";
 import PanelClaims from "./pages/clinic/PanelClaims";
 import Inventory from "./pages/clinic/Inventory";
 import VoidedRecords from "./pages/clinic/VoidedRecords";
+import SettingsPage from "./pages/clinic/settings/SettingsPage";
+import InClinicSettings from "./pages/clinic/settings/InClinicSettings";
+import UserManagementSettings from "./pages/clinic/settings/UserManagementSettings";
 
 import LeadsManagement from "./pages/admin/LeadsManagement";
 import BlogManagement from "./pages/admin/BlogManagement";
@@ -168,6 +171,16 @@ const App = () => (
                 <Route path="billings" element={<Billings />} />
                 <Route path="panel-claims" element={<PanelClaims />} />
                 <Route path="inventory" element={<Inventory />} />
+                <Route path="settings" element={<SettingsPage />} />
+                <Route path="settings/preferences" element={<InClinicSettings />} />
+                <Route
+                  path="settings/users"
+                  element={
+                    <ClinicProtectedRoute requiredRole="admin">
+                      <UserManagementSettings />
+                    </ClinicProtectedRoute>
+                  }
+                />
                 <Route
                   path="voided"
                   element={
