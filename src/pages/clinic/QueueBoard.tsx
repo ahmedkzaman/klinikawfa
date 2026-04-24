@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AlertCircle, ListOrdered, Plus, UserPlus } from 'lucide-react';
@@ -95,6 +96,7 @@ export default function QueueBoard() {
   const { data: entries = [], isLoading } = useQueueEntries();
   const { data: appointments = [] } = useTodayAppointments();
   const updateQueue = useUpdateQueueEntry();
+  const navigate = useNavigate();
 
   const [appointmentDialog, setAppointmentDialog] = useState(false);
   const [walkInDialog, setWalkInDialog] = useState(false);
@@ -266,26 +268,24 @@ export default function QueueBoard() {
               </div>
 
               <div className="pt-4 border-t flex flex-col gap-2">
-                {/* STRICT GUARD: Only fresh registrations and on_hold patients can be sent
-                    to the doctor from this sheet. on_hold acts as a recovery hatch so paused
-                    waiting-room patients aren't permanently stuck on the board. */}
-                {(activeEntry.clinic_status === 'registered' ||
-                  activeEntry.clinic_status === 'on_hold') && (
+                {/* STRICT ROLE-BASED ACTIONS:
+                    - `registered`            → front desk may call patient to doctor
+                    - `sent_to_dispensary` /
+                      `dispensing_payment`    → front desk routes to checkout (revenue lock)
+                    - `on_hold`               → READ-ONLY here; only the attending doctor
+                                                may resume from /clinic/consultation
+                    - all other statuses      → no actions */}
+                {activeEntry.clinic_status === 'registered' && (
                   <Button
                     disabled={updateQueue.isPending || !activeEntry}
                     onClick={() => {
                       if (!activeEntry) return;
-                      const wasOnHold = activeEntry.clinic_status === 'on_hold';
                       updateQueue.mutate(
                         { id: activeEntry.id, clinic_status: 'ready_for_doctor' },
                         {
                           onSuccess: () => {
                             setActiveEntry(null);
-                            toast.success(
-                              wasOnHold
-                                ? 'Patient resumed — sent to doctor'
-                                : 'Patient called to doctor',
-                            );
+                            toast.success('Patient called to doctor');
                           },
                           onError: (error: unknown) => {
                             const message =
@@ -299,17 +299,29 @@ export default function QueueBoard() {
                     {updateQueue.isPending &&
                     updateQueue.variables?.clinic_status === 'ready_for_doctor'
                       ? 'Updating…'
-                      : activeEntry.clinic_status === 'on_hold'
-                        ? 'Resume → Send to Doctor'
-                        : 'Send to Doctor'}
+                      : 'Send to Doctor'}
                   </Button>
                 )}
 
-                {/* NOTE: The "Mark Done" button has been intentionally omitted.
-                    Patients past the consultation phase must be processed and completed
-                    via the dedicated /clinic/queue/checkout/:id route to ensure invoices
-                    are reconciled before the queue status advances to `completed`. This
-                    keeps the queue board strictly in lockstep with the payment ledger. */}
+                {(activeEntry.clinic_status === 'sent_to_dispensary' ||
+                  activeEntry.clinic_status === 'dispensing_payment') && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (!activeEntry) return;
+                      navigate(`/clinic/queue/checkout/${activeEntry.id}`);
+                      setActiveEntry(null);
+                    }}
+                  >
+                    Open Checkout
+                  </Button>
+                )}
+
+                {activeEntry.clinic_status === 'on_hold' && (
+                  <p className="text-sm text-muted-foreground italic">
+                    Patient is on hold. Status can only be resumed by the attending doctor.
+                  </p>
+                )}
               </div>
             </div>
           )}

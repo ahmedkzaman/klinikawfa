@@ -17,9 +17,14 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { StatusBadge } from '@/components/clinic/StatusBadge';
-import { useConsultationQueueEntries, useCallPatient } from '@/hooks/clinic/useQueueEntries';
+import {
+  useConsultationQueueEntries,
+  useCallPatient,
+  useUpdateQueueEntry,
+} from '@/hooks/clinic/useQueueEntries';
 import { useCurrentDoctor } from '@/hooks/clinic/useCurrentDoctor';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 import type { ClinicStatus } from '@/types/clinic';
 
 const TAB_KEYS = ['waiting', 'serving', 'on_hold', 'dispensary', 'completed', 'all'] as const;
@@ -53,6 +58,7 @@ export default function Consultation() {
   const { data: entries = [], isLoading: queueLoading, error: queueError } =
     useConsultationQueueEntries();
   const callPatient = useCallPatient();
+  const resumeQueue = useUpdateQueueEntry();
   const [tab, setTab] = useState('waiting');
   const [search, setSearch] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -271,9 +277,38 @@ export default function Consultation() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      {(['sent_to_dispensary', 'dispensing_payment'] as ClinicStatus[]).includes(
-                        entry.clinic_status,
-                      ) ? (
+                      {entry.clinic_status === 'on_hold' ? (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          disabled={
+                            resumeQueue.isPending &&
+                            resumeQueue.variables?.id === entry.id
+                          }
+                          onClick={() =>
+                            resumeQueue.mutate(
+                              { id: entry.id, clinic_status: 'with_doctor' },
+                              {
+                                onSuccess: () => {
+                                  toast.success('Patient resumed — back with doctor');
+                                  navigate(`/clinic/consultation/${entry.id}`);
+                                },
+                                onError: (error: unknown) => {
+                                  const message =
+                                    error instanceof Error ? error.message : 'Unknown error';
+                                  toast.error(`Resume failed: ${message}`);
+                                },
+                              },
+                            )
+                          }
+                        >
+                          {resumeQueue.isPending && resumeQueue.variables?.id === entry.id
+                            ? 'Resuming…'
+                            : 'Resume Patient'}
+                        </Button>
+                      ) : (['sent_to_dispensary', 'dispensing_payment'] as ClinicStatus[]).includes(
+                          entry.clinic_status,
+                        ) ? (
                         <Button
                           size="sm"
                           variant="outline"
