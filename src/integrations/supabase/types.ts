@@ -1600,6 +1600,86 @@ export type Database = {
         }
         Relationships: []
       }
+      panel_claims: {
+        Row: {
+          amount: number
+          claim_date: string
+          claim_no: string
+          created_at: string
+          due_date: string | null
+          id: string
+          panel_id: string
+          patient_id: string
+          queue_entry_id: string | null
+          received_amount: number | null
+          remarks: string | null
+          status: Database["public"]["Enums"]["panel_claim_status"]
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          amount?: number
+          claim_date?: string
+          claim_no: string
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          panel_id: string
+          patient_id: string
+          queue_entry_id?: string | null
+          received_amount?: number | null
+          remarks?: string | null
+          status?: Database["public"]["Enums"]["panel_claim_status"]
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          amount?: number
+          claim_date?: string
+          claim_no?: string
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          panel_id?: string
+          patient_id?: string
+          queue_entry_id?: string | null
+          received_amount?: number | null
+          remarks?: string | null
+          status?: Database["public"]["Enums"]["panel_claim_status"]
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_panel_claims_updated_by"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_claims_panel_id_fkey"
+            columns: ["panel_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_claims_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_claims_queue_entry_id_fkey"
+            columns: ["queue_entry_id"]
+            isOneToOne: false
+            referencedRelation: "queue_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       panel_payment_methods: {
         Row: {
           created_at: string
@@ -3020,7 +3100,89 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      panel_claims_view: {
+        Row: {
+          amount: number | null
+          claim_date: string | null
+          claim_no: string | null
+          created_at: string | null
+          due_date: string | null
+          id: string | null
+          is_overdue: boolean | null
+          panel_id: string | null
+          patient_id: string | null
+          queue_entry_id: string | null
+          received_amount: number | null
+          remarks: string | null
+          status: Database["public"]["Enums"]["panel_claim_status"] | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          amount?: number | null
+          claim_date?: string | null
+          claim_no?: string | null
+          created_at?: string | null
+          due_date?: string | null
+          id?: string | null
+          is_overdue?: never
+          panel_id?: string | null
+          patient_id?: string | null
+          queue_entry_id?: string | null
+          received_amount?: number | null
+          remarks?: string | null
+          status?: Database["public"]["Enums"]["panel_claim_status"] | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          amount?: number | null
+          claim_date?: string | null
+          claim_no?: string | null
+          created_at?: string | null
+          due_date?: string | null
+          id?: string | null
+          is_overdue?: never
+          panel_id?: string | null
+          patient_id?: string | null
+          queue_entry_id?: string | null
+          received_amount?: number | null
+          remarks?: string | null
+          status?: Database["public"]["Enums"]["panel_claim_status"] | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_panel_claims_updated_by"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_claims_panel_id_fkey"
+            columns: ["panel_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_claims_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_claims_queue_entry_id_fkey"
+            columns: ["queue_entry_id"]
+            isOneToOne: false
+            referencedRelation: "queue_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       _resolve_inventory_item_id: {
@@ -3104,6 +3266,13 @@ export type Database = {
         | "sent_to_dispensary"
         | "dispensing_payment"
         | "completed"
+      panel_claim_status:
+        | "pending"
+        | "submitted"
+        | "approved"
+        | "rejected"
+        | "received"
+        | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -3248,6 +3417,14 @@ export const Constants = {
         "sent_to_dispensary",
         "dispensing_payment",
         "completed",
+      ],
+      panel_claim_status: [
+        "pending",
+        "submitted",
+        "approved",
+        "rejected",
+        "received",
+        "cancelled",
       ],
     },
   },
