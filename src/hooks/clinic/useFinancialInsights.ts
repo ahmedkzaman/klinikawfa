@@ -30,11 +30,21 @@ export interface LtvSegmentRow {
   avgProfitPerPatient: number;
 }
 
+export interface RawFinancialRow {
+  visit_date: string;
+  queue_entry_id: string;
+  payment_method: string | null;
+  item_name: string;
+  revenue: number;
+  profit: number;
+}
+
 export interface FinancialInsights {
   summary: InsightSummary;
   dailyTrends: DailyTrendPoint[];
   topItems: TopItemRow[];
   ltvSegment: LtvSegmentRow[];
+  rows: RawFinancialRow[];
 }
 
 interface ViewRow {
