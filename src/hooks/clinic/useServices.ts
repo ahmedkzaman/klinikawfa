@@ -56,6 +56,7 @@ export interface ServiceInput {
   cost: number;
   /** Maps to DB column `price_to_patient` */
   price: number;
+  status?: 'active' | 'inactive';
 }
 
 function mapServicePayload(input: Partial<ServiceInput>) {
@@ -63,6 +64,7 @@ function mapServicePayload(input: Partial<ServiceInput>) {
   if (input.name !== undefined) payload.name = input.name;
   if (input.cost !== undefined) payload.cost = input.cost;
   if (input.price !== undefined) payload.price_to_patient = input.price;
+  if (input.status !== undefined) payload.status = input.status;
   return payload;
 }
 
