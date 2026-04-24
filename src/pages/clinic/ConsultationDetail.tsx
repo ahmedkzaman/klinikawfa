@@ -274,6 +274,32 @@ export default function ConsultationDetail() {
     navigate('/clinic/consultation');
   };
 
+  const handlePutOnHold = async () => {
+    if (!entry) return;
+
+    try {
+      if (consultationId) {
+        await updateConsultation.mutateAsync({
+          id: consultationId,
+          case_note: caseNote,
+          dispense_note: dispenseNote,
+          diagnosis_id: null,
+          diagnosis_text: diagnosisText,
+        });
+      }
+
+      await updateQueue.mutateAsync({
+        id: entry.id,
+        clinic_status: 'on_hold',
+      });
+
+      toast.success(`${patient?.name ?? 'Patient'} placed on hold`);
+      navigate('/clinic/consultation');
+    } catch (error: any) {
+      toast.error(`Failed to place on hold: ${error.message || 'Unknown error'}`);
+    }
+  };
+
   const handleCallIn = async (roomId: string, roomLabel: string) => {
     if (!entry || !patient || !doctor) return;
     await updateQueue.mutateAsync({
