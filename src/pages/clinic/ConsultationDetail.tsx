@@ -571,7 +571,7 @@ export default function ConsultationDetail() {
                   RM {total.toFixed(2)}
                 </span>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2 justify-end">
                 <Button
                   variant="outline"
                   onClick={handleSaveNotes}
@@ -579,6 +579,18 @@ export default function ConsultationDetail() {
                   className="rounded-xl"
                 >
                   <Save className="h-4 w-4 mr-1" /> Save Draft
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handlePutOnHold}
+                  disabled={
+                    updateQueue.isPending ||
+                    updateConsultation.isPending ||
+                    entry.clinic_status === 'on_hold'
+                  }
+                  className="rounded-xl border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                >
+                  <PauseCircle className="h-4 w-4 mr-1" /> Put on Hold
                 </Button>
                 <Button
                   onClick={handleSendToDispensary}
