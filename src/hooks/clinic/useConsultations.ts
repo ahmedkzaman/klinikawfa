@@ -67,6 +67,34 @@ export function useUpdateConsultation() {
   });
 }
 
+/**
+ * Pessimistic lock for a consultation. Pass `userId: null` to release.
+ * Silent on success — only surfaces errors.
+ */
+export function useLockConsultation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      userId,
+    }: {
+      id: string;
+      userId: string | null;
+    }) => {
+      const { error } = await supabase
+        .from('consultations')
+        .update({
+          locked_by: userId,
+          locked_at: userId ? new Date().toISOString() : null,
+        })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['consultation'] }),
+    onError: (error: Error) => toast.error(`Lock error: ${error.message}`),
+  });
+}
+
 export function usePatientConsultationHistory(patientId: string | undefined) {
   const qc = useQueryClient();
 
