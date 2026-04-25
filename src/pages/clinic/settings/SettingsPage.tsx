@@ -39,6 +39,13 @@ export default function SettingsPage() {
       visible: isOpsOrAdmin,
     },
     {
+      href: '/clinic/settings/panels',
+      title: 'Panels & Insurance',
+      description: 'Manage corporate panels, TPAs, and insurance provider profiles.',
+      icon: Shield,
+      visible: isOpsOrAdmin,
+    },
+    {
       href: '/clinic/settings/users',
       title: 'User Management',
       description: 'Manage staff roles and locum doctor profiles.',
