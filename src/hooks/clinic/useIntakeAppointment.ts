@@ -6,16 +6,26 @@ interface IntakeArgs {
   patientId: string;
   visitPurpose?: string;
   notes?: string | null;
+  panelId?: string | null;
 }
 
 /**
  * Wraps the `intake_appointment_to_queue` RPC. Returns the new queue entry id.
+ * If `panelId` is supplied, performs a follow-up UPDATE to set the payer
+ * profile + payment_method on the freshly created queue row. This keeps the
+ * existing RPC signature stable.
  */
 export function useIntakeAppointment() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ appointmentId, patientId, visitPurpose, notes }: IntakeArgs) => {
+    mutationFn: async ({
+      appointmentId,
+      patientId,
+      visitPurpose,
+      notes,
+      panelId,
+    }: IntakeArgs) => {
       const { data, error } = await supabase.rpc('intake_appointment_to_queue', {
         p_appointment_id: appointmentId,
         p_patient_id: patientId,
@@ -23,7 +33,18 @@ export function useIntakeAppointment() {
         p_notes: notes ?? null,
       });
       if (error) throw error;
-      return data as string;
+
+      const queueEntryId = data as string;
+
+      if (panelId && queueEntryId) {
+        const { error: updateError } = await supabase
+          .from('queue_entries')
+          .update({ panel_id: panelId, payment_method: 'panel' })
+          .eq('id', queueEntryId);
+        if (updateError) throw updateError;
+      }
+
+      return queueEntryId;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['clinic', 'queue-entries'] });
@@ -36,6 +57,7 @@ interface WalkInArgs {
   patientId: string;
   visitPurpose: string;
   notes?: string | null;
+  panelId?: string | null;
 }
 
 /** Inserts a walk-in queue entry (no source appointment). */
@@ -43,7 +65,7 @@ export function useCheckInWalkIn() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ patientId, visitPurpose, notes }: WalkInArgs) => {
+    mutationFn: async ({ patientId, visitPurpose, notes, panelId }: WalkInArgs) => {
       const { data: userData } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from('queue_entries')
@@ -53,6 +75,8 @@ export function useCheckInWalkIn() {
           visit_notes: notes ?? null,
           created_by: userData.user?.id ?? null,
           clinic_status: 'registered',
+          panel_id: panelId ?? null,
+          payment_method: panelId ? 'panel' : null,
         })
         .select()
         .single();

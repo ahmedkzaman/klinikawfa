@@ -68,4 +68,5 @@ export type QueueEntryWithJoins = QueueEntryRow & {
     | { id?: string; name: string; avatar_url?: string | null }
     | null;
   rooms?: { id: string; label: string } | null;
+  insurance_providers?: { id: string; name: string } | null;
 };

@@ -16,6 +16,15 @@ import { PatientPicker } from '@/components/clinic/PatientPicker';
 import { RegisterPatientDialog } from '@/components/clinic/RegisterPatientDialog';
 import { useTodayAppointments } from '@/hooks/clinic/useTodayAppointments';
 import { useIntakeAppointment } from '@/hooks/clinic/useIntakeAppointment';
+import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { AppointmentRow, PatientRow } from '@/types/clinic';
 
 interface CheckInAppointmentDialogProps {
@@ -25,25 +34,35 @@ interface CheckInAppointmentDialogProps {
 
 export function CheckInAppointmentDialog({ open, onOpenChange }: CheckInAppointmentDialogProps) {
   const { data: appointments = [], isLoading } = useTodayAppointments();
+  const { data: panels = [] } = useInsuranceProviders();
   const intake = useIntakeAppointment();
 
   const [activeAppt, setActiveAppt] = useState<AppointmentRow | null>(null);
   const [patient, setPatient] = useState<PatientRow | null>(null);
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [payerType, setPayerType] = useState<'self' | 'panel'>('self');
+  const [panelId, setPanelId] = useState<string>('');
 
   const reset = () => {
     setActiveAppt(null);
     setPatient(null);
+    setPayerType('self');
+    setPanelId('');
   };
 
   const handleCheckIn = async () => {
     if (!activeAppt || !patient) return;
+    if (payerType === 'panel' && !panelId) {
+      toast.error('Please select a panel');
+      return;
+    }
     try {
       await intake.mutateAsync({
         appointmentId: activeAppt.id,
         patientId: patient.id,
         visitPurpose: activeAppt.service || 'consultation',
         notes: activeAppt.message,
+        panelId: payerType === 'panel' ? panelId : null,
       });
       toast.success(`${patient.name} added to queue`);
       reset();
@@ -117,6 +136,42 @@ export function CheckInAppointmentDialog({ open, onOpenChange }: CheckInAppointm
                   onChange={setPatient}
                   onRegisterNew={() => setRegisterOpen(true)}
                 />
+              </div>
+
+              <div>
+                <Label className="mb-2 block">Payer</Label>
+                <RadioGroup
+                  value={payerType}
+                  onValueChange={(v) => setPayerType(v as 'self' | 'panel')}
+                  className="flex gap-4"
+                >
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem value="self" id="appt-payer-self" />
+                    <Label htmlFor="appt-payer-self" className="font-normal cursor-pointer">
+                      Self Pay
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem value="panel" id="appt-payer-panel" />
+                    <Label htmlFor="appt-payer-panel" className="font-normal cursor-pointer">
+                      Panel
+                    </Label>
+                  </div>
+                </RadioGroup>
+                {payerType === 'panel' && (
+                  <Select value={panelId} onValueChange={setPanelId}>
+                    <SelectTrigger className="mt-2">
+                      <SelectValue placeholder="Select panel" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {panels.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="flex justify-between">

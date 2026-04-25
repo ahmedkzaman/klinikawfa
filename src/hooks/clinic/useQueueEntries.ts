@@ -26,7 +26,8 @@ export function useQueueEntries() {
           `
           *,
           patients ( name, phone ),
-          doctors!queue_entries_assigned_doctor_id_fkey ( name )
+          doctors!queue_entries_assigned_doctor_id_fkey ( name ),
+          insurance_providers ( id, name )
         `,
         )
         .is('deleted_at', null)
@@ -84,7 +85,8 @@ export function useConsultationQueueEntries() {
           *,
           patients ( * ),
           doctors:assigned_doctor_id ( id, name, avatar_url ),
-          rooms:assigned_room_id ( id, label )
+          rooms:assigned_room_id ( id, label ),
+          insurance_providers ( id, name )
         `,
         )
         .is('deleted_at', null)

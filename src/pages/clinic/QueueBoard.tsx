@@ -82,6 +82,11 @@ function QueueCard({
         </Badge>
         <span className="text-xs text-muted-foreground tabular-nums">{waited}</span>
       </div>
+      {entry.insurance_providers?.name && (
+        <Badge variant="secondary" className="mt-2 text-[10px] font-normal">
+          Panel · {entry.insurance_providers.name}
+        </Badge>
+      )}
       {entry.doctors?.name && (
         <p className="text-xs text-muted-foreground mt-1 truncate">
           Dr. {entry.doctors.name}

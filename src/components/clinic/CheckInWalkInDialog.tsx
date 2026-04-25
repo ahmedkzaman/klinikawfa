@@ -15,6 +15,8 @@ import {
 import { PatientPicker } from '@/components/clinic/PatientPicker';
 import { RegisterPatientDialog } from '@/components/clinic/RegisterPatientDialog';
 import { useCheckInWalkIn } from '@/hooks/clinic/useIntakeAppointment';
+import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import type { PatientRow } from '@/types/clinic';
 
 const VISIT_PURPOSES = [
@@ -41,7 +43,10 @@ export function CheckInWalkInDialog({
   const [purpose, setPurpose] = useState('consultation');
   const [notes, setNotes] = useState('');
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [payerType, setPayerType] = useState<'self' | 'panel'>('self');
+  const [panelId, setPanelId] = useState<string>('');
   const checkIn = useCheckInWalkIn();
+  const { data: panels = [] } = useInsuranceProviders();
 
   useEffect(() => {
     if (open && initialPatient) {
@@ -53,15 +58,22 @@ export function CheckInWalkInDialog({
     setPatient(null);
     setPurpose('consultation');
     setNotes('');
+    setPayerType('self');
+    setPanelId('');
   };
 
   const handleSubmit = async () => {
     if (!patient) return;
+    if (payerType === 'panel' && !panelId) {
+      toast.error('Please select a panel');
+      return;
+    }
     try {
       await checkIn.mutateAsync({
         patientId: patient.id,
         visitPurpose: purpose,
         notes: notes || null,
+        panelId: payerType === 'panel' ? panelId : null,
       });
       toast.success(`${patient.name} added to queue`);
       reset();
@@ -124,6 +136,42 @@ export function CheckInWalkInDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div>
+              <Label className="mb-2 block">Payer</Label>
+              <RadioGroup
+                value={payerType}
+                onValueChange={(v) => setPayerType(v as 'self' | 'panel')}
+                className="flex gap-4"
+              >
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="self" id="payer-self" />
+                  <Label htmlFor="payer-self" className="font-normal cursor-pointer">
+                    Self Pay
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="panel" id="payer-panel" />
+                  <Label htmlFor="payer-panel" className="font-normal cursor-pointer">
+                    Panel
+                  </Label>
+                </div>
+              </RadioGroup>
+              {payerType === 'panel' && (
+                <Select value={panelId} onValueChange={setPanelId}>
+                  <SelectTrigger className="mt-2">
+                    <SelectValue placeholder="Select panel" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {panels.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div>
