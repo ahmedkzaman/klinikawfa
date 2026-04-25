@@ -53,6 +53,7 @@ export interface ServiceRow {
   standard_panel_price?: number | null;
   status?: 'active' | 'inactive' | string;
   category?: ServiceCategory | string | null;
+  item_code?: string | null;
 }
 
 interface Props {
@@ -77,6 +78,7 @@ const serviceSchema = z.object({
   standard_panel_price: moneyField,
   status: z.enum(['active', 'inactive']),
   category: z.enum(['General Service', 'Procedure', 'Laboratory Investigation', 'Other']),
+  item_code: z.string().trim().max(40).optional().or(z.literal('')),
 });
 
 type ServiceFormData = z.infer<typeof serviceSchema>;
@@ -88,6 +90,7 @@ const EMPTY: ServiceFormData = {
   standard_panel_price: 0,
   status: 'active',
   category: 'General Service',
+  item_code: '',
 };
 
 export function ServiceDialog({ open, onOpenChange, service, defaultCategory }: Props) {
@@ -128,6 +131,7 @@ export function ServiceDialog({ open, onOpenChange, service, defaultCategory }: 
         standard_panel_price: Number(service.standard_panel_price ?? 0) || 0,
         status: service.status === 'inactive' ? 'inactive' : 'active',
         category: cat,
+        item_code: service.item_code ?? '',
       });
     } else {
       reset({ ...EMPTY, category: defaultCategory ?? 'General Service' });
@@ -193,6 +197,7 @@ export function ServiceDialog({ open, onOpenChange, service, defaultCategory }: 
         standard_panel_price: data.standard_panel_price,
         status: data.status,
         category: data.category,
+        item_code: data.item_code,
       };
 
       let serviceId: string;
@@ -243,16 +248,29 @@ export function ServiceDialog({ open, onOpenChange, service, defaultCategory }: 
               <CardTitle className="text-base">Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="svc-name">Name</Label>
-                <Input
-                  id="svc-name"
-                  placeholder="e.g. Wound Dressing"
-                  {...register('name')}
-                />
-                {errors.name && (
-                  <p className="text-sm text-destructive">{errors.name.message}</p>
-                )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="svc-name">Name</Label>
+                  <Input
+                    id="svc-name"
+                    placeholder="e.g. Wound Dressing"
+                    {...register('name')}
+                  />
+                  {errors.name && (
+                    <p className="text-sm text-destructive">{errors.name.message}</p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="svc-item-code">Item Code (SKU)</Label>
+                  <Input
+                    id="svc-item-code"
+                    placeholder="Optional SKU"
+                    {...register('item_code')}
+                  />
+                  {errors.item_code && (
+                    <p className="text-sm text-destructive">{errors.item_code.message}</p>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
