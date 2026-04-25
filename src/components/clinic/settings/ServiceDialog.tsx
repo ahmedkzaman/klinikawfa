@@ -285,7 +285,25 @@ export function ServiceDialog({ open, onOpenChange, service, defaultCategory }: 
                       <SelectItem value="inactive">Inactive</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="svc-category">Category</Label>
+                <Select
+                  value={category}
+                  onValueChange={(v) =>
+                    setValue('category', v as ServiceCategory)
+                  }
+                >
+                  <SelectTrigger id="svc-category">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SERVICE_CATEGORIES.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </CardContent>
           </Card>
