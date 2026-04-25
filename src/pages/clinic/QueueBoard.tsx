@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertCircle, ListOrdered, Plus, UserPlus } from 'lucide-react';
+import { AlertCircle, ListOrdered, Plus, UserPlus, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { SEOHead } from '@/components/seo/SEOHead';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ import { useQueueEntries, useUpdateQueueEntry } from '@/hooks/clinic/useQueueEnt
 import { useTodayAppointments } from '@/hooks/clinic/useTodayAppointments';
 import { CheckInAppointmentDialog } from '@/components/clinic/CheckInAppointmentDialog';
 import { CheckInWalkInDialog } from '@/components/clinic/CheckInWalkInDialog';
+import { RegisterAndCheckInDialog } from '@/components/clinic/RegisterAndCheckInDialog';
 import {
   QUEUE_COLUMNS,
   STATUS_COLORS,
@@ -105,6 +106,7 @@ export default function QueueBoard() {
 
   const [appointmentDialog, setAppointmentDialog] = useState(false);
   const [walkInDialog, setWalkInDialog] = useState(false);
+  const [registerDialog, setRegisterDialog] = useState(false);
   const [activeEntry, setActiveEntry] = useState<QueueEntryWithJoins | null>(null);
 
   const grouped = useMemo(() => {
@@ -138,6 +140,9 @@ export default function QueueBoard() {
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setWalkInDialog(true)}>
             <UserPlus className="h-4 w-4 mr-1" /> Walk-In
+          </Button>
+          <Button variant="outline" onClick={() => setRegisterDialog(true)}>
+            <Users className="h-4 w-4 mr-1" /> Register & Queue
           </Button>
           <Button
             onClick={() => setAppointmentDialog(true)}
@@ -338,6 +343,7 @@ export default function QueueBoard() {
         onOpenChange={setAppointmentDialog}
       />
       <CheckInWalkInDialog open={walkInDialog} onOpenChange={setWalkInDialog} />
+      <RegisterAndCheckInDialog open={registerDialog} onOpenChange={setRegisterDialog} />
     </>
   );
 }

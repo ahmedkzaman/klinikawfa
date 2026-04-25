@@ -1997,7 +1997,9 @@ export type Database = {
           national_id: string | null
           notes: string | null
           phone: string | null
+          principal_id: string | null
           registration_date: string
+          relationship: string | null
           state_of_birth: string | null
           underlying_conditions: string | null
           updated_at: string
@@ -2013,7 +2015,9 @@ export type Database = {
           national_id?: string | null
           notes?: string | null
           phone?: string | null
+          principal_id?: string | null
           registration_date?: string
+          relationship?: string | null
           state_of_birth?: string | null
           underlying_conditions?: string | null
           updated_at?: string
@@ -2029,12 +2033,22 @@ export type Database = {
           national_id?: string | null
           notes?: string | null
           phone?: string | null
+          principal_id?: string | null
           registration_date?: string
+          relationship?: string | null
           state_of_birth?: string | null
           underlying_conditions?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "patients_principal_id_fkey"
+            columns: ["principal_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payment_methods: {
         Row: {
