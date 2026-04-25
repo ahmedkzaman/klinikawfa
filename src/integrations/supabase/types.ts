@@ -1428,6 +1428,7 @@ export type Database = {
       inventory_items: {
         Row: {
           allocated_quantity: number
+          brand: string | null
           category: string
           cost_price: number
           created_at: string
@@ -1444,6 +1445,8 @@ export type Database = {
           generic_name: string | null
           groups: string | null
           id: string
+          is_otc: boolean | null
+          item_code: string | null
           latest_expiry_date: string | null
           location_id: string | null
           name: string
@@ -1457,10 +1460,12 @@ export type Database = {
           stock_amount_warning: number | null
           stock_expiry_warning_days: number
           unit_of_measure: string | null
+          uom: string | null
           updated_at: string
         }
         Insert: {
           allocated_quantity?: number
+          brand?: string | null
           category?: string
           cost_price?: number
           created_at?: string
@@ -1477,6 +1482,8 @@ export type Database = {
           generic_name?: string | null
           groups?: string | null
           id?: string
+          is_otc?: boolean | null
+          item_code?: string | null
           latest_expiry_date?: string | null
           location_id?: string | null
           name: string
@@ -1490,10 +1497,12 @@ export type Database = {
           stock_amount_warning?: number | null
           stock_expiry_warning_days?: number
           unit_of_measure?: string | null
+          uom?: string | null
           updated_at?: string
         }
         Update: {
           allocated_quantity?: number
+          brand?: string | null
           category?: string
           cost_price?: number
           created_at?: string
@@ -1510,6 +1519,8 @@ export type Database = {
           generic_name?: string | null
           groups?: string | null
           id?: string
+          is_otc?: boolean | null
+          item_code?: string | null
           latest_expiry_date?: string | null
           location_id?: string | null
           name?: string
@@ -1523,6 +1534,7 @@ export type Database = {
           stock_amount_warning?: number | null
           stock_expiry_warning_days?: number
           unit_of_measure?: string | null
+          uom?: string | null
           updated_at?: string
         }
         Relationships: [
