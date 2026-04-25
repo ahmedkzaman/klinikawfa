@@ -28,19 +28,17 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 
 const CATEGORIES = [
-  'Respiratory',
-  'Cardiovascular',
-  'Gastrointestinal',
-  'Musculoskeletal',
-  'Neurology',
+  'Cardiometabolic / Endocrine',
   'Dermatology',
-  'Endocrine',
-  'Psychiatric',
-  'Infectious Disease',
-  'Occupational Health',
-  'Obstetrics/Gynecology',
-  'Pediatrics',
-  'Other',
+  'Eye',
+  'Gastrointestinal',
+  'Musculoskeletal / Injury',
+  'Neurology / Mental Health / General',
+  'Pediatrics / Infectious',
+  'Preventive / Administrative',
+  'Respiratory / ENT',
+  'Urology / Renal',
+  'Women’s Health / Reproductive',
 ];
 
 function IcdCell({ row }: { row: DiagnosisRow }) {
