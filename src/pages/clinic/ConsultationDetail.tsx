@@ -662,6 +662,30 @@ export default function ConsultationDetail() {
 
           {/* ASIDE — Context (left on desktop, second on mobile) */}
           <aside className="order-2 lg:order-1 lg:col-span-4 space-y-4">
+            {/* Intake Briefing — visit purpose + visit note from registration counter */}
+            <Card className="rounded-2xl border-amber-200 bg-amber-50/60 shadow-sm">
+              <CardContent className="p-5 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" />
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-800">
+                    Intake Briefing
+                  </h3>
+                </div>
+                {entry.visit_purpose && (
+                  <div className="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-2.5 py-0.5 capitalize">
+                    {entry.visit_purpose.replace(/_/g, ' ')}
+                  </div>
+                )}
+                <p className="text-base leading-relaxed whitespace-pre-wrap text-slate-800 font-medium">
+                  {entry.visit_notes || (
+                    <span className="text-slate-400 font-normal italic">
+                      No visit notes recorded by registration counter.
+                    </span>
+                  )}
+                </p>
+              </CardContent>
+            </Card>
+
             {/* Demographics */}
             <Card className={bento}>
               <CardContent className="p-5 space-y-3">
@@ -713,18 +737,6 @@ export default function ConsultationDetail() {
                     {entry.payment_method || 'Self-pay'}
                   </span>
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Visit Note (intake) */}
-            <Card className={bento}>
-              <CardContent className="p-5">
-                <h3 className={bentoHeader}>VISIT NOTE</h3>
-                <p className="text-sm whitespace-pre-wrap text-slate-700">
-                  {entry.visit_notes || (
-                    <span className="text-slate-400">No visit notes recorded.</span>
-                  )}
-                </p>
               </CardContent>
             </Card>
 
