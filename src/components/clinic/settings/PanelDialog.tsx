@@ -35,26 +35,20 @@ interface Props {
   panel: InsuranceProviderRow | null;
 }
 
-const optionalString = z
-  .string()
-  .trim()
-  .max(255)
-  .optional()
-  .or(z.literal(''))
-  .transform((v) => (v ? v : null));
+const makeOptionalString = (max: number) =>
+  z
+    .union([z.string().trim().max(max), z.literal(''), z.null()])
+    .optional()
+    .transform((v) => (v && typeof v === 'string' && v.length > 0 ? v : null));
+
+const optionalString = makeOptionalString(255);
 
 const schema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(120),
   panel_type: z.enum(['tpa', 'corporate', 'insurance', 'government', 'other']),
   panel_code: optionalString,
   status: z.enum(['active', 'inactive']),
-  price_tier: z
-    .string()
-    .trim()
-    .max(60)
-    .optional()
-    .or(z.literal(''))
-    .transform((v) => (v ? v : null)),
+  price_tier: makeOptionalString(60),
   submission_preference: z.enum(['bulk_claim', 'per_visit']),
   verification_type: z.enum(['url', 'phone', 'email', 'manual']),
   verification_link: optionalString,
