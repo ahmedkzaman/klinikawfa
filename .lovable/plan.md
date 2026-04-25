@@ -1,88 +1,55 @@
-## Step 19.5 — Inventory & Services Categorization
+# Step 19.8 — Legacy Inventory Alignment
 
-Adds a lightweight `category` dimension to existing `services` (inventory_items already has one) and refactors the settings UI into 6 focused tabs, without altering `packages`, `package_items`, or any billing trigger.
+Add 4 structural columns to `inventory_items` so the master inventory matches the clinic's legacy Excel sheet, with first-class support for OTC vs. prescription-only medications.
 
----
+## A. Database Migration
 
-### A. Database Migration — `<ts>_add_inventory_categories.sql`
-
-`inventory_items.category` already exists (`varchar(50)`, default `'Medication'`) — keep idempotent guard. Only `services` actually needs the new column:
+New file: `supabase/migrations/<ts>_add_inventory_legacy_fields.sql`
 
 ```sql
 ALTER TABLE public.inventory_items
-  ADD COLUMN IF NOT EXISTS category varchar(50) DEFAULT 'Medication';
-
-ALTER TABLE public.services
-  ADD COLUMN IF NOT EXISTS category varchar(50) DEFAULT 'General Service';
-
--- Backfill any pre-existing rows that came in as NULL (defensive)
-UPDATE public.inventory_items SET category = 'Medication'      WHERE category IS NULL;
-UPDATE public.services        SET category = 'General Service' WHERE category IS NULL;
+  ADD COLUMN IF NOT EXISTS item_code varchar(100),
+  ADD COLUMN IF NOT EXISTS is_otc    boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS brand     varchar(100),
+  ADD COLUMN IF NOT EXISTS uom       varchar(50);
 ```
 
-No changes to `packages`, `package_items`, RLS, or triggers.
+No backfill needed (`item_code`, `brand`, `uom` are nullable; `is_otc` defaults to `false` for existing rows).
+RLS is unchanged — existing `inventory_items_*` policies continue to cover the new columns.
+`packages`, `package_items`, billing triggers, and `inventory_item_prices` are untouched.
 
----
+## B. Hooks & Types — `src/hooks/clinic/useInventoryItems.ts`
 
-### B. Hooks & Types
+1. Extend `InventoryItemInput` with the 4 optional fields:
+   - `item_code?: string | null`
+   - `is_otc?: boolean`
+   - `brand?: string | null`
+   - `uom?: string | null`
+2. Extend `mapItemPayload` to forward each field, normalizing empty strings to `null` for the 3 text fields and passing `is_otc` through as a boolean.
+3. The base `useInventoryItems()` query already uses `select('*')`, so the new columns are returned automatically — no query change required.
 
-**`src/hooks/clinic/useInventoryItems.ts`**
-- Extend `InventoryItemInput` with `category?: 'Medication' | 'Disposable Item' | 'Vaccine' | 'Other'`.
-- In `mapItemPayload`, forward `category` when defined. (`select('*')` already returns it.)
+## C. Settings UI — `src/components/clinic/settings/InventoryItemDialog.tsx`
 
-**`src/hooks/clinic/useServices.ts`**
-- Extend `ServiceInput` with `category?: 'General Service' | 'Procedure' | 'Laboratory Investigation' | 'Other'`.
-- In `mapServicePayload`, forward `category` when defined. (`select('*')` already returns it.)
+1. **Type / schema**:
+   - Extend `InventoryItemRow` with `item_code?: string | null`, `is_otc?: boolean | null`, `brand?: string | null`, `uom?: string | null`.
+   - Add 4 fields to `itemSchema`:
+     - `item_code: optStr(100)`
+     - `brand: optStr(100)`
+     - `uom: optStr(50)`
+     - `is_otc: z.boolean().default(false)`
+   - Add matching defaults to `EMPTY_VALUES` (`item_code: ''`, `brand: ''`, `uom: ''`, `is_otc: false`).
+2. **Hydration** in the `useEffect` `reset({...})` block: populate the 4 fields from `item` when editing (coerce nulls → `''` / `false`).
+3. **`onSubmit` payload**: include `item_code`, `brand`, `uom` (trim → null if empty) and `is_otc` (boolean) alongside the existing payload keys.
+4. **UI additions** inside the **Details** card, placed below the existing Name input and above the Cost / Stock grid:
+   - A 2-column grid with **Item Code (SKU)** and **Brand / Manufacturer** text inputs.
+   - A 2-column grid with **UOM (Unit of Measure)** text input (placeholder: `STRIP, VIAL, BOTTLE`) and the existing Status select OR keep UOM standalone — final layout: UOM in a 2-col grid alongside an empty spacer to keep visual rhythm with the existing grids.
+   - An **OTC (Over-The-Counter)** row using the existing `Switch` component (already in the project) wired via `watch('is_otc')` + `setValue('is_otc', v)`, with helper text:  
+     *"If enabled, this item can be sold at the front desk without a doctor's consultation."*
 
-No new query keys; existing list queries automatically pick up the new column.
+No changes to `InventorySettings.tsx` tab logic, `PackageDialog.tsx`, or any other consumer — the new fields are purely additive metadata.
 
----
+## Verification
 
-### C. Dialog Updates
-
-**`InventoryItemDialog.tsx`**
-- Add `category` to `InventoryItemRow`, the Zod schema (enum of 4 options, default `'Medication'`), `EMPTY_VALUES`, the hydration `reset(...)` block, and the submit payload.
-- Render a "Category" `Select` in the Details card next to Status: **Medication / Disposable Item / Vaccine / Other**.
-- Accept an optional `defaultCategory` prop so the parent tab can pre-seed the right value when adding from a category-specific tab.
-
-**`ServiceDialog.tsx`**
-- Same pattern: add `category` to `ServiceRow`, schema (enum of 4: `'General Service' | 'Procedure' | 'Laboratory Investigation' | 'Other'`, default `'General Service'`), `EMPTY`, hydration, and submit payload.
-- Render the Category Select alongside Status.
-- Accept an optional `defaultCategory` prop.
-
-Both dialogs leave editing of the category enabled (so a misfiled item can be moved between tabs by changing its category).
-
----
-
-### D. `InventorySettings.tsx` — 6-tab refactor
-
-Replace the current 3 tabs with:
-
-| Tab key | Source | Filter | Add button default category |
-|---|---|---|---|
-| `medications` | `inventory_items` | `category ∈ {Medication, Vaccine}` (or null → treated as Medication) | `Medication` |
-| `disposables` | `inventory_items` | `category === 'Disposable Item'` | `Disposable Item` |
-| `procedures` | `services` | `category === 'Procedure'` | `Procedure` |
-| `labs` | `services` | `category === 'Laboratory Investigation'` | `Laboratory Investigation` |
-| `general_services` | `services` | `category ∈ {General Service, Other}` (or null → General Service) | `General Service` |
-| `packages` | `packages` | unchanged | n/a |
-
-Implementation details:
-- Compute filtered arrays via `useMemo` from the existing `useInventoryItems()` / `useServices()` results — no extra queries.
-- Track active tab in local state so the "Add" button can pass the correct `defaultCategory` to the dialog when `row` is `null`.
-- When opening an existing row for edit, forward `category` (with the same `??` fallback already used for `standard_panel_price` and the `default_*` fields).
-- Add a "Category" column to the Medications and Services tables (small `Badge`) so misfiled rows are immediately visible.
-- Keep all existing columns, edit handlers, hooks, RLS expectations, and the loading/empty states — only the tab structure and a couple of column additions change.
-
----
-
-### Out of scope (explicitly not touched)
-- `packages` / `package_items` schema, hooks, `PackageDialog`, billing triggers, RLS.
-- Consultation cart auto-fill (Step 18) and any prescribing logic.
-- No data migration beyond the defensive `UPDATE … WHERE category IS NULL` backfill.
-
-### Verification after approval
-1. Migration runs cleanly (idempotent on `inventory_items`).
-2. Existing items/services appear under their default tabs (Medication / General Service).
-3. Creating from each tab pre-selects the right category; editing preserves it.
-4. Packages tab and existing package bundling continue to work unchanged.
+- Run `npx tsc --noEmit` to confirm types compile cleanly.
+- Open the Inventory dialog (Add + Edit) and confirm the 4 new fields render, hydrate on edit, and persist on save.
+- Existing items continue to load with `is_otc = false` and empty SKU/Brand/UOM.

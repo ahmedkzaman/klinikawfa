@@ -33,6 +33,7 @@ import {
 } from '@/lib/clinic/prescribingOptions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import {
   useAddInventoryItem,
   useUpdateInventoryItem,
@@ -63,6 +64,10 @@ export interface InventoryItemRow {
   stock: number;
   status: string;
   category?: InventoryCategory | string | null;
+  item_code?: string | null;
+  is_otc?: boolean | null;
+  brand?: string | null;
+  uom?: string | null;
   default_indication?: string | null;
   default_dosage_qty?: string | null;
   default_dosage_unit?: string | null;
@@ -107,6 +112,10 @@ const itemSchema = z.object({
   current_stock: intField,
   status: z.enum(['active', 'inactive']),
   category: z.enum(['Medication', 'Disposable Item', 'Vaccine', 'Other']),
+  item_code: optStr(100),
+  brand: optStr(100),
+  uom: optStr(50),
+  is_otc: z.boolean().default(false),
   default_indication: optStr(500),
   default_dosage_qty: optStr(50),
   default_dosage_unit: optStr(50),
@@ -127,6 +136,10 @@ const EMPTY_VALUES: ItemFormData = {
   current_stock: 0,
   status: 'active',
   category: 'Medication',
+  item_code: '',
+  brand: '',
+  uom: '',
+  is_otc: false,
   default_indication: '',
   default_dosage_qty: '',
   default_dosage_unit: '',
@@ -178,6 +191,10 @@ export function InventoryItemDialog({ open, onOpenChange, item, defaultCategory 
         current_stock: Number(item.stock) || 0,
         status: (item.status as 'active' | 'inactive') ?? 'active',
         category: cat,
+        item_code: item.item_code ?? '',
+        brand: item.brand ?? '',
+        uom: item.uom ?? '',
+        is_otc: !!item.is_otc,
         default_indication: item.default_indication ?? '',
         default_dosage_qty: item.default_dosage_qty ?? '',
         default_dosage_unit: item.default_dosage_unit ?? '',
@@ -253,6 +270,10 @@ export function InventoryItemDialog({ open, onOpenChange, item, defaultCategory 
         current_stock: data.current_stock,
         status: data.status,
         category: data.category,
+        item_code: data.item_code?.trim() || null,
+        brand: data.brand?.trim() || null,
+        uom: data.uom?.trim() || null,
+        is_otc: !!data.is_otc,
         default_indication: data.default_indication?.trim() || null,
         default_dosage_qty: data.default_dosage_qty?.trim() || null,
         default_dosage_unit: data.default_dosage_unit?.trim() || null,
@@ -323,6 +344,54 @@ export function InventoryItemDialog({ open, onOpenChange, item, defaultCategory 
                 {errors.name && (
                   <p className="text-sm text-destructive">{errors.name.message}</p>
                 )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="item-code">Item Code (SKU)</Label>
+                  <Input
+                    id="item-code"
+                    placeholder="e.g. MED-PCM-500"
+                    {...register('item_code')}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="item-brand">Brand / Manufacturer</Label>
+                  <Input
+                    id="item-brand"
+                    placeholder="e.g. Pfizer"
+                    {...register('brand')}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="item-uom">UOM (Unit of Measure)</Label>
+                  <Input
+                    id="item-uom"
+                    placeholder="e.g. STRIP, VIAL, BOTTLE"
+                    {...register('uom')}
+                  />
+                </div>
+                <div />
+              </div>
+
+              <div className="flex items-start justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2.5">
+                <div className="space-y-0.5">
+                  <Label htmlFor="item-otc" className="cursor-pointer">
+                    OTC (Over-The-Counter)
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    If enabled, this item can be sold at the front desk without a
+                    doctor's consultation.
+                  </p>
+                </div>
+                <Switch
+                  id="item-otc"
+                  checked={!!watch('is_otc')}
+                  onCheckedChange={(v) => setValue('is_otc', !!v)}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
