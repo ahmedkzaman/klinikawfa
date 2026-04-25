@@ -141,7 +141,16 @@ export function AddTreatmentBulkDialog({ open, onOpenChange, onInsert }: Props) 
     setSelected((prev) => {
       const exists = prev.find((s) => s.id === item.id);
       if (exists) return prev.filter((s) => s.id !== item.id);
-      return [...prev, { id: item.id, name: item.name, price: item.priceNum, type: item.type }];
+      return [
+        ...prev,
+        {
+          id: item.id,
+          name: item.name,
+          price: item.priceNum,
+          type: item.type,
+          defaults: item.defaults,
+        },
+      ];
     });
   };
 
@@ -155,7 +164,13 @@ export function AddTreatmentBulkDialog({ open, onOpenChange, onInsert }: Props) 
         const existing = new Set(prev.map((s) => s.id));
         const newItems = filtered
           .filter((i) => !existing.has(i.id))
-          .map((i) => ({ id: i.id, name: i.name, price: i.priceNum, type: i.type }));
+          .map((i) => ({
+            id: i.id,
+            name: i.name,
+            price: i.priceNum,
+            type: i.type,
+            defaults: i.defaults,
+          }));
         return [...prev, ...newItems];
       });
     }
