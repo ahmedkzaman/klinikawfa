@@ -52,6 +52,14 @@ export function useAddConsultationItem() {
       item_id?: string | null;
       service_id?: string | null;
       package_id?: string | null;
+      // Optional prescribing defaults forwarded from the master inventory item.
+      indication?: string | null;
+      dosage_qty?: number | null;
+      dosage_unit?: string | null;
+      frequency?: string | null;
+      instruction?: string | null;
+      duration?: string | null;
+      precaution?: string | null;
     }) => {
       const { error } = await supabase.from('consultation_items').insert(item);
       if (error) {
