@@ -485,6 +485,9 @@ export default function ConsultationDetail() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* MAIN — Workspace (right on desktop, first on mobile) */}
           <main className="order-1 lg:order-2 lg:col-span-8 space-y-4 flex flex-col pb-24 relative">
+            {isLockedByOther && (
+              <ConsultationLockBanner onForceUnlock={forceUnlock} />
+            )}
             {/* Consultation Notes — document canvas */}
             <Card className={bento}>
               <CardContent className="p-5 space-y-4">
