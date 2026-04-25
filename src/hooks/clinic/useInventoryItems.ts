@@ -70,6 +70,11 @@ export interface InventoryItemInput {
   status: 'active' | 'inactive';
   /** Visual grouping in Inventory settings. Maps to DB column `category`. */
   category?: InventoryCategory;
+  // Legacy / Excel-aligned metadata (Step 19.8)
+  item_code?: string | null;
+  is_otc?: boolean;
+  brand?: string | null;
+  uom?: string | null;
   // Default dispensing instructions (Step 18). All optional.
   default_indication?: string | null;
   default_dosage_qty?: string | null;
