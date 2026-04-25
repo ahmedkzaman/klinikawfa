@@ -210,6 +210,14 @@ const App = () => (
                   }
                 />
                 <Route
+                  path="settings/panels"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <PanelsSettings />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
                   path="voided"
                   element={
                     <ClinicProtectedRoute requiredRole="special_admin">
