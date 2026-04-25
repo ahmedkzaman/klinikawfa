@@ -22,6 +22,8 @@ import {
   useConsultation,
   useUpdateConsultation,
 } from '@/hooks/clinic/useConsultations';
+import { useConsultationLock } from '@/hooks/clinic/useConsultationLock';
+import { ConsultationLockBanner } from '@/components/clinic/consultation/ConsultationLockBanner';
 import { useConsultationItems } from '@/hooks/clinic/useConsultationItems';
 import { usePayments } from '@/hooks/clinic/usePayments';
 
@@ -42,6 +44,12 @@ export default function DispenseCheckout() {
   const { data: consultation } = useConsultation(queueEntryId);
   const { data: items = [] } = useConsultationItems(consultation?.id);
   const { data: payments = [] } = usePayments(queueEntryId);
+  const { isLockedByOther, canEdit, forceUnlock } = useConsultationLock(
+    consultation as
+      | { id?: string; locked_by?: string | null; status?: string }
+      | null
+      | undefined,
+  );
 
   // Auto-advance status once on mount.
   const advancedRef = useRef(false);
@@ -150,6 +158,10 @@ export default function DispenseCheckout() {
         <StatusBadge status={entry.clinic_status} />
       </div>
 
+      {isLockedByOther && (
+        <ConsultationLockBanner onForceUnlock={forceUnlock} />
+      )}
+
       {/* 3-column workspace */}
       <div className="grid lg:grid-cols-[280px_1fr_360px] gap-4 items-start">
         {/* Patient summary */}
@@ -188,7 +200,7 @@ export default function DispenseCheckout() {
         </div>
 
         {/* Items */}
-        <VisitDetailsColumn consultationId={consultation?.id} />
+        <VisitDetailsColumn consultationId={consultation?.id} canEdit={canEdit} />
 
         {/* Billing */}
         <BillingDetailsColumn

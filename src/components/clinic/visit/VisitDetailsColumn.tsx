@@ -10,9 +10,10 @@ import { toast } from 'sonner';
 
 interface Props {
   consultationId: string | undefined;
+  canEdit?: boolean;
 }
 
-export function VisitDetailsColumn({ consultationId }: Props) {
+export function VisitDetailsColumn({ consultationId, canEdit = true }: Props) {
   const { data: items = [], isLoading } = useConsultationItems(consultationId);
   const updateItem = useUpdateConsultationItem();
   const removeItem = useRemoveConsultationItem();
@@ -48,11 +49,20 @@ export function VisitDetailsColumn({ consultationId }: Props) {
 
   return (
     <div className="rounded-xl bg-card border overflow-hidden">
-      <div className="px-4 py-3 border-b border-border">
-        <h2 className="text-sm font-semibold text-foreground">Prescribed Items</h2>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Adjust quantities or remove items before checkout
-        </p>
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Prescribed Items</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {canEdit
+              ? 'Adjust quantities or remove items before checkout'
+              : 'View only — locked by another user'}
+          </p>
+        </div>
+        {!canEdit && (
+          <span className="text-[10px] uppercase tracking-wide font-semibold rounded-full bg-muted text-muted-foreground px-2 py-0.5 shrink-0">
+            View only
+          </span>
+        )}
       </div>
 
       {isLoading ? (
@@ -95,31 +105,39 @@ export function VisitDetailsColumn({ consultationId }: Props) {
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => handleQty(item.id, item.quantity ?? 1, -1)}
-                    disabled={(item.quantity ?? 1) <= 1 || updateItem.isPending}
-                    aria-label="Decrease quantity"
-                  >
-                    <Minus className="h-3 w-3" />
-                  </Button>
-                  <span className="w-8 text-center text-sm font-medium tabular-nums">
-                    {item.quantity ?? 1}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => handleQty(item.id, item.quantity ?? 1, 1)}
-                    disabled={updateItem.isPending}
-                    aria-label="Increase quantity"
-                  >
-                    <Plus className="h-3 w-3" />
-                  </Button>
+                  {canEdit ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => handleQty(item.id, item.quantity ?? 1, -1)}
+                        disabled={(item.quantity ?? 1) <= 1 || updateItem.isPending}
+                        aria-label="Decrease quantity"
+                      >
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <span className="w-8 text-center text-sm font-medium tabular-nums">
+                        {item.quantity ?? 1}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => handleQty(item.id, item.quantity ?? 1, 1)}
+                        disabled={updateItem.isPending}
+                        aria-label="Increase quantity"
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    </>
+                  ) : (
+                    <span className="w-8 text-center text-sm font-medium tabular-nums">
+                      ×{item.quantity ?? 1}
+                    </span>
+                  )}
                 </div>
 
                 <div className="text-right shrink-0 w-24">
@@ -131,17 +149,19 @@ export function VisitDetailsColumn({ consultationId }: Props) {
                   </div>
                 </div>
 
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                  onClick={() => handleRemove(item.id)}
-                  disabled={removeItem.isPending}
-                  aria-label="Remove item"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                {canEdit && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    onClick={() => handleRemove(item.id)}
+                    disabled={removeItem.isPending}
+                    aria-label="Remove item"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </div>
             );
           })}

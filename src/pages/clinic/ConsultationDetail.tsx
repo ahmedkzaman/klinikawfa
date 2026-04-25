@@ -38,6 +38,8 @@ import {
   useUpdateConsultation,
   usePatientConsultationHistory,
 } from '@/hooks/clinic/useConsultations';
+import { useConsultationLock } from '@/hooks/clinic/useConsultationLock';
+import { ConsultationLockBanner } from '@/components/clinic/consultation/ConsultationLockBanner';
 import { useClinicPreferences } from '@/hooks/clinic/useClinicPreferences';
 import { useVitalSigns, useRecordVitalSigns } from '@/hooks/clinic/useVitalSigns';
 import {
@@ -101,6 +103,12 @@ export default function ConsultationDetail() {
   const [diagnosisId, setDiagnosisId] = useState<string | null>(null);
 
   const consultationId = (consultation as { id?: string } | null)?.id;
+  const { isLockedByOther, canEdit, forceUnlock } = useConsultationLock(
+    consultation as
+      | { id?: string; locked_by?: string | null; status?: string }
+      | null
+      | undefined,
+  );
   const { data: items = [] } = useConsultationItems(consultationId);
   const addItem = useAddConsultationItem();
   const removeItem = useRemoveConsultationItem();
@@ -477,6 +485,9 @@ export default function ConsultationDetail() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* MAIN — Workspace (right on desktop, first on mobile) */}
           <main className="order-1 lg:order-2 lg:col-span-8 space-y-4 flex flex-col pb-24 relative">
+            {isLockedByOther && (
+              <ConsultationLockBanner onForceUnlock={forceUnlock} />
+            )}
             {/* Consultation Notes — document canvas */}
             <Card className={bento}>
               <CardContent className="p-5 space-y-4">
@@ -534,6 +545,7 @@ export default function ConsultationDetail() {
                   <Button
                     size="sm"
                     onClick={() => setBulkDialogOpen(true)}
+                    disabled={!canEdit}
                     className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
                   >
                     <Plus className="h-3 w-3 mr-1" /> Add in bulk
@@ -576,6 +588,7 @@ export default function ConsultationDetail() {
                         key={item.id}
                         item={item as TreatmentItemCardItem}
                         priceTiers={PRICE_TIERS}
+                        disabled={!canEdit}
                         onRemove={() =>
                           consultationId &&
                           removeItem.mutate({ id: item.id, consultationId })

@@ -1,55 +1,127 @@
-# Step 19.8 — Legacy Inventory Alignment
+# Step 20 — Consultation Concurrency Locking
 
-Add 4 structural columns to `inventory_items` so the master inventory matches the clinic's legacy Excel sheet, with first-class support for OTC vs. prescription-only medications.
+Filename note: spec references `DispensaryDetail.tsx` — actual file is **`src/pages/clinic/DispenseCheckout.tsx`**, and the editable cart inside it lives in **`src/components/clinic/visit/VisitDetailsColumn.tsx`**. Gating applied at both points.
 
-## A. Database Migration
-
-New file: `supabase/migrations/<ts>_add_inventory_legacy_fields.sql`
+## A. DB Migration — `<ts>_add_consultation_locks.sql`
 
 ```sql
-ALTER TABLE public.inventory_items
-  ADD COLUMN IF NOT EXISTS item_code varchar(100),
-  ADD COLUMN IF NOT EXISTS is_otc    boolean DEFAULT false,
-  ADD COLUMN IF NOT EXISTS brand     varchar(100),
-  ADD COLUMN IF NOT EXISTS uom       varchar(50);
+ALTER TABLE public.consultations
+  ADD COLUMN IF NOT EXISTS locked_by uuid REFERENCES auth.users(id),
+  ADD COLUMN IF NOT EXISTS locked_at timestamptz;
+
+CREATE INDEX IF NOT EXISTS idx_consultations_locked_by
+  ON public.consultations(locked_by) WHERE locked_by IS NOT NULL;
 ```
 
-No backfill needed (`item_code`, `brand`, `uom` are nullable; `is_otc` defaults to `false` for existing rows).
-RLS is unchanged — existing `inventory_items_*` policies continue to cover the new columns.
-`packages`, `package_items`, billing triggers, and `inventory_item_prices` are untouched.
+No RLS policy changes — existing `consultations_update_active` (ops/admin) already covers lock writes. `auth.users` types regenerate automatically.
 
-## B. Hooks & Types — `src/hooks/clinic/useInventoryItems.ts`
+## B. Hooks & Types — `src/hooks/clinic/useConsultations.ts`
 
-1. Extend `InventoryItemInput` with the 4 optional fields:
-   - `item_code?: string | null`
-   - `is_otc?: boolean`
-   - `brand?: string | null`
-   - `uom?: string | null`
-2. Extend `mapItemPayload` to forward each field, normalizing empty strings to `null` for the 3 text fields and passing `is_otc` through as a boolean.
-3. The base `useInventoryItems()` query already uses `select('*')`, so the new columns are returned automatically — no query change required.
+1. Extend every `.select('*, …')` to keep returning `*` (already includes the new columns post-regeneration).
+2. Add a focused mutation:
 
-## C. Settings UI — `src/components/clinic/settings/InventoryItemDialog.tsx`
+```ts
+export function useLockConsultation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, userId }: { id: string; userId: string | null }) => {
+      const { error } = await supabase
+        .from('consultations')
+        .update({
+          locked_by: userId,
+          locked_at: userId ? new Date().toISOString() : null,
+        })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['consultation'] });
+    },
+    // No toast — lock churn is silent; surface errors only.
+    onError: (e: Error) => toast.error(`Lock error: ${e.message}`),
+  });
+}
+```
 
-1. **Type / schema**:
-   - Extend `InventoryItemRow` with `item_code?: string | null`, `is_otc?: boolean | null`, `brand?: string | null`, `uom?: string | null`.
-   - Add 4 fields to `itemSchema`:
-     - `item_code: optStr(100)`
-     - `brand: optStr(100)`
-     - `uom: optStr(50)`
-     - `is_otc: z.boolean().default(false)`
-   - Add matching defaults to `EMPTY_VALUES` (`item_code: ''`, `brand: ''`, `uom: ''`, `is_otc: false`).
-2. **Hydration** in the `useEffect` `reset({...})` block: populate the 4 fields from `item` when editing (coerce nulls → `''` / `false`).
-3. **`onSubmit` payload**: include `item_code`, `brand`, `uom` (trim → null if empty) and `is_otc` (boolean) alongside the existing payload keys.
-4. **UI additions** inside the **Details** card, placed below the existing Name input and above the Cost / Stock grid:
-   - A 2-column grid with **Item Code (SKU)** and **Brand / Manufacturer** text inputs.
-   - A 2-column grid with **UOM (Unit of Measure)** text input (placeholder: `STRIP, VIAL, BOTTLE`) and the existing Status select OR keep UOM standalone — final layout: UOM in a 2-col grid alongside an empty spacer to keep visual rhythm with the existing grids.
-   - An **OTC (Over-The-Counter)** row using the existing `Switch` component (already in the project) wired via `watch('is_otc')` + `setValue('is_otc', v)`, with helper text:  
-     *"If enabled, this item can be sold at the front desk without a doctor's consultation."*
+Pass `userId: null` to release. Keep mutation lightweight (no optimistic update — realtime invalidation in `useConsultation` covers cross-tab sync via existing channel patterns).
 
-No changes to `InventorySettings.tsx` tab logic, `PackageDialog.tsx`, or any other consumer — the new fields are purely additive metadata.
+## C. Gatekeeper — shared hook `src/hooks/clinic/useConsultationLock.ts` (new)
 
-## Verification
+To avoid duplicating logic across `ConsultationDetail.tsx` and `DispenseCheckout.tsx`:
 
-- Run `npx tsc --noEmit` to confirm types compile cleanly.
-- Open the Inventory dialog (Add + Edit) and confirm the 4 new fields render, hydrate on edit, and persist on save.
-- Existing items continue to load with `is_otc = false` and empty SKU/Brand/UOM.
+```ts
+export function useConsultationLock(consultation: { id?: string; locked_by?: string | null; status?: string } | null | undefined) {
+  const { user } = useAuth();
+  const lockMut = useLockConsultation();
+  const claimedRef = useRef<string | null>(null);
+
+  const lockedBy = consultation?.locked_by ?? null;
+  const myUserId = user?.id ?? null;
+  const isLockedByMe = !!lockedBy && lockedBy === myUserId;
+  const isLockedByOther = !!lockedBy && lockedBy !== myUserId;
+  const isCompleted = consultation?.status === 'completed';
+  const canEdit = !isCompleted && (lockedBy === null || isLockedByMe);
+
+  // Auto-claim on mount when free
+  useEffect(() => {
+    if (!consultation?.id || !myUserId || isCompleted) return;
+    if (lockedBy === null && claimedRef.current !== consultation.id) {
+      claimedRef.current = consultation.id;
+      lockMut.mutate({ id: consultation.id, userId: myUserId });
+    }
+  }, [consultation?.id, lockedBy, myUserId, isCompleted]);
+
+  // Release on unmount (only if I hold it)
+  useEffect(() => {
+    return () => {
+      if (consultation?.id && claimedRef.current === consultation.id && isLockedByMe) {
+        lockMut.mutate({ id: consultation.id, userId: null });
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [consultation?.id]);
+
+  const forceUnlock = () => {
+    if (consultation?.id) lockMut.mutate({ id: consultation.id, userId: null });
+  };
+
+  return { isLockedByMe, isLockedByOther, canEdit, lockedBy, forceUnlock };
+}
+```
+
+Plus a presentational `<ConsultationLockBanner />` component (`src/components/clinic/consultation/ConsultationLockBanner.tsx`) using `Alert` + `AlertTriangle` icon:
+
+> ⚠️ **FILE IN USE** — This consultation is currently opened by another staff member. Please coordinate with them before making changes to the treatment cart. **[Force Unlock]**
+
+## D. Wire into `ConsultationDetail.tsx`
+
+- Call `const { isLockedByOther, canEdit, forceUnlock } = useConsultationLock(consultation);` after `useConsultation`.
+- Render `<ConsultationLockBanner />` at top of `<main>` when `isLockedByOther`.
+- Disable `Add in bulk` button (line ~534) and pass a `readOnly` (or `disabled`) prop to `<TreatmentItemCard>` when `!canEdit` — hides Trash + Save inside the card. Existing card already supports a disabled visual via button props.
+- `Send to Dispensary` / `Save Draft` / `Put on Hold` remain enabled for the lock holder; disabled when `isLockedByOther`.
+
+## E. Wire into `DispenseCheckout.tsx` + `VisitDetailsColumn.tsx`
+
+- In `DispenseCheckout.tsx`: same hook call + banner above the 3-column grid.
+- Pass a new optional prop `canEdit: boolean` to `VisitDetailsColumn`. When `false`: hide the qty +/- and Trash buttons, show a small "view-only" pill in the column header.
+- Cart is now editable whenever `canEdit` is true regardless of `clinic_status` being `dispensing_payment` (satisfies spec point: "no longer strictly disabled based purely on status === 'dispensing'").
+- `Complete Checkout` button stays gated on `outstanding === 0` only — does **not** require lock (clean handoff: completing also flushes status to `completed`, which the hook treats as non-editable so unmount-release is safe).
+
+## F. Edge cases
+
+- **Tab close / browser crash**: cleanup may not fire → `Force Unlock` button on the banner is the manual escape hatch.
+- **Same user opens two tabs**: `isLockedByMe` stays true in both; both can edit (acceptable trade-off, single human user).
+- **Race on auto-claim**: two staff opening simultaneously → last write wins on the DB; the loser's next realtime tick flips `isLockedByMe → false` and surfaces the banner. Acceptable for clinic-scale concurrency.
+- **Status flip to `completed`**: hook short-circuits auto-claim and treats as non-editable; no orphan locks.
+
+## Files touched
+
+- `supabase/migrations/<ts>_add_consultation_locks.sql` (new)
+- `src/hooks/clinic/useConsultations.ts` (add `useLockConsultation`)
+- `src/hooks/clinic/useConsultationLock.ts` (new)
+- `src/components/clinic/consultation/ConsultationLockBanner.tsx` (new)
+- `src/pages/clinic/ConsultationDetail.tsx` (wire hook + banner + disable cart controls)
+- `src/pages/clinic/DispenseCheckout.tsx` (wire hook + banner + pass `canEdit`)
+- `src/components/clinic/visit/VisitDetailsColumn.tsx` (accept `canEdit`, hide edit affordances)
+
+Verification: `npx tsc --noEmit` after implementation.

@@ -54,9 +54,10 @@ interface Props {
   onRemove: () => void;
   onSave: (updates: ItemUpdate) => void;
   priceTiers: string[];
+  disabled?: boolean;
 }
 
-export function TreatmentItemCard({ item, onRemove, onSave, priceTiers }: Props) {
+export function TreatmentItemCard({ item, onRemove, onSave, priceTiers, disabled = false }: Props) {
   const [qty, setQty] = useState(item.quantity);
   const [rate, setRate] = useState(Number(item.price));
   const [tier, setTier] = useState(item.price_tier ?? '');
@@ -118,12 +119,14 @@ export function TreatmentItemCard({ item, onRemove, onSave, priceTiers }: Props)
             variant="ghost"
             className="h-7 text-xs text-destructive hover:bg-destructive/10"
             onClick={onRemove}
+            disabled={disabled}
           >
             Remove
           </Button>
           <Button
             size="sm"
             className="h-7 text-xs"
+            disabled={disabled}
             onClick={() => {
               onSave({
                 quantity: qty,

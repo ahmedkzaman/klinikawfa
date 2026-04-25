@@ -912,6 +912,8 @@ export type Database = {
           dispense_note: string
           doctor_id: string
           id: string
+          locked_at: string | null
+          locked_by: string | null
           patient_id: string
           queue_entry_id: string
           status: string
@@ -927,6 +929,8 @@ export type Database = {
           dispense_note?: string
           doctor_id: string
           id?: string
+          locked_at?: string | null
+          locked_by?: string | null
           patient_id: string
           queue_entry_id: string
           status?: string
@@ -942,6 +946,8 @@ export type Database = {
           dispense_note?: string
           doctor_id?: string
           id?: string
+          locked_at?: string | null
+          locked_by?: string | null
           patient_id?: string
           queue_entry_id?: string
           status?: string
