@@ -150,7 +150,7 @@ export function PanelDialog({ open, onOpenChange, panel }: Props) {
         await updateMut.mutateAsync({ id: panel.id, patch: parsed });
         toast.success('Panel updated');
       } else {
-        await addMut.mutateAsync(parsed);
+        await addMut.mutateAsync({ ...parsed, name: parsed.name });
         toast.success('Panel created');
       }
       onOpenChange(false);
