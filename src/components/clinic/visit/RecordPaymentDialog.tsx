@@ -41,7 +41,7 @@ export function RecordPaymentDialog({
   defaultAmount,
 }: Props) {
   const { data: methods = [] } = usePaymentMethods();
-  const { data: providers = [] } = useInsuranceProviders();
+  const { data: providers = [] } = useInsuranceProviders({ activeOnly: true });
   const recordPayment = useRecordPayment();
 
   const [paymentType, setPaymentType] = useState<PaymentType>('self_pay');
