@@ -103,6 +103,12 @@ export default function ConsultationDetail() {
   const [diagnosisId, setDiagnosisId] = useState<string | null>(null);
 
   const consultationId = (consultation as { id?: string } | null)?.id;
+  const { isLockedByOther, canEdit, forceUnlock } = useConsultationLock(
+    consultation as
+      | { id?: string; locked_by?: string | null; status?: string }
+      | null
+      | undefined,
+  );
   const { data: items = [] } = useConsultationItems(consultationId);
   const addItem = useAddConsultationItem();
   const removeItem = useRemoveConsultationItem();
