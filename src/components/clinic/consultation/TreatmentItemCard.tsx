@@ -119,12 +119,14 @@ export function TreatmentItemCard({ item, onRemove, onSave, priceTiers, disabled
             variant="ghost"
             className="h-7 text-xs text-destructive hover:bg-destructive/10"
             onClick={onRemove}
+            disabled={disabled}
           >
             Remove
           </Button>
           <Button
             size="sm"
             className="h-7 text-xs"
+            disabled={disabled}
             onClick={() => {
               onSave({
                 quantity: qty,
