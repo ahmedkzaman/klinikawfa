@@ -7,12 +7,13 @@ export type DiagnosisRow = {
   status: string;
   group_category: string;
   icd10_code: string | null;
+  search_aliases?: string | null;
   created_at: string;
   updated_at: string;
 };
 
 const SELECT_COLS =
-  'id, name, status, group_category, icd10_code, created_at, updated_at';
+  'id, name, status, group_category, icd10_code, search_aliases, created_at, updated_at';
 
 export function useDiagnoses() {
   const queryClient = useQueryClient();

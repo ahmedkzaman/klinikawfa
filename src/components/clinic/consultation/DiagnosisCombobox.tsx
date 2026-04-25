@@ -50,7 +50,8 @@ export function DiagnosisCombobox({
       .filter(
         (d) =>
           d.name.toLowerCase().includes(q) ||
-          (d.icd10_code ?? '').toLowerCase().includes(q),
+          (d.icd10_code ?? '').toLowerCase().includes(q) ||
+          (d.search_aliases ?? '').toLowerCase().includes(q),
       )
       .slice(0, 50);
   }, [diagnoses, search]);
