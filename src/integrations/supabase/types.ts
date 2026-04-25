@@ -1031,6 +1031,7 @@ export type Database = {
           icd10_code: string | null
           id: string
           name: string
+          search_aliases: string | null
           status: string
           updated_at: string
         }
@@ -1040,6 +1041,7 @@ export type Database = {
           icd10_code?: string | null
           id?: string
           name: string
+          search_aliases?: string | null
           status?: string
           updated_at?: string
         }
@@ -1049,6 +1051,7 @@ export type Database = {
           icd10_code?: string | null
           id?: string
           name?: string
+          search_aliases?: string | null
           status?: string
           updated_at?: string
         }
