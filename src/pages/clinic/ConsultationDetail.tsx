@@ -240,18 +240,57 @@ export default function ConsultationDetail() {
   };
 
   const handleBulkInsert = async (
-    selectedItems: { id: string; name: string; price: number; type: string }[],
+    selectedItems: {
+      id: string;
+      name: string;
+      price: number;
+      type: string;
+      defaults?: {
+        indication?: string | null;
+        dosage_qty?: string | null;
+        dosage_unit?: string | null;
+        frequency?: string | null;
+        instruction?: string | null;
+        duration?: string | null;
+        duration_unit?: string | null;
+        precaution?: string | null;
+      };
+    }[],
   ) => {
     if (!consultationId) {
       toast.error('Doctor profile missing or consultation not created — contact admin');
       return;
     }
     for (const item of selectedItems) {
+      const d = item.defaults ?? {};
+      // Combine duration + unit (e.g. "5" + "days" → "5 days") to fit the
+      // single `duration` text column on consultation_items.
+      const combinedDuration =
+        d.duration && d.duration_unit
+          ? `${d.duration} ${d.duration_unit}`.trim()
+          : (d.duration ?? null);
+      const dosageQtyNum =
+        d.dosage_qty && !Number.isNaN(Number(d.dosage_qty))
+          ? Number(d.dosage_qty)
+          : null;
+
       await addItem.mutateAsync({
         consultation_id: consultationId,
         item_name: item.name,
         quantity: 1,
         price: item.price,
+        ...(item.type === 'item'
+          ? {
+              item_id: item.id,
+              indication: d.indication ?? null,
+              dosage_qty: dosageQtyNum,
+              dosage_unit: d.dosage_unit ?? null,
+              frequency: d.frequency ?? null,
+              instruction: d.instruction ?? null,
+              duration: combinedDuration,
+              precaution: d.precaution ?? null,
+            }
+          : {}),
       });
     }
     toast.success(`${selectedItems.length} item(s) added to treatment plan`);
