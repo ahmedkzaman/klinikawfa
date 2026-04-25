@@ -1431,6 +1431,14 @@ export type Database = {
           category: string
           cost_price: number
           created_at: string
+          default_dosage_qty: string | null
+          default_dosage_unit: string | null
+          default_duration: string | null
+          default_duration_unit: string | null
+          default_frequency: string | null
+          default_indication: string | null
+          default_instruction: string | null
+          default_precaution: string | null
           dosage_instructions: string | null
           dosage_instructions_enabled: boolean
           generic_name: string | null
@@ -1456,6 +1464,14 @@ export type Database = {
           category?: string
           cost_price?: number
           created_at?: string
+          default_dosage_qty?: string | null
+          default_dosage_unit?: string | null
+          default_duration?: string | null
+          default_duration_unit?: string | null
+          default_frequency?: string | null
+          default_indication?: string | null
+          default_instruction?: string | null
+          default_precaution?: string | null
           dosage_instructions?: string | null
           dosage_instructions_enabled?: boolean
           generic_name?: string | null
@@ -1481,6 +1497,14 @@ export type Database = {
           category?: string
           cost_price?: number
           created_at?: string
+          default_dosage_qty?: string | null
+          default_dosage_unit?: string | null
+          default_duration?: string | null
+          default_duration_unit?: string | null
+          default_frequency?: string | null
+          default_indication?: string | null
+          default_instruction?: string | null
+          default_precaution?: string | null
           dosage_instructions?: string | null
           dosage_instructions_enabled?: boolean
           generic_name?: string | null
