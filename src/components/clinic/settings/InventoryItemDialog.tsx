@@ -232,6 +232,14 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
         standard_panel_price: data.standard_panel_price,
         current_stock: data.current_stock,
         status: data.status,
+        default_indication: data.default_indication?.trim() || null,
+        default_dosage_qty: data.default_dosage_qty?.trim() || null,
+        default_dosage_unit: data.default_dosage_unit?.trim() || null,
+        default_frequency: data.default_frequency?.trim() || null,
+        default_instruction: data.default_instruction?.trim() || null,
+        default_duration: data.default_duration?.trim() || null,
+        default_duration_unit: data.default_duration_unit?.trim() || null,
+        default_precaution: data.default_precaution?.trim() || null,
       };
 
       // Step 1: persist the item itself
