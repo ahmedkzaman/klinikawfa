@@ -348,6 +348,54 @@ export function InventoryItemDialog({ open, onOpenChange, item, defaultCategory 
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
+                  <Label htmlFor="item-code">Item Code (SKU)</Label>
+                  <Input
+                    id="item-code"
+                    placeholder="e.g. MED-PCM-500"
+                    {...register('item_code')}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="item-brand">Brand / Manufacturer</Label>
+                  <Input
+                    id="item-brand"
+                    placeholder="e.g. Pfizer"
+                    {...register('brand')}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="item-uom">UOM (Unit of Measure)</Label>
+                  <Input
+                    id="item-uom"
+                    placeholder="e.g. STRIP, VIAL, BOTTLE"
+                    {...register('uom')}
+                  />
+                </div>
+                <div />
+              </div>
+
+              <div className="flex items-start justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2.5">
+                <div className="space-y-0.5">
+                  <Label htmlFor="item-otc" className="cursor-pointer">
+                    OTC (Over-The-Counter)
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    If enabled, this item can be sold at the front desk without a
+                    doctor's consultation.
+                  </p>
+                </div>
+                <Switch
+                  id="item-otc"
+                  checked={!!watch('is_otc')}
+                  onCheckedChange={(v) => setValue('is_otc', !!v)}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
                   <Label htmlFor="item-cost">Cost Price (RM)</Label>
                   <Input
                     id="item-cost"
