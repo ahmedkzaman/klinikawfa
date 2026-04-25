@@ -64,6 +64,10 @@ export interface InventoryItemRow {
   stock: number;
   status: string;
   category?: InventoryCategory | string | null;
+  item_code?: string | null;
+  is_otc?: boolean | null;
+  brand?: string | null;
+  uom?: string | null;
   default_indication?: string | null;
   default_dosage_qty?: string | null;
   default_dosage_unit?: string | null;
