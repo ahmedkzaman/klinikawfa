@@ -45,6 +45,15 @@ import {
 } from '@/hooks/clinic/usePriceOverrides';
 import { toast } from 'sonner';
 
+export type InventoryCategory = 'Medication' | 'Disposable Item' | 'Vaccine' | 'Other';
+
+const INVENTORY_CATEGORIES: InventoryCategory[] = [
+  'Medication',
+  'Disposable Item',
+  'Vaccine',
+  'Other',
+];
+
 export interface InventoryItemRow {
   id: string;
   name: string;
@@ -53,6 +62,7 @@ export interface InventoryItemRow {
   standard_panel_price?: number | null;
   stock: number;
   status: string;
+  category?: InventoryCategory | string | null;
   default_indication?: string | null;
   default_dosage_qty?: string | null;
   default_dosage_unit?: string | null;
@@ -67,6 +77,8 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   item: InventoryItemRow | null;
+  /** Pre-selected category when adding from a category-specific tab. Ignored when editing. */
+  defaultCategory?: InventoryCategory;
 }
 
 const moneyField = z.preprocess(
