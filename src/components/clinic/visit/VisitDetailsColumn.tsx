@@ -49,11 +49,20 @@ export function VisitDetailsColumn({ consultationId, canEdit = true }: Props) {
 
   return (
     <div className="rounded-xl bg-card border overflow-hidden">
-      <div className="px-4 py-3 border-b border-border">
-        <h2 className="text-sm font-semibold text-foreground">Prescribed Items</h2>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Adjust quantities or remove items before checkout
-        </p>
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Prescribed Items</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {canEdit
+              ? 'Adjust quantities or remove items before checkout'
+              : 'View only — locked by another user'}
+          </p>
+        </div>
+        {!canEdit && (
+          <span className="text-[10px] uppercase tracking-wide font-semibold rounded-full bg-muted text-muted-foreground px-2 py-0.5 shrink-0">
+            View only
+          </span>
+        )}
       </div>
 
       {isLoading ? (
