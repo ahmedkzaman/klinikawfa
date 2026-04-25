@@ -2549,6 +2549,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          item_code: string | null
           name: string
           price_to_patient: number
           standard_panel_price: number
@@ -2561,6 +2562,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          item_code?: string | null
           name: string
           price_to_patient?: number
           standard_panel_price?: number
@@ -2573,6 +2575,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          item_code?: string | null
           name?: string
           price_to_patient?: number
           standard_panel_price?: number
