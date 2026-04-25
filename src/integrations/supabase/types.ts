@@ -1060,6 +1060,42 @@ export type Database = {
         }
         Relationships: []
       }
+      diagnoses_backup_20260425: {
+        Row: {
+          created_at: string | null
+          group_category: string | null
+          icd10_code: string | null
+          id: string | null
+          is_active: boolean | null
+          name: string | null
+          search_aliases: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          group_category?: string | null
+          icd10_code?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          name?: string | null
+          search_aliases?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          group_category?: string | null
+          icd10_code?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          name?: string | null
+          search_aliases?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       doctors: {
         Row: {
           avatar_url: string | null
