@@ -252,6 +252,7 @@ export function InventoryItemDialog({ open, onOpenChange, item, defaultCategory 
         standard_panel_price: data.standard_panel_price,
         current_stock: data.current_stock,
         status: data.status,
+        category: data.category,
         default_indication: data.default_indication?.trim() || null,
         default_dosage_qty: data.default_dosage_qty?.trim() || null,
         default_dosage_unit: data.default_dosage_unit?.trim() || null,
