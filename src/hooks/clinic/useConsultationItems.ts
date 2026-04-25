@@ -27,6 +27,18 @@ export function useConsultationItems(consultationId: string | undefined) {
   });
 }
 
+/**
+ * Adds a consultation item.
+ *
+ * NOTE: As of the Automated Checkout Pricing migration, the database trigger
+ * `before_insert_resolve_selling_price` is the absolute source of truth for the
+ * baseline `price` on INSERT. The hierarchy is:
+ *   Bespoke Panel Override → Standard Panel Price → Self Pay Price.
+ *
+ * Any `price` value passed from the frontend is ignored on INSERT and
+ * overwritten by the trigger. Manual price adjustments (discounts, etc.) must
+ * be applied via a subsequent UPDATE through `useUpdateConsultationItem`.
+ */
 export function useAddConsultationItem() {
   const qc = useQueryClient();
   return useMutation({
@@ -35,6 +47,7 @@ export function useAddConsultationItem() {
       item_name: string;
       quantity?: number;
       dosage?: string;
+      /** Ignored on insert — resolved server-side by trg_resolve_selling_price. */
       price?: number;
       item_id?: string | null;
       service_id?: string | null;
