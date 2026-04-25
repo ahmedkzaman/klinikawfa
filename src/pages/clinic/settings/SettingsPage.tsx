@@ -32,6 +32,13 @@ export default function SettingsPage() {
       visible: isOpsOrAdmin,
     },
     {
+      href: '/clinic/settings/diagnoses',
+      title: 'Diagnosis Sweeper',
+      description: 'Map raw clinical diagnoses into standard reporting categories.',
+      icon: Stethoscope,
+      visible: isOpsOrAdmin,
+    },
+    {
       href: '/clinic/settings/users',
       title: 'User Management',
       description: 'Manage staff roles and locum doctor profiles.',
