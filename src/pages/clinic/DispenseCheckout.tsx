@@ -200,7 +200,7 @@ export default function DispenseCheckout() {
         </div>
 
         {/* Items */}
-        <VisitDetailsColumn consultationId={consultation?.id} />
+        <VisitDetailsColumn consultationId={consultation?.id} canEdit={canEdit} />
 
         {/* Billing */}
         <BillingDetailsColumn
