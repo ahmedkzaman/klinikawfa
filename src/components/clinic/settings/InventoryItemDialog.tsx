@@ -166,6 +166,10 @@ export function InventoryItemDialog({ open, onOpenChange, item, defaultCategory 
   useEffect(() => {
     if (!open) return;
     if (item) {
+      const validCats: InventoryCategory[] = ['Medication', 'Disposable Item', 'Vaccine', 'Other'];
+      const cat = (validCats as string[]).includes(item.category as string)
+        ? (item.category as InventoryCategory)
+        : 'Medication';
       reset({
         name: item.name,
         cost_price: Number(item.cost_price) || 0,
@@ -173,6 +177,7 @@ export function InventoryItemDialog({ open, onOpenChange, item, defaultCategory 
         standard_panel_price: Number(item.standard_panel_price ?? 0) || 0,
         current_stock: Number(item.stock) || 0,
         status: (item.status as 'active' | 'inactive') ?? 'active',
+        category: cat,
         default_indication: item.default_indication ?? '',
         default_dosage_qty: item.default_dosage_qty ?? '',
         default_dosage_unit: item.default_dosage_unit ?? '',
@@ -183,12 +188,12 @@ export function InventoryItemDialog({ open, onOpenChange, item, defaultCategory 
         default_precaution: item.default_precaution ?? '',
       });
     } else {
-      reset(EMPTY_VALUES);
+      reset({ ...EMPTY_VALUES, category: defaultCategory ?? 'Medication' });
       setOverrides([]);
     }
     setDraftPanelId('');
     setDraftPrice('');
-  }, [open, item, reset]);
+  }, [open, item, reset, defaultCategory]);
 
   // Hydrate overrides whenever the existing list arrives for an edit
   useEffect(() => {
