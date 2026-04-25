@@ -70,6 +70,7 @@ import SettingsPage from "./pages/clinic/settings/SettingsPage";
 import InClinicSettings from "./pages/clinic/settings/InClinicSettings";
 import UserManagementSettings from "./pages/clinic/settings/UserManagementSettings";
 import InventorySettings from "./pages/clinic/settings/InventorySettings";
+import DiagnosisSweeper from "./pages/clinic/settings/DiagnosisSweeper";
 
 import LeadsManagement from "./pages/admin/LeadsManagement";
 import BlogManagement from "./pages/admin/BlogManagement";
@@ -196,6 +197,14 @@ const App = () => (
                   element={
                     <ClinicProtectedRoute>
                       <InventorySettings />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
+                  path="settings/diagnoses"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <DiagnosisSweeper />
                     </ClinicProtectedRoute>
                   }
                 />

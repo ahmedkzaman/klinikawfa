@@ -55,3 +55,34 @@ export function useDiagnoses() {
 
   return { diagnoses, isLoading, addDiagnosis, updateDiagnosis, deleteDiagnosis };
 }
+
+export function useUncategorizedDiagnoses() {
+  return useQuery({
+    queryKey: ['diagnoses', 'uncategorized'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('diagnoses')
+        .select('id, name, group_category, status, created_at, updated_at')
+        .or('group_category.is.null,group_category.eq.,group_category.eq.Uncategorized')
+        .order('name', { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
+export function useUpdateDiagnosisCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, category }: { id: string; category: string }) => {
+      const { error } = await supabase
+        .from('diagnoses')
+        .update({ group_category: category })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['diagnoses'] });
+    },
+  });
+}
