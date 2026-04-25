@@ -309,13 +309,21 @@ export default function Consultation() {
                       ) : (['sent_to_dispensary', 'dispensing_payment'] as ClinicStatus[]).includes(
                           entry.clinic_status,
                         ) ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => navigate(`/clinic/queue/checkout/${entry.id}`)}
-                        >
-                          Checkout
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => navigate(`/clinic/consultation/${entry.id}`)}
+                          >
+                            Edit Consultation
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => navigate(`/clinic/queue/checkout/${entry.id}`)}
+                          >
+                            Checkout
+                          </Button>
+                        </div>
                       ) : (
                         <Button
                           size="sm"
