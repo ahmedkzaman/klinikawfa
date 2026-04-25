@@ -1,0 +1,1 @@
+drop policy if exists "temp_seed_insert_diagnoses" on public.diagnoses;
