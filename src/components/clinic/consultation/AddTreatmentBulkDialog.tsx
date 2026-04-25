@@ -22,11 +22,23 @@ import { useInventoryItems } from '@/hooks/clinic/useInventoryItems';
 import { useServices } from '@/hooks/clinic/useServices';
 import { usePackages } from '@/hooks/clinic/usePackages';
 
+export interface SelectedDefaults {
+  indication?: string | null;
+  dosage_qty?: string | null;
+  dosage_unit?: string | null;
+  frequency?: string | null;
+  instruction?: string | null;
+  duration?: string | null;
+  duration_unit?: string | null;
+  precaution?: string | null;
+}
+
 interface SelectedItem {
   id: string;
   name: string;
   price: number;
   type: 'item' | 'service' | 'package';
+  defaults?: SelectedDefaults;
 }
 
 interface Props {
@@ -44,6 +56,7 @@ interface CombinedRow {
   price: string;
   priceNum: number;
   type: 'item' | 'service' | 'package';
+  defaults?: SelectedDefaults;
 }
 
 export function AddTreatmentBulkDialog({ open, onOpenChange, onInsert }: Props) {
