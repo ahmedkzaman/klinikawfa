@@ -292,6 +292,8 @@ export default function InventorySettings() {
                                 name: p.name,
                                 cost: Number(p.cost) || 0,
                                 price: Number(p.price) || 0,
+                                standard_panel_price:
+                                  Number((p as { standard_panel_price?: number }).standard_panel_price) || 0,
                                 status: p.status,
                               },
                             })
