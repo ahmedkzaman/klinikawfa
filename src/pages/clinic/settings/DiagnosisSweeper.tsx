@@ -1,12 +1,15 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Stethoscope } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   useUncategorizedDiagnoses,
   useUpdateDiagnosisCategory,
+  type DiagnosisRow,
 } from '@/hooks/clinic/useDiagnoses';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -40,11 +43,44 @@ const CATEGORIES = [
   'Other',
 ];
 
+function IcdCell({ row }: { row: DiagnosisRow }) {
+  const updateCategory = useUpdateDiagnosisCategory();
+  const [val, setVal] = useState(row.icd10_code ?? '');
+
+  useEffect(() => {
+    setVal(row.icd10_code ?? '');
+  }, [row.icd10_code]);
+
+  const handleBlur = () => {
+    const next = val.trim() || null;
+    if (next === (row.icd10_code ?? null)) return;
+    updateCategory.mutate(
+      { id: row.id, icd10_code: next },
+      {
+        onSuccess: () =>
+          toast.success(next ? `ICD-10 set to ${next}` : 'ICD-10 cleared'),
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : 'Failed to update ICD-10'),
+      },
+    );
+  };
+
+  return (
+    <Input
+      value={val}
+      onChange={(e) => setVal(e.target.value.toUpperCase())}
+      onBlur={handleBlur}
+      placeholder="—"
+      className="h-8 max-w-[120px] font-mono text-xs"
+    />
+  );
+}
+
 export default function DiagnosisSweeper() {
   const { data: diagnoses = [], isLoading } = useUncategorizedDiagnoses();
   const updateCategory = useUpdateDiagnosisCategory();
 
-  const handleChange = (id: string, category: string, name: string) => {
+  const handleCategoryChange = (id: string, category: string, name: string) => {
     updateCategory.mutate(
       { id, category },
       {
@@ -75,8 +111,8 @@ export default function DiagnosisSweeper() {
             Diagnosis Categorization Sweeper
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Map raw clinical diagnoses into standard reporting categories. Categorized entries
-            will leave this list automatically.
+            Map raw clinical diagnoses into standard reporting categories and tag them with
+            ICD-10 codes. Categorized entries leave this list automatically.
           </p>
         </div>
       </div>
@@ -85,7 +121,8 @@ export default function DiagnosisSweeper() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[55%]">Diagnosis Name</TableHead>
+              <TableHead className="w-[45%]">Diagnosis Name</TableHead>
+              <TableHead className="w-[20%]">ICD-10</TableHead>
               <TableHead>Category</TableHead>
             </TableRow>
           </TableHeader>
@@ -97,13 +134,16 @@ export default function DiagnosisSweeper() {
                     <Skeleton className="h-5 w-2/3" />
                   </TableCell>
                   <TableCell>
+                    <Skeleton className="h-8 w-24" />
+                  </TableCell>
+                  <TableCell>
                     <Skeleton className="h-9 w-full max-w-xs" />
                   </TableCell>
                 </TableRow>
               ))
             ) : diagnoses.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={2} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={3} className="text-center py-12 text-muted-foreground">
                   All diagnoses are categorized. Nothing to sweep right now. 🎉
                 </TableCell>
               </TableRow>
@@ -112,8 +152,11 @@ export default function DiagnosisSweeper() {
                 <TableRow key={d.id}>
                   <TableCell className="font-medium">{d.name}</TableCell>
                   <TableCell>
+                    <IcdCell row={d} />
+                  </TableCell>
+                  <TableCell>
                     <Select
-                      onValueChange={(value) => handleChange(d.id, value, d.name)}
+                      onValueChange={(value) => handleCategoryChange(d.id, value, d.name)}
                       disabled={updateCategory.isPending}
                     >
                       <SelectTrigger className="max-w-xs">
