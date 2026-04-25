@@ -82,17 +82,6 @@ function mapServicePayload(input: Partial<ServiceInput>) {
   return payload;
 }
 
-function mapServicePayload(input: Partial<ServiceInput>) {
-  const payload: Record<string, unknown> = {};
-  if (input.name !== undefined) payload.name = input.name;
-  if (input.cost !== undefined) payload.cost = input.cost;
-  if (input.price !== undefined) payload.price_to_patient = input.price;
-  if (input.standard_panel_price !== undefined) {
-    payload.standard_panel_price = input.standard_panel_price;
-  }
-  if (input.status !== undefined) payload.status = input.status;
-  return payload;
-}
 
 export function useAddService() {
   const queryClient = useQueryClient();
