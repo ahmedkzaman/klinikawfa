@@ -51,6 +51,12 @@ export function useServices() {
 /* Named mutation hooks (Step 12 catalog management)                  */
 /* ------------------------------------------------------------------ */
 
+export type ServiceCategory =
+  | 'General Service'
+  | 'Procedure'
+  | 'Laboratory Investigation'
+  | 'Other';
+
 export interface ServiceInput {
   name: string;
   cost: number;
@@ -59,6 +65,21 @@ export interface ServiceInput {
   /** Standard panel rate. Maps to DB column `standard_panel_price`. */
   standard_panel_price?: number;
   status?: 'active' | 'inactive';
+  /** Visual grouping in Inventory settings. Maps to DB column `category`. */
+  category?: ServiceCategory;
+}
+
+function mapServicePayload(input: Partial<ServiceInput>) {
+  const payload: Record<string, unknown> = {};
+  if (input.name !== undefined) payload.name = input.name;
+  if (input.cost !== undefined) payload.cost = input.cost;
+  if (input.price !== undefined) payload.price_to_patient = input.price;
+  if (input.standard_panel_price !== undefined) {
+    payload.standard_panel_price = input.standard_panel_price;
+  }
+  if (input.status !== undefined) payload.status = input.status;
+  if (input.category !== undefined) payload.category = input.category;
+  return payload;
 }
 
 function mapServicePayload(input: Partial<ServiceInput>) {
