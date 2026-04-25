@@ -56,6 +56,8 @@ export function useInventoryItems() {
 /* Named mutation hooks (Step 12 catalog management)                  */
 /* ------------------------------------------------------------------ */
 
+export type InventoryCategory = 'Medication' | 'Disposable Item' | 'Vaccine' | 'Other';
+
 export interface InventoryItemInput {
   name: string;
   cost_price: number;
@@ -66,6 +68,8 @@ export interface InventoryItemInput {
   /** Maps to DB column `stock` */
   current_stock: number;
   status: 'active' | 'inactive';
+  /** Visual grouping in Inventory settings. Maps to DB column `category`. */
+  category?: InventoryCategory;
   // Default dispensing instructions (Step 18). All optional.
   default_indication?: string | null;
   default_dosage_qty?: string | null;
