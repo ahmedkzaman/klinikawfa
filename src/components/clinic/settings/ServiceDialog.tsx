@@ -285,6 +285,7 @@ export function ServiceDialog({ open, onOpenChange, service, defaultCategory }: 
                       <SelectItem value="inactive">Inactive</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
               </div>
 
               <div className="space-y-1.5">
