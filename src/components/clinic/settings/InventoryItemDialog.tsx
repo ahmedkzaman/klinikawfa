@@ -21,6 +21,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { ComboboxInput } from '@/components/ui/combobox-input';
+import {
+  INDICATION_OPTIONS,
+  DOSAGE_UNIT_OPTIONS,
+  FREQUENCY_OPTIONS,
+  INSTRUCTION_OPTIONS,
+  DURATION_UNIT_OPTIONS,
+  PRECAUTION_OPTIONS,
+} from '@/lib/clinic/prescribingOptions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -43,6 +53,14 @@ export interface InventoryItemRow {
   standard_panel_price?: number | null;
   stock: number;
   status: string;
+  default_indication?: string | null;
+  default_dosage_qty?: string | null;
+  default_dosage_unit?: string | null;
+  default_frequency?: string | null;
+  default_instruction?: string | null;
+  default_duration?: string | null;
+  default_duration_unit?: string | null;
+  default_precaution?: string | null;
 }
 
 interface Props {
@@ -66,6 +84,9 @@ const intField = z.preprocess(
     .nonnegative('Must be 0 or more'),
 );
 
+const optStr = (max: number) =>
+  z.string().trim().max(max).optional().or(z.literal(''));
+
 const itemSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(120),
   cost_price: moneyField,
@@ -73,6 +94,14 @@ const itemSchema = z.object({
   standard_panel_price: moneyField,
   current_stock: intField,
   status: z.enum(['active', 'inactive']),
+  default_indication: optStr(500),
+  default_dosage_qty: optStr(50),
+  default_dosage_unit: optStr(50),
+  default_frequency: optStr(50),
+  default_instruction: optStr(100),
+  default_duration: optStr(50),
+  default_duration_unit: optStr(50),
+  default_precaution: optStr(500),
 });
 
 type ItemFormData = z.infer<typeof itemSchema>;
@@ -84,6 +113,14 @@ const EMPTY_VALUES: ItemFormData = {
   standard_panel_price: 0,
   current_stock: 0,
   status: 'active',
+  default_indication: '',
+  default_dosage_qty: '',
+  default_dosage_unit: '',
+  default_frequency: '',
+  default_instruction: '',
+  default_duration: '',
+  default_duration_unit: '',
+  default_precaution: '',
 };
 
 export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
@@ -122,6 +159,14 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
         standard_panel_price: Number(item.standard_panel_price ?? 0) || 0,
         current_stock: Number(item.stock) || 0,
         status: (item.status as 'active' | 'inactive') ?? 'active',
+        default_indication: item.default_indication ?? '',
+        default_dosage_qty: item.default_dosage_qty ?? '',
+        default_dosage_unit: item.default_dosage_unit ?? '',
+        default_frequency: item.default_frequency ?? '',
+        default_instruction: item.default_instruction ?? '',
+        default_duration: item.default_duration ?? '',
+        default_duration_unit: item.default_duration_unit ?? '',
+        default_precaution: item.default_precaution ?? '',
       });
     } else {
       reset(EMPTY_VALUES);
@@ -187,6 +232,14 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
         standard_panel_price: data.standard_panel_price,
         current_stock: data.current_stock,
         status: data.status,
+        default_indication: data.default_indication?.trim() || null,
+        default_dosage_qty: data.default_dosage_qty?.trim() || null,
+        default_dosage_unit: data.default_dosage_unit?.trim() || null,
+        default_frequency: data.default_frequency?.trim() || null,
+        default_instruction: data.default_instruction?.trim() || null,
+        default_duration: data.default_duration?.trim() || null,
+        default_duration_unit: data.default_duration_unit?.trim() || null,
+        default_precaution: data.default_precaution?.trim() || null,
       };
 
       // Step 1: persist the item itself
@@ -442,6 +495,131 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
                     ))}
                   </div>
                 )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ─────────────── Section 3: Default Dispensing Instructions ─────────────── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">
+                Default Dispensing Instructions (Optional)
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Pre-fills the prescribing fields when this item is added to a
+                consultation. Doctors can override per patient.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Dosage qty + unit */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="def-dosage-qty">Dosage Qty</Label>
+                  <Input
+                    id="def-dosage-qty"
+                    placeholder="e.g. 1"
+                    {...register('default_dosage_qty')}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="def-dosage-unit">Dosage Unit</Label>
+                  <Select
+                    value={watch('default_dosage_unit') ?? ''}
+                    onValueChange={(v) => setValue('default_dosage_unit', v)}
+                  >
+                    <SelectTrigger id="def-dosage-unit">
+                      <SelectValue placeholder="Select unit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DOSAGE_UNIT_OPTIONS.map((o) => (
+                        <SelectItem key={o} value={o}>
+                          {o}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Frequency + duration + duration unit */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="def-frequency">Frequency</Label>
+                  <Select
+                    value={watch('default_frequency') ?? ''}
+                    onValueChange={(v) => setValue('default_frequency', v)}
+                  >
+                    <SelectTrigger id="def-frequency">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FREQUENCY_OPTIONS.map((o) => (
+                        <SelectItem key={o} value={o}>
+                          {o}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="def-duration">Duration</Label>
+                  <Input
+                    id="def-duration"
+                    placeholder="e.g. 5"
+                    {...register('default_duration')}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="def-duration-unit">Duration Unit</Label>
+                  <Select
+                    value={watch('default_duration_unit') ?? ''}
+                    onValueChange={(v) => setValue('default_duration_unit', v)}
+                  >
+                    <SelectTrigger id="def-duration-unit">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DURATION_UNIT_OPTIONS.map((o) => (
+                        <SelectItem key={o} value={o}>
+                          {o}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Instruction */}
+              <div className="space-y-1.5">
+                <Label>Instruction</Label>
+                <ComboboxInput
+                  value={watch('default_instruction') ?? ''}
+                  onChange={(v) => setValue('default_instruction', v)}
+                  options={INSTRUCTION_OPTIONS}
+                  placeholder="Type or select"
+                />
+              </div>
+
+              {/* Indication */}
+              <div className="space-y-1.5">
+                <Label>Indication</Label>
+                <ComboboxInput
+                  value={watch('default_indication') ?? ''}
+                  onChange={(v) => setValue('default_indication', v)}
+                  options={INDICATION_OPTIONS}
+                  placeholder="Type or select"
+                />
+              </div>
+
+              {/* Precaution */}
+              <div className="space-y-1.5">
+                <Label htmlFor="def-precaution">Precaution</Label>
+                <Textarea
+                  id="def-precaution"
+                  rows={2}
+                  placeholder={PRECAUTION_OPTIONS.join(', ')}
+                  {...register('default_precaution')}
+                />
               </div>
             </CardContent>
           </Card>

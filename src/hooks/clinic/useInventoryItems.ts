@@ -66,7 +66,27 @@ export interface InventoryItemInput {
   /** Maps to DB column `stock` */
   current_stock: number;
   status: 'active' | 'inactive';
+  // Default dispensing instructions (Step 18). All optional.
+  default_indication?: string | null;
+  default_dosage_qty?: string | null;
+  default_dosage_unit?: string | null;
+  default_frequency?: string | null;
+  default_instruction?: string | null;
+  default_duration?: string | null;
+  default_duration_unit?: string | null;
+  default_precaution?: string | null;
 }
+
+const DEFAULT_FIELDS = [
+  'default_indication',
+  'default_dosage_qty',
+  'default_dosage_unit',
+  'default_frequency',
+  'default_instruction',
+  'default_duration',
+  'default_duration_unit',
+  'default_precaution',
+] as const;
 
 function mapItemPayload(input: Partial<InventoryItemInput>) {
   const payload: Record<string, unknown> = {};
@@ -81,6 +101,12 @@ function mapItemPayload(input: Partial<InventoryItemInput>) {
   }
   if (input.current_stock !== undefined) payload.stock = input.current_stock;
   if (input.status !== undefined) payload.status = input.status;
+  for (const key of DEFAULT_FIELDS) {
+    if (input[key] !== undefined) {
+      const v = input[key];
+      payload[key] = typeof v === 'string' && v.trim() === '' ? null : v;
+    }
+  }
   return payload;
 }
 

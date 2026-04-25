@@ -22,11 +22,23 @@ import { useInventoryItems } from '@/hooks/clinic/useInventoryItems';
 import { useServices } from '@/hooks/clinic/useServices';
 import { usePackages } from '@/hooks/clinic/usePackages';
 
+export interface SelectedDefaults {
+  indication?: string | null;
+  dosage_qty?: string | null;
+  dosage_unit?: string | null;
+  frequency?: string | null;
+  instruction?: string | null;
+  duration?: string | null;
+  duration_unit?: string | null;
+  precaution?: string | null;
+}
+
 interface SelectedItem {
   id: string;
   name: string;
   price: number;
   type: 'item' | 'service' | 'package';
+  defaults?: SelectedDefaults;
 }
 
 interface Props {
@@ -44,6 +56,7 @@ interface CombinedRow {
   price: string;
   priceNum: number;
   type: 'item' | 'service' | 'package';
+  defaults?: SelectedDefaults;
 }
 
 export function AddTreatmentBulkDialog({ open, onOpenChange, onInsert }: Props) {
@@ -57,7 +70,9 @@ export function AddTreatmentBulkDialog({ open, onOpenChange, onInsert }: Props) 
   const allItems = useMemo<CombinedRow[]>(() => {
     const combined: CombinedRow[] = [];
 
-    inventoryItems.forEach((i) =>
+    inventoryItems.forEach((i) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ii = i as any;
       combined.push({
         id: i.id,
         name: i.name,
@@ -72,8 +87,18 @@ export function AddTreatmentBulkDialog({ open, onOpenChange, onInsert }: Props) 
               ).toFixed(2)}`,
         priceNum: Number(i.price_to_patient_min),
         type: 'item',
-      }),
-    );
+        defaults: {
+          indication: ii.default_indication ?? null,
+          dosage_qty: ii.default_dosage_qty ?? null,
+          dosage_unit: ii.default_dosage_unit ?? null,
+          frequency: ii.default_frequency ?? null,
+          instruction: ii.default_instruction ?? null,
+          duration: ii.default_duration ?? null,
+          duration_unit: ii.default_duration_unit ?? null,
+          precaution: ii.default_precaution ?? null,
+        },
+      });
+    });
 
     services.forEach((s) =>
       combined.push({
@@ -116,7 +141,16 @@ export function AddTreatmentBulkDialog({ open, onOpenChange, onInsert }: Props) 
     setSelected((prev) => {
       const exists = prev.find((s) => s.id === item.id);
       if (exists) return prev.filter((s) => s.id !== item.id);
-      return [...prev, { id: item.id, name: item.name, price: item.priceNum, type: item.type }];
+      return [
+        ...prev,
+        {
+          id: item.id,
+          name: item.name,
+          price: item.priceNum,
+          type: item.type,
+          defaults: item.defaults,
+        },
+      ];
     });
   };
 
@@ -130,7 +164,13 @@ export function AddTreatmentBulkDialog({ open, onOpenChange, onInsert }: Props) 
         const existing = new Set(prev.map((s) => s.id));
         const newItems = filtered
           .filter((i) => !existing.has(i.id))
-          .map((i) => ({ id: i.id, name: i.name, price: i.priceNum, type: i.type }));
+          .map((i) => ({
+            id: i.id,
+            name: i.name,
+            price: i.priceNum,
+            type: i.type,
+            defaults: i.defaults,
+          }));
         return [...prev, ...newItems];
       });
     }
