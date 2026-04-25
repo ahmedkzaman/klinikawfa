@@ -105,6 +105,7 @@ function mapItemPayload(input: Partial<InventoryItemInput>) {
   }
   if (input.current_stock !== undefined) payload.stock = input.current_stock;
   if (input.status !== undefined) payload.status = input.status;
+  if (input.category !== undefined) payload.category = input.category;
   for (const key of DEFAULT_FIELDS) {
     if (input[key] !== undefined) {
       const v = input[key];
