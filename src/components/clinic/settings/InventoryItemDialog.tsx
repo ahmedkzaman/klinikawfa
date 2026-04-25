@@ -358,22 +358,42 @@ export function InventoryItemDialog({ open, onOpenChange, item, defaultCategory 
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="item-status">Status</Label>
-                <Select
-                  value={status}
-                  onValueChange={(v) =>
-                    setValue('status', v as 'active' | 'inactive')
-                  }
-                >
-                  <SelectTrigger id="item-status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="item-category">Category</Label>
+                  <Select
+                    value={category}
+                    onValueChange={(v) =>
+                      setValue('category', v as InventoryCategory)
+                    }
+                  >
+                    <SelectTrigger id="item-category">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {INVENTORY_CATEGORIES.map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="item-status">Status</Label>
+                  <Select
+                    value={status}
+                    onValueChange={(v) =>
+                      setValue('status', v as 'active' | 'inactive')
+                    }
+                  >
+                    <SelectTrigger id="item-status">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardContent>
           </Card>
