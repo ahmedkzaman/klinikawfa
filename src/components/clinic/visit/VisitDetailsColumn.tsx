@@ -105,31 +105,39 @@ export function VisitDetailsColumn({ consultationId, canEdit = true }: Props) {
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => handleQty(item.id, item.quantity ?? 1, -1)}
-                    disabled={(item.quantity ?? 1) <= 1 || updateItem.isPending}
-                    aria-label="Decrease quantity"
-                  >
-                    <Minus className="h-3 w-3" />
-                  </Button>
-                  <span className="w-8 text-center text-sm font-medium tabular-nums">
-                    {item.quantity ?? 1}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => handleQty(item.id, item.quantity ?? 1, 1)}
-                    disabled={updateItem.isPending}
-                    aria-label="Increase quantity"
-                  >
-                    <Plus className="h-3 w-3" />
-                  </Button>
+                  {canEdit ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => handleQty(item.id, item.quantity ?? 1, -1)}
+                        disabled={(item.quantity ?? 1) <= 1 || updateItem.isPending}
+                        aria-label="Decrease quantity"
+                      >
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <span className="w-8 text-center text-sm font-medium tabular-nums">
+                        {item.quantity ?? 1}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => handleQty(item.id, item.quantity ?? 1, 1)}
+                        disabled={updateItem.isPending}
+                        aria-label="Increase quantity"
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    </>
+                  ) : (
+                    <span className="w-8 text-center text-sm font-medium tabular-nums">
+                      ×{item.quantity ?? 1}
+                    </span>
+                  )}
                 </div>
 
                 <div className="text-right shrink-0 w-24">
