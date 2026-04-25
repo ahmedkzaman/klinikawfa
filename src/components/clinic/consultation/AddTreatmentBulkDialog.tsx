@@ -70,7 +70,9 @@ export function AddTreatmentBulkDialog({ open, onOpenChange, onInsert }: Props) 
   const allItems = useMemo<CombinedRow[]>(() => {
     const combined: CombinedRow[] = [];
 
-    inventoryItems.forEach((i) =>
+    inventoryItems.forEach((i) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ii = i as any;
       combined.push({
         id: i.id,
         name: i.name,
@@ -85,8 +87,18 @@ export function AddTreatmentBulkDialog({ open, onOpenChange, onInsert }: Props) 
               ).toFixed(2)}`,
         priceNum: Number(i.price_to_patient_min),
         type: 'item',
-      }),
-    );
+        defaults: {
+          indication: ii.default_indication ?? null,
+          dosage_qty: ii.default_dosage_qty ?? null,
+          dosage_unit: ii.default_dosage_unit ?? null,
+          frequency: ii.default_frequency ?? null,
+          instruction: ii.default_instruction ?? null,
+          duration: ii.default_duration ?? null,
+          duration_unit: ii.default_duration_unit ?? null,
+          precaution: ii.default_precaution ?? null,
+        },
+      });
+    });
 
     services.forEach((s) =>
       combined.push({
