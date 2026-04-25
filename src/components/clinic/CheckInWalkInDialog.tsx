@@ -46,7 +46,7 @@ export function CheckInWalkInDialog({
   const [payerType, setPayerType] = useState<'self' | 'panel'>('self');
   const [panelId, setPanelId] = useState<string>('');
   const checkIn = useCheckInWalkIn();
-  const { data: panels = [] } = useInsuranceProviders();
+  const { data: panels = [] } = useInsuranceProviders({ activeOnly: true });
 
   useEffect(() => {
     if (open && initialPatient) {

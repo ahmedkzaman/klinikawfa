@@ -34,7 +34,7 @@ interface CheckInAppointmentDialogProps {
 
 export function CheckInAppointmentDialog({ open, onOpenChange }: CheckInAppointmentDialogProps) {
   const { data: appointments = [], isLoading } = useTodayAppointments();
-  const { data: panels = [] } = useInsuranceProviders();
+  const { data: panels = [] } = useInsuranceProviders({ activeOnly: true });
   const intake = useIntakeAppointment();
 
   const [activeAppt, setActiveAppt] = useState<AppointmentRow | null>(null);

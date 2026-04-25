@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Sliders, Users, Archive, Package, ChevronRight, Stethoscope } from 'lucide-react';
+import { Sliders, Users, Archive, Package, ChevronRight, Stethoscope, Shield } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -36,6 +36,13 @@ export default function SettingsPage() {
       title: 'Diagnosis Sweeper',
       description: 'Map raw clinical diagnoses into standard reporting categories.',
       icon: Stethoscope,
+      visible: isOpsOrAdmin,
+    },
+    {
+      href: '/clinic/settings/panels',
+      title: 'Panels & Insurance',
+      description: 'Manage corporate panels, TPAs, and insurance provider profiles.',
+      icon: Shield,
       visible: isOpsOrAdmin,
     },
     {
