@@ -67,6 +67,8 @@ export interface ServiceInput {
   status?: 'active' | 'inactive';
   /** Visual grouping in Inventory settings. Maps to DB column `category`. */
   category?: ServiceCategory;
+  /** Natural key (SKU) used for legacy-inventory UPSERTs. Maps to DB column `item_code`. */
+  item_code?: string | null;
 }
 
 function mapServicePayload(input: Partial<ServiceInput>) {
@@ -79,6 +81,9 @@ function mapServicePayload(input: Partial<ServiceInput>) {
   }
   if (input.status !== undefined) payload.status = input.status;
   if (input.category !== undefined) payload.category = input.category;
+  if (input.item_code !== undefined) {
+    payload.item_code = input.item_code?.toString().trim() || null;
+  }
   return payload;
 }
 
