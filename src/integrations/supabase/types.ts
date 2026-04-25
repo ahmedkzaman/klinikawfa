@@ -1030,6 +1030,7 @@ export type Database = {
           group_category: string
           icd10_code: string | null
           id: string
+          is_active: boolean
           name: string
           search_aliases: string | null
           status: string
@@ -1040,6 +1041,7 @@ export type Database = {
           group_category?: string
           icd10_code?: string | null
           id?: string
+          is_active?: boolean
           name: string
           search_aliases?: string | null
           status?: string
@@ -1050,6 +1052,7 @@ export type Database = {
           group_category?: string
           icd10_code?: string | null
           id?: string
+          is_active?: boolean
           name?: string
           search_aliases?: string | null
           status?: string
