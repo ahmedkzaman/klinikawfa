@@ -1,65 +1,54 @@
-## Problem
+## Root cause
 
-When you click **Add Panel** or **Edit** on `/clinic/settings/panels`, the form fails Zod validation with errors like:
+I confirmed in the database that **saving works on Add** — e.g. `T. Paracetamol 500mg` has `standard_panel_price = 15.00` plus indication / dosage / frequency persisted correctly.
 
-```
-Expected string, received null  →  panel_code, price_tier, verification_link,
-claim_due_date_type, tin_number, company_name, company_reg_number,
-person_in_charge, phone, email, address_line_1, address_line_2, postcode, ...
-```
-
-### Root cause
-
-In `src/components/clinic/settings/PanelDialog.tsx`, every optional text field uses this Zod helper:
+The bug is on the **Edit** path in `src/pages/clinic/settings/InventorySettings.tsx`. The pencil-edit handler builds the row passed to `InventoryItemDialog` with only 6 fields:
 
 ```ts
-const optionalString = z.string().trim().max(255).optional()
-  .or(z.literal(''))
-  .transform((v) => (v ? v : null));
+row: {
+  id, name, cost_price, price_to_patient_max, stock, status
+}
 ```
 
-This schema accepts `string | undefined | ""` but **rejects `null`**. The form receives `null` values in two situations:
+It omits `standard_panel_price` and all 8 `default_*` columns. The dialog's hydration `useEffect` then falls back to `0` / `''` for those missing properties, the user clicks Save without re-entering them, and the update mutation overwrites the previously-saved values with zeros/nulls.
 
-1. **Editing an existing panel** — Supabase rows return `null` for empty optional columns (`panel_code`, `phone`, etc.). Even though `form.reset()` coerces with `?? ''`, React Hook Form re-runs validation on the `defaultValues` reference, and after the first successful submit the in-memory state holds the transformed `null` values, which then fail the input-side schema check on the next render/submit.
-2. **Re-opening the dialog** after a save — same mechanism.
-
-The result: the submit button never reaches the mutation, no row is inserted/updated, and you see no toast (errors are silently captured by RHF and surfaced as the runtime errors you're seeing).
+So the symptom "values aren't saved" is actually "values are saved on Add, then wiped on the next Edit".
 
 ## Fix
 
-Update the optional-string helper(s) to also accept `null` and normalize everything (`null | undefined | ''`) to `null` for the DB:
+Single-file change to `src/pages/clinic/settings/InventorySettings.tsx`:
+
+In the table row's edit `onClick` (around line 136–148), include all the fields the dialog hydrates from:
 
 ```ts
-const optionalString = z
-  .union([z.string().trim().max(255), z.literal(''), z.null()])
-  .optional()
-  .transform((v) => (v && v.length > 0 ? v : null));
+setItemDialog({
+  open: true,
+  row: {
+    id: it.id,
+    name: it.name,
+    cost_price: Number(it.cost_price) || 0,
+    price_to_patient_max: Number(it.price_to_patient_max) || 0,
+    standard_panel_price: Number(it.standard_panel_price) || 0,
+    stock: Number(it.stock) || 0,
+    status: it.status,
+    default_indication: it.default_indication ?? null,
+    default_dosage_qty: it.default_dosage_qty ?? null,
+    default_dosage_unit: it.default_dosage_unit ?? null,
+    default_frequency: it.default_frequency ?? null,
+    default_instruction: it.default_instruction ?? null,
+    default_duration: it.default_duration ?? null,
+    default_duration_unit: it.default_duration_unit ?? null,
+    default_precaution: it.default_precaution ?? null,
+  },
+})
 ```
 
-Apply the same pattern to the inline `price_tier` schema (lines 51-57), which has the identical bug.
+`useInventoryItems` already does `select('*')`, so all these fields are present on `it` — they just weren't being forwarded.
 
-Also remove the unnecessary `schema.parse(values)` call inside `onSubmit` (line 147) — `zodResolver` has already parsed and transformed the values, so calling `.parse()` again on transformed output is wasted work. Just use `values` directly.
+No schema changes, no hook changes, no migration. The dialog, mutation hook (`useUpdateInventoryItem` / `mapItemPayload`), and DB columns are all already wired up correctly — proven by the Add path working.
 
-### Additional small fix (visible in console)
+## Verification after fix
 
-The console also shows:
-
-```
-Warning: Function components cannot be given refs… Check the render method of `PanelDialog`.
-```
-
-This comes from `<DialogFooter>` receiving a ref via `<form>` children context — harmless, but caused by the same component. We won't change `DialogFooter` (it's a shared UI primitive). The Zod fix above is what unblocks panel creation.
-
-## Files to change
-
-- `src/components/clinic/settings/PanelDialog.tsx`
-  - Replace `optionalString` definition (lines 38-44).
-  - Replace inline `price_tier` schema (lines 51-57) with `optionalString` (max 60 → use a separate helper or inline the same union pattern with `max(60)`).
-  - Simplify `onSubmit` to pass `values` directly to mutations instead of re-parsing.
-
-## Verification
-
-After the fix:
-1. Open `/clinic/settings/panels` → click **Add Panel** → fill only "Panel Name" (e.g. `Allianz`) → click **Create panel** → row appears in the table with toast "Panel created".
-2. Click **Edit** on the new row → no Zod errors in console → change the name → **Save changes** works.
-3. Re-open the same row a second time → still works (no `null` rejection on re-validation).
+1. Open an existing item (e.g. `T. Paracetamol 500mg`) — confirm Standard Panel field shows **15.00** (currently shows 0) and dispensing defaults are pre-populated.
+2. Edit only the name, save, reopen — Standard Panel and dispensing defaults still intact.
+3. Set Standard Panel + dispensing defaults on a different item, save, reopen — values persist across edits.
