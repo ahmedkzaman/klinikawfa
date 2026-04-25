@@ -21,6 +21,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { ComboboxInput } from '@/components/ui/combobox-input';
+import {
+  INDICATION_OPTIONS,
+  DOSAGE_UNIT_OPTIONS,
+  FREQUENCY_OPTIONS,
+  INSTRUCTION_OPTIONS,
+  DURATION_UNIT_OPTIONS,
+  PRECAUTION_OPTIONS,
+} from '@/lib/clinic/prescribingOptions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import {
