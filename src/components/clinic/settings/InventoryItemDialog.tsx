@@ -45,6 +45,15 @@ import {
 } from '@/hooks/clinic/usePriceOverrides';
 import { toast } from 'sonner';
 
+export type InventoryCategory = 'Medication' | 'Disposable Item' | 'Vaccine' | 'Other';
+
+const INVENTORY_CATEGORIES: InventoryCategory[] = [
+  'Medication',
+  'Disposable Item',
+  'Vaccine',
+  'Other',
+];
+
 export interface InventoryItemRow {
   id: string;
   name: string;
@@ -53,6 +62,7 @@ export interface InventoryItemRow {
   standard_panel_price?: number | null;
   stock: number;
   status: string;
+  category?: InventoryCategory | string | null;
   default_indication?: string | null;
   default_dosage_qty?: string | null;
   default_dosage_unit?: string | null;
@@ -67,6 +77,8 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   item: InventoryItemRow | null;
+  /** Pre-selected category when adding from a category-specific tab. Ignored when editing. */
+  defaultCategory?: InventoryCategory;
 }
 
 const moneyField = z.preprocess(
@@ -94,6 +106,7 @@ const itemSchema = z.object({
   standard_panel_price: moneyField,
   current_stock: intField,
   status: z.enum(['active', 'inactive']),
+  category: z.enum(['Medication', 'Disposable Item', 'Vaccine', 'Other']),
   default_indication: optStr(500),
   default_dosage_qty: optStr(50),
   default_dosage_unit: optStr(50),
@@ -113,6 +126,7 @@ const EMPTY_VALUES: ItemFormData = {
   standard_panel_price: 0,
   current_stock: 0,
   status: 'active',
+  category: 'Medication',
   default_indication: '',
   default_dosage_qty: '',
   default_dosage_unit: '',
@@ -123,7 +137,7 @@ const EMPTY_VALUES: ItemFormData = {
   default_precaution: '',
 };
 
-export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
+export function InventoryItemDialog({ open, onOpenChange, item, defaultCategory }: Props) {
   const addItem = useAddInventoryItem();
   const updateItem = useUpdateInventoryItem();
   const reconcileOverrides = useReconcileOverrides();
@@ -152,6 +166,10 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
   useEffect(() => {
     if (!open) return;
     if (item) {
+      const validCats: InventoryCategory[] = ['Medication', 'Disposable Item', 'Vaccine', 'Other'];
+      const cat = (validCats as string[]).includes(item.category as string)
+        ? (item.category as InventoryCategory)
+        : 'Medication';
       reset({
         name: item.name,
         cost_price: Number(item.cost_price) || 0,
@@ -159,6 +177,7 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
         standard_panel_price: Number(item.standard_panel_price ?? 0) || 0,
         current_stock: Number(item.stock) || 0,
         status: (item.status as 'active' | 'inactive') ?? 'active',
+        category: cat,
         default_indication: item.default_indication ?? '',
         default_dosage_qty: item.default_dosage_qty ?? '',
         default_dosage_unit: item.default_dosage_unit ?? '',
@@ -169,12 +188,12 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
         default_precaution: item.default_precaution ?? '',
       });
     } else {
-      reset(EMPTY_VALUES);
+      reset({ ...EMPTY_VALUES, category: defaultCategory ?? 'Medication' });
       setOverrides([]);
     }
     setDraftPanelId('');
     setDraftPrice('');
-  }, [open, item, reset]);
+  }, [open, item, reset, defaultCategory]);
 
   // Hydrate overrides whenever the existing list arrives for an edit
   useEffect(() => {
@@ -190,6 +209,7 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
   const submitting =
     addItem.isPending || updateItem.isPending || reconcileOverrides.isPending;
   const status = watch('status');
+  const category = watch('category');
 
   const usedPanelIds = new Set(overrides.map((o) => o.panel_id));
   const availablePanels = panels.filter((p) => !usedPanelIds.has(p.id));
@@ -232,6 +252,7 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
         standard_panel_price: data.standard_panel_price,
         current_stock: data.current_stock,
         status: data.status,
+        category: data.category,
         default_indication: data.default_indication?.trim() || null,
         default_dosage_qty: data.default_dosage_qty?.trim() || null,
         default_dosage_unit: data.default_dosage_unit?.trim() || null,
@@ -337,22 +358,42 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="item-status">Status</Label>
-                <Select
-                  value={status}
-                  onValueChange={(v) =>
-                    setValue('status', v as 'active' | 'inactive')
-                  }
-                >
-                  <SelectTrigger id="item-status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="item-category">Category</Label>
+                  <Select
+                    value={category}
+                    onValueChange={(v) =>
+                      setValue('category', v as InventoryCategory)
+                    }
+                  >
+                    <SelectTrigger id="item-category">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {INVENTORY_CATEGORIES.map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="item-status">Status</Label>
+                  <Select
+                    value={status}
+                    onValueChange={(v) =>
+                      setValue('status', v as 'active' | 'inactive')
+                    }
+                  >
+                    <SelectTrigger id="item-status">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardContent>
           </Card>

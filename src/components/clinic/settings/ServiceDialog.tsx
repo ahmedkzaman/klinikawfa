@@ -32,6 +32,19 @@ import {
 } from '@/hooks/clinic/usePriceOverrides';
 import { toast } from 'sonner';
 
+export type ServiceCategory =
+  | 'General Service'
+  | 'Procedure'
+  | 'Laboratory Investigation'
+  | 'Other';
+
+const SERVICE_CATEGORIES: ServiceCategory[] = [
+  'General Service',
+  'Procedure',
+  'Laboratory Investigation',
+  'Other',
+];
+
 export interface ServiceRow {
   id: string;
   name: string;
@@ -39,12 +52,15 @@ export interface ServiceRow {
   price_to_patient: number;
   standard_panel_price?: number | null;
   status?: 'active' | 'inactive' | string;
+  category?: ServiceCategory | string | null;
 }
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   service: ServiceRow | null;
+  /** Pre-selected category when adding from a category-specific tab. Ignored when editing. */
+  defaultCategory?: ServiceCategory;
 }
 
 const moneyField = z.preprocess(
@@ -60,6 +76,7 @@ const serviceSchema = z.object({
   price: moneyField,
   standard_panel_price: moneyField,
   status: z.enum(['active', 'inactive']),
+  category: z.enum(['General Service', 'Procedure', 'Laboratory Investigation', 'Other']),
 });
 
 type ServiceFormData = z.infer<typeof serviceSchema>;
@@ -70,9 +87,10 @@ const EMPTY: ServiceFormData = {
   price: 0,
   standard_panel_price: 0,
   status: 'active',
+  category: 'General Service',
 };
 
-export function ServiceDialog({ open, onOpenChange, service }: Props) {
+export function ServiceDialog({ open, onOpenChange, service, defaultCategory }: Props) {
   const addService = useAddService();
   const updateService = useUpdateService();
   const reconcileOverrides = useReconcileOverrides();
@@ -99,20 +117,25 @@ export function ServiceDialog({ open, onOpenChange, service }: Props) {
   useEffect(() => {
     if (!open) return;
     if (service) {
+      const validCats: ServiceCategory[] = ['General Service', 'Procedure', 'Laboratory Investigation', 'Other'];
+      const cat = (validCats as string[]).includes(service.category as string)
+        ? (service.category as ServiceCategory)
+        : 'General Service';
       reset({
         name: service.name,
         cost: Number(service.cost) || 0,
         price: Number(service.price_to_patient) || 0,
         standard_panel_price: Number(service.standard_panel_price ?? 0) || 0,
         status: service.status === 'inactive' ? 'inactive' : 'active',
+        category: cat,
       });
     } else {
-      reset(EMPTY);
+      reset({ ...EMPTY, category: defaultCategory ?? 'General Service' });
       setOverrides([]);
     }
     setDraftPanelId('');
     setDraftPrice('');
-  }, [open, service, reset]);
+  }, [open, service, reset, defaultCategory]);
 
   useEffect(() => {
     if (!open || !service) return;
@@ -127,6 +150,7 @@ export function ServiceDialog({ open, onOpenChange, service }: Props) {
   const submitting =
     addService.isPending || updateService.isPending || reconcileOverrides.isPending;
   const status = watch('status');
+  const category = watch('category');
 
   const usedPanelIds = new Set(overrides.map((o) => o.panel_id));
   const availablePanels = panels.filter((p) => !usedPanelIds.has(p.id));
@@ -168,6 +192,7 @@ export function ServiceDialog({ open, onOpenChange, service }: Props) {
         price: data.price,
         standard_panel_price: data.standard_panel_price,
         status: data.status,
+        category: data.category,
       };
 
       let serviceId: string;
@@ -261,6 +286,25 @@ export function ServiceDialog({ open, onOpenChange, service }: Props) {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="svc-category">Category</Label>
+                <Select
+                  value={category}
+                  onValueChange={(v) =>
+                    setValue('category', v as ServiceCategory)
+                  }
+                >
+                  <SelectTrigger id="svc-category">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SERVICE_CATEGORIES.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </CardContent>
           </Card>

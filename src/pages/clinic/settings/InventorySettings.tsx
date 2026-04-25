@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Plus, Pencil, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -24,10 +24,12 @@ import { usePackages } from '@/hooks/clinic/usePackages';
 import {
   InventoryItemDialog,
   type InventoryItemRow,
+  type InventoryCategory,
 } from '@/components/clinic/settings/InventoryItemDialog';
 import {
   ServiceDialog,
   type ServiceRow,
+  type ServiceCategory,
 } from '@/components/clinic/settings/ServiceDialog';
 import {
   PackageDialog,
@@ -40,23 +42,257 @@ const fmtRM = (n: number) =>
     maximumFractionDigits: 2,
   })}`;
 
+type ItemTabKey = 'medications' | 'disposables';
+type SvcTabKey = 'procedures' | 'labs' | 'general_services';
+type TabKey = ItemTabKey | SvcTabKey | 'packages';
+
+const ITEM_TAB_DEFAULTS: Record<ItemTabKey, InventoryCategory> = {
+  medications: 'Medication',
+  disposables: 'Disposable Item',
+};
+
+const SVC_TAB_DEFAULTS: Record<SvcTabKey, ServiceCategory> = {
+  procedures: 'Procedure',
+  labs: 'Laboratory Investigation',
+  general_services: 'General Service',
+};
+
 export default function InventorySettings() {
   const { items, isLoading: itemsLoading } = useInventoryItems();
   const { services, isLoading: servicesLoading } = useServices();
   const { packages, isLoading: packagesLoading } = usePackages();
 
-  const [itemDialog, setItemDialog] = useState<{ open: boolean; row: InventoryItemRow | null }>({
-    open: false,
-    row: null,
-  });
-  const [serviceDialog, setServiceDialog] = useState<{ open: boolean; row: ServiceRow | null }>({
-    open: false,
-    row: null,
-  });
+  const [activeTab, setActiveTab] = useState<TabKey>('medications');
+
+  const [itemDialog, setItemDialog] = useState<{
+    open: boolean;
+    row: InventoryItemRow | null;
+    defaultCategory?: InventoryCategory;
+  }>({ open: false, row: null });
+
+  const [serviceDialog, setServiceDialog] = useState<{
+    open: boolean;
+    row: ServiceRow | null;
+    defaultCategory?: ServiceCategory;
+  }>({ open: false, row: null });
+
   const [pkgDialog, setPkgDialog] = useState<{ open: boolean; row: PackageRow | null }>({
     open: false,
     row: null,
   });
+
+  // ── Filtered slices ────────────────────────────────────────────
+  const medications = useMemo(
+    () =>
+      items.filter((it) => {
+        const c = (it as { category?: string | null }).category ?? 'Medication';
+        return c === 'Medication' || c === 'Vaccine';
+      }),
+    [items],
+  );
+
+  const disposables = useMemo(
+    () =>
+      items.filter(
+        (it) => (it as { category?: string | null }).category === 'Disposable Item',
+      ),
+    [items],
+  );
+
+  const procedures = useMemo(
+    () =>
+      services.filter(
+        (s) => (s as { category?: string | null }).category === 'Procedure',
+      ),
+    [services],
+  );
+
+  const labs = useMemo(
+    () =>
+      services.filter(
+        (s) =>
+          (s as { category?: string | null }).category === 'Laboratory Investigation',
+      ),
+    [services],
+  );
+
+  const generalServices = useMemo(
+    () =>
+      services.filter((s) => {
+        const c = (s as { category?: string | null }).category ?? 'General Service';
+        return c === 'General Service' || c === 'Other';
+      }),
+    [services],
+  );
+
+  // ── Helpers ────────────────────────────────────────────────────
+  const buildItemRow = (it: (typeof items)[number]): InventoryItemRow => ({
+    id: it.id,
+    name: it.name,
+    cost_price: Number(it.cost_price) || 0,
+    price_to_patient_max: Number(it.price_to_patient_max) || 0,
+    standard_panel_price:
+      Number((it as { standard_panel_price?: number | null }).standard_panel_price) || 0,
+    stock: Number(it.stock) || 0,
+    status: it.status,
+    category: (it as { category?: string | null }).category ?? 'Medication',
+    default_indication: (it as { default_indication?: string | null }).default_indication ?? null,
+    default_dosage_qty: (it as { default_dosage_qty?: string | null }).default_dosage_qty ?? null,
+    default_dosage_unit: (it as { default_dosage_unit?: string | null }).default_dosage_unit ?? null,
+    default_frequency: (it as { default_frequency?: string | null }).default_frequency ?? null,
+    default_instruction: (it as { default_instruction?: string | null }).default_instruction ?? null,
+    default_duration: (it as { default_duration?: string | null }).default_duration ?? null,
+    default_duration_unit: (it as { default_duration_unit?: string | null }).default_duration_unit ?? null,
+    default_precaution: (it as { default_precaution?: string | null }).default_precaution ?? null,
+  });
+
+  const buildServiceRow = (s: (typeof services)[number]): ServiceRow => ({
+    id: s.id,
+    name: s.name,
+    cost: Number(s.cost) || 0,
+    price_to_patient: Number(s.price_to_patient) || 0,
+    standard_panel_price:
+      Number((s as { standard_panel_price?: number | null }).standard_panel_price) || 0,
+    status: s.status,
+    category: (s as { category?: string | null }).category ?? 'General Service',
+  });
+
+  const openAddItem = (cat: InventoryCategory) =>
+    setItemDialog({ open: true, row: null, defaultCategory: cat });
+
+  const openAddService = (cat: ServiceCategory) =>
+    setServiceDialog({ open: true, row: null, defaultCategory: cat });
+
+  // ── Reusable table renderers ───────────────────────────────────
+  const renderItemTable = (
+    rows: typeof items,
+    loading: boolean,
+    emptyHint: string,
+  ) => (
+    <Card className="overflow-hidden">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Category</TableHead>
+            <TableHead className="text-right">Stock</TableHead>
+            <TableHead className="text-right">Cost (RM)</TableHead>
+            <TableHead className="text-right">Selling (RM)</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="w-[80px]" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {loading ? (
+            <TableRow>
+              <TableCell colSpan={7} className="h-24 text-center">
+                <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
+              </TableCell>
+            </TableRow>
+          ) : rows.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                {emptyHint}
+              </TableCell>
+            </TableRow>
+          ) : (
+            rows.map((it) => (
+              <TableRow key={it.id}>
+                <TableCell className="font-medium">{it.name}</TableCell>
+                <TableCell>
+                  <Badge variant="outline">
+                    {(it as { category?: string | null }).category ?? 'Medication'}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{it.stock}</TableCell>
+                <TableCell className="text-right tabular-nums">{fmtRM(it.cost_price)}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {fmtRM(it.price_to_patient_max)}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={it.status === 'active' ? 'default' : 'secondary'}>
+                    {it.status}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      setItemDialog({ open: true, row: buildItemRow(it) })
+                    }
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </Card>
+  );
+
+  const renderServiceTable = (
+    rows: typeof services,
+    loading: boolean,
+    emptyHint: string,
+  ) => (
+    <Card className="overflow-hidden">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Category</TableHead>
+            <TableHead className="text-right">Cost (RM)</TableHead>
+            <TableHead className="text-right">Price (RM)</TableHead>
+            <TableHead className="w-[80px]" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {loading ? (
+            <TableRow>
+              <TableCell colSpan={5} className="h-24 text-center">
+                <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
+              </TableCell>
+            </TableRow>
+          ) : rows.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                {emptyHint}
+              </TableCell>
+            </TableRow>
+          ) : (
+            rows.map((s) => (
+              <TableRow key={s.id}>
+                <TableCell className="font-medium">{s.name}</TableCell>
+                <TableCell>
+                  <Badge variant="outline">
+                    {(s as { category?: string | null }).category ?? 'General Service'}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{fmtRM(s.cost)}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {fmtRM(s.price_to_patient)}
+                </TableCell>
+                <TableCell>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      setServiceDialog({ open: true, row: buildServiceRow(s) })
+                    }
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </Card>
+  );
 
   return (
     <div className="space-y-6">
@@ -75,172 +311,89 @@ export default function InventorySettings() {
         </div>
       </div>
 
-      <Tabs defaultValue="items">
-        <TabsList>
-          <TabsTrigger value="items">Medications & Items</TabsTrigger>
-          <TabsTrigger value="services">Services</TabsTrigger>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabKey)}>
+        <TabsList className="flex-wrap h-auto">
+          <TabsTrigger value="medications">Medications</TabsTrigger>
+          <TabsTrigger value="disposables">Disposables</TabsTrigger>
+          <TabsTrigger value="procedures">Procedures</TabsTrigger>
+          <TabsTrigger value="labs">Lab Investigations</TabsTrigger>
+          <TabsTrigger value="general_services">General Services</TabsTrigger>
           <TabsTrigger value="packages">Packages</TabsTrigger>
         </TabsList>
 
-        {/* ITEMS */}
-        <TabsContent value="items" className="space-y-3">
+        {/* MEDICATIONS (Medication + Vaccine) */}
+        <TabsContent value="medications" className="space-y-3">
           <div className="flex justify-end">
-            <Button size="sm" onClick={() => setItemDialog({ open: true, row: null })}>
+            <Button size="sm" onClick={() => openAddItem(ITEM_TAB_DEFAULTS.medications)}>
               <Plus className="mr-1.5 h-4 w-4" />
-              Add Item
+              Add Medication
             </Button>
           </div>
-          <Card className="overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead className="text-right">Stock</TableHead>
-                  <TableHead className="text-right">Cost Price (RM)</TableHead>
-                  <TableHead className="text-right">Selling Price (RM)</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-[80px]" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {itemsLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">
-                      <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
-                    </TableCell>
-                  </TableRow>
-                ) : items.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                      No items yet. Click "Add Item" to create one.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  items.map((it) => (
-                    <TableRow key={it.id}>
-                      <TableCell className="font-medium">{it.name}</TableCell>
-                      <TableCell className="text-right tabular-nums">{it.stock}</TableCell>
-                      <TableCell className="text-right tabular-nums">{fmtRM(it.cost_price)}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {fmtRM(it.price_to_patient_max)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={it.status === 'active' ? 'default' : 'secondary'}>
-                          {it.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() =>
-                            setItemDialog({
-                              open: true,
-                              row: {
-                                id: it.id,
-                                name: it.name,
-                                cost_price: Number(it.cost_price) || 0,
-                                price_to_patient_max: Number(it.price_to_patient_max) || 0,
-                                standard_panel_price:
-                                  Number((it as { standard_panel_price?: number | null }).standard_panel_price) || 0,
-                                stock: Number(it.stock) || 0,
-                                status: it.status,
-                                default_indication:
-                                  (it as { default_indication?: string | null }).default_indication ?? null,
-                                default_dosage_qty:
-                                  (it as { default_dosage_qty?: string | null }).default_dosage_qty ?? null,
-                                default_dosage_unit:
-                                  (it as { default_dosage_unit?: string | null }).default_dosage_unit ?? null,
-                                default_frequency:
-                                  (it as { default_frequency?: string | null }).default_frequency ?? null,
-                                default_instruction:
-                                  (it as { default_instruction?: string | null }).default_instruction ?? null,
-                                default_duration:
-                                  (it as { default_duration?: string | null }).default_duration ?? null,
-                                default_duration_unit:
-                                  (it as { default_duration_unit?: string | null }).default_duration_unit ?? null,
-                                default_precaution:
-                                  (it as { default_precaution?: string | null }).default_precaution ?? null,
-                              },
-                            })
-                          }
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </Card>
+          {renderItemTable(
+            medications,
+            itemsLoading,
+            'No medications yet. Click "Add Medication" to create one.',
+          )}
         </TabsContent>
 
-        {/* SERVICES */}
-        <TabsContent value="services" className="space-y-3">
+        {/* DISPOSABLES */}
+        <TabsContent value="disposables" className="space-y-3">
           <div className="flex justify-end">
-            <Button size="sm" onClick={() => setServiceDialog({ open: true, row: null })}>
+            <Button size="sm" onClick={() => openAddItem(ITEM_TAB_DEFAULTS.disposables)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Disposable
+            </Button>
+          </div>
+          {renderItemTable(
+            disposables,
+            itemsLoading,
+            'No disposable items yet. Click "Add Disposable" to create one.',
+          )}
+        </TabsContent>
+
+        {/* PROCEDURES */}
+        <TabsContent value="procedures" className="space-y-3">
+          <div className="flex justify-end">
+            <Button size="sm" onClick={() => openAddService(SVC_TAB_DEFAULTS.procedures)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Procedure
+            </Button>
+          </div>
+          {renderServiceTable(
+            procedures,
+            servicesLoading,
+            'No procedures yet. Click "Add Procedure" to create one.',
+          )}
+        </TabsContent>
+
+        {/* LAB INVESTIGATIONS */}
+        <TabsContent value="labs" className="space-y-3">
+          <div className="flex justify-end">
+            <Button size="sm" onClick={() => openAddService(SVC_TAB_DEFAULTS.labs)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Lab Investigation
+            </Button>
+          </div>
+          {renderServiceTable(
+            labs,
+            servicesLoading,
+            'No lab investigations yet. Click "Add Lab Investigation" to create one.',
+          )}
+        </TabsContent>
+
+        {/* GENERAL SERVICES (General Service + Other) */}
+        <TabsContent value="general_services" className="space-y-3">
+          <div className="flex justify-end">
+            <Button size="sm" onClick={() => openAddService(SVC_TAB_DEFAULTS.general_services)}>
               <Plus className="mr-1.5 h-4 w-4" />
               Add Service
             </Button>
           </div>
-          <Card className="overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead className="text-right">Cost (RM)</TableHead>
-                  <TableHead className="text-right">Price (RM)</TableHead>
-                  <TableHead className="w-[80px]" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {servicesLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center">
-                      <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
-                    </TableCell>
-                  </TableRow>
-                ) : services.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                      No services yet. Click "Add Service" to create one.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  services.map((s) => (
-                    <TableRow key={s.id}>
-                      <TableCell className="font-medium">{s.name}</TableCell>
-                      <TableCell className="text-right tabular-nums">{fmtRM(s.cost)}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {fmtRM(s.price_to_patient)}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() =>
-                            setServiceDialog({
-                              open: true,
-                              row: {
-                                id: s.id,
-                                name: s.name,
-                                cost: Number(s.cost) || 0,
-                                price_to_patient: Number(s.price_to_patient) || 0,
-                                status: s.status,
-                              },
-                            })
-                          }
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </Card>
+          {renderServiceTable(
+            generalServices,
+            servicesLoading,
+            'No general services yet. Click "Add Service" to create one.',
+          )}
         </TabsContent>
 
         {/* PACKAGES */}
@@ -315,11 +468,13 @@ export default function InventorySettings() {
         open={itemDialog.open}
         onOpenChange={(o) => setItemDialog((s) => ({ ...s, open: o }))}
         item={itemDialog.row}
+        defaultCategory={itemDialog.defaultCategory}
       />
       <ServiceDialog
         open={serviceDialog.open}
         onOpenChange={(o) => setServiceDialog((s) => ({ ...s, open: o }))}
         service={serviceDialog.row}
+        defaultCategory={serviceDialog.defaultCategory}
       />
       <PackageDialog
         open={pkgDialog.open}
