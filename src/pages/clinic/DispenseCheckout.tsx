@@ -158,6 +158,10 @@ export default function DispenseCheckout() {
         <StatusBadge status={entry.clinic_status} />
       </div>
 
+      {isLockedByOther && (
+        <ConsultationLockBanner onForceUnlock={forceUnlock} />
+      )}
+
       {/* 3-column workspace */}
       <div className="grid lg:grid-cols-[280px_1fr_360px] gap-4 items-start">
         {/* Patient summary */}
