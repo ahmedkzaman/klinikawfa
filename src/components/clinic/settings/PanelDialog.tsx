@@ -137,22 +137,29 @@ export function PanelDialog({ open, onOpenChange, panel }: Props) {
     }
   }, [open, panel, form]);
 
-  const onSubmit = form.handleSubmit(async (values) => {
-    const parsed = schema.parse(values);
-    try {
-      if (isEdit && panel) {
-        await updateMut.mutateAsync({ id: panel.id, patch: parsed });
-        toast.success('Panel updated');
-      } else {
-        await addMut.mutateAsync({ ...parsed, name: parsed.name });
-        toast.success('Panel created');
+  const onSubmit = form.handleSubmit(
+    async (values) => {
+      // values are already parsed/transformed by zodResolver
+      const parsed = values as unknown as z.output<typeof schema>;
+      try {
+        if (isEdit && panel) {
+          await updateMut.mutateAsync({ id: panel.id, patch: parsed });
+          toast.success('Panel updated');
+        } else {
+          await addMut.mutateAsync({ ...parsed, name: parsed.name });
+          toast.success('Panel created');
+        }
+        onOpenChange(false);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Save failed';
+        toast.error(message);
       }
-      onOpenChange(false);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Save failed';
-      toast.error(message);
-    }
-  });
+    },
+    (errors) => {
+      console.error('Panel form validation errors:', errors);
+      toast.error('Please check the form for errors');
+    },
+  );
 
   const submitting = addMut.isPending || updateMut.isPending;
 
