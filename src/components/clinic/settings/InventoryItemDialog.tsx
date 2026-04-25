@@ -53,6 +53,14 @@ export interface InventoryItemRow {
   standard_panel_price?: number | null;
   stock: number;
   status: string;
+  default_indication?: string | null;
+  default_dosage_qty?: string | null;
+  default_dosage_unit?: string | null;
+  default_frequency?: string | null;
+  default_instruction?: string | null;
+  default_duration?: string | null;
+  default_duration_unit?: string | null;
+  default_precaution?: string | null;
 }
 
 interface Props {
@@ -76,6 +84,9 @@ const intField = z.preprocess(
     .nonnegative('Must be 0 or more'),
 );
 
+const optStr = (max: number) =>
+  z.string().trim().max(max).optional().or(z.literal(''));
+
 const itemSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(120),
   cost_price: moneyField,
@@ -83,6 +94,14 @@ const itemSchema = z.object({
   standard_panel_price: moneyField,
   current_stock: intField,
   status: z.enum(['active', 'inactive']),
+  default_indication: optStr(500),
+  default_dosage_qty: optStr(50),
+  default_dosage_unit: optStr(50),
+  default_frequency: optStr(50),
+  default_instruction: optStr(100),
+  default_duration: optStr(50),
+  default_duration_unit: optStr(50),
+  default_precaution: optStr(500),
 });
 
 type ItemFormData = z.infer<typeof itemSchema>;
@@ -94,6 +113,14 @@ const EMPTY_VALUES: ItemFormData = {
   standard_panel_price: 0,
   current_stock: 0,
   status: 'active',
+  default_indication: '',
+  default_dosage_qty: '',
+  default_dosage_unit: '',
+  default_frequency: '',
+  default_instruction: '',
+  default_duration: '',
+  default_duration_unit: '',
+  default_precaution: '',
 };
 
 export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
