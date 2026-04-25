@@ -106,6 +106,7 @@ const itemSchema = z.object({
   standard_panel_price: moneyField,
   current_stock: intField,
   status: z.enum(['active', 'inactive']),
+  category: z.enum(['Medication', 'Disposable Item', 'Vaccine', 'Other']),
   default_indication: optStr(500),
   default_dosage_qty: optStr(50),
   default_dosage_unit: optStr(50),
@@ -125,6 +126,7 @@ const EMPTY_VALUES: ItemFormData = {
   standard_panel_price: 0,
   current_stock: 0,
   status: 'active',
+  category: 'Medication',
   default_indication: '',
   default_dosage_qty: '',
   default_dosage_unit: '',
@@ -135,7 +137,7 @@ const EMPTY_VALUES: ItemFormData = {
   default_precaution: '',
 };
 
-export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
+export function InventoryItemDialog({ open, onOpenChange, item, defaultCategory }: Props) {
   const addItem = useAddInventoryItem();
   const updateItem = useUpdateInventoryItem();
   const reconcileOverrides = useReconcileOverrides();
