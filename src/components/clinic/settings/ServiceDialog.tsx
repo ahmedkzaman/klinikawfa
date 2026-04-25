@@ -32,6 +32,19 @@ import {
 } from '@/hooks/clinic/usePriceOverrides';
 import { toast } from 'sonner';
 
+export type ServiceCategory =
+  | 'General Service'
+  | 'Procedure'
+  | 'Laboratory Investigation'
+  | 'Other';
+
+const SERVICE_CATEGORIES: ServiceCategory[] = [
+  'General Service',
+  'Procedure',
+  'Laboratory Investigation',
+  'Other',
+];
+
 export interface ServiceRow {
   id: string;
   name: string;
@@ -39,12 +52,15 @@ export interface ServiceRow {
   price_to_patient: number;
   standard_panel_price?: number | null;
   status?: 'active' | 'inactive' | string;
+  category?: ServiceCategory | string | null;
 }
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   service: ServiceRow | null;
+  /** Pre-selected category when adding from a category-specific tab. Ignored when editing. */
+  defaultCategory?: ServiceCategory;
 }
 
 const moneyField = z.preprocess(
