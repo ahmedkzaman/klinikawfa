@@ -1,62 +1,128 @@
-# Fix Doctor Lockout — Preserve Historical Immutability
+# Master Inventory Import — Corrected Execution Plan
 
-You're correct: stripping `isCompleted` from `useConsultationLock.ts` would let any user re-open and edit a 6-month-old, fully-paid consultation — a serious clinical and LHDN compliance hazard. The fix should instead delay when `consultation.status` becomes `'completed'`, so that the existing immutability guard naturally aligns with the real workflow.
-
-I verified that `DispenseCheckout.tsx` (line 90) is the legitimate point that flips `consultation.status = 'completed'` once payment is finalized. So removing the premature flip from `handleSendToDispensary` is safe — completion will now strictly mean "paid & finalized at front desk".
+You are right on all three points. `inventory_items` already has `item_code`, `brand`, `uom`, `is_otc`, `default_indication`, and `category`. Only `services` needs `item_code`. The execution will follow exactly your corrected logic.
 
 ---
 
-## A. Prevent Premature Completion — `src/pages/clinic/ConsultationDetail.tsx`
+## Step 1 — Schema Migration (`<ts>_inventory_import_keys.sql`)
 
-In `handleSendToDispensary` (line 307), remove `status: 'completed'` from the `updateConsultation.mutateAsync` payload. Keep saving notes and diagnoses; only the queue entry transitions to `sent_to_dispensary`. The consultation remains `'in_progress'` until `DispenseCheckout` finalizes payment.
+Add the natural key to `services` and ensure both tables can UPSERT cleanly.
 
-```diff
- await updateConsultation.mutateAsync({
-   id: consultationId,
-   case_note: caseNote,
-   dispense_note: dispenseNote,
-   diagnosis_id: diagnosisId,
-   diagnosis_text: diagnosisText,
--  status: 'completed',
- });
- await updateQueue.mutateAsync({
-   id: entry.id,
-   clinic_status: 'sent_to_dispensary',
- });
+```sql
+-- services: add item_code as natural key
+ALTER TABLE public.services
+  ADD COLUMN IF NOT EXISTS item_code varchar;
+
+CREATE UNIQUE INDEX IF NOT EXISTS services_item_code_unique
+  ON public.services (item_code)
+  WHERE item_code IS NOT NULL;
+
+-- inventory_items: ensure unique partial index on item_code
+CREATE UNIQUE INDEX IF NOT EXISTS inventory_items_item_code_unique
+  ON public.inventory_items (item_code)
+  WHERE item_code IS NOT NULL;
 ```
 
-## B. Add Reopen Path — `src/pages/clinic/Consultation.tsx`
+---
 
-In the action cell (line 309–318), the `sent_to_dispensary` / `dispensing_payment` branch currently renders only a **Checkout** button. Replace it with a side-by-side pair wrapped in `flex gap-2`:
+## Step 2 — Generate Seed SQL (Python, run in sandbox)
 
-- **Edit Consultation** — `variant="outline"`, navigates to `/clinic/consultation/${entry.id}`. Lets the doctor re-enter and amend notes/cart while the lock is free.
-- **Checkout** — preserves existing behavior, navigates to `/clinic/queue/checkout/${entry.id}`.
+Copy the uploaded XLSX/CSV into `/tmp`, then run the corrected script (your version, adopted verbatim). Key fixes baked in:
 
-## C. Lock Hook — `src/hooks/clinic/useConsultationLock.ts` (NO CHANGES)
-
-Explicitly leave the immutability guard intact:
-
-- Keep `const isCompleted = consultation?.status === 'completed';`
-- Keep `const canEdit = !isCompleted && (lockedBy === null || isLockedByMe);`
-- Keep `isCompleted` in both `useEffect` early-returns and dependency arrays.
-
-Because Step A delays completion until real checkout, doctors will retain edit access during the dispensing phase via the pessimistic lock, while truly-finalized historical records remain permanently read-only — protecting clinical records and LHDN tax receipts from retrospective edits.
+- **Pricing scan** matches `'default'`, `'self'`, `'cash'`, `'retail'` for self-pay, and the **first** `'panel'` rate for `standard_panel_price`. Falls back to `PRICE 1 VALUE`, then mirrors self-pay → panel if panel missing.
+- **`USE FOR` → `default_indication`** mapped on inventory rows.
+- **Group routing** covers all six observed groups: `Medicines`, `Medical Disposables`, `Procedures`, `Lab Test`, `Consultation Fees`, `General`.
+- Output written to `/mnt/documents/seed_master_inventory.sql` so it survives across calls.
 
 ---
 
-## Why this is the right architecture
+## Step 3 — Apply Seed via Insert Tool
 
-| Phase | `consultation.status` | `clinic_status` | `canEdit` (doctor) |
-|---|---|---|---|
-| Doctor consulting | `in_progress` | `with_doctor` | ✅ (lock-gated) |
-| Sent to dispensary | `in_progress` | `sent_to_dispensary` | ✅ (lock-gated) — **the fix** |
-| Payment in progress | `in_progress` | `dispensing_payment` | ✅ (lock-gated) |
-| Paid & closed | `completed` | `completed` | 🔒 read-only forever |
+Two separate UPSERTs, both with **complete `DO UPDATE SET` clauses** (no stale-data drift on re-import).
 
-Status semantics now match reality: `completed` = "money has changed hands, file is sealed". The lock manages live concurrency; `isCompleted` enforces historical immutability. The two concerns stay cleanly separated.
+**Inventory items** (Medicines + Medical Disposables, ~235 rows):
+```sql
+INSERT INTO public.inventory_items
+  (item_code, name, category, brand, uom, is_otc, default_indication,
+   cost_price, price_to_patient_max, price_to_patient_min,
+   standard_panel_price, stock, status)
+VALUES (...)
+ON CONFLICT (item_code) WHERE item_code IS NOT NULL
+DO UPDATE SET
+  name                  = EXCLUDED.name,
+  category              = EXCLUDED.category,
+  brand                 = EXCLUDED.brand,
+  uom                   = EXCLUDED.uom,
+  is_otc                = EXCLUDED.is_otc,
+  default_indication    = EXCLUDED.default_indication,
+  cost_price            = EXCLUDED.cost_price,
+  price_to_patient_max  = EXCLUDED.price_to_patient_max,
+  price_to_patient_min  = EXCLUDED.price_to_patient_min,
+  standard_panel_price  = EXCLUDED.standard_panel_price,
+  status                = EXCLUDED.status,
+  updated_at            = now();
+-- NOTE: stock intentionally excluded from UPDATE so live counts are never overwritten.
+```
 
-## Files touched
+**Services** (Procedures + Lab Test + Consultation Fees + General, ~197 rows):
+```sql
+INSERT INTO public.services
+  (item_code, name, category, cost, price_to_patient, standard_panel_price, status)
+VALUES (...)
+ON CONFLICT (item_code) WHERE item_code IS NOT NULL
+DO UPDATE SET
+  name                 = EXCLUDED.name,
+  category             = EXCLUDED.category,
+  cost                 = EXCLUDED.cost,
+  price_to_patient     = EXCLUDED.price_to_patient,
+  standard_panel_price = EXCLUDED.standard_panel_price,
+  status               = EXCLUDED.status;
+```
 
-- `src/pages/clinic/ConsultationDetail.tsx` — remove premature `status: 'completed'`
-- `src/pages/clinic/Consultation.tsx` — add Edit Consultation + Checkout button pair
-- `src/hooks/clinic/useConsultationLock.ts` — **unchanged** (guard preserved)
+---
+
+## Step 4 — Wire `item_code` Through the Services UI
+
+**`src/hooks/clinic/useServices.ts`**
+- Add `item_code?: string | null` to `ServiceInput`.
+- Map it in `mapServicePayload`: `if (input.item_code !== undefined) payload.item_code = input.item_code?.trim() || null;`
+
+**`src/components/clinic/settings/ServiceDialog.tsx`**
+- Extend `ServiceRow` with `item_code?: string | null`.
+- Add `item_code: z.string().trim().max(40).optional().or(z.literal(''))` to `serviceSchema`.
+- Add an "Item Code" input in the form (read-only-feel, optional, displayed near "Name"), wired to defaults from `service?.item_code`.
+- Include `item_code` in the submit payload to `addService` / `updateService`.
+
+This guarantees admins can edit / re-export imported rows without losing the natural key.
+
+---
+
+## Step 5 — Reconciliation Report
+
+After applying the seed, run a verification query and surface counts:
+
+```sql
+SELECT category, COUNT(*) AS rows, COUNT(item_code) AS coded
+FROM public.inventory_items GROUP BY category ORDER BY category;
+
+SELECT category, COUNT(*) AS rows, COUNT(item_code) AS coded
+FROM public.services GROUP BY category ORDER BY category;
+```
+
+Expected: ~141 Medication, ~94 Disposable Item, ~121 Procedure, ~65 Laboratory Investigation, ~5 General Service, ~6 Other. Every imported row has a non-null `item_code`.
+
+---
+
+## Files to Change
+
+- **NEW migration**: `supabase/migrations/<ts>_inventory_import_keys.sql`
+- **NEW artifact**: `/mnt/documents/seed_master_inventory.sql` (idempotent, re-runnable)
+- **EDIT**: `src/hooks/clinic/useServices.ts` — add `item_code` to `ServiceInput` + payload mapper
+- **EDIT**: `src/components/clinic/settings/ServiceDialog.tsx` — add `item_code` to schema, form field, and `ServiceRow` type
+
+## Why this is safe
+
+- `ON CONFLICT` keyed on `item_code` (432 unique) — never on `name` (only 421 unique).
+- `stock` excluded from inventory `DO UPDATE SET` — live allocations untouched.
+- `default_indication`, `is_otc`, `status` all included — no stale data on re-import.
+- Frontend wired to the new column in the same change-set — no orphaned schema.
