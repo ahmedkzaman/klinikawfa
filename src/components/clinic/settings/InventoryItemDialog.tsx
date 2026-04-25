@@ -499,6 +499,131 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
             </CardContent>
           </Card>
 
+          {/* ─────────────── Section 3: Default Dispensing Instructions ─────────────── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">
+                Default Dispensing Instructions (Optional)
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Pre-fills the prescribing fields when this item is added to a
+                consultation. Doctors can override per patient.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Dosage qty + unit */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="def-dosage-qty">Dosage Qty</Label>
+                  <Input
+                    id="def-dosage-qty"
+                    placeholder="e.g. 1"
+                    {...register('default_dosage_qty')}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="def-dosage-unit">Dosage Unit</Label>
+                  <Select
+                    value={watch('default_dosage_unit') ?? ''}
+                    onValueChange={(v) => setValue('default_dosage_unit', v)}
+                  >
+                    <SelectTrigger id="def-dosage-unit">
+                      <SelectValue placeholder="Select unit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DOSAGE_UNIT_OPTIONS.map((o) => (
+                        <SelectItem key={o} value={o}>
+                          {o}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Frequency + duration + duration unit */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="def-frequency">Frequency</Label>
+                  <Select
+                    value={watch('default_frequency') ?? ''}
+                    onValueChange={(v) => setValue('default_frequency', v)}
+                  >
+                    <SelectTrigger id="def-frequency">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FREQUENCY_OPTIONS.map((o) => (
+                        <SelectItem key={o} value={o}>
+                          {o}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="def-duration">Duration</Label>
+                  <Input
+                    id="def-duration"
+                    placeholder="e.g. 5"
+                    {...register('default_duration')}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="def-duration-unit">Duration Unit</Label>
+                  <Select
+                    value={watch('default_duration_unit') ?? ''}
+                    onValueChange={(v) => setValue('default_duration_unit', v)}
+                  >
+                    <SelectTrigger id="def-duration-unit">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DURATION_UNIT_OPTIONS.map((o) => (
+                        <SelectItem key={o} value={o}>
+                          {o}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Instruction */}
+              <div className="space-y-1.5">
+                <Label>Instruction</Label>
+                <ComboboxInput
+                  value={watch('default_instruction') ?? ''}
+                  onChange={(v) => setValue('default_instruction', v)}
+                  options={INSTRUCTION_OPTIONS}
+                  placeholder="Type or select"
+                />
+              </div>
+
+              {/* Indication */}
+              <div className="space-y-1.5">
+                <Label>Indication</Label>
+                <ComboboxInput
+                  value={watch('default_indication') ?? ''}
+                  onChange={(v) => setValue('default_indication', v)}
+                  options={INDICATION_OPTIONS}
+                  placeholder="Type or select"
+                />
+              </div>
+
+              {/* Precaution */}
+              <div className="space-y-1.5">
+                <Label htmlFor="def-precaution">Precaution</Label>
+                <Textarea
+                  id="def-precaution"
+                  rows={2}
+                  placeholder={PRECAUTION_OPTIONS.join(', ')}
+                  {...register('default_precaution')}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
           <DialogFooter>
             <Button
               type="button"
