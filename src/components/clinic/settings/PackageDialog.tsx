@@ -722,7 +722,7 @@ interface BundleListProps {
   register: any;
   fieldName: 'services' | 'medications';
   options: PickerOption[];
-  watchedRows: { id: string | null; quantity: number }[];
+  watchedRows: Array<{ id?: string | null; quantity?: number }>;
   onAppend: () => void;
   onRemove: (index: number) => void;
   emptyHint: string;
