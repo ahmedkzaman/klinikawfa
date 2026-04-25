@@ -38,6 +38,8 @@ import {
   useUpdateConsultation,
   usePatientConsultationHistory,
 } from '@/hooks/clinic/useConsultations';
+import { useConsultationLock } from '@/hooks/clinic/useConsultationLock';
+import { ConsultationLockBanner } from '@/components/clinic/consultation/ConsultationLockBanner';
 import { useClinicPreferences } from '@/hooks/clinic/useClinicPreferences';
 import { useVitalSigns, useRecordVitalSigns } from '@/hooks/clinic/useVitalSigns';
 import {
