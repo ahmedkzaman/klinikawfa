@@ -44,6 +44,12 @@ export default function DispenseCheckout() {
   const { data: consultation } = useConsultation(queueEntryId);
   const { data: items = [] } = useConsultationItems(consultation?.id);
   const { data: payments = [] } = usePayments(queueEntryId);
+  const { isLockedByOther, canEdit, forceUnlock } = useConsultationLock(
+    consultation as
+      | { id?: string; locked_by?: string | null; status?: string }
+      | null
+      | undefined,
+  );
 
   // Auto-advance status once on mount.
   const advancedRef = useRef(false);
