@@ -315,7 +315,6 @@ export default function ConsultationDetail() {
       dispense_note: dispenseNote,
       diagnosis_id: diagnosisId,
       diagnosis_text: diagnosisText,
-      status: 'completed',
     });
     await updateQueue.mutateAsync({
       id: entry.id,
