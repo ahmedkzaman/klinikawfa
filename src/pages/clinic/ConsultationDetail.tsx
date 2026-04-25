@@ -57,6 +57,7 @@ import {
   TreatmentItemCard,
   type TreatmentItemCardItem,
 } from '@/components/clinic/consultation/TreatmentItemCard';
+import { DiagnosisCombobox } from '@/components/clinic/consultation/DiagnosisCombobox';
 
 const PRICE_TIERS = ['SELF PAY'];
 
@@ -97,6 +98,7 @@ export default function ConsultationDetail() {
   const [caseNote, setCaseNote] = useState('');
   const [dispenseNote, setDispenseNote] = useState('');
   const [diagnosisText, setDiagnosisText] = useState('');
+  const [diagnosisId, setDiagnosisId] = useState<string | null>(null);
 
   const consultationId = (consultation as { id?: string } | null)?.id;
   const { data: items = [] } = useConsultationItems(consultationId);
@@ -172,10 +174,12 @@ export default function ConsultationDetail() {
         case_note?: string;
         dispense_note?: string;
         diagnosis_text?: string;
+        diagnosis_id?: string | null;
       };
       setCaseNote(c.case_note ?? '');
       setDispenseNote(c.dispense_note ?? '');
       setDiagnosisText(c.diagnosis_text ?? '');
+      setDiagnosisId(c.diagnosis_id ?? null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [consultationId]);
