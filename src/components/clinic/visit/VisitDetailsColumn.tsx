@@ -149,17 +149,19 @@ export function VisitDetailsColumn({ consultationId, canEdit = true }: Props) {
                   </div>
                 </div>
 
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                  onClick={() => handleRemove(item.id)}
-                  disabled={removeItem.isPending}
-                  aria-label="Remove item"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                {canEdit && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    onClick={() => handleRemove(item.id)}
+                    disabled={removeItem.isPending}
+                    aria-label="Remove item"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </div>
             );
           })}
