@@ -192,6 +192,7 @@ export function ServiceDialog({ open, onOpenChange, service, defaultCategory }: 
         price: data.price,
         standard_panel_price: data.standard_panel_price,
         status: data.status,
+        category: data.category,
       };
 
       let serviceId: string;
