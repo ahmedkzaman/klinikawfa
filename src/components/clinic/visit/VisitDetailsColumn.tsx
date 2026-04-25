@@ -10,9 +10,10 @@ import { toast } from 'sonner';
 
 interface Props {
   consultationId: string | undefined;
+  canEdit?: boolean;
 }
 
-export function VisitDetailsColumn({ consultationId }: Props) {
+export function VisitDetailsColumn({ consultationId, canEdit = true }: Props) {
   const { data: items = [], isLoading } = useConsultationItems(consultationId);
   const updateItem = useUpdateConsultationItem();
   const removeItem = useRemoveConsultationItem();
