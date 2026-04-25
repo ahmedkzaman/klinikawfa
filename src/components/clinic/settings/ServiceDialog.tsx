@@ -76,6 +76,7 @@ const serviceSchema = z.object({
   price: moneyField,
   standard_panel_price: moneyField,
   status: z.enum(['active', 'inactive']),
+  category: z.enum(['General Service', 'Procedure', 'Laboratory Investigation', 'Other']),
 });
 
 type ServiceFormData = z.infer<typeof serviceSchema>;
@@ -86,9 +87,10 @@ const EMPTY: ServiceFormData = {
   price: 0,
   standard_panel_price: 0,
   status: 'active',
+  category: 'General Service',
 };
 
-export function ServiceDialog({ open, onOpenChange, service }: Props) {
+export function ServiceDialog({ open, onOpenChange, service, defaultCategory }: Props) {
   const addService = useAddService();
   const updateService = useUpdateService();
   const reconcileOverrides = useReconcileOverrides();
@@ -115,20 +117,25 @@ export function ServiceDialog({ open, onOpenChange, service }: Props) {
   useEffect(() => {
     if (!open) return;
     if (service) {
+      const validCats: ServiceCategory[] = ['General Service', 'Procedure', 'Laboratory Investigation', 'Other'];
+      const cat = (validCats as string[]).includes(service.category as string)
+        ? (service.category as ServiceCategory)
+        : 'General Service';
       reset({
         name: service.name,
         cost: Number(service.cost) || 0,
         price: Number(service.price_to_patient) || 0,
         standard_panel_price: Number(service.standard_panel_price ?? 0) || 0,
         status: service.status === 'inactive' ? 'inactive' : 'active',
+        category: cat,
       });
     } else {
-      reset(EMPTY);
+      reset({ ...EMPTY, category: defaultCategory ?? 'General Service' });
       setOverrides([]);
     }
     setDraftPanelId('');
     setDraftPrice('');
-  }, [open, service, reset]);
+  }, [open, service, reset, defaultCategory]);
 
   useEffect(() => {
     if (!open || !service) return;
