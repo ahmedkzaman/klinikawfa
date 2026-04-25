@@ -588,6 +588,7 @@ export default function ConsultationDetail() {
                         key={item.id}
                         item={item as TreatmentItemCardItem}
                         priceTiers={PRICE_TIERS}
+                        disabled={!canEdit}
                         onRemove={() =>
                           consultationId &&
                           removeItem.mutate({ id: item.id, consultationId })
