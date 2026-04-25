@@ -1028,6 +1028,7 @@ export type Database = {
         Row: {
           created_at: string
           group_category: string
+          icd10_code: string | null
           id: string
           name: string
           status: string
@@ -1036,6 +1037,7 @@ export type Database = {
         Insert: {
           created_at?: string
           group_category?: string
+          icd10_code?: string | null
           id?: string
           name: string
           status?: string
@@ -1044,6 +1046,7 @@ export type Database = {
         Update: {
           created_at?: string
           group_category?: string
+          icd10_code?: string | null
           id?: string
           name?: string
           status?: string

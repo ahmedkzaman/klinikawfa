@@ -57,6 +57,7 @@ import {
   TreatmentItemCard,
   type TreatmentItemCardItem,
 } from '@/components/clinic/consultation/TreatmentItemCard';
+import { DiagnosisCombobox } from '@/components/clinic/consultation/DiagnosisCombobox';
 
 const PRICE_TIERS = ['SELF PAY'];
 
@@ -97,6 +98,7 @@ export default function ConsultationDetail() {
   const [caseNote, setCaseNote] = useState('');
   const [dispenseNote, setDispenseNote] = useState('');
   const [diagnosisText, setDiagnosisText] = useState('');
+  const [diagnosisId, setDiagnosisId] = useState<string | null>(null);
 
   const consultationId = (consultation as { id?: string } | null)?.id;
   const { data: items = [] } = useConsultationItems(consultationId);
@@ -172,10 +174,12 @@ export default function ConsultationDetail() {
         case_note?: string;
         dispense_note?: string;
         diagnosis_text?: string;
+        diagnosis_id?: string | null;
       };
       setCaseNote(c.case_note ?? '');
       setDispenseNote(c.dispense_note ?? '');
       setDiagnosisText(c.diagnosis_text ?? '');
+      setDiagnosisId(c.diagnosis_id ?? null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [consultationId]);
@@ -205,7 +209,7 @@ export default function ConsultationDetail() {
       id: consultationId,
       case_note: caseNote,
       dispense_note: dispenseNote,
-      diagnosis_id: null,
+      diagnosis_id: diagnosisId,
       diagnosis_text: diagnosisText,
     });
     toast.success('Consultation notes saved');
@@ -262,7 +266,7 @@ export default function ConsultationDetail() {
       id: consultationId,
       case_note: caseNote,
       dispense_note: dispenseNote,
-      diagnosis_id: null,
+      diagnosis_id: diagnosisId,
       diagnosis_text: diagnosisText,
       status: 'completed',
     });
@@ -283,7 +287,7 @@ export default function ConsultationDetail() {
           id: consultationId,
           case_note: caseNote,
           dispense_note: dispenseNote,
-          diagnosis_id: null,
+          diagnosis_id: diagnosisId,
           diagnosis_text: diagnosisText,
         });
       }
@@ -449,11 +453,13 @@ export default function ConsultationDetail() {
                     <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       Diagnosis
                     </Label>
-                    <Input
-                      value={diagnosisText}
-                      onChange={(e) => setDiagnosisText(e.target.value)}
-                      placeholder="Type diagnosis…"
-                      className={softInput}
+                    <DiagnosisCombobox
+                      diagnosisId={diagnosisId}
+                      diagnosisText={diagnosisText}
+                      onChange={({ diagnosis_id, diagnosis_text }) => {
+                        setDiagnosisId(diagnosis_id);
+                        setDiagnosisText(diagnosis_text);
+                      }}
                     />
                   </div>
                   <div className="space-y-1.5">
