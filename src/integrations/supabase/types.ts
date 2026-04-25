@@ -2105,6 +2105,7 @@ export type Database = {
           doctor_remarks: string | null
           id: string
           is_urgent: boolean
+          panel_id: string | null
           patient_id: string
           payment_method: string | null
           queue_number: number | null
@@ -2126,6 +2127,7 @@ export type Database = {
           doctor_remarks?: string | null
           id?: string
           is_urgent?: boolean
+          panel_id?: string | null
           patient_id: string
           payment_method?: string | null
           queue_number?: number | null
@@ -2147,6 +2149,7 @@ export type Database = {
           doctor_remarks?: string | null
           id?: string
           is_urgent?: boolean
+          panel_id?: string | null
           patient_id?: string
           payment_method?: string | null
           queue_number?: number | null
@@ -2175,6 +2178,13 @@ export type Database = {
             columns: ["called_by_doctor_id"]
             isOneToOne: false
             referencedRelation: "doctors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "queue_entries_panel_id_fkey"
+            columns: ["panel_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_providers"
             referencedColumns: ["id"]
           },
           {
