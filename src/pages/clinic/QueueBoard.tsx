@@ -106,6 +106,7 @@ export default function QueueBoard() {
 
   const [appointmentDialog, setAppointmentDialog] = useState(false);
   const [walkInDialog, setWalkInDialog] = useState(false);
+  const [registerDialog, setRegisterDialog] = useState(false);
   const [activeEntry, setActiveEntry] = useState<QueueEntryWithJoins | null>(null);
 
   const grouped = useMemo(() => {
@@ -139,6 +140,9 @@ export default function QueueBoard() {
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setWalkInDialog(true)}>
             <UserPlus className="h-4 w-4 mr-1" /> Walk-In
+          </Button>
+          <Button variant="outline" onClick={() => setRegisterDialog(true)}>
+            <Users className="h-4 w-4 mr-1" /> Register & Queue
           </Button>
           <Button
             onClick={() => setAppointmentDialog(true)}
@@ -339,6 +343,7 @@ export default function QueueBoard() {
         onOpenChange={setAppointmentDialog}
       />
       <CheckInWalkInDialog open={walkInDialog} onOpenChange={setWalkInDialog} />
+      <RegisterAndCheckInDialog open={registerDialog} onOpenChange={setRegisterDialog} />
     </>
   );
 }
