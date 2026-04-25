@@ -141,8 +141,26 @@ export default function InventorySettings() {
                                 name: it.name,
                                 cost_price: Number(it.cost_price) || 0,
                                 price_to_patient_max: Number(it.price_to_patient_max) || 0,
+                                standard_panel_price:
+                                  Number((it as { standard_panel_price?: number | null }).standard_panel_price) || 0,
                                 stock: Number(it.stock) || 0,
                                 status: it.status,
+                                default_indication:
+                                  (it as { default_indication?: string | null }).default_indication ?? null,
+                                default_dosage_qty:
+                                  (it as { default_dosage_qty?: string | null }).default_dosage_qty ?? null,
+                                default_dosage_unit:
+                                  (it as { default_dosage_unit?: string | null }).default_dosage_unit ?? null,
+                                default_frequency:
+                                  (it as { default_frequency?: string | null }).default_frequency ?? null,
+                                default_instruction:
+                                  (it as { default_instruction?: string | null }).default_instruction ?? null,
+                                default_duration:
+                                  (it as { default_duration?: string | null }).default_duration ?? null,
+                                default_duration_unit:
+                                  (it as { default_duration_unit?: string | null }).default_duration_unit ?? null,
+                                default_precaution:
+                                  (it as { default_precaution?: string | null }).default_precaution ?? null,
                               },
                             })
                           }
