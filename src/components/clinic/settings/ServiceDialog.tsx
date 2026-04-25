@@ -150,6 +150,7 @@ export function ServiceDialog({ open, onOpenChange, service, defaultCategory }: 
   const submitting =
     addService.isPending || updateService.isPending || reconcileOverrides.isPending;
   const status = watch('status');
+  const category = watch('category');
 
   const usedPanelIds = new Set(overrides.map((o) => o.panel_id));
   const availablePanels = panels.filter((p) => !usedPanelIds.has(p.id));
