@@ -111,6 +111,17 @@ function mapItemPayload(input: Partial<InventoryItemInput>) {
   if (input.current_stock !== undefined) payload.stock = input.current_stock;
   if (input.status !== undefined) payload.status = input.status;
   if (input.category !== undefined) payload.category = input.category;
+  // Legacy / Excel-aligned metadata
+  if (input.item_code !== undefined) {
+    payload.item_code = typeof input.item_code === 'string' && input.item_code.trim() === '' ? null : input.item_code;
+  }
+  if (input.brand !== undefined) {
+    payload.brand = typeof input.brand === 'string' && input.brand.trim() === '' ? null : input.brand;
+  }
+  if (input.uom !== undefined) {
+    payload.uom = typeof input.uom === 'string' && input.uom.trim() === '' ? null : input.uom;
+  }
+  if (input.is_otc !== undefined) payload.is_otc = !!input.is_otc;
   for (const key of DEFAULT_FIELDS) {
     if (input[key] !== undefined) {
       const v = input[key];
