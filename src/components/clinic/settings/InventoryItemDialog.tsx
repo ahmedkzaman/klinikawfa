@@ -209,6 +209,7 @@ export function InventoryItemDialog({ open, onOpenChange, item, defaultCategory 
   const submitting =
     addItem.isPending || updateItem.isPending || reconcileOverrides.isPending;
   const status = watch('status');
+  const category = watch('category');
 
   const usedPanelIds = new Set(overrides.map((o) => o.panel_id));
   const availablePanels = panels.filter((p) => !usedPanelIds.has(p.id));
