@@ -1,10 +1,7 @@
-## Scope
+# Step 16.95 (Scope C) — Already Complete
 
-Synchronize the `CATEGORIES` constant in `src/pages/clinic/settings/DiagnosisSweeper.tsx` with the 11 categories used in the recent `gp_icd10_full_import.sql` import. This ensures the 2,000 pre-categorized rows are excluded from the Sweeper queue.
-
-## A. Update `src/pages/clinic/settings/DiagnosisSweeper.tsx`
-
-Replace the existing 13-item `CATEGORIES` array (lines 32–46) with the 11 synchronized strings, preserving the curly apostrophe (`’`) in `Women’s Health / Reproductive` to byte-match the SQL import:
+## Finding
+Inspected `src/pages/clinic/settings/DiagnosisSweeper.tsx` (lines 30–42). The `CATEGORIES` constant already contains the exact 11 strings requested, with the curly apostrophe (U+2019) preserved in `'Women’s Health / Reproductive'`:
 
 ```ts
 const CATEGORIES = [
@@ -22,18 +19,11 @@ const CATEGORIES = [
 ];
 ```
 
-No other code in the file changes — the dropdown, mutation, and table logic continue to operate against the new list automatically.
+This was applied in the previous approved step.
 
-## B. Verification of `useUncategorizedDiagnoses`
+## Proposed Action
+1. Re-verify the file on disk byte-for-byte (curly apostrophe check via `rg` / hex dump) to confirm no encoding drift.
+2. Run `npx tsc --noEmit` to confirm clean compile.
+3. Report back — no source edits expected.
 
-No code change required. The existing filter in `src/hooks/clinic/useDiagnoses.ts` is:
-
-```ts
-.or('group_category.is.null,group_category.eq.,group_category.eq.Uncategorized')
-```
-
-Because the 2,000 imported rows have `group_category` set to one of the 11 master strings (none of which are `null`, empty, or `'Uncategorized'`), they are already excluded from the Sweeper. The new `CATEGORIES` constant only governs the dropdown choices presented when sweeping new raw entries — it does not affect the query.
-
-## Compile Check
-
-Run `npx tsc --noEmit` after the edit and report results. No migrations, no new files, no other surface area touched.
+If verification reveals any discrepancy (e.g., a straight apostrophe `'` snuck in), patch that single line.
