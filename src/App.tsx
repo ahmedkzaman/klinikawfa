@@ -201,6 +201,14 @@ const App = () => (
                   }
                 />
                 <Route
+                  path="settings/diagnoses"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <DiagnosisSweeper />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
                   path="voided"
                   element={
                     <ClinicProtectedRoute requiredRole="special_admin">
