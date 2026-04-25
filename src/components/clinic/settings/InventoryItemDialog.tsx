@@ -159,6 +159,14 @@ export function InventoryItemDialog({ open, onOpenChange, item }: Props) {
         standard_panel_price: Number(item.standard_panel_price ?? 0) || 0,
         current_stock: Number(item.stock) || 0,
         status: (item.status as 'active' | 'inactive') ?? 'active',
+        default_indication: item.default_indication ?? '',
+        default_dosage_qty: item.default_dosage_qty ?? '',
+        default_dosage_unit: item.default_dosage_unit ?? '',
+        default_frequency: item.default_frequency ?? '',
+        default_instruction: item.default_instruction ?? '',
+        default_duration: item.default_duration ?? '',
+        default_duration_unit: item.default_duration_unit ?? '',
+        default_precaution: item.default_precaution ?? '',
       });
     } else {
       reset(EMPTY_VALUES);
