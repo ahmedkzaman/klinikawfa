@@ -545,6 +545,7 @@ export default function ConsultationDetail() {
                   <Button
                     size="sm"
                     onClick={() => setBulkDialogOpen(true)}
+                    disabled={!canEdit}
                     className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
                   >
                     <Plus className="h-3 w-3 mr-1" /> Add in bulk
