@@ -33,6 +33,7 @@ import {
 } from '@/lib/clinic/prescribingOptions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import {
   useAddInventoryItem,
   useUpdateInventoryItem,
