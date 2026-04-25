@@ -740,18 +740,6 @@ export default function ConsultationDetail() {
               </CardContent>
             </Card>
 
-            {/* Visit Note (intake) */}
-            <Card className={bento}>
-              <CardContent className="p-5">
-                <h3 className={bentoHeader}>VISIT NOTE</h3>
-                <p className="text-sm whitespace-pre-wrap text-slate-700">
-                  {entry.visit_notes || (
-                    <span className="text-slate-400">No visit notes recorded.</span>
-                  )}
-                </p>
-              </CardContent>
-            </Card>
-
             {/* Vital Signs */}
             <Card className={bento}>
               <CardContent className="p-5">
