@@ -93,13 +93,14 @@ export function useFinancialInsights(startDate: Date, endDate: Date) {
 
       // Summary
       let totalRevenue = 0;
+      let totalCogs = 0;
       let totalProfit = 0;
       const uniqueQueueIds = new Set<string>();
 
       // Daily map
-      const dailyMap = new Map<string, { revenue: number; profit: number }>();
+      const dailyMap = new Map<string, { revenue: number; cogs: number; profit: number }>();
       // Items map
-      const itemMap = new Map<string, { revenue: number; profit: number }>();
+      const itemMap = new Map<string, { revenue: number; cogs: number; profit: number }>();
       // Segment map: payment_method -> aggregates + queue ids
       const segmentMap = new Map<
         string,
@@ -109,18 +110,22 @@ export function useFinancialInsights(startDate: Date, endDate: Date) {
       for (const r of rows) {
         const rev = Number(r.revenue ?? 0);
         const prof = Number(r.profit ?? 0);
+        const cogs = rev - prof; // GAAP-aligned: COGS = Revenue − Profit
 
         totalRevenue += rev;
+        totalCogs += cogs;
         totalProfit += prof;
         uniqueQueueIds.add(r.queue_entry_id);
 
-        const day = dailyMap.get(r.visit_date) ?? { revenue: 0, profit: 0 };
+        const day = dailyMap.get(r.visit_date) ?? { revenue: 0, cogs: 0, profit: 0 };
         day.revenue += rev;
+        day.cogs += cogs;
         day.profit += prof;
         dailyMap.set(r.visit_date, day);
 
-        const item = itemMap.get(r.item_name) ?? { revenue: 0, profit: 0 };
+        const item = itemMap.get(r.item_name) ?? { revenue: 0, cogs: 0, profit: 0 };
         item.revenue += rev;
+        item.cogs += cogs;
         item.profit += prof;
         itemMap.set(r.item_name, item);
 
@@ -139,17 +144,18 @@ export function useFinancialInsights(startDate: Date, endDate: Date) {
 
       const summary: InsightSummary = {
         totalRevenue,
+        totalCogs,
         totalProfit,
         marginPct: totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0,
         patientVolume: uniqueQueueIds.size,
       };
 
       const dailyTrends: DailyTrendPoint[] = Array.from(dailyMap.entries())
-        .map(([date, v]) => ({ date, revenue: v.revenue, profit: v.profit }))
+        .map(([date, v]) => ({ date, revenue: v.revenue, cogs: v.cogs, profit: v.profit }))
         .sort((a, b) => a.date.localeCompare(b.date));
 
       const topItems: TopItemRow[] = Array.from(itemMap.entries())
-        .map(([itemName, v]) => ({ itemName, revenue: v.revenue, profit: v.profit }))
+        .map(([itemName, v]) => ({ itemName, revenue: v.revenue, cogs: v.cogs, profit: v.profit }))
         .sort((a, b) => b.profit - a.profit)
         .slice(0, 10);
 
@@ -183,14 +189,19 @@ export function useFinancialInsights(startDate: Date, endDate: Date) {
         }))
         .sort((a, b) => b.totalProfit - a.totalProfit);
 
-      const rawRows: RawFinancialRow[] = rows.map((r) => ({
-        visit_date: r.visit_date,
-        queue_entry_id: r.queue_entry_id,
-        payment_method: r.payment_method,
-        item_name: r.item_name,
-        revenue: Number(r.revenue ?? 0),
-        profit: Number(r.profit ?? 0),
-      }));
+      const rawRows: RawFinancialRow[] = rows.map((r) => {
+        const rev = Number(r.revenue ?? 0);
+        const prof = Number(r.profit ?? 0);
+        return {
+          visit_date: r.visit_date,
+          queue_entry_id: r.queue_entry_id,
+          payment_method: r.payment_method,
+          item_name: r.item_name,
+          revenue: rev,
+          cogs: rev - prof,
+          profit: prof,
+        };
+      });
 
       return { summary, dailyTrends, topItems, ltvSegment, rows: rawRows };
     },
