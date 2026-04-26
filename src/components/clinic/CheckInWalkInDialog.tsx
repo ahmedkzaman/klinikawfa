@@ -12,10 +12,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { PatientPicker } from '@/components/clinic/PatientPicker';
 import { RegisterPatientDialog } from '@/components/clinic/RegisterPatientDialog';
 import { useCheckInWalkIn } from '@/hooks/clinic/useIntakeAppointment';
 import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
+import { usePatientOutstanding, formatRm } from '@/hooks/clinic/usePatientFinancials';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import type { PatientRow } from '@/types/clinic';
 
