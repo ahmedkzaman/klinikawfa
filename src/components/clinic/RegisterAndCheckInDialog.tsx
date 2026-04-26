@@ -215,6 +215,17 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
   const dobValue = watch('date_of_birth');
   const genderValue = watch('gender');
 
+  // Fast-path duplicate detection: once the user types a full 12-digit IC,
+  // look up an existing patient and surface their outstanding ledgers.
+  const debouncedIc = useDebouncedValue(nationalId ?? '', 300);
+  const { data: existingPatient } = usePatientByIc(debouncedIc);
+  const {
+    patientOutstanding: existingPatientOutstanding,
+    panelOutstanding: existingPanelOutstanding,
+    hasPatientDebt: existingHasPatientDebt,
+    hasPanelDebt: existingHasPanelDebt,
+  } = usePatientOutstanding(existingPatient?.id);
+
   // MyKad auto-parse — only fills empty fields, never overrides manual input.
   useEffect(() => {
     if (!nationalId) return;
