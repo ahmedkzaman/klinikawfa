@@ -13,6 +13,7 @@ interface ViewRow {
   profit: number | string | null;
   visit_date: string | null;
   queue_entry_id: string;
+  diagnosis_name: string | null;
 }
 
 export interface LtvHistogramBucket {
@@ -26,6 +27,7 @@ export interface VipPatientRow {
   visitCount: number;
   totalRevenue: number;
   totalProfit: number;
+  primary_diagnosis: string;
 }
 
 export interface PatientLtvData {
@@ -60,7 +62,9 @@ export function usePatientLTV() {
     queryFn: async () => {
       const { data, error } = await db
         .from('insight_financials_view')
-        .select('patient_id, patient_reg_no, revenue, profit, visit_date, queue_entry_id');
+        .select(
+          'patient_id, patient_reg_no, revenue, profit, visit_date, queue_entry_id, diagnosis_name',
+        );
 
       if (error) throw error;
 
@@ -74,6 +78,7 @@ export function usePatientLTV() {
         totalProfit: number;
         lastVisit: string;
         visits: Set<string>;
+        diagnosisCounts: Map<string, number>;
       };
       const patientMap = new Map<string, PatientAcc>();
 
@@ -88,6 +93,7 @@ export function usePatientLTV() {
             totalProfit: 0,
             lastVisit: r.visit_date,
             visits: new Set<string>(),
+            diagnosisCounts: new Map<string, number>(),
           } as PatientAcc);
 
         acc.totalRevenue += Number(r.revenue ?? 0);
@@ -96,6 +102,15 @@ export function usePatientLTV() {
         if (r.visit_date > acc.lastVisit) acc.lastVisit = r.visit_date;
         // reg_no may arrive on later rows if first one was null
         if (!acc.regNo && r.patient_reg_no) acc.regNo = r.patient_reg_no;
+
+        // Track diagnosis frequency — skip 'Undiagnosed' so the vote
+        // reflects only real clinical signals. If every visit is
+        // undiagnosed, the map stays empty and we fall back to
+        // 'Unspecified' below.
+        const dx = r.diagnosis_name?.trim();
+        if (dx && dx !== 'Undiagnosed') {
+          acc.diagnosisCounts.set(dx, (acc.diagnosisCounts.get(dx) ?? 0) + 1);
+        }
 
         patientMap.set(r.patient_id, acc);
       }
@@ -133,13 +148,26 @@ export function usePatientLTV() {
       const top50: VipPatientRow[] = [...active]
         .sort((a, b) => b.totalRevenue - a.totalRevenue)
         .slice(0, 50)
-        .map((p) => ({
-          patient_id: p.patientId,
-          reg_no: p.regNo,
-          visitCount: p.visits.size,
-          totalRevenue: p.totalRevenue,
-          totalProfit: p.totalProfit,
-        }));
+        .map((p) => {
+          // Vote on the highest-frequency diagnosis (first encountered wins ties).
+          let primaryDx = 'Unspecified';
+          let maxCount = 0;
+          p.diagnosisCounts.forEach((count, dx) => {
+            if (count > maxCount) {
+              maxCount = count;
+              primaryDx = dx;
+            }
+          });
+
+          return {
+            patient_id: p.patientId,
+            reg_no: p.regNo,
+            visitCount: p.visits.size,
+            totalRevenue: p.totalRevenue,
+            totalProfit: p.totalProfit,
+            primary_diagnosis: primaryDx,
+          };
+        });
 
       return {
         histogramData,
