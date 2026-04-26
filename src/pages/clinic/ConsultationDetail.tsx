@@ -92,6 +92,10 @@ export default function ConsultationDetail() {
   const createConsultation = useCreateConsultation();
   const updateConsultation = useUpdateConsultation();
 
+  const isLocked =
+    consultation?.status === 'completed' ||
+    entry?.clinic_status === 'completed';
+
   const { data: vitals } = useVitalSigns(queueEntryId);
   const recordVitals = useRecordVitalSigns();
   const [showVitalForm, setShowVitalForm] = useState(false);
