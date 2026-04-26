@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -19,11 +21,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { usePaymentMethods } from '@/hooks/clinic/usePaymentMethods';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { cn } from '@/lib/utils';
 import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
 import { useRecordPayment } from '@/hooks/clinic/usePayments';
+import { useUpdateConsultation } from '@/hooks/clinic/useConsultations';
+import { useUpdateQueueEntry } from '@/hooks/clinic/useQueueEntries';
 
-type PaymentType = 'self_pay' | 'panel' | 'insurance';
+type PaymentType = 'self_pay' | 'panel';
+
+const SELF_PAY_METHODS = [
+  'Cash',
+  'TNG / DuitNow QR',
+  'Credit/Debit Card',
+] as const;
 
 interface Props {
   open: boolean;
@@ -33,6 +56,19 @@ interface Props {
   defaultAmount: number;
 }
 
+/**
+ * Atomic checkout dialog.
+ *
+ * Flow on submit:
+ *   1. Insert payment row (self-pay or panel).
+ *   2. If consultationId is present, mark the consultation `completed`.
+ *   3. Set the queue entry's `clinic_status` to `completed`.
+ *   4. Toast, close, and navigate back to the Queue Board.
+ *
+ * If any step fails the dialog stays open with form state intact so the staff
+ * can retry — this is intentional rather than a true DB transaction because
+ * each operation is idempotent against re-running it once.
+ */
 export function RecordPaymentDialog({
   open,
   onOpenChange,
@@ -40,92 +76,154 @@ export function RecordPaymentDialog({
   consultationId,
   defaultAmount,
 }: Props) {
-  const { data: methods = [] } = usePaymentMethods();
+  const navigate = useNavigate();
   const { data: providers = [] } = useInsuranceProviders({ activeOnly: true });
   const recordPayment = useRecordPayment();
+  const updateConsultation = useUpdateConsultation();
+  const updateQueueEntry = useUpdateQueueEntry();
 
   const [paymentType, setPaymentType] = useState<PaymentType>('self_pay');
-  const [paymentMethodId, setPaymentMethodId] = useState<string>('');
+  const [selfPayMethod, setSelfPayMethod] = useState<string>('');
   const [providerId, setProviderId] = useState<string>('');
+  const [providerOpen, setProviderOpen] = useState(false);
   const [amount, setAmount] = useState<string>(defaultAmount.toFixed(2));
   const [notes, setNotes] = useState<string>('');
 
+  // Reset every time the dialog opens.
   useEffect(() => {
     if (open) {
+      setPaymentType('self_pay');
+      setSelfPayMethod('');
+      setProviderId('');
+      setProviderOpen(false);
       setAmount(Math.max(defaultAmount, 0).toFixed(2));
       setNotes('');
-      setProviderId('');
-      setPaymentMethodId('');
-      setPaymentType('self_pay');
     }
   }, [open, defaultAmount]);
 
-  const filteredMethods = useMemo(() => {
-    if (paymentType === 'self_pay') {
-      return methods.filter((m) =>
-        ['cash', 'card', 'qr', 'bank_transfer', 'ewallet'].includes(
-          (m.type ?? '').toLowerCase(),
-        ),
-      );
-    }
-    return methods.filter((m) => (m.type ?? '').toLowerCase() === 'panel');
-  }, [methods, paymentType]);
-
-  // Reset method choice when type changes
+  // When the user toggles between self-pay and panel, clear sub-selections
+  // and reset the default amount: panel visits are billed to the panel
+  // (RM 0.00 patient-facing) while self-pay defaults to outstanding.
   useEffect(() => {
-    setPaymentMethodId('');
-  }, [paymentType]);
+    setSelfPayMethod('');
+    setProviderId('');
+    setProviderOpen(false);
+    setAmount(
+      paymentType === 'panel'
+        ? '0.00'
+        : Math.max(defaultAmount, 0).toFixed(2),
+    );
+  }, [paymentType, defaultAmount]);
 
-  const handleSubmit = async () => {
+  const selectedProvider = useMemo(
+    () => providers.find((p) => p.id === providerId) ?? null,
+    [providers, providerId],
+  );
+
+  const isSubmitting =
+    recordPayment.isPending ||
+    updateConsultation.isPending ||
+    updateQueueEntry.isPending;
+
+  const submitDisabled =
+    isSubmitting ||
+    (paymentType === 'self_pay' && !selfPayMethod) ||
+    (paymentType === 'panel' && !providerId);
+
+  const submittingLabel = recordPayment.isPending
+    ? 'Recording payment…'
+    : updateConsultation.isPending
+      ? 'Completing visit…'
+      : updateQueueEntry.isPending
+        ? 'Checking out…'
+        : 'Processing…';
+
+  async function handleSubmit() {
+    // ── Validation ───────────────────────────────────────────────────────────
     const numericAmount = parseFloat(amount);
-    if (!numericAmount || numericAmount <= 0) {
-      toast.error('Amount must be greater than 0');
+    if (!Number.isFinite(numericAmount) || numericAmount < 0) {
+      toast.error('Amount must be a number ≥ 0');
       return;
     }
-    const method = methods.find((m) => m.id === paymentMethodId);
-    if (!method) {
-      toast.error('Please select a payment method');
-      return;
-    }
-    if (paymentType !== 'self_pay' && !providerId) {
-      toast.error('Please select an insurance / panel provider');
-      return;
-    }
-
-    let finalNotes = notes.trim();
-    if (paymentType !== 'self_pay') {
-      const provider = providers.find((p) => p.id === providerId);
-      if (provider) {
-        finalNotes = finalNotes
-          ? `Provider: ${provider.name}\n${finalNotes}`
-          : `Provider: ${provider.name}`;
+    if (paymentType === 'self_pay') {
+      if (numericAmount <= 0) {
+        toast.error('Self-pay amount must be greater than 0');
+        return;
+      }
+      if (!selfPayMethod) {
+        toast.error('Please select a payment method');
+        return;
       }
     }
+    if (paymentType === 'panel' && !selectedProvider) {
+      toast.error('Please select a panel');
+      return;
+    }
 
+    const resolvedMethodLabel =
+      paymentType === 'self_pay'
+        ? selfPayMethod
+        : `Panel: ${selectedProvider!.name}`;
+
+    let finalNotes = notes.trim();
+    if (paymentType === 'panel' && selectedProvider) {
+      finalNotes = finalNotes
+        ? `Provider: ${selectedProvider.name}\n${finalNotes}`
+        : `Provider: ${selectedProvider.name}`;
+    }
+
+    // ── Atomic 3-step flow — short-circuits on first failure ─────────────────
     try {
+      // 1. Insert payment row
       await recordPayment.mutateAsync({
         queue_entry_id: queueEntryId,
         consultation_id: consultationId,
         payment_type: paymentType,
-        payment_method: method.name,
+        payment_method: resolvedMethodLabel,
         amount: numericAmount,
         notes: finalNotes || null,
       });
-      toast.success('Payment recorded');
+
+      // 2. Mark consultation completed (only if one exists)
+      if (consultationId) {
+        await updateConsultation.mutateAsync({
+          id: consultationId,
+          status: 'completed',
+        });
+      }
+
+      // 3. Check out queue entry
+      await updateQueueEntry.mutateAsync({
+        id: queueEntryId,
+        clinic_status: 'completed',
+      });
+
+      toast.success('Payment recorded · Patient checked out');
       onOpenChange(false);
-    } catch {
-      // toast already surfaced by hook onError
+      navigate('/clinic/queue');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Checkout failed';
+      toast.error(`Checkout failed: ${msg}`);
+      // Intentionally do NOT close the dialog or navigate — leave state intact
+      // so the staff can adjust and retry.
     }
-  };
+  }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        // Block closing while a step is in flight.
+        if (!isSubmitting) onOpenChange(o);
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Record Payment</DialogTitle>
+          <DialogTitle>Record Payment & Check Out</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {/* Payment type */}
           <div className="space-y-2">
             <Label>Payment Type</Label>
             <RadioGroup
@@ -141,61 +239,105 @@ export function RecordPaymentDialog({
                 <RadioGroupItem value="panel" id="pt-panel" />
                 Panel
               </label>
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <RadioGroupItem value="insurance" id="pt-ins" />
-                Insurance
-              </label>
             </RadioGroup>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="pay-method">Payment Method</Label>
-            <Select value={paymentMethodId} onValueChange={setPaymentMethodId}>
-              <SelectTrigger id="pay-method">
-                <SelectValue placeholder="Select method" />
-              </SelectTrigger>
-              <SelectContent>
-                {filteredMethods.length === 0 ? (
-                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                    No methods configured
-                  </div>
-                ) : (
-                  filteredMethods.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.name}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {paymentType !== 'self_pay' && (
+          {/* Payment method — branches on payment type */}
+          {paymentType === 'self_pay' ? (
             <div className="space-y-2">
-              <Label htmlFor="provider">Provider</Label>
-              <Select value={providerId} onValueChange={setProviderId}>
-                <SelectTrigger id="provider">
-                  <SelectValue placeholder="Select provider" />
+              <Label htmlFor="pay-method">Payment Method</Label>
+              <Select value={selfPayMethod} onValueChange={setSelfPayMethod}>
+                <SelectTrigger id="pay-method">
+                  <SelectValue placeholder="Select method" />
                 </SelectTrigger>
                 <SelectContent>
-                  {providers.length === 0 ? (
-                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                      No providers configured
-                    </div>
-                  ) : (
-                    providers.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))
-                  )}
+                  {SELF_PAY_METHODS.map((m) => (
+                    <SelectItem key={m} value={m}>
+                      {m}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
+          ) : (
+            <div className="space-y-2">
+              <Label>Panel</Label>
+              <Popover open={providerOpen} onOpenChange={setProviderOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={providerOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    {selectedProvider ? (
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="truncate">{selectedProvider.name}</span>
+                        {selectedProvider.panel_code && (
+                          <span className="text-xs text-muted-foreground shrink-0">
+                            ({selectedProvider.panel_code})
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        Search and select a panel…
+                      </span>
+                    )}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-[--radix-popover-trigger-width] p-0"
+                  align="start"
+                >
+                  <Command>
+                    <CommandInput placeholder="Search panel by name…" />
+                    <CommandList>
+                      <CommandEmpty>No panels found.</CommandEmpty>
+                      <CommandGroup>
+                        {providers.map((p) => (
+                          <CommandItem
+                            key={p.id}
+                            value={`${p.name} ${p.panel_code ?? ''}`}
+                            onSelect={() => {
+                              setProviderId(p.id);
+                              setProviderOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                'mr-2 h-4 w-4',
+                                providerId === p.id ? 'opacity-100' : 'opacity-0',
+                              )}
+                            />
+                            <span className="flex-1 truncate">{p.name}</span>
+                            {p.panel_code && (
+                              <span className="text-xs text-muted-foreground ml-2">
+                                {p.panel_code}
+                              </span>
+                            )}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
           )}
 
+          {/* Amount */}
           <div className="space-y-2">
-            <Label htmlFor="amount">Amount (RM)</Label>
+            <Label htmlFor="amount">
+              Amount (RM)
+              {paymentType === 'panel' && (
+                <span className="text-xs text-muted-foreground font-normal ml-2">
+                  (default 0.00; edit for co-payment)
+                </span>
+              )}
+            </Label>
             <Input
               id="amount"
               type="number"
@@ -206,6 +348,7 @@ export function RecordPaymentDialog({
             />
           </div>
 
+          {/* Notes */}
           <div className="space-y-2">
             <Label htmlFor="notes">Notes (optional)</Label>
             <Textarea
@@ -222,12 +365,19 @@ export function RecordPaymentDialog({
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={recordPayment.isPending}
+            disabled={isSubmitting}
           >
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={recordPayment.isPending}>
-            {recordPayment.isPending ? 'Recording…' : 'Record Payment'}
+          <Button onClick={handleSubmit} disabled={submitDisabled}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                {submittingLabel}
+              </>
+            ) : (
+              'Record Payment & Check Out'
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
