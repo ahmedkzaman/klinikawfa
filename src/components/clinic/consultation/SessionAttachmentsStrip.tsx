@@ -1,9 +1,4 @@
-import {
-  FileText,
-  Image as ImageIcon,
-  Paperclip,
-  Trash2,
-} from 'lucide-react';
+import { Image as ImageIcon, Paperclip, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -103,11 +98,6 @@ export function SessionAttachmentsStrip({
             )}
           </div>
         );
-      })}
-
-      {/* Fallback for the FileText import used elsewhere — keeps tree-shaken
-          icons available if we add list mode later */}
-      <FileText className="hidden" aria-hidden />
     </div>
   );
 }
