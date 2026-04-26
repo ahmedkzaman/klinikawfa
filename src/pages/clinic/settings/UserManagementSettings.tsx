@@ -8,9 +8,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
+import { bento, pageInner, pageShell, softInput } from '@/lib/clinic/bentoTokens';
 import {
   Table,
   TableBody,
@@ -106,42 +108,46 @@ export default function UserManagementSettings() {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <Button variant="ghost" size="sm" asChild className="mb-2 -ml-2">
-          <Link to="/clinic/settings">
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back to Settings
-          </Link>
-        </Button>
-        <h1 className="text-2xl font-semibold tracking-tight">User Management</h1>
-        <p className="text-sm text-muted-foreground">
-          Assign roles and manage locum doctor profiles.
-        </p>
-      </div>
+  const TH = 'text-[11px] font-semibold text-slate-500 uppercase tracking-wider';
+  const TR = 'border-slate-100';
 
-      <Card className="p-4 space-y-4">
-        <div className="relative max-w-sm">
-          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search by name or email…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
+  return (
+    <div className={pageShell}>
+      <div className={pageInner}>
+        <div>
+          <Button variant="ghost" size="sm" asChild className="mb-2 -ml-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100">
+            <Link to="/clinic/settings">
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Back to Settings
+            </Link>
+          </Button>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">User Management</h1>
+          <p className="text-sm text-slate-500">
+            Assign roles and manage locum doctor profiles.
+          </p>
         </div>
 
-        <div className="border rounded-md">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="min-w-[220px]">Name / Email</TableHead>
-                <TableHead className="min-w-[200px]">Current Role</TableHead>
-                <TableHead className="min-w-[180px]">Doctor Profile</TableHead>
-                <TableHead className="text-right">Action</TableHead>
-              </TableRow>
-            </TableHeader>
+        <Card className={bento}>
+          <CardContent className="p-6 space-y-4">
+            <div className="relative max-w-sm">
+              <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Input
+                placeholder="Search by name or email…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className={cn(softInput, 'pl-9')}
+              />
+            </div>
+
+            <Table>
+              <TableHeader>
+                <TableRow className={cn(TR, 'hover:bg-transparent bg-slate-50/50')}>
+                  <TableHead className={cn(TH, 'min-w-[220px]')}>Name / Email</TableHead>
+                  <TableHead className={cn(TH, 'min-w-[200px]')}>Current Role</TableHead>
+                  <TableHead className={cn(TH, 'min-w-[180px]')}>Doctor Profile</TableHead>
+                  <TableHead className={cn(TH, 'text-right')}>Action</TableHead>
+                </TableRow>
+              </TableHeader>
             <TableBody>
               {isLoading ? (
                 Array.from({ length: 8 }).map((_, i) => (
@@ -239,11 +245,16 @@ export default function UserManagementSettings() {
         </div>
       </Card>
 
-      <DoctorProfileDialog
-        open={!!profileDialogUser}
-        onOpenChange={(open) => !open && setProfileDialogUser(null)}
-        user={profileDialogUser}
-      />
+            </Table>
+          </CardContent>
+        </Card>
+
+        <DoctorProfileDialog
+          open={!!profileDialogUser}
+          onOpenChange={(open) => !open && setProfileDialogUser(null)}
+          user={profileDialogUser}
+        />
+      </div>
     </div>
   );
 }

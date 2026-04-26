@@ -3,6 +3,7 @@ import { Sliders, Users, Archive, Package, ChevronRight, Stethoscope, Shield, Ta
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { bento, pageInner, pageShell } from '@/lib/clinic/bentoTokens';
 
 interface SettingsCard {
   href: string;
@@ -71,36 +72,38 @@ export default function SettingsPage() {
   const visible = cards.filter((c) => c.visible);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground">
-          Configure clinic preferences and manage user access.
-        </p>
-      </div>
+    <div className={pageShell}>
+      <div className={pageInner}>
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Settings</h1>
+          <p className="text-sm text-slate-500">
+            Configure clinic preferences and manage user access.
+          </p>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {visible.map((card) => (
-          <Link key={card.href} to={card.href} className="group">
-            <Card
-              className={cn(
-                'p-5 h-full flex items-start gap-4 transition-colors',
-                'hover:bg-accent/40 hover:border-primary/40',
-              )}
-            >
-              <div className="rounded-md bg-primary/10 text-primary p-2.5 shrink-0">
-                <card.icon className="h-5 w-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="font-medium text-foreground">{card.title}</h2>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {visible.map((card) => (
+            <Link key={card.href} to={card.href} className="group">
+              <Card
+                className={cn(
+                  bento,
+                  'p-5 h-full flex items-start gap-4 transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:-translate-y-0.5',
+                )}
+              >
+                <div className="rounded-xl bg-blue-50 text-blue-600 p-3 shrink-0">
+                  <card.icon className="h-5 w-5" />
                 </div>
-                <p className="text-sm text-muted-foreground mt-1">{card.description}</p>
-              </div>
-            </Card>
-          </Link>
-        ))}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 className="font-semibold text-slate-900">{card.title}</h2>
+                    <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
+                  </div>
+                  <p className="text-sm text-slate-500 mt-1">{card.description}</p>
+                </div>
+              </Card>
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
   );

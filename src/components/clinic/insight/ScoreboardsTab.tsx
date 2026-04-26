@@ -10,7 +10,7 @@ import {
 } from 'recharts';
 import { Inbox } from 'lucide-react';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -21,6 +21,15 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import {
+  bento,
+  bentoHeader,
+  chartGridStroke,
+  chartAxisStroke,
+  chartTickFill,
+  chartTooltipStyle,
+  chartColors,
+} from '@/lib/clinic/bentoTokens';
 
 import { useScoreboards } from '@/hooks/clinic/useScoreboards';
 
@@ -39,8 +48,11 @@ function formatRM(value: number) {
 function marginColorClass(margin: number) {
   if (margin >= 40) return 'text-emerald-600 font-semibold';
   if (margin >= 20) return 'text-amber-600 font-semibold';
-  return 'text-red-600 font-semibold';
+  return 'text-rose-600 font-semibold';
 }
+
+const TH = 'text-[11px] font-semibold text-slate-500 uppercase tracking-wider';
+const TR = 'border-slate-100';
 
 export function ScoreboardsTab({ startDate, endDate }: Props) {
   const { data, isLoading, isError, error } = useScoreboards(startDate, endDate);
@@ -65,8 +77,8 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
 
   if (isError) {
     return (
-      <Card>
-        <CardContent className="py-6 text-sm text-destructive">
+      <Card className={bento}>
+        <CardContent className="py-6 text-sm text-rose-600">
           Failed to load scoreboards: {(error as Error)?.message ?? 'Unknown error'}
         </CardContent>
       </Card>
@@ -85,11 +97,13 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
 
   if (!hasData) {
     return (
-      <Card>
+      <Card className={bento}>
         <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-          <Inbox className="h-10 w-10 text-muted-foreground mb-3" />
-          <h3 className="text-base font-semibold text-foreground">No scoreboard data</h3>
-          <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+          <div className="rounded-2xl bg-blue-50 p-4 mb-3">
+            <Inbox className="h-8 w-8 text-blue-600" />
+          </div>
+          <h3 className="text-base font-semibold text-slate-900">No scoreboard data</h3>
+          <p className="text-sm text-slate-500 mt-1 max-w-sm">
             No completed consultations were recorded in the selected date range.
           </p>
         </CardContent>
@@ -98,45 +112,45 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* 1. Doctor Performance */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Doctor Performance</CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">
-            Revenue per Patient = Σ Revenue / Unique Patients · Sorted by efficiency.
-          </p>
-        </CardHeader>
-        <CardContent>
+      <Card className={bento}>
+        <CardContent className="p-6">
+          <div className="mb-3">
+            <h3 className={cn(bentoHeader, 'mb-1')}>Doctor Performance</h3>
+            <p className="text-xs text-slate-500">
+              Revenue per Patient = Σ Revenue / Unique Patients · Sorted by efficiency.
+            </p>
+          </div>
           {data!.doctors.length === 0 ? (
             <EmptyMini label="No doctor activity in this period." />
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Doctor</TableHead>
-                  <TableHead className="text-right">Patients</TableHead>
-                  <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead className="text-right">Revenue / Patient</TableHead>
-                  <TableHead className="text-right">Margin %</TableHead>
+                <TableRow className={cn(TR, 'hover:bg-transparent')}>
+                  <TableHead className={TH}>Doctor</TableHead>
+                  <TableHead className={cn(TH, 'text-right')}>Patients</TableHead>
+                  <TableHead className={cn(TH, 'text-right')}>Revenue</TableHead>
+                  <TableHead className={cn(TH, 'text-right')}>Revenue / Patient</TableHead>
+                  <TableHead className={cn(TH, 'text-right')}>Margin %</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data!.doctors.map((d) => (
-                  <TableRow key={d.doctorId ?? `unassigned-${d.doctorName}`}>
+                  <TableRow key={d.doctorId ?? `unassigned-${d.doctorName}`} className={TR}>
                     <TableCell
                       className={cn(
-                        'font-medium',
-                        d.doctorId === null && 'text-muted-foreground italic',
+                        'font-medium text-slate-800',
+                        d.doctorId === null && 'text-slate-400 italic',
                       )}
                     >
                       {d.doctorName}
                     </TableCell>
-                    <TableCell className="text-right">{d.uniquePatients}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">
+                    <TableCell className="text-right text-slate-600">{d.uniquePatients}</TableCell>
+                    <TableCell className="text-right text-slate-500">
                       {formatRM(d.totalRevenue)}
                     </TableCell>
-                    <TableCell className="text-right font-semibold text-foreground">
+                    <TableCell className="text-right font-semibold text-slate-900">
                       {formatRM(d.revenuePerPatient)}
                     </TableCell>
                     <TableCell className={cn('text-right', marginColorClass(d.marginPct))}>
@@ -152,12 +166,12 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
 
       {/* 2. Top Diagnoses + Top Medications */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Top 10 Diagnoses</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">By encounters</p>
-          </CardHeader>
-          <CardContent>
+        <Card className={bento}>
+          <CardContent className="p-6">
+            <div className="mb-3">
+              <h3 className={cn(bentoHeader, 'mb-1')}>Top 10 Diagnoses</h3>
+              <p className="text-xs text-slate-500">By encounters</p>
+            </div>
             {diagnosesChartData.length === 0 ? (
               <EmptyMini label="No diagnoses recorded." />
             ) : (
@@ -168,33 +182,19 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
                     layout="vertical"
                     margin={{ top: 8, right: 24, left: 8, bottom: 4 }}
                   >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      horizontal={false}
-                      stroke="hsl(var(--border))"
-                    />
-                    <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={chartGridStroke} />
+                    <XAxis type="number" stroke={chartAxisStroke} tick={{ fill: chartTickFill }} fontSize={11} />
                     <YAxis
                       type="category"
                       dataKey="name"
-                      stroke="hsl(var(--muted-foreground))"
+                      stroke={chartAxisStroke}
+                      tick={{ fill: chartTickFill }}
                       fontSize={11}
                       width={140}
                       tickFormatter={(v: string) => (v.length > 22 ? `${v.slice(0, 22)}…` : v)}
                     />
-                    <Tooltip
-                      contentStyle={{
-                        background: 'hsl(var(--background))',
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                      }}
-                    />
-                    <Bar
-                      dataKey="Encounters"
-                      fill="hsl(var(--primary))"
-                      radius={[0, 4, 4, 0]}
-                    />
+                    <Tooltip contentStyle={chartTooltipStyle} />
+                    <Bar dataKey="Encounters" fill={chartColors.blue} radius={[0, 6, 6, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -202,12 +202,12 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Top 10 Medications</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">By revenue</p>
-          </CardHeader>
-          <CardContent>
+        <Card className={bento}>
+          <CardContent className="p-6">
+            <div className="mb-3">
+              <h3 className={cn(bentoHeader, 'mb-1')}>Top 10 Medications</h3>
+              <p className="text-xs text-slate-500">By revenue</p>
+            </div>
             {medicationsChartData.length === 0 ? (
               <EmptyMini label="No medications dispensed." />
             ) : (
@@ -218,35 +218,28 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
                     layout="vertical"
                     margin={{ top: 8, right: 24, left: 8, bottom: 4 }}
                   >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      horizontal={false}
-                      stroke="hsl(var(--border))"
-                    />
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={chartGridStroke} />
                     <XAxis
                       type="number"
-                      stroke="hsl(var(--muted-foreground))"
+                      stroke={chartAxisStroke}
+                      tick={{ fill: chartTickFill }}
                       fontSize={11}
                       tickFormatter={(v) => `RM ${v}`}
                     />
                     <YAxis
                       type="category"
                       dataKey="name"
-                      stroke="hsl(var(--muted-foreground))"
+                      stroke={chartAxisStroke}
+                      tick={{ fill: chartTickFill }}
                       fontSize={11}
                       width={140}
                       tickFormatter={(v: string) => (v.length > 22 ? `${v.slice(0, 22)}…` : v)}
                     />
                     <Tooltip
-                      contentStyle={{
-                        background: 'hsl(var(--background))',
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                      }}
+                      contentStyle={chartTooltipStyle}
                       formatter={(value: number) => formatRM(value)}
                     />
-                    <Bar dataKey="Revenue" fill="#10b981" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="Revenue" fill={chartColors.emerald} radius={[0, 6, 6, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -256,32 +249,32 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
       </div>
 
       {/* 3. Procedure ROI */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Procedure ROI</CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">
-            Gross Margin % = (Revenue − COGS) / Revenue × 100 · Sorted by margin.
-          </p>
-        </CardHeader>
-        <CardContent>
+      <Card className={bento}>
+        <CardContent className="p-6">
+          <div className="mb-3">
+            <h3 className={cn(bentoHeader, 'mb-1')}>Procedure ROI</h3>
+            <p className="text-xs text-slate-500">
+              Gross Margin % = (Revenue − COGS) / Revenue × 100 · Sorted by margin.
+            </p>
+          </div>
           {data!.procedureRoi.length === 0 ? (
             <EmptyMini label="No procedures performed in this period." />
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Procedure</TableHead>
-                  <TableHead className="text-right">Count</TableHead>
-                  <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead className="text-right">Margin %</TableHead>
+                <TableRow className={cn(TR, 'hover:bg-transparent')}>
+                  <TableHead className={TH}>Procedure</TableHead>
+                  <TableHead className={cn(TH, 'text-right')}>Count</TableHead>
+                  <TableHead className={cn(TH, 'text-right')}>Revenue</TableHead>
+                  <TableHead className={cn(TH, 'text-right')}>Margin %</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data!.procedureRoi.map((p) => (
-                  <TableRow key={p.itemName}>
-                    <TableCell className="font-medium">{p.itemName}</TableCell>
-                    <TableCell className="text-right">{p.count}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">
+                  <TableRow key={p.itemName} className={TR}>
+                    <TableCell className="font-medium text-slate-800">{p.itemName}</TableCell>
+                    <TableCell className="text-right text-slate-600">{p.count}</TableCell>
+                    <TableCell className="text-right text-slate-500">
                       {formatRM(p.totalRevenue)}
                     </TableCell>
                     <TableCell className={cn('text-right', marginColorClass(p.marginPct))}>
@@ -300,7 +293,7 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
 
 function EmptyMini({ label }: { label: string }) {
   return (
-    <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
+    <div className="flex h-[200px] items-center justify-center text-sm text-slate-400">
       {label}
     </div>
   );
@@ -308,32 +301,26 @@ function EmptyMini({ label }: { label: string }) {
 
 function ScoreboardsSkeleton() {
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
+    <div className="space-y-4">
+      <Card className={bento}>
+        <CardContent className="p-6 space-y-3">
           <Skeleton className="h-4 w-48" />
-        </CardHeader>
-        <CardContent>
           <Skeleton className="h-[260px] w-full" />
         </CardContent>
       </Card>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {Array.from({ length: 2 }).map((_, i) => (
-          <Card key={i}>
-            <CardHeader>
+          <Card key={i} className={bento}>
+            <CardContent className="p-6 space-y-3">
               <Skeleton className="h-4 w-40" />
-            </CardHeader>
-            <CardContent>
               <Skeleton className="h-[360px] w-full" />
             </CardContent>
           </Card>
         ))}
       </div>
-      <Card>
-        <CardHeader>
+      <Card className={bento}>
+        <CardContent className="p-6 space-y-3">
           <Skeleton className="h-4 w-48" />
-        </CardHeader>
-        <CardContent>
           <Skeleton className="h-[260px] w-full" />
         </CardContent>
       </Card>
