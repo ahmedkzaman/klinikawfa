@@ -430,9 +430,37 @@ export default function Insight() {
               </CardContent>
             </Card>
           </div>
-        </>
-      )}
+          </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="scoreboards">
+          <ScoreboardsTab startDate={startDate} endDate={endDate} />
+        </TabsContent>
+
+        <TabsContent value="leaderboards">
+          <PlaceholderPanel label="Leaderboards (Step 37) — coming next" />
+        </TabsContent>
+
+        <TabsContent value="valuation">
+          <PlaceholderPanel label="DCF Valuation Engine (Step 38) — coming next" />
+        </TabsContent>
+
+        <TabsContent value="health">
+          <PlaceholderPanel label="Bank Health Radar (Step 39) — coming next" />
+        </TabsContent>
+      </Tabs>
     </div>
+  );
+}
+
+function PlaceholderPanel({ label }: { label: string }) {
+  return (
+    <Card>
+      <CardContent className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">
+        {label}
+      </CardContent>
+    </Card>
   );
 }
 
