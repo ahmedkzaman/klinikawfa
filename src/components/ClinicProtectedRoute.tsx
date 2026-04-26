@@ -4,7 +4,7 @@ import { Loader2 } from 'lucide-react';
 
 interface ClinicProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: 'ops_or_admin' | 'special_admin' | 'admin';
+  requiredRole?: 'ops_or_admin' | 'special_admin' | 'admin' | 'insights';
 }
 
 /**
@@ -20,7 +20,7 @@ export function ClinicProtectedRoute({
   children,
   requiredRole = 'ops_or_admin',
 }: ClinicProtectedRouteProps) {
-  const { user, loading, rolesLoading, isOpsOrAdmin, isSpecialAdmin, isAdmin } = useAuth();
+  const { user, loading, rolesLoading, isOpsOrAdmin, isSpecialAdmin, isAdmin, canViewInsights } = useAuth();
   const location = useLocation();
 
   if (loading || rolesLoading) {
@@ -41,7 +41,9 @@ export function ClinicProtectedRoute({
       ? isSpecialAdmin
       : requiredRole === 'admin'
         ? isAdmin || isSpecialAdmin
-        : isOpsOrAdmin;
+        : requiredRole === 'insights'
+          ? canViewInsights
+          : isOpsOrAdmin;
 
   if (!hasAccess) {
     return <Navigate to="/staff/dashboard" replace />;

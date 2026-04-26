@@ -29,12 +29,22 @@ import {
 import { DoctorProfileDialog } from '@/components/clinic/settings/DoctorProfileDialog';
 import { toast } from 'sonner';
 
-const ROLE_OPTIONS: AppRole[] = ['guest', 'staff', 'operations', 'admin', 'special_admin'];
+const ROLE_OPTIONS: AppRole[] = [
+  'guest',
+  'staff',
+  'locum',
+  'operations',
+  'doctor_admin',
+  'admin',
+  'special_admin',
+];
 
 const ROLE_LABEL: Record<AppRole, string> = {
   guest: 'Guest',
   staff: 'Staff',
+  locum: 'Locum Doctor',
   operations: 'Operations',
+  doctor_admin: 'Doctor Admin',
   admin: 'Admin',
   special_admin: 'Special Admin',
 };

@@ -2,7 +2,14 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
-export type AppRole = 'special_admin' | 'admin' | 'operations' | 'staff' | 'guest';
+export type AppRole =
+  | 'special_admin'
+  | 'admin'
+  | 'doctor_admin'
+  | 'operations'
+  | 'staff'
+  | 'locum'
+  | 'guest';
 
 interface AuthContextType {
   user: User | null;
@@ -16,6 +23,9 @@ interface AuthContextType {
   isSpecialAdmin: boolean;
   isOperations: boolean;
   isOpsOrAdmin: boolean;
+  isDoctorAdmin: boolean;
+  isLocum: boolean;
+  canViewInsights: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -148,13 +158,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error as Error | null };
   };
 
-  const isAdmin = role === 'admin' || role === 'special_admin';
+  const isAdmin = role === 'admin' || role === 'special_admin' || role === 'doctor_admin';
   const isStaffOrAdmin =
-    role === 'admin' || role === 'staff' || role === 'special_admin' || role === 'operations';
+    role === 'admin' ||
+    role === 'staff' ||
+    role === 'special_admin' ||
+    role === 'operations' ||
+    role === 'doctor_admin' ||
+    role === 'locum';
   const isGuest = role === 'guest' || role === null;
   const isSpecialAdmin = role === 'special_admin';
   const isOperations = role === 'operations';
-  const isOpsOrAdmin = role === 'operations' || role === 'admin' || role === 'special_admin';
+  const isOpsOrAdmin =
+    role === 'operations' ||
+    role === 'admin' ||
+    role === 'special_admin' ||
+    role === 'doctor_admin';
+  const isDoctorAdmin = role === 'doctor_admin';
+  const isLocum = role === 'locum';
+  const canViewInsights =
+    role === 'admin' || role === 'special_admin' || role === 'doctor_admin';
 
   return (
     <AuthContext.Provider
@@ -170,6 +193,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isSpecialAdmin,
         isOperations,
         isOpsOrAdmin,
+        isDoctorAdmin,
+        isLocum,
+        canViewInsights,
         signIn,
         signUp,
         signOut,

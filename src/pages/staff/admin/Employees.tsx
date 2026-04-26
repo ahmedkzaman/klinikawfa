@@ -95,6 +95,9 @@ export default function AdminEmployees() {
                      <SelectContent>
                        <SelectItem value="guest" disabled={e.id === user?.id && e.role === 'admin'}>Guest</SelectItem>
                        <SelectItem value="staff" disabled={e.id === user?.id && e.role === 'admin'}>Staff</SelectItem>
+                       <SelectItem value="locum">Locum Doctor</SelectItem>
+                       <SelectItem value="operations">Operations</SelectItem>
+                       <SelectItem value="doctor_admin">Doctor Admin</SelectItem>
                        <SelectItem value="admin">Admin</SelectItem>
                      </SelectContent>
                   </Select>
