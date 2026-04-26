@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { FileText } from 'lucide-react';
+import { FileText, MoreVertical } from 'lucide-react';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import {
@@ -14,6 +14,12 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import {
   bento,
@@ -33,6 +39,7 @@ import {
   type PanelClaimStatus,
   type PanelClaimsTab,
 } from '@/hooks/clinic/usePanelClaims';
+import ClaimDetailsSheet from '@/components/clinic/claims/ClaimDetailsSheet';
 
 const TABS: Array<{ key: PanelClaimsTab; label: string }> = [
   { key: 'all', label: 'All' },
@@ -44,6 +51,8 @@ const TABS: Array<{ key: PanelClaimsTab; label: string }> = [
   { key: 'received', label: 'Received' },
   { key: 'cancelled', label: 'Cancelled' },
 ];
+
+const COLUMN_COUNT = 10;
 
 function formatRM(value: number): string {
   return `RM ${value.toFixed(2)}`;
@@ -78,6 +87,7 @@ function Dot({ className }: { className: string }) {
 export default function PanelClaims() {
   const [tab, setTab] = useState<PanelClaimsTab>('all');
   const [page, setPage] = useState(0);
+  const [activeClaim, setActiveClaim] = useState<PanelClaimRow | null>(null);
 
   const { data: claims, isLoading } = usePanelClaims(tab, page);
   const { data: summary } = usePanelClaimsSummary();
@@ -185,26 +195,35 @@ export default function PanelClaims() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50 hover:bg-slate-50 border-b border-slate-100">
-                    {['Amount', 'Claim No', 'Panel', 'Patient', 'Status', 'Date', 'Updated By', 'Remarks'].map(
-                      (h, i) => (
-                        <TableHead
-                          key={h}
-                          className={cn(
-                            'text-[11px] font-semibold text-slate-500 uppercase tracking-wider',
-                            i === 0 && 'text-right',
-                          )}
-                        >
-                          {h}
-                        </TableHead>
-                      ),
-                    )}
+                    {[
+                      { label: 'Amount', align: 'right' as const },
+                      { label: 'Claim No' },
+                      { label: 'Panel' },
+                      { label: 'Patient' },
+                      { label: 'Status' },
+                      { label: 'Date' },
+                      { label: 'Due Date' },
+                      { label: 'Updated By' },
+                      { label: 'Remarks' },
+                      { label: '', align: 'right' as const },
+                    ].map((h, i) => (
+                      <TableHead
+                        key={`${h.label}-${i}`}
+                        className={cn(
+                          'text-[11px] font-semibold text-slate-500 uppercase tracking-wider',
+                          h.align === 'right' && 'text-right',
+                        )}
+                      >
+                        {h.label}
+                      </TableHead>
+                    ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <TableRow key={`sk-${i}`}>
-                        {Array.from({ length: 8 }).map((__, j) => (
+                        {Array.from({ length: COLUMN_COUNT }).map((__, j) => (
                           <TableCell key={j}>
                             <Skeleton className="h-4 w-full" />
                           </TableCell>
@@ -213,7 +232,7 @@ export default function PanelClaims() {
                     ))
                   ) : rows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="h-48">
+                      <TableCell colSpan={COLUMN_COUNT} className="h-48">
                         <div className="flex flex-col items-center justify-center gap-2 text-slate-400">
                           <FileText className="h-10 w-10 opacity-40" />
                           <p className="text-sm">No claims in this view</p>
@@ -222,7 +241,12 @@ export default function PanelClaims() {
                     </TableRow>
                   ) : (
                     rows.map((row) => (
-                      <ClaimRow key={row.id} row={row} activeTab={tab} />
+                      <ClaimRow
+                        key={row.id}
+                        row={row}
+                        activeTab={tab}
+                        onOpen={() => setActiveClaim(row)}
+                      />
                     ))
                   )}
                 </TableBody>
@@ -260,6 +284,14 @@ export default function PanelClaims() {
           </CardContent>
         </Card>
       </div>
+
+      <ClaimDetailsSheet
+        claim={activeClaim}
+        open={activeClaim !== null}
+        onOpenChange={(open) => {
+          if (!open) setActiveClaim(null);
+        }}
+      />
     </div>
   );
 }
@@ -267,9 +299,11 @@ export default function PanelClaims() {
 function ClaimRow({
   row,
   activeTab,
+  onOpen,
 }: {
   row: PanelClaimRow;
   activeTab: PanelClaimsTab;
+  onOpen: () => void;
 }) {
   const displayAmount = row.received_amount ?? row.amount;
   const showClaimedSuffix =
@@ -287,10 +321,20 @@ function ClaimRow({
     dateLabel = row.claim_date;
   }
 
+  let dueLabel = '—';
+  if (row.due_date) {
+    try {
+      dueLabel = format(new Date(row.due_date), 'd MMM yyyy');
+    } catch {
+      dueLabel = row.due_date;
+    }
+  }
+
   return (
     <TableRow
+      onClick={onOpen}
       className={cn(
-        'border-b border-slate-100 last:border-0 hover:bg-slate-50/60',
+        'border-b border-slate-100 last:border-0 hover:bg-slate-50/60 cursor-pointer',
         row.is_overdue && 'bg-red-50/40 hover:bg-red-50/60',
       )}
     >
@@ -309,12 +353,39 @@ function ClaimRow({
         <StatusBadge status={row.status} />
       </TableCell>
       <TableCell className="text-slate-500">{dateLabel}</TableCell>
+      <TableCell>
+        {row.is_overdue ? (
+          <Badge className="rounded-full border-none font-semibold bg-red-100 text-red-700 hover:bg-red-100">
+            Overdue
+          </Badge>
+        ) : (
+          <span className="text-slate-500">{dueLabel}</span>
+        )}
+      </TableCell>
       <TableCell className="text-slate-500">{updatedBy}</TableCell>
       <TableCell
         className="max-w-[200px] line-clamp-1 text-slate-500"
         title={row.remarks ?? undefined}
       >
         {row.remarks ?? '—'}
+      </TableCell>
+      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 hover:bg-slate-100"
+            >
+              <MoreVertical className="h-4 w-4 text-slate-500" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onOpen}>
+              View details / Update claim
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </TableCell>
     </TableRow>
   );
