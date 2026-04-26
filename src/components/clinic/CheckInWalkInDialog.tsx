@@ -128,6 +128,23 @@ export function CheckInWalkInDialog({
                 onChange={setPatient}
                 onRegisterNew={() => setRegisterOpen(true)}
               />
+
+              {patient && hasPatientDebt && (
+                <Alert variant="destructive" className="mt-4">
+                  <AlertDescription>
+                    ⚠️ Patient Liability: {formatRm(patientOutstanding)}. Please collect this
+                    payment before proceeding.
+                  </AlertDescription>
+                </Alert>
+              )}
+              {patient && hasPanelDebt && (
+                <Alert className="mt-2 border-yellow-200 bg-yellow-50 text-yellow-800 [&>svg]:text-yellow-800">
+                  <AlertDescription>
+                    📄 Pending Panel Claims: {formatRm(panelOutstanding)}. (Awaiting
+                    disbursement from panel)
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
 
             <div>
