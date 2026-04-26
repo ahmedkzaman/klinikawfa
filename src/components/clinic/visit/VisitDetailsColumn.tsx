@@ -147,6 +147,8 @@ export function VisitDetailsColumn({
   const { data: attachments = [], isLoading: attachmentsLoading } =
     useConsultationAttachments(consultationId);
 
+  const { data: labelSettings } = useDrugLabelSettings();
+
   const updateItem = useUpdateConsultationItem();
   const removeItem = useRemoveConsultationItem();
 
