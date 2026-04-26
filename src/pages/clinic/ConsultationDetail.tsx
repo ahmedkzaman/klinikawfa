@@ -997,6 +997,7 @@ export default function ConsultationDetail() {
           open={bulkDialogOpen}
           onOpenChange={setBulkDialogOpen}
           onInsert={handleBulkInsert}
+          isPanel={(entry?.payment_method ?? '').startsWith('panel')}
         />
       </div>
     </div>
