@@ -28,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { StatusBadge } from '@/components/clinic/StatusBadge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { FollowUpScheduler } from '@/components/clinic/patient/FollowUpScheduler';
 import {
   useConsultationQueueEntries,
