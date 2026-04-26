@@ -247,6 +247,7 @@ export function LeaderboardsTab({ startDate, endDate }: Props) {
                 <TableRow>
                   <TableHead className="w-12">Rank</TableHead>
                   <TableHead>Reg. No</TableHead>
+                  <TableHead>Primary Condition</TableHead>
                   <TableHead className="text-right">Visits</TableHead>
                   <TableHead className="text-right">Total LTV</TableHead>
                 </TableRow>
@@ -270,6 +271,9 @@ export function LeaderboardsTab({ startDate, endDate }: Props) {
                       ) : (
                         <span>{p.reg_no ?? '—'}</span>
                       )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground italic text-sm">
+                      {p.primary_diagnosis}
                     </TableCell>
                     <TableCell className="text-right">{p.visitCount}</TableCell>
                     <TableCell className="text-right font-semibold text-emerald-600">
