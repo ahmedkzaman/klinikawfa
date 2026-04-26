@@ -1,66 +1,112 @@
-# Step 32 — True 60×50mm Thermal Label via PDF
+# Step 33 — Record Payment: Atomic Checkout Flow
 
-## Why the current approach failed
+Refactor `src/components/clinic/visit/RecordPaymentDialog.tsx` so a single click records the payment, completes the consultation, checks out the queue entry, and returns the user to the Queue Board.
 
-Looking at your screenshot, the `@page { size: 60mm 50mm }` CSS is being **ignored** — the browser still rendered the label centered on a full A4 sheet with the date, page title (`Queue Board — Clinic Portal | Klinik Awfa`), and the project URL stamped on top/bottom.
+## A. Payment Method Logic
 
-This is a known Chromium limitation:
-- `@page size` only takes effect when the user manually picks a matching paper size and sets *Margins → None* in the print dialog.
-- Browser-injected headers/footers (date/title/URL) **cannot** be removed by CSS — only by the user unticking *Headers and footers*.
+Replace the current `usePaymentMethods()` + `filteredMethods` selector with a payment-type–aware UI:
 
-A consumer clicking "Print" will never get the right output.
+- **Self-pay** (`paymentType === 'self_pay'`) — render a `<Select>` with three hardcoded items:
+  - `Cash`
+  - `TNG / DuitNow QR`
+  - `Credit/Debit Card`
+  
+  The selected string becomes `payment_method` directly (no lookup needed).
 
-## The fix — generate a real 60×50mm PDF
+- **Panel** (`paymentType === 'panel'`) — replace the dropdown with a searchable combobox built on `Popover` + `Command` (`CommandInput`, `CommandList`, `CommandEmpty`, `CommandItem`), populated from `useInsuranceProviders({ activeOnly: true })`. Show provider `name` (and `panel_code` as a muted hint where present). Selecting a provider:
+  - Sets a local `selectedProviderId` state
+  - Sets `payment_method = "Panel: <provider.name>"` for the payment row
+  - Resets `amount` to `"0.00"` (still editable so staff can capture co-payments)
 
-Build the label as a vector PDF with exact physical dimensions, open it in a new tab, and let the browser/printer driver print it 1:1. No `@page` guesswork, no browser chrome, works the same on every printer.
+- **Insurance** option is removed from the `RadioGroup` (out of scope for this step) — keep only `Self-pay` and `Panel`. The existing `payment_type` enum value `'panel'` is what we send.
 
-### A. Add `jspdf` dependency
-~30 KB, zero peer deps. Standard tool for client-side PDF generation.
+When the user toggles `paymentType`, clear method/provider state and reset `amount` to either `defaultAmount` (self-pay) or `0` (panel).
 
-### B. New helper — `src/lib/clinic/printDrugLabel.ts`
+## B. Atomic Checkout Flow
 
-A pure function `generateDrugLabelPdf(items, patientName, settings, clinic)` that:
+Pull in two more hooks alongside `useRecordPayment`:
 
-1. Creates `new jsPDF({ unit: 'mm', format: [60, 50], orientation: 'landscape' })`.
-2. For each item, draws one page using `doc.text` / `doc.line` / `doc.setFont`:
-   - **Header (top, ~3 mm)** — Clinic name (bold, 8pt all-caps), tel (5pt) if `show_tel_number`, address (5pt, wrapped) if `show_address`.
-   - **Hairline divider** — `doc.line()`.
-   - **Patient strip** — `PATIENT NAME` bold 6pt.
-   - **Medication block** — `item_name` bold 8pt, wrapped to 54 mm width (~2 lines max).
-   - **Indication** — `For: {indication}` italic 6pt, only if `show_indication` and value present.
-   - **Instruction** (centred, bold 7pt) — built from `dosageBits` (e.g. `1 BIJI · 3X SEHARI`).
-   - **Footer row** — `QTY: x` left, `Date: dd/mm/yyyy` centre (if `show_date`), `EXP: mm/yyyy` right (if `show_expiry_date`). All 5pt.
-   - **Bottom strip** — `Ubat Terkawal / Controlled Medicine` italic 4.5pt centred at y ≈ 48 mm.
-3. Calls `doc.addPage([60, 50], 'landscape')` between items.
-4. Returns the PDF as a `Blob` URL via `doc.output('bloburl')`.
+```ts
+import { useUpdateConsultation } from '@/hooks/clinic/useConsultations';
+import { useUpdateQueueEntry } from '@/hooks/clinic/useQueueEntries';
+import { useNavigate } from 'react-router-dom';
+```
 
-Layout uses `splitTextToSize` for clean wrapping and `getTextWidth` for the centred QTY/Date/EXP row, so nothing clips even when toggles are off.
+Rewrite `handleSubmit` to run the three mutations sequentially with `mutateAsync` so any failure short-circuits the flow:
 
-### C. Wire it into `VisitDetailsColumn.tsx`
+```ts
+const navigate = useNavigate();
+const recordPayment = useRecordPayment();
+const updateConsultation = useUpdateConsultation();
+const updateQueueEntry = useUpdateQueueEntry();
 
-- Delete `ThermalLabelPortal`, `ThermalLabel`, `THERMAL_PRINT_CSS`, and the old `<style>`/`createPortal` plumbing — they are no longer needed.
-- Replace the body of `handlePrintLabel` (and the "Print all labels" handler) with:
+async function handleSubmit() {
+  // ...validation (see section C)
+
+  try {
+    // 1. Record payment row
+    await recordPayment.mutateAsync({
+      queue_entry_id: queueEntryId,
+      consultation_id: consultationId,
+      payment_type: paymentType,           // 'self_pay' | 'panel'
+      payment_method: resolvedMethodLabel, // hardcoded label or "Panel: <name>"
+      amount: numericAmount,
+      notes: finalNotes || null,
+    });
+
+    // 2. Mark consultation completed (only if one exists)
+    if (consultationId) {
+      await updateConsultation.mutateAsync({
+        id: consultationId,
+        status: 'completed',
+      });
+    }
+
+    // 3. Check out queue entry
+    await updateQueueEntry.mutateAsync({
+      id: queueEntryId,
+      clinic_status: 'completed',
+    });
+
+    toast.success('Payment recorded · Patient checked out');
+    onOpenChange(false);
+    navigate('/clinic/queue');
+  } catch (err) {
+    // Step-specific destructive toast; do NOT close dialog or navigate.
+    const msg = err instanceof Error ? err.message : 'Checkout failed';
+    toast.error(`Checkout failed: ${msg}`);
+  }
+}
+```
+
+Notes:
+- `useRecordPayment`, `useUpdateConsultation`, and `useUpdateQueueEntry` already invalidate their respective query keys on success, so the Queue Board will refresh automatically after navigation.
+- `clinic_status = 'completed'` matches the existing enum used elsewhere in the queue flow.
+
+## C. UX & Defensive UI
+
+- Compute a single `isSubmitting` flag:
   ```ts
-  const url = generateDrugLabelPdf(rows, patientName, labelSettings, CLINIC_INFO);
-  const win = window.open(url, '_blank');
-  win?.addEventListener('load', () => win.print());
+  const isSubmitting =
+    recordPayment.isPending ||
+    updateConsultation.isPending ||
+    updateQueueEntry.isPending;
   ```
-- `CLINIC_INFO` is a small const at the top of the helper — name, tel, address pulled from the existing memory (`mem://project/contact-info`).
+- Submit button:
+  - Import `Loader2` from `lucide-react`.
+  - When `isSubmitting`, render `<Loader2 className="h-4 w-4 animate-spin mr-2" />` plus contextual label (`Recording…` / `Completing visit…` / `Checking out…` based on which mutation is pending — fall back to `Processing…`).
+  - Disabled when `isSubmitting` OR no method/provider selected:
+    - Self-pay: disabled if `selectedSelfPayMethod` is empty
+    - Panel: disabled if `selectedProviderId` is empty
+- Cancel button is also disabled while `isSubmitting` to prevent half-completed flows from being abandoned.
+- Validation that runs **before** the try/catch:
+  - Amount must parse to a finite number `>= 0` (panel can be 0; self-pay must be `> 0`).
+  - Method/provider must be selected (already enforced by disabled state, but re-check defensively).
+  - Surface validation failures with `toast.error(...)` and return early.
+- On error from any of the three mutations: show destructive toast, **keep the dialog open**, and leave all form state intact so staff can adjust and retry. Do not navigate.
 
-### D. UX side-effects
+## Files
 
-- The user gets a new tab with the PDF preview. Their browser's PDF viewer shows it at exact 60×50 mm.
-- Auto-print prompt fires once the PDF finishes loading.
-- No browser headers/footers, no margin negotiation, no "set paper size to custom" instructions.
-- Print dialog will show *Paper size: 60×50 mm* automatically (it reads the PDF metadata).
+- **Edited**: `src/components/clinic/visit/RecordPaymentDialog.tsx` — replace method-selection UI, add panel combobox, wire the 3-step atomic flow, add `Loader2` spinner + per-step button labels, remove the `insurance` radio option, drop the `usePaymentMethods` dependency.
 
-### Files touched
-
-- **New:** `src/lib/clinic/printDrugLabel.ts` — jsPDF helper.
-- **Edited:** `src/components/clinic/visit/VisitDetailsColumn.tsx` — remove portal + CSS, call helper.
-- **Edited:** `package.json` — add `jspdf`.
-
-### Out of scope
-
-- No DB or hook changes; `useDrugLabelSettings` is consumed as-is.
-- The on-screen Live Preview in `DrugLabelSettings.tsx` stays exactly as it is — only the *printed* output changes.
+No DB migrations, no new files, no schema changes — all referenced hooks (`useRecordPayment`, `useUpdateConsultation`, `useUpdateQueueEntry`, `useInsuranceProviders`) already exist with the required signatures.
