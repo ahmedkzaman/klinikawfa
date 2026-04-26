@@ -29,15 +29,15 @@ export const STATUS_LABELS: Record<ClinicStatus, string> = {
   completed: 'Completed',
 };
 
-/** Semantic-token Tailwind classes only — never raw colors. */
+/** Soft, desaturated palette aligned with the clinic bento design. */
 export const STATUS_COLORS: Record<ClinicStatus, string> = {
-  registered: 'bg-muted text-muted-foreground border-border',
-  ready_for_doctor: 'bg-primary/10 text-primary border-primary/20',
-  with_doctor: 'bg-accent text-accent-foreground border-border',
-  sent_to_dispensary: 'bg-secondary text-secondary-foreground border-border',
-  dispensing_payment: 'bg-secondary text-secondary-foreground border-border',
-  on_hold: 'bg-destructive/10 text-destructive border-destructive/20',
-  completed: 'bg-primary/10 text-primary border-primary/20',
+  registered: 'bg-slate-50 text-slate-600 border-transparent',
+  ready_for_doctor: 'bg-blue-50 text-blue-700 border-transparent',
+  with_doctor: 'bg-emerald-50 text-emerald-700 border-transparent',
+  sent_to_dispensary: 'bg-violet-50 text-violet-700 border-transparent',
+  dispensing_payment: 'bg-amber-50 text-amber-700 border-transparent',
+  on_hold: 'bg-rose-50 text-rose-700 border-transparent',
+  completed: 'bg-emerald-50 text-emerald-700 border-transparent',
 };
 
 /** Five visible columns for the kanban board (completed/cancelled drop off). */

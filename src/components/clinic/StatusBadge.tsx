@@ -11,23 +11,23 @@ export function StatusBadge({ status }: { status: ClinicStatus }) {
 }
 
 const appointmentStatusConfig: Record<string, { label: string; className: string }> = {
-  scheduled: { label: 'Scheduled', className: 'bg-muted text-muted-foreground border-border' },
-  confirmed: { label: 'Confirmed', className: 'bg-primary/10 text-primary border-primary/20' },
+  scheduled: { label: 'Scheduled', className: 'bg-slate-50 text-slate-600 border-transparent' },
+  confirmed: { label: 'Confirmed', className: 'bg-blue-50 text-blue-700 border-transparent' },
   in_progress: {
     label: 'In Progress',
-    className: 'bg-accent text-accent-foreground border-border',
+    className: 'bg-emerald-50 text-emerald-700 border-transparent',
   },
   completed: {
     label: 'Completed',
-    className: 'bg-primary/10 text-primary border-primary/20',
+    className: 'bg-emerald-50 text-emerald-700 border-transparent',
   },
   cancelled: {
     label: 'Cancelled',
-    className: 'bg-destructive/10 text-destructive border-destructive/20',
+    className: 'bg-rose-50 text-rose-700 border-transparent',
   },
   no_show: {
     label: 'No Show',
-    className: 'bg-destructive/10 text-destructive border-destructive/20',
+    className: 'bg-rose-50 text-rose-700 border-transparent',
   },
 };
 
@@ -35,7 +35,7 @@ export function AppointmentStatusBadge({ status }: { status: string }) {
   const config =
     appointmentStatusConfig[status] ?? {
       label: status,
-      className: 'bg-muted text-muted-foreground border-border',
+      className: 'bg-slate-50 text-slate-600 border-transparent',
     };
   return <span className={cn(baseClass, config.className)}>{config.label}</span>;
 }

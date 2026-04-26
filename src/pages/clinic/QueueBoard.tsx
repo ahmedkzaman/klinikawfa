@@ -6,8 +6,6 @@ import { AlertCircle, ListOrdered, Plus, UserPlus, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { SEOHead } from '@/components/seo/SEOHead';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Sheet,
@@ -29,6 +27,15 @@ import {
   type QueueEntryWithJoins,
 } from '@/types/clinic';
 import { cn } from '@/lib/utils';
+import {
+  bento,
+  bentoHeader,
+  pageInner,
+  pageShell,
+  primaryBtn,
+  secondaryBtn,
+  softBadge,
+} from '@/lib/clinic/bentoTokens';
 
 function useTickEveryMinute() {
   const [, setTick] = useState(0);
@@ -58,40 +65,43 @@ function QueueCard({
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.15 }}
       className={cn(
-        'w-full text-left rounded-md border bg-card p-3 hover:border-primary transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'w-full text-left bg-white rounded-xl p-3 border border-transparent shadow-[0_2px_8px_rgb(0,0,0,0.04)] hover:shadow-[0_4px_16px_rgb(0,0,0,0.08)] hover:border-blue-200 transition-all',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200',
       )}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
-        <span className="font-mono text-2xl font-semibold text-foreground leading-none">
+        <span className="font-mono text-2xl font-semibold text-slate-800 leading-none">
           {entry.queue_number ?? '—'}
         </span>
         {entry.is_urgent && (
           <span
-            className="h-2 w-2 rounded-full bg-destructive mt-1"
+            className="h-2 w-2 rounded-full bg-rose-500 mt-1"
             aria-label="Urgent"
             title="Urgent"
           />
         )}
       </div>
-      <p className="font-medium text-sm text-foreground truncate">
+      <p className="font-medium text-sm text-slate-800 truncate">
         {entry.patients?.name ?? 'Unknown patient'}
       </p>
       <div className="flex items-center justify-between mt-2 gap-2">
-        <Badge variant="outline" className={cn('text-xs', STATUS_COLORS[status])}>
+        <span
+          className={cn(
+            'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium',
+            STATUS_COLORS[status],
+          )}
+        >
           {STATUS_LABELS[status]}
-        </Badge>
-        <span className="text-xs text-muted-foreground tabular-nums">{waited}</span>
+        </span>
+        <span className="text-xs text-slate-400 tabular-nums">{waited}</span>
       </div>
       {entry.insurance_providers?.name && (
-        <Badge variant="secondary" className="mt-2 text-[10px] font-normal">
+        <span className="mt-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-normal bg-blue-50 text-blue-700">
           Panel · {entry.insurance_providers.name}
-        </Badge>
+        </span>
       )}
       {entry.doctors?.name && (
-        <p className="text-xs text-muted-foreground mt-1 truncate">
-          Dr. {entry.doctors.name}
-        </p>
+        <p className="text-xs text-slate-500 mt-1 truncate">Dr. {entry.doctors.name}</p>
       )}
     </motion.button>
   );
@@ -130,163 +140,165 @@ export default function QueueBoard() {
         noIndex
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Queue Board</h1>
-          <p className="text-sm text-muted-foreground">
-            {format(new Date(), 'EEEE, d MMMM yyyy')} · {totalActive} active
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setWalkInDialog(true)}>
-            <UserPlus className="h-4 w-4 mr-1" /> Walk-In
-          </Button>
-          <Button variant="outline" onClick={() => setRegisterDialog(true)}>
-            <Users className="h-4 w-4 mr-1" /> Register & Queue
-          </Button>
-          <Button
-            onClick={() => setAppointmentDialog(true)}
-            disabled={appointments.length === 0}
-            title={appointments.length === 0 ? 'No pending appointments today' : undefined}
-          >
-            <Plus className="h-4 w-4 mr-1" /> Check In Appointment
-          </Button>
+      <div className={pageShell}>
+        <div className={pageInner}>
+          {/* Header bar */}
+          <div className={cn(bento, 'p-4 flex items-center justify-between gap-3 flex-wrap')}>
+            <div>
+              <h1 className="text-2xl font-semibold text-slate-800">Queue Board</h1>
+              <p className="text-sm text-slate-500 mt-0.5">
+                {format(new Date(), 'EEEE, d MMMM yyyy')} · {totalActive} active
+              </p>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                variant="ghost"
+                onClick={() => setWalkInDialog(true)}
+                className={secondaryBtn}
+              >
+                <UserPlus className="h-4 w-4 mr-1" /> Walk-In
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setRegisterDialog(true)}
+                className={secondaryBtn}
+              >
+                <Users className="h-4 w-4 mr-1" /> Register & Queue
+              </Button>
+              <Button
+                onClick={() => setAppointmentDialog(true)}
+                disabled={appointments.length === 0}
+                title={appointments.length === 0 ? 'No pending appointments today' : undefined}
+                className={primaryBtn}
+              >
+                <Plus className="h-4 w-4 mr-1" /> Check In Appointment
+              </Button>
+            </div>
+          </div>
+
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-64 w-full rounded-2xl" />
+              ))}
+            </div>
+          ) : totalActive === 0 ? (
+            <div className={cn(bento, 'flex flex-col items-center gap-3 py-16 text-center')}>
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-50">
+                <ListOrdered className="h-7 w-7 text-blue-600" />
+              </div>
+              <p className="text-sm text-slate-500 max-w-sm">
+                No active patients. Check in an appointment or walk-in to get started.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
+              {QUEUE_COLUMNS.map((col) => {
+                const items = grouped.get(col.key) ?? [];
+                return (
+                  <div
+                    key={col.key}
+                    className={cn(bento, 'p-3 flex flex-col min-h-[180px]')}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                        {col.label}
+                      </h2>
+                      <span
+                        className={cn(softBadge, 'inline-flex items-center px-2 py-0.5 text-xs tabular-nums')}
+                      >
+                        {items.length}
+                      </span>
+                    </div>
+                    <div className="space-y-2 flex-1">
+                      <AnimatePresence mode="popLayout">
+                        {items.length === 0 && (
+                          <motion.p
+                            key="empty"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="text-xs text-slate-400 text-center py-4"
+                          >
+                            Empty
+                          </motion.p>
+                        )}
+                        {items.map((entry) => (
+                          <QueueCard
+                            key={entry.id}
+                            entry={entry}
+                            onClick={() => setActiveEntry(entry)}
+                          />
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
-      {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-64 w-full" />
-          ))}
-        </div>
-      ) : totalActive === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
-              <ListOrdered className="h-7 w-7 text-primary" />
-            </div>
-            <p className="text-sm text-muted-foreground max-w-sm">
-              No active patients. Check in an appointment or walk-in to get started.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
-          {QUEUE_COLUMNS.map((col) => {
-            const items = grouped.get(col.key) ?? [];
-            return (
-              <div
-                key={col.key}
-                className="rounded-lg border border-border bg-muted/30 p-3 flex flex-col min-h-[180px]"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-semibold text-foreground">{col.label}</h2>
-                  <Badge variant="secondary" className="tabular-nums">
-                    {items.length}
-                  </Badge>
-                </div>
-                <div className="space-y-2 flex-1">
-                  <AnimatePresence mode="popLayout">
-                    {items.length === 0 && (
-                      <motion.p
-                        key="empty"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="text-xs text-muted-foreground text-center py-4"
-                      >
-                        Empty
-                      </motion.p>
-                    )}
-                    {items.map((entry) => (
-                      <QueueCard
-                        key={entry.id}
-                        entry={entry}
-                        onClick={() => setActiveEntry(entry)}
-                      />
-                    ))}
-                  </AnimatePresence>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
       {/* Detail sheet */}
       <Sheet open={!!activeEntry} onOpenChange={(o) => !o && setActiveEntry(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+        <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto bg-slate-50">
           <SheetHeader>
-            <SheetTitle>
+            <SheetTitle className="text-slate-800">
               Queue #{activeEntry?.queue_number ?? '—'}
               {activeEntry?.is_urgent && (
-                <span className="ml-2 inline-flex items-center gap-1 text-destructive text-sm font-normal">
+                <span className="ml-2 inline-flex items-center gap-1 text-rose-600 text-sm font-normal">
                   <AlertCircle className="h-4 w-4" /> Urgent
                 </span>
               )}
             </SheetTitle>
-            <SheetDescription>
+            <SheetDescription className="text-slate-500">
               {activeEntry?.patients?.name ?? 'Unknown patient'}
             </SheetDescription>
           </SheetHeader>
 
           {activeEntry && (
-            <div className="mt-6 space-y-4 text-sm">
+            <div className={cn(bento, 'mt-6 p-5 space-y-4 text-sm')}>
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
-                  Status
-                </p>
-                <Badge
-                  variant="outline"
-                  className={STATUS_COLORS[activeEntry.clinic_status as ClinicStatus]}
+                <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Status</p>
+                <span
+                  className={cn(
+                    'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
+                    STATUS_COLORS[activeEntry.clinic_status as ClinicStatus],
+                  )}
                 >
                   {STATUS_LABELS[activeEntry.clinic_status as ClinicStatus]}
-                </Badge>
+                </span>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
-                  Phone
-                </p>
-                <p className="text-foreground">{activeEntry.patients?.phone ?? '—'}</p>
+                <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Phone</p>
+                <p className="text-slate-800">{activeEntry.patients?.phone ?? '—'}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
+                <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">
                   Visit purpose
                 </p>
-                <p className="text-foreground capitalize">
+                <p className="text-slate-800 capitalize">
                   {activeEntry.visit_purpose.replace(/_/g, ' ')}
                 </p>
               </div>
               {activeEntry.visit_notes && (
                 <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
-                    Notes
-                  </p>
-                  <p className="text-foreground whitespace-pre-wrap">
-                    {activeEntry.visit_notes}
-                  </p>
+                  <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Notes</p>
+                  <p className="text-slate-800 whitespace-pre-wrap">{activeEntry.visit_notes}</p>
                 </div>
               )}
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
-                  Created
-                </p>
-                <p className="text-foreground">
+                <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Created</p>
+                <p className="text-slate-800">
                   {format(new Date(activeEntry.created_at), 'd MMM yyyy, HH:mm')}
                 </p>
               </div>
 
-              <div className="pt-4 border-t flex flex-col gap-2">
-                {/* STRICT ROLE-BASED ACTIONS:
-                    - `registered`            → front desk may call patient to doctor
-                    - `sent_to_dispensary` /
-                      `dispensing_payment`    → front desk routes to checkout (revenue lock)
-                    - `on_hold`               → READ-ONLY here; only the attending doctor
-                                                may resume from /clinic/consultation
-                    - all other statuses      → no actions */}
+              <div className="pt-4 border-t border-slate-100 flex flex-col gap-2">
                 {activeEntry.clinic_status === 'registered' && (
                   <Button
+                    className={primaryBtn}
                     disabled={updateQueue.isPending || !activeEntry}
                     onClick={() => {
                       if (!activeEntry) return;
@@ -316,7 +328,8 @@ export default function QueueBoard() {
                 {(activeEntry.clinic_status === 'sent_to_dispensary' ||
                   activeEntry.clinic_status === 'dispensing_payment') && (
                   <Button
-                    variant="outline"
+                    variant="ghost"
+                    className={secondaryBtn}
                     onClick={() => {
                       if (!activeEntry) return;
                       navigate(`/clinic/queue/checkout/${activeEntry.id}`);
@@ -328,7 +341,7 @@ export default function QueueBoard() {
                 )}
 
                 {activeEntry.clinic_status === 'on_hold' && (
-                  <p className="text-sm text-muted-foreground italic">
+                  <p className="text-sm text-slate-500 italic">
                     Patient is on hold. Status can only be resumed by the attending doctor.
                   </p>
                 )}
