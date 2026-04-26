@@ -384,6 +384,33 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                   )}
                 </div>
               </div>
+
+              {existingPatient && (
+                <Alert variant="destructive">
+                  <AlertDescription className="space-y-2">
+                    <div>
+                      ⚠️ A patient with this MyKad already exists:{' '}
+                      <span className="font-semibold">{existingPatient.name}</span>
+                      {existingPatient.phone ? ` • ${existingPatient.phone}` : ''}. Consider
+                      using the existing record instead of creating a duplicate.
+                    </div>
+                    {existingHasPatientDebt && (
+                      <div>
+                        ⚠️ Patient Liability: {formatRm(existingPatientOutstanding)}. Please
+                        collect this payment before proceeding.
+                      </div>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
+              {existingPatient && existingHasPanelDebt && (
+                <Alert className="border-yellow-200 bg-yellow-50 text-yellow-800 [&>svg]:text-yellow-800">
+                  <AlertDescription>
+                    📄 Pending Panel Claims: {formatRm(existingPanelOutstanding)}. (Awaiting
+                    disbursement from panel)
+                  </AlertDescription>
+                </Alert>
+              )}
             </CardContent>
           </Card>
 
