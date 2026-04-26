@@ -1,124 +1,190 @@
-# Step 37 — Leaderboards Tab: Active LTV + Doctor Profit Efficiency
 
-## Context
+# Step 37 — Roles, Registration Numbers & VIP Radar
 
-Step 37 adds the **Leaderboards** tab to the Insight dashboard. This surfaces two strategic views:
+## Reality-check against the existing codebase
 
-1. **Active Patient LTV Distribution** — anonymized buckets of cumulative revenue per patient, with a 3-year inactivity hard-stop to exclude churned patients from skewing the median.
-2. **Doctor Efficiency Leaderboard** — doctors ranked by **Gross Profit** (not revenue), reusing the existing `useScoreboards` hook to enforce a single source of truth.
+Before approving, please note three deviations from the prompt that this plan resolves explicitly:
 
-The existing `insight_financials_view` already exposes `patient_id`, `revenue`, `profit`, and `visit_date` from Step 36, so **no database migration is required**. `Insight.tsx` already has a placeholder `<TabsContent value="leaderboards">` ready to swap.
+1. **There is no `registration_number` column on `patients`.** Today the clinic identifies patients by `national_id` (MyKad). We will **add** a new `reg_no` column and backfill it (Klinik Awfa format `KA-00001`). We will **not** expose `national_id` in the dashboard.
+2. **The `app_role` enum currently contains:** `admin`, `staff`, `guest`, `special_admin`, `operations`. The prompt asks for `doctor-admin` and `locum`. Postgres enums accept hyphens but most of the existing codebase uses underscored identifiers, so we will add **`doctor_admin`** and **`locum`** (underscored). All references stay consistent.
+3. **There is no `/clinic/patients/:id/history` route.** The existing `PatientProfileSheet` already shows profile + visit history and is the established pattern (used in `PatientsList`). VIP Radar clicks will open this sheet — no new route needed.
 
 ---
 
-## A. Patient LTV Hook — `src/hooks/clinic/usePatientLTV.ts` (NEW)
+## A. Database migration — `add_specialized_roles_and_reg_no.sql`
 
-Fetches the **full unbounded history** from `insight_financials_view` (LTV is inherently lifetime, not period-bound).
-
-**Aggregation:**
-- Group rows by `patient_id` (skip null IDs).
-- Track per-patient: `totalRevenue`, `totalProfit`, `lastVisit` (max of `visit_date`), `visitCount`.
-
-**Recency filter (the "Active" definition):**
-- Compute `isInactive = differenceInYears(now, lastVisit) >= 3`.
-- Drop inactive patients before computing distribution stats.
-
-**Anonymized return shape (PDPA-safe):**
-```ts
-{
-  histogramData: { name: string; count: number }[]; // 5 buckets
-  medianLTV: number;                                 // median totalRevenue of active patients
-  activeCount: number;
-  inactiveCount: number;
-}
+### A1. Extend `app_role` enum
+```sql
+ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'doctor_admin';
+ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'locum';
 ```
 
-**Buckets (revenue-based):** `RM 0–200`, `RM 201–500`, `RM 501–1,000`, `RM 1,001–2,500`, `RM 2,500+`
+### A2. Update role helper functions
+Promote `doctor_admin` to admin-equivalent for ops/insight gates; `locum` is treated as **clinical-only** (not ops, not admin).
 
-**Implementation notes:**
-- Use the `const db = supabase as any` pattern (mirrors `useScoreboards` since the view isn't in generated types).
-- Median: sort by `totalRevenue`, pick `Math.floor(activePatients.length / 2)`.
-- Cache key: `['patient-ltv']` — no date range, since LTV is lifetime.
-- **Never** return `patient_id`, names, or any per-patient object externally.
+```sql
+CREATE OR REPLACE FUNCTION public.is_admin(_user_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT public.has_role(_user_id, 'admin')
+      OR public.has_role(_user_id, 'special_admin')
+      OR public.has_role(_user_id, 'doctor_admin')
+$$;
 
----
+CREATE OR REPLACE FUNCTION public.is_ops_or_admin(_user_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.user_roles
+    WHERE user_id = _user_id
+      AND role IN ('operations','admin','special_admin','doctor_admin')
+  )
+$$;
 
-## B. Leaderboards UI — `src/components/clinic/insight/LeaderboardsTab.tsx` (NEW)
-
-Component signature: `({ startDate, endDate }: { startDate: Date; endDate: Date })`
-
-### Layout
-
-**Top row (2-column grid on lg, stacked on mobile):**
-
-1. **LTV Distribution Card**
-   - Title: "Active Patient LTV Distribution"
-   - Subtitle: "Excludes patients with no visits in > 3 years"
-   - Vertical Recharts `BarChart` of `histogramData` with bars in **Emerald-500 (`#10b981`)**, matching the Overview tab's Revenue color.
-   - Footer caption: `"{activeCount} active patients · {inactiveCount} excluded as inactive"`.
-
-2. **Acquisition Strategy Card**
-   - Title: "Acquisition Strategy"
-   - Two stacked stat blocks:
-     - **Median Active LTV** — `RM X.XX`
-     - **Recommended CAC Ceiling (30%)** — `RM X.XX`, computed as `medianLTV * 0.3`.
-   - The CAC block uses a highlighted alert style (`border-l-4 border-primary bg-primary/5 p-4 rounded`) with strategic note:
-     > *"To maintain sustainable unit economics, do not spend more than this amount to acquire a single new patient."*
-
-**Bottom row (full-width):**
-
-3. **Doctor Efficiency Leaderboard Card**
-   - Title: "Doctor Efficiency Leaderboard"
-   - Subtitle: "Ranked by Gross Profit (Revenue − COGS) for the selected period"
-   - Reuses `useScoreboards(startDate, endDate)` — **no duplicate hook**.
-   - Sort: `[...doctors].sort((a, b) => b.totalProfit - a.totalProfit)` — **CRITICAL: by profit, not revenue**, to discourage low-margin volume gaming.
-   - Columns: Doctor · Revenue (RM, right) · Gross Profit (**bold emerald**, right) · Margin % (color-coded)
-   - Margin color thresholds (mirror the `marginColorClass` pattern from `ScoreboardsTab`):
-     - `≥ 40%` → `text-emerald-600 font-semibold`
-     - `20–40%` → `text-amber-600 font-semibold`
-     - `< 20%` → `text-red-600 font-semibold`
-
-### States
-
-- **Loading**: Skeletons for all three cards (mirror `ScoreboardsSkeleton`).
-- **Error**: Destructive-text card — separately for LTV vs. scoreboards (one can fail without the other).
-- **Empty (no active patients)**: Inbox icon + "No active patient history available yet."
-- **Empty (no doctors)**: "No doctor performance data for this period."
-
----
-
-## C. Integration — `src/pages/clinic/Insight.tsx` (EDIT)
-
-Single-line swap inside `<TabsContent value="leaderboards">`:
-
-```tsx
-// Before (line 442):
-<PlaceholderPanel label="Leaderboards (Step 37) — coming next" />
-
-// After:
-<LeaderboardsTab startDate={startDate} endDate={endDate} />
+-- New: insight access (admin + doctor_admin only — pure ops/staff/locum blocked)
+CREATE OR REPLACE FUNCTION public.can_view_insights(_user_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.user_roles
+    WHERE user_id = _user_id
+      AND role IN ('admin','special_admin','doctor_admin')
+  )
+$$;
 ```
 
-Add the import alongside `ScoreboardsTab`. Access control is **already inherited** — `/clinic/insight` is admin-only via existing route guards.
+### A3. Add `reg_no` to `patients` and backfill
+```sql
+ALTER TABLE public.patients
+  ADD COLUMN reg_no TEXT UNIQUE;
+
+CREATE SEQUENCE IF NOT EXISTS public.patient_reg_no_seq START 1;
+
+-- Backfill in registration_date order
+WITH ordered AS (
+  SELECT id, ROW_NUMBER() OVER (ORDER BY registration_date, created_at) AS rn
+  FROM public.patients
+)
+UPDATE public.patients p
+   SET reg_no = 'KA-' || lpad(o.rn::text, 5, '0')
+  FROM ordered o
+ WHERE p.id = o.id;
+
+-- Auto-assign on insert
+CREATE OR REPLACE FUNCTION public.trg_assign_reg_no()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NEW.reg_no IS NULL THEN
+    NEW.reg_no := 'KA-' || lpad(nextval('public.patient_reg_no_seq')::text, 5, '0');
+  END IF;
+  RETURN NEW;
+END $$;
+
+CREATE TRIGGER patients_assign_reg_no
+  BEFORE INSERT ON public.patients
+  FOR EACH ROW EXECUTE FUNCTION public.trg_assign_reg_no();
+
+-- Align sequence past the backfill
+SELECT setval('public.patient_reg_no_seq',
+  (SELECT COUNT(*) FROM public.patients), true);
+```
+
+### A4. Recreate `insight_financials_view` with `reg_no`
+Drop and recreate the existing view (created in Step 36) adding `p.reg_no` to the SELECT and a `LEFT JOIN public.patients p ON p.id = c.patient_id`. Keep `WITH (security_invoker = true)` so RLS still applies.
 
 ---
 
-## Strategic Audit
+## B. Frontend role plumbing
 
-- **PDPA-safe by design**: Hook returns only aggregate distribution data — no patient IDs, names, or per-patient rows ever cross the hook boundary.
-- **Profit > Revenue**: The leaderboard sort key is deliberately Gross Profit. A doctor pushing high-volume low-margin medications ranks lower than one performing fewer high-margin procedures.
-- **Inactivity hard-stop**: The 3-year filter prevents the median from being dragged down by long-dormant patients, grounding CAC guidance in *current* economics.
-- **Single source of truth**: Reusing `useScoreboards` ensures Step 36 and Step 37 mathematically agree on every doctor figure.
+### B1. `src/contexts/AuthContext.tsx`
+- Extend `AppRole`: `'special_admin' | 'admin' | 'doctor_admin' | 'operations' | 'staff' | 'locum' | 'guest'`.
+- Add derived booleans:
+  - `isDoctorAdmin = role === 'doctor_admin'`
+  - `isLocum = role === 'locum'`
+  - `canViewInsights = role === 'admin' || role === 'special_admin' || role === 'doctor_admin'`
+- Update existing flags to include `doctor_admin` where appropriate:
+  - `isAdmin`: add `doctor_admin`.
+  - `isOpsOrAdmin`: add `doctor_admin`.
+  - `isStaffOrAdmin`: add `doctor_admin` and `locum` (locum is clinical staff).
+- `isGuest` unchanged (`guest` or `null`).
+
+### B2. Role admin UIs
+- `src/pages/staff/admin/Employees.tsx` and `src/pages/clinic/settings/UserManagementSettings.tsx`: add `doctor_admin` and `locum` to the `ROLE_OPTIONS` array and `ROLE_LABEL` map (labels: "Doctor Admin", "Locum Doctor"). No DB change needed beyond the enum — `admin_assign_role` already accepts any `app_role`.
+
+### B3. `ClinicProtectedRoute`
+Add a new `requiredRole` value `'insights'` that gates on `canViewInsights`. Apply it to the `/clinic/insight` route in `App.tsx` so locums and pure ops users are bounced to `/staff/dashboard`.
 
 ---
 
-## Files
+## C. `usePatientLTV` hook refactor
 
-**New:**
-- `src/hooks/clinic/usePatientLTV.ts`
-- `src/components/clinic/insight/LeaderboardsTab.tsx`
+`src/hooks/clinic/usePatientLTV.ts` — extend the existing hook:
+- Select adds `reg_no` from the view.
+- Aggregate as before (3-year recency filter, RM buckets, median).
+- **New return field:** `top50: Array<{ patient_id: string; reg_no: string | null; visitCount: number; totalRevenue: number; totalProfit: number }>` — top 50 active patients by `totalRevenue` descending.
+- Histogram and median logic unchanged. `top50` is the only new emission; no names or `national_id` ever leave the hook.
+
+---
+
+## D. VIP Radar UI in `LeaderboardsTab.tsx`
+
+Layout (top → bottom):
+
+1. **LTV Histogram + CAC Card** — unchanged from current implementation.
+2. **VIP Radar Table (NEW)** — Card titled "VIP Patient Radar" with subtitle "Top 50 active patients by lifetime revenue."
+   - Columns: `Rank`, `Reg. No`, `Visits`, `Total LTV (RM)`.
+   - **Clickability rule** (uses `useAuth` + `useCurrentDoctor`):
+     - If `isDoctorAdmin` **OR** the user has a row in `doctors` (locum case via `useCurrentDoctor().data`), `Reg. No` renders as a button that opens `PatientProfileSheet` for that `patient_id`.
+     - Otherwise (pure `admin`, `special_admin` without doctor row), `Reg. No` renders as plain text — they can see the ranking but not the medical record.
+   - Empty state: "No active patients to rank."
+3. **Doctor Efficiency Leaderboard** — unchanged (already implemented, sorted by gross profit, color-coded margins).
+
+A single `<PatientProfileSheet>` is mounted at the bottom of the tab with state `{ open, patientId }` — the radar rows toggle it.
+
+---
+
+## E. Tab-level access control
+
+In `Insight.tsx`:
+- Wrap the entire page in a `canViewInsights` check; if false, render an "Access Restricted" card explaining that only Admins and Doctor-Admins can view financial insights. (Defence in depth — the route guard already redirects, but this protects against direct tab links and ensures consistent UX for anyone who somehow lands here.)
+
+---
+
+## F. Files touched
+
+**Migration (new):**
+- `supabase/migrations/<ts>_add_specialized_roles_and_reg_no.sql`
+- `supabase/migrations/<ts>_extend_insight_view_with_reg_no.sql` *(separate file for the view recreation, easier to revert)*
 
 **Edited:**
-- `src/pages/clinic/Insight.tsx` — swap placeholder for `LeaderboardsTab`, add import.
+- `src/contexts/AuthContext.tsx` — enum, derived flags, `canViewInsights`.
+- `src/components/ClinicProtectedRoute.tsx` — new `'insights'` gate.
+- `src/App.tsx` — apply `requiredRole="insights"` to the insight route.
+- `src/pages/staff/admin/Employees.tsx` — role options.
+- `src/pages/clinic/settings/UserManagementSettings.tsx` — role options + labels.
+- `src/hooks/clinic/usePatientLTV.ts` — `top50` emission, `reg_no` column.
+- `src/components/clinic/insight/LeaderboardsTab.tsx` — VIP Radar card + sheet.
+- `src/pages/clinic/Insight.tsx` — top-level access gate.
 
-**Verification:** `npx tsc --noEmit` must pass cleanly before handing back.
+**Memory updates:**
+- `mem://auth/role-system` — document `doctor_admin` + `locum` and their semantics.
+- `mem://index.md` — bump core role-list line.
+
+---
+
+## G. Verification
+
+1. `npx tsc --noEmit` clean.
+2. Manual smoke: log in as each role and load `/clinic/insight`:
+   - `admin` / `special_admin` → sees Insights, VIP Radar non-clickable.
+   - `doctor_admin` → sees Insights, VIP Radar **clickable**.
+   - `locum` → redirected from `/clinic/insight`. (Locums consult, they don't audit finance.)
+   - `operations` / `staff` → redirected.
+   - `guest` → redirected.
+3. Patients page should still display correctly with `reg_no` available (no UI change required this step, but the column is now in `types.ts`).
+
+---
+
+## H. Strategic notes (no-glaze)
+
+- **Locum sandbox:** by NOT giving locums insight access, supplier costs and profit margins stay invisible to temporary clinicians — exactly the "in/out clinician" posture the prompt called for.
+- **Pure admin can audit but not pry:** non-clinical owners see the rankings (so they can spot a whale patient) but cannot click into a chart, satisfying PDPA's "least privilege" principle.
+- **`doctor_admin` is the power role:** the only role that bridges P&L data and clinical context — appropriate for an owner-doctor.
+- **Backfill safety:** `reg_no` is `UNIQUE` but nullable initially; the `WITH ordered` CTE assigns deterministic numbers before we add the trigger, so there is no race window.

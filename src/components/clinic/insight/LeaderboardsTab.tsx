@@ -7,8 +7,9 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Inbox, Users, Wallet } from 'lucide-react';
-import { useMemo } from 'react';
+import { Inbox, Users, Wallet, ExternalLink } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -21,9 +22,14 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 
+import { useAuth } from '@/contexts/AuthContext';
+import { useCurrentDoctor } from '@/hooks/clinic/useCurrentDoctor';
 import { usePatientLTV } from '@/hooks/clinic/usePatientLTV';
 import { useScoreboards } from '@/hooks/clinic/useScoreboards';
+import { PatientProfileSheet } from '@/components/patients/PatientProfileSheet';
+import type { PatientRow } from '@/types/clinic';
 
 interface Props {
   startDate: Date;
@@ -43,7 +49,31 @@ function marginColorClass(margin: number) {
   return 'text-red-600 font-semibold';
 }
 
+/** One-shot fetch of a single patient row. Used to feed PatientProfileSheet. */
+function usePatientById(patientId: string | null) {
+  return useQuery({
+    queryKey: ['patient', patientId],
+    enabled: !!patientId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('id', patientId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data as PatientRow | null;
+    },
+  });
+}
+
 export function LeaderboardsTab({ startDate, endDate }: Props) {
+  const { isDoctorAdmin } = useAuth();
+  const { data: currentDoctor } = useCurrentDoctor();
+
+  // Clinical-record clickability: doctor_admin OR any user linked to a doctors row.
+  // Pure admin (non-clinical) sees the radar but cannot drill into medical records.
+  const canClickToHistory = isDoctorAdmin || !!currentDoctor;
+
   const {
     data: ltvData,
     isLoading: ltvLoading,
@@ -67,6 +97,10 @@ export function LeaderboardsTab({ startDate, endDate }: Props) {
   );
 
   const cacCeiling = (ltvData?.medianLTV ?? 0) * 0.3;
+
+  // VIP Radar → PatientProfileSheet bridge
+  const [openPatientId, setOpenPatientId] = useState<string | null>(null);
+  const { data: openPatient } = usePatientById(openPatientId);
 
   return (
     <div className="space-y-6">
@@ -186,6 +220,69 @@ export function LeaderboardsTab({ startDate, endDate }: Props) {
         </Card>
       </div>
 
+      {/* VIP Patient Radar */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">VIP Patient Radar</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Top 50 active patients by lifetime revenue.
+            {!canClickToHistory && (
+              <span className="ml-1 italic">
+                Reg. No is read-only — clinical access required to view records.
+              </span>
+            )}
+          </p>
+        </CardHeader>
+        <CardContent>
+          {ltvLoading ? (
+            <Skeleton className="h-[260px] w-full" />
+          ) : (ltvData?.top50.length ?? 0) === 0 ? (
+            <EmptyMini
+              icon={<Inbox className="h-8 w-8 text-muted-foreground mb-2" />}
+              label="No active patients to rank."
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">Rank</TableHead>
+                  <TableHead>Reg. No</TableHead>
+                  <TableHead className="text-right">Visits</TableHead>
+                  <TableHead className="text-right">Total LTV</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {ltvData!.top50.map((p, idx) => (
+                  <TableRow key={p.patient_id}>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      #{idx + 1}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {canClickToHistory ? (
+                        <button
+                          type="button"
+                          onClick={() => setOpenPatientId(p.patient_id)}
+                          className="inline-flex items-center gap-1 text-primary hover:underline"
+                        >
+                          {p.reg_no ?? '—'}
+                          <ExternalLink className="h-3 w-3" />
+                        </button>
+                      ) : (
+                        <span>{p.reg_no ?? '—'}</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">{p.visitCount}</TableCell>
+                    <TableCell className="text-right font-semibold text-emerald-600">
+                      {formatRM(p.totalRevenue)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Doctor Efficiency Leaderboard */}
       <Card>
         <CardHeader>
@@ -244,6 +341,20 @@ export function LeaderboardsTab({ startDate, endDate }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {/* Patient profile sheet — shared by all VIP rows */}
+      <PatientProfileSheet
+        patient={openPatient ?? null}
+        isOpen={!!openPatientId && !!openPatient}
+        onClose={() => setOpenPatientId(null)}
+        onRegisterVisit={() => {
+          // Register-visit is a UX shortcut from the patients list; on the
+          // insight dashboard we just close the sheet — the user can navigate
+          // to the patients page if they need to register a fresh visit.
+          setOpenPatientId(null);
+        }}
+      />
+
     </div>
   );
 }

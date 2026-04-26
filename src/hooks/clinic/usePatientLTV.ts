@@ -8,9 +8,11 @@ const db = supabase as any;
 
 interface ViewRow {
   patient_id: string | null;
+  patient_reg_no: string | null;
   revenue: number | string | null;
   profit: number | string | null;
   visit_date: string | null;
+  queue_entry_id: string;
 }
 
 export interface LtvHistogramBucket {
@@ -18,11 +20,20 @@ export interface LtvHistogramBucket {
   count: number;
 }
 
+export interface VipPatientRow {
+  patient_id: string;
+  reg_no: string | null;
+  visitCount: number;
+  totalRevenue: number;
+  totalProfit: number;
+}
+
 export interface PatientLtvData {
   histogramData: LtvHistogramBucket[];
   medianLTV: number;
   activeCount: number;
   inactiveCount: number;
+  top50: VipPatientRow[];
 }
 
 const INACTIVE_YEARS = 3;
@@ -49,7 +60,7 @@ export function usePatientLTV() {
     queryFn: async () => {
       const { data, error } = await db
         .from('insight_financials_view')
-        .select('patient_id, revenue, profit, visit_date');
+        .select('patient_id, patient_reg_no, revenue, profit, visit_date, queue_entry_id');
 
       if (error) throw error;
 
@@ -57,10 +68,12 @@ export function usePatientLTV() {
 
       // Aggregate per patient
       type PatientAcc = {
+        patientId: string;
+        regNo: string | null;
         totalRevenue: number;
         totalProfit: number;
         lastVisit: string;
-        visitCount: number;
+        visits: Set<string>;
       };
       const patientMap = new Map<string, PatientAcc>();
 
@@ -69,16 +82,20 @@ export function usePatientLTV() {
         const acc =
           patientMap.get(r.patient_id) ??
           ({
+            patientId: r.patient_id,
+            regNo: r.patient_reg_no ?? null,
             totalRevenue: 0,
             totalProfit: 0,
             lastVisit: r.visit_date,
-            visitCount: 0,
+            visits: new Set<string>(),
           } as PatientAcc);
 
         acc.totalRevenue += Number(r.revenue ?? 0);
         acc.totalProfit += Number(r.profit ?? 0);
-        acc.visitCount += 1;
+        acc.visits.add(r.queue_entry_id);
         if (r.visit_date > acc.lastVisit) acc.lastVisit = r.visit_date;
+        // reg_no may arrive on later rows if first one was null
+        if (!acc.regNo && r.patient_reg_no) acc.regNo = r.patient_reg_no;
 
         patientMap.set(r.patient_id, acc);
       }
@@ -112,11 +129,24 @@ export function usePatientLTV() {
         medianLTV = sorted[Math.floor(sorted.length / 2)].totalRevenue;
       }
 
+      // Top 50 active VIPs by total revenue
+      const top50: VipPatientRow[] = [...active]
+        .sort((a, b) => b.totalRevenue - a.totalRevenue)
+        .slice(0, 50)
+        .map((p) => ({
+          patient_id: p.patientId,
+          reg_no: p.regNo,
+          visitCount: p.visits.size,
+          totalRevenue: p.totalRevenue,
+          totalProfit: p.totalProfit,
+        }));
+
       return {
         histogramData,
         medianLTV,
         activeCount: active.length,
         inactiveCount,
+        top50,
       };
     },
   });
