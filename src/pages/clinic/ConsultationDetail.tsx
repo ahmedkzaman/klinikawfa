@@ -662,13 +662,13 @@ export default function ConsultationDetail() {
 
           {/* ASIDE — Context (left on desktop, second on mobile) */}
           <aside className="order-2 lg:order-1 lg:col-span-4 space-y-4">
-            {/* Intake Briefing — visit purpose + visit note from registration counter */}
+            {/* Visit Note — visit purpose + visit note from registration counter */}
             <Card className="rounded-2xl border-amber-200 bg-amber-50/60 shadow-sm">
               <CardContent className="p-5 space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" />
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-800">
-                    Intake Briefing
+                    Visit Note
                   </h3>
                 </div>
                 {entry.visit_purpose && (
