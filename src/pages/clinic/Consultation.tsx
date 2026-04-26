@@ -26,6 +26,17 @@ import { useCurrentDoctor } from '@/hooks/clinic/useCurrentDoctor';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import type { ClinicStatus } from '@/types/clinic';
+import { cn } from '@/lib/utils';
+import {
+  bento,
+  pageInner,
+  pageShell,
+  pillTabActive,
+  pillTabIdle,
+  primaryBtn,
+  secondaryBtn,
+  softInput,
+} from '@/lib/clinic/bentoTokens';
 
 const TAB_KEYS = ['waiting', 'serving', 'on_hold', 'dispensary', 'completed', 'all'] as const;
 
@@ -119,36 +130,44 @@ export default function Consultation() {
 
   if (doctorLoading || queueLoading) {
     return (
-      <div className="space-y-5 max-w-7xl mx-auto">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-64 w-full" />
+      <div className={pageShell}>
+        <div className={pageInner}>
+          <Skeleton className="h-16 w-full rounded-2xl" />
+          <Skeleton className="h-64 w-full rounded-2xl" />
+        </div>
       </div>
     );
   }
 
   if (doctorError || queueError) {
     return (
-      <div className="space-y-5 max-w-7xl mx-auto">
-        <h1 className="text-2xl font-semibold">Consultation</h1>
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Failed to load data:{' '}
-            {(doctorError as Error)?.message || (queueError as Error)?.message}
-          </AlertDescription>
-        </Alert>
+      <div className={pageShell}>
+        <div className={pageInner}>
+          <div className={cn(bento, 'p-5')}>
+            <h1 className="text-2xl font-semibold text-slate-800">Consultation</h1>
+          </div>
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Failed to load data:{' '}
+              {(doctorError as Error)?.message || (queueError as Error)?.message}
+            </AlertDescription>
+          </Alert>
+        </div>
       </div>
     );
   }
 
   if (!doctor && !isAdmin) {
     return (
-      <div className="space-y-5 max-w-7xl mx-auto">
-        <div>
-          <h1 className="text-2xl font-semibold">Consultation</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            You are not registered as a doctor.
-          </p>
+      <div className={pageShell}>
+        <div className={pageInner}>
+          <div className={cn(bento, 'p-5')}>
+            <h1 className="text-2xl font-semibold text-slate-800">Consultation</h1>
+            <p className="text-slate-500 text-sm mt-1">
+              You are not registered as a doctor.
+            </p>
+          </div>
         </div>
       </div>
     );
