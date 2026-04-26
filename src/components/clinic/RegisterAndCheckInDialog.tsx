@@ -40,7 +40,14 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
-import { useCreatePatient, useDebouncedValue, useSearchPatients } from '@/hooks/clinic/usePatients';
+import {
+  useCreatePatient,
+  useDebouncedValue,
+  usePatientByIc,
+  useSearchPatients,
+} from '@/hooks/clinic/usePatients';
+import { usePatientOutstanding, formatRm } from '@/hooks/clinic/usePatientFinancials';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
