@@ -45,6 +45,8 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onInsert: (items: SelectedItem[]) => void;
+  /** When true, use panel/standard tier pricing first; otherwise self-pay first. */
+  isPanel?: boolean;
 }
 
 interface CombinedRow {
@@ -59,7 +61,26 @@ interface CombinedRow {
   defaults?: SelectedDefaults;
 }
 
-export function AddTreatmentBulkDialog({ open, onOpenChange, onInsert }: Props) {
+/**
+ * Picks the first finite, positive number from a list of candidates.
+ * Used to drive tier-aware pricing without silently inserting RM 0.00.
+ */
+const resolvePrice = (
+  ...candidates: Array<number | string | null | undefined>
+): number => {
+  for (const c of candidates) {
+    const n = Number(c);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return 0;
+};
+
+export function AddTreatmentBulkDialog({
+  open,
+  onOpenChange,
+  onInsert,
+  isPanel = false,
+}: Props) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<SelectedItem[]>([]);
 
@@ -73,19 +94,27 @@ export function AddTreatmentBulkDialog({ open, onOpenChange, onInsert }: Props) 
     inventoryItems.forEach((i) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ii = i as any;
+      const priceNum = isPanel
+        ? resolvePrice(ii.standard_panel_price, i.price_to_patient_min, i.price_to_patient_max)
+        : resolvePrice(i.price_to_patient_min, i.price_to_patient_max, ii.standard_panel_price);
+
+      const priceLabel =
+        isPanel
+          ? `RM ${priceNum.toFixed(2)} (Panel)`
+          : i.price_to_patient_min === i.price_to_patient_max
+            ? `RM ${Number(i.price_to_patient_min).toFixed(2)}`
+            : `RM ${Number(i.price_to_patient_min).toFixed(2)} - ${Number(
+                i.price_to_patient_max,
+              ).toFixed(2)}`;
+
       combined.push({
         id: i.id,
         name: i.name,
         stock: i.stock,
         uom: i.groups || '—',
         group: i.category,
-        price:
-          i.price_to_patient_min === i.price_to_patient_max
-            ? `RM ${Number(i.price_to_patient_min).toFixed(2)}`
-            : `RM ${Number(i.price_to_patient_min).toFixed(2)} - ${Number(
-                i.price_to_patient_max,
-              ).toFixed(2)}`,
-        priceNum: Number(i.price_to_patient_min),
+        price: priceLabel,
+        priceNum,
         type: 'item',
         defaults: {
           indication: ii.default_indication ?? null,
@@ -100,34 +129,44 @@ export function AddTreatmentBulkDialog({ open, onOpenChange, onInsert }: Props) 
       });
     });
 
-    services.forEach((s) =>
+    services.forEach((s) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ss = s as any;
+      const priceNum = isPanel
+        ? resolvePrice(ss.standard_panel_price, s.price_to_patient)
+        : resolvePrice(s.price_to_patient, ss.standard_panel_price);
       combined.push({
         id: s.id,
         name: s.name,
         stock: null,
         uom: s.type,
         group: 'Service',
-        price: `RM ${Number(s.price_to_patient).toFixed(2)}`,
-        priceNum: Number(s.price_to_patient),
+        price: `RM ${priceNum.toFixed(2)}${isPanel ? ' (Panel)' : ''}`,
+        priceNum,
         type: 'service',
-      }),
-    );
+      });
+    });
 
-    packages.forEach((p) =>
+    packages.forEach((p) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pp = p as any;
+      const priceNum = isPanel
+        ? resolvePrice(pp.standard_panel_price, p.price)
+        : resolvePrice(p.price, pp.standard_panel_price);
       combined.push({
         id: p.id,
         name: p.name,
         stock: p.stock,
         uom: 'Package',
         group: 'Package',
-        price: `RM ${Number(p.price).toFixed(2)}`,
-        priceNum: Number(p.price),
+        price: `RM ${priceNum.toFixed(2)}${isPanel ? ' (Panel)' : ''}`,
+        priceNum,
         type: 'package',
-      }),
-    );
+      });
+    });
 
     return combined;
-  }, [inventoryItems, services, packages]);
+  }, [inventoryItems, services, packages, isPanel]);
 
   const filtered = useMemo(() => {
     if (!search) return allItems;
@@ -202,7 +241,14 @@ export function AddTreatmentBulkDialog({ open, onOpenChange, onInsert }: Props) 
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-5xl h-[80vh] flex flex-col p-0">
         <DialogHeader className="px-6 pt-6 pb-0">
-          <DialogTitle>Add treatment in bulk</DialogTitle>
+          <DialogTitle>
+            Add treatment in bulk
+            {isPanel && (
+              <span className="ml-2 text-xs font-medium text-amber-700">
+                · Panel pricing
+              </span>
+            )}
+          </DialogTitle>
         </DialogHeader>
         <div className="flex flex-1 overflow-hidden">
           {/* Left - search & table */}

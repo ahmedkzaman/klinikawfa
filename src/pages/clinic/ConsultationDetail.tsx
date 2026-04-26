@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -70,7 +70,13 @@ export default function ConsultationDetail() {
   const { data: entries = [] } = useConsultationQueueEntries();
   const updateQueue = useUpdateQueueEntry();
   const { data: rooms = [] } = useRooms();
-  const { getPreference } = useClinicPreferences();
+  const { getPreference, isLoading: preferencesLoading } = useClinicPreferences();
+
+  // Synchronous locks to prevent React 18 Strict-Mode double-mount and
+  // re-render races during the consultation-creation network window from
+  // double-billing the patient.
+  const hasCreatedConsultRef = useRef(false);
+  const hasSeededFeeRef = useRef(false);
 
   const entry = useMemo(
     () => entries.find((e) => e.id === queueEntryId),
@@ -148,33 +154,47 @@ export default function ConsultationDetail() {
     ).length;
   }, [entries, doctor]);
 
-  // Auto-create consultation + seed default consultation fee
+  // Auto-create consultation + seed default consultation fee.
+  // Race-safe: synchronous refs lock BEFORE firing the mutation so a
+  // Strict-Mode double-mount or re-render during the ~200ms DB roundtrip
+  // cannot create a second consultation or double-seed the fee.
   useEffect(() => {
-    if (!consultLoading && !consultation && entry && doctor) {
-      createConsultation.mutate(
-        {
-          queue_entry_id: entry.id,
-          patient_id: entry.patient_id,
-          doctor_id: doctor.id,
+    if (preferencesLoading) return;
+    if (consultLoading) return;
+    if (!entry || !doctor) return;
+    if (consultation) return;
+    if (hasCreatedConsultRef.current) return;
+
+    hasCreatedConsultRef.current = true; // lock BEFORE firing
+
+    createConsultation.mutate(
+      {
+        queue_entry_id: entry.id,
+        patient_id: entry.patient_id,
+        doctor_id: doctor.id,
+      },
+      {
+        onSuccess: (newConsultation) => {
+          const feeName = getPreference('default_consultation_fee_name', 'Consultation Fee');
+          const feePrice = parseFloat(getPreference('default_consultation_fee_price', '0'));
+          if (feeName && feePrice > 0 && !hasSeededFeeRef.current) {
+            hasSeededFeeRef.current = true; // lock BEFORE seeding
+            addItem.mutate({
+              consultation_id: newConsultation.id,
+              item_name: feeName,
+              quantity: 1,
+              price: feePrice,
+            });
+          }
         },
-        {
-          onSuccess: (newConsultation) => {
-            const feeName = getPreference('default_consultation_fee_name', 'Consultation Fee');
-            const feePrice = parseFloat(getPreference('default_consultation_fee_price', '0'));
-            if (feeName && feePrice > 0) {
-              addItem.mutate({
-                consultation_id: newConsultation.id,
-                item_name: feeName,
-                quantity: 1,
-                price: feePrice,
-              });
-            }
-          },
+        onError: () => {
+          // Allow a retry on a real network/DB failure.
+          hasCreatedConsultRef.current = false;
         },
-      );
-    }
+      },
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [consultLoading, consultation, entry, doctor]);
+  }, [preferencesLoading, consultLoading, consultation, entry, doctor]);
 
   useEffect(() => {
     if (consultation) {
@@ -977,6 +997,7 @@ export default function ConsultationDetail() {
           open={bulkDialogOpen}
           onOpenChange={setBulkDialogOpen}
           onInsert={handleBulkInsert}
+          isPanel={(entry?.payment_method ?? '').startsWith('panel')}
         />
       </div>
     </div>
