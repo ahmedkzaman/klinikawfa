@@ -7,6 +7,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import {
+  bento,
+  pageInner,
+  pageShell,
+  softInput,
+} from '@/lib/clinic/bentoTokens';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { usePaymentsLedger } from '@/hooks/clinic/usePayments';
