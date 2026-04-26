@@ -123,3 +123,45 @@ export function useConsultationAttachments(
     },
   });
 }
+
+/**
+ * Mutation: remove an attachment from both storage and the tracking table.
+ * Accepts the row directly so we don't need to refetch it. Invalidates both
+ * the per-consultation attachment list AND the patient visit-history query
+ * (so the joined attachment-count badge stays in sync).
+ */
+export function useDeleteAttachment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (row: {
+      id: string;
+      file_path: string;
+      consultation_id: string;
+    }) => {
+      // Storage first — if this fails the DB row stays so the UI still
+      // shows the file (and the user can retry). If the DB delete fails
+      // after, the file is already gone but a stale row will surface as
+      // "Unavailable" in the list (signedUrl will be null).
+      const { error: storageErr } = await supabase.storage
+        .from(BUCKET)
+        .remove([row.file_path]);
+      if (storageErr) throw storageErr;
+
+      const { error: dbErr } = await supabase
+        .from('consultation_attachments')
+        .delete()
+        .eq('id', row.id);
+      if (dbErr) throw dbErr;
+
+      return row;
+    },
+    onSuccess: (row) => {
+      qc.invalidateQueries({
+        queryKey: ['clinic', 'attachments', row.consultation_id],
+      });
+      qc.invalidateQueries({
+        queryKey: ['clinic', 'patient-visit-history'],
+      });
+    },
+  });
+}

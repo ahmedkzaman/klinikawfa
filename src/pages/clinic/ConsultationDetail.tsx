@@ -61,6 +61,7 @@ import {
   type TreatmentItemCardItem,
 } from '@/components/clinic/consultation/TreatmentItemCard';
 import { DiagnosisCombobox } from '@/components/clinic/consultation/DiagnosisCombobox';
+import { SessionAttachmentsStrip } from '@/components/clinic/consultation/SessionAttachmentsStrip';
 
 const PRICE_TIERS = ['SELF PAY'];
 
@@ -542,6 +543,15 @@ export default function ConsultationDetail() {
                       placeholder="Notes for dispensary staff…"
                       rows={3}
                       className={softInput}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      Session Attachments
+                    </Label>
+                    <SessionAttachmentsStrip
+                      consultationId={consultationId}
+                      canEdit={canEdit}
                     />
                   </div>
                 </div>
