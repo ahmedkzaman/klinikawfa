@@ -995,7 +995,7 @@ export default function ConsultationDetail() {
             {entry?.patient_id && (
               <FollowUpScheduler
                 patientId={entry.patient_id}
-                defaultDoctorId={consultation?.doctor_id ?? entry.doctor_id ?? null}
+                defaultDoctorId={consultation?.doctor_id ?? null}
               />
             )}
           </aside>
