@@ -98,6 +98,7 @@ export function SessionAttachmentsStrip({
             )}
           </div>
         );
+      })}
     </div>
   );
 }
