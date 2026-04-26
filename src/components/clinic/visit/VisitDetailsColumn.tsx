@@ -411,10 +411,15 @@ export function VisitDetailsColumn({
         </Tabs>
       </div>
 
-      {/* Hidden print-only block — only mounted when there's something to print */}
-      {printQueue.length > 0 && (
-        <PrintLabels rows={printQueue} patientName={patientName ?? null} />
-      )}
+      {/* Hidden print portal — mounts as a direct child of <body> via createPortal
+          so the label escapes every layout container (sidebar, header, padding,
+          max-width). The scoped @page rule + body > *:not(...) hide rule
+          forces the browser onto a true 60×50mm thermal page. */}
+      <ThermalLabelPortal
+        rows={printQueue}
+        patientName={patientName ?? null}
+        settings={labelSettings ?? DEFAULT_LABEL_SETTINGS}
+      />
     </>
   );
 }
