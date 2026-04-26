@@ -1,156 +1,66 @@
-# Step 31 — True 60×50mm Thermal Label Printing
+# Step 32 — True 60×50mm Thermal Label via PDF
 
-## Why the current print is A4
+## Why the current approach failed
 
-`PrintLabels` currently renders inside `<VisitDetailsColumn>`, which lives deep inside the `/clinic/queue/checkout/...` layout (sidebar, header, max-width container, paddings). When `window.print()` fires, the browser keeps the entire DOM intact and only relies on `display: hidden` / `print:block` utilities — there is **no `@page` rule**, so the browser falls back to the user's default paper (A4/Letter) and inherits parent layout constraints. That is the "A4 creep" the user described.
+Looking at your screenshot, the `@page { size: 60mm 50mm }` CSS is being **ignored** — the browser still rendered the label centered on a full A4 sheet with the date, page title (`Queue Board — Clinic Portal | Klinik Awfa`), and the project URL stamped on top/bottom.
 
-The fix is two-fold:
+This is a known Chromium limitation:
+- `@page size` only takes effect when the user manually picks a matching paper size and sets *Margins → None* in the print dialog.
+- Browser-injected headers/footers (date/title/URL) **cannot** be removed by CSS — only by the user unticking *Headers and footers*.
 
-1. **Escape the layout** by rendering the label markup as a direct child of `<body>` via `ReactDOM.createPortal`.
-2. **Force the paper size** with a scoped `<style>` that injects `@page { size: 60mm 50mm; margin: 0 }` and hides every `body > *` except the portal during `@media print`.
+A consumer clicking "Print" will never get the right output.
 
----
+## The fix — generate a real 60×50mm PDF
 
-## A. Print infrastructure changes — `src/components/clinic/visit/VisitDetailsColumn.tsx`
+Build the label as a vector PDF with exact physical dimensions, open it in a new tab, and let the browser/printer driver print it 1:1. No `@page` guesswork, no browser chrome, works the same on every printer.
 
-**Imports to add**
-- `createPortal` from `react-dom`
-- `useDrugLabelSettings` from `@/hooks/clinic/useDrugLabelSettings`
+### A. Add `jspdf` dependency
+~30 KB, zero peer deps. Standard tool for client-side PDF generation.
 
-**Wire up settings**
-Inside `VisitDetailsColumn`, fetch `const { data: labelSettings } = useDrugLabelSettings();`. If undefined (first load), fall back to a defaults object where every `show_*` flag is `true` so we never accidentally print a blank label while the singleton row is still loading.
+### B. New helper — `src/lib/clinic/printDrugLabel.ts`
 
-**Replace `PrintLabels`** (lines 601–658) with a new `ThermalLabelPortal` component that:
-- Returns `null` when `rows.length === 0`.
-- Calls `createPortal(<>{styleTag}{labels}</>, document.body)` so the markup mounts as `<body><div id="thermal-label-portal">…</div></body>`.
-- Renders one `<ThermalLabel>` per row inside `#thermal-label-portal`.
+A pure function `generateDrugLabelPdf(items, patientName, settings, clinic)` that:
 
-**Print trigger flow** (keep existing `printQueue` state + `useEffect` from lines 128–143):
-- `setPrintQueue([item])` → React commits the portal → `setTimeout(window.print, 50)` → `afterprint` clears the queue. No change to that orchestration.
-- The portal unmounts itself (returns `null`) once `printQueue` is empty, so the hidden node never lingers in the DOM.
+1. Creates `new jsPDF({ unit: 'mm', format: [60, 50], orientation: 'landscape' })`.
+2. For each item, draws one page using `doc.text` / `doc.line` / `doc.setFont`:
+   - **Header (top, ~3 mm)** — Clinic name (bold, 8pt all-caps), tel (5pt) if `show_tel_number`, address (5pt, wrapped) if `show_address`.
+   - **Hairline divider** — `doc.line()`.
+   - **Patient strip** — `PATIENT NAME` bold 6pt.
+   - **Medication block** — `item_name` bold 8pt, wrapped to 54 mm width (~2 lines max).
+   - **Indication** — `For: {indication}` italic 6pt, only if `show_indication` and value present.
+   - **Instruction** (centred, bold 7pt) — built from `dosageBits` (e.g. `1 BIJI · 3X SEHARI`).
+   - **Footer row** — `QTY: x` left, `Date: dd/mm/yyyy` centre (if `show_date`), `EXP: mm/yyyy` right (if `show_expiry_date`). All 5pt.
+   - **Bottom strip** — `Ubat Terkawal / Controlled Medicine` italic 4.5pt centred at y ≈ 48 mm.
+3. Calls `doc.addPage([60, 50], 'landscape')` between items.
+4. Returns the PDF as a `Blob` URL via `doc.output('bloburl')`.
 
-**Where it mounts in JSX**
-Replace the current conditional at lines 380–383 with:
-```tsx
-<ThermalLabelPortal
-  rows={printQueue}
-  patientName={patientName ?? null}
-  settings={labelSettings ?? DEFAULT_LABEL_SETTINGS}
-/>
-```
-(Drop the now-obsolete `PrintLabels` function.)
+Layout uses `splitTextToSize` for clean wrapping and `getTextWidth` for the centred QTY/Date/EXP row, so nothing clips even when toggles are off.
 
----
+### C. Wire it into `VisitDetailsColumn.tsx`
 
-## B. Scoped print stylesheet
+- Delete `ThermalLabelPortal`, `ThermalLabel`, `THERMAL_PRINT_CSS`, and the old `<style>`/`createPortal` plumbing — they are no longer needed.
+- Replace the body of `handlePrintLabel` (and the "Print all labels" handler) with:
+  ```ts
+  const url = generateDrugLabelPdf(rows, patientName, labelSettings, CLINIC_INFO);
+  const win = window.open(url, '_blank');
+  win?.addEventListener('load', () => win.print());
+  ```
+- `CLINIC_INFO` is a small const at the top of the helper — name, tel, address pulled from the existing memory (`mem://project/contact-info`).
 
-Inside `ThermalLabelPortal`, render a `<style>` element as a sibling of the label container (still inside the portal so it lives directly under `<body>`):
+### D. UX side-effects
 
-```css
-@media print {
-  /* Hide the entire app, keep only the portal visible */
-  body > *:not(#thermal-label-portal) { display: none !important; }
+- The user gets a new tab with the PDF preview. Their browser's PDF viewer shows it at exact 60×50 mm.
+- Auto-print prompt fires once the PDF finishes loading.
+- No browser headers/footers, no margin negotiation, no "set paper size to custom" instructions.
+- Print dialog will show *Paper size: 60×50 mm* automatically (it reads the PDF metadata).
 
-  #thermal-label-portal {
-    display: block !important;
-    width: 60mm;
-    margin: 0;
-    padding: 0;
-  }
+### Files touched
 
-  /* Tells the browser the physical roll dimensions */
-  @page {
-    size: 60mm 50mm;
-    margin: 0;
-  }
+- **New:** `src/lib/clinic/printDrugLabel.ts` — jsPDF helper.
+- **Edited:** `src/components/clinic/visit/VisitDetailsColumn.tsx` — remove portal + CSS, call helper.
+- **Edited:** `package.json` — add `jspdf`.
 
-  .thermal-label-page {
-    width: 60mm;
-    height: 50mm;
-    padding: 2mm 3mm;
-    box-sizing: border-box;
-    page-break-after: always;
-    font-family: 'Inter', system-ui, sans-serif;
-    color: #000;
-    overflow: hidden;
-    position: relative;
-    background: #fff;
-  }
-  .thermal-label-page:last-child { page-break-after: auto; }
-}
+### Out of scope
 
-/* On screen: the portal is fully hidden so devs/QA never see it */
-@media screen {
-  #thermal-label-portal { display: none; }
-}
-```
-
-Notes:
-- `body > *:not(#thermal-label-portal)` is the surgical hide — it leaves the portal as the only visible top-level node, which prevents A4 fallback from inherited paddings.
-- Keeping a `screen` rule means we don't need to add any `hidden`/`sr-only` class and accidentally clip the print preview in some browsers.
-- Using `mm` units (rather than `px`) is what actually persuades Chrome/Edge/Safari/Firefox to accept the custom `@page size`.
-
----
-
-## C. `ThermalLabel` layout (Yezza mirror)
-
-A new internal component renders one label. Layout is a vertical flex stack inside `.thermal-label-page`:
-
-1. **Header row** — flex, baseline-aligned, font-size ≈ 8pt, bold uppercase clinic name on the left:
-   - `KLINIK AWFA` (always shown — mandatory).
-   - Right-aligned `Tel: 018-252 3531` only when `settings.show_tel_number`.
-   - Below it, single line `B2 & B4, Jalan KS 1/12, KotaSAS, 25200 Kuantan` only when `settings.show_address` (truncated with `text-overflow: ellipsis` to stay one line).
-   - Thin `<hr>` separator (`border-top: 0.5px solid #000`).
-
-2. **Medication block** — bold 11–12pt uppercase `item.item_name`. Mandatory (no toggle).
-
-3. **Indication line** — small italic 8pt `For: <indication>` only when `settings.show_indication` and `item.indication` is set.
-
-4. **Instructions** — bold 10pt centered, joining `buildDosageBits(item)` with " | ". Mandatory (it's the safety-critical line). Followed by a solid `<hr style={{ border: 0, borderTop: '1px solid #000', margin: '1mm 0' }} />`.
-
-5. **Precaution** — italic 8pt prefixed with `⚠` only when `settings.show_precaution` and `item.precaution` is set.
-
-6. **Duration** — 8pt `Duration: <duration>` only when `settings.show_duration` and `item.duration` is set.
-
-7. **Footer row** — flexbox, justified, 8pt:
-   - Left: `QTY: <quantity>` when `settings.show_quantity`.
-   - Middle: `Date: <today, dd/MM/yy>` when `settings.show_date`.
-   - Right: `EXP: <today + 30d, dd/MM/yy>` when `settings.show_expiry_date`. (Expiry is a placeholder — no expiry column exists on `consultation_items` yet, so we show today + 30 days as a reasonable dispensing-window default. If a real expiry source is added later, swap it in.)
-
-8. **Patient line** — 8pt: `<patientName>` (uppercase, bold) — mandatory when `patientName` is provided.
-
-9. **Fixed bottom strip** — absolutely positioned at the bottom-center of `.thermal-label-page`, 7pt italic: `Ubat Terkawal / Controlled Medicine`. Always rendered (regulatory).
-
-All sizes use `pt` so they map predictably to physical mm at print time.
-
----
-
-## D. Data handling
-
-- `patientName` is already piped from `DispenseCheckout.tsx` → `VisitDetailsColumn` (verified at line 110, and `DispenseCheckout` already passes `patient?.name`). No further wiring needed.
-- `buildDosageBits(item)` (lines 61–69) is reused as-is for the instructions line.
-- `useDrugLabelSettings()` (existing hook, includes optimistic updates) drives every conditional render. A constant `DEFAULT_LABEL_SETTINGS` (all `true`) covers the loading state so the user never prints an under-populated label by accident.
-- No new database migration, no schema change.
-
----
-
-## Files modified
-
-- `src/components/clinic/visit/VisitDetailsColumn.tsx`
-  - Add `createPortal` import + `useDrugLabelSettings` import.
-  - Add `DEFAULT_LABEL_SETTINGS` constant.
-  - Replace `PrintLabels` (lines 601–658) with `ThermalLabelPortal` + internal `ThermalLabel`.
-  - Update the JSX mount point (lines 380–383) to use the new portal component and pass `labelSettings`.
-
-No other files require changes.
-
----
-
-## QA checklist (post-implementation)
-
-1. From `/clinic/queue/checkout/:id`, click **Print label** on a single medicine → browser print dialog should show paper size **60mm × 50mm** (or "Custom" with those dims) and the preview should be **only** the label, no sidebar/header.
-2. Click **Print all labels** with 3 medicines → preview shows 3 pages, each 60×50mm, with `page-break-after: always` between them.
-3. Toggle off `show_address` in Settings → Drug Label, then trigger a print → the address line disappears from the preview.
-4. Toggle off `show_tel_number`, `show_indication`, `show_precaution`, `show_duration`, `show_quantity`, `show_date`, `show_expiry_date` individually → confirm each disappears without breaking layout balance.
-5. Confirm `KLINIK AWFA`, the medication name, the instructions line, the patient name, and the "Ubat Terkawal / Controlled Medicine" footer are always present regardless of toggles.
-6. Confirm the rest of the screen UI (Patient panel, Billing panel, etc.) is hidden in the print preview.
+- No DB or hook changes; `useDrugLabelSettings` is consumed as-is.
+- The on-screen Live Preview in `DrugLabelSettings.tsx` stays exactly as it is — only the *printed* output changes.
