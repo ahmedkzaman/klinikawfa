@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Info } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import {
   Tooltip,
   TooltipContent,
@@ -200,7 +201,18 @@ export default function DispenseCheckout() {
         </div>
 
         {/* Items */}
-        <VisitDetailsColumn consultationId={consultation?.id} canEdit={canEdit} />
+        <div className="space-y-4">
+          {consultation?.dispense_note?.trim() && (
+            <Alert className="bg-yellow-50 border-yellow-200">
+              <Info className="h-4 w-4 text-yellow-700" />
+              <AlertTitle className="text-yellow-900">Doctor's Instructions</AlertTitle>
+              <AlertDescription className="whitespace-pre-wrap text-yellow-900/90">
+                {consultation.dispense_note}
+              </AlertDescription>
+            </Alert>
+          )}
+          <VisitDetailsColumn consultationId={consultation?.id} canEdit={canEdit} />
+        </div>
 
         {/* Billing */}
         <BillingDetailsColumn
