@@ -1,91 +1,83 @@
-## Goal
-Redesign every page under `/clinic/*` (and their feature components) to match the **bento style** established in `ConsultationDetail.tsx`. Visual parity only — no logic, data, or routing changes.
+# Step 40 — Panel Claims A/R Engine (Phase 1)
 
-## Design Tokens (mirrored from ConsultationDetail)
+Turn `/clinic/panel-claims` into a real Accounts Receivable workflow with workflow-aware fields, a dedicated evidence storage bucket, and a 2-column slide-out claim sheet.
 
-```ts
-const bento        = "bg-white border-none rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.03)]";
-const bentoHeader  = "text-sm font-bold text-slate-800 uppercase tracking-wider mb-3";
-const softInput    = "bg-slate-50 border-transparent focus-visible:bg-white focus-visible:border-blue-500 rounded-lg";
-const pageShell    = "min-h-full bg-slate-50 -m-4 md:-m-6 p-4 md:p-6";
-const pageInner    = "max-w-[1600px] mx-auto space-y-4";
-const primaryBtn   = "rounded-xl bg-blue-600 hover:bg-blue-700 text-white";
-const softBadge    = "rounded-full bg-slate-50 text-slate-600 border-none";
-const softTile     = "rounded-xl bg-slate-50 px-3 py-2";          // labels / pill rows
-const pillTab      = "rounded-full px-3 py-1 text-xs font-medium"; // active = bg-blue-600 text-white, idle = bg-slate-50 text-slate-600
-```
+## Current state (audited)
 
-A shared helper file `src/lib/clinic/bentoTokens.ts` will export these constants so every page references the same source of truth (avoids drift if we tune the look later).
+- `panel_claims` already has: `claim_no`, `panel_id`, `patient_id`, `queue_entry_id`, `amount`, `received_amount`, `status`, `claim_date`, `due_date`, `remarks`, `updated_by`, timestamps.
+- Enum `panel_claim_status` already includes the full set: `pending, submitted, approved, rejected, received, cancelled`. ✅
+- View `panel_claims_view` already computes `is_overdue`. ✅
+- Page `src/pages/clinic/PanelClaims.tsx` already renders the bento table + tabs but has **no Due Date column, no Actions menu, and no detail sheet**.
+- Treatment items live in `consultation_items` (linked via `consultations.queue_entry_id` → `panel_claims.queue_entry_id`).
 
-## Scope — Pages
+## A. Database migration — extend schema
 
-Each page gets:
-1. Wrapped in `pageShell` + `pageInner`.
-2. All `Card` instances swapped to the `bento` token (no border, soft shadow, rounded-2xl).
-3. Section titles → uppercase `bentoHeader`.
-4. Inputs/Selects/Textareas → `softInput`.
-5. Primary actions → `primaryBtn`; secondary → ghost on `bg-slate-50`.
-6. Tables: header row `bg-slate-50 text-slate-500 uppercase tracking-wider text-xs`, body rows `hover:bg-slate-50/60`, no harsh borders.
-7. Tabs (where present) → pill style.
-8. Status/role badges → `softBadge` variants.
+New columns on `public.panel_claims`:
 
-| Page | Notes |
-|---|---|
-| `Consultation.tsx` (queue list) | Header bar + queue table become bento; status chips → soft pills. |
-| `ConsultationDetail.tsx` | Already the reference — only refactor inline strings into the shared token import. |
-| `QueueBoard.tsx` | Kanban columns become bento cards; column headers uppercase; cards inside white with soft hover. |
-| `PatientsList.tsx` | Search bar → soft input; result rows → bento card grid; Patient Profile sheet inherits soft inputs. |
-| `Billings.tsx` | Filter strip + table reskinned; "Record payment" CTA → primary blue. |
-| `DispenseCheckout.tsx` | Two-column bento layout; line-item rows → `softTile`. |
-| `PanelClaims.tsx` | Tabs → pill tabs; claim list → bento cards; status badges recolored to soft palette. |
-| `Inventory.tsx` | Toolbar + inventory table reskinned. |
-| `Procurement.tsx` | Same treatment as Inventory. |
-| `VoidedRecords.tsx` | Audit table reskinned, danger states use `bg-red-50 text-red-700` soft chips. |
-| `Insight.tsx` + 5 tabs (`OverviewTab` inline, `ScoreboardsTab`, `LeaderboardsTab`, `ValuationTab`, `BankHealthTab`) | Apply bento to all chart/table cards, pill tabs, soft inputs for date pickers, blue-600 CTAs, slate tooltips on Recharts. |
-| `_Placeholder.tsx` | Empty-state card → centered bento card with muted icon. |
+| Column | Type | Notes |
+|---|---|---|
+| `submitted_date` | `date` | Stamped on transition to `submitted` |
+| `approved_amount` | `numeric(10,2)` | Stamped on transition to `approved` |
+| `write_off_amount` | `numeric(10,2) GENERATED ALWAYS AS (amount - COALESCE(approved_amount, amount)) STORED` | Auto-computed |
+| `payment_reference` | `text` | Cheque/EFT reference for `received` |
+| `received_date` | `date` | Stamped on transition to `received` |
+| `gl_document_url` | `text` | Storage path to uploaded GL/receipt |
 
-### Settings sub-pages
-| Page | Notes |
-|---|---|
-| `SettingsPage.tsx` | Sidebar nav → pill list; content frame → bento. |
-| `InClinicSettings.tsx` | Form sections grouped into bento cards. |
-| `DrugLabelSettings.tsx` | Preview pane in bento; form on left in soft inputs. |
-| `InventorySettings.tsx` | Toolbar + table reskinned. |
-| `PanelsSettings.tsx` | List + dialog trigger reskinned. |
-| `UserManagementSettings.tsx` | User table + role chips reskinned. |
-| `DiagnosisSweeper.tsx` | Two-column compare layout in bento. |
+Update `panel_claims_view` to expose all new columns alongside `is_overdue`.
 
-## Scope — Shared Clinic Components
-- `ClinicLayout.tsx` — set the outer surface to `bg-slate-50`, top bar to `bg-white border-b border-slate-100`, sidebar items to slate-500 idle / blue-600 active pills.
-- `StatusBadge.tsx` — soft palette (`bg-{color}-50 text-{color}-700`) instead of saturated fills.
-- `PatientPicker.tsx`, `CheckInAppointmentDialog.tsx`, `CheckInWalkInDialog.tsx`, `RegisterAndCheckInDialog.tsx`, `RegisterPatientDialog.tsx` — Dialog content uses bento card chrome, soft inputs, primary blue CTA.
-- `consultation/*` (already aligned, light pass for token consistency).
-- `visit/AttachmentsCard.tsx`, `visit/BillingDetailsColumn.tsx`, `visit/VisitDetailsColumn.tsx`, `visit/RecordPaymentDialog.tsx` — bento cards, soft tiles for line items, pill status chips.
-- `patient/FollowUpScheduler.tsx` — soft input date row, blue-600 CTA.
-- `settings/DoctorProfileDialog.tsx`, `InventoryItemDialog.tsx`, `PackageDialog.tsx`, `PanelDialog.tsx`, `ServiceDialog.tsx` — Dialog header strip, sectioned bento blocks, soft inputs, sticky bottom action bar (white/90 backdrop blur, like ConsultationDetail's save bar).
-- `insight/*` — already drafted in last step; this pass enforces the shared token imports.
+Storage:
+- Create private bucket `panel-claim-docs` (mirrors existing `visit-attachment` pattern).
+- RLS on `storage.objects`:
+  - `select`/`insert`/`update`/`delete` allowed when `bucket_id = 'panel-claim-docs'` AND `is_ops_or_admin(auth.uid())`.
 
-## What I will NOT change
-- Data hooks, queries, mutations, routes, validation, business logic.
-- The clinic sidebar information architecture.
-- Component file boundaries (no splits/renames).
-- Color semantics for hard medical states (errors stay red, success stays green) — only desaturated to the soft palette.
+(Existing `panel_claims` RLS already restricts mutations to ops/admin — no change needed there.)
 
-## Approach / Order
-1. Create `src/lib/clinic/bentoTokens.ts` with the shared constants.
-2. Update `ClinicLayout` + `StatusBadge` first (affects every screen).
-3. Sweep page-by-page in the order listed above, one PR-sized batch per group:
-   - Operational pages (Consultation, QueueBoard, PatientsList, Billings, DispenseCheckout, PanelClaims).
-   - Inventory/Procurement/VoidedRecords.
-   - Insight + 5 tabs.
-   - Settings hub + 6 sub-pages.
-   - Shared dialogs and visit/patient components.
-4. Final TypeScript check (`npx tsc --noEmit`) and a visual smoke test of each route.
+## B. Hook updates — `src/hooks/clinic/usePanelClaims.ts`
 
-## Risks / Trade-offs
-- ~30 files touched; large diff but mechanical (className edits).
-- Recharts default tooltip/legend will be restyled inline per chart — minor repetition is acceptable to keep charts self-contained.
-- StatusBadge palette change is global; if any screen relies on a specific saturated color for emphasis, it will soften — acceptable per the "full visual parity" directive.
+- Extend `PanelClaimRow` with the 6 new columns.
+- Extend `PANEL_CLAIMS_SELECT` to fetch them.
+- Add a new mutation hook `useUpdatePanelClaim()` that:
+  - Accepts `{ id, status?, submitted_date?, approved_amount?, payment_reference?, received_date?, remarks?, gl_document_url?, received_amount? }`.
+  - Auto-stamps `submitted_date = today` when status flips to `submitted` and field is empty (same pattern for `received_date`).
+  - Sets `updated_by = auth.uid()`.
+  - Invalidates `['panel_claims']` and `['panel_claims_summary']`.
+- Add `useClaimTreatmentItems(queueEntryId)` returning `consultation_items` joined via `consultations` (active rows only) for the left column ledger.
 
-## Deliverable
-Every `/clinic/*` route reads as one cohesive product: slate-50 canvas, white rounded-2xl bento cards with whisper shadows, uppercase section labels, soft slate-50 inputs, blue-600 primary actions, and pill-style tabs/badges — indistinguishable in feel from `ConsultationDetail`.
+## C. Page updates — `src/pages/clinic/PanelClaims.tsx`
+
+- Add `Due Date` column between `Date` and `Updated By`. Render `—` if null; if `is_overdue`, render a red `Overdue` pill instead of the date.
+- Add `Actions` column (right-most) with a `DropdownMenu` (three-dot icon button) containing **"View details / Update claim"**.
+- Clicking the row OR the menu item opens the new `ClaimDetailsSheet` (controlled state in the page).
+- Update `colSpan` on the empty/loading rows to 10.
+
+## D. New component — `src/components/clinic/claims/ClaimDetailsSheet.tsx`
+
+Wide right-side `Sheet` (`w-full sm:max-w-5xl`) with a 2-column grid (`md:grid-cols-2 gap-6`).
+
+### Left column — Read-only ledger (bento card)
+- **Billing Details** — patient name, reg no/ID.
+- **Invoice Details** — `claim_no`, visit date (from `consultation.created_at` or `claim_date` fallback), panel name.
+- **Treatment Items table** — Item Name, Rate (price), Qty, Total (`price * quantity`), with a footer row summing to the claim `amount`.
+- Skeleton rows while `useClaimTreatmentItems` loads.
+
+### Right column — Action & Workflow (bento card)
+- Header strip: panel name + total billed amount (large, tabular).
+- **Status `Select`** with all 6 enum values (`Pending → Submitted → Approved → Received`, plus `Rejected`/`Cancelled`).
+- **Dynamic fields** based on selected status:
+  - `submitted` → `submitted_date` (Date input, defaults today).
+  - `approved` → `approved_amount` (numeric); show computed `write_off = amount - approved_amount` in a soft amber strip when non-zero.
+  - `received` → `payment_reference` (text) + `received_date` (Date) + optional `received_amount` (numeric, defaults to `approved_amount ?? amount`).
+- **Remarks** `Textarea` (always visible).
+- **Upload zone** — drag-and-drop file input (PDF/JPG/PNG, max 10 MB) that uploads to `panel-claim-docs/{claim_id}/{timestamp}-{filename}` and stamps `gl_document_url`. Show existing file as a download link if present.
+- Footer: `Cancel` + `Save` buttons. Save calls `useUpdatePanelClaim`, toasts success/error, closes sheet.
+
+All UI uses bento tokens (`bento`, `bentoHeader`, `softInput`, `pillTabActive`, `secondaryBtn`) for visual parity with `ConsultationDetail`.
+
+## Deliverables checklist
+
+1. **Migration**: add 6 columns + recreate `panel_claims_view` + create `panel-claim-docs` bucket + storage RLS.
+2. **`usePanelClaims.ts`**: extended row type, new `useUpdatePanelClaim`, new `useClaimTreatmentItems`.
+3. **`PanelClaims.tsx`**: Due Date column with overdue pill, Actions dropdown, controlled sheet state.
+4. **`ClaimDetailsSheet.tsx`**: new split-view sheet with workflow form + uploader.
+
+No changes to summary cards, tabs, or pagination — those already work. Phase 2 (audit log, bulk submit, ageing buckets) is out of scope for this step.

@@ -1892,51 +1892,69 @@ export type Database = {
       panel_claims: {
         Row: {
           amount: number
+          approved_amount: number | null
           claim_date: string
           claim_no: string
           created_at: string
           due_date: string | null
+          gl_document_url: string | null
           id: string
           panel_id: string
           patient_id: string
+          payment_reference: string | null
           queue_entry_id: string | null
           received_amount: number | null
+          received_date: string | null
           remarks: string | null
           status: Database["public"]["Enums"]["panel_claim_status"]
+          submitted_date: string | null
           updated_at: string
           updated_by: string | null
+          write_off_amount: number | null
         }
         Insert: {
           amount?: number
+          approved_amount?: number | null
           claim_date?: string
           claim_no: string
           created_at?: string
           due_date?: string | null
+          gl_document_url?: string | null
           id?: string
           panel_id: string
           patient_id: string
+          payment_reference?: string | null
           queue_entry_id?: string | null
           received_amount?: number | null
+          received_date?: string | null
           remarks?: string | null
           status?: Database["public"]["Enums"]["panel_claim_status"]
+          submitted_date?: string | null
           updated_at?: string
           updated_by?: string | null
+          write_off_amount?: number | null
         }
         Update: {
           amount?: number
+          approved_amount?: number | null
           claim_date?: string
           claim_no?: string
           created_at?: string
           due_date?: string | null
+          gl_document_url?: string | null
           id?: string
           panel_id?: string
           patient_id?: string
+          payment_reference?: string | null
           queue_entry_id?: string | null
           received_amount?: number | null
+          received_date?: string | null
           remarks?: string | null
           status?: Database["public"]["Enums"]["panel_claim_status"]
+          submitted_date?: string | null
           updated_at?: string
           updated_by?: string | null
+          write_off_amount?: number | null
         }
         Relationships: [
           {
@@ -3560,54 +3578,72 @@ export type Database = {
       panel_claims_view: {
         Row: {
           amount: number | null
+          approved_amount: number | null
           claim_date: string | null
           claim_no: string | null
           created_at: string | null
           due_date: string | null
+          gl_document_url: string | null
           id: string | null
           is_overdue: boolean | null
           panel_id: string | null
           patient_id: string | null
+          payment_reference: string | null
           queue_entry_id: string | null
           received_amount: number | null
+          received_date: string | null
           remarks: string | null
           status: Database["public"]["Enums"]["panel_claim_status"] | null
+          submitted_date: string | null
           updated_at: string | null
           updated_by: string | null
+          write_off_amount: number | null
         }
         Insert: {
           amount?: number | null
+          approved_amount?: number | null
           claim_date?: string | null
           claim_no?: string | null
           created_at?: string | null
           due_date?: string | null
+          gl_document_url?: string | null
           id?: string | null
           is_overdue?: never
           panel_id?: string | null
           patient_id?: string | null
+          payment_reference?: string | null
           queue_entry_id?: string | null
           received_amount?: number | null
+          received_date?: string | null
           remarks?: string | null
           status?: Database["public"]["Enums"]["panel_claim_status"] | null
+          submitted_date?: string | null
           updated_at?: string | null
           updated_by?: string | null
+          write_off_amount?: number | null
         }
         Update: {
           amount?: number | null
+          approved_amount?: number | null
           claim_date?: string | null
           claim_no?: string | null
           created_at?: string | null
           due_date?: string | null
+          gl_document_url?: string | null
           id?: string | null
           is_overdue?: never
           panel_id?: string | null
           patient_id?: string | null
+          payment_reference?: string | null
           queue_entry_id?: string | null
           received_amount?: number | null
+          received_date?: string | null
           remarks?: string | null
           status?: Database["public"]["Enums"]["panel_claim_status"] | null
+          submitted_date?: string | null
           updated_at?: string | null
           updated_by?: string | null
+          write_off_amount?: number | null
         }
         Relationships: [
           {
