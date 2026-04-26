@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Sliders, Users, Archive, Package, ChevronRight, Stethoscope, Shield } from 'lucide-react';
+import { Sliders, Users, Archive, Package, ChevronRight, Stethoscope, Shield, Tag } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -43,6 +43,13 @@ export default function SettingsPage() {
       title: 'Panels & Insurance',
       description: 'Manage corporate panels, TPAs, and insurance provider profiles.',
       icon: Shield,
+      visible: isOpsOrAdmin,
+    },
+    {
+      href: '/clinic/settings/drug-label',
+      title: 'Drug Label',
+      description: 'Choose which fields appear on printed medicine labels.',
+      icon: Tag,
       visible: isOpsOrAdmin,
     },
     {
