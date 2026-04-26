@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import {
   FileText,
@@ -23,37 +22,8 @@ import {
   useRemoveConsultationItem,
 } from '@/hooks/clinic/useConsultationItems';
 import { useConsultationAttachments } from '@/hooks/clinic/useAttachments';
-import {
-  useDrugLabelSettings,
-  type DrugLabelSettings,
-} from '@/hooks/clinic/useDrugLabelSettings';
-import { CLINIC_INFO } from '@/lib/constants';
-
-/**
- * Defaults that mirror the DB defaults (every field visible). Used while the
- * singleton settings row is still loading so we never accidentally print a
- * stripped-down label by accident.
- */
-const DEFAULT_LABEL_SETTINGS: Pick<
-  DrugLabelSettings,
-  | 'show_address'
-  | 'show_tel_number'
-  | 'show_precaution'
-  | 'show_quantity'
-  | 'show_date'
-  | 'show_expiry_date'
-  | 'show_duration'
-  | 'show_indication'
-> = {
-  show_address: true,
-  show_tel_number: true,
-  show_precaution: true,
-  show_quantity: true,
-  show_date: true,
-  show_expiry_date: true,
-  show_duration: true,
-  show_indication: true,
-};
+import { useDrugLabelSettings } from '@/hooks/clinic/useDrugLabelSettings';
+import { generateDrugLabelPdf } from '@/lib/clinic/printDrugLabel';
 
 interface Props {
   consultationId: string | undefined;
