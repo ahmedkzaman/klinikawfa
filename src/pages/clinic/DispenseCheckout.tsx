@@ -213,7 +213,11 @@ export default function DispenseCheckout() {
               </AlertDescription>
             </Alert>
           )}
-          <VisitDetailsColumn consultationId={consultation?.id} canEdit={canEdit} />
+          <VisitDetailsColumn
+            consultationId={consultation?.id}
+            canEdit={canEdit}
+            patientName={patient?.name ?? null}
+          />
 
           <AttachmentsCard consultationId={consultation?.id} />
 
