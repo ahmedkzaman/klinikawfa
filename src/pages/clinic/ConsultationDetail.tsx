@@ -27,6 +27,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { StatusBadge } from '@/components/clinic/StatusBadge';
+import { FollowUpScheduler } from '@/components/clinic/patient/FollowUpScheduler';
 import {
   useConsultationQueueEntries,
   useUpdateQueueEntry,
@@ -990,6 +991,13 @@ export default function ConsultationDetail() {
                 )}
               </CardContent>
             </Card>
+
+            {entry?.patient_id && (
+              <FollowUpScheduler
+                patientId={entry.patient_id}
+                defaultDoctorId={consultation?.doctor_id ?? entry.doctor_id ?? null}
+              />
+            )}
           </aside>
         </div>
 
