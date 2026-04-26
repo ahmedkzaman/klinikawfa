@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 
 export interface InsightSummary {
   totalRevenue: number;
+  totalCogs: number;
   totalProfit: number;
   marginPct: number;
   patientVolume: number;
@@ -12,12 +13,14 @@ export interface InsightSummary {
 export interface DailyTrendPoint {
   date: string; // YYYY-MM-DD
   revenue: number;
+  cogs: number;
   profit: number;
 }
 
 export interface TopItemRow {
   itemName: string;
   revenue: number;
+  cogs: number;
   profit: number;
 }
 
@@ -36,6 +39,7 @@ export interface RawFinancialRow {
   payment_method: string | null;
   item_name: string;
   revenue: number;
+  cogs: number;
   profit: number;
 }
 
