@@ -13,6 +13,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { StatusBadge } from '@/components/clinic/StatusBadge';
+import { FollowUpScheduler } from '@/components/clinic/patient/FollowUpScheduler';
 import { VisitDetailsColumn } from '@/components/clinic/visit/VisitDetailsColumn';
 import { BillingDetailsColumn } from '@/components/clinic/visit/BillingDetailsColumn';
 import {
@@ -212,6 +213,13 @@ export default function DispenseCheckout() {
             </Alert>
           )}
           <VisitDetailsColumn consultationId={consultation?.id} canEdit={canEdit} />
+
+          {(consultation?.patient_id || entry.patient_id) && (
+            <FollowUpScheduler
+              patientId={(consultation?.patient_id ?? entry.patient_id) as string}
+              defaultDoctorId={consultation?.doctor_id ?? null}
+            />
+          )}
         </div>
 
         {/* Billing */}
