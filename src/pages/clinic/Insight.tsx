@@ -31,12 +31,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 
 import {
   useFinancialInsights,
   type RawFinancialRow,
 } from '@/hooks/clinic/useFinancialInsights';
+import { ScoreboardsTab } from '@/components/clinic/insight/ScoreboardsTab';
 
 const SEGMENT_COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', 'hsl(var(--muted-foreground))'];
 const MAX_RANGE_DAYS = 365;
@@ -195,17 +197,27 @@ export default function Insight() {
         </div>
       </div>
 
-      {isError && (
-        <Card>
-          <CardContent className="py-6 text-sm text-destructive">
-            Failed to load insights: {(error as Error)?.message ?? 'Unknown error'}
-          </CardContent>
-        </Card>
-      )}
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="flex flex-wrap h-auto">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="scoreboards">Scoreboards</TabsTrigger>
+          <TabsTrigger value="leaderboards">Leaderboards</TabsTrigger>
+          <TabsTrigger value="valuation">Valuation</TabsTrigger>
+          <TabsTrigger value="health">Bank Health</TabsTrigger>
+        </TabsList>
 
-      {isLoading ? (
-        <InsightSkeleton />
-      ) : isEmpty ? (
+        <TabsContent value="overview" className="space-y-6">
+          {isError && (
+            <Card>
+              <CardContent className="py-6 text-sm text-destructive">
+                Failed to load insights: {(error as Error)?.message ?? 'Unknown error'}
+              </CardContent>
+            </Card>
+          )}
+
+          {isLoading ? (
+            <InsightSkeleton />
+          ) : isEmpty ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Inbox className="h-10 w-10 text-muted-foreground mb-3" />
@@ -418,9 +430,37 @@ export default function Insight() {
               </CardContent>
             </Card>
           </div>
-        </>
-      )}
+          </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="scoreboards">
+          <ScoreboardsTab startDate={startDate} endDate={endDate} />
+        </TabsContent>
+
+        <TabsContent value="leaderboards">
+          <PlaceholderPanel label="Leaderboards (Step 37) — coming next" />
+        </TabsContent>
+
+        <TabsContent value="valuation">
+          <PlaceholderPanel label="DCF Valuation Engine (Step 38) — coming next" />
+        </TabsContent>
+
+        <TabsContent value="health">
+          <PlaceholderPanel label="Bank Health Radar (Step 39) — coming next" />
+        </TabsContent>
+      </Tabs>
     </div>
+  );
+}
+
+function PlaceholderPanel({ label }: { label: string }) {
+  return (
+    <Card>
+      <CardContent className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">
+        {label}
+      </CardContent>
+    </Card>
   );
 }
 
