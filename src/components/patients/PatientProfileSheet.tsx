@@ -198,6 +198,9 @@ export function PatientProfileSheet({
                           {notes}
                         </p>
                       )}
+                      {consultation?.id && (
+                        <VisitAttachmentList consultationId={consultation.id} />
+                      )}
                     </li>
                   );
                 })}
