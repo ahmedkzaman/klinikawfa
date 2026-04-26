@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 export const PANEL_CLAIMS_PAGE_SIZE = 50;
@@ -21,11 +21,18 @@ export interface PanelClaimRow {
   status: PanelClaimStatus;
   claim_date: string;
   due_date: string | null;
+  submitted_date: string | null;
+  approved_amount: number | null;
+  write_off_amount: number | null;
+  payment_reference: string | null;
+  received_date: string | null;
+  gl_document_url: string | null;
   remarks: string | null;
   created_at: string;
   is_overdue: boolean;
+  queue_entry_id: string | null;
   insurance_providers: { id: string; name: string } | null;
-  patients: { id: string; name: string } | null;
+  patients: { id: string; name: string; reg_no: string | null } | null;
   updater: {
     id: string;
     full_name: string | null;
@@ -49,18 +56,38 @@ interface PanelClaimsPage {
 
 const PANEL_CLAIMS_SELECT = `
   id, claim_no, amount, received_amount, status, claim_date, due_date,
-  remarks, created_at, is_overdue,
+  submitted_date, approved_amount, write_off_amount,
+  payment_reference, received_date, gl_document_url,
+  remarks, created_at, is_overdue, queue_entry_id,
   insurance_providers:panel_id ( id, name ),
-  patients:patient_id ( id, name ),
+  patients:patient_id ( id, name, reg_no ),
   updater:profiles!fk_panel_claims_updated_by ( id, full_name, email )
 ` as const;
 
 // Cast supabase client to any for the new view (`panel_claims_view`) which is
 // not yet present in the auto-generated types until the next regeneration.
-// The shape is enforced via PanelClaimRow above.
 const db = supabase as unknown as {
   from: (table: string) => ReturnType<typeof supabase.from>;
 };
+
+function normalizeRow(row: PanelClaimRow): PanelClaimRow {
+  return {
+    ...row,
+    amount: Number(row.amount ?? 0),
+    received_amount:
+      row.received_amount === null || row.received_amount === undefined
+        ? null
+        : Number(row.received_amount),
+    approved_amount:
+      row.approved_amount === null || row.approved_amount === undefined
+        ? null
+        : Number(row.approved_amount),
+    write_off_amount:
+      row.write_off_amount === null || row.write_off_amount === undefined
+        ? null
+        : Number(row.write_off_amount),
+  };
+}
 
 export function usePanelClaims(tab: PanelClaimsTab, page: number) {
   return useQuery<PanelClaimsPage>({
@@ -88,14 +115,7 @@ export function usePanelClaims(tab: PanelClaimsTab, page: number) {
       if (error) throw error;
 
       return {
-        rows: ((data ?? []) as unknown as PanelClaimRow[]).map((row) => ({
-          ...row,
-          amount: Number(row.amount ?? 0),
-          received_amount:
-            row.received_amount === null || row.received_amount === undefined
-              ? null
-              : Number(row.received_amount),
-        })),
+        rows: ((data ?? []) as unknown as PanelClaimRow[]).map(normalizeRow),
         total: count ?? 0,
       };
     },
@@ -167,4 +187,118 @@ export function usePanelClaimsSummary() {
       return aggregate((data ?? []) as unknown as SummaryRowRaw[]);
     },
   });
+}
+
+// ---------- Treatment items for the claim ledger ----------
+
+export interface ClaimTreatmentItem {
+  id: string;
+  item_name: string;
+  quantity: number;
+  price: number;
+  total: number;
+}
+
+export interface ClaimLedger {
+  visit_date: string | null;
+  items: ClaimTreatmentItem[];
+}
+
+export function useClaimTreatmentItems(queueEntryId: string | null | undefined) {
+  return useQuery<ClaimLedger>({
+    enabled: Boolean(queueEntryId),
+    queryKey: ['panel_claim_items', queueEntryId],
+    queryFn: async () => {
+      // 1. Find the active consultation for this queue entry
+      const { data: consult, error: cErr } = await supabase
+        .from('consultations')
+        .select('id, created_at')
+        .eq('queue_entry_id', queueEntryId!)
+        .is('deleted_at', null)
+        .maybeSingle();
+      if (cErr) throw cErr;
+      if (!consult) return { visit_date: null, items: [] };
+
+      // 2. Fetch its active items
+      const { data: items, error: iErr } = await supabase
+        .from('consultation_items')
+        .select('id, item_name, quantity, price')
+        .eq('consultation_id', consult.id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: true });
+      if (iErr) throw iErr;
+
+      return {
+        visit_date: consult.created_at,
+        items: (items ?? []).map((it) => {
+          const qty = Number(it.quantity ?? 0);
+          const price = Number(it.price ?? 0);
+          return {
+            id: it.id,
+            item_name: it.item_name,
+            quantity: qty,
+            price,
+            total: qty * price,
+          };
+        }),
+      };
+    },
+  });
+}
+
+// ---------- Mutation: update claim ----------
+
+export interface UpdateClaimPayload {
+  id: string;
+  status?: PanelClaimStatus;
+  submitted_date?: string | null;
+  approved_amount?: number | null;
+  payment_reference?: string | null;
+  received_date?: string | null;
+  received_amount?: number | null;
+  remarks?: string | null;
+  gl_document_url?: string | null;
+  due_date?: string | null;
+}
+
+export function useUpdatePanelClaim() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: UpdateClaimPayload) => {
+      const { id, ...rest } = payload;
+      const { data: auth } = await supabase.auth.getUser();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const patch: Record<string, any> = { ...rest, updated_by: auth.user?.id ?? null };
+
+      // Auto-stamp dates on transition if caller didn't supply them
+      const today = new Date().toISOString().slice(0, 10);
+      if (rest.status === 'submitted' && !('submitted_date' in rest)) {
+        patch.submitted_date = today;
+      }
+      if (rest.status === 'received' && !('received_date' in rest)) {
+        patch.received_date = today;
+      }
+
+      const { error } = await supabase
+        .from('panel_claims')
+        .update(patch)
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['panel_claims'] });
+      qc.invalidateQueries({ queryKey: ['panel_claims_summary'] });
+    },
+  });
+}
+
+// ---------- GL document signed URL ----------
+
+export async function getClaimDocSignedUrl(path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage
+    .from('panel-claim-docs')
+    .createSignedUrl(path, 60 * 10); // 10 minutes
+  if (error) return null;
+  return data?.signedUrl ?? null;
 }
