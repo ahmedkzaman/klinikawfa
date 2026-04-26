@@ -1,112 +1,99 @@
-# Step 33 — Record Payment: Atomic Checkout Flow
+# Step 35 — Lock Completed Consultations from Re-Dispensing
 
-Refactor `src/components/clinic/visit/RecordPaymentDialog.tsx` so a single click records the payment, completes the consultation, checks out the queue entry, and returns the user to the Queue Board.
+Once a visit reaches `completed` status (consultation completed or queue checked out), the consultation page must become read-mostly: only clinical documentation may be patched, and the dispensary/hold workflows must be inaccessible.
 
-## A. Payment Method Logic
+## File: `src/pages/clinic/ConsultationDetail.tsx`
 
-Replace the current `usePaymentMethods()` + `filteredMethods` selector with a payment-type–aware UI:
+### A. Derived lock state
 
-- **Self-pay** (`paymentType === 'self_pay'`) — render a `<Select>` with three hardcoded items:
-  - `Cash`
-  - `TNG / DuitNow QR`
-  - `Credit/Debit Card`
-  
-  The selected string becomes `payment_method` directly (no lookup needed).
+Add a derived constant near the top of the component (after `consultation` and `entry` are resolved, around line ~95):
 
-- **Panel** (`paymentType === 'panel'`) — replace the dropdown with a searchable combobox built on `Popover` + `Command` (`CommandInput`, `CommandList`, `CommandEmpty`, `CommandItem`), populated from `useInsuranceProviders({ activeOnly: true })`. Show provider `name` (and `panel_code` as a muted hint where present). Selecting a provider:
-  - Sets a local `selectedProviderId` state
-  - Sets `payment_method = "Panel: <provider.name>"` for the payment row
-  - Resets `amount` to `"0.00"` (still editable so staff can capture co-payments)
-
-- **Insurance** option is removed from the `RadioGroup` (out of scope for this step) — keep only `Self-pay` and `Panel`. The existing `payment_type` enum value `'panel'` is what we send.
-
-When the user toggles `paymentType`, clear method/provider state and reset `amount` to either `defaultAmount` (self-pay) or `0` (panel).
-
-## B. Atomic Checkout Flow
-
-Pull in two more hooks alongside `useRecordPayment`:
-
-```ts
-import { useUpdateConsultation } from '@/hooks/clinic/useConsultations';
-import { useUpdateQueueEntry } from '@/hooks/clinic/useQueueEntries';
-import { useNavigate } from 'react-router-dom';
+```tsx
+const isLocked =
+  consultation?.status === 'completed' ||
+  entry?.clinic_status === 'completed';
 ```
 
-Rewrite `handleSubmit` to run the three mutations sequentially with `mutateAsync` so any failure short-circuits the flow:
+### B. Completion banner
 
-```ts
-const navigate = useNavigate();
-const recordPayment = useRecordPayment();
-const updateConsultation = useUpdateConsultation();
-const updateQueueEntry = useUpdateQueueEntry();
+Add `CheckCircle2` to the `lucide-react` import block, and import `Alert`/`AlertDescription` from `@/components/ui/alert`.
 
-async function handleSubmit() {
-  // ...validation (see section C)
+Render the banner inside the main workspace column, **above** the existing `ConsultationLockBanner` block (around line ~509), so it sits at the top of the right pane on desktop and first on mobile:
 
-  try {
-    // 1. Record payment row
-    await recordPayment.mutateAsync({
-      queue_entry_id: queueEntryId,
-      consultation_id: consultationId,
-      payment_type: paymentType,           // 'self_pay' | 'panel'
-      payment_method: resolvedMethodLabel, // hardcoded label or "Panel: <name>"
-      amount: numericAmount,
-      notes: finalNotes || null,
-    });
+```tsx
+{isLocked && (
+  <Alert className="border-emerald-200 bg-emerald-50 text-emerald-900">
+    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+    <AlertDescription>
+      This consultation is completed. Changes are limited to clinical
+      documentation only.
+    </AlertDescription>
+  </Alert>
+)}
+```
 
-    // 2. Mark consultation completed (only if one exists)
-    if (consultationId) {
-      await updateConsultation.mutateAsync({
-        id: consultationId,
-        status: 'completed',
-      });
-    }
+### C. New handler — clinical-notes-only patch
 
-    // 3. Check out queue entry
-    await updateQueueEntry.mutateAsync({
-      id: queueEntryId,
-      clinic_status: 'completed',
-    });
+Add alongside the existing handlers (near `handleSaveNotes`, ~line 233). It intentionally omits `dispense_note` and any status mutation:
 
-    toast.success('Payment recorded · Patient checked out');
-    onOpenChange(false);
-    navigate('/clinic/queue');
-  } catch (err) {
-    // Step-specific destructive toast; do NOT close dialog or navigate.
-    const msg = err instanceof Error ? err.message : 'Checkout failed';
-    toast.error(`Checkout failed: ${msg}`);
+```tsx
+const handleUpdateClinicalNotes = async () => {
+  if (!consultationId) {
+    toast.error('Consultation not found');
+    return;
   }
+  await updateConsultation.mutateAsync({
+    id: consultationId,
+    case_note: caseNote,
+    diagnosis_id: diagnosisId,
+    diagnosis_text: diagnosisText,
+  });
+  toast.success('Clinical notes updated');
+};
+```
+
+### D. Safety guards on existing handlers
+
+Prepend early returns to both `handleSendToDispensary` (line 329) and `handlePutOnHold` (line 349):
+
+```tsx
+if (isLocked) {
+  toast.error('This consultation is completed and cannot be modified');
+  return;
 }
 ```
 
-Notes:
-- `useRecordPayment`, `useUpdateConsultation`, and `useUpdateQueueEntry` already invalidate their respective query keys on success, so the Queue Board will refresh automatically after navigation.
-- `clinic_status = 'completed'` matches the existing enum used elsewhere in the queue flow.
+### E. Action footer transformation (lines ~662–690)
 
-## C. UX & Defensive UI
+- **Save Draft button**: when `isLocked`, swap label to **"Update Clinical Notes"** and route `onClick` to `handleUpdateClinicalNotes` instead of `handleSaveNotes`.
+- **Put on Hold button**: wrap in `{!isLocked && (...)}` so it disappears entirely when locked.
+- **Send to Dispensary button**: wrap in `{!isLocked && (...)}` likewise.
 
-- Compute a single `isSubmitting` flag:
-  ```ts
-  const isSubmitting =
-    recordPayment.isPending ||
-    updateConsultation.isPending ||
-    updateQueueEntry.isPending;
-  ```
-- Submit button:
-  - Import `Loader2` from `lucide-react`.
-  - When `isSubmitting`, render `<Loader2 className="h-4 w-4 animate-spin mr-2" />` plus contextual label (`Recording…` / `Completing visit…` / `Checking out…` based on which mutation is pending — fall back to `Processing…`).
-  - Disabled when `isSubmitting` OR no method/provider selected:
-    - Self-pay: disabled if `selectedSelfPayMethod` is empty
-    - Panel: disabled if `selectedProviderId` is empty
-- Cancel button is also disabled while `isSubmitting` to prevent half-completed flows from being abandoned.
-- Validation that runs **before** the try/catch:
-  - Amount must parse to a finite number `>= 0` (panel can be 0; self-pay must be `> 0`).
-  - Method/provider must be selected (already enforced by disabled state, but re-check defensively).
-  - Surface validation failures with `toast.error(...)` and return early.
-- On error from any of the three mutations: show destructive toast, **keep the dialog open**, and leave all form state intact so staff can adjust and retry. Do not navigate.
+```tsx
+<Button
+  variant="outline"
+  onClick={isLocked ? handleUpdateClinicalNotes : handleSaveNotes}
+  disabled={updateConsultation.isPending}
+  className="rounded-xl"
+>
+  <Save className="h-4 w-4 mr-1" />
+  {isLocked ? 'Update Clinical Notes' : 'Save Draft'}
+</Button>
 
-## Files
+{!isLocked && (
+  <>
+    <Button onClick={handlePutOnHold} ...>...</Button>
+    <Button onClick={handleSendToDispensary} ...>...</Button>
+  </>
+)}
+```
 
-- **Edited**: `src/components/clinic/visit/RecordPaymentDialog.tsx` — replace method-selection UI, add panel combobox, wire the 3-step atomic flow, add `Loader2` spinner + per-step button labels, remove the `insurance` radio option, drop the `usePaymentMethods` dependency.
+## Out of scope
 
-No DB migrations, no new files, no schema changes — all referenced hooks (`useRecordPayment`, `useUpdateConsultation`, `useUpdateQueueEntry`, `useInsuranceProviders`) already exist with the required signatures.
+- No DB schema or RLS changes — `consultations.status` and `queue_entries.clinic_status` already exist and are correctly written by Step 33's checkout flow.
+- No changes to the dispense cart hook (`useConsultationLock`) — its `isCompleted` check already disables editing of treatment items when the consultation is completed.
+- No changes to `RecordPaymentDialog` — Step 33 already drives the transition to `completed`.
+
+## Files modified
+
+- `src/pages/clinic/ConsultationDetail.tsx` (imports, derived `isLocked`, new handler, guards on two handlers, banner render, footer conditional rendering)

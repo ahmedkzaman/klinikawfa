@@ -9,6 +9,7 @@ import {
   Plus,
   Phone,
   PauseCircle,
+  CheckCircle2,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
@@ -27,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { StatusBadge } from '@/components/clinic/StatusBadge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { FollowUpScheduler } from '@/components/clinic/patient/FollowUpScheduler';
 import {
   useConsultationQueueEntries,
@@ -89,6 +91,10 @@ export default function ConsultationDetail() {
   const { data: consultation, isLoading: consultLoading } = useConsultation(queueEntryId);
   const createConsultation = useCreateConsultation();
   const updateConsultation = useUpdateConsultation();
+
+  const isLocked =
+    consultation?.status === 'completed' ||
+    entry?.clinic_status === 'completed';
 
   const { data: vitals } = useVitalSigns(queueEntryId);
   const recordVitals = useRecordVitalSigns();
@@ -245,6 +251,20 @@ export default function ConsultationDetail() {
     toast.success('Consultation notes saved');
   };
 
+  const handleUpdateClinicalNotes = async () => {
+    if (!consultationId) {
+      toast.error('Consultation not found');
+      return;
+    }
+    await updateConsultation.mutateAsync({
+      id: consultationId,
+      case_note: caseNote,
+      diagnosis_id: diagnosisId,
+      diagnosis_text: diagnosisText,
+    });
+    toast.success('Clinical notes updated');
+  };
+
   const handleSaveVitals = async () => {
     if (!entry || !patient?.id) {
       toast.error('Missing patient or queue data');
@@ -327,6 +347,10 @@ export default function ConsultationDetail() {
   };
 
   const handleSendToDispensary = async () => {
+    if (isLocked) {
+      toast.error('This consultation is completed and cannot be modified');
+      return;
+    }
     if (!entry || !consultationId) {
       toast.error('Doctor profile missing or consultation not created — contact admin');
       return;
@@ -347,6 +371,10 @@ export default function ConsultationDetail() {
   };
 
   const handlePutOnHold = async () => {
+    if (isLocked) {
+      toast.error('This consultation is completed and cannot be modified');
+      return;
+    }
     if (!entry) return;
 
     try {
@@ -506,6 +534,14 @@ export default function ConsultationDetail() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* MAIN — Workspace (right on desktop, first on mobile) */}
           <main className="order-1 lg:order-2 lg:col-span-8 space-y-4 flex flex-col pb-24 relative">
+            {isLocked && (
+              <Alert className="border-emerald-200 bg-emerald-50 text-emerald-900">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <AlertDescription>
+                  This consultation is completed. Changes are limited to clinical documentation only.
+                </AlertDescription>
+              </Alert>
+            )}
             {isLockedByOther && (
               <ConsultationLockBanner onForceUnlock={forceUnlock} />
             )}
@@ -662,31 +698,36 @@ export default function ConsultationDetail() {
               <div className="flex flex-wrap gap-2 justify-end">
                 <Button
                   variant="outline"
-                  onClick={handleSaveNotes}
+                  onClick={isLocked ? handleUpdateClinicalNotes : handleSaveNotes}
                   disabled={updateConsultation.isPending}
                   className="rounded-xl"
                 >
-                  <Save className="h-4 w-4 mr-1" /> Save Draft
+                  <Save className="h-4 w-4 mr-1" />
+                  {isLocked ? 'Update Clinical Notes' : 'Save Draft'}
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={handlePutOnHold}
-                  disabled={
-                    updateQueue.isPending ||
-                    updateConsultation.isPending ||
-                    entry.clinic_status === 'on_hold'
-                  }
-                  className="rounded-xl border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
-                >
-                  <PauseCircle className="h-4 w-4 mr-1" /> Put on Hold
-                </Button>
-                <Button
-                  onClick={handleSendToDispensary}
-                  disabled={updateQueue.isPending}
-                  className="px-8 py-6 rounded-xl text-base font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-md"
-                >
-                  Send to Dispensary
-                </Button>
+                {!isLocked && (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={handlePutOnHold}
+                      disabled={
+                        updateQueue.isPending ||
+                        updateConsultation.isPending ||
+                        entry.clinic_status === 'on_hold'
+                      }
+                      className="rounded-xl border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                    >
+                      <PauseCircle className="h-4 w-4 mr-1" /> Put on Hold
+                    </Button>
+                    <Button
+                      onClick={handleSendToDispensary}
+                      disabled={updateQueue.isPending}
+                      className="px-8 py-6 rounded-xl text-base font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+                    >
+                      Send to Dispensary
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </main>
