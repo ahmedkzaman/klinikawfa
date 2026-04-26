@@ -31,12 +31,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 
 import {
   useFinancialInsights,
   type RawFinancialRow,
 } from '@/hooks/clinic/useFinancialInsights';
+import { ScoreboardsTab } from '@/components/clinic/insight/ScoreboardsTab';
 
 const SEGMENT_COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', 'hsl(var(--muted-foreground))'];
 const MAX_RANGE_DAYS = 365;
