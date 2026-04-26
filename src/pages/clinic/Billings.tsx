@@ -188,124 +188,143 @@ export default function Billings() {
   const isLoading = ledgerLoading || itemsLoading;
 
   return (
-    <div className="space-y-5 max-w-7xl mx-auto">
-      <div className="flex items-end justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold">Billings</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Financial overview for self-pay and panel claims.
-          </p>
-        </div>
-        <div className="flex items-end gap-2">
-          <div className="space-y-1">
-            <Label htmlFor="from" className="text-xs">From</Label>
-            <Input
-              id="from"
-              type="date"
-              className="h-9 w-40"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-            />
+    <div className={pageShell}>
+      <div className={pageInner}>
+        {/* Header bar */}
+        <div className={cn(bento, 'p-4 flex items-end justify-between gap-4 flex-wrap')}>
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-800">Billings</h1>
+            <p className="text-sm text-slate-500 mt-0.5">
+              Financial overview for self-pay and panel claims.
+            </p>
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="to" className="text-xs">To</Label>
-            <Input
-              id="to"
-              type="date"
-              className="h-9 w-40"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-            />
+          <div className="flex items-end gap-2">
+            <div className="space-y-1">
+              <Label htmlFor="from" className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                From
+              </Label>
+              <Input
+                id="from"
+                type="date"
+                className={cn(softInput, 'h-9 w-40')}
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="to" className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                To
+              </Label>
+              <Input
+                id="to"
+                type="date"
+                className={cn(softInput, 'h-9 w-40')}
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+              />
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={cn(
-              'px-3 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors duration-200',
-              activeTab === tab.key
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {tab.label}
-            <span className="ml-1.5 text-xs text-muted-foreground">
-              ({counts[tab.key]})
-            </span>
-          </button>
-        ))}
-      </div>
+        {/* Pill tabs */}
+        <div className={cn(bento, 'p-2 flex items-center gap-1 flex-wrap')}>
+          {tabs.map((tab) => {
+            const active = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={cn(
+                  'rounded-full px-3 py-1.5 text-sm font-medium transition-colors',
+                  active
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100',
+                )}
+              >
+                {tab.label}
+                <span
+                  className={cn(
+                    'ml-1.5 text-xs',
+                    active ? 'text-white/80' : 'text-slate-400',
+                  )}
+                >
+                  ({counts[tab.key]})
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
-      <div className="rounded-xl bg-card border overflow-hidden">
-        <div className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_80px] gap-2 px-4 py-3 border-b border-border">
-          {['QUEUE', 'PATIENT', 'DATE', 'SUBTOTAL', 'PAID', 'OUTSTANDING', ''].map(
-            (col) => (
+        <div className={cn(bento, 'overflow-hidden')}>
+          <div className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_80px] gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
+            {['QUEUE', 'PATIENT', 'DATE', 'SUBTOTAL', 'PAID', 'OUTSTANDING', ''].map((col) => (
               <span
                 key={col}
-                className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider"
+                className="text-[11px] font-bold text-slate-500 uppercase tracking-wider"
               >
                 {col}
               </span>
-            ),
-          )}
-        </div>
-
-        {isLoading ? (
-          <div className="p-4 space-y-3">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-10 w-full" />
             ))}
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-            <Receipt className="h-12 w-12 mb-3 opacity-20" />
-            <p className="text-sm font-medium">No entries in this view</p>
-            <p className="text-xs mt-1">
-              Try adjusting the date range or switch tabs.
-            </p>
-          </div>
-        ) : (
-          filtered.map((e) => (
-            <div
-              key={e.queueEntryId}
-              className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_80px] gap-2 px-4 py-3 border-b border-border last:border-0 items-center hover:bg-muted/50 transition-colors"
-            >
-              <span className="text-sm tabular-nums">
-                #{e.queueNumber ?? '—'}
-              </span>
-              <span className="text-sm font-medium text-foreground truncate">
-                {e.patientName}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {format(new Date(e.createdAt), 'd MMM, h:mm a')}
-              </span>
-              <span className="text-sm tabular-nums">
-                RM {e.subtotal.toFixed(2)}
-              </span>
-              <span className="text-sm tabular-nums">
-                RM {e.paid.toFixed(2)}
-              </span>
-              <span
-                className={cn(
-                  'text-sm tabular-nums',
-                  e.outstanding > 0 && 'text-destructive font-semibold',
-                )}
-              >
-                RM {e.outstanding.toFixed(2)}
-              </span>
-              <Button asChild variant="ghost" size="sm" className="h-7 text-xs">
-                <Link to={`/clinic/queue/checkout/${e.queueEntryId}`}>
-                  <ExternalLink className="h-3 w-3 mr-1" />
-                  Open
-                </Link>
-              </Button>
+
+          {isLoading ? (
+            <div className="p-4 space-y-3">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-10 w-full" />
+              ))}
             </div>
-          ))
-        )}
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+              <Receipt className="h-12 w-12 mb-3 opacity-30" />
+              <p className="text-sm font-medium text-slate-600">No entries in this view</p>
+              <p className="text-xs mt-1 text-slate-500">
+                Try adjusting the date range or switch tabs.
+              </p>
+            </div>
+          ) : (
+            filtered.map((e) => (
+              <div
+                key={e.queueEntryId}
+                className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_80px] gap-2 px-4 py-3 border-b border-slate-100 last:border-0 items-center hover:bg-slate-50/60 transition-colors"
+              >
+                <span className="text-sm tabular-nums text-slate-600">
+                  #{e.queueNumber ?? '—'}
+                </span>
+                <span className="text-sm font-medium text-slate-800 truncate">
+                  {e.patientName}
+                </span>
+                <span className="text-xs text-slate-500">
+                  {format(new Date(e.createdAt), 'd MMM, h:mm a')}
+                </span>
+                <span className="text-sm tabular-nums text-slate-600">
+                  RM {e.subtotal.toFixed(2)}
+                </span>
+                <span className="text-sm tabular-nums text-slate-600">
+                  RM {e.paid.toFixed(2)}
+                </span>
+                <span
+                  className={cn(
+                    'text-sm tabular-nums',
+                    e.outstanding > 0 ? 'text-rose-600 font-semibold' : 'text-slate-600',
+                  )}
+                >
+                  RM {e.outstanding.toFixed(2)}
+                </span>
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs rounded-lg text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                >
+                  <Link to={`/clinic/queue/checkout/${e.queueEntryId}`}>
+                    <ExternalLink className="h-3 w-3 mr-1" />
+                    Open
+                  </Link>
+                </Button>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
