@@ -40,6 +40,7 @@ import {
 } from '@/hooks/clinic/useFinancialInsights';
 import { ScoreboardsTab } from '@/components/clinic/insight/ScoreboardsTab';
 import { LeaderboardsTab } from '@/components/clinic/insight/LeaderboardsTab';
+import { ValuationTab } from '@/components/clinic/insight/ValuationTab';
 
 const SEGMENT_COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', 'hsl(var(--muted-foreground))'];
 const MAX_RANGE_DAYS = 365;
@@ -444,7 +445,7 @@ export default function Insight() {
         </TabsContent>
 
         <TabsContent value="valuation">
-          <PlaceholderPanel label="DCF Valuation Engine (Step 38) — coming next" />
+          <ValuationTab startDate={startDate} endDate={endDate} />
         </TabsContent>
 
         <TabsContent value="health">

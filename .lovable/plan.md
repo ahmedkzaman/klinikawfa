@@ -1,37 +1,65 @@
-# Step 38 — VIP Radar: Primary Diagnosis Column
+# Step 38 — DCF Valuation Engine Tab
 
-Augment the VIP Patient Radar with a **Primary Condition** column derived from each patient's most-frequent recorded diagnosis. This converts the radar from a pure financial ranking into a clinical-persona map that will feed the Step 39 DCF model.
+## Goal
+Replace the "Valuation" placeholder in `Insight.tsx` with an interactive DCF (Discounted Cash Flow) calculator that derives a baseline from existing financial data and lets the owner stress-test growth, WACC, OpEx, and terminal-growth assumptions.
 
-The migration already emits `diagnosis_name` from `insight_financials_view` (with `LEFT JOIN` falling back to `'Undiagnosed'`), so no SQL changes are required.
+## A. New component — `src/components/clinic/insight/ValuationTab.tsx`
 
----
+**Data source**
+- Consume `useFinancialInsights(startDate, endDate)` and read `data.summary`. The hook returns `{ data, isLoading, isError }` — not the destructured `{ summary, isLoading, isEmpty }` shape from the user's snippet. I'll correct that during implementation and derive `isEmpty` locally as `!data || data.summary.totalRevenue === 0`.
+- Annualize the period: `annualizedRevenue = totalRevenue * (365 / days)` where `days = differenceInCalendarDays(endDate, startDate) + 1`.
+- Derive `cogsRatio = totalCogs / totalRevenue` from history (the GAAP-aligned ratio already computed by the hook).
 
-## A. Hook update — `src/hooks/clinic/usePatientLTV.ts`
+**Inputs (Shadcn `Slider` + `Input` + `Label`)**
+- Expected Annual Growth — slider, 0–30%, default 10%.
+- Discount Rate (WACC) — slider, 5–25%, default 12%.
+- Annual OpEx (MYR) — numeric input, default = `annualizedRevenue * 0.6`, user-overridable (tracked via nullable `customOpex` state).
+- Terminal Growth Rate — slider, 0–5%, default 2%.
 
-1. **Extend the select** to pull `diagnosis_name` from `insight_financials_view`.
-2. **Extend `ViewRow`** with `diagnosis_name: string | null`.
-3. **Extend `PatientAcc`** with `diagnosisCounts: Map<string, number>` (initialised to an empty Map for each new patient).
-4. **In the row loop**, increment `diagnosisCounts` for the row's `diagnosis_name`, but **skip `'Undiagnosed'` and null/empty values** so the primary condition only reflects real clinical signals.
-5. **In the top-50 mapping**, walk `diagnosisCounts` to find the highest-count entry; default to `'Unspecified'` when the map is empty (i.e. the patient only has undiagnosed encounters).
-6. **Extend `VipPatientRow`** with `primary_diagnosis: string`.
+**DCF math (`runDCF` helper)**
+For `t = 1..5`:
+- `Revenue_t = min(annRev * (1 + g)^t, 5,000,000)` — hard RM 5M revenue cap per year.
+- `GrossProfit_t = Revenue_t * (1 - cogsRatio)`
+- `FCF_t = GrossProfit_t - OpEx`
+- `DiscFCF_t = FCF_t / (1 + wacc)^t`
 
-Tie-breaker is intentionally "first encountered wins" — acceptable for low data volumes, and the `'Unspecified'` fallback itself becomes a data-quality signal as called out in the audit.
+Terminal value (Gordon Growth, only when `wacc > terminalGrowth`):
+- `TV = (FCF_5 * (1 + tg)) / (wacc - tg)`
+- `DiscTV = TV / (1 + wacc)^5`
+- `EV = Σ DiscFCF_t + DiscTV`
 
-## B. UI update — `src/components/clinic/insight/LeaderboardsTab.tsx`
+If `wacc ≤ terminalGrowth`, exclude terminal value and surface a warning alert ("WACC must exceed Terminal Growth").
 
-1. **Header**: insert `<TableHead>Primary Condition</TableHead>` between **Reg. No** and **Visits** (line ~249).
-2. **Body**: insert a new `<TableCell className="text-muted-foreground italic text-sm">{p.primary_diagnosis}</TableCell>` in the same position so the diagnosis sits visually subordinate to the hard financial figures.
-3. **Visibility**: the table already renders unconditionally for any non-empty `top50`, including a single patient — no gating change required.
-4. **Position**: the radar already sits between the Acquisition Strategy cards and the Doctor Efficiency Leaderboard — no reordering needed.
+**Visuals**
+- **Hero Card**: large EV figure in emerald when positive, slate when ≤ 0, with the WACC/TV warning inline when applicable.
+- **5-Year Projection Chart**: Recharts `ComposedChart` with Revenue & Gross Profit bars and Discounted FCF line; tooltips formatted as MYR.
+- **Sensitivity Matrix**: `Table` with WACC rows `[8, 10, 12, 14, 16, 18, 20]` × Growth columns `[0, 5, 10, 15, 20, 25]`. Each cell shows compact MYR EV; cells where `wacc ≤ tg` render "—". The cell matching the user's current sliders is highlighted.
+
+**States**
+- Loading: skeleton/placeholder card.
+- Empty baseline: empty-state card prompting the user to widen the date range.
+- Error: destructive alert.
+
+**Disclaimer footer**
+> *Indicative model based on current margins and user assumptions. Not a substitute for professional financial valuation.*
+
+## B. Wiring — `src/pages/clinic/Insight.tsx`
+- Add `import { ValuationTab } from '@/components/clinic/insight/ValuationTab';`
+- Replace the placeholder at lines 446–448:
+  ```tsx
+  <TabsContent value="valuation">
+    <ValuationTab startDate={startDate} endDate={endDate} />
+  </TabsContent>
+  ```
 
 ## C. Verification
+- Run `npx tsc --noEmit` and confirm clean.
+- Manual smoke check on `/clinic/insight` → Valuation tab: drag Growth slider and confirm the projection chart bends upward and flattens against the RM 5M cap; set WACC ≤ TG to confirm the warning state.
 
-- Run `npx tsc --noEmit` and confirm a clean pass before reporting back.
-- No database migration, no new files, no auth changes.
+## "No-glaze" caveats (carried into the disclaimer)
+- OpEx is held constant across all 5 years — high-growth scenarios will overstate FCF because real fixed costs scale with capacity.
+- Revenue cap is fixed at RM 5M to prevent fantasy projections from a single small clinic location.
 
----
-
-## Files touched
-
-- **Edited**: `src/hooks/clinic/usePatientLTV.ts`
-- **Edited**: `src/components/clinic/insight/LeaderboardsTab.tsx`
+## Files
+- **New**: `src/components/clinic/insight/ValuationTab.tsx`
+- **Edited**: `src/pages/clinic/Insight.tsx`
