@@ -1,125 +1,91 @@
-## Step 39 — Bank Health Radar (Comparative)
+## Goal
+Redesign every page under `/clinic/*` (and their feature components) to match the **bento style** established in `ConsultationDetail.tsx`. Visual parity only — no logic, data, or routing changes.
 
-A 5-axis radar chart comparing the **current selected period** against the **prior equivalent window** (same day-length, immediately preceding). All metrics normalized to a 0–100 scale so a single glance reveals strengths, fragility, and momentum.
+## Design Tokens (mirrored from ConsultationDetail)
 
-### "No-Glaze" Reality Check
-
-- **Liquidity is currently 100% Cash** (only `cash` exists in `insight_financials_view`). Until panel/insurance billing actually flows through `queue_entries.payment_method`, the Liquidity axis will always read 100. That's accurate — but it means this axis becomes meaningful **only after** the first panel claim is processed. Worth flagging in the tooltip.
-- **Risk axis on a single-doctor clinic always reads 0.** With one billing doctor, concentration is 100% by definition. This is not a bug — it's a structural reality the model surfaces honestly.
-- **Growth requires prior data.** If the prior period has zero revenue (new clinic), Growth defaults to 50 (neutral) rather than dividing by zero or showing a misleading 100.
-
----
-
-### A. Data Hook — `src/hooks/clinic/useBankHealth.ts` (NEW)
-
-**Period derivation** using `differenceInCalendarDays` + `subDays` from `date-fns`:
 ```ts
-const days = differenceInCalendarDays(endDate, startDate) + 1;
-const priorEnd   = subDays(startDate, 1);
-const priorStart = subDays(priorEnd, days - 1);
+const bento        = "bg-white border-none rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.03)]";
+const bentoHeader  = "text-sm font-bold text-slate-800 uppercase tracking-wider mb-3";
+const softInput    = "bg-slate-50 border-transparent focus-visible:bg-white focus-visible:border-blue-500 rounded-lg";
+const pageShell    = "min-h-full bg-slate-50 -m-4 md:-m-6 p-4 md:p-6";
+const pageInner    = "max-w-[1600px] mx-auto space-y-4";
+const primaryBtn   = "rounded-xl bg-blue-600 hover:bg-blue-700 text-white";
+const softBadge    = "rounded-full bg-slate-50 text-slate-600 border-none";
+const softTile     = "rounded-xl bg-slate-50 px-3 py-2";          // labels / pill rows
+const pillTab      = "rounded-full px-3 py-1 text-xs font-medium"; // active = bg-blue-600 text-white, idle = bg-slate-50 text-slate-600
 ```
 
-**Two parallel queries** against `insight_financials_view`, selecting:
-`visit_date, payment_method, revenue, profit, queue_entry_id, doctor_name`
+A shared helper file `src/lib/clinic/bentoTokens.ts` will export these constants so every page references the same source of truth (avoids drift if we tune the look later).
 
-**Per-period aggregator** (`computeAxes`) returns 5 normalized scores plus raw context for the explainer grid:
+## Scope — Pages
 
-| Axis | Formula | Notes |
-|---|---|---|
-| **Profitability** | `(profit / revenue) × 100` | `0` if revenue = 0 |
-| **Risk** | `100 − (topDoctorRev / totalRev × 100)` | Tracks revenue per `doctor_name`; "Unassigned" included |
-| **Efficiency** | `Math.min((profit / uniquePatients) / 80 × 100, 100)` | RM 80 profit/visit benchmark; uniquePatients = distinct `queue_entry_id` |
-| **Liquidity** | `% revenue from ('cash','qr','credit_card','debit_card')` | Case-insensitive match; null = panel |
-| **Growth** | `(currRev − priorRev) / priorRev`, capped ±50%, mapped −50→0, 0→50, +50→100 | Special: `priorRev = 0 ⇒ 50` (neutral) |
+Each page gets:
+1. Wrapped in `pageShell` + `pageInner`.
+2. All `Card` instances swapped to the `bento` token (no border, soft shadow, rounded-2xl).
+3. Section titles → uppercase `bentoHeader`.
+4. Inputs/Selects/Textareas → `softInput`.
+5. Primary actions → `primaryBtn`; secondary → ghost on `bg-slate-50`.
+6. Tables: header row `bg-slate-50 text-slate-500 uppercase tracking-wider text-xs`, body rows `hover:bg-slate-50/60`, no harsh borders.
+7. Tabs (where present) → pill style.
+8. Status/role badges → `softBadge` variants.
 
-**Output shape** (Recharts-ready):
-```ts
-interface BankHealthData {
-  chartData: Array<{ metric: string; current: number; prior: number; fullMark: 100 }>;
-  context: {
-    current: AxisContext;  // raw values for the explainer grid
-    prior:   AxisContext;
-    periodLabel: string;       // "Last 30 days"
-    priorPeriodLabel: string;  // "Previous 30 days"
-  };
-  isLoading, isError, error;
-}
+| Page | Notes |
+|---|---|
+| `Consultation.tsx` (queue list) | Header bar + queue table become bento; status chips → soft pills. |
+| `ConsultationDetail.tsx` | Already the reference — only refactor inline strings into the shared token import. |
+| `QueueBoard.tsx` | Kanban columns become bento cards; column headers uppercase; cards inside white with soft hover. |
+| `PatientsList.tsx` | Search bar → soft input; result rows → bento card grid; Patient Profile sheet inherits soft inputs. |
+| `Billings.tsx` | Filter strip + table reskinned; "Record payment" CTA → primary blue. |
+| `DispenseCheckout.tsx` | Two-column bento layout; line-item rows → `softTile`. |
+| `PanelClaims.tsx` | Tabs → pill tabs; claim list → bento cards; status badges recolored to soft palette. |
+| `Inventory.tsx` | Toolbar + inventory table reskinned. |
+| `Procurement.tsx` | Same treatment as Inventory. |
+| `VoidedRecords.tsx` | Audit table reskinned, danger states use `bg-red-50 text-red-700` soft chips. |
+| `Insight.tsx` + 5 tabs (`OverviewTab` inline, `ScoreboardsTab`, `LeaderboardsTab`, `ValuationTab`, `BankHealthTab`) | Apply bento to all chart/table cards, pill tabs, soft inputs for date pickers, blue-600 CTAs, slate tooltips on Recharts. |
+| `_Placeholder.tsx` | Empty-state card → centered bento card with muted icon. |
 
-interface AxisContext {
-  revenue: number;
-  profit: number;
-  marginPct: number;
-  topDoctorName: string;
-  topDoctorSharePct: number;
-  profitPerPatient: number;
-  patientCount: number;
-  liquidPct: number;
-  growthPct: number | null;  // null when prior = 0
-}
-```
+### Settings sub-pages
+| Page | Notes |
+|---|---|
+| `SettingsPage.tsx` | Sidebar nav → pill list; content frame → bento. |
+| `InClinicSettings.tsx` | Form sections grouped into bento cards. |
+| `DrugLabelSettings.tsx` | Preview pane in bento; form on left in soft inputs. |
+| `InventorySettings.tsx` | Toolbar + table reskinned. |
+| `PanelsSettings.tsx` | List + dialog trigger reskinned. |
+| `UserManagementSettings.tsx` | User table + role chips reskinned. |
+| `DiagnosisSweeper.tsx` | Two-column compare layout in bento. |
 
-Uses `useQuery` with key `['bank-health', startKey, endKey]` (prior period is derived, not user-selectable, so it doesn't need its own key). The view isn't in generated types → cast `supabase as any` for the read, matching the pattern in `useFinancialInsights.ts`.
+## Scope — Shared Clinic Components
+- `ClinicLayout.tsx` — set the outer surface to `bg-slate-50`, top bar to `bg-white border-b border-slate-100`, sidebar items to slate-500 idle / blue-600 active pills.
+- `StatusBadge.tsx` — soft palette (`bg-{color}-50 text-{color}-700`) instead of saturated fills.
+- `PatientPicker.tsx`, `CheckInAppointmentDialog.tsx`, `CheckInWalkInDialog.tsx`, `RegisterAndCheckInDialog.tsx`, `RegisterPatientDialog.tsx` — Dialog content uses bento card chrome, soft inputs, primary blue CTA.
+- `consultation/*` (already aligned, light pass for token consistency).
+- `visit/AttachmentsCard.tsx`, `visit/BillingDetailsColumn.tsx`, `visit/VisitDetailsColumn.tsx`, `visit/RecordPaymentDialog.tsx` — bento cards, soft tiles for line items, pill status chips.
+- `patient/FollowUpScheduler.tsx` — soft input date row, blue-600 CTA.
+- `settings/DoctorProfileDialog.tsx`, `InventoryItemDialog.tsx`, `PackageDialog.tsx`, `PanelDialog.tsx`, `ServiceDialog.tsx` — Dialog header strip, sectioned bento blocks, soft inputs, sticky bottom action bar (white/90 backdrop blur, like ConsultationDetail's save bar).
+- `insight/*` — already drafted in last step; this pass enforces the shared token imports.
 
----
+## What I will NOT change
+- Data hooks, queries, mutations, routes, validation, business logic.
+- The clinic sidebar information architecture.
+- Component file boundaries (no splits/renames).
+- Color semantics for hard medical states (errors stay red, success stays green) — only desaturated to the soft palette.
 
-### B. UI — `src/components/clinic/insight/BankHealthTab.tsx` (NEW)
+## Approach / Order
+1. Create `src/lib/clinic/bentoTokens.ts` with the shared constants.
+2. Update `ClinicLayout` + `StatusBadge` first (affects every screen).
+3. Sweep page-by-page in the order listed above, one PR-sized batch per group:
+   - Operational pages (Consultation, QueueBoard, PatientsList, Billings, DispenseCheckout, PanelClaims).
+   - Inventory/Procurement/VoidedRecords.
+   - Insight + 5 tabs.
+   - Settings hub + 6 sub-pages.
+   - Shared dialogs and visit/patient components.
+4. Final TypeScript check (`npx tsc --noEmit`) and a visual smoke test of each route.
 
-**Layout** (single column, `space-y-6`):
+## Risks / Trade-offs
+- ~30 files touched; large diff but mechanical (className edits).
+- Recharts default tooltip/legend will be restyled inline per chart — minor repetition is acceptable to keep charts self-contained.
+- StatusBadge palette change is global; if any screen relies on a specific saturated color for emphasis, it will soften — acceptable per the "full visual parity" directive.
 
-1. **Header card** — Title "Bank Health" + subtitle showing both period labels (e.g., "**Last 30 days** vs **Previous 30 days**").
-
-2. **Radar chart card** — `ResponsiveContainer` at `h-[420px]`:
-   ```tsx
-   <RadarChart data={chartData}>
-     <PolarGrid stroke="hsl(var(--border))" />
-     <PolarAngleAxis dataKey="metric" tick={{ fontSize: 12 }} />
-     <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 10 }} />
-     <Radar name="Prior Period"   dataKey="prior"   stroke="#94a3b8"
-            fill="transparent" strokeDasharray="3 3" strokeWidth={2} />
-     <Radar name="Current Period" dataKey="current" stroke="#059669"
-            fill="#10b981" fillOpacity={0.5} strokeWidth={2} />
-     <Legend wrapperStyle={{ fontSize: 12 }} />
-     <Tooltip formatter={(v: number) => `${v.toFixed(0)} / 100`} />
-   </RadarChart>
-   ```
-   Current is rendered **after** Prior so the solid emerald polygon sits on top of the dashed ghost.
-
-3. **Explainer grid** — `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3` with one card per axis. Each card shows:
-   - Metric name + score (e.g., **"Liquidity — 100 / 100"**)
-   - Raw context line (e.g., *"100% from instant-cash methods"*)
-   - Delta vs prior in muted text (e.g., *"Prior: 100 (no change)"*)
-
-4. **"What does 100 mean?" footnote** — small muted block clarifying each benchmark:
-   - Profitability: 100 = every ringgit of revenue is profit (impossible in practice; ~50–70 is excellent)
-   - Risk: 100 = revenue evenly spread across many doctors; 0 = one doctor does 100%
-   - Efficiency: 100 = avg RM 80+ profit per patient visit
-   - Liquidity: 100 = all revenue collected instantly (no panel waiting)
-   - Growth: 50 = flat; 100 = +50% period-over-period; 0 = −50%
-
-**Empty / loading states** mirror `ValuationTab`:
-- Loading: skeleton card with "Comparing periods…"
-- No current-period data: `Inbox` icon + "No financial data in this period."
-
----
-
-### C. Wiring — `src/pages/clinic/Insight.tsx`
-
-Replace the placeholder at line **452**:
-```tsx
-<TabsContent value="health">
-  <BankHealthTab startDate={startDate} endDate={endDate} />
-</TabsContent>
-```
-Add the import alongside the other insight tabs (line 43).
-
----
-
-### Files
-
-- **NEW**: `src/hooks/clinic/useBankHealth.ts`
-- **NEW**: `src/components/clinic/insight/BankHealthTab.tsx`
-- **EDITED**: `src/pages/clinic/Insight.tsx` (1 import + 1 line swap)
-
-### Verification
-
-`npx tsc --noEmit` — confirm Recharts radar prop types and the new hook signature are clean. Then visit `/clinic/insight` → "Bank Health" tab. With current data (5 cash items, 1 doctor) you should see: high Profitability + Liquidity, low Risk (single-doctor reality), Growth near 50 (neutral baseline), and a dashed prior-period ghost trailing the emerald polygon.
+## Deliverable
+Every `/clinic/*` route reads as one cohesive product: slate-50 canvas, white rounded-2xl bento cards with whisper shadows, uppercase section labels, soft slate-50 inputs, blue-600 primary actions, and pill-style tabs/badges — indistinguishable in feel from `ConsultationDetail`.
