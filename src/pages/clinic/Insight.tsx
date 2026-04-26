@@ -197,17 +197,27 @@ export default function Insight() {
         </div>
       </div>
 
-      {isError && (
-        <Card>
-          <CardContent className="py-6 text-sm text-destructive">
-            Failed to load insights: {(error as Error)?.message ?? 'Unknown error'}
-          </CardContent>
-        </Card>
-      )}
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="flex flex-wrap h-auto">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="scoreboards">Scoreboards</TabsTrigger>
+          <TabsTrigger value="leaderboards">Leaderboards</TabsTrigger>
+          <TabsTrigger value="valuation">Valuation</TabsTrigger>
+          <TabsTrigger value="health">Bank Health</TabsTrigger>
+        </TabsList>
 
-      {isLoading ? (
-        <InsightSkeleton />
-      ) : isEmpty ? (
+        <TabsContent value="overview" className="space-y-6">
+          {isError && (
+            <Card>
+              <CardContent className="py-6 text-sm text-destructive">
+                Failed to load insights: {(error as Error)?.message ?? 'Unknown error'}
+              </CardContent>
+            </Card>
+          )}
+
+          {isLoading ? (
+            <InsightSkeleton />
+          ) : isEmpty ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Inbox className="h-10 w-10 text-muted-foreground mb-3" />
