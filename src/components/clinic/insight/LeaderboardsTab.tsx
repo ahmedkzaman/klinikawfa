@@ -67,7 +67,7 @@ function usePatientById(patientId: string | null) {
 }
 
 export function LeaderboardsTab({ startDate, endDate }: Props) {
-  const { isAdmin, isDoctorAdmin } = useAuth();
+  const { isDoctorAdmin } = useAuth();
   const { data: currentDoctor } = useCurrentDoctor();
 
   // Clinical-record clickability: doctor_admin OR any user linked to a doctors row.
@@ -355,8 +355,6 @@ export function LeaderboardsTab({ startDate, endDate }: Props) {
         }}
       />
 
-      {/* Suppress unused-var warning when isAdmin is gated upstream by route guard */}
-      {void isAdmin}
     </div>
   );
 }
