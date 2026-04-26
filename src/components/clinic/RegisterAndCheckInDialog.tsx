@@ -40,7 +40,14 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
-import { useCreatePatient, useDebouncedValue, useSearchPatients } from '@/hooks/clinic/usePatients';
+import {
+  useCreatePatient,
+  useDebouncedValue,
+  usePatientByIc,
+  useSearchPatients,
+} from '@/hooks/clinic/usePatients';
+import { usePatientOutstanding, formatRm } from '@/hooks/clinic/usePatientFinancials';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
@@ -208,6 +215,17 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
   const dobValue = watch('date_of_birth');
   const genderValue = watch('gender');
 
+  // Fast-path duplicate detection: once the user types a full 12-digit IC,
+  // look up an existing patient and surface their outstanding ledgers.
+  const debouncedIc = useDebouncedValue(nationalId ?? '', 300);
+  const { data: existingPatient } = usePatientByIc(debouncedIc);
+  const {
+    patientOutstanding: existingPatientOutstanding,
+    panelOutstanding: existingPanelOutstanding,
+    hasPatientDebt: existingHasPatientDebt,
+    hasPanelDebt: existingHasPanelDebt,
+  } = usePatientOutstanding(existingPatient?.id);
+
   // MyKad auto-parse — only fills empty fields, never overrides manual input.
   useEffect(() => {
     if (!nationalId) return;
@@ -366,6 +384,33 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                   )}
                 </div>
               </div>
+
+              {existingPatient && (
+                <Alert variant="destructive">
+                  <AlertDescription className="space-y-2">
+                    <div>
+                      ⚠️ A patient with this MyKad already exists:{' '}
+                      <span className="font-semibold">{existingPatient.name}</span>
+                      {existingPatient.phone ? ` • ${existingPatient.phone}` : ''}. Consider
+                      using the existing record instead of creating a duplicate.
+                    </div>
+                    {existingHasPatientDebt && (
+                      <div>
+                        ⚠️ Patient Liability: {formatRm(existingPatientOutstanding)}. Please
+                        collect this payment before proceeding.
+                      </div>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
+              {existingPatient && existingHasPanelDebt && (
+                <Alert className="border-yellow-200 bg-yellow-50 text-yellow-800 [&>svg]:text-yellow-800">
+                  <AlertDescription>
+                    📄 Pending Panel Claims: {formatRm(existingPanelOutstanding)}. (Awaiting
+                    disbursement from panel)
+                  </AlertDescription>
+                </Alert>
+              )}
             </CardContent>
           </Card>
 

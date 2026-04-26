@@ -62,6 +62,30 @@ export function useSearchPatients(searchQuery: string) {
   });
 }
 
+/**
+ * Lookup an existing patient by exact MyKad / national ID. Disabled until the
+ * caller passes a 12-digit value. Returns the matched row or null.
+ */
+export function usePatientByIc(ic: string | undefined | null) {
+  const cleaned = (ic ?? '').replace(/[-\s]/g, '');
+  const enabled = /^\d{12}$/.test(cleaned);
+
+  return useQuery<PatientRow | null>({
+    queryKey: ['clinic', 'patients', 'by-ic', cleaned],
+    enabled,
+    staleTime: 10_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('national_id', cleaned)
+        .maybeSingle();
+      if (error) throw error;
+      return data ?? null;
+    },
+  });
+}
+
 /** Tiny debounce helper so Combobox queries don't fire on every keystroke. */
 export function useDebouncedValue<T>(value: T, delay = 250): T {
   const [debounced, setDebounced] = useState(value);

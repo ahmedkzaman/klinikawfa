@@ -12,10 +12,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { PatientPicker } from '@/components/clinic/PatientPicker';
 import { RegisterPatientDialog } from '@/components/clinic/RegisterPatientDialog';
 import { useCheckInWalkIn } from '@/hooks/clinic/useIntakeAppointment';
 import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
+import { usePatientOutstanding, formatRm } from '@/hooks/clinic/usePatientFinancials';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import type { PatientRow } from '@/types/clinic';
 
@@ -47,6 +49,12 @@ export function CheckInWalkInDialog({
   const [panelId, setPanelId] = useState<string>('');
   const checkIn = useCheckInWalkIn();
   const { data: panels = [] } = useInsuranceProviders({ activeOnly: true });
+  const {
+    patientOutstanding,
+    panelOutstanding,
+    hasPatientDebt,
+    hasPanelDebt,
+  } = usePatientOutstanding(patient?.id);
 
   useEffect(() => {
     if (open && initialPatient) {
@@ -120,6 +128,23 @@ export function CheckInWalkInDialog({
                 onChange={setPatient}
                 onRegisterNew={() => setRegisterOpen(true)}
               />
+
+              {patient && hasPatientDebt && (
+                <Alert variant="destructive" className="mt-4">
+                  <AlertDescription>
+                    ⚠️ Patient Liability: {formatRm(patientOutstanding)}. Please collect this
+                    payment before proceeding.
+                  </AlertDescription>
+                </Alert>
+              )}
+              {patient && hasPanelDebt && (
+                <Alert className="mt-2 border-yellow-200 bg-yellow-50 text-yellow-800 [&>svg]:text-yellow-800">
+                  <AlertDescription>
+                    📄 Pending Panel Claims: {formatRm(panelOutstanding)}. (Awaiting
+                    disbursement from panel)
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
 
             <div>
