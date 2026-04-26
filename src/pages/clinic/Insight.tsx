@@ -14,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { CalendarIcon, TrendingUp, Wallet, Percent, Users, Download, Inbox } from 'lucide-react';
+import { CalendarIcon, TrendingUp, Wallet, Percent, PackageMinus, Download, Inbox } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { toast } from 'sonner';
 
@@ -58,7 +58,7 @@ function csvEscape(value: string | number | null | undefined): string {
 }
 
 function downloadCSV(rows: RawFinancialRow[], startDate: Date, endDate: Date) {
-  const header = ['visit_date', 'queue_entry_id', 'payment_method', 'item_name', 'revenue', 'profit'];
+  const header = ['visit_date', 'queue_entry_id', 'payment_method', 'item_name', 'revenue', 'cogs', 'profit'];
   const lines = [header.join(',')];
   for (const r of rows) {
     lines.push(
@@ -68,6 +68,7 @@ function downloadCSV(rows: RawFinancialRow[], startDate: Date, endDate: Date) {
         csvEscape(r.payment_method),
         csvEscape(r.item_name),
         csvEscape(r.revenue.toFixed(2)),
+        csvEscape(r.cogs.toFixed(2)),
         csvEscape(r.profit.toFixed(2)),
       ].join(','),
     );
@@ -122,7 +123,8 @@ export default function Insight() {
       dailyTrends.map((d) => ({
         date: format(new Date(d.date), 'd MMM'),
         Revenue: Number(d.revenue.toFixed(2)),
-        Profit: Number(d.profit.toFixed(2)),
+        COGS: Number(d.cogs.toFixed(2)),
+        Margin: d.revenue > 0 ? Number(((d.profit / d.revenue) * 100).toFixed(1)) : 0,
       })),
     [dailyTrends],
   );
@@ -142,7 +144,7 @@ export default function Insight() {
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Financial Insights</h1>
           <p className="text-sm text-muted-foreground">
-            Revenue, profit & margin analytics across consultations.
+            Revenue, COGS & gross margin analytics across consultations.
           </p>
         </div>
 
@@ -224,26 +226,26 @@ export default function Insight() {
               value={summary ? formatRM(summary.totalRevenue) : '—'}
             />
             <SummaryCard
+              icon={<PackageMinus className="h-4 w-4" />}
+              label="COGS"
+              value={summary ? formatRM(summary.totalCogs) : '—'}
+            />
+            <SummaryCard
               icon={<TrendingUp className="h-4 w-4" />}
-              label="Total Profit"
+              label="Gross Profit"
               value={summary ? formatRM(summary.totalProfit) : '—'}
             />
             <SummaryCard
               icon={<Percent className="h-4 w-4" />}
-              label="Overall Margin"
+              label="Gross Margin %"
               value={summary ? `${summary.marginPct.toFixed(1)}%` : '—'}
-            />
-            <SummaryCard
-              icon={<Users className="h-4 w-4" />}
-              label="Patient Volume"
-              value={summary ? summary.patientVolume.toLocaleString() : '—'}
             />
           </div>
 
           {/* Trend chart */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Daily Revenue vs Profit</CardTitle>
+              <CardTitle className="text-base">Daily Revenue vs COGS</CardTitle>
             </CardHeader>
             <CardContent>
               {chartData.length === 0 ? (
@@ -254,9 +256,22 @@ export default function Insight() {
                 <div className="h-[320px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={chartData} margin={{ top: 12, right: 16, left: 4, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                       <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                      <YAxis
+                        yAxisId="left"
+                        stroke="hsl(var(--muted-foreground))"
+                        fontSize={12}
+                        tickFormatter={(v) => `RM ${v}`}
+                      />
+                      <YAxis
+                        yAxisId="right"
+                        orientation="right"
+                        domain={[0, 100]}
+                        stroke="hsl(var(--muted-foreground))"
+                        fontSize={12}
+                        tickFormatter={(v) => `${v}%`}
+                      />
                       <Tooltip
                         contentStyle={{
                           background: 'hsl(var(--background))',
@@ -264,16 +279,20 @@ export default function Insight() {
                           borderRadius: '6px',
                           fontSize: '12px',
                         }}
-                        formatter={(value: number) => formatRM(value)}
+                        formatter={(value: number, name: string) =>
+                          name === 'Margin' ? `${value.toFixed(1)}%` : formatRM(value)
+                        }
                       />
                       <Legend wrapperStyle={{ fontSize: '12px' }} />
-                      <Bar dataKey="Revenue" fill="hsl(var(--muted))" radius={[4, 4, 0, 0]} />
+                      <Bar yAxisId="left" dataKey="Revenue" fill="#10b981" radius={[4, 4, 0, 0]} />
+                      <Bar yAxisId="left" dataKey="COGS" fill="#94a3b8" radius={[4, 4, 0, 0]} />
                       <Line
+                        yAxisId="right"
                         type="monotone"
-                        dataKey="Profit"
+                        dataKey="Margin"
                         stroke="hsl(var(--primary))"
-                        strokeWidth={2.5}
-                        dot={{ r: 3 }}
+                        strokeWidth={2}
+                        dot={false}
                       />
                     </ComposedChart>
                   </ResponsiveContainer>
@@ -300,6 +319,7 @@ export default function Insight() {
                       <TableRow>
                         <TableHead>Item</TableHead>
                         <TableHead className="text-right">Revenue</TableHead>
+                        <TableHead className="text-right">COGS</TableHead>
                         <TableHead className="text-right">Profit</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -309,6 +329,9 @@ export default function Insight() {
                           <TableCell className="font-medium">{item.itemName}</TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             {formatRM(item.revenue)}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {formatRM(item.cogs)}
                           </TableCell>
                           <TableCell className="text-right font-semibold text-foreground">
                             {formatRM(item.profit)}
