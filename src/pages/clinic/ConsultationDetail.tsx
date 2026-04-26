@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -70,7 +70,13 @@ export default function ConsultationDetail() {
   const { data: entries = [] } = useConsultationQueueEntries();
   const updateQueue = useUpdateQueueEntry();
   const { data: rooms = [] } = useRooms();
-  const { getPreference } = useClinicPreferences();
+  const { getPreference, isLoading: preferencesLoading } = useClinicPreferences();
+
+  // Synchronous locks to prevent React 18 Strict-Mode double-mount and
+  // re-render races during the consultation-creation network window from
+  // double-billing the patient.
+  const hasCreatedConsultRef = useRef(false);
+  const hasSeededFeeRef = useRef(false);
 
   const entry = useMemo(
     () => entries.find((e) => e.id === queueEntryId),
