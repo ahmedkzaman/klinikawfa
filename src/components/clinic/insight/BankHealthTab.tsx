@@ -10,8 +10,17 @@ import {
 } from 'recharts';
 import { Inbox } from 'lucide-react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
+import {
+  bento,
+  bentoHeader,
+  softTile,
+  chartGridStroke,
+  chartTooltipStyle,
+  chartColors,
+} from '@/lib/clinic/bentoTokens';
 import { useBankHealth, type AxisContext } from '@/hooks/clinic/useBankHealth';
 
 interface Props {
@@ -39,21 +48,21 @@ function AxisCard({ label, score, priorScore, raw, rawPrior }: AxisCardProps) {
   const delta = score - priorScore;
   const deltaTone =
     Math.abs(delta) < 0.5
-      ? 'text-muted-foreground'
+      ? 'text-slate-400'
       : delta > 0
         ? 'text-emerald-600'
         : 'text-rose-600';
   const deltaSign = delta > 0 ? '+' : '';
 
   return (
-    <div className="border rounded-md p-3 bg-muted/20">
-      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="text-lg font-semibold text-foreground mt-0.5">{fmtScore(score)}</div>
-      <div className="text-xs text-foreground/80 mt-1">{raw}</div>
-      <div className={`text-xs mt-1 ${deltaTone}`}>
+    <div className={softTile}>
+      <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">{label}</div>
+      <div className="text-lg font-bold text-slate-900 mt-0.5 tabular-nums">{fmtScore(score)}</div>
+      <div className="text-xs text-slate-700 mt-1">{raw}</div>
+      <div className={cn('text-xs mt-1', deltaTone)}>
         Prior: {fmtScore(priorScore)} ({deltaSign}
         {delta.toFixed(0)})
-        <span className="text-muted-foreground"> · {rawPrior}</span>
+        <span className="text-slate-400"> · {rawPrior}</span>
       </div>
     </div>
   );
@@ -86,8 +95,8 @@ export function BankHealthTab({ startDate, endDate }: Props) {
 
   if (isError) {
     return (
-      <Card>
-        <CardContent className="py-6 text-sm text-destructive">
+      <Card className={bento}>
+        <CardContent className="py-6 text-sm text-rose-600">
           Failed to load Bank Health: {(error as Error)?.message ?? 'Unknown error'}
         </CardContent>
       </Card>
@@ -96,7 +105,7 @@ export function BankHealthTab({ startDate, endDate }: Props) {
 
   if (isLoading || !data) {
     return (
-      <Card>
+      <Card className={bento}>
         <CardContent className="py-6 space-y-3">
           <Skeleton className="h-6 w-64" />
           <Skeleton className="h-[420px] w-full" />
@@ -115,13 +124,15 @@ export function BankHealthTab({ startDate, endDate }: Props) {
 
   if (noData) {
     return (
-      <Card>
+      <Card className={bento}>
         <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-          <Inbox className="h-10 w-10 text-muted-foreground mb-3" />
-          <h3 className="text-base font-semibold text-foreground">
+          <div className="rounded-2xl bg-blue-50 p-4 mb-3">
+            <Inbox className="h-8 w-8 text-blue-600" />
+          </div>
+          <h3 className="text-base font-semibold text-slate-900">
             No financial data in either period
           </h3>
-          <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+          <p className="text-sm text-slate-500 mt-1 max-w-sm">
             No completed consultations were recorded in {periodLabel.toLowerCase()} or{' '}
             {priorPeriodLabel.toLowerCase()}. Widen the date range to populate the radar.
           </p>
@@ -139,35 +150,35 @@ export function BankHealthTab({ startDate, endDate }: Props) {
   );
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Bank Health Radar</CardTitle>
-          <CardDescription>
-            <span className="font-medium text-emerald-700">{periodLabel}</span>
-            {' vs '}
-            <span className="font-medium text-slate-600">{priorPeriodLabel}</span>
-            {' — five normalized axes (0–100). Higher is healthier on every axis.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+    <div className="space-y-4">
+      <Card className={bento}>
+        <CardContent className="p-6">
+          <div className="mb-3">
+            <h3 className={cn(bentoHeader, 'mb-1')}>Bank Health Radar</h3>
+            <p className="text-xs text-slate-500">
+              <span className="font-medium text-emerald-700">{periodLabel}</span>
+              {' vs '}
+              <span className="font-medium text-slate-600">{priorPeriodLabel}</span>
+              {' — five normalized axes (0–100). Higher is healthier on every axis.'}
+            </p>
+          </div>
           <div className="h-[420px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart data={chartData} outerRadius="75%">
-                <PolarGrid stroke="hsl(var(--border))" />
+                <PolarGrid stroke={chartGridStroke} />
                 <PolarAngleAxis
                   dataKey="metric"
-                  tick={{ fontSize: 12, fill: 'hsl(var(--foreground))' }}
+                  tick={{ fontSize: 12, fill: '#334155' }}
                 />
                 <PolarRadiusAxis
                   angle={30}
                   domain={[0, 100]}
-                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                  tick={{ fontSize: 10, fill: '#94a3b8' }}
                 />
                 <Radar
                   name={priorPeriodLabel}
                   dataKey="prior"
-                  stroke="#94a3b8"
+                  stroke={chartColors.slate}
                   fill="transparent"
                   strokeDasharray="4 4"
                   strokeWidth={2}
@@ -175,19 +186,14 @@ export function BankHealthTab({ startDate, endDate }: Props) {
                 <Radar
                   name={periodLabel}
                   dataKey="current"
-                  stroke="#059669"
-                  fill="#10b981"
+                  stroke={chartColors.emeraldDark}
+                  fill={chartColors.emerald}
                   fillOpacity={0.5}
                   strokeWidth={2}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Tooltip
-                  contentStyle={{
-                    background: 'hsl(var(--background))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: 6,
-                    fontSize: 12,
-                  }}
+                  contentStyle={chartTooltipStyle}
                   formatter={(value: number) => `${Math.round(value)} / 100`}
                 />
               </RadarChart>
@@ -196,14 +202,14 @@ export function BankHealthTab({ startDate, endDate }: Props) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Behind the Scores</CardTitle>
-          <CardDescription>
-            What each axis is actually measuring in this clinic, right now.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+      <Card className={bento}>
+        <CardContent className="p-6">
+          <div className="mb-3">
+            <h3 className={cn(bentoHeader, 'mb-1')}>Behind the Scores</h3>
+            <p className="text-xs text-slate-500">
+              What each axis is actually measuring in this clinic, right now.
+            </p>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             <AxisCard
               label="Profitability"
@@ -242,26 +248,26 @@ export function BankHealthTab({ startDate, endDate }: Props) {
             />
           </div>
 
-          <div className="mt-6 border-t pt-4 text-xs text-muted-foreground space-y-1">
-            <p className="font-medium text-foreground">What does 100 mean?</p>
+          <div className="mt-6 border-t border-slate-100 pt-4 text-xs text-slate-500 space-y-1">
+            <p className="font-semibold text-slate-700">What does 100 mean?</p>
             <p>
-              <span className="font-medium text-foreground">Profitability:</span> 100 = every ringgit
+              <span className="font-medium text-slate-700">Profitability:</span> 100 = every ringgit
               of revenue is profit (impossible in practice; 50–70 is excellent).
             </p>
             <p>
-              <span className="font-medium text-foreground">Risk:</span> 100 = revenue evenly spread
+              <span className="font-medium text-slate-700">Risk:</span> 100 = revenue evenly spread
               across many doctors; 0 = one doctor generates 100% of revenue.
             </p>
             <p>
-              <span className="font-medium text-foreground">Efficiency:</span> 100 = average RM 80+
+              <span className="font-medium text-slate-700">Efficiency:</span> 100 = average RM 80+
               gross profit per patient visit.
             </p>
             <p>
-              <span className="font-medium text-foreground">Liquidity:</span> 100 = all revenue
+              <span className="font-medium text-slate-700">Liquidity:</span> 100 = all revenue
               collected instantly via cash, QR, or card. 0 = entirely panel/insurance (delayed).
             </p>
             <p>
-              <span className="font-medium text-foreground">Growth:</span> 50 = flat revenue
+              <span className="font-medium text-slate-700">Growth:</span> 50 = flat revenue
               period-over-period; 100 = +50% or better; 0 = −50% or worse.
             </p>
           </div>
