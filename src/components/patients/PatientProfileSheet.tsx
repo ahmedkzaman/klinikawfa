@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import { FileText, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -14,7 +15,48 @@ import {
   usePatientVisitHistory,
   type PatientVisitConsultation,
 } from '@/hooks/patients/usePatientVisitHistory';
+import { useConsultationAttachments } from '@/hooks/clinic/useAttachments';
 import type { PatientRow, ClinicStatus } from '@/types/clinic';
+
+/**
+ * Tiny per-visit child that loads attachments for one consultation. Kept as a
+ * child component so the hook is scoped to a single row and React doesn't
+ * complain about variable hook counts.
+ */
+function VisitAttachmentList({ consultationId }: { consultationId: string }) {
+  const { data: attachments = [] } = useConsultationAttachments(consultationId);
+  if (attachments.length === 0) return null;
+
+  return (
+    <div className="mt-2 border-t pt-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+        Attachments
+      </p>
+      <ul className="space-y-1">
+        {attachments.map((a) => {
+          const isImage = (a.content_type ?? '').startsWith('image/');
+          const Icon = isImage ? ImageIcon : FileText;
+          return (
+            <li key={a.id} className="flex items-center gap-2 text-xs">
+              <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="truncate flex-1">{a.file_name}</span>
+              {a.signedUrl && (
+                <a
+                  href={a.signedUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-primary hover:underline shrink-0"
+                >
+                  View
+                </a>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
 
 interface PatientProfileSheetProps {
   patient: PatientRow | null;
@@ -155,6 +197,9 @@ export function PatientProfileSheet({
                         <p className="mt-1 text-xs text-foreground/80 line-clamp-2">
                           {notes}
                         </p>
+                      )}
+                      {consultation?.id && (
+                        <VisitAttachmentList consultationId={consultation.id} />
                       )}
                     </li>
                   );
