@@ -15,6 +15,7 @@ import {
 import { StatusBadge } from '@/components/clinic/StatusBadge';
 import { FollowUpScheduler } from '@/components/clinic/patient/FollowUpScheduler';
 import { VisitDetailsColumn } from '@/components/clinic/visit/VisitDetailsColumn';
+import { AttachmentsCard } from '@/components/clinic/visit/AttachmentsCard';
 import { BillingDetailsColumn } from '@/components/clinic/visit/BillingDetailsColumn';
 import {
   useConsultationQueueEntries,
@@ -213,6 +214,8 @@ export default function DispenseCheckout() {
             </Alert>
           )}
           <VisitDetailsColumn consultationId={consultation?.id} canEdit={canEdit} />
+
+          <AttachmentsCard consultationId={consultation?.id} />
 
           {(consultation?.patient_id || entry.patient_id) && (
             <FollowUpScheduler
