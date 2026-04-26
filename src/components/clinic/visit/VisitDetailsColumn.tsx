@@ -126,25 +126,40 @@ export function VisitDetailsColumn({
     'all' | 'items' | 'services' | 'packages' | 'documents'
   >('all');
 
-  // Single-rendering print state — when populated we render a hidden
-  // `print:block` block then call window.print() once. Cleared on
-  // `afterprint` so subsequent prints stay deterministic.
-  const [printQueue, setPrintQueue] = useState<ConsultationItemRow[]>([]);
-  const printTimerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (printQueue.length === 0) return;
-    // Defer one tick so React commits the hidden print block to the DOM.
-    printTimerRef.current = window.setTimeout(() => {
-      window.print();
-    }, 50);
-    const clear = () => setPrintQueue([]);
-    window.addEventListener('afterprint', clear, { once: true });
-    return () => {
-      if (printTimerRef.current) window.clearTimeout(printTimerRef.current);
-      window.removeEventListener('afterprint', clear);
-    };
-  }, [printQueue]);
+  // Print orchestration: build a real 60×50mm PDF with jsPDF and open it in
+  // a new tab. The PDF carries its physical page dimensions in its metadata,
+  // so the browser's print dialog auto-selects the right paper size and skips
+  // the A4-fallback / browser-injected headers/footers that broke the
+  // window.print() approach.
+  const openLabelPdf = (rows: ConsultationItemRow[]) => {
+    if (rows.length === 0) return;
+    try {
+      const url = generateDrugLabelPdf(
+        rows,
+        patientName ?? null,
+        labelSettings ?? null,
+      );
+      const win = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!win) {
+        toast.error('Pop-up blocked — allow pop-ups to print labels');
+        return;
+      }
+      // Auto-prompt the print dialog once the PDF viewer finishes loading.
+      win.addEventListener(
+        'load',
+        () => {
+          try {
+            win.print();
+          } catch {
+            /* user can still hit Ctrl+P manually */
+          }
+        },
+        { once: true },
+      );
+    } catch (err) {
+      toast.error((err as Error).message || 'Failed to generate label PDF');
+    }
+  };
 
   // ── Filtered slices ───────────────────────────────────────────────────────
   const itemsRows = useMemo(
