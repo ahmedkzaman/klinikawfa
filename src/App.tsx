@@ -179,7 +179,7 @@ const App = () => (
                 <Route
                   path="insight"
                   element={
-                    <ClinicProtectedRoute requiredRole="admin">
+                    <ClinicProtectedRoute requiredRole="insights">
                       <Insight />
                     </ClinicProtectedRoute>
                   }
