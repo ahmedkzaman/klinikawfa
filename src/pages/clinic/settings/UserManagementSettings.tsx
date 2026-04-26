@@ -242,10 +242,6 @@ export default function UserManagementSettings() {
               )}
             </TableBody>
           </Table>
-        </div>
-      </Card>
-
-            </Table>
           </CardContent>
         </Card>
 
