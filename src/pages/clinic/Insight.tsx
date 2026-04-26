@@ -41,6 +41,7 @@ import {
 import { ScoreboardsTab } from '@/components/clinic/insight/ScoreboardsTab';
 import { LeaderboardsTab } from '@/components/clinic/insight/LeaderboardsTab';
 import { ValuationTab } from '@/components/clinic/insight/ValuationTab';
+import { BankHealthTab } from '@/components/clinic/insight/BankHealthTab';
 
 const SEGMENT_COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', 'hsl(var(--muted-foreground))'];
 const MAX_RANGE_DAYS = 365;
@@ -449,7 +450,7 @@ export default function Insight() {
         </TabsContent>
 
         <TabsContent value="health">
-          <PlaceholderPanel label="Bank Health Radar (Step 39) — coming next" />
+          <BankHealthTab startDate={startDate} endDate={endDate} />
         </TabsContent>
       </Tabs>
     </div>
