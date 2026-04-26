@@ -203,7 +203,7 @@ export function VisitDetailsColumn({
 
   // ── Print actions ─────────────────────────────────────────────────────────
   const handlePrintLabel = (item: ConsultationItemRow) => {
-    setPrintQueue([item]);
+    openLabelPdf([item]);
   };
 
   const handlePrintAllLabels = () => {
@@ -211,7 +211,7 @@ export function VisitDetailsColumn({
       toast.info('No medicines to print labels for');
       return;
     }
-    setPrintQueue(itemsRows);
+    openLabelPdf(itemsRows);
   };
 
   const handlePrintAllDocuments = () => {
