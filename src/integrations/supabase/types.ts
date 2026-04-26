@@ -3515,15 +3515,43 @@ export type Database = {
     Views: {
       insight_financials_view: {
         Row: {
+          diagnosis_id: string | null
+          diagnosis_name: string | null
+          doctor_id: string | null
+          doctor_name: string | null
           id: string | null
           item_name: string | null
+          kind: string | null
+          patient_id: string | null
           payment_method: string | null
           profit: number | null
           queue_entry_id: string | null
           revenue: number | null
           visit_date: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "consultations_diagnosis_id_fkey"
+            columns: ["diagnosis_id"]
+            isOneToOne: false
+            referencedRelation: "diagnoses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultations_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "doctors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "queue_entries_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       panel_claims_view: {
         Row: {
