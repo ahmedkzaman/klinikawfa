@@ -1181,6 +1181,48 @@ export type Database = {
           },
         ]
       }
+      drug_label_settings: {
+        Row: {
+          id: string
+          show_address: boolean
+          show_date: boolean
+          show_duration: boolean
+          show_expiry_date: boolean
+          show_indication: boolean
+          show_precaution: boolean
+          show_quantity: boolean
+          show_tel_number: boolean
+          singleton: boolean
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          show_address?: boolean
+          show_date?: boolean
+          show_duration?: boolean
+          show_expiry_date?: boolean
+          show_indication?: boolean
+          show_precaution?: boolean
+          show_quantity?: boolean
+          show_tel_number?: boolean
+          singleton?: boolean
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          show_address?: boolean
+          show_date?: boolean
+          show_duration?: boolean
+          show_expiry_date?: boolean
+          show_indication?: boolean
+          show_precaution?: boolean
+          show_quantity?: boolean
+          show_tel_number?: boolean
+          singleton?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       einvoice_credentials: {
         Row: {
           id: string
