@@ -1,239 +1,119 @@
-## Step 24 (Revised) — Dispense Note Surface + Race-Safe Auto-Seed + Tier-Aware Pricing
+## Root Cause
 
-This corrects the two revenue-leak risks you flagged: (1) double-billed Consultation Fee from a React 18 Strict-Mode / re-render race during the network window, and (2) the cash-first fallback silently overriding panel pricing.
+The `Price tier = "Select tier"` and `Rate (RM) = 0` you see on the auto-seeded **CONSULTATION FEE** row is not a UI bug — it's the database silently overwriting your price.
 
----
+When `useAddConsultationItem` inserts the row, the DB trigger **`trg_resolve_selling_price`** runs and rewrites `NEW.price`. Its logic is:
 
-### A. Surface Doctor's Dispense Note in Checkout
-**File:** `src/pages/clinic/DispenseCheckout.tsx`
+1. Look up `inventory_items` if `item_id` is set,
+2. else look up `services` if `service_id` is set,
+3. else look up `packages` if `package_id` is set,
+4. Then `NEW.price := COALESCE(v_self_pay, 0)`.
 
-- Import `Alert`, `AlertTitle`, `AlertDescription` from `@/components/ui/alert` and `Info` from `lucide-react`.
-- The middle workspace column currently renders `<VisitDetailsColumn ... />` directly. Wrap it in a fragment and prepend the conditional alert so it sits **above** the treatment cart:
+The auto-seed insert sends only `item_name: 'Consultation Fee'` + `price: 45` with **no `item_id` / `service_id` / `package_id`**, because there is no "Consultation Fee" entry in the catalog (verified — no matching service/inventory item exists). All three lookups return NULL, the COALESCE collapses to `0`, and your RM 45 is discarded. The Price Tier field stays empty for the same reason — the trigger never sets one and the insert doesn't either.
 
-```tsx
-<div className="space-y-4">
-  {consultation?.dispense_note?.trim() && (
-    <Alert className="bg-yellow-50 border-yellow-200">
-      <Info className="h-4 w-4 text-yellow-700" />
-      <AlertTitle className="text-yellow-900">Doctor's Instructions</AlertTitle>
-      <AlertDescription className="whitespace-pre-wrap text-yellow-900/90">
-        {consultation.dispense_note}
-      </AlertDescription>
-    </Alert>
-  )}
-  <VisitDetailsColumn consultationId={consultation?.id} canEdit={canEdit} />
-</div>
+This same bug will silently zero **any future ad-hoc / free-text item** a doctor types in.
+
+## Fix — Patch the trigger to respect manual prices
+
+### A. Migration: update `public.trg_resolve_selling_price`
+
+Add an early-exit branch at the top of the function: **if no catalog reference is supplied (`item_id`, `service_id`, and `package_id` are all NULL), keep `NEW.price` exactly as the caller passed it and stamp `price_tier = 'SELF PAY'` (or `'PANEL'` when the queue entry has a panel) so the UI shows the correct tier instead of "Select tier".**
+
+```sql
+CREATE OR REPLACE FUNCTION public.trg_resolve_selling_price()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_panel_id uuid;
+  v_override numeric(10,2);
+  v_standard numeric(10,2);
+  v_self_pay numeric(10,2);
+BEGIN
+  -- Identify payer profile for this visit (needed for tier stamping below)
+  SELECT qe.panel_id INTO v_panel_id
+  FROM public.consultations c
+  JOIN public.queue_entries qe ON c.queue_entry_id = qe.id
+  WHERE c.id = NEW.consultation_id;
+
+  -- NEW: Manual / free-text item (no catalog link). Trust the caller's price
+  -- and stamp a sensible tier so the UI doesn't render "Select tier".
+  IF NEW.item_id IS NULL
+     AND NEW.service_id IS NULL
+     AND NEW.package_id IS NULL THEN
+    NEW.price      := COALESCE(NEW.price, 0);
+    NEW.price_tier := COALESCE(NEW.price_tier,
+                               CASE WHEN v_panel_id IS NOT NULL
+                                    THEN 'PANEL' ELSE 'SELF PAY' END);
+    RETURN NEW;
+  END IF;
+
+  -- Existing catalog-resolution logic (unchanged) ...
+  IF NEW.item_id IS NOT NULL THEN
+    SELECT price_to_patient_max, standard_panel_price
+      INTO v_self_pay, v_standard
+      FROM public.inventory_items WHERE id = NEW.item_id;
+    IF v_panel_id IS NOT NULL THEN
+      SELECT override_price INTO v_override
+        FROM public.panel_price_overrides
+        WHERE panel_id = v_panel_id AND item_id = NEW.item_id;
+    END IF;
+  ELSIF NEW.service_id IS NOT NULL THEN
+    SELECT price_to_patient, standard_panel_price
+      INTO v_self_pay, v_standard
+      FROM public.services WHERE id = NEW.service_id;
+    IF v_panel_id IS NOT NULL THEN
+      SELECT override_price INTO v_override
+        FROM public.panel_price_overrides
+        WHERE panel_id = v_panel_id AND service_id = NEW.service_id;
+    END IF;
+  ELSIF NEW.package_id IS NOT NULL THEN
+    SELECT price, standard_panel_price
+      INTO v_self_pay, v_standard
+      FROM public.packages WHERE id = NEW.package_id;
+    IF v_panel_id IS NOT NULL THEN
+      SELECT override_price INTO v_override
+        FROM public.panel_price_overrides
+        WHERE panel_id = v_panel_id AND package_id = NEW.package_id;
+    END IF;
+  END IF;
+
+  IF v_panel_id IS NOT NULL THEN
+    NEW.price      := COALESCE(v_override, v_standard, v_self_pay, 0);
+    NEW.price_tier := COALESCE(NEW.price_tier, 'PANEL');
+  ELSE
+    NEW.price      := COALESCE(v_self_pay, 0);
+    NEW.price_tier := COALESCE(NEW.price_tier, 'SELF PAY');
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
 ```
 
-- Note: schema column is `dispense_note` (singular, no "s") — confirmed in the `consultations` table. No spec change needed there.
+The catalog branch is preserved exactly as today — panel-aware pricing, override hierarchy, all unchanged. Only the previously-broken "no catalog reference" path is fixed.
 
----
+### B. Frontend update: `src/hooks/clinic/useConsultationItems.ts`
 
-### B. Race-Safe Auto-Seed of Consultation Fee
-**File:** `src/pages/clinic/ConsultationDetail.tsx`
+Update the JSDoc on `useAddConsultationItem` to reflect the new contract: **the frontend's `price` is now authoritative when no `item_id`/`service_id`/`package_id` is provided.** Also extend the mutation input type to include an optional `price_tier` so callers can stamp it explicitly.
 
-The current flow at lines 152–177 fires `addItem.mutate(...)` from inside `createConsultation`'s `onSuccess`. Under React 18 Strict Mode the create effect runs twice; the second run sees `consultation` still `null` (network in-flight) and creates a second consultation + second seeded fee. Cache invalidation later collapses to one consultation but the duplicate seeded line items persist.
+### C. Backfill the broken row on the current consultation
 
-**Fix:**
+The existing zero-priced "Consultation Fee" row on consultation `ce6edfc6-…` is already in the DB with `price = 0`. After the trigger is fixed, run a one-shot UPDATE to set its `price = 45` and `price_tier = 'SELF PAY'` so the doctor sees the right number on this visit without having to delete + re-add the row.
 
-1. Add `useRef` to the imports from `react`.
-2. Pull `isLoading: preferencesLoading` out of `useClinicPreferences()`:
-   ```ts
-   const { getPreference, isLoading: preferencesLoading } = useClinicPreferences();
-   ```
-3. Add two synchronous locks at the top of the component:
-   ```ts
-   const hasCreatedConsultRef = useRef(false);
-   const hasSeededFeeRef = useRef(false);
-   ```
-4. Replace the auto-create / auto-seed `useEffect` (lines 152–177):
-   ```ts
-   useEffect(() => {
-     if (preferencesLoading) return;
-     if (consultLoading) return;
-     if (!entry || !doctor) return;
-     if (consultation) return;
-     if (hasCreatedConsultRef.current) return;
+### D. (Optional, no extra change required)
 
-     hasCreatedConsultRef.current = true; // lock BEFORE firing
+The auto-seed code in `ConsultationDetail.tsx` already passes `price: feePrice` from the `default_consultation_fee_price` preference (currently `45`). With the trigger patched, that value will be honored on insert and the Price Tier dropdown will show `SELF PAY` instead of "Select tier".
 
-     createConsultation.mutate(
-       {
-         queue_entry_id: entry.id,
-         patient_id: entry.patient_id,
-         doctor_id: doctor.id,
-       },
-       {
-         onSuccess: (newConsultation) => {
-           const feeName = getPreference('default_consultation_fee_name', 'Consultation Fee');
-           const feePrice = parseFloat(getPreference('default_consultation_fee_price', '0'));
-           if (feeName && feePrice > 0 && !hasSeededFeeRef.current) {
-             hasSeededFeeRef.current = true; // lock BEFORE seeding
-             addItem.mutate({
-               consultation_id: newConsultation.id,
-               item_name: feeName,
-               quantity: 1,
-               price: feePrice,
-             });
-           }
-         },
-         onError: () => {
-           // allow retry on real failure
-           hasCreatedConsultRef.current = false;
-         },
-       },
-     );
-   }, [preferencesLoading, consultLoading, consultation, entry, doctor]);
-   ```
+## What this does NOT change
 
-   Why two refs:
-   - `hasCreatedConsultRef` blocks duplicate `createConsultation` calls during the ~200ms DB roundtrip and across Strict-Mode double mount.
-   - `hasSeededFeeRef` is independently latched so even a malformed re-entry into `onSuccess` cannot re-seed.
-   - Both are set **synchronously before** the mutation fires, closing the race window completely.
+- Catalog-linked items (medicines, services, packages from `Add in bulk`) still have their price resolved by the trigger using the existing Override → Standard Panel → Self Pay hierarchy. No regression to your panel billing flow.
+- Manual UPDATE-based price adjustments via `useUpdateConsultationItem` continue to work as today.
 
-5. Leave the rest of the component untouched.
+## Files / migrations
 
----
-
-### C. Tier-Aware Pricing Fallback
-**File:** `src/components/clinic/consultation/AddTreatmentBulkDialog.tsx`
-**Companion edit:** `src/pages/clinic/ConsultationDetail.tsx` (pass `paymentMethod` prop to dialog)
-
-#### C1. Resolve panel vs cash from the queue entry
-In `ConsultationDetail.tsx`, derive the tier from the queue entry (`payment_method` is stored as either `'panel'`, `null`, or sometimes prefixed like `'panel:<panelId>'`):
-
-```ts
-const isPanel = (entry?.payment_method ?? '').startsWith('panel');
-```
-
-Pass it into the dialog:
-```tsx
-<AddTreatmentBulkDialog
-  open={bulkDialogOpen}
-  onOpenChange={setBulkDialogOpen}
-  onInsert={handleBulkInsert}
-  isPanel={isPanel}
-/>
-```
-
-#### C2. Update the dialog signature
-In `AddTreatmentBulkDialog.tsx`:
-
-```ts
-interface Props {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onInsert: (items: SelectedItem[]) => void;
-  isPanel?: boolean;
-}
-```
-
-Add the resolver at module scope (above the component):
-```ts
-const resolvePrice = (
-  ...candidates: Array<number | string | null | undefined>
-): number => {
-  for (const c of candidates) {
-    const n = Number(c);
-    if (Number.isFinite(n) && n > 0) return n;
-  }
-  return 0;
-};
-```
-
-#### C3. Apply tier-aware ordering inside `allItems` builder
-Replace the three `combined.push(...)` blocks so `priceNum` is computed via `resolvePrice` with order driven by `isPanel`:
-
-```ts
-// Inventory items
-inventoryItems.forEach((i) => {
-  const ii = i as any;
-  const priceNum = isPanel
-    ? resolvePrice(ii.standard_panel_price, i.price_to_patient_min, i.price_to_patient_max)
-    : resolvePrice(i.price_to_patient_min, i.price_to_patient_max, ii.standard_panel_price);
-
-  const priceLabel =
-    i.price_to_patient_min === i.price_to_patient_max
-      ? `RM ${Number(priceNum).toFixed(2)}`
-      : isPanel
-        ? `RM ${priceNum.toFixed(2)} (Panel)`
-        : `RM ${Number(i.price_to_patient_min).toFixed(2)} - ${Number(i.price_to_patient_max).toFixed(2)}`;
-
-  combined.push({
-    id: i.id,
-    name: i.name,
-    stock: i.stock,
-    uom: i.groups || '—',
-    group: i.category,
-    price: priceLabel,
-    priceNum,
-    type: 'item',
-    defaults: {
-      indication: ii.default_indication ?? null,
-      dosage_qty: ii.default_dosage_qty ?? null,
-      dosage_unit: ii.default_dosage_unit ?? null,
-      frequency: ii.default_frequency ?? null,
-      instruction: ii.default_instruction ?? null,
-      duration: ii.default_duration ?? null,
-      duration_unit: ii.default_duration_unit ?? null,
-      precaution: ii.default_precaution ?? null,
-    },
-  });
-});
-
-// Services
-services.forEach((s) => {
-  const ss = s as any;
-  const priceNum = isPanel
-    ? resolvePrice(ss.standard_panel_price, s.price_to_patient)
-    : resolvePrice(s.price_to_patient, ss.standard_panel_price);
-  combined.push({
-    id: s.id,
-    name: s.name,
-    stock: null,
-    uom: s.type,
-    group: 'Service',
-    price: `RM ${priceNum.toFixed(2)}${isPanel ? ' (Panel)' : ''}`,
-    priceNum,
-    type: 'service',
-  });
-});
-
-// Packages
-packages.forEach((p) => {
-  const pp = p as any;
-  const priceNum = isPanel
-    ? resolvePrice(pp.standard_panel_price, p.price)
-    : resolvePrice(p.price, pp.standard_panel_price);
-  combined.push({
-    id: p.id,
-    name: p.name,
-    stock: p.stock,
-    uom: 'Package',
-    group: 'Package',
-    price: `RM ${priceNum.toFixed(2)}${isPanel ? ' (Panel)' : ''}`,
-    priceNum,
-    type: 'package',
-  });
-});
-```
-
-Add `isPanel` to the `useMemo` dependency array for `allItems`.
-
-#### C4. Cast safety
-`standard_panel_price` exists on `inventory_items` (confirmed in schema). On services/packages it may not exist as a typed column today; the `(x as any).standard_panel_price` cast plus `resolvePrice` returning `0` for missing/invalid values means the fallback gracefully degrades to `price_to_patient` / `price` without throwing.
-
----
-
-### Files modified
-- `src/pages/clinic/DispenseCheckout.tsx`
-- `src/pages/clinic/ConsultationDetail.tsx`
-- `src/components/clinic/consultation/AddTreatmentBulkDialog.tsx`
-
-### Files NOT modified
-- No DB migration required — `dispense_note` already exists; no new columns needed.
-- `useClinicPreferences.ts` already exposes `isLoading`; no change.
-
-### Out of scope (flagged for follow-up, not in this step)
-- Per-tier pricing for **services** and **packages** (currently single-column `price_to_patient` / `price`). The tier-aware resolver is forward-compatible — once those tables get a `standard_panel_price` column the panel branch will pick it up automatically.
-- Hydrating panel prices via the dedicated `inventory_item_prices` tier table (richer than the single `standard_panel_price` column) — that's a separate pricing-architecture pass.
+- **Migration**: replace `public.trg_resolve_selling_price` with the patched version above.
+- **Data fix**: `UPDATE consultation_items SET price = 45, price_tier = 'SELF PAY' WHERE consultation_id IN (SELECT id FROM consultations WHERE queue_entry_id = '<current entry>') AND item_name = 'Consultation Fee' AND price = 0 AND item_id IS NULL AND service_id IS NULL AND package_id IS NULL;`
+- **Code**: `src/hooks/clinic/useConsultationItems.ts` — JSDoc + type update only (no behavior change in TS).
