@@ -1,143 +1,93 @@
-# Step 27 — Secure Clinical Attachments
+## Step 28 — Doctor-Side Visibility & History Optimization
 
-Add staff-uploadable clinical files (labs, photos, PDFs) attached to a consultation, viewable by doctors via short-lived signed URLs from the **private** `visit-attachment` bucket.
+You're right about the N+1: mounting `useConsultationAttachments` per visit row would fan out one DB query **plus** a `createSignedUrl` round-trip per attachment, on every sheet open. The plan below decouples the **count badge** (cheap, eager, in the parent query) from the **signed-URL list** (lazy, only on expand).
 
----
+### A. Data Layer — fold attachment count into the visit-history query
 
-## A. Database — `consultation_attachments` + Storage RLS
+**File:** `src/hooks/patients/usePatientVisitHistory.ts` (the actual location of `usePatientVisitHistory` — the prompt mentioned `usePatients.ts` but the hook lives here)
 
-New migration: `supabase/migrations/<ts>_setup_attachments.sql`
+- Extend the PostgREST select to pull a `count` aggregate on the related `consultation_attachments` rows via the embedded consultation:
+  ```
+  consultations:consultations!consultations_queue_entry_id_fkey (
+    id, doctor_id, diagnosis_text, case_note,
+    doctors:doctor_id ( id, name ),
+    consultation_attachments ( count )
+  )
+  ```
+- Extend `PatientVisitConsultation` with:
+  ```ts
+  consultation_attachments?: { count: number }[] | null;
+  ```
+- Add a small helper exported from the hook:
+  ```ts
+  export function getAttachmentCount(c: PatientVisitConsultation | null): number {
+    return c?.consultation_attachments?.[0]?.count ?? 0;
+  }
+  ```
+- Single round-trip — no extra hooks, no per-row queries.
 
-```sql
--- 1. Tracking table
-CREATE TABLE public.consultation_attachments (
-  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  consultation_id uuid NOT NULL REFERENCES public.consultations(id) ON DELETE CASCADE,
-  file_path       text NOT NULL,
-  file_name       text NOT NULL,
-  content_type    text,
-  uploaded_by     uuid REFERENCES auth.users(id),
-  created_at      timestamptz NOT NULL DEFAULT now()
-);
+### B. Optimized History UI — collapsible rows with deferred signed-URL fetch
 
-CREATE INDEX idx_consultation_attachments_consultation
-  ON public.consultation_attachments (consultation_id);
+**File:** `src/components/patients/PatientProfileSheet.tsx`
 
-ALTER TABLE public.consultation_attachments ENABLE ROW LEVEL SECURITY;
+- Extract a new `<VisitRow row={row} />` sub-component:
+  - Local `const [isExpanded, setIsExpanded] = useState(false)`.
+  - Header is a `<button type="button">` covering the date / queue-number / status row, toggling `isExpanded`. Add a `ChevronDown` / `ChevronUp` indicator.
+  - Compute `attachmentCount = getAttachmentCount(consultation)`.
+  - If `attachmentCount > 0`, render a small `<Badge variant="secondary">` next to the date with `<Paperclip className="h-3 w-3 mr-1" /> {attachmentCount}` — no hook needed for this, it comes from the parent query.
+  - Notes preview stays in the collapsed view (truncated `line-clamp-2`).
+  - **Only when `isExpanded === true`**, render the existing `<VisitAttachmentList consultationId={consultation.id} />`. This is the key fix: `useConsultationAttachments` mounts **only on demand**, so 30 past visits = 0 signed-URL calls until the doctor clicks one.
+- The existing `<VisitAttachmentList>` component is already a clean child wrapper around `useConsultationAttachments` — keep it as-is, just gate its mount behind `isExpanded`.
+- Replace the current `visits.map(...)` body with `<VisitRow key={row.id} row={row} />`.
 
--- Read: any authenticated clinic user (mirrors consultation_items pattern)
-CREATE POLICY "attachments_read"
-  ON public.consultation_attachments FOR SELECT
-  TO authenticated USING (true);
+### C. Active Session UI — Session Attachments strip
 
--- Insert: ops/admin only (Dispensary staff + doctors)
-CREATE POLICY "attachments_insert"
-  ON public.consultation_attachments FOR INSERT
-  TO authenticated
-  WITH CHECK (public.is_ops_or_admin(auth.uid()));
+**File:** `src/pages/clinic/ConsultationDetail.tsx`
 
--- Delete: ops/admin only
-CREATE POLICY "attachments_delete"
-  ON public.consultation_attachments FOR DELETE
-  TO authenticated
-  USING (public.is_ops_or_admin(auth.uid()));
-
--- 2. Storage policies on the EXISTING private bucket 'visit-attachment'
--- (do NOT recreate the bucket — it's already there)
-CREATE POLICY "visit_attachment_read"
-  ON storage.objects FOR SELECT
-  TO authenticated
-  USING (bucket_id = 'visit-attachment');
-
-CREATE POLICY "visit_attachment_insert"
-  ON storage.objects FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    bucket_id = 'visit-attachment'
-    AND public.is_ops_or_admin(auth.uid())
-  );
-
-CREATE POLICY "visit_attachment_delete"
-  ON storage.objects FOR DELETE
-  TO authenticated
-  USING (
-    bucket_id = 'visit-attachment'
-    AND public.is_ops_or_admin(auth.uid())
-  );
-```
-
-**Why storage RLS is included even though the spec didn't list it:** the bucket is private, so without these policies `signedUrl` and `upload` would silently fail for staff. Mirrors the `is_ops_or_admin` pattern already used across the clinic schema.
-
----
-
-## B. Hooks — `src/hooks/clinic/useAttachments.ts` (new)
-
-```ts
-const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
-const BUCKET = 'visit-attachment';
-```
-
-### `useUploadAttachment(consultationId)`
-- Mutation accepting a single `File`.
-- Pre-flight guards: throw `'No consultation'` if id missing; throw `'File exceeds 5MB limit'` if `file.size > MAX_BYTES`.
-- Sanitize the filename (strip path separators, collapse whitespace) and build path: `${consultationId}/${Date.now()}_${safeName}`.
-- `supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type, upsert: false })`.
-- On success, insert into `consultation_attachments` with `file_path`, `file_name` (original), `content_type`, `uploaded_by: auth.uid()`.
-- On settled, invalidate `['clinic','attachments', consultationId]`.
-- Surface errors via toast on the caller side.
-
-### `useConsultationAttachments(consultationId)`
-- `useQuery` keyed `['clinic','attachments', consultationId]`, enabled when id present.
-- Select rows ordered by `created_at desc`.
-- For each row, call `supabase.storage.from(BUCKET).createSignedUrl(file_path, 60)`.
-- Return rows shaped `{ id, file_name, content_type, created_at, signedUrl }`.
-- `staleTime: 45_000` so the 60s URLs stay fresh on re-renders without a refetch storm; `gcTime: 60_000`.
-
----
-
-## C. Dispensary Upload UI — `src/pages/clinic/DispenseCheckout.tsx`
-
-Inject a new `<Card>` titled **"Clinical Attachments (Labs / Photos)"** in the middle column, placed **above the FollowUpScheduler** (so attachments are visible while staff still has the patient at the counter).
-
-UI:
-- Local state: `selectedFile: File | null`, controlled `<input type="file" accept="image/*,application/pdf">`.
-- Helper text: *"Max 5MB. Images or PDFs."*.
-- "Upload" button — disabled when no file selected OR `mutation.isPending`. On click: `mutate(selectedFile)`, then on success reset input + toast `'Attachment uploaded'`. On error toast the message.
-- Below the input, an `<ul>` of `useConsultationAttachments(consultation?.id)` rows:
-  - Icon: `Image` for `content_type` starting with `image/`, else `FileText` (lucide-react).
-  - File name + small `created_at` timestamp.
-  - "View" link → `<a href={signedUrl} target="_blank" rel="noopener noreferrer">` styled as a ghost button.
-- Empty state: *"No attachments yet."*.
-
-Gracefully renders nothing for the upload control if `!consultation?.id` (defensive — shouldn't happen at this stage of the flow).
-
----
-
-## D. Doctor History UI — `src/components/patients/PatientProfileSheet.tsx`
-
-(There is no separate `PastVisits.tsx` — the visit history list lives in `PatientProfileSheet`. Confirmed via repo search; only `usePatientVisitHistory` consumer is this sheet.)
-
-For each historical visit row inside the existing `<ul>`:
-- Resolve `consultationId = consultation?.id`.
-- Render a small **"Attachments"** sub-section (collapsible details element to avoid making each row tall by default) when `consultationId` exists.
-- Inside, mount a tiny child component `<VisitAttachmentList consultationId={...} />` (declared in the same file or co-located) that:
+- Import `useConsultationAttachments` and `useDeleteAttachment` (see D).
+- Inside the Diagnosis/Dispense card (`CardContent` ending around line 548), directly **below** the Dispense Note `Textarea` (after line 546, still inside the same `space-y` wrapper), add a new section:
+  ```tsx
+  <div className="space-y-1.5">
+    <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+      Session Attachments
+    </Label>
+    <SessionAttachmentsStrip consultationId={consultationId} canEdit={canEdit} />
+  </div>
+  ```
+- Build `SessionAttachmentsStrip` as a small inline component (or a sibling file under `src/components/clinic/consultation/`). Behavior:
   - Calls `useConsultationAttachments(consultationId)`.
-  - Renders nothing when zero attachments (so closed visits stay tidy).
-  - Otherwise renders icon + name + "View" link list (same icon rule as in C).
-- Using a child component keeps the hook call valid (one hook per row) and keeps each row's signed URLs scoped to that row.
+  - **Empty state:** subtle muted text "No files uploaded yet."
+  - **Pill chips:** `flex flex-wrap gap-2`. Each pill is a rounded `bg-slate-50 border` row with:
+    - `Paperclip` icon (or `Image` icon when `content_type` starts with `image/`).
+    - Truncated filename (`max-w-[180px] truncate`).
+    - "View" link (signed URL, `target="_blank"`).
+    - Small `Trash` icon button (only when `canEdit`) wired to `useDeleteAttachment` with a `confirm()` guard, showing a `toast.success` on done.
+- Doctor reads files staff uploaded in real time; can clean up irrelevant ones.
 
-To prevent N×60s signed-URL refetches when the doctor scrolls quickly, the hook's 45s `staleTime` already covers re-renders; we additionally only mount the child when the visit has a consultation id.
+### D. Hook addition — `useDeleteAttachment`
 
----
+**File:** `src/hooks/clinic/useAttachments.ts`
 
-## Files touched
-- **NEW**: `supabase/migrations/<ts>_setup_attachments.sql`
-- **NEW**: `src/hooks/clinic/useAttachments.ts`
-- **EDIT**: `src/pages/clinic/DispenseCheckout.tsx` — inject Attachments card in middle column.
-- **EDIT**: `src/components/patients/PatientProfileSheet.tsx` — add `VisitAttachmentList` child + render per visit.
+- Add a mutation that:
+  1. Looks up the row by id (or accepts `{ id, file_path, consultation_id }` — accept the row to avoid an extra fetch).
+  2. Calls `supabase.storage.from('visit-attachment').remove([file_path])`.
+  3. Deletes the `consultation_attachments` row by id.
+  4. Invalidates `['clinic', 'attachments', consultation_id]` **and** `['clinic', 'patient-visit-history']` (so the badge count stays in sync if a doctor deletes from the active session).
+- RLS already permits delete for ops/admin (`attachments_delete` policy + `visit_attachment_delete` storage policy added in Step 27), so no migration needed.
 
-## Out of scope (per execution constraints)
-- Multi-file batch uploads.
-- Server-side virus scanning.
-- Editing/deleting attachments from the UI (delete policy exists in DB but no UI surfaced).
-- Image thumbnails / inline previews (links open in a new tab only).
+### Performance impact
+
+| Scenario | Before this change | After |
+|---|---|---|
+| Open patient sheet, 30 past visits, 5 with attachments | 30 attachment list queries + ~N signed-URL calls eagerly | 1 visit-history query (count joined), 0 signed-URL calls |
+| Doctor clicks 1 visit | (already fetched) | 1 attachment query + signed URLs only for that visit |
+| Active consultation | 1 query, signed URLs for current session only | unchanged |
+
+### Files touched
+
+- `src/hooks/patients/usePatientVisitHistory.ts` — add `consultation_attachments(count)` and `getAttachmentCount` helper
+- `src/hooks/clinic/useAttachments.ts` — add `useDeleteAttachment`
+- `src/components/patients/PatientProfileSheet.tsx` — extract `<VisitRow>`, deferred mount of `<VisitAttachmentList>`, count badge
+- `src/pages/clinic/ConsultationDetail.tsx` — Session Attachments strip below Dispense Note
+
+No DB migration required (`consultation_attachments` table, RLS, and storage policies already exist from Step 27).
