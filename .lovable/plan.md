@@ -1,119 +1,97 @@
-## Root Cause
+# Step 26 — Shared Follow-up Scheduler
 
-The `Price tier = "Select tier"` and `Rate (RM) = 0` you see on the auto-seeded **CONSULTATION FEE** row is not a UI bug — it's the database silently overwriting your price.
+Build a reusable patient follow-up booking widget that prevents double-booking by checking for existing future appointments before showing the booking form. Inject it into both the doctor's Consultation view and the staff Dispensary Checkout view.
 
-When `useAddConsultationItem` inserts the row, the DB trigger **`trg_resolve_selling_price`** runs and rewrites `NEW.price`. Its logic is:
+---
 
-1. Look up `inventory_items` if `item_id` is set,
-2. else look up `services` if `service_id` is set,
-3. else look up `packages` if `package_id` is set,
-4. Then `NEW.price := COALESCE(v_self_pay, 0)`.
+## Schema reality check
 
-The auto-seed insert sends only `item_name: 'Consultation Fee'` + `price: 45` with **no `item_id` / `service_id` / `package_id`**, because there is no "Consultation Fee" entry in the catalog (verified — no matching service/inventory item exists). All three lookups return NULL, the COALESCE collapses to `0`, and your RM 45 is discarded. The Price Tier field stays empty for the same reason — the trigger never sets one and the insert doesn't either.
+The clinical scheduling table is **`clinic_appointments`** (not the public `appointments` lead-form table). Columns:
+- `appointment_date` (date) and `appointment_time` (time) — **stored as separate columns**, not a combined `appointment_datetime`.
+- `doctor_id` (nullable), `patient_id`, `status` (enum `clinic_appointment_status`, default `'scheduled'`), `notes` (text).
 
-This same bug will silently zero **any future ad-hoc / free-text item** a doctor types in.
+Existing reader: `useClinicAppointments(patientId?)` in `src/hooks/clinic/useClinicAppointments.ts`. There is **no** existing `useAppointments.ts` and **no** create mutation yet. We'll extend the existing file rather than create a parallel one (keeps a single source of truth for clinic appointment hooks).
 
-## Fix — Patch the trigger to respect manual prices
+---
 
-### A. Migration: update `public.trg_resolve_selling_price`
+## A. Appointment hooks — extend `src/hooks/clinic/useClinicAppointments.ts`
 
-Add an early-exit branch at the top of the function: **if no catalog reference is supplied (`item_id`, `service_id`, and `package_id` are all NULL), keep `NEW.price` exactly as the caller passed it and stamp `price_tier = 'SELF PAY'` (or `'PANEL'` when the queue entry has a panel) so the UI shows the correct tier instead of "Select tier".**
+Add two new exports alongside the existing `useClinicAppointments`:
 
-```sql
-CREATE OR REPLACE FUNCTION public.trg_resolve_selling_price()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $function$
-DECLARE
-  v_panel_id uuid;
-  v_override numeric(10,2);
-  v_standard numeric(10,2);
-  v_self_pay numeric(10,2);
-BEGIN
-  -- Identify payer profile for this visit (needed for tier stamping below)
-  SELECT qe.panel_id INTO v_panel_id
-  FROM public.consultations c
-  JOIN public.queue_entries qe ON c.queue_entry_id = qe.id
-  WHERE c.id = NEW.consultation_id;
+1. **`usePatientFutureAppointments(patientId?: string)`**
+   - Query key: `['clinic', 'clinic_appointments', 'future', patientId]`.
+   - Enabled only when `patientId` is truthy.
+   - Filter: `patient_id = patientId` AND `status <> 'cancelled'` AND the combined `(appointment_date, appointment_time)` is `>= now()`.
+   - Because the table splits date/time, we filter `appointment_date >= today` in SQL, then drop today's already-passed slots client-side using the local clock. Order by `appointment_date asc, appointment_time asc`.
+   - Joins `doctors:doctor_id(id, name)` so the alert can show who the appointment is with.
 
-  -- NEW: Manual / free-text item (no catalog link). Trust the caller's price
-  -- and stamp a sensible tier so the UI doesn't render "Select tier".
-  IF NEW.item_id IS NULL
-     AND NEW.service_id IS NULL
-     AND NEW.package_id IS NULL THEN
-    NEW.price      := COALESCE(NEW.price, 0);
-    NEW.price_tier := COALESCE(NEW.price_tier,
-                               CASE WHEN v_panel_id IS NOT NULL
-                                    THEN 'PANEL' ELSE 'SELF PAY' END);
-    RETURN NEW;
-  END IF;
+2. **`useCreateClinicAppointment()`**
+   - `useMutation` that inserts into `clinic_appointments` with `{ patient_id, doctor_id?, appointment_date, appointment_time, notes }` (status defaults to `'scheduled'` server-side).
+   - On success: invalidate `['clinic', 'clinic_appointments']` (broad prefix) so both the new "future" key and any list views refresh.
+   - Surfaces Postgres errors via the returned `error` for the caller to toast.
 
-  -- Existing catalog-resolution logic (unchanged) ...
-  IF NEW.item_id IS NOT NULL THEN
-    SELECT price_to_patient_max, standard_panel_price
-      INTO v_self_pay, v_standard
-      FROM public.inventory_items WHERE id = NEW.item_id;
-    IF v_panel_id IS NOT NULL THEN
-      SELECT override_price INTO v_override
-        FROM public.panel_price_overrides
-        WHERE panel_id = v_panel_id AND item_id = NEW.item_id;
-    END IF;
-  ELSIF NEW.service_id IS NOT NULL THEN
-    SELECT price_to_patient, standard_panel_price
-      INTO v_self_pay, v_standard
-      FROM public.services WHERE id = NEW.service_id;
-    IF v_panel_id IS NOT NULL THEN
-      SELECT override_price INTO v_override
-        FROM public.panel_price_overrides
-        WHERE panel_id = v_panel_id AND service_id = NEW.service_id;
-    END IF;
-  ELSIF NEW.package_id IS NOT NULL THEN
-    SELECT price, standard_panel_price
-      INTO v_self_pay, v_standard
-      FROM public.packages WHERE id = NEW.package_id;
-    IF v_panel_id IS NOT NULL THEN
-      SELECT override_price INTO v_override
-        FROM public.panel_price_overrides
-        WHERE panel_id = v_panel_id AND package_id = NEW.package_id;
-    END IF;
-  END IF;
+No changes needed to `useTodayAppointments` or `useIntakeAppointment`.
 
-  IF v_panel_id IS NOT NULL THEN
-    NEW.price      := COALESCE(v_override, v_standard, v_self_pay, 0);
-    NEW.price_tier := COALESCE(NEW.price_tier, 'PANEL');
-  ELSE
-    NEW.price      := COALESCE(v_self_pay, 0);
-    NEW.price_tier := COALESCE(NEW.price_tier, 'SELF PAY');
-  END IF;
+---
 
-  RETURN NEW;
-END;
-$function$;
-```
+## B. Shared component — `src/components/clinic/patient/FollowUpScheduler.tsx` (new)
 
-The catalog branch is preserved exactly as today — panel-aware pricing, override hierarchy, all unchanged. Only the previously-broken "no catalog reference" path is fixed.
+New folder `src/components/clinic/patient/` (none exists yet — clean home for cross-context patient widgets).
 
-### B. Frontend update: `src/hooks/clinic/useConsultationItems.ts`
+**Props:** `{ patientId: string; defaultReason?: string; defaultDoctorId?: string | null }`
 
-Update the JSDoc on `useAddConsultationItem` to reflect the new contract: **the frontend's `price` is now authoritative when no `item_id`/`service_id`/`package_id` is provided.** Also extend the mutation input type to include an optional `price_tier` so callers can stamp it explicitly.
+**Behavior:**
+- Calls `usePatientFutureAppointments(patientId)`.
+- While loading: small skeleton row.
+- **State 1 — Already booked** (one or more future appointments):
+  - Renders `<Alert className="bg-green-50 text-green-900 border-green-200">` with a `CheckCircle2` icon, title "Follow-up scheduled", and description:
+    `"Next appointment: <formatted date & time>" + " · " + reason (notes) + (doctor name if present)`.
+  - If there are >1 future appointments, append `"+N more"` muted text.
+- **State 2 — Needs booking** (no future appointments):
+  - Renders `<Card>` titled **"Schedule Follow-up"** with `CalendarPlus` icon.
+  - Fields:
+    - **Date** — native `<Input type="date">` with `min={today}` (avoids past dates without pulling in a heavy DatePicker; matches the lightweight inline style used elsewhere in clinic).
+    - **Time** — native `<Input type="time">`.
+    - **Reason** — `<Input>` text, defaults to `defaultReason ?? "Follow-up"`.
+    - (Doctor pre-selected via `defaultDoctorId` when provided, but no UI selector in this step — kept simple per the brief.)
+  - **Book Appointment** button:
+    - Disabled until both date and time are filled.
+    - Calls `useCreateClinicAppointment().mutateAsync({...})` with the doctor id from props (or null), then toasts success/error using `sonner`.
+    - On success: query invalidation (in the hook) flips the component to State 1 automatically.
 
-### C. Backfill the broken row on the current consultation
+The component is fully self-contained — no portal, no parent state required.
 
-The existing zero-priced "Consultation Fee" row on consultation `ce6edfc6-…` is already in the DB with `price = 0`. After the trigger is fixed, run a one-shot UPDATE to set its `price = 45` and `price_tier = 'SELF PAY'` so the doctor sees the right number on this visit without having to delete + re-add the row.
+---
 
-### D. (Optional, no extra change required)
+## C. Inject into Consultation — `src/pages/clinic/ConsultationDetail.tsx`
 
-The auto-seed code in `ConsultationDetail.tsx` already passes `price: feePrice` from the `default_consultation_fee_price` preference (currently `45`). With the trigger patched, that value will be honored on insert and the Price Tier dropdown will show `SELF PAY` instead of "Select tier".
+The page has a 12-col grid (line 504): main work column + a right `<aside>` (lines 684–993) containing patient info / vitals / history cards. There are **no existing Referral or MC cards** in this file (the brief assumed they exist), so we inject the follow-up scheduler at the **bottom of the aside**, immediately before its closing `</aside>` (~line 993). That keeps it in the patient-context column where it belongs.
 
-## What this does NOT change
+- Render `<FollowUpScheduler patientId={consultation.patient_id} defaultDoctorId={consultation.doctor_id} />`.
+- `patient_id` and `doctor_id` are available on the consultation object already loaded in the page; no extra fetch.
 
-- Catalog-linked items (medicines, services, packages from `Add in bulk`) still have their price resolved by the trigger using the existing Override → Standard Panel → Self Pay hierarchy. No regression to your panel billing flow.
-- Manual UPDATE-based price adjustments via `useUpdateConsultationItem` continue to work as today.
+---
 
-## Files / migrations
+## D. Inject into Dispensary Checkout — `src/pages/clinic/DispenseCheckout.tsx`
 
-- **Migration**: replace `public.trg_resolve_selling_price` with the patched version above.
-- **Data fix**: `UPDATE consultation_items SET price = 45, price_tier = 'SELF PAY' WHERE consultation_id IN (SELECT id FROM consultations WHERE queue_entry_id = '<current entry>') AND item_name = 'Consultation Fee' AND price = 0 AND item_id IS NULL AND service_id IS NULL AND package_id IS NULL;`
-- **Code**: `src/hooks/clinic/useConsultationItems.ts` — JSDoc + type update only (no behavior change in TS).
+The page uses a 3-column layout (`lg:grid-cols-[280px_1fr_360px]`). The middle column already holds the Doctor's Instructions alert and the `VisitDetailsColumn` (treatment cart). The "Complete Checkout" button lives in a **fixed bottom bar** (`fixed bottom-0 …`), so "directly above" it in document flow means at the **end of the middle column**, after `<VisitDetailsColumn />`.
+
+- Render `<FollowUpScheduler patientId={consultation?.patient_id ?? entry.patient_id} defaultDoctorId={consultation?.doctor_id ?? entry.doctor_id ?? null} />` at the bottom of the middle column.
+- Falls back to the queue entry's patient/doctor when consultation isn't loaded yet (covers the brief network window before consultation query resolves).
+
+---
+
+## Files touched
+
+- **Edit:** `src/hooks/clinic/useClinicAppointments.ts` — add `usePatientFutureAppointments` + `useCreateClinicAppointment`.
+- **New:** `src/components/clinic/patient/FollowUpScheduler.tsx`.
+- **Edit:** `src/pages/clinic/ConsultationDetail.tsx` — import + inject in aside.
+- **Edit:** `src/pages/clinic/DispenseCheckout.tsx` — import + inject at bottom of middle column.
+
+## Notes / deviations from brief
+
+1. **Hook file name:** Brief said `useAppointments.ts`; we extend the existing `useClinicAppointments.ts` instead to avoid a parallel file targeting the same table (the public `appointments` table is the lead-capture form, unrelated to clinical scheduling).
+2. **No combined datetime column:** Future-appointment filter uses `appointment_date >= today` server-side, with a small client-side prune for today's already-passed slots.
+3. **No existing Referral/MC cards** in `ConsultationDetail.tsx`. Injection point is the bottom of the patient-context aside, which is the closest match to the brief's intent.
+4. **"Directly above Complete Checkout" in DispenseCheckout** = bottom of the middle (scrolling) column, since the button is in a fixed footer bar.
+5. Native `<input type="date|time">` is used (no shadcn DatePicker) to keep the widget lightweight and consistent with other inline clinic forms.
