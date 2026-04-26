@@ -1,201 +1,124 @@
-# Step 36 — Strategic Insight Suite Foundation
+# Step 37 — Leaderboards Tab: Active LTV + Doctor Profit Efficiency
 
-Adds analytical dimensions (doctor, diagnosis, patient, kind) to the financial view, builds the **Scoreboards** tab, and restructures the Insight page into a 5-tab layout.
+## Context
 
----
+Step 37 adds the **Leaderboards** tab to the Insight dashboard. This surfaces two strategic views:
 
-## A. Database Migration — Extend `insight_financials_view`
+1. **Active Patient LTV Distribution** — anonymized buckets of cumulative revenue per patient, with a 3-year inactivity hard-stop to exclude churned patients from skewing the median.
+2. **Doctor Efficiency Leaderboard** — doctors ranked by **Gross Profit** (not revenue), reusing the existing `useScoreboards` hook to enforce a single source of truth.
 
-**Current view** (verified via `pg_get_viewdef`):
-```sql
-SELECT ci.id, ci.item_name, date(qe.created_at) AS visit_date,
-       qe.payment_method,
-       ci.price * ci.quantity AS revenue,
-       (ci.price - ci.unit_cost) * ci.quantity AS profit,
-       qe.id AS queue_entry_id
-FROM consultation_items ci
-JOIN consultations c ON ci.consultation_id = c.id
-JOIN queue_entries qe ON c.queue_entry_id = qe.id
-WHERE c.status = 'completed' AND ci.deleted_at IS NULL AND c.deleted_at IS NULL;
-```
-
-**Migration:** Drop and recreate to add new dimensional columns while preserving every existing column (so Step 35 keeps working).
-
-```sql
-DROP VIEW IF EXISTS public.insight_financials_view;
-
-CREATE VIEW public.insight_financials_view AS
-SELECT
-  ci.id,
-  ci.item_name,
-  date(qe.created_at)               AS visit_date,
-  qe.payment_method,
-  (ci.price * ci.quantity)::numeric                      AS revenue,
-  ((ci.price - ci.unit_cost) * ci.quantity)::numeric     AS profit,
-  qe.id                              AS queue_entry_id,
-  -- New analytical dimensions
-  c.doctor_id,
-  COALESCE(d.name, 'Unassigned')     AS doctor_name,
-  c.diagnosis_id,
-  COALESCE(dx.name, NULLIF(c.diagnosis_text, ''), 'Undiagnosed') AS diagnosis_name,
-  qe.patient_id,
-  CASE
-    WHEN ci.service_id IS NOT NULL THEN 'service'
-    WHEN ci.item_id    IS NOT NULL THEN 'medication'
-    WHEN ci.package_id IS NOT NULL THEN 'package'
-    ELSE 'other'
-  END                                AS kind
-FROM public.consultation_items ci
-JOIN public.consultations c       ON ci.consultation_id = c.id
-JOIN public.queue_entries qe      ON c.queue_entry_id = qe.id
-LEFT JOIN public.doctors d        ON c.doctor_id = d.id
-LEFT JOIN public.diagnoses dx     ON c.diagnosis_id = dx.id
-WHERE c.status = 'completed'
-  AND ci.deleted_at IS NULL
-  AND c.deleted_at IS NULL;
-```
-
-**Why LEFT JOIN doctors/diagnoses:** captures unattributed visits as `Unassigned`/`Undiagnosed` — surfacing them as a clinical-risk/data-quality signal instead of silently dropping them.
-
-**Backward compatibility:** all columns consumed by `useFinancialInsights.ts` (`id, item_name, visit_date, payment_method, revenue, profit, queue_entry_id`) are preserved unchanged. No existing hook needs editing.
+The existing `insight_financials_view` already exposes `patient_id`, `revenue`, `profit`, and `visit_date` from Step 36, so **no database migration is required**. `Insight.tsx` already has a placeholder `<TabsContent value="leaderboards">` ready to swap.
 
 ---
 
-## B. New Hook — `src/hooks/clinic/useScoreboards.ts`
+## A. Patient LTV Hook — `src/hooks/clinic/usePatientLTV.ts` (NEW)
 
-Single React Query hook that fetches the extended view once and aggregates **four datasets** in-memory:
+Fetches the **full unbounded history** from `insight_financials_view` (LTV is inherently lifetime, not period-bound).
 
+**Aggregation:**
+- Group rows by `patient_id` (skip null IDs).
+- Track per-patient: `totalRevenue`, `totalProfit`, `lastVisit` (max of `visit_date`), `visitCount`.
+
+**Recency filter (the "Active" definition):**
+- Compute `isInactive = differenceInYears(now, lastVisit) >= 3`.
+- Drop inactive patients before computing distribution stats.
+
+**Anonymized return shape (PDPA-safe):**
 ```ts
-export interface DoctorScore {
-  doctorId: string | null;
-  doctorName: string;
-  uniquePatients: number;     // Set<patient_id>.size
-  totalRevenue: number;
-  totalCogs: number;          // revenue - profit
-  totalProfit: number;
-  revenuePerPatient: number;  // totalRevenue / uniquePatients
-  marginPct: number;
-}
-
-export interface DiagnosisRank {
-  diagnosisId: string | null;
-  diagnosisName: string;
-  encounters: number;         // Set<queue_entry_id>.size
-  totalRevenue: number;
-}
-
-export interface MedicationRank {
-  itemName: string;
-  totalRevenue: number;
-  totalQuantity: number;      // proxied via row count for now (qty not exposed; see note)
-}
-
-export interface ProcedureROI {
-  itemName: string;
-  count: number;              // queue_entry_id distinct
-  totalRevenue: number;
-  totalCogs: number;
-  marginPct: number;          // (revenue - cogs) / revenue * 100
-}
-
-export interface ScoreboardsData {
-  doctors: DoctorScore[];           // sorted by revenuePerPatient desc
-  topDiagnoses: DiagnosisRank[];    // top 10 by encounters
-  topMedications: MedicationRank[]; // top 10 by totalRevenue
-  procedureRoi: ProcedureROI[];     // sorted by marginPct desc
+{
+  histogramData: { name: string; count: number }[]; // 5 buckets
+  medianLTV: number;                                 // median totalRevenue of active patients
+  activeCount: number;
+  inactiveCount: number;
 }
 ```
+
+**Buckets (revenue-based):** `RM 0–200`, `RM 201–500`, `RM 501–1,000`, `RM 1,001–2,500`, `RM 2,500+`
 
 **Implementation notes:**
-- Same `format(startDate)`/`format(endDate)` window contract as `useFinancialInsights` for consistency.
-- Single SELECT pulling new columns plus existing financial fields; aggregate client-side using `Map` + `Set` (mirrors the proven pattern in `useFinancialInsights.ts`).
-- COGS derivation is `revenue - profit` (GAAP-aligned, same as Step 35).
-- Quantity is not in the view today — `totalQuantity` for medications uses **row count** as a frequency proxy (line-item occurrences). If true quantity is needed later, we extend the view with `SUM(ci.quantity)` in a follow-up.
-- Use the same loose-typed client cast (`supabase as any`) that `useFinancialInsights.ts` uses, since the view isn't in generated types until the next type sync.
+- Use the `const db = supabase as any` pattern (mirrors `useScoreboards` since the view isn't in generated types).
+- Median: sort by `totalRevenue`, pick `Math.floor(activePatients.length / 2)`.
+- Cache key: `['patient-ltv']` — no date range, since LTV is lifetime.
+- **Never** return `patient_id`, names, or any per-patient object externally.
 
 ---
 
-## C. Scoreboards UI — `src/components/clinic/insight/ScoreboardsTab.tsx`
+## B. Leaderboards UI — `src/components/clinic/insight/LeaderboardsTab.tsx` (NEW)
 
-A stateless component that takes the date range as props and renders four panels:
+Component signature: `({ startDate, endDate }: { startDate: Date; endDate: Date })`
 
-### 1. Doctor Performance (Table)
-Columns: **Doctor · Patients · Revenue · Revenue/Patient · Margin %**.
-- Sorted by `revenuePerPatient` desc.
-- `Revenue/Patient = ΣRevenue / Unique Patients`.
-- Includes an `Unassigned` row when present (highlighted with muted styling) — your front-desk attribution audit signal.
+### Layout
 
-### 2. Top Diagnoses (Horizontal BarChart, top 10 by encounters)
-- Recharts `BarChart` with `layout="vertical"`, `YAxis dataKey="diagnosisName" type="category"`, `XAxis type="number"`.
-- Bar fill: `hsl(var(--primary))`.
-- `Undiagnosed` will surface naturally if doctors skip the diagnosis field — your clinical documentation audit signal.
+**Top row (2-column grid on lg, stacked on mobile):**
 
-### 3. Top Medications (Horizontal BarChart, top 10 by revenue)
-- Same orientation as #2; bar fill `#10b981` (Emerald, matches Revenue color from Overview tab).
-- Tooltip shows revenue formatted as `RM xx.xx`.
+1. **LTV Distribution Card**
+   - Title: "Active Patient LTV Distribution"
+   - Subtitle: "Excludes patients with no visits in > 3 years"
+   - Vertical Recharts `BarChart` of `histogramData` with bars in **Emerald-500 (`#10b981`)**, matching the Overview tab's Revenue color.
+   - Footer caption: `"{activeCount} active patients · {inactiveCount} excluded as inactive"`.
 
-### 4. Procedure ROI (Table, `kind = 'service'`)
-Columns: **Procedure · Count · Revenue · Margin %**.
-- Margin cell color-coded:
-  - **Emerald-500** if `marginPct >= 40`
-  - **Amber-500** if `20 <= marginPct < 40`
-  - **Red-500** if `marginPct < 20`
-- Sorted by `marginPct` desc to surface the most efficient procedures first.
+2. **Acquisition Strategy Card**
+   - Title: "Acquisition Strategy"
+   - Two stacked stat blocks:
+     - **Median Active LTV** — `RM X.XX`
+     - **Recommended CAC Ceiling (30%)** — `RM X.XX`, computed as `medianLTV * 0.3`.
+   - The CAC block uses a highlighted alert style (`border-l-4 border-primary bg-primary/5 p-4 rounded`) with strategic note:
+     > *"To maintain sustainable unit economics, do not spend more than this amount to acquire a single new patient."*
 
-**Layout:** Doctor table full-width on top, then a 2-col grid for the two bar charts, then the Procedure ROI table full-width. All wrapped in Shadcn `<Card>`s with `<CardHeader>`/`<CardTitle>`.
+**Bottom row (full-width):**
 
-**Empty/Loading:** Reuses the same `<Skeleton>` and `<Inbox>` empty-state pattern as the Overview tab for visual consistency.
+3. **Doctor Efficiency Leaderboard Card**
+   - Title: "Doctor Efficiency Leaderboard"
+   - Subtitle: "Ranked by Gross Profit (Revenue − COGS) for the selected period"
+   - Reuses `useScoreboards(startDate, endDate)` — **no duplicate hook**.
+   - Sort: `[...doctors].sort((a, b) => b.totalProfit - a.totalProfit)` — **CRITICAL: by profit, not revenue**, to discourage low-margin volume gaming.
+   - Columns: Doctor · Revenue (RM, right) · Gross Profit (**bold emerald**, right) · Margin % (color-coded)
+   - Margin color thresholds (mirror the `marginColorClass` pattern from `ScoreboardsTab`):
+     - `≥ 40%` → `text-emerald-600 font-semibold`
+     - `20–40%` → `text-amber-600 font-semibold`
+     - `< 20%` → `text-red-600 font-semibold`
+
+### States
+
+- **Loading**: Skeletons for all three cards (mirror `ScoreboardsSkeleton`).
+- **Error**: Destructive-text card — separately for LTV vs. scoreboards (one can fail without the other).
+- **Empty (no active patients)**: Inbox icon + "No active patient history available yet."
+- **Empty (no doctors)**: "No doctor performance data for this period."
 
 ---
 
-## D. UI Restructure — `src/pages/clinic/Insight.tsx`
+## C. Integration — `src/pages/clinic/Insight.tsx` (EDIT)
 
-Wrap the existing page body in Shadcn `<Tabs>`:
+Single-line swap inside `<TabsContent value="leaderboards">`:
 
 ```tsx
-<Tabs defaultValue="overview" className="w-full">
-  <TabsList>
-    <TabsTrigger value="overview">Overview</TabsTrigger>
-    <TabsTrigger value="scoreboards">Scoreboards</TabsTrigger>
-    <TabsTrigger value="leaderboards">Leaderboards</TabsTrigger>
-    <TabsTrigger value="valuation">Valuation</TabsTrigger>
-    <TabsTrigger value="health">Bank Health</TabsTrigger>
-  </TabsList>
+// Before (line 442):
+<PlaceholderPanel label="Leaderboards (Step 37) — coming next" />
 
-  <TabsContent value="overview">{/* existing cards/charts */}</TabsContent>
-  <TabsContent value="scoreboards">
-    <ScoreboardsTab startDate={startDate} endDate={endDate} />
-  </TabsContent>
-  <TabsContent value="leaderboards"><PlaceholderPanel label="Leaderboards (Step 37)" /></TabsContent>
-  <TabsContent value="valuation"><PlaceholderPanel label="DCF Valuation Engine (Step 38)" /></TabsContent>
-  <TabsContent value="health"><PlaceholderPanel label="Bank Health Radar (Step 39)" /></TabsContent>
-</Tabs>
+// After:
+<LeaderboardsTab startDate={startDate} endDate={endDate} />
 ```
 
-- The shared **header** (title + date range picker + CSV download) stays *above* the `<Tabs>` so the date range applies across every tab.
-- `<PlaceholderPanel>` is a tiny inline component: a `<Card>` with a muted "Coming in Step XX" message — keeps the tab shell clean without scaffolding empty hooks.
-- Loading/error/empty states currently inside the body remain inside the **Overview** `<TabsContent>` so each tab manages its own emptiness.
+Add the import alongside `ScoreboardsTab`. Access control is **already inherited** — `/clinic/insight` is admin-only via existing route guards.
 
 ---
 
-## E. Access Control
+## Strategic Audit
 
-The `/clinic/insight` route is already gated for admin/owner (existing `ClinicProtectedRoute` config — no change required). New tab is mounted inside the same protected page.
-
----
-
-## F. Verification
-
-After implementation, run `npx tsc --noEmit` to confirm a clean compile, then stop and confirm before moving to Step 37.
+- **PDPA-safe by design**: Hook returns only aggregate distribution data — no patient IDs, names, or per-patient rows ever cross the hook boundary.
+- **Profit > Revenue**: The leaderboard sort key is deliberately Gross Profit. A doctor pushing high-volume low-margin medications ranks lower than one performing fewer high-margin procedures.
+- **Inactivity hard-stop**: The 3-year filter prevents the median from being dragged down by long-dormant patients, grounding CAC guidance in *current* economics.
+- **Single source of truth**: Reusing `useScoreboards` ensures Step 36 and Step 37 mathematically agree on every doctor figure.
 
 ---
 
 ## Files
 
 **New:**
-- `supabase/migrations/<timestamp>_extend_insight_financials_view.sql`
-- `src/hooks/clinic/useScoreboards.ts`
-- `src/components/clinic/insight/ScoreboardsTab.tsx`
+- `src/hooks/clinic/usePatientLTV.ts`
+- `src/components/clinic/insight/LeaderboardsTab.tsx`
 
 **Edited:**
-- `src/pages/clinic/Insight.tsx` (wrap body in `<Tabs>`, mount Scoreboards + 3 placeholders)
+- `src/pages/clinic/Insight.tsx` — swap placeholder for `LeaderboardsTab`, add import.
+
+**Verification:** `npx tsc --noEmit` must pass cleanly before handing back.
