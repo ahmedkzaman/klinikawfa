@@ -2078,6 +2078,7 @@ export type Database = {
           notes: string | null
           phone: string | null
           principal_id: string | null
+          reg_no: string | null
           registration_date: string
           relationship: string | null
           state_of_birth: string | null
@@ -2096,6 +2097,7 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           principal_id?: string | null
+          reg_no?: string | null
           registration_date?: string
           relationship?: string | null
           state_of_birth?: string | null
@@ -2114,6 +2116,7 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           principal_id?: string | null
+          reg_no?: string | null
           registration_date?: string
           relationship?: string | null
           state_of_birth?: string | null
@@ -3523,6 +3526,7 @@ export type Database = {
           item_name: string | null
           kind: string | null
           patient_id: string | null
+          patient_reg_no: string | null
           payment_method: string | null
           profit: number | null
           queue_entry_id: string | null
@@ -3657,6 +3661,7 @@ export type Database = {
         Returns: undefined
       }
       available_quantity: { Args: { _item_id: string }; Returns: number }
+      can_view_insights: { Args: { _user_id: string }; Returns: boolean }
       cleanup_appointment_submission_log: { Args: never; Returns: undefined }
       commit_inventory: {
         Args: { _item_id: string; _qty: number }
