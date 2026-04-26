@@ -8,7 +8,7 @@ import {
   type DiagnosisRow,
 } from '@/hooks/clinic/useDiagnoses';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
   Table,
@@ -26,6 +26,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { bento, pageInner, pageShell, softInput } from '@/lib/clinic/bentoTokens';
+import { cn } from '@/lib/utils';
 
 const CATEGORIES = [
   'Cardiometabolic / Endocrine',
@@ -40,6 +42,9 @@ const CATEGORIES = [
   'Urology / Renal',
   'Women’s Health / Reproductive',
 ];
+
+const TH = 'text-[11px] font-semibold text-slate-500 uppercase tracking-wider';
+const TR = 'border-slate-100';
 
 function IcdCell({ row }: { row: DiagnosisRow }) {
   const updateCategory = useUpdateDiagnosisCategory();
@@ -69,7 +74,7 @@ function IcdCell({ row }: { row: DiagnosisRow }) {
       onChange={(e) => setVal(e.target.value.toUpperCase())}
       onBlur={handleBlur}
       placeholder="—"
-      className="h-8 max-w-[120px] font-mono text-xs"
+      className={cn(softInput, 'h-8 max-w-[120px] font-mono text-xs')}
     />
   );
 }
@@ -90,91 +95,95 @@ export default function DiagnosisSweeper() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Button asChild variant="ghost" size="sm">
-          <Link to="/clinic/settings">
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back to Settings
-          </Link>
-        </Button>
-      </div>
-
-      <div className="flex items-start gap-3">
-        <div className="rounded-md bg-primary/10 text-primary p-2.5 shrink-0">
-          <Stethoscope className="h-5 w-5" />
+    <div className={pageShell}>
+      <div className={pageInner}>
+        <div className="flex items-center gap-3">
+          <Button asChild variant="ghost" size="sm" className="text-slate-600 hover:text-slate-900 hover:bg-slate-100">
+            <Link to="/clinic/settings">
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Back to Settings
+            </Link>
+          </Button>
         </div>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Diagnosis Categorization Sweeper
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Map raw clinical diagnoses into standard reporting categories and tag them with
-            ICD-10 codes. Categorized entries leave this list automatically.
-          </p>
-        </div>
-      </div>
 
-      <Card className="overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[45%]">Diagnosis Name</TableHead>
-              <TableHead className="w-[20%]">ICD-10</TableHead>
-              <TableHead>Category</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell>
-                    <Skeleton className="h-5 w-2/3" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-8 w-24" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-9 w-full max-w-xs" />
-                  </TableCell>
+        <div className="flex items-start gap-3">
+          <div className="rounded-xl bg-blue-50 text-blue-600 p-3 shrink-0">
+            <Stethoscope className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+              Diagnosis Categorization Sweeper
+            </h1>
+            <p className="text-sm text-slate-500 mt-1">
+              Map raw clinical diagnoses into standard reporting categories and tag them with
+              ICD-10 codes. Categorized entries leave this list automatically.
+            </p>
+          </div>
+        </div>
+
+        <Card className={cn(bento, 'overflow-hidden')}>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow className={cn(TR, 'hover:bg-transparent bg-slate-50/50')}>
+                  <TableHead className={cn(TH, 'w-[45%]')}>Diagnosis Name</TableHead>
+                  <TableHead className={cn(TH, 'w-[20%]')}>ICD-10</TableHead>
+                  <TableHead className={TH}>Category</TableHead>
                 </TableRow>
-              ))
-            ) : diagnoses.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={3} className="text-center py-12 text-muted-foreground">
-                  All diagnoses are categorized. Nothing to sweep right now. 🎉
-                </TableCell>
-              </TableRow>
-            ) : (
-              diagnoses.map((d) => (
-                <TableRow key={d.id}>
-                  <TableCell className="font-medium">{d.name}</TableCell>
-                  <TableCell>
-                    <IcdCell row={d} />
-                  </TableCell>
-                  <TableCell>
-                    <Select
-                      onValueChange={(value) => handleCategoryChange(d.id, value, d.name)}
-                      disabled={updateCategory.isPending}
-                    >
-                      <SelectTrigger className="max-w-xs">
-                        <SelectValue placeholder="Select category…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CATEGORIES.map((cat) => (
-                          <SelectItem key={cat} value={cat}>
-                            {cat}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i} className={TR}>
+                      <TableCell>
+                        <Skeleton className="h-5 w-2/3" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-8 w-24" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-9 w-full max-w-xs" />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : diagnoses.length === 0 ? (
+                  <TableRow className={TR}>
+                    <TableCell colSpan={3} className="text-center py-12 text-slate-400">
+                      All diagnoses are categorized. Nothing to sweep right now. 🎉
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  diagnoses.map((d) => (
+                    <TableRow key={d.id} className={TR}>
+                      <TableCell className="font-medium text-slate-800">{d.name}</TableCell>
+                      <TableCell>
+                        <IcdCell row={d} />
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          onValueChange={(value) => handleCategoryChange(d.id, value, d.name)}
+                          disabled={updateCategory.isPending}
+                        >
+                          <SelectTrigger className={cn(softInput, 'max-w-xs')}>
+                            <SelectValue placeholder="Select category…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CATEGORIES.map((cat) => (
+                              <SelectItem key={cat} value={cat}>
+                                {cat}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
