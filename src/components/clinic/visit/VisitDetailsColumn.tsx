@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import {
   FileText,
@@ -23,37 +22,8 @@ import {
   useRemoveConsultationItem,
 } from '@/hooks/clinic/useConsultationItems';
 import { useConsultationAttachments } from '@/hooks/clinic/useAttachments';
-import {
-  useDrugLabelSettings,
-  type DrugLabelSettings,
-} from '@/hooks/clinic/useDrugLabelSettings';
-import { CLINIC_INFO } from '@/lib/constants';
-
-/**
- * Defaults that mirror the DB defaults (every field visible). Used while the
- * singleton settings row is still loading so we never accidentally print a
- * stripped-down label by accident.
- */
-const DEFAULT_LABEL_SETTINGS: Pick<
-  DrugLabelSettings,
-  | 'show_address'
-  | 'show_tel_number'
-  | 'show_precaution'
-  | 'show_quantity'
-  | 'show_date'
-  | 'show_expiry_date'
-  | 'show_duration'
-  | 'show_indication'
-> = {
-  show_address: true,
-  show_tel_number: true,
-  show_precaution: true,
-  show_quantity: true,
-  show_date: true,
-  show_expiry_date: true,
-  show_duration: true,
-  show_indication: true,
-};
+import { useDrugLabelSettings } from '@/hooks/clinic/useDrugLabelSettings';
+import { generateDrugLabelPdf } from '@/lib/clinic/printDrugLabel';
 
 interface Props {
   consultationId: string | undefined;
@@ -156,25 +126,40 @@ export function VisitDetailsColumn({
     'all' | 'items' | 'services' | 'packages' | 'documents'
   >('all');
 
-  // Single-rendering print state — when populated we render a hidden
-  // `print:block` block then call window.print() once. Cleared on
-  // `afterprint` so subsequent prints stay deterministic.
-  const [printQueue, setPrintQueue] = useState<ConsultationItemRow[]>([]);
-  const printTimerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (printQueue.length === 0) return;
-    // Defer one tick so React commits the hidden print block to the DOM.
-    printTimerRef.current = window.setTimeout(() => {
-      window.print();
-    }, 50);
-    const clear = () => setPrintQueue([]);
-    window.addEventListener('afterprint', clear, { once: true });
-    return () => {
-      if (printTimerRef.current) window.clearTimeout(printTimerRef.current);
-      window.removeEventListener('afterprint', clear);
-    };
-  }, [printQueue]);
+  // Print orchestration: build a real 60×50mm PDF with jsPDF and open it in
+  // a new tab. The PDF carries its physical page dimensions in its metadata,
+  // so the browser's print dialog auto-selects the right paper size and skips
+  // the A4-fallback / browser-injected headers/footers that broke the
+  // window.print() approach.
+  const openLabelPdf = (rows: ConsultationItemRow[]) => {
+    if (rows.length === 0) return;
+    try {
+      const url = generateDrugLabelPdf(
+        rows,
+        patientName ?? null,
+        labelSettings ?? null,
+      );
+      const win = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!win) {
+        toast.error('Pop-up blocked — allow pop-ups to print labels');
+        return;
+      }
+      // Auto-prompt the print dialog once the PDF viewer finishes loading.
+      win.addEventListener(
+        'load',
+        () => {
+          try {
+            win.print();
+          } catch {
+            /* user can still hit Ctrl+P manually */
+          }
+        },
+        { once: true },
+      );
+    } catch (err) {
+      toast.error((err as Error).message || 'Failed to generate label PDF');
+    }
+  };
 
   // ── Filtered slices ───────────────────────────────────────────────────────
   const itemsRows = useMemo(
@@ -218,7 +203,7 @@ export function VisitDetailsColumn({
 
   // ── Print actions ─────────────────────────────────────────────────────────
   const handlePrintLabel = (item: ConsultationItemRow) => {
-    setPrintQueue([item]);
+    openLabelPdf([item]);
   };
 
   const handlePrintAllLabels = () => {
@@ -226,7 +211,7 @@ export function VisitDetailsColumn({
       toast.info('No medicines to print labels for');
       return;
     }
-    setPrintQueue(itemsRows);
+    openLabelPdf(itemsRows);
   };
 
   const handlePrintAllDocuments = () => {
@@ -411,15 +396,6 @@ export function VisitDetailsColumn({
         </Tabs>
       </div>
 
-      {/* Hidden print portal — mounts as a direct child of <body> via createPortal
-          so the label escapes every layout container (sidebar, header, padding,
-          max-width). The scoped @page rule + body > *:not(...) hide rule
-          forces the browser onto a true 60×50mm thermal page. */}
-      <ThermalLabelPortal
-        rows={printQueue}
-        patientName={patientName ?? null}
-        settings={labelSettings ?? DEFAULT_LABEL_SETTINGS}
-      />
     </>
   );
 }
@@ -634,294 +610,5 @@ function DocumentsList({ attachments, isLoading }: DocumentsListProps) {
         );
       })}
     </ul>
-  );
-}
-
-/**
- * Scoped print stylesheet shipped with the portal. Lives inside the portal
- * (which mounts under <body>) so the rules are present whenever the portal
- * is present and removed when it isn't.
- *
- * The two key rules:
- *   1. `body > *:not(#thermal-label-portal) { display: none }` — surgical
- *      hide that prevents A4-creep from inherited app paddings.
- *   2. `@page { size: 60mm 50mm; margin: 0 }` — physically forces the
- *      browser onto the thermal roll dimensions.
- */
-const THERMAL_PRINT_CSS = `
-@media screen {
-  #thermal-label-portal { display: none; }
-}
-@media print {
-  body > *:not(#thermal-label-portal) { display: none !important; }
-
-  html, body {
-    margin: 0 !important;
-    padding: 0 !important;
-    background: #fff !important;
-  }
-
-  #thermal-label-portal {
-    display: block !important;
-    width: 60mm;
-    margin: 0;
-    padding: 0;
-  }
-
-  @page {
-    size: 60mm 50mm;
-    margin: 0;
-  }
-
-  .thermal-label-page {
-    width: 60mm;
-    height: 50mm;
-    padding: 2mm 3mm;
-    box-sizing: border-box;
-    page-break-after: always;
-    font-family: 'Inter', system-ui, sans-serif;
-    color: #000;
-    background: #fff;
-    overflow: hidden;
-    position: relative;
-  }
-  .thermal-label-page:last-child { page-break-after: auto; }
-}
-`;
-
-interface ThermalLabelPortalProps {
-  rows: ConsultationItemRow[];
-  patientName: string | null;
-  settings: Pick<
-    DrugLabelSettings,
-    | 'show_address'
-    | 'show_tel_number'
-    | 'show_precaution'
-    | 'show_quantity'
-    | 'show_date'
-    | 'show_expiry_date'
-    | 'show_duration'
-    | 'show_indication'
-  >;
-}
-
-function ThermalLabelPortal({
-  rows,
-  patientName,
-  settings,
-}: ThermalLabelPortalProps) {
-  // Don't mount anything when there's nothing to print — keeps the DOM clean
-  // between print jobs and ensures `afterprint` returns the page to its
-  // normal state without leftover hidden nodes.
-  if (rows.length === 0 || typeof document === 'undefined') return null;
-
-  return createPortal(
-    <>
-      <style>{THERMAL_PRINT_CSS}</style>
-      <div id="thermal-label-portal">
-        {rows.map((r, idx) => (
-          <ThermalLabel
-            key={`${r.id}-thermal-${idx}`}
-            item={r}
-            patientName={patientName}
-            settings={settings}
-          />
-        ))}
-      </div>
-    </>,
-    document.body,
-  );
-}
-
-function ThermalLabel({
-  item,
-  patientName,
-  settings,
-}: {
-  item: ConsultationItemRow;
-  patientName: string | null;
-  settings: ThermalLabelPortalProps['settings'];
-}) {
-  const dosageBits = buildDosageBits(item);
-  const today = format(new Date(), 'dd/MM/yyyy');
-  // Placeholder expiry — `consultation_items` doesn't store one yet. Defaulting
-  // to today + 30 days gives the dispensary a reasonable use-by hint until a
-  // real expiry source is added (future migration). The toggle still controls
-  // visibility so clinics that don't want a guess can hide it.
-  const expiryDate = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 30);
-    return format(d, 'dd/MM/yyyy');
-  })();
-
-  const clinicLine = `${CLINIC_INFO.name.toUpperCase()}, KOTASAS`;
-  const addressLine = `${CLINIC_INFO.address.line1}, ${CLINIC_INFO.address.city}`;
-  const telLine = CLINIC_INFO.phone;
-
-  return (
-    <div className="thermal-label-page">
-      {/* Header — clinic identity, always shows clinic name */}
-      <div
-        style={{
-          fontWeight: 700,
-          fontSize: '8pt',
-          textTransform: 'uppercase',
-          lineHeight: 1.1,
-        }}
-      >
-        {clinicLine}
-      </div>
-      {settings.show_address && (
-        <div
-          style={{
-            fontSize: '6.5pt',
-            lineHeight: 1.2,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {addressLine}
-        </div>
-      )}
-      {settings.show_tel_number && (
-        <div style={{ fontSize: '6.5pt', fontWeight: 600, lineHeight: 1.2 }}>
-          Tel: {telLine}
-        </div>
-      )}
-
-      <hr
-        style={{
-          border: 0,
-          borderTop: '0.3mm solid #000',
-          margin: '0.8mm 0',
-        }}
-      />
-
-      {/* Patient — mandatory when provided */}
-      {patientName && (
-        <div
-          style={{
-            fontWeight: 700,
-            fontSize: '7.5pt',
-            textTransform: 'uppercase',
-            lineHeight: 1.15,
-          }}
-        >
-          {patientName}
-        </div>
-      )}
-
-      {/* Medication name — bold, large, mandatory */}
-      <div
-        style={{
-          fontWeight: 700,
-          fontSize: '10pt',
-          textTransform: 'uppercase',
-          lineHeight: 1.15,
-          marginTop: '0.5mm',
-        }}
-      >
-        {item.item_name}
-      </div>
-
-      {/* Indication */}
-      {settings.show_indication && item.indication && (
-        <div
-          style={{
-            fontSize: '7pt',
-            fontStyle: 'italic',
-            lineHeight: 1.2,
-            marginTop: '0.3mm',
-          }}
-        >
-          For: {item.indication}
-        </div>
-      )}
-
-      {/* Instructions — mandatory, bold, separated by horizontal rule */}
-      {dosageBits.length > 0 && (
-        <>
-          <div
-            style={{
-              fontWeight: 700,
-              fontSize: '8.5pt',
-              textAlign: 'center',
-              lineHeight: 1.2,
-              marginTop: '1mm',
-            }}
-          >
-            {dosageBits.join(' | ')}
-          </div>
-          <hr
-            style={{
-              border: 0,
-              borderTop: '0.4mm solid #000',
-              margin: '0.8mm 0',
-            }}
-          />
-        </>
-      )}
-
-      {/* Precaution */}
-      {settings.show_precaution && item.precaution && (
-        <div
-          style={{
-            fontSize: '7pt',
-            fontStyle: 'italic',
-            lineHeight: 1.2,
-          }}
-        >
-          ⚠ {item.precaution}
-        </div>
-      )}
-
-      {/* Duration */}
-      {settings.show_duration && item.duration && (
-        <div style={{ fontSize: '7pt', lineHeight: 1.2 }}>
-          Duration: {item.duration}
-        </div>
-      )}
-
-      {/* Footer row — QTY / Date / EXP */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          fontSize: '7pt',
-          marginTop: '1mm',
-          gap: '1mm',
-        }}
-      >
-        {settings.show_quantity ? (
-          <span>QTY: {item.quantity ?? 1}</span>
-        ) : (
-          <span />
-        )}
-        {settings.show_date ? <span>{today}</span> : <span />}
-        {settings.show_expiry_date ? (
-          <span>EXP: {expiryDate}</span>
-        ) : (
-          <span />
-        )}
-      </div>
-
-      {/* Fixed bottom strip — regulatory, always shown */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: '1mm',
-          left: 0,
-          right: 0,
-          textAlign: 'center',
-          fontSize: '6pt',
-          fontStyle: 'italic',
-          color: '#000',
-        }}
-      >
-        Ubat Terkawal / Controlled Medicine
-      </div>
-    </div>
   );
 }
