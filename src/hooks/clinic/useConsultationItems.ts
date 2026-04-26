@@ -30,14 +30,21 @@ export function useConsultationItems(consultationId: string | undefined) {
 /**
  * Adds a consultation item.
  *
- * NOTE: As of the Automated Checkout Pricing migration, the database trigger
- * `before_insert_resolve_selling_price` is the absolute source of truth for the
- * baseline `price` on INSERT. The hierarchy is:
- *   Bespoke Panel Override → Standard Panel Price → Self Pay Price.
+ * Pricing contract (enforced by DB trigger `trg_resolve_selling_price`):
  *
- * Any `price` value passed from the frontend is ignored on INSERT and
- * overwritten by the trigger. Manual price adjustments (discounts, etc.) must
- * be applied via a subsequent UPDATE through `useUpdateConsultationItem`.
+ * - **Catalog-linked rows** (`item_id`, `service_id`, or `package_id` is set):
+ *   the trigger is the source of truth and resolves `price` from the catalog
+ *   using the hierarchy:
+ *     Bespoke Panel Override → Standard Panel Price → Self Pay Price.
+ *   Any `price` passed from the frontend is overwritten.
+ *
+ * - **Manual / free-text rows** (none of the catalog FKs set, e.g. the
+ *   auto-seeded "Consultation Fee"): the trigger trusts the `price` value
+ *   sent from the frontend and stamps `price_tier` automatically based on
+ *   whether the visit is a panel visit (`PANEL`) or self-pay (`SELF PAY`).
+ *
+ * Manual price adjustments after insert (discounts, etc.) must still go
+ * through `useUpdateConsultationItem`.
  */
 export function useAddConsultationItem() {
   const qc = useQueryClient();
@@ -47,8 +54,12 @@ export function useAddConsultationItem() {
       item_name: string;
       quantity?: number;
       dosage?: string;
-      /** Ignored on insert — resolved server-side by trg_resolve_selling_price. */
+      /**
+       * Authoritative for manual / free-text rows. Overwritten by the trigger
+       * when the row is linked to a catalog entry (item / service / package).
+       */
       price?: number;
+      price_tier?: string | null;
       item_id?: string | null;
       service_id?: string | null;
       package_id?: string | null;
