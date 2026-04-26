@@ -39,6 +39,7 @@ import {
   type RawFinancialRow,
 } from '@/hooks/clinic/useFinancialInsights';
 import { ScoreboardsTab } from '@/components/clinic/insight/ScoreboardsTab';
+import { LeaderboardsTab } from '@/components/clinic/insight/LeaderboardsTab';
 
 const SEGMENT_COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', 'hsl(var(--muted-foreground))'];
 const MAX_RANGE_DAYS = 365;
@@ -439,7 +440,7 @@ export default function Insight() {
         </TabsContent>
 
         <TabsContent value="leaderboards">
-          <PlaceholderPanel label="Leaderboards (Step 37) — coming next" />
+          <LeaderboardsTab startDate={startDate} endDate={endDate} />
         </TabsContent>
 
         <TabsContent value="valuation">
