@@ -9,6 +9,7 @@ import {
   Plus,
   Phone,
   PauseCircle,
+  CheckCircle2,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
