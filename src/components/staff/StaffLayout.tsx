@@ -347,6 +347,14 @@ export function StaffLayout() {
               <img src={logoKlinikAwfa} alt="Klinik Awfa" className="h-8 w-auto" />
               <span className="font-semibold text-sm">Klinik Awfa Staff</span>
             </Link>
+            {isOpsOrAdmin && (
+              <Button asChild size="sm" className="w-full mt-3 gap-2" onClick={() => setMobileOpen(false)}>
+                <Link to="/clinic/queue">
+                  <Activity className="h-4 w-4" />
+                  Open Clinic System
+                </Link>
+              </Button>
+            )}
           </div>
           <div className="flex-1 overflow-y-auto">
             <SidebarNav isAdmin={isAdmin} isOpsOrAdmin={isOpsOrAdmin} pathname={location.pathname} onLinkClick={() => setMobileOpen(false)} unreadNoticeCount={unacknowledgedNotices.length} />
