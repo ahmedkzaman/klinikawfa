@@ -49,6 +49,7 @@ const adminNavItems = [
   { href: '/staff/admin/payroll-profiles', label: 'Payroll Profiles', icon: DollarSign },
   { href: '/staff/admin/daily-tasks', label: 'Daily Tasks', icon: ClipboardList },
   { href: '/staff/admin/notices', label: 'Circular Notices', icon: Megaphone },
+  { href: '/staff/admin/punch-settings', label: 'Punch Settings', icon: Clock },
 ];
 
 const contentNavItems = [
