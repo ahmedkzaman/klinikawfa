@@ -2345,6 +2345,42 @@ export type Database = {
         }
         Relationships: []
       }
+      punch_buffer_settings: {
+        Row: {
+          clock_in_early_min: number
+          clock_in_late_min: number
+          clock_out_early_min: number
+          clock_out_late_min: number
+          id: string
+          role: Database["public"]["Enums"]["app_role"] | null
+          scope: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          clock_in_early_min?: number
+          clock_in_late_min?: number
+          clock_out_early_min?: number
+          clock_out_late_min?: number
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"] | null
+          scope: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          clock_in_early_min?: number
+          clock_in_late_min?: number
+          clock_out_early_min?: number
+          clock_out_late_min?: number
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"] | null
+          scope?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       queue_entries: {
         Row: {
           assigned_doctor_id: string | null
