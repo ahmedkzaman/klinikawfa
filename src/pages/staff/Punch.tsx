@@ -105,20 +105,40 @@ export default function StaffPunch() {
   const nextPunchType = isPunchedIn ? 'out' : 'in';
   const assignmentBlock = geofenceResult?.isWithinZone ? checkAssignment(assignments, geofenceResult.zone?.id) : null;
 
-  // Check if punch is within ±30 min of shift window
-  const isWithinShiftWindow = (): boolean => {
-    if (!todayShift) return true; // No roster = allow (fallback)
+  const { buffers } = useUserPunchBuffers(user?.id);
+
+  // Format minutes-from-midnight as h:mm AM/PM (handles next-day wraps)
+  const fmtTime = (date: Date) => format(date, 'h:mm a');
+
+  // Asymmetric punch window: in vs out have different pre/post buffers
+  const computeShiftWindowBlock = (): string | null => {
+    if (!todayShift) return null; // No roster = allow (fallback)
     const now = new Date();
     const [startH, startM] = todayShift.start.split(':').map(Number);
     const [endH, endM] = todayShift.end.split(':').map(Number);
     const shiftStart = new Date(now); shiftStart.setHours(startH, startM, 0, 0);
     const shiftEnd = new Date(now); shiftEnd.setHours(endH, endM, 0, 0);
-    // Allow ±30 min buffer
-    const bufferMs = 30 * 60 * 1000;
-    return now.getTime() >= shiftStart.getTime() - bufferMs && now.getTime() <= shiftEnd.getTime() + bufferMs;
+    // Handle shifts that cross midnight (e.g. 20:00 → 00:00)
+    if (shiftEnd.getTime() <= shiftStart.getTime()) {
+      shiftEnd.setDate(shiftEnd.getDate() + 1);
+    }
+
+    if (nextPunchType === 'in') {
+      const openAt = new Date(shiftStart.getTime() - buffers.clock_in_early_min * 60_000);
+      const closeAt = new Date(shiftStart.getTime() + buffers.clock_in_late_min * 60_000);
+      if (now < openAt) return `Punch-in opens at ${fmtTime(openAt)} (${buffers.clock_in_early_min} min before your ${fmtTime(shiftStart)} shift)`;
+      if (now > closeAt) return `Punch-in closed at ${fmtTime(closeAt)} (${buffers.clock_in_late_min} min after shift start)`;
+      return null;
+    }
+    // Punch out
+    const openAt = new Date(shiftEnd.getTime() - buffers.clock_out_early_min * 60_000);
+    const closeAt = new Date(shiftEnd.getTime() + buffers.clock_out_late_min * 60_000);
+    if (now < openAt) return `Punch-out opens at ${fmtTime(openAt)} (${buffers.clock_out_early_min} min before your ${fmtTime(shiftEnd)} shift end)`;
+    if (now > closeAt) return `Punch-out closed at ${fmtTime(closeAt)} (${buffers.clock_out_late_min} min after shift end)`;
+    return null;
   };
 
-  const shiftWindowBlock = !isWithinShiftWindow() ? `Outside your shift window (${todayShift?.label})` : null;
+  const shiftWindowBlock = computeShiftWindowBlock();
 
   const handlePunchClick = () => {
     if (!geo.latitude || !geo.longitude || !geofenceResult?.isWithinZone) { toast({ title: 'Cannot Punch', description: 'You must be within a valid zone.', variant: 'destructive' }); return; }
