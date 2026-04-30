@@ -10,6 +10,7 @@ import { checkGeofence, formatDistance, getAccuracyStatus } from '@/lib/geofence
 import { getUserShiftForDate, type ShiftInfo } from '@/lib/rosterUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useUserPunchBuffers } from '@/hooks/useUserPunchBuffers';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { FaceVerificationModal } from '@/components/staff/FaceVerificationModal';
