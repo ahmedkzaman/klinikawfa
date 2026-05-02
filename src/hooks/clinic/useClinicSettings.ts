@@ -13,6 +13,9 @@ export interface ClinicSettings {
   letterhead_text_px: number;
   content_margin_top: number;
   sst_number: string | null;
+  bank_name: string | null;
+  bank_account_no: string | null;
+  bank_account_holder: string | null;
   updated_at: string;
 }
 
@@ -28,6 +31,9 @@ const DEFAULTS: ClinicSettings = {
   letterhead_text_px: 12,
   content_margin_top: 120,
   sst_number: null,
+  bank_name: null,
+  bank_account_no: null,
+  bank_account_holder: null,
   updated_at: new Date().toISOString(),
 };
 

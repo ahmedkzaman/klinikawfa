@@ -150,12 +150,30 @@ export function ClientInvoicePrintTemplate({ invoice }: Props) {
         )}
 
         {/* Bank details */}
-        <div className="mt-8 border border-black p-3 text-xs">
-          <div className="font-semibold uppercase tracking-wide mb-1">Payment Instructions</div>
-          <div>Make payment to <span className="font-semibold">Klinik Awfa</span></div>
-          <div>Bank: [Bank Name] · Account No: [Account Number]</div>
-          <div>Please quote invoice no. <span className="font-semibold">{invoice.invoice_no}</span> as payment reference.</div>
-        </div>
+        {settings.bank_name?.trim() && settings.bank_account_no?.trim() ? (
+          <div className="mt-8 border border-black p-3 text-xs">
+            <div className="font-semibold uppercase tracking-wide mb-1">Payment Instructions</div>
+            <div>
+              Please make payment to{' '}
+              <span className="font-semibold">
+                {settings.bank_account_holder?.trim() || settings.clinic_name || 'Klinik Awfa'}
+              </span>
+            </div>
+            <div>
+              <span className="font-semibold">{settings.bank_name}</span> — Account No:{' '}
+              <span className="font-mono font-semibold">{settings.bank_account_no}</span>
+            </div>
+            <div>
+              Please quote invoice no.{' '}
+              <span className="font-semibold">{invoice.invoice_no}</span> as payment reference.
+            </div>
+          </div>
+        ) : (
+          <div className="mt-8 border border-dashed border-gray-400 p-3 text-xs italic text-gray-500 print:hidden">
+            Bank details not configured. Add them in Clinic → Settings → Document Settings to show
+            payment instructions on this invoice.
+          </div>
+        )}
 
         {/* Signatures */}
         <div className="mt-12 grid grid-cols-2 gap-12 text-xs">

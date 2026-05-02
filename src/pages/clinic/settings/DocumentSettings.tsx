@@ -25,6 +25,9 @@ export default function DocumentSettings() {
     letterhead_text_px: settings.letterhead_text_px,
     content_margin_top: settings.content_margin_top,
     sst_number: settings.sst_number ?? '',
+    bank_name: settings.bank_name ?? '',
+    bank_account_no: settings.bank_account_no ?? '',
+    bank_account_holder: settings.bank_account_holder ?? '',
   });
 
   // sync when settings load
@@ -40,6 +43,9 @@ export default function DocumentSettings() {
       letterhead_text_px: settings.letterhead_text_px,
       content_margin_top: settings.content_margin_top,
       sst_number: settings.sst_number ?? '',
+      bank_name: settings.bank_name ?? '',
+      bank_account_no: settings.bank_account_no ?? '',
+      bank_account_holder: settings.bank_account_holder ?? '',
     });
   }, [settings.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -76,7 +82,13 @@ export default function DocumentSettings() {
 
   const onSave = async () => {
     try {
-      const patch = { ...form, sst_number: form.sst_number.trim() || null };
+      const patch = {
+        ...form,
+        sst_number: form.sst_number.trim() || null,
+        bank_name: form.bank_name.trim() || null,
+        bank_account_no: form.bank_account_no.trim() || null,
+        bank_account_holder: form.bank_account_holder.trim() || null,
+      };
       await update.mutateAsync(patch);
       toast.success('Settings saved.');
     } catch (e) {
