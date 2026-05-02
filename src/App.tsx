@@ -61,6 +61,7 @@ import PatientsList from "./pages/clinic/PatientsList";
 import Consultation from "./pages/clinic/Consultation";
 import ConsultationDetail from "./pages/clinic/ConsultationDetail";
 import Procurement from "./pages/clinic/Procurement";
+import Dispensary from "./pages/clinic/Dispensary";
 import DispenseCheckout from "./pages/clinic/DispenseCheckout";
 import Billings from "./pages/clinic/Billings";
 import PanelClaims from "./pages/clinic/PanelClaims";
@@ -173,6 +174,7 @@ const App = () => (
                 <Route path="patients" element={<PatientsList />} />
                 <Route path="consultation" element={<Consultation />} />
                 <Route path="consultation/:queueEntryId" element={<ConsultationDetail />} />
+                <Route path="dispensary" element={<Dispensary />} />
                 <Route path="procurement" element={<Procurement />} />
                 <Route path="queue/checkout/:queueEntryId" element={<DispenseCheckout />} />
                 <Route path="billings" element={<Billings />} />
