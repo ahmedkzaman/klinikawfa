@@ -1,16 +1,31 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { Plus, Package, Building2, Receipt } from 'lucide-react';
+import { Plus, Package, Building2, MoreHorizontal } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useSuppliers, type Supplier } from '@/hooks/clinic/useSuppliers';
 import { usePurchaseOrders, type POStatus } from '@/hooks/clinic/usePurchaseOrders';
+import { useVendorInvoices, type VendorInvoiceStatus } from '@/hooks/clinic/useVendorInvoices';
 import { SupplierDialog } from '@/components/clinic/procurement/SupplierDialog';
 import { POSheet } from '@/components/clinic/procurement/POSheet';
+import { VendorInvoiceDialog } from '@/components/clinic/procurement/VendorInvoiceDialog';
+import { MarkPaidDialog } from '@/components/clinic/procurement/MarkPaidDialog';
 import { toast } from 'sonner';
+
+const invoiceStatusBadge: Record<VendorInvoiceStatus, string> = {
+  Open:    'bg-amber-500/15 text-amber-700 dark:text-amber-400',
+  Paid:    'bg-green-500/15 text-green-700 dark:text-green-400',
+  Overdue: 'bg-destructive/15 text-destructive',
+};
 
 const statusBadge: Record<POStatus, string> = {
   Draft:     'bg-muted text-muted-foreground',
@@ -22,6 +37,7 @@ const statusBadge: Record<POStatus, string> = {
 export default function Procurement() {
   const { suppliers, isLoading: suppliersLoading } = useSuppliers();
   const { orders, isLoading: ordersLoading, createDraft } = usePurchaseOrders();
+  const { data: invoices = [], isLoading: invoicesLoading } = useVendorInvoices();
 
   const [supplierDialog, setSupplierDialog] = useState<{ open: boolean; supplier: Supplier | null }>({
     open: false,
@@ -30,6 +46,10 @@ export default function Procurement() {
   const [poSheet, setPOSheet] = useState<{ open: boolean; poId: string | null }>({
     open: false,
     poId: null,
+  });
+  const [invoiceDialog, setInvoiceDialog] = useState(false);
+  const [paidDialog, setPaidDialog] = useState<{ open: boolean; id: string | null; no: string | null }>({
+    open: false, id: null, no: null,
   });
 
   const onAddPO = async () => {
@@ -183,15 +203,81 @@ export default function Procurement() {
           </Card>
         </TabsContent>
 
-        {/* Vendor Invoices placeholder */}
+        {/* Vendor Invoices */}
         <TabsContent value="invoices">
           <Card>
-            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <Receipt className="h-12 w-12 text-muted-foreground mb-3" />
-              <h3 className="font-semibold">Vendor Invoices</h3>
-              <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-                Match supplier invoices against received POs and track payables. Coming in Phase 2C.
-              </p>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Vendor Invoices</CardTitle>
+              <Button onClick={() => setInvoiceDialog(true)}>
+                <Plus className="h-4 w-4 mr-1" /> Log Invoice
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Invoice No</TableHead>
+                      <TableHead>Supplier</TableHead>
+                      <TableHead>Linked PO</TableHead>
+                      <TableHead className="text-right">Amount (RM)</TableHead>
+                      <TableHead>Due Date</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-12" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {invoicesLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
+                          Loading…
+                        </TableCell>
+                      </TableRow>
+                    ) : invoices.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
+                          No vendor invoices yet.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      invoices.map((inv) => (
+                        <TableRow key={inv.id}>
+                          <TableCell className="font-medium">{inv.invoice_no}</TableCell>
+                          <TableCell>{inv.supplier?.name ?? '—'}</TableCell>
+                          <TableCell>{inv.po?.po_number ?? '—'}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {Number(inv.amount).toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            {inv.due_date ? format(new Date(inv.due_date), 'dd MMM yyyy') : '—'}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={invoiceStatusBadge[inv.status]}>{inv.status}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            {inv.status !== 'Paid' && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => setPaidDialog({ open: true, id: inv.id, no: inv.invoice_no })}
+                                  >
+                                    Mark as Paid
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -206,6 +292,13 @@ export default function Procurement() {
         open={poSheet.open}
         poId={poSheet.poId}
         onOpenChange={(open) => setPOSheet({ open, poId: open ? poSheet.poId : null })}
+      />
+      <VendorInvoiceDialog open={invoiceDialog} onOpenChange={setInvoiceDialog} />
+      <MarkPaidDialog
+        open={paidDialog.open}
+        invoiceId={paidDialog.id}
+        invoiceNo={paidDialog.no}
+        onOpenChange={(o) => setPaidDialog((p) => ({ ...p, open: o }))}
       />
     </div>
   );

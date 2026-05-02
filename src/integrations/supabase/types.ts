@@ -664,6 +664,78 @@ export type Database = {
         }
         Relationships: []
       }
+      clinic_package_items: {
+        Row: {
+          created_at: string
+          id: string
+          inventory_item_id: string
+          package_id: string
+          quantity: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          inventory_item_id: string
+          package_id: string
+          quantity?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          inventory_item_id?: string
+          package_id?: string
+          quantity?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clinic_package_items_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clinic_package_items_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "clinic_packages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clinic_packages: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          status: string
+          total_price: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          status?: string
+          total_price?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          status?: string
+          total_price?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       clinic_preferences: {
         Row: {
           id: string
@@ -1523,6 +1595,47 @@ export type Database = {
           verification_type?: string
         }
         Relationships: []
+      }
+      inventory_adjustments: {
+        Row: {
+          adjusted_by: string
+          created_at: string
+          id: string
+          inventory_item_id: string
+          new_stock: number
+          previous_stock: number
+          reason: string | null
+          variance: number | null
+        }
+        Insert: {
+          adjusted_by?: string
+          created_at?: string
+          id?: string
+          inventory_item_id: string
+          new_stock: number
+          previous_stock: number
+          reason?: string | null
+          variance?: number | null
+        }
+        Update: {
+          adjusted_by?: string
+          created_at?: string
+          id?: string
+          inventory_item_id?: string
+          new_stock?: number
+          previous_stock?: number
+          reason?: string | null
+          variance?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_adjustments_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       inventory_item_prices: {
         Row: {
@@ -3599,6 +3712,60 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: true
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendor_invoices: {
+        Row: {
+          amount: number
+          created_at: string
+          due_date: string | null
+          id: string
+          invoice_no: string
+          payment_ref: string | null
+          po_id: string | null
+          status: string
+          supplier_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          invoice_no: string
+          payment_ref?: string | null
+          po_id?: string | null
+          status?: string
+          supplier_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          invoice_no?: string
+          payment_ref?: string | null
+          po_id?: string | null
+          status?: string
+          supplier_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_invoices_po_id_fkey"
+            columns: ["po_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_invoices_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]

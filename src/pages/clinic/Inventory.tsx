@@ -22,6 +22,8 @@ import {
   ItemEditSheet,
   type InventoryDashboardRow,
 } from '@/components/clinic/inventory/ItemEditSheet';
+import { PackagesPanel } from '@/components/clinic/inventory/PackagesPanel';
+import { StockTakePanel } from '@/components/clinic/inventory/StockTakePanel';
 
 type SubNav = 'item_master' | 'stock_take' | 'packages';
 type TabKey = 'all' | 'in_stock' | 'low_stock' | 'out_of_stock' | 'expiring' | 'archived';
@@ -168,24 +170,10 @@ export default function Inventory() {
           </div>
 
           {/* Sub-nav content */}
-          {subNav !== 'item_master' ? (
-            <Card className={cn(bento)}>
-              <CardContent className="flex flex-col items-center gap-3 py-20 text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
-                  {subNav === 'stock_take' ? (
-                    <ClipboardList className="h-7 w-7 text-slate-400" />
-                  ) : (
-                    <Boxes className="h-7 w-7 text-slate-400" />
-                  )}
-                </div>
-                <div>
-                  <p className="text-base font-semibold text-slate-700">
-                    {subNav === 'stock_take' ? 'Stock Take' : 'Packages'}
-                  </p>
-                  <p className="text-sm text-slate-500 mt-1">Module coming in Phase 2C.</p>
-                </div>
-              </CardContent>
-            </Card>
+          {subNav === 'packages' ? (
+            <PackagesPanel />
+          ) : subNav === 'stock_take' ? (
+            <StockTakePanel />
           ) : (
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabKey)}>
               <TabsList className="flex-wrap h-auto">
