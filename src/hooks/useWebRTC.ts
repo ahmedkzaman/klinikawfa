@@ -803,7 +803,7 @@ export function useWebRTC({
               }
               
               // Process the offer
-              const offer = data.current_offer as unknown as RTCSessionDescriptionInit;
+              const offer = row.current_offer as unknown as RTCSessionDescriptionInit;
               const currentPc = peerConnectionRef.current;
               
               if (currentPc && !currentPc.remoteDescription) {
