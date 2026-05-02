@@ -17,6 +17,7 @@ import {
 import DoctorRosterPanel from '@/components/staff/roster/DoctorRosterPanel';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, getISOWeek, isWeekend } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { usePublicHolidays, useAddPublicHoliday, useDeletePublicHoliday } from '@/hooks/usePublicHolidays';
 
 interface StaffMember {
   id: string;
