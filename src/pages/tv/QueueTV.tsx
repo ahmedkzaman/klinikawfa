@@ -144,24 +144,30 @@ export default function QueueTV() {
     }
   };
 
-  const speakMalay = (next: CallEvent) => {
+  const speakAnnouncement = (next: CallEvent) => {
     if (isPreview) return;
     const callBy = settings.queue_call_by ?? 'number';
-    const text =
-      callBy === 'name'
-        ? `Pesakit, ${next.display}, sila ke, ${next.roomLabel}`
-        : `Nombor giliran, ${next.display}, sila ke, ${next.roomLabel}`;
+    const lang = (settings.tts_language ?? 'ms-MY') as 'ms-MY' | 'en-US';
+    const isMalay = lang === 'ms-MY';
+    const text = isMalay
+      ? (callBy === 'name'
+          ? `Pesakit, ${next.display}, sila ke, ${next.roomLabel}`
+          : `Nombor giliran, ${next.display}, sila ke, ${next.roomLabel}`)
+      : (callBy === 'name'
+          ? `Patient, ${next.display}, please proceed to, ${next.roomLabel}`
+          : `Queue number, ${next.display}, please proceed to, ${next.roomLabel}`);
 
     const speakOnce = () => {
       const msg = new SpeechSynthesisUtterance(text);
-      msg.lang = 'ms-MY';
+      msg.lang = lang;
       msg.rate = 0.85;
       msg.volume = 1;
       const voices = window.speechSynthesis.getVoices();
-      const malay =
-        voices.find((v) => v.lang === 'ms-MY') ||
-        voices.find((v) => v.lang?.toLowerCase().startsWith('ms'));
-      if (malay) msg.voice = malay;
+      const prefix = lang.split('-')[0].toLowerCase();
+      const voice =
+        voices.find((v) => v.lang === lang) ||
+        voices.find((v) => v.lang?.toLowerCase().startsWith(prefix));
+      if (voice) msg.voice = voice;
       window.speechSynthesis.speak(msg);
     };
 
