@@ -472,8 +472,10 @@
   @page { size: A4; margin: 15mm; }
   html, body { background: #fff !important; }
   body * { visibility: hidden !important; }
-  .po-print-root, .po-print-root * { visibility: visible !important; }
-  .po-print-root {
+  .po-print-root, .po-print-root *,
+  .client-invoice-print-root, .client-invoice-print-root * { visibility: visible !important; }
+  .po-print-root,
+  .client-invoice-print-root {
     position: absolute;
     inset: 0;
     display: block !important;
