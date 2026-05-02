@@ -53,8 +53,8 @@ import {
 } from '@/hooks/clinic/useConsultationItems';
 import { useClinicAppointments } from '@/hooks/clinic/useClinicAppointments';
 import { useInventoryItemsSafe } from '@/hooks/clinic/useInventoryItems';
-import { useServices } from '@/hooks/clinic/useServices';
-import { usePackages } from '@/hooks/clinic/usePackages';
+import { useServicesSafe } from '@/hooks/clinic/useServices';
+import { usePackagesSafe } from '@/hooks/clinic/usePackages';
 import { useRooms } from '@/hooks/clinic/useRooms';
 import { AddTreatmentBulkDialog } from '@/components/clinic/consultation/AddTreatmentBulkDialog';
 import { VitalHistoryTrends } from '@/components/clinic/consultation/VitalHistoryTrends';
@@ -135,8 +135,8 @@ export default function ConsultationDetail() {
   // inventory_items table) can still populate the picker. Cost data is not
   // needed here — pricing is resolved server-side by trg_resolve_selling_price.
   const { data: inventoryItems = [] } = useInventoryItemsSafe();
-  const { services } = useServices();
-  const { packages } = usePackages();
+  const { data: services = [] } = useServicesSafe();
+  const { data: packages = [] } = usePackagesSafe();
 
   const [treatmentSearch, setTreatmentSearch] = useState('');
   const [treatmentCategory, setTreatmentCategory] = useState('all');
