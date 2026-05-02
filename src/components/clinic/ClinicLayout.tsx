@@ -4,21 +4,22 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import {
-  ListOrdered,
   Users,
   Stethoscope,
   Receipt,
   FileText,
-  ClipboardList,
-  Package,
   Pill,
-  Archive,
   ArrowLeft,
   Menu,
   Settings,
   LineChart,
   Briefcase,
   CalendarDays,
+  LayoutDashboard,
+  PackageSearch,
+  ShoppingCart,
+  Trash2,
+  type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
