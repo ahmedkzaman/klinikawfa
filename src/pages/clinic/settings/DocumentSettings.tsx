@@ -230,6 +230,51 @@ export default function DocumentSettings() {
 
             <Separator />
 
+            {/* Bank Details for B2B Invoices */}
+            <div className="space-y-3">
+              <div>
+                <Label className="text-base">Bank Details (for B2B Invoices)</Label>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  These appear in the footer of corporate invoices to instruct clients where to remit payment.
+                </p>
+              </div>
+              <div className="grid gap-3">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="bank_name">Bank Name</Label>
+                  <Input
+                    id="bank_name"
+                    value={form.bank_name}
+                    onChange={(e) => setForm({ ...form, bank_name: e.target.value })}
+                    placeholder="e.g. Maybank Berhad"
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="bank_account_holder">Account Holder Name</Label>
+                  <Input
+                    id="bank_account_holder"
+                    value={form.bank_account_holder}
+                    onChange={(e) => setForm({ ...form, bank_account_holder: e.target.value })}
+                    placeholder="e.g. Klinik Awfa Sdn Bhd"
+                  />
+                  <p className="text-xs text-slate-500">
+                    Defaults to the clinic name on the invoice if left blank.
+                  </p>
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="bank_account_no">Account Number</Label>
+                  <Input
+                    id="bank_account_no"
+                    value={form.bank_account_no}
+                    onChange={(e) => setForm({ ...form, bank_account_no: e.target.value })}
+                    placeholder="e.g. 5621-3456-7890"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+
             {/* Logo size slider */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
