@@ -1,10 +1,10 @@
 import { format } from 'date-fns';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
-import type { PurchaseOrderWithItems } from '@/hooks/clinic/usePurchaseOrders';
+import type { PurchaseOrderDetail } from '@/hooks/clinic/usePurchaseOrders';
 import type { Supplier } from '@/hooks/clinic/useSuppliers';
 
 interface Props {
-  po: PurchaseOrderWithItems;
+  po: PurchaseOrderDetail;
   supplier?: Supplier | null;
 }
 
