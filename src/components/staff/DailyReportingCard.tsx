@@ -180,8 +180,8 @@ export default function DailyReportingCard() {
       const { error: uploadError } = await supabase.storage.from('daily-reports').upload(path, file, { upsert: true });
       if (uploadError) throw uploadError;
 
-      const { data: urlData } = supabase.storage.from('daily-reports').getPublicUrl(path);
-      const url = urlData.publicUrl;
+      const { data: signed } = await supabase.storage.from('daily-reports').createSignedUrl(path, 60 * 60 * 24 * 7);
+      const url = signed?.signedUrl ?? path;
 
       if (report.id) {
         await supabase.from('daily_reports').update({ [field]: url }).eq('id', report.id);
