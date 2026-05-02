@@ -41,6 +41,7 @@ const DEFAULTS: ClinicSettings = {
   queue_call_by: 'number',
   tv_youtube_id: null,
   tv_ticker_text: null,
+  tts_language: 'ms-MY',
   updated_at: new Date().toISOString(),
 };
 
