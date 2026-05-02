@@ -980,13 +980,17 @@ export default function ConsultationDetail() {
                                   {consult.consultation_items.map((it) => (
                                     <div
                                       key={it.id}
-                                      className="flex justify-between text-sm pl-2 text-slate-600"
+                                      className="flex justify-between items-start gap-4 w-full pl-2"
                                     >
-                                      <span>
-                                        {it.item_name} x{it.quantity}{' '}
-                                        {it.dosage && `(${it.dosage})`}
+                                      <div className="flex-1 min-w-0 flex flex-col">
+                                        <span className="text-sm text-slate-600 break-words">
+                                          {it.item_name} x{it.quantity}{' '}
+                                          {it.dosage && `(${it.dosage})`}
+                                        </span>
+                                      </div>
+                                      <span className="shrink-0 text-right whitespace-nowrap text-sm text-slate-600">
+                                        RM {Number(it.price).toFixed(2)}
                                       </span>
-                                      <span>RM {Number(it.price).toFixed(2)}</span>
                                     </div>
                                   ))}
                                 </div>
