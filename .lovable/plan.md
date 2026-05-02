@@ -1,66 +1,78 @@
-## Status check
+## Migrate TV Announcements to Google Cloud TTS
 
-Tasks 3 & 4 from your prompt are **already in place** in `src/pages/tv/QueueTV.tsx`:
-- `started` already initializes from `isPreview` (line 33).
-- `ReactPlayer` is already imported and rendered with `volume={videoVolume}`, `muted={isPreview}`, and the bottom-left glass volume slider is already gated behind `!isPreview`.
+Replace the unreliable browser `speechSynthesis` API with high-quality Google Cloud Text-to-Speech served via a Supabase Edge Function. Audio playback will be event-driven (no `setTimeout` racing).
 
-So the remaining work is **Tasks 1, 2, and 5**: add a `tts_language` column, expose a language dropdown in settings, and make the TTS phrase + utterance language dynamic.
+### Prerequisite — Secret Required
 
-## Plan
+`GOOGLE_TTS_API_KEY` is **not** currently configured. Before implementation I will request it via the secrets tool. The user will need to:
+1. Create / open a Google Cloud project, enable **Cloud Text-to-Speech API**.
+2. Create an API key (APIs & Services → Credentials → Create credentials → API key).
+3. Restrict the key to the Text-to-Speech API.
+4. Paste it into the Lovable secrets prompt.
 
-### 1. DB migration — `clinic_settings.tts_language`
-```sql
-ALTER TABLE public.clinic_settings
-ADD COLUMN IF NOT EXISTS tts_language text NOT NULL DEFAULT 'ms-MY';
-```
+Implementation pauses until the secret is saved.
 
-### 2. `src/hooks/clinic/useClinicSettings.ts`
-- Add `tts_language: 'ms-MY' | 'en-US'` to the `ClinicSettings` interface.
-- Add `tts_language: 'ms-MY'` to the `DEFAULTS` constant so the field is always defined.
+---
 
-### 3. `src/pages/clinic/settings/QueueSettings.tsx`
-In the Waiting Room TV card, add a third grid column (or a new row beside "Call patients by") with a shadcn `Select`:
-- Label: "Announcement Language"
-- Options: `ms-MY` → "Bahasa Melayu", `en-US` → "English"
-- Local state `ttsLanguage`, hydrated from `settings.tts_language` in the existing `if (!hydrated …)` block.
-- Include `tts_language: ttsLanguage` in the `update.mutateAsync({…})` payload inside `saveTv`.
+### 1. New Edge Function — `supabase/functions/generate-tts/index.ts`
 
-### 4. `src/pages/tv/QueueTV.tsx` — dynamic TTS
-Replace the hard-coded `speakMalay` body so the phrase and `msg.lang` follow `settings.tts_language`:
+- Public POST endpoint with full CORS (`OPTIONS` preflight + `corsHeaders` on every response).
+- Validates body via Zod: `{ text: string (1..5000), languageCode: string, voiceName: string }`.
+- Reads `GOOGLE_TTS_API_KEY` from `Deno.env`.
+- POSTs to `https://texttospeech.googleapis.com/v1/text:synthesize?key={KEY}` with:
+  ```json
+  {
+    "input": { "text": "..." },
+    "voice": { "languageCode": "...", "name": "..." },
+    "audioConfig": { "audioEncoding": "MP3" }
+  }
+  ```
+- Returns `{ audioContent: "<base64>" }` to the client. Surfaces upstream errors as 502 with sanitized message.
+- No `verify_jwt` override needed (default applies).
 
-```ts
-const lang = settings.tts_language ?? 'ms-MY';
-const isMalay = lang === 'ms-MY';
-const callBy = settings.queue_call_by ?? 'number';
+### 2. Refactor `src/pages/tv/QueueTV.tsx`
 
-const text = isMalay
-  ? (callBy === 'name'
-      ? `Pesakit, ${next.display}, sila ke, ${next.roomLabel}`
-      : `Nombor giliran, ${next.display}, sila ke, ${next.roomLabel}`)
-  : (callBy === 'name'
-      ? `Patient, ${next.display}, please proceed to, ${next.roomLabel}`
-      : `Queue number, ${next.display}, please proceed to, ${next.roomLabel}`);
+**Remove** all references to:
+- `window.speechSynthesis`
+- `SpeechSynthesisUtterance`
+- The `voiceschanged` listener
+- The "prime" `speak(' ')` call inside the gate-screen Start button (replace with a no-op `new Audio().play()` unlock — needed so iOS/Safari allows later programmatic playback).
 
-const speakOnce = () => {
-  const msg = new SpeechSynthesisUtterance(text);
-  msg.lang = lang;
-  msg.rate = 0.85;
-  msg.volume = 1;
-  const voices = window.speechSynthesis.getVoices();
-  const prefix = lang.split('-')[0].toLowerCase();
-  const voice =
-    voices.find((v) => v.lang === lang) ||
-    voices.find((v) => v.lang?.toLowerCase().startsWith(prefix));
-  if (voice) msg.voice = voice;
-  window.speechSynthesis.speak(msg);
-};
-```
-Rename the function from `speakMalay` to `speakAnnouncement` (and update its call site) to reflect that it is no longer Malay-only. The existing `voiceschanged` fallback and repeat-once `setTimeout` logic are preserved.
+**Add** a single managed `currentAudioRef: HTMLAudioElement | null` so we can stop a stale clip if a new call arrives.
 
-### Files touched
-- new SQL migration (`tts_language` column)
-- `src/hooks/clinic/useClinicSettings.ts`
-- `src/pages/clinic/settings/QueueSettings.tsx`
-- `src/pages/tv/QueueTV.tsx`
+**`speakAnnouncement(next)` becomes async:**
+1. Skip entirely if `isPreview`.
+2. Determine:
+   - `lang = settings.tts_language ?? 'ms-MY'`
+   - `voiceName = lang === 'ms-MY' ? 'ms-MY-Wavenet-A' : 'en-US-Journey-F'`
+   - `text` = same Malay/English phrasing already in place.
+3. `const { data, error } = await supabase.functions.invoke('generate-tts', { body: { text, languageCode: lang, voiceName } })`.
+4. On error → log + bail (queue still advances).
+5. Build `audio = new Audio('data:audio/mp3;base64,' + data.audioContent)`, store in ref, `await audio.play()`.
+6. Returns a Promise that resolves on `audio.onended` (and on `onerror` to avoid hangs).
 
-No changes to `react-player`, the volume slider, or the preview-gate logic — those are already correct.
+**`processQueue()` rewrite (event-driven, no overlap):**
+1. If `playingRef.current` → return.
+2. Shift next call; if none → return.
+3. `playingRef = true`; push to `recentCalls`.
+4. `await playDingDong()` (chime keeps existing implementation; wraps `audio.onended` in a Promise so it also waits cleanly instead of `wait(900)`).
+5. `await speakAnnouncement(next)` — first pass.
+6. `await wait(800)` — short gap.
+7. `await speakAnnouncement(next)` — repeat once for clarity (replaces the old `setTimeout(..., 2800)` repeat).
+8. `playingRef = false`; if more queued → `processQueue()` recursively.
+
+This guarantees: chime → first announcement → gap → repeat → next patient, with **zero overlap**, because every step awaits real `onended` events.
+
+### 3. Files Touched
+
+- **NEW** `supabase/functions/generate-tts/index.ts`
+- **EDIT** `src/pages/tv/QueueTV.tsx`
+
+No DB migration, no other file changes. The existing `tts_language` setting and language dropdown remain unchanged.
+
+### 4. Verification
+
+After deploy I will:
+- Curl the edge function with a short Malay sample to confirm it returns base64.
+- Confirm no `speechSynthesis` references remain (`rg speechSynthesis src`).
+- Confirm preview iframe still mutes audio (`isPreview` early-returns are preserved).
