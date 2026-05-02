@@ -156,6 +156,7 @@ export default function UserManagementSettings() {
                 <TableRow className={cn(TR, 'hover:bg-transparent bg-slate-50/50')}>
                   <TableHead className={cn(TH, 'min-w-[220px]')}>Name / Email</TableHead>
                   <TableHead className={cn(TH, 'min-w-[200px]')}>Current Role</TableHead>
+                  <TableHead className={cn(TH, 'min-w-[200px]')}>MMC / Verification</TableHead>
                   <TableHead className={cn(TH, 'min-w-[180px]')}>Doctor Profile</TableHead>
                   <TableHead className={cn(TH, 'text-right')}>Action</TableHead>
                 </TableRow>
