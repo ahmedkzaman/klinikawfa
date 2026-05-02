@@ -17,6 +17,7 @@ import {
   Menu,
   Settings,
   LineChart,
+  Briefcase,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
@@ -35,6 +36,7 @@ const clinicNavItems: ClinicNavItem[] = [
   { href: '/clinic/consultation', label: 'Consultation', icon: Stethoscope },
   { href: '/clinic/billings', label: 'Billings', icon: Receipt },
   { href: '/clinic/panel-claims', label: 'Panel Claims', icon: FileText },
+  { href: '/clinic/receivables', label: 'Receivables', icon: Briefcase },
   { href: '/clinic/dispensary', label: 'Dispensary', icon: Pill },
   { href: '/clinic/procurement', label: 'Procurement', icon: ClipboardList },
   { href: '/clinic/inventory', label: 'Inventory', icon: Package },

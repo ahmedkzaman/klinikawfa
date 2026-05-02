@@ -24,6 +24,7 @@ export default function DocumentSettings() {
     logo_height_px: settings.logo_height_px,
     letterhead_text_px: settings.letterhead_text_px,
     content_margin_top: settings.content_margin_top,
+    sst_number: settings.sst_number ?? '',
   });
 
   // sync when settings load
@@ -38,6 +39,7 @@ export default function DocumentSettings() {
       logo_height_px: settings.logo_height_px,
       letterhead_text_px: settings.letterhead_text_px,
       content_margin_top: settings.content_margin_top,
+      sst_number: settings.sst_number ?? '',
     });
   }, [settings.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -74,7 +76,8 @@ export default function DocumentSettings() {
 
   const onSave = async () => {
     try {
-      await update.mutateAsync(form);
+      const patch = { ...form, sst_number: form.sst_number.trim() || null };
+      await update.mutateAsync(patch);
       toast.success('Settings saved.');
     } catch (e) {
       toast.error((e as Error).message);
@@ -195,6 +198,22 @@ export default function DocumentSettings() {
                   />
                 </div>
               </div>
+            </div>
+
+            <Separator />
+
+            {/* SST Registration */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="sst_number">SST Registration No. (optional)</Label>
+              <Input
+                id="sst_number"
+                value={form.sst_number}
+                onChange={(e) => setForm({ ...form, sst_number: e.target.value })}
+                placeholder="W10-1234-56789012"
+              />
+              <p className="text-xs text-slate-500">
+                Leave blank if not SST-registered. When set, client invoices are labelled "TAX INVOICE" and show this number.
+              </p>
             </div>
 
             <Separator />

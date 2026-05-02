@@ -583,6 +583,97 @@ export type Database = {
         }
         Relationships: []
       }
+      client_invoice_items: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          invoice_id: string
+          quantity: number
+          total_price: number | null
+          unit_price: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: string
+          invoice_id: string
+          quantity?: number
+          total_price?: number | null
+          unit_price?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          invoice_id?: string
+          quantity?: number
+          total_price?: number | null
+          unit_price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "client_invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_invoices: {
+        Row: {
+          client_id: string
+          created_at: string
+          due_date: string | null
+          id: string
+          invoice_no: string
+          issue_date: string
+          notes: string | null
+          payment_ref: string | null
+          status: string
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          invoice_no: string
+          issue_date?: string
+          notes?: string | null
+          payment_ref?: string | null
+          status?: string
+          total_amount?: number
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          invoice_no?: string
+          issue_date?: string
+          notes?: string | null
+          payment_ref?: string | null
+          status?: string
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "corporate_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clinic_appointments: {
         Row: {
           appointment_date: string
@@ -820,6 +911,7 @@ export type Database = {
           logo_url: string
           phone: string
           singleton: boolean
+          sst_number: string | null
           updated_at: string
         }
         Insert: {
@@ -834,6 +926,7 @@ export type Database = {
           logo_url?: string
           phone?: string
           singleton?: boolean
+          sst_number?: string | null
           updated_at?: string
         }
         Update: {
@@ -848,6 +941,7 @@ export type Database = {
           logo_url?: string
           phone?: string
           singleton?: boolean
+          sst_number?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -1145,6 +1239,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      corporate_clients: {
+        Row: {
+          address: string | null
+          contact_person: string | null
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          phone: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          contact_person?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          phone?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          contact_person?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       daily_reports: {
         Row: {
@@ -4149,6 +4279,10 @@ export type Database = {
       is_ops_or_admin: { Args: { _user_id: string }; Returns: boolean }
       is_special_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff_or_admin: { Args: { _user_id: string }; Returns: boolean }
+      recalc_client_invoice_total: {
+        Args: { _invoice_id: string }
+        Returns: undefined
+      }
       recalc_po_total: { Args: { _po_id: string }; Returns: undefined }
       receive_purchase_order: { Args: { _po_id: string }; Returns: undefined }
       record_appointment_submission: {
@@ -4172,6 +4306,10 @@ export type Database = {
         Returns: undefined
       }
       safe_reset_queue_number_seq: { Args: never; Returns: undefined }
+      save_client_invoice_items: {
+        Args: { _invoice_id: string; _items: Json }
+        Returns: undefined
+      }
       sync_roster_zone_assignments: {
         Args: { _month: number; _year: number }
         Returns: undefined
