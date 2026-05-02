@@ -77,6 +77,9 @@ import DiagnosisSweeper from "./pages/clinic/settings/DiagnosisSweeper";
 import PanelsSettings from "./pages/clinic/settings/PanelsSettings";
 import DrugLabelSettings from "./pages/clinic/settings/DrugLabelSettings";
 import DocumentSettings from "./pages/clinic/settings/DocumentSettings";
+import QueueSettings from "./pages/clinic/settings/QueueSettings";
+import Appointments from "./pages/clinic/Appointments";
+import QueueTV from "./pages/tv/QueueTV";
 
 import LeadsManagement from "./pages/admin/LeadsManagement";
 import BlogManagement from "./pages/admin/BlogManagement";
@@ -118,6 +121,7 @@ const App = () => (
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/video-call" element={<VideoCall />} />
               <Route path="/video-call/staff" element={<VideoCallStaff />} />
+              <Route path="/tv" element={<QueueTV />} />
 
               {/* Staff Portal Routes */}
               <Route path="/staff" element={<StaffLayout />}>
@@ -173,6 +177,7 @@ const App = () => (
               >
                 <Route index element={<Navigate to="queue" replace />} />
                 <Route path="queue" element={<QueueBoard />} />
+                <Route path="appointments" element={<Appointments />} />
                 <Route path="patients" element={<PatientsList />} />
                 <Route path="consultation" element={<Consultation />} />
                 <Route path="consultation/:queueEntryId" element={<ConsultationDetail />} />
@@ -238,6 +243,14 @@ const App = () => (
                   element={
                     <ClinicProtectedRoute requiredRole="admin">
                       <DocumentSettings />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
+                  path="settings/queue"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <QueueSettings />
                     </ClinicProtectedRoute>
                   }
                 />

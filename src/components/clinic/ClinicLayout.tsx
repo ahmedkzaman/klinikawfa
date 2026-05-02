@@ -18,6 +18,7 @@ import {
   Settings,
   LineChart,
   Briefcase,
+  CalendarDays,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
@@ -32,6 +33,7 @@ type ClinicNavItem = {
 
 const clinicNavItems: ClinicNavItem[] = [
   { href: '/clinic/queue', label: 'Queue Board', icon: ListOrdered },
+  { href: '/clinic/appointments', label: 'Appointments', icon: CalendarDays },
   { href: '/clinic/patients', label: 'Patients', icon: Users },
   { href: '/clinic/consultation', label: 'Consultation', icon: Stethoscope },
   { href: '/clinic/billings', label: 'Billings', icon: Receipt },
