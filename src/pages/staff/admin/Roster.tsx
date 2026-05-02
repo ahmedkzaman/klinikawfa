@@ -157,6 +157,23 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
     return eachDayOfInterval({ start, end });
   }, [selectedMonth, selectedYear]);
 
+  // Public holidays
+  const { data: publicHolidays = [] } = usePublicHolidays();
+  const addHolidayMutation = useAddPublicHoliday();
+  const deleteHolidayMutation = useDeletePublicHoliday();
+  const [newHolidayDate, setNewHolidayDate] = useState('');
+  const [newHolidayName, setNewHolidayName] = useState('');
+
+  const holidaySet = useMemo(() => new Set(publicHolidays.map(h => h.holiday_date)), [publicHolidays]);
+  const monthHolidays = useMemo(
+    () => publicHolidays.filter(h => {
+      const d = new Date(h.holiday_date + 'T00:00:00');
+      return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+    }),
+    [publicHolidays, selectedMonth, selectedYear]
+  );
+  const isPublicHoliday = (dateKey: string) => holidaySet.has(dateKey);
+
   useEffect(() => { setStaffList(initialStaff); }, [initialStaff]);
 
   // Load roster settings
