@@ -141,6 +141,23 @@ function mapItemPayload(input: Partial<InventoryItemInput>) {
       payload[key] = typeof v === 'string' && v.trim() === '' ? null : v;
     }
   }
+  // Phase 2A fields
+  if (input.drug_group !== undefined) {
+    payload.groups = typeof input.drug_group === 'string' && input.drug_group.trim() === '' ? null : input.drug_group;
+  }
+  if (input.low_stock_threshold !== undefined) {
+    payload.stock_amount_warning =
+      input.low_stock_threshold === null || Number.isNaN(Number(input.low_stock_threshold))
+        ? null
+        : Number(input.low_stock_threshold);
+  }
+  if (input.expiry_date !== undefined) {
+    payload.nearest_expiry_date =
+      typeof input.expiry_date === 'string' && input.expiry_date.trim() === '' ? null : input.expiry_date;
+  }
+  if (input.price_tier_1 !== undefined) payload.price_tier_1 = Number(input.price_tier_1) || 0;
+  if (input.price_tier_2 !== undefined) payload.price_tier_2 = Number(input.price_tier_2) || 0;
+  if (input.archived_at !== undefined) payload.archived_at = input.archived_at;
   return payload;
 }
 
