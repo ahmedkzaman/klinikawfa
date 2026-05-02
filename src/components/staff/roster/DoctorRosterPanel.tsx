@@ -1085,7 +1085,16 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                                   <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
                                 </SelectContent>
                               </Select>
-                            ) : <span className="text-[10px] text-muted-foreground">—</span>}
+                            ) : (
+                              <Select value="" onValueChange={v => updateCell(dk, 'shift3', v)}>
+                                <SelectTrigger className="h-6 text-[11px] border-0 bg-transparent shadow-none px-1 justify-center min-w-[60px]">
+                                  <span className="text-[10px] text-muted-foreground">—</span>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            )}
                           </TableCell>
                         );
                       })}
