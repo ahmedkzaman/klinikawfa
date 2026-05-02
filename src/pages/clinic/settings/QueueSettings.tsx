@@ -58,6 +58,28 @@ export default function QueueSettings() {
     }
   };
 
+  const startEditRoom = (id: string, label: string) => {
+    setEditingRoomId(id);
+    setEditingLabel(label);
+  };
+
+  const cancelEditRoom = () => {
+    setEditingRoomId(null);
+    setEditingLabel('');
+  };
+
+  const saveEditRoom = async (id: string) => {
+    const label = editingLabel.trim();
+    if (!label) return;
+    try {
+      await updateRoom.mutateAsync({ id, label });
+      toast.success('Room renamed');
+      cancelEditRoom();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to rename');
+    }
+  };
+
   const extractYouTubeId = (input: string) => {
     if (!input) return '';
     const trimmed = input.trim();
