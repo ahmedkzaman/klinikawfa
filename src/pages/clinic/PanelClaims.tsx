@@ -91,13 +91,59 @@ export default function PanelClaims() {
   const [tab, setTab] = useState<PanelClaimsTab>('all');
   const [page, setPage] = useState(0);
   const [activeClaim, setActiveClaim] = useState<PanelClaimRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const { data: claims, isLoading } = usePanelClaims(tab, page);
   const { data: summary } = usePanelClaimsSummary();
+  const bulkMark = useBulkMarkClaimsSubmitted();
 
   const rows = claims?.rows ?? [];
   const total = claims?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PANEL_CLAIMS_PAGE_SIZE));
+
+  // Reset selection whenever the visible page changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [tab, page]);
+
+  const visibleIds = useMemo(() => rows.map((r) => r.id), [rows]);
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const someVisibleSelected =
+    !allVisibleSelected && visibleIds.some((id) => selectedIds.has(id));
+
+  const toggleRow = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const toggleAll = () =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        visibleIds.forEach((id) => next.delete(id));
+      } else {
+        visibleIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+
+  const handleBulkSubmit = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    try {
+      const n = await bulkMark.mutateAsync(ids);
+      toast.success(
+        `${n} ${n === 1 ? 'claim' : 'claims'} marked as submitted`,
+      );
+      setSelectedIds(new Set());
+    } catch (err) {
+      toast.error((err as Error).message ?? 'Failed to update claims');
+    }
+  };
 
   const overdueCount = summary?.overdueCount ?? 0;
 
