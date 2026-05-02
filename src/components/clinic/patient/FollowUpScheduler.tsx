@@ -47,40 +47,9 @@ export function FollowUpScheduler({
     return <Skeleton className="h-24 w-full rounded-xl" />;
   }
 
-  // ── State 1: a future appointment already exists ────────────────────────
-  if (future.length > 0) {
-    const next = future[0];
-    const formattedDate = (() => {
-      try {
-        return format(new Date(next.appointment_date), 'd MMM yyyy');
-      } catch {
-        return next.appointment_date;
-      }
-    })();
-    const reasonText = next.notes?.trim() || 'Follow-up';
-    const doctorName = next.doctors?.name;
-    const more = future.length - 1;
-
-    return (
-      <Alert className="bg-green-50 text-green-900 border-green-200">
-        <CheckCircle2 className="h-4 w-4 text-green-700" />
-        <AlertTitle className="text-green-900">Follow-up scheduled</AlertTitle>
-        <AlertDescription className="text-green-900/90">
-          Next appointment scheduled for{' '}
-          <strong>
-            {formattedDate} at {next.appointment_time}
-          </strong>
-          . Reason: {reasonText}
-          {doctorName && <span className="opacity-80"> · with {doctorName}</span>}
-          {more > 0 && (
-            <span className="opacity-70"> · +{more} more upcoming</span>
-          )}
-        </AlertDescription>
-      </Alert>
-    );
-  }
-
-  // ── State 2: no future appointment — show booking form ───────────────────
+  // Booking form is ALWAYS available — patients may have multiple distinct
+  // future appointments. Existing future appointments are surfaced as an
+  // informational summary above the form (non-blocking).
   const canSubmit = !!date && !!time && !createAppt.isPending;
 
   const handleBook = async () => {
@@ -94,7 +63,6 @@ export function FollowUpScheduler({
         notes: reason.trim() || 'Follow-up',
       });
       toast.success('Follow-up appointment booked');
-      // Reset local form; query invalidation will swap the view to State 1.
       setDate('');
       setTime('');
       setReason(defaultReason);
@@ -103,62 +71,110 @@ export function FollowUpScheduler({
     }
   };
 
+  const upcoming = future.slice(0, 3);
+  const more = future.length - upcoming.length;
+
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <CalendarPlus className="h-4 w-4 text-primary" />
-          Schedule Follow-up
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <Label htmlFor="follow-up-date" className="text-xs">
-              Date
-            </Label>
-            <Input
-              id="follow-up-date"
-              type="date"
-              min={todayStr}
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
+    <div className="space-y-3">
+      {future.length > 0 && (
+        <Alert className="bg-green-50 text-green-900 border-green-200">
+          <CheckCircle2 className="h-4 w-4 text-green-700" />
+          <AlertTitle className="text-green-900">
+            {future.length === 1
+              ? 'Upcoming follow-up scheduled'
+              : `${future.length} upcoming follow-ups scheduled`}
+          </AlertTitle>
+          <AlertDescription className="text-green-900/90">
+            <ul className="mt-1 space-y-0.5">
+              {upcoming.map((appt) => {
+                const formattedDate = (() => {
+                  try {
+                    return format(new Date(appt.appointment_date), 'd MMM yyyy');
+                  } catch {
+                    return appt.appointment_date;
+                  }
+                })();
+                const reasonText = appt.notes?.trim() || 'Follow-up';
+                const doctorName = appt.doctors?.name;
+                return (
+                  <li key={appt.id} className="text-xs">
+                    <strong>
+                      {formattedDate} at {appt.appointment_time}
+                    </strong>{' '}
+                    · {reasonText}
+                    {doctorName && (
+                      <span className="opacity-80"> · with {doctorName}</span>
+                    )}
+                  </li>
+                );
+              })}
+              {more > 0 && (
+                <li className="text-xs opacity-70">+{more} more upcoming</li>
+              )}
+            </ul>
+            <p className="mt-2 text-xs opacity-80">
+              You can still book additional appointments below.
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <CalendarPlus className="h-4 w-4 text-primary" />
+            Schedule Follow-up
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label htmlFor="follow-up-date" className="text-xs">
+                Date
+              </Label>
+              <Input
+                id="follow-up-date"
+                type="date"
+                min={todayStr}
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="follow-up-time" className="text-xs">
+                Time
+              </Label>
+              <Input
+                id="follow-up-time"
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+              />
+            </div>
           </div>
           <div className="space-y-1">
-            <Label htmlFor="follow-up-time" className="text-xs">
-              Time
+            <Label htmlFor="follow-up-reason" className="text-xs">
+              Reason
             </Label>
             <Input
-              id="follow-up-time"
-              type="time"
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
+              id="follow-up-reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Follow-up"
             />
           </div>
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="follow-up-reason" className="text-xs">
-            Reason
-          </Label>
-          <Input
-            id="follow-up-reason"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Follow-up"
-          />
-        </div>
-        <Button
-          onClick={handleBook}
-          disabled={!canSubmit}
-          className="w-full"
-          size="sm"
-        >
-          <CalendarPlus className="h-4 w-4 mr-1.5" />
-          {createAppt.isPending ? 'Booking…' : 'Book Appointment'}
-        </Button>
-      </CardContent>
-    </Card>
+          <Button
+            onClick={handleBook}
+            disabled={!canSubmit}
+            className="w-full"
+            size="sm"
+          >
+            <CalendarPlus className="h-4 w-4 mr-1.5" />
+            {createAppt.isPending ? 'Booking…' : 'Book Appointment'}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
