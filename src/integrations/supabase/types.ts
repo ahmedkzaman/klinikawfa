@@ -1514,6 +1514,7 @@ export type Database = {
       inventory_items: {
         Row: {
           allocated_quantity: number
+          archived_at: string | null
           brand: string | null
           category: string
           cost_price: number
@@ -1537,6 +1538,8 @@ export type Database = {
           location_id: string | null
           name: string
           nearest_expiry_date: string | null
+          price_tier_1: number
+          price_tier_2: number
           price_to_patient_max: number
           price_to_patient_min: number
           remarks: string | null
@@ -1551,6 +1554,7 @@ export type Database = {
         }
         Insert: {
           allocated_quantity?: number
+          archived_at?: string | null
           brand?: string | null
           category?: string
           cost_price?: number
@@ -1574,6 +1578,8 @@ export type Database = {
           location_id?: string | null
           name: string
           nearest_expiry_date?: string | null
+          price_tier_1?: number
+          price_tier_2?: number
           price_to_patient_max?: number
           price_to_patient_min?: number
           remarks?: string | null
@@ -1588,6 +1594,7 @@ export type Database = {
         }
         Update: {
           allocated_quantity?: number
+          archived_at?: string | null
           brand?: string | null
           category?: string
           cost_price?: number
@@ -1611,6 +1618,8 @@ export type Database = {
           location_id?: string | null
           name?: string
           nearest_expiry_date?: string | null
+          price_tier_1?: number
+          price_tier_2?: number
           price_to_patient_max?: number
           price_to_patient_min?: number
           remarks?: string | null

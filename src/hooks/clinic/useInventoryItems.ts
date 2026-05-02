@@ -84,6 +84,19 @@ export interface InventoryItemInput {
   default_duration?: string | null;
   default_duration_unit?: string | null;
   default_precaution?: string | null;
+  // Phase 2A: Inventory dashboard fields
+  /** Drug grouping (e.g. Antibiotic, Analgesic). Maps to DB column `groups`. */
+  drug_group?: string | null;
+  /** Low-stock alert threshold. Maps to DB column `stock_amount_warning`. */
+  low_stock_threshold?: number | null;
+  /** Earliest expiry date for current stock. Maps to DB column `nearest_expiry_date`. */
+  expiry_date?: string | null;
+  /** Tier 1 panel/corporate price. */
+  price_tier_1?: number;
+  /** Tier 2 panel/corporate price. */
+  price_tier_2?: number;
+  /** Soft-delete timestamp. null = active, set = archived. */
+  archived_at?: string | null;
 }
 
 const DEFAULT_FIELDS = [
@@ -128,6 +141,23 @@ function mapItemPayload(input: Partial<InventoryItemInput>) {
       payload[key] = typeof v === 'string' && v.trim() === '' ? null : v;
     }
   }
+  // Phase 2A fields
+  if (input.drug_group !== undefined) {
+    payload.groups = typeof input.drug_group === 'string' && input.drug_group.trim() === '' ? null : input.drug_group;
+  }
+  if (input.low_stock_threshold !== undefined) {
+    payload.stock_amount_warning =
+      input.low_stock_threshold === null || Number.isNaN(Number(input.low_stock_threshold))
+        ? null
+        : Number(input.low_stock_threshold);
+  }
+  if (input.expiry_date !== undefined) {
+    payload.nearest_expiry_date =
+      typeof input.expiry_date === 'string' && input.expiry_date.trim() === '' ? null : input.expiry_date;
+  }
+  if (input.price_tier_1 !== undefined) payload.price_tier_1 = Number(input.price_tier_1) || 0;
+  if (input.price_tier_2 !== undefined) payload.price_tier_2 = Number(input.price_tier_2) || 0;
+  if (input.archived_at !== undefined) payload.archived_at = input.archived_at;
   return payload;
 }
 
