@@ -1009,7 +1009,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                                   <span className="truncate">{firstName(cell.staffName)}</span>
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
                                 </SelectContent>
                               </Select>
                             ) : <span className="text-[10px] text-muted-foreground">—</span>}
@@ -1037,7 +1037,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                                   <span className="truncate">{firstName(cell.staffName)}</span>
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
                                 </SelectContent>
                               </Select>
                             ) : <span className="text-[10px] text-muted-foreground">—</span>}
@@ -1064,7 +1064,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                                   <span className="truncate">{firstName(cell.staffName)}</span>
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
                                 </SelectContent>
                               </Select>
                             ) : <span className="text-[10px] text-muted-foreground">—</span>}
