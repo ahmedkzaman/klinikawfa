@@ -35,12 +35,14 @@ export default function QueueSettings() {
   const [youtubeId, setYoutubeId] = useState('');
   const [tickerText, setTickerText] = useState('');
   const [callBy, setCallBy] = useState<'name' | 'number'>('number');
+  const [ttsLanguage, setTtsLanguage] = useState<'ms-MY' | 'en-US'>('ms-MY');
   const [hydrated, setHydrated] = useState(false);
 
   if (!hydrated && !isLoading && settings.id) {
     setYoutubeId(settings.tv_youtube_id ?? '');
     setTickerText(settings.tv_ticker_text ?? '');
     setCallBy((settings.queue_call_by as 'name' | 'number') ?? 'number');
+    setTtsLanguage((settings.tts_language as 'ms-MY' | 'en-US') ?? 'ms-MY');
     setHydrated(true);
   }
 
