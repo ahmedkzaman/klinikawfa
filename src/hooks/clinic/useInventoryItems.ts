@@ -2,6 +2,26 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 const QUERY_KEY = ['inventory_items'];
+const SAFE_QUERY_KEY = ['inventory_items_safe'];
+
+/**
+ * Cost-free inventory listing for roles that are not allowed to see
+ * cost_price / tier prices (e.g. locums). Backed by the
+ * `inventory_items_safe` definer view.
+ */
+export function useInventoryItemsSafe() {
+  return useQuery({
+    queryKey: SAFE_QUERY_KEY,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('inventory_items_safe')
+        .select('*')
+        .order('name');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
 
 export function useInventoryItems() {
   const queryClient = useQueryClient();

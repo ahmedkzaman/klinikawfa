@@ -131,7 +131,10 @@ export default function ConsultationDetail() {
   const removeItem = useRemoveConsultationItem();
   const updateItem = useUpdateConsultationItem();
 
-  const { items: inventoryItems } = useInventoryItems();
+  // Use the cost-free safe view so locum doctors (blocked from the base
+  // inventory_items table) can still populate the picker. Cost data is not
+  // needed here — pricing is resolved server-side by trg_resolve_selling_price.
+  const { data: inventoryItems = [] } = useInventoryItemsSafe();
   const { services } = useServices();
   const { packages } = usePackages();
 
