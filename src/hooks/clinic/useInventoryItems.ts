@@ -84,6 +84,19 @@ export interface InventoryItemInput {
   default_duration?: string | null;
   default_duration_unit?: string | null;
   default_precaution?: string | null;
+  // Phase 2A: Inventory dashboard fields
+  /** Drug grouping (e.g. Antibiotic, Analgesic). Maps to DB column `groups`. */
+  drug_group?: string | null;
+  /** Low-stock alert threshold. Maps to DB column `stock_amount_warning`. */
+  low_stock_threshold?: number | null;
+  /** Earliest expiry date for current stock. Maps to DB column `nearest_expiry_date`. */
+  expiry_date?: string | null;
+  /** Tier 1 panel/corporate price. */
+  price_tier_1?: number;
+  /** Tier 2 panel/corporate price. */
+  price_tier_2?: number;
+  /** Soft-delete timestamp. null = active, set = archived. */
+  archived_at?: string | null;
 }
 
 const DEFAULT_FIELDS = [
