@@ -38,6 +38,7 @@ export default function QueueTV() {
   const playingRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const currentTtsAudioRef = useRef<HTMLAudioElement | null>(null);
   const seenRef = useRef<Set<string>>(new Set());
 
   // Realtime subscription
@@ -105,19 +106,29 @@ export default function QueueTV() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [started, settings.queue_call_by, isPreview]);
 
-  const playDingDong = async () => {
+  const playDingDong = async (): Promise<void> => {
     if (isPreview) return;
-    // Try MP3 first
+    // Try MP3 first; resolve when it ends so we never overlap.
     if (audioRef.current) {
       try {
-        audioRef.current.currentTime = 0;
-        await audioRef.current.play();
+        const el = audioRef.current;
+        el.currentTime = 0;
+        await el.play();
+        await new Promise<void>((resolve) => {
+          const done = () => {
+            el.removeEventListener('ended', done);
+            el.removeEventListener('error', done);
+            resolve();
+          };
+          el.addEventListener('ended', done);
+          el.addEventListener('error', done);
+        });
         return;
       } catch {
         /* fall through to synthesized fallback */
       }
     }
-    // Synthesized two-tone fallback
+    // Synthesized two-tone fallback (~1.1s total)
     try {
       if (!audioCtxRef.current) {
         audioCtxRef.current = new (window.AudioContext ||
@@ -142,9 +153,10 @@ export default function QueueTV() {
     } catch {
       /* noop */
     }
+    await wait(1150);
   };
 
-  const speakAnnouncement = (next: CallEvent) => {
+  const speakAnnouncement = async (next: CallEvent): Promise<void> => {
     if (isPreview) return;
     const callBy = settings.queue_call_by ?? 'number';
     const lang = (settings.tts_language ?? 'ms-MY') as 'ms-MY' | 'en-US';
@@ -157,39 +169,46 @@ export default function QueueTV() {
           ? `Patient, ${next.display}, please proceed to, ${next.roomLabel}`
           : `Queue number, ${next.display}, please proceed to, ${next.roomLabel}`);
 
-    const speakOnce = () => {
-      const msg = new SpeechSynthesisUtterance(text);
-      msg.lang = lang;
-      msg.rate = 0.85;
-      msg.volume = 1;
-      const voices = window.speechSynthesis.getVoices();
-      const prefix = lang.split('-')[0].toLowerCase();
-      const voice =
-        voices.find((v) => v.lang === lang) ||
-        voices.find((v) => v.lang?.toLowerCase().startsWith(prefix));
-      if (voice) msg.voice = voice;
-      window.speechSynthesis.speak(msg);
-    };
+    const voiceName = isMalay ? 'ms-MY-Wavenet-A' : 'en-US-Journey-F';
 
     try {
-      window.speechSynthesis.cancel();
-      if (window.speechSynthesis.getVoices().length === 0) {
-        window.speechSynthesis.onvoiceschanged = () => {
-          speakOnce();
-        };
-      } else {
-        speakOnce();
+      // Stop any stale clip
+      if (currentTtsAudioRef.current) {
+        try { currentTtsAudioRef.current.pause(); } catch { /* noop */ }
+        currentTtsAudioRef.current = null;
       }
-      // Repeat once for clarity
-      setTimeout(() => {
-        try {
-          speakOnce();
-        } catch {
-          /* noop */
-        }
-      }, 2800);
-    } catch {
-      /* noop */
+
+      const { data, error } = await supabase.functions.invoke('generate-tts', {
+        body: { text, languageCode: lang, voiceName },
+      });
+
+      if (error || !data?.audioContent) {
+        console.error('TTS invoke failed', error);
+        return;
+      }
+
+      const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
+      currentTtsAudioRef.current = audio;
+      audio.volume = 1;
+
+      await new Promise<void>((resolve) => {
+        const done = () => {
+          audio.removeEventListener('ended', done);
+          audio.removeEventListener('error', done);
+          if (currentTtsAudioRef.current === audio) {
+            currentTtsAudioRef.current = null;
+          }
+          resolve();
+        };
+        audio.addEventListener('ended', done);
+        audio.addEventListener('error', done);
+        audio.play().catch((e) => {
+          console.error('TTS audio play failed', e);
+          done();
+        });
+      });
+    } catch (e) {
+      console.error('speakAnnouncement error', e);
     }
   };
 
@@ -201,13 +220,15 @@ export default function QueueTV() {
     setRecentCalls((prev) => [...prev, next].slice(-3));
 
     await playDingDong();
-    await wait(900);
-    speakAnnouncement(next);
+    await wait(300);
+    await speakAnnouncement(next);
+    await wait(600);
+    await speakAnnouncement(next); // repeat once for clarity
 
-    await wait(5000);
     playingRef.current = false;
     if (queueRef.current.length > 0) processQueue();
   };
+
 
   if (!started) {
     return (
@@ -220,8 +241,13 @@ export default function QueueTV() {
         </p>
         <button
           onClick={() => {
+            // Unlock autoplay on iOS/Safari with a silent play attempt
             try {
-              window.speechSynthesis.speak(new SpeechSynthesisUtterance(' '));
+              const unlock = new Audio(
+                'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQxAADB8AhSmxhIIEVCSiJrDCQBTcu3UrAIwUdkRgQbFAZC1CQEwTJ9mjRvBA4UOLD8nKVOWfh+UlK3z/177OXrfOdKl7097deO9XHv/3Q1/jOR40cf/G/5/aphP/+/9/+///8/g//1/'
+              );
+              unlock.volume = 0;
+              unlock.play().catch(() => { /* noop */ });
             } catch {
               /* noop */
             }
