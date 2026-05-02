@@ -657,6 +657,7 @@ export default function ConsultationDetail() {
                         key={item.id}
                         item={item as TreatmentItemCardItem}
                         priceTiers={PRICE_TIERS}
+                        isPanel={isPanel}
                         disabled={!canEdit}
                         onRemove={() =>
                           consultationId &&
