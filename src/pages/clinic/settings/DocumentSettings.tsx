@@ -22,6 +22,7 @@ export default function DocumentSettings() {
     email: settings.email,
     logo_url: settings.logo_url,
     logo_height_px: settings.logo_height_px,
+    letterhead_text_px: settings.letterhead_text_px,
     content_margin_top: settings.content_margin_top,
   });
 
@@ -35,6 +36,7 @@ export default function DocumentSettings() {
       email: settings.email,
       logo_url: settings.logo_url,
       logo_height_px: settings.logo_height_px,
+      letterhead_text_px: settings.letterhead_text_px,
       content_margin_top: settings.content_margin_top,
     });
   }, [settings.id]); // eslint-disable-line react-hooks/exhaustive-deps
