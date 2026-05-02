@@ -16,6 +16,9 @@ export interface ClinicSettings {
   bank_name: string | null;
   bank_account_no: string | null;
   bank_account_holder: string | null;
+  queue_call_by: 'name' | 'number';
+  tv_youtube_id: string | null;
+  tv_ticker_text: string | null;
   updated_at: string;
 }
 
@@ -34,6 +37,9 @@ const DEFAULTS: ClinicSettings = {
   bank_name: null,
   bank_account_no: null,
   bank_account_holder: null,
+  queue_call_by: 'number',
+  tv_youtube_id: null,
+  tv_ticker_text: null,
   updated_at: new Date().toISOString(),
 };
 
