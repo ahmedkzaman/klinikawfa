@@ -119,18 +119,32 @@ export default function QueueBoard() {
   const [registerDialog, setRegisterDialog] = useState(false);
   const [activeEntry, setActiveEntry] = useState<QueueEntryWithJoins | null>(null);
 
+  const ACTIVE_STATUSES: ClinicStatus[] = [
+    'registered',
+    'ready_for_doctor',
+    'with_doctor',
+    'sent_to_dispensary',
+    'dispensing_payment',
+    'on_hold',
+  ];
+
+  const visibleEntries = useMemo(
+    () => entries.filter((e) => ACTIVE_STATUSES.includes(e.clinic_status as ClinicStatus)),
+    [entries],
+  );
+
   const grouped = useMemo(() => {
     const map = new Map<string, QueueEntryWithJoins[]>();
     QUEUE_COLUMNS.forEach((c) => map.set(c.key, []));
-    entries.forEach((e) => {
+    visibleEntries.forEach((e) => {
       const status = e.clinic_status as ClinicStatus;
       const col = QUEUE_COLUMNS.find((c) => c.statuses.includes(status));
       if (col) map.get(col.key)!.push(e);
     });
     return map;
-  }, [entries]);
+  }, [visibleEntries]);
 
-  const totalActive = entries.length;
+  const totalActive = visibleEntries.length;
 
   return (
     <>
