@@ -29,6 +29,12 @@ const isPreview =
   typeof window !== 'undefined' &&
   new URLSearchParams(window.location.search).get('preview') === 'true';
 
+// Professional chime hosted in Lovable Cloud public storage.
+// Capped to CHIME_MAX_MS so the TTS announcement doesn't wait too long.
+const CHIME_URL =
+  'https://ncysmppzfjtiekfnomdv.supabase.co/storage/v1/object/public/assets/clinic-chime.mp3';
+const CHIME_MAX_MS = 3000;
+
 export default function QueueTV() {
   const [started, setStarted] = useState(isPreview);
   const { settings } = useClinicSettings();
@@ -36,7 +42,7 @@ export default function QueueTV() {
   const [videoVolume, setVideoVolume] = useState(0.5);
   const queueRef = useRef<CallEvent[]>([]);
   const playingRef = useRef(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  
   const audioCtxRef = useRef<AudioContext | null>(null);
   const currentTtsAudioRef = useRef<HTMLAudioElement | null>(null);
   const seenRef = useRef<Set<string>>(new Set());
@@ -108,25 +114,29 @@ export default function QueueTV() {
 
   const playDingDong = async (): Promise<void> => {
     if (isPreview) return;
-    // Try MP3 first; resolve when it ends so we never overlap.
-    if (audioRef.current) {
-      try {
-        const el = audioRef.current;
-        el.currentTime = 0;
-        await el.play();
-        await new Promise<void>((resolve) => {
-          const done = () => {
-            el.removeEventListener('ended', done);
-            el.removeEventListener('error', done);
-            resolve();
-          };
-          el.addEventListener('ended', done);
-          el.addEventListener('error', done);
-        });
-        return;
-      } catch {
-        /* fall through to synthesized fallback */
-      }
+    // Try the hosted chime first; resolve on `ended`, on a 3s safety cap,
+    // or on error — whichever fires first — so the queue never hangs.
+    try {
+      const el = new Audio(CHIME_URL);
+      el.volume = 0.6;
+      await el.play();
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          el.removeEventListener('ended', finish);
+          el.removeEventListener('error', finish);
+          try { el.pause(); } catch { /* noop */ }
+          resolve();
+        };
+        el.addEventListener('ended', finish);
+        el.addEventListener('error', finish);
+        window.setTimeout(finish, CHIME_MAX_MS);
+      });
+      return;
+    } catch {
+      /* fall through to synthesized fallback */
     }
     // Synthesized two-tone fallback (~1.1s total)
     try {
@@ -257,7 +267,6 @@ export default function QueueTV() {
         >
           ▶ Mulakan Paparan TV
         </button>
-        <audio ref={audioRef} src="/sounds/dingdong.mp3" preload="auto" />
       </div>
     );
   }
@@ -274,7 +283,6 @@ export default function QueueTV() {
 
   return (
     <div className="fixed inset-0 bg-slate-950 text-white flex overflow-hidden">
-      {!isPreview && <audio ref={audioRef} src="/sounds/dingdong.mp3" preload="auto" />}
 
       {/* Left 65%: Video + ticker */}
       <div className="flex-[65] flex flex-col">
