@@ -789,6 +789,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "clinic_package_items_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "clinic_package_items_package_id_fkey"
             columns: ["package_id"]
             isOneToOne: false
@@ -1088,6 +1095,13 @@ export type Database = {
             columns: ["item_id"]
             isOneToOne: false
             referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultation_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items_safe"
             referencedColumns: ["id"]
           },
           {
@@ -1789,6 +1803,13 @@ export type Database = {
             referencedRelation: "inventory_items"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "inventory_adjustments_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       inventory_item_prices: {
@@ -1819,6 +1840,13 @@ export type Database = {
             columns: ["item_id"]
             isOneToOne: false
             referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_item_prices_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -2159,6 +2187,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "package_items_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "package_items_package_id_fkey"
             columns: ["package_id"]
             isOneToOne: false
@@ -2379,6 +2414,13 @@ export type Database = {
             columns: ["item_id"]
             isOneToOne: false
             referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_price_overrides_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items_safe"
             referencedColumns: ["id"]
           },
           {
@@ -2788,6 +2830,13 @@ export type Database = {
             columns: ["inventory_item_id"]
             isOneToOne: false
             referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_order_items_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items_safe"
             referencedColumns: ["id"]
           },
           {
@@ -3643,6 +3692,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "stock_take_counts_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "stock_take_counts_stock_take_id_fkey"
             columns: ["stock_take_id"]
             isOneToOne: false
@@ -4178,6 +4234,93 @@ export type Database = {
           },
         ]
       }
+      inventory_items_safe: {
+        Row: {
+          allocated_quantity: number | null
+          archived_at: string | null
+          brand: string | null
+          category: string | null
+          created_at: string | null
+          default_dosage_qty: string | null
+          default_dosage_unit: string | null
+          default_duration: string | null
+          default_duration_unit: string | null
+          default_frequency: string | null
+          default_indication: string | null
+          default_instruction: string | null
+          default_precaution: string | null
+          groups: string | null
+          id: string | null
+          is_otc: boolean | null
+          item_code: string | null
+          name: string | null
+          nearest_expiry_date: string | null
+          price_to_patient_max: number | null
+          price_to_patient_min: number | null
+          status: string | null
+          stock: number | null
+          stock_amount_warning: number | null
+          uom: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          allocated_quantity?: number | null
+          archived_at?: string | null
+          brand?: string | null
+          category?: string | null
+          created_at?: string | null
+          default_dosage_qty?: string | null
+          default_dosage_unit?: string | null
+          default_duration?: string | null
+          default_duration_unit?: string | null
+          default_frequency?: string | null
+          default_indication?: string | null
+          default_instruction?: string | null
+          default_precaution?: string | null
+          groups?: string | null
+          id?: string | null
+          is_otc?: boolean | null
+          item_code?: string | null
+          name?: string | null
+          nearest_expiry_date?: string | null
+          price_to_patient_max?: number | null
+          price_to_patient_min?: number | null
+          status?: string | null
+          stock?: number | null
+          stock_amount_warning?: number | null
+          uom?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          allocated_quantity?: number | null
+          archived_at?: string | null
+          brand?: string | null
+          category?: string | null
+          created_at?: string | null
+          default_dosage_qty?: string | null
+          default_dosage_unit?: string | null
+          default_duration?: string | null
+          default_duration_unit?: string | null
+          default_frequency?: string | null
+          default_indication?: string | null
+          default_instruction?: string | null
+          default_precaution?: string | null
+          groups?: string | null
+          id?: string | null
+          is_otc?: boolean | null
+          item_code?: string | null
+          name?: string | null
+          nearest_expiry_date?: string | null
+          price_to_patient_max?: number | null
+          price_to_patient_min?: number | null
+          status?: string | null
+          stock?: number | null
+          stock_amount_warning?: number | null
+          uom?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       panel_claims_view: {
         Row: {
           amount: number | null
@@ -4301,6 +4444,7 @@ export type Database = {
       }
       available_quantity: { Args: { _item_id: string }; Returns: number }
       can_view_insights: { Args: { _user_id: string }; Returns: boolean }
+      can_view_inventory_costs: { Args: { _user_id: string }; Returns: boolean }
       cleanup_appointment_submission_log: { Args: never; Returns: undefined }
       commit_inventory: {
         Args: { _item_id: string; _qty: number }
