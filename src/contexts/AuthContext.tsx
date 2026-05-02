@@ -25,6 +25,7 @@ interface AuthContextType {
   isOpsOrAdmin: boolean;
   isDoctorAdmin: boolean;
   isLocum: boolean;
+  isClinical: boolean;
   canViewInsights: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>;
@@ -176,6 +177,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     role === 'doctor_admin';
   const isDoctorAdmin = role === 'doctor_admin';
   const isLocum = role === 'locum';
+  const isClinical =
+    role === 'locum' ||
+    role === 'doctor_admin' ||
+    role === 'special_admin' ||
+    role === 'admin';
   const canViewInsights =
     role === 'admin' || role === 'special_admin' || role === 'doctor_admin';
 
@@ -195,6 +201,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isOpsOrAdmin,
         isDoctorAdmin,
         isLocum,
+        isClinical,
         canViewInsights,
         signIn,
         signUp,

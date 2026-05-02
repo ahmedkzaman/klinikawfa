@@ -1,135 +1,117 @@
-## Locum Onboarding — Dual Pipeline (with MMC Verification Visibility)
+# Locum Clinical Tier & Routing Firewall (Revised — Option 3)
 
-Two parallel pathways for creating Locum doctor accounts:
-1. **Internal**: Staff/Admin manually creates a Locum from User Management (no session disruption).
-2. **External**: Public `/locum-register` page where a Locum self-signs-up as a `guest` pending Medical Director review.
+Adopt the **broad parent, strict child** strategy. The parent `/clinic` gate stays permissive (admits all non-guest employees); individual child routes carry strict role wrappers.
 
-`SUPABASE_SERVICE_ROLE_KEY` is already configured. No manual setup required.
+## 1. AuthContext (`src/contexts/AuthContext.tsx`)
 
----
+Add and export `isClinical`:
 
-### 1. Edge Function — `supabase/functions/admin-create-user/index.ts`
-
-New function with `verify_jwt = false` (manual verification in code, per project pattern).
-
-Flow:
-- CORS preflight handler.
-- Zod-validated body: `{ email, fullName, phone? }`.
-- Read `Authorization: Bearer <jwt>`, verify with anon client `getClaims(token)`. Reject 401 if invalid.
-- Use service-role client to check caller's role in `user_roles`. Require `admin | special_admin | doctor_admin | staff`. Otherwise 403.
-- `serviceClient.auth.admin.createUser({ email, password: 'test1234', email_confirm: true, user_metadata: { full_name, phone } })`.
-- Upsert `public.user_roles` with `{ user_id, role: 'locum' }`.
-- Return `{ success: true, user_id }`. Friendly 409 on duplicate email.
-
-`handle_new_user` trigger already creates the `profiles` row — no migration needed.
-
----
-
-### 2. Public Self-Registration — `src/pages/auth/LocumRegister.tsx`
-
-Public page styled to match `Auth.tsx`:
-- Card with brand gradient header "Locum Doctor Registration".
-- Fields: Full Name, Email, Password (min 8), Phone, **MMC Registration Number** (required).
-- On submit:
-  ```ts
-  supabase.auth.signUp({
-    email, password,
-    options: {
-      emailRedirectTo: `${window.location.origin}/`,
-      data: { requested_role: 'locum', full_name, phone, mmc_number },
-    }
-  })
-  ```
-- Success state: "Registration submitted. Check your email to verify your account. Our Medical Director will review your MMC credentials before granting clinic access."
-- Link back to `/auth` for existing users.
-
-New users land as `guest` (default) — quarantined by the Guest Firewall until promoted.
-
----
-
-### 3. Database — Surface `mmc_number` for verification
-
-Add a migration so the MMC number persists on the `profiles` table (more reliable than reading raw `auth.users.raw_user_meta_data` from the client).
-
-**Migration**: `supabase/migrations/<ts>_profiles_mmc_number.sql`
-```sql
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS mmc_number text;
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone text;
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS requested_role text;
-
--- Update handle_new_user to capture metadata from public signup
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-BEGIN
-  INSERT INTO public.profiles (id, email, full_name, phone, mmc_number, requested_role)
-  VALUES (
-    NEW.id,
-    NEW.email,
-    NEW.raw_user_meta_data->>'full_name',
-    NEW.raw_user_meta_data->>'phone',
-    NEW.raw_user_meta_data->>'mmc_number',
-    NEW.raw_user_meta_data->>'requested_role'
-  );
-  RETURN NEW;
-END;
-$$;
+```ts
+const isClinical = ['locum', 'doctor_admin', 'special_admin', 'admin'].includes(role ?? '');
 ```
 
-Existing `useClinicUsers` hook will be updated to select these new profile columns.
+Add `isClinical: boolean` to `AuthContextType` and to the provider value. Keep `isClinical` strict — receptionists/operations are NOT clinical.
 
----
+## 2. Login redirect (`src/pages/Auth.tsx`)
 
-### 4. Staff UI — `src/pages/clinic/settings/UserManagementSettings.tsx`
+Replace the blanket `navigate('/')` with a role-aware effect that fires once `rolesLoading` is false. Since `/clinic/dashboard` doesn't exist yet, route both branches to `/clinic/queue` but keep the role split for future-proofing:
 
-**Add Locum button**:
-- Visible only when `isAdmin || isSpecialAdmin || role === 'staff'`.
-- Opens `AddLocumDialog` (new component at `src/components/clinic/settings/AddLocumDialog.tsx`).
-- Form: Full Name, Email, Phone. Helper text: "Default password: `test1234` (locum should change after first login)."
-- Calls `supabase.functions.invoke('admin-create-user', ...)`, then `qc.invalidateQueries(['clinic_users'])`.
+```ts
+useEffect(() => {
+  if (!user || authLoading || rolesLoading) return;
+  if (role === 'locum') {
+    navigate('/clinic/queue', { replace: true });
+  } else if (['admin','special_admin','doctor_admin','operations','staff'].includes(role ?? '')) {
+    navigate('/clinic/queue', { replace: true }); // future: /clinic/dashboard
+  } else {
+    navigate('/', { replace: true }); // guest / null
+  }
+}, [user, role, authLoading, rolesLoading]);
+```
 
-**MMC verification visibility** (the critical addition):
-- Add a new column **"MMC / Requested Role"** to the user table.
-- For each row, render:
-  - If `requested_role === 'locum'` and `mmc_number` present → show a yellow `Pending Locum` badge alongside the MMC number, with a `Verify on MMC →` external link to `https://meritsmmc.moh.gov.my/` (opens new tab).
-  - Otherwise show `—`.
-- In the `DoctorProfileDialog` (or via tooltip on the badge), surface the `phone` and `mmc_number` fields read-only so the admin can confirm details before changing the role dropdown to `Locum`.
+Remove the inline `navigate('/')` from `handleLogin` (the effect handles it after role resolves).
 
-This closes the loop: a self-registered guest is immediately visible with their MMC number, and the admin can verify and promote them in one screen.
+## 3. Route guard hardening (`src/components/ClinicProtectedRoute.tsx`)
 
----
+- Extend `requiredRole` union: add `'clinical'`.
+- Pull `isClinical`, `isLocum` from context.
+- Bounce safely to prevent loops:
 
-### 5. Routing — `src/App.tsx`
+```ts
+if (requiredRole === 'clinical' && !isClinical) {
+  // staff/operations bounced out of clinical-only routes
+  return <Navigate to="/clinic/queue" replace />;
+}
+if (!hasAccess) {
+  // ops_or_admin / admin / special_admin / insights failures
+  if (isLocum) return <Navigate to="/clinic/queue" replace />;
+  return <Navigate to="/staff/dashboard" replace />;
+}
+```
 
-Public route OUTSIDE all protected wrappers, alongside `/auth` and `/reset-password`:
+The default `requiredRole` stays `ops_or_admin` BUT — important — the parent `/clinic` wrapper must explicitly opt out of that default. Change its usage in App.tsx to pass an explicit prop, OR (cleaner) loosen the default to a new `'any_staff'` baseline.
+
+**Decision:** add a new `'any_staff'` value (uses `isStaffOrAdmin`, which already includes locum + staff + operations + all admins) and change the parent wrapper to `requiredRole="any_staff"`. This keeps existing children that omit `requiredRole` from accidentally inheriting a permissive default — they'll continue to default to `ops_or_admin`.
+
+Updated union: `'any_staff' | 'clinical' | 'ops_or_admin' | 'special_admin' | 'admin' | 'insights'`.
+
+## 4. Route assignments (`src/App.tsx`)
+
+**Parent (broad front door):**
 ```tsx
-<Route path="/locum-register" element={<LocumRegister />} />
+<Route path="/clinic" element={
+  <ClinicProtectedRoute requiredRole="any_staff"><ClinicLayout /></ClinicProtectedRoute>
+}>
 ```
 
----
+**Clinical-only children** (wrap with `requiredRole="clinical"`):
+- `consultation`
+- `consultation/:queueEntryId`
+- `patients`
+- (Leave `queue`, `appointments`, `visits/:id` unwrapped — front desk needs them.)
 
-### Files Touched
+**Ops-or-admin children** (wrap with `requiredRole="ops_or_admin"` — locks locums OUT):
+- `dispensary`
+- `procurement`
+- `queue/checkout/:queueEntryId`
+- `billings`
+- `panel-claims`
+- `receivables`
+- `inventory`
+- `settings` (bare)
+- `settings/preferences`
 
-**New**
-- `supabase/functions/admin-create-user/index.ts`
-- `supabase/migrations/<ts>_profiles_mmc_number.sql`
-- `src/components/clinic/settings/AddLocumDialog.tsx`
-- `src/pages/auth/LocumRegister.tsx`
+**Already correctly wrapped (leave as-is):**
+- `settings/users`, `settings/documents` → `admin`
+- `settings/diagnoses`, `settings/panels`, `settings/drug-label`, `settings/queue` → `ops_or_admin`
+- `settings/inventory` → currently bare `ClinicProtectedRoute` (defaults to `ops_or_admin`) ✓
+- `insight` → `insights`
+- `voided` → `special_admin`
 
-**Edited**
-- `supabase/config.toml` — append `[functions.admin-create-user]\nverify_jwt = false`
-- `src/hooks/clinic/useClinicUsers.ts` — select `phone, mmc_number, requested_role`
-- `src/pages/clinic/settings/UserManagementSettings.tsx` — Add Locum button, MMC column, verify link
-- `src/components/clinic/settings/DoctorProfileDialog.tsx` — show MMC/phone read-only
-- `src/App.tsx` — register `/locum-register` route
+## 5. Sidebar visibility (`src/components/clinic/ClinicLayout.tsx`)
 
----
+Add `locumAllowed?: boolean` to `ClinicNavItem`. Mark only `patients` and `queue` (Queue Board) as `locumAllowed: true`. In `SidebarNav`:
 
-### Verification
+- Pull `isLocum` from `useAuth()`.
+- If `isLocum`, filter list to only `locumAllowed` items.
+- Hide the "Back to Staff Portal" footer link for locums (replace with an inline sign-out button via `signOut` from context, or simply hide).
 
-1. Deploy edge function → log in as staff → click Add Locum → confirm staff session intact and new locum appears.
-2. Log out → visit `/locum-register` → submit with MMC number → confirm guest row created with `mmc_number` populated.
-3. Log back in as admin → confirm new guest displays Pending Locum badge + MMC number + verify link → promote to `locum` via existing role dropdown.
+## 6. Consultation end-state (`src/pages/clinic/ConsultationDetail.tsx`)
+
+Pull `isLocum` from `useAuth()`. Update the post-action navigation calls:
+
+- `handleSendToDispensary` (line ~376): `navigate(isLocum ? '/clinic/queue' : '/clinic/consultation', { replace: true })`
+- Completion path at line ~403: same conditional.
+- Back button at line ~492: `navigate(isLocum ? '/clinic/queue' : '/clinic/consultation')`.
+
+Locums never see the consultation list (they don't need to triage); they bounce straight back to the queue to pick the next patient.
+
+## Stop point
+
+After these edits compile, stop and report. Manual QA checklist for the user:
+1. Log in as locum → lands on `/clinic/queue`, sidebar shows only Patients + Queue Board.
+2. Locum tries `/clinic/settings` directly → bounced to `/clinic/queue`.
+3. Log in as staff/operations → can still reach `/clinic/queue`, `/clinic/billings`, `/clinic/inventory`.
+4. Staff tries `/clinic/consultation/:id` → bounced to `/clinic/queue` (clinical-only).
+
+No DB changes, no edge function changes.

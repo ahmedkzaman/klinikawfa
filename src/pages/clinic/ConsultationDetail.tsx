@@ -64,12 +64,14 @@ import {
 } from '@/components/clinic/consultation/TreatmentItemCard';
 import { DiagnosisCombobox } from '@/components/clinic/consultation/DiagnosisCombobox';
 import { SessionAttachmentsStrip } from '@/components/clinic/consultation/SessionAttachmentsStrip';
+import { useAuth } from '@/contexts/AuthContext';
 
 const PRICE_TIERS = ['SELF PAY', 'PANEL'];
 
 export default function ConsultationDetail() {
   const { queueEntryId } = useParams<{ queueEntryId: string }>();
   const navigate = useNavigate();
+  const { isLocum } = useAuth();
   const { data: doctor } = useCurrentDoctor();
   const { data: entries = [] } = useConsultationQueueEntries();
   const updateQueue = useUpdateQueueEntry();
@@ -373,7 +375,7 @@ export default function ConsultationDetail() {
       clinic_status: 'sent_to_dispensary',
     });
     toast.success('Sent to dispensary');
-    navigate('/clinic/consultation');
+    navigate(isLocum ? '/clinic/queue' : '/clinic/consultation', { replace: true });
   };
 
   const handlePutOnHold = async () => {
@@ -400,7 +402,7 @@ export default function ConsultationDetail() {
       });
 
       toast.success(`${patient?.name ?? 'Patient'} placed on hold`);
-      navigate('/clinic/consultation');
+      navigate(isLocum ? '/clinic/queue' : '/clinic/consultation', { replace: true });
     } catch (error: any) {
       toast.error(`Failed to place on hold: ${error.message || 'Unknown error'}`);
     }
@@ -489,7 +491,7 @@ export default function ConsultationDetail() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate('/clinic/consultation')}
+              onClick={() => navigate(isLocum ? '/clinic/queue' : '/clinic/consultation')}
               className="rounded-lg"
             >
               <ArrowLeft className="h-4 w-4" />

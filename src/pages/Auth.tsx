@@ -18,18 +18,30 @@ type AuthMode = 'login' | 'signup' | 'reset';
 
 export default function Auth() {
   const { language } = useLanguage();
-  const { user, signIn, signUp, resetPassword, loading: authLoading } = useAuth();
+  const { user, role, rolesLoading, signIn, signUp, resetPassword, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [mode, setMode] = useState<AuthMode>('login');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Redirect if already logged in
+  // Role-aware redirect once session and role are both resolved
   useEffect(() => {
-    if (user && !authLoading) {
-      navigate('/');
+    if (!user || authLoading || rolesLoading) return;
+    if (role === 'locum') {
+      navigate('/clinic/queue', { replace: true });
+    } else if (
+      role === 'admin' ||
+      role === 'special_admin' ||
+      role === 'doctor_admin' ||
+      role === 'operations' ||
+      role === 'staff'
+    ) {
+      // Future: /clinic/dashboard. Today the queue is the unified landing.
+      navigate('/clinic/queue', { replace: true });
+    } else {
+      navigate('/', { replace: true });
     }
-  }, [user, authLoading, navigate]);
+  }, [user, role, authLoading, rolesLoading, navigate]);
 
   const loginForm = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -76,7 +88,7 @@ export default function Auth() {
         title: language === 'ms' ? 'Berjaya' : 'Success',
         description: language === 'ms' ? 'Log masuk berjaya!' : 'Login successful!',
       });
-      navigate('/');
+      // Role-aware redirect handled by the effect above once role resolves.
     }
   };
 

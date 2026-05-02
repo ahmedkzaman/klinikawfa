@@ -30,12 +30,13 @@ type ClinicNavItem = {
   icon: LucideIcon;
   specialAdminOnly?: boolean;
   adminOnly?: boolean;
+  locumAllowed?: boolean;
 };
 
 const clinicNavItems: ClinicNavItem[] = [
-  { href: '/clinic/patients', label: 'Patients', icon: Users },
+  { href: '/clinic/patients', label: 'Patients', icon: Users, locumAllowed: true },
   { href: '/clinic/appointments', label: 'Appointments', icon: CalendarDays },
-  { href: '/clinic/queue', label: 'Queue Board', icon: LayoutDashboard },
+  { href: '/clinic/queue', label: 'Queue Board', icon: LayoutDashboard, locumAllowed: true },
   { href: '/clinic/consultation', label: 'Consultation', icon: Stethoscope },
   { href: '/clinic/dispensary', label: 'Dispensary', icon: Pill },
   { href: '/clinic/billings', label: 'Billings', icon: Receipt },
@@ -52,15 +53,18 @@ function SidebarNav({
   pathname,
   isSpecialAdmin,
   isAdmin,
+  isLocum,
   onLinkClick,
 }: {
   pathname: string;
   isSpecialAdmin: boolean;
   isAdmin: boolean;
+  isLocum: boolean;
   onLinkClick?: () => void;
 }) {
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const visibleItems = clinicNavItems.filter((item) => {
+    if (isLocum) return !!item.locumAllowed;
     if (item.specialAdminOnly && !isSpecialAdmin) return false;
     if (item.adminOnly && !(isAdmin || isSpecialAdmin)) return false;
     return true;
@@ -94,7 +98,7 @@ function SidebarNav({
 }
 
 export function ClinicLayout() {
-  const { user, isSpecialAdmin, isAdmin } = useAuth();
+  const { user, isSpecialAdmin, isAdmin, isLocum, signOut } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -113,23 +117,36 @@ export function ClinicLayout() {
             pathname={location.pathname}
             isSpecialAdmin={isSpecialAdmin}
             isAdmin={isAdmin}
+            isLocum={isLocum}
           />
         </div>
         <div className="shrink-0 p-4 border-t border-slate-100">
           {user?.email && (
             <div className="text-xs text-slate-500 mb-2 truncate">{user.email}</div>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start rounded-xl text-slate-600 hover:text-slate-800 hover:bg-slate-50"
-            asChild
-          >
-            <Link to="/staff/dashboard">
+          {isLocum ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start rounded-xl text-slate-600 hover:text-slate-800 hover:bg-slate-50"
+              onClick={() => signOut()}
+            >
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Staff Portal
-            </Link>
-          </Button>
+              Sign Out
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start rounded-xl text-slate-600 hover:text-slate-800 hover:bg-slate-50"
+              asChild
+            >
+              <Link to="/staff/dashboard">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Staff Portal
+              </Link>
+            </Button>
+          )}
         </div>
       </aside>
 
@@ -152,6 +169,7 @@ export function ClinicLayout() {
               pathname={location.pathname}
               isSpecialAdmin={isSpecialAdmin}
               isAdmin={isAdmin}
+              isLocum={isLocum}
               onLinkClick={() => setMobileOpen(false)}
             />
           </div>
@@ -159,17 +177,32 @@ export function ClinicLayout() {
             {user?.email && (
               <div className="text-xs text-slate-500 mb-2 truncate">{user.email}</div>
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start rounded-xl text-slate-600 hover:text-slate-800 hover:bg-slate-50"
-              asChild
-            >
-              <Link to="/staff/dashboard" onClick={() => setMobileOpen(false)}>
+            {isLocum ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start rounded-xl text-slate-600 hover:text-slate-800 hover:bg-slate-50"
+                onClick={() => {
+                  setMobileOpen(false);
+                  signOut();
+                }}
+              >
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Staff Portal
-              </Link>
-            </Button>
+                Sign Out
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start rounded-xl text-slate-600 hover:text-slate-800 hover:bg-slate-50"
+                asChild
+              >
+                <Link to="/staff/dashboard" onClick={() => setMobileOpen(false)}>
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Staff Portal
+                </Link>
+              </Button>
+            )}
           </div>
         </SheetContent>
       </Sheet>
