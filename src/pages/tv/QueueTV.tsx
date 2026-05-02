@@ -6,25 +6,27 @@ import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 
 interface CallEvent {
   id: string;
-  display: string; // queue number (formatted) or patient name
+  display: string; // queue number (bare, e.g. "12") or patient name
   roomLabel: string;
   ts: number;
 }
 
 /**
  * Waiting-room TV. Listens for queue_entries updates and announces the
- * patient via Web Speech API + chime when their status flips to with_doctor.
+ * patient via Web Speech API + ding-dong chime when their status flips to
+ * with_doctor. Shows the last 3 calls as a vertical stack (newest at the
+ * bottom, glowing & flashing).
  *
  * Mounted at /tv outside any layout. Dark, full-screen, 16:9-friendly.
  */
 export default function QueueTV() {
   const [started, setStarted] = useState(false);
   const { settings } = useClinicSettings();
-  const [current, setCurrent] = useState<CallEvent | null>(null);
-  const [recent, setRecent] = useState<CallEvent[]>([]);
+  const [recentCalls, setRecentCalls] = useState<CallEvent[]>([]);
   const queueRef = useRef<CallEvent[]>([]);
   const playingRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
   const seenRef = useRef<Set<string>>(new Set());
 
   // Realtime subscription
@@ -55,7 +57,6 @@ export default function QueueTV() {
           if (seenRef.current.has(eventKey)) return;
           seenRef.current.add(eventKey);
 
-          // Fetch joined info
           const { data, error } = await supabase
             .from('queue_entries')
             .select(
@@ -66,12 +67,12 @@ export default function QueueTV() {
           if (error || !data) return;
 
           const callBy = settings.queue_call_by ?? 'number';
-          const patient = (data.patients as { name?: string } | null)?.name ?? 'Patient';
-          const room = (data.rooms as { label?: string } | null)?.label ?? 'consultation room';
+          const patient = (data.patients as { name?: string } | null)?.name ?? 'Pesakit';
+          const room = (data.rooms as { label?: string } | null)?.label ?? 'bilik konsultasi';
           const display =
             callBy === 'name'
               ? patient
-              : `Number ${data.queue_number ?? ''}`.trim();
+              : `${data.queue_number ?? ''}`.trim();
 
           const evt: CallEvent = {
             id: `${id}-${next.called_at}`,
@@ -91,44 +92,98 @@ export default function QueueTV() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [started, settings.queue_call_by]);
 
+  const playDingDong = async () => {
+    // Try MP3 first
+    if (audioRef.current) {
+      try {
+        audioRef.current.currentTime = 0;
+        await audioRef.current.play();
+        return;
+      } catch {
+        /* fall through to synthesized fallback */
+      }
+    }
+    // Synthesized two-tone fallback
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const ctx = audioCtxRef.current;
+      const now = ctx.currentTime;
+      const tone = (freq: number, start: number, dur: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, now + start);
+        gain.gain.exponentialRampToValueAtTime(0.4, now + start + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(now + start);
+        osc.stop(now + start + dur + 0.05);
+      };
+      tone(880, 0, 0.45); // ding
+      tone(660, 0.5, 0.6); // dong
+    } catch {
+      /* noop */
+    }
+  };
+
+  const speakMalay = (next: CallEvent) => {
+    const callBy = settings.queue_call_by ?? 'number';
+    const text =
+      callBy === 'name'
+        ? `Pesakit, ${next.display}, sila ke, ${next.roomLabel}`
+        : `Nombor giliran, ${next.display}, sila ke, ${next.roomLabel}`;
+
+    const speakOnce = () => {
+      const msg = new SpeechSynthesisUtterance(text);
+      msg.lang = 'ms-MY';
+      msg.rate = 0.85;
+      msg.volume = 1;
+      const voices = window.speechSynthesis.getVoices();
+      const malay =
+        voices.find((v) => v.lang === 'ms-MY') ||
+        voices.find((v) => v.lang?.toLowerCase().startsWith('ms'));
+      if (malay) msg.voice = malay;
+      window.speechSynthesis.speak(msg);
+    };
+
+    try {
+      window.speechSynthesis.cancel();
+      if (window.speechSynthesis.getVoices().length === 0) {
+        window.speechSynthesis.onvoiceschanged = () => {
+          speakOnce();
+        };
+      } else {
+        speakOnce();
+      }
+      // Repeat once for clarity
+      setTimeout(() => {
+        try {
+          speakOnce();
+        } catch {
+          /* noop */
+        }
+      }, 2800);
+    } catch {
+      /* noop */
+    }
+  };
+
   const processQueue = async () => {
     if (playingRef.current) return;
     const next = queueRef.current.shift();
     if (!next) return;
     playingRef.current = true;
-    setCurrent(next);
-    setRecent((r) => [next, ...r].slice(0, 5));
+    setRecentCalls((prev) => [...prev, next].slice(-3));
 
-    // Chime
-    try {
-      if (audioRef.current) {
-        audioRef.current.currentTime = 0;
-        await audioRef.current.play().catch(() => {});
-      }
-    } catch {
-      /* noop */
-    }
-    await wait(800);
+    await playDingDong();
+    await wait(900);
+    speakMalay(next);
 
-    // Speak
-    try {
-      const utter = new SpeechSynthesisUtterance(
-        `Calling ${next.display}, to ${next.roomLabel}`,
-      );
-      utter.rate = 0.95;
-      utter.volume = 1;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utter);
-      // Repeat once for clarity
-      await wait(2200);
-      window.speechSynthesis.speak(
-        new SpeechSynthesisUtterance(`Calling ${next.display}, to ${next.roomLabel}`),
-      );
-    } catch {
-      /* noop */
-    }
-
-    await wait(4000);
+    await wait(5000);
     playingRef.current = false;
     if (queueRef.current.length > 0) processQueue();
   };
@@ -137,14 +192,13 @@ export default function QueueTV() {
     return (
       <div className="fixed inset-0 bg-slate-950 text-white flex flex-col items-center justify-center gap-6 p-8">
         <TvIcon className="h-20 w-20 text-blue-400" />
-        <h1 className="text-4xl font-bold">Waiting Room TV</h1>
+        <h1 className="text-4xl font-bold">Paparan TV Bilik Menunggu</h1>
         <p className="max-w-lg text-center text-slate-400">
-          Start the display to enable patient call announcements. Audio playback
-          requires a one-time tap.
+          Mula paparan untuk membolehkan pengumuman panggilan pesakit. Audio
+          memerlukan satu sentuhan untuk dimulakan.
         </p>
         <button
           onClick={() => {
-            // Pre-warm speechSynthesis (gesture unlock)
             try {
               window.speechSynthesis.speak(new SpeechSynthesisUtterance(' '));
             } catch {
@@ -154,9 +208,9 @@ export default function QueueTV() {
           }}
           className="rounded-2xl bg-blue-600 hover:bg-blue-500 px-12 py-6 text-2xl font-semibold shadow-2xl transition-all hover:scale-105"
         >
-          ▶ Start TV Display
+          ▶ Mulakan Paparan TV
         </button>
-        <audio ref={audioRef} src="/sounds/chime.mp3" preload="auto" />
+        <audio ref={audioRef} src="/sounds/dingdong.mp3" preload="auto" />
       </div>
     );
   }
@@ -164,9 +218,16 @@ export default function QueueTV() {
   const ytId = settings.tv_youtube_id?.trim();
   const ticker = settings.tv_ticker_text?.trim();
 
+  // Build 3 row slots: index 0 = oldest (top), index 2 = newest (bottom).
+  // Pad with nulls if fewer than 3 calls.
+  const padded: (CallEvent | null)[] = [
+    ...Array(Math.max(0, 3 - recentCalls.length)).fill(null),
+    ...recentCalls,
+  ].slice(-3);
+
   return (
     <div className="fixed inset-0 bg-slate-950 text-white flex overflow-hidden">
-      <audio ref={audioRef} src="/sounds/chime.mp3" preload="auto" />
+      <audio ref={audioRef} src="/sounds/dingdong.mp3" preload="auto" />
 
       {/* Left 65%: Video + ticker */}
       <div className="flex-[65] flex flex-col">
@@ -182,7 +243,7 @@ export default function QueueTV() {
           ) : (
             <div className="text-slate-500 text-center px-8">
               <TvIcon className="h-16 w-16 mx-auto mb-4 opacity-40" />
-              <p>Set a YouTube Video ID under Settings → Queue &amp; TV.</p>
+              <p>Tetapkan ID Video YouTube di Settings → Queue &amp; TV.</p>
             </div>
           )}
         </div>
@@ -190,68 +251,102 @@ export default function QueueTV() {
         {/* Ticker */}
         <div className="h-14 bg-blue-900/80 border-t border-blue-700 flex items-center overflow-hidden">
           <div className="whitespace-nowrap animate-tv-marquee text-2xl font-medium px-6">
-            {ticker || 'Welcome to Klinik Awfa. Please wait to be called.'}
+            {ticker || 'Selamat datang ke Klinik Awfa. Sila tunggu giliran anda.'}
           </div>
         </div>
       </div>
 
-      {/* Right 35%: Now Calling */}
+      {/* Right 35%: 3-row stack */}
       <div className="flex-[35] flex flex-col bg-gradient-to-b from-slate-900 to-slate-950 border-l border-slate-800">
         <div className="px-6 py-4 border-b border-slate-800 flex items-center gap-2">
           <Volume2 className="h-5 w-5 text-blue-400" />
           <span className="text-sm uppercase tracking-widest text-slate-400">
-            Now Calling
+            Sedang Memanggil
           </span>
         </div>
 
-        <div className="flex-1 flex items-center justify-center p-6">
-          <AnimatePresence mode="wait">
-            {current ? (
-              <motion.div
-                key={current.id}
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                transition={{ type: 'spring', stiffness: 200, damping: 18 }}
-                className="text-center"
-              >
-                <motion.div
-                  animate={{ scale: [1, 1.05, 1] }}
-                  transition={{ duration: 1.2, repeat: 3 }}
-                  className="text-7xl font-black tracking-tight text-white drop-shadow-[0_0_30px_rgba(59,130,246,0.5)]"
-                >
-                  {current.display}
-                </motion.div>
-                <div className="mt-6 text-2xl text-blue-300">
-                  Please proceed to
-                </div>
-                <div className="mt-2 text-5xl font-bold text-blue-400">
-                  {current.roomLabel}
-                </div>
-              </motion.div>
-            ) : (
-              <div className="text-center text-slate-500">
-                <p className="text-xl">Waiting for next patient…</p>
-              </div>
-            )}
-          </AnimatePresence>
-        </div>
+        <div className="flex-1 flex flex-col p-4 gap-3">
+          {padded.map((call, idx) => {
+            const isNewest = idx === 2;
+            const isMid = idx === 1;
+            const isOldest = idx === 0;
 
-        {recent.length > 1 && (
-          <div className="border-t border-slate-800 px-6 py-3">
-            <div className="text-xs uppercase tracking-widest text-slate-500 mb-2">
-              Recent
-            </div>
-            <ul className="space-y-1 text-sm">
-              {recent.slice(1, 5).map((r) => (
-                <li key={r.id} className="flex justify-between text-slate-400">
-                  <span>{r.display}</span>
-                  <span className="text-slate-600">→ {r.roomLabel}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+            // Empty placeholder
+            if (!call) {
+              return (
+                <div
+                  key={`empty-${idx}`}
+                  className={`flex-1 rounded-2xl border border-dashed border-slate-800 flex items-center justify-center text-slate-700 ${
+                    isNewest ? 'min-h-[40%]' : ''
+                  }`}
+                >
+                  <span className="text-3xl">—</span>
+                </div>
+              );
+            }
+
+            const opacityCls = isNewest
+              ? 'opacity-100'
+              : isMid
+              ? 'opacity-70'
+              : 'opacity-40';
+            const borderCls = isNewest
+              ? 'border-blue-400 bg-blue-950/30 shadow-[0_0_40px_rgba(59,130,246,0.35)]'
+              : 'border-slate-800 bg-slate-900/40';
+            const textSize = isNewest
+              ? 'text-7xl'
+              : isMid
+              ? 'text-4xl'
+              : 'text-3xl';
+            const roomSize = isNewest ? 'text-3xl' : 'text-lg';
+            const glow = isNewest
+              ? 'drop-shadow-[0_0_30px_rgba(59,130,246,0.6)]'
+              : '';
+
+            return (
+              <AnimatePresence mode="wait" key={`slot-${idx}`}>
+                <motion.div
+                  key={call.id}
+                  initial={
+                    isNewest
+                      ? { scale: 0.85, opacity: 0, y: 20 }
+                      : { opacity: 0, y: -10 }
+                  }
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+                  className={`flex-1 rounded-2xl border-2 ${borderCls} ${opacityCls} flex items-center justify-between px-6 ${
+                    isNewest ? 'min-h-[40%]' : ''
+                  }`}
+                >
+                  <motion.div
+                    animate={
+                      isNewest
+                        ? { scale: [1, 1.04, 1] }
+                        : undefined
+                    }
+                    transition={
+                      isNewest
+                        ? { duration: 1.1, repeat: 3 }
+                        : undefined
+                    }
+                    className={`font-black tracking-tight text-white ${textSize} ${glow}`}
+                  >
+                    {call.display}
+                  </motion.div>
+                  <div className={`text-right ${isNewest ? 'text-blue-300' : 'text-slate-400'}`}>
+                    <div className={`${isNewest ? 'text-base' : 'text-xs'} uppercase tracking-widest opacity-70`}>
+                      {isNewest ? 'Sila ke' : isMid ? 'Sebelum ini' : 'Lebih awal'}
+                    </div>
+                    <div className={`font-bold ${roomSize} ${isNewest ? 'text-blue-400' : ''}`}>
+                      {call.roomLabel}
+                    </div>
+                  </div>
+                </motion.div>
+              </AnimatePresence>
+            );
+          })}
+        </div>
       </div>
 
       <style>{`
