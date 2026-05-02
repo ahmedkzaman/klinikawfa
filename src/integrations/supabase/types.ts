@@ -1667,6 +1667,7 @@ export type Database = {
           company_reg_number: string | null
           country: string | null
           created_at: string
+          default_price_tier: string
           email: string | null
           id: string
           name: string
@@ -1692,6 +1693,7 @@ export type Database = {
           company_reg_number?: string | null
           country?: string | null
           created_at?: string
+          default_price_tier?: string
           email?: string | null
           id?: string
           name: string
@@ -1717,6 +1719,7 @@ export type Database = {
           company_reg_number?: string | null
           country?: string | null
           created_at?: string
+          default_price_tier?: string
           email?: string | null
           id?: string
           name?: string
@@ -2394,17 +2397,22 @@ export type Database = {
           allergies: string | null
           created_at: string
           date_of_birth: string | null
+          default_panel_id: string | null
           email: string | null
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
           gender: string | null
           id: string
           name: string
           national_id: string | null
           notes: string | null
+          passport_no: string | null
           phone: string | null
           principal_id: string | null
           reg_no: string | null
           registration_date: string
           relationship: string | null
+          religion: string | null
           state_of_birth: string | null
           underlying_conditions: string | null
           updated_at: string
@@ -2413,17 +2421,22 @@ export type Database = {
           allergies?: string | null
           created_at?: string
           date_of_birth?: string | null
+          default_panel_id?: string | null
           email?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
           gender?: string | null
           id?: string
           name: string
           national_id?: string | null
           notes?: string | null
+          passport_no?: string | null
           phone?: string | null
           principal_id?: string | null
           reg_no?: string | null
           registration_date?: string
           relationship?: string | null
+          religion?: string | null
           state_of_birth?: string | null
           underlying_conditions?: string | null
           updated_at?: string
@@ -2432,22 +2445,34 @@ export type Database = {
           allergies?: string | null
           created_at?: string
           date_of_birth?: string | null
+          default_panel_id?: string | null
           email?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
           gender?: string | null
           id?: string
           name?: string
           national_id?: string | null
           notes?: string | null
+          passport_no?: string | null
           phone?: string | null
           principal_id?: string | null
           reg_no?: string | null
           registration_date?: string
           relationship?: string | null
+          religion?: string | null
           state_of_birth?: string | null
           underlying_conditions?: string | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "patients_default_panel_id_fkey"
+            columns: ["default_panel_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_providers"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "patients_principal_id_fkey"
             columns: ["principal_id"]

@@ -1,13 +1,4 @@
-## Sprint 3 — Ready to Execute
-
-Plan was approved, but I'm still in read-only/plan mode (the migration tool only becomes available once you confirm here). Approve this and I'll run the full sequence in one pass.
-
----
-
-### Step 1 — Migration (`sprint3_rules_and_panel_tiers.sql`)
-
-```sql
--- 1. Patient guards: NRIC + Passport siblings, religion, emergency contact, default panel
+-- 1. Patient demographic guards & default panel
 ALTER TABLE public.patients
   ADD COLUMN IF NOT EXISTS passport_no             text,
   ADD COLUMN IF NOT EXISTS religion                text,
@@ -18,10 +9,11 @@ ALTER TABLE public.patients
 
 CREATE INDEX IF NOT EXISTS idx_patients_default_panel_id
   ON public.patients(default_panel_id) WHERE default_panel_id IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_patients_passport_no
   ON public.patients(passport_no) WHERE passport_no IS NOT NULL;
 
--- 2. Panel default pricing tier on insurance_providers (NOT corporate_clients)
+-- 2. Panel default pricing tier on insurance_providers
 ALTER TABLE public.insurance_providers
   ADD COLUMN IF NOT EXISTS default_price_tier text NOT NULL DEFAULT 'standard';
 
@@ -29,7 +21,7 @@ CREATE OR REPLACE FUNCTION public.trg_validate_panel_tier()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 BEGIN
   IF NEW.default_price_tier NOT IN ('standard','tier1','tier2') THEN
-    RAISE EXCEPTION 'INVALID_PRICE_TIER: %' , NEW.default_price_tier
+    RAISE EXCEPTION 'INVALID_PRICE_TIER: %', NEW.default_price_tier
       USING ERRCODE='P0001';
   END IF;
   RETURN NEW;
@@ -40,12 +32,7 @@ CREATE TRIGGER validate_panel_tier
   BEFORE INSERT OR UPDATE ON public.insurance_providers
   FOR EACH ROW EXECUTE FUNCTION public.trg_validate_panel_tier();
 
--- 3. Extend price-resolution trigger to honour the panel's default tier.
---    Precedence for panel patients:
---      panel_price_overrides → tier price (price_tier_1 / price_tier_2)
---      → standard_panel_price → price_to_patient_max
---    Self-pay patients unchanged. Services/packages have no per-tier columns
---    today, so they fall through to standard_panel_price as before.
+-- 3. Extend price-resolution trigger to honour the panel's default tier
 CREATE OR REPLACE FUNCTION public.trg_resolve_selling_price()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE
@@ -105,53 +92,3 @@ BEGIN
   END IF;
   RETURN NEW;
 END $$;
-```
-
-### Step 2 — `RegisterPatientDialog.tsx`
-
-Extend Zod with strict guards:
-
-- `national_id` (12-digit MyKad) **OR** `passport_no` (1–20 alphanumeric) — XOR via `superRefine`
-- `phone` — already required ✓
-- `religion` — required Select: Islam / Buddhism / Christianity / Hinduism / Other / Prefer not to say
-- `emergency_contact_name` — required, ≥2 chars
-- `emergency_contact_phone` — required, same regex as `phone`
-- `default_panel_id` — optional Combobox from `useInsuranceProviders({ activeOnly: true })` with "None / Self-Pay" option
-
-Persist all six fields through `useCreatePatient`.
-
-### Step 3 — `PanelDialog.tsx`
-
-Add a **"Default Pricing Tier"** Select beside the existing freeform "Price Tier (key)" field:
-
-- Options: Standard / Tier 1 / Tier 2
-- Bound to `default_price_tier` on the schema/defaults/reset
-- Helper text: *"Drives the inventory price tier the trigger uses when no per-item override exists."*
-
-### Step 4 — Check-in prefill
-
-When a patient with `default_panel_id` is selected:
-
-- `RegisterAndCheckInDialog.tsx`: prefill `payment_method='panel'` + `panel_id` once a matching IC resolves to an existing patient
-- `CheckInWalkInDialog.tsx`: when `PatientPicker` returns a patient with `default_panel_id`, set `payerType='panel'` and `panelId` automatically (still editable)
-
-### Step 5 — Diagnoses
-
-Already wired — `SettingsPage.tsx` has the **Diagnosis Sweeper** card pointing at `/clinic/settings/diagnoses` (full CRUD via `useDiagnoses` on the existing 262-row `public.diagnoses` table). No new page or table.
-
-### Step 6 — Receivables module: untouched
-
-`corporate_clients`, `CorporateClientDialog.tsx`, `useCorporateClients.ts`, the AR invoice flow — none of these change. They remain the AR-only B2B billing entity.
-
----
-
-### Files to be edited / created
-
-- **New**: `supabase/migrations/<ts>_sprint3_rules_and_panel_tiers.sql` (via migration tool)
-- **Edited**: `src/components/clinic/RegisterPatientDialog.tsx`
-- **Edited**: `src/components/clinic/RegisterAndCheckInDialog.tsx` (prefill panel)
-- **Edited**: `src/components/clinic/CheckInWalkInDialog.tsx` (prefill panel)
-- **Edited**: `src/components/clinic/settings/PanelDialog.tsx` (tier Select)
-- **Notes**: `src/types/clinic.ts` and `useInsuranceProviders.ts` types regenerate automatically once the migration runs (Supabase types are auto-generated).
-
-Approve this and I'll run the migration + ship all four file edits in the next pass.

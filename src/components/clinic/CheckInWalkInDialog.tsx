@@ -62,6 +62,15 @@ export function CheckInWalkInDialog({
     }
   }, [open, initialPatient]);
 
+  // Auto-prefill payer when the selected patient has a default panel.
+  useEffect(() => {
+    const defaultPanel = (patient as { default_panel_id?: string | null } | null)?.default_panel_id;
+    if (defaultPanel) {
+      setPayerType('panel');
+      setPanelId(defaultPanel);
+    }
+  }, [patient]);
+
   const reset = () => {
     setPatient(null);
     setPurpose('consultation');

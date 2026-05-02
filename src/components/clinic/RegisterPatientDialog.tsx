@@ -10,29 +10,78 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCreatePatient } from '@/hooks/clinic/usePatients';
+import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
 import type { PatientRow } from '@/types/clinic';
 
-const patientSchema = z.object({
-  name: z.string().trim().min(2, 'Name must be at least 2 characters').max(120),
-  phone: z
-    .string()
-    .trim()
-    .min(1, 'Phone is required')
-    .max(20)
-    .regex(/^[+]?[0-9\s-]+$/, 'Invalid phone number'),
-  national_id: z
-    .string()
-    .trim()
-    .optional()
-    .refine((v) => !v || /^[0-9]{12}$/.test(v.replace(/[-\s]/g, '')), {
-      message: 'MyKad must be 12 digits',
-    }),
-  date_of_birth: z.string().optional(),
-  gender: z.enum(['male', 'female', 'other', '']).optional(),
-  email: z.string().trim().email('Invalid email').max(255).optional().or(z.literal('')),
-  allergies: z.string().trim().max(500).optional(),
-  underlying_conditions: z.string().trim().max(500).optional(),
-});
+const PHONE_REGEX = /^[+]?[0-9\s-]+$/;
+
+const RELIGIONS = [
+  'Islam',
+  'Buddhism',
+  'Christianity',
+  'Hinduism',
+  'Other',
+  'Prefer not to say',
+] as const;
+
+const patientSchema = z
+  .object({
+    name: z.string().trim().min(2, 'Name must be at least 2 characters').max(120),
+    phone: z
+      .string()
+      .trim()
+      .min(1, 'Phone is required')
+      .max(20)
+      .regex(PHONE_REGEX, 'Invalid phone number'),
+    national_id: z
+      .string()
+      .trim()
+      .optional()
+      .refine((v) => !v || /^[0-9]{12}$/.test(v.replace(/[-\s]/g, '')), {
+        message: 'MyKad must be 12 digits',
+      }),
+    passport_no: z
+      .string()
+      .trim()
+      .max(20, 'Passport must be ≤ 20 characters')
+      .regex(/^[A-Za-z0-9]*$/, 'Passport must be alphanumeric')
+      .optional()
+      .or(z.literal('')),
+    date_of_birth: z.string().optional(),
+    gender: z.enum(['male', 'female', 'other', '']).optional(),
+    email: z.string().trim().email('Invalid email').max(255).optional().or(z.literal('')),
+    religion: z.string().min(1, 'Religion is required'),
+    emergency_contact_name: z
+      .string()
+      .trim()
+      .min(2, 'Emergency contact name is required')
+      .max(120),
+    emergency_contact_phone: z
+      .string()
+      .trim()
+      .min(1, 'Emergency contact phone is required')
+      .max(20)
+      .regex(PHONE_REGEX, 'Invalid phone number'),
+    default_panel_id: z.string().nullable().optional(),
+    allergies: z.string().trim().max(500).optional(),
+    underlying_conditions: z.string().trim().max(500).optional(),
+  })
+  .superRefine((data, ctx) => {
+    const hasIc = !!data.national_id?.trim();
+    const hasPassport = !!data.passport_no?.trim();
+    if (!hasIc && !hasPassport) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['national_id'],
+        message: 'Provide either MyKad or Passport No.',
+      });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['passport_no'],
+        message: 'Provide either MyKad or Passport No.',
+      });
+    }
+  });
 
 type FormData = z.infer<typeof patientSchema>;
 
@@ -48,6 +97,7 @@ export function RegisterPatientDialog({
   onCreated,
 }: RegisterPatientDialogProps) {
   const create = useCreatePatient();
+  const { data: panels = [] } = useInsuranceProviders({ activeOnly: true });
   const [submitting, setSubmitting] = useState(false);
 
   const {
@@ -59,7 +109,14 @@ export function RegisterPatientDialog({
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(patientSchema),
-    defaultValues: { name: '', phone: '' },
+    defaultValues: {
+      name: '',
+      phone: '',
+      religion: '',
+      emergency_contact_name: '',
+      emergency_contact_phone: '',
+      default_panel_id: null,
+    },
   });
 
   const onSubmit = async (data: FormData) => {
@@ -68,10 +125,15 @@ export function RegisterPatientDialog({
       const created = await create.mutateAsync({
         name: data.name,
         phone: data.phone || null,
-        national_id: data.national_id || null,
+        national_id: data.national_id?.trim() || null,
+        passport_no: data.passport_no?.trim() || null,
         date_of_birth: data.date_of_birth || null,
         gender: data.gender || null,
         email: data.email || null,
+        religion: data.religion,
+        emergency_contact_name: data.emergency_contact_name,
+        emergency_contact_phone: data.emergency_contact_phone,
+        default_panel_id: data.default_panel_id || null,
         allergies: data.allergies || null,
         underlying_conditions: data.underlying_conditions || null,
       });
@@ -89,7 +151,7 @@ export function RegisterPatientDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Register Patient</DialogTitle>
         </DialogHeader>
@@ -99,7 +161,28 @@ export function RegisterPatientDialog({
             <Input id="name" {...register('name')} />
             {errors.name && <p className="text-sm text-destructive mt-1">{errors.name.message}</p>}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="national_id">MyKad / IC *</Label>
+              <Input id="national_id" placeholder="12 digits" {...register('national_id')} />
+              {errors.national_id && (
+                <p className="text-sm text-destructive mt-1">{errors.national_id.message}</p>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="passport_no">Passport No. *</Label>
+              <Input id="passport_no" placeholder="For foreign patients" {...register('passport_no')} />
+              {errors.passport_no && (
+                <p className="text-sm text-destructive mt-1">{errors.passport_no.message}</p>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground md:col-span-2 -mt-2">
+              Provide MyKad for Malaysians or Passport No. for foreigners (one is required).
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <Label htmlFor="phone">Phone *</Label>
               <Input id="phone" placeholder="+60 12 345 6789" {...register('phone')} />
@@ -108,14 +191,15 @@ export function RegisterPatientDialog({
               )}
             </div>
             <div>
-              <Label htmlFor="national_id">MyKad / IC</Label>
-              <Input id="national_id" placeholder="12 digits" {...register('national_id')} />
-              {errors.national_id && (
-                <p className="text-sm text-destructive mt-1">{errors.national_id.message}</p>
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" {...register('email')} />
+              {errors.email && (
+                <p className="text-sm text-destructive mt-1">{errors.email.message}</p>
               )}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <Label htmlFor="date_of_birth">Date of birth</Label>
               <Input id="date_of_birth" type="date" {...register('date_of_birth')} />
@@ -136,14 +220,74 @@ export function RegisterPatientDialog({
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <Label htmlFor="religion">Religion *</Label>
+              <Select
+                value={watch('religion') ?? ''}
+                onValueChange={(v) => setValue('religion', v, { shouldValidate: true })}
+              >
+                <SelectTrigger id="religion">
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  {RELIGIONS.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.religion && (
+                <p className="text-sm text-destructive mt-1">{errors.religion.message}</p>
+              )}
+            </div>
           </div>
+
+          <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+            <p className="text-sm font-medium">Emergency Contact</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="ec_name">Contact name *</Label>
+                <Input id="ec_name" {...register('emergency_contact_name')} />
+                {errors.emergency_contact_name && (
+                  <p className="text-sm text-destructive mt-1">
+                    {errors.emergency_contact_name.message}
+                  </p>
+                )}
+              </div>
+              <div>
+                <Label htmlFor="ec_phone">Contact phone *</Label>
+                <Input id="ec_phone" placeholder="+60 12 345 6789" {...register('emergency_contact_phone')} />
+                {errors.emergency_contact_phone && (
+                  <p className="text-sm text-destructive mt-1">
+                    {errors.emergency_contact_phone.message}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div>
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" {...register('email')} />
-            {errors.email && (
-              <p className="text-sm text-destructive mt-1">{errors.email.message}</p>
-            )}
+            <Label htmlFor="default_panel">Default Panel (optional)</Label>
+            <Select
+              value={watch('default_panel_id') ?? '__none__'}
+              onValueChange={(v) =>
+                setValue('default_panel_id', v === '__none__' ? null : v, { shouldValidate: true })
+              }
+            >
+              <SelectTrigger id="default_panel">
+                <SelectValue placeholder="Self-Pay (no panel)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Self-Pay (no panel)</SelectItem>
+                {panels.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Auto-prefills the payer at every check-in (still editable per visit).
+            </p>
           </div>
+
           <div>
             <Label htmlFor="allergies">Allergies</Label>
             <Textarea id="allergies" rows={2} {...register('allergies')} />

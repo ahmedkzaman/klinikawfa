@@ -49,6 +49,7 @@ const schema = z.object({
   panel_code: optionalString,
   status: z.enum(['active', 'inactive']),
   price_tier: makeOptionalString(60),
+  default_price_tier: z.enum(['standard', 'tier1', 'tier2']),
   submission_preference: z.enum(['bulk_claim', 'per_visit']),
   verification_type: z.enum(['url', 'phone', 'email', 'manual']),
   verification_link: optionalString,
@@ -75,6 +76,7 @@ const DEFAULTS: FormValues = {
   panel_code: '',
   status: 'active',
   price_tier: '',
+  default_price_tier: 'standard',
   submission_preference: 'bulk_claim',
   verification_type: 'url',
   verification_link: '',
@@ -112,6 +114,9 @@ export function PanelDialog({ open, onOpenChange, panel }: Props) {
         panel_code: panel.panel_code ?? '',
         status: (panel.status as FormValues['status']) ?? 'active',
         price_tier: panel.price_tier ?? '',
+        default_price_tier:
+          ((panel as { default_price_tier?: string }).default_price_tier as FormValues['default_price_tier']) ??
+          'standard',
         submission_preference:
           (panel.submission_preference as FormValues['submission_preference']) ??
           'bulk_claim',
@@ -210,11 +215,30 @@ export function PanelDialog({ open, onOpenChange, panel }: Props) {
                   ]}
                 />
               </Field>
-              <Field label="Price Tier (key)">
+              <Field label="Price Tier (legacy key)">
                 <Input
                   {...form.register('price_tier')}
                   placeholder="e.g. tier_a"
                 />
+              </Field>
+              <Field label="Default Pricing Tier">
+                <SelectField
+                  value={form.watch('default_price_tier')}
+                  onChange={(v) =>
+                    form.setValue(
+                      'default_price_tier',
+                      v as FormValues['default_price_tier'],
+                    )
+                  }
+                  options={[
+                    { value: 'standard', label: 'Standard' },
+                    { value: 'tier1', label: 'Tier 1' },
+                    { value: 'tier2', label: 'Tier 2' },
+                  ]}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Drives the inventory price tier the billing trigger uses when no per-item override exists.
+                </p>
               </Field>
               <Field label="TIN Number">
                 <Input {...form.register('tin_number')} placeholder="LHDN TIN" />
