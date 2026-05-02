@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Stethoscope, Search, Phone, AlertCircle } from 'lucide-react';
 import { format, differenceInYears, differenceInMonths, differenceInDays } from 'date-fns';
+import { RoomPickerDialog } from '@/components/clinic/consultation/RoomPickerDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';

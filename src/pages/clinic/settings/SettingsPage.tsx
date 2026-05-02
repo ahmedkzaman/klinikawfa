@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Sliders, Users, Archive, Package, ChevronRight, Stethoscope, Shield, Tag, FileText } from 'lucide-react';
+import { Sliders, Users, Archive, Package, ChevronRight, Stethoscope, Shield, Tag, FileText, Tv } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -51,6 +51,13 @@ export default function SettingsPage() {
       title: 'Drug Label',
       description: 'Choose which fields appear on printed medicine labels.',
       icon: Tag,
+      visible: isOpsOrAdmin,
+    },
+    {
+      href: '/clinic/settings/queue',
+      title: 'Queue & TV',
+      description: 'Manage clinic rooms and the waiting-room TV display.',
+      icon: Tv,
       visible: isOpsOrAdmin,
     },
     {
