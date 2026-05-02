@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Plus, Trash2, Printer, Save, Send, CheckCircle2, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Printer, Save, Send, CheckCircle2, Loader2, Ban, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCorporateClients } from '@/hooks/clinic/useCorporateClients';
 import {
@@ -72,6 +72,19 @@ export function ClientInvoiceSheet({ open, onOpenChange, invoiceId }: Props) {
 
   const [paidPromptOpen, setPaidPromptOpen] = useState(false);
   const [paidRef, setPaidRef] = useState('');
+  const [cancelPromptOpen, setCancelPromptOpen] = useState(false);
+
+  const handleCancelInvoice = async () => {
+    if (!invoiceId) return;
+    try {
+      await updateHeader.mutateAsync({ id: invoiceId, patch: { status: 'Cancelled' } });
+      setStatus('Cancelled');
+      setCancelPromptOpen(false);
+      toast.success('Invoice cancelled');
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
 
   // Hydrate from detail
   useEffect(() => {
@@ -364,15 +377,46 @@ export function ClientInvoiceSheet({ open, onOpenChange, invoiceId }: Props) {
                 <Button variant="outline" onClick={handlePrint} disabled={!isEdit || pending}>
                   <Printer className="h-4 w-4 mr-1" /> Download PDF / Print
                 </Button>
-                <Button variant="outline" onClick={handleSaveDraft} disabled={pending}>
-                  <Save className="h-4 w-4 mr-1" /> Save Draft
-                </Button>
-                <Button variant="outline" onClick={handleMarkIssued} disabled={pending || status === 'Paid'}>
-                  <Send className="h-4 w-4 mr-1" /> Mark as Issued
-                </Button>
-                <Button onClick={handleMarkPaid} disabled={pending || status === 'Paid'}>
-                  <CheckCircle2 className="h-4 w-4 mr-1" /> Mark as Paid
-                </Button>
+                {isEdit && status === 'Cancelled' ? (
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      if (!invoiceId) return;
+                      try {
+                        await updateHeader.mutateAsync({ id: invoiceId, patch: { status: 'Draft' } });
+                        setStatus('Draft');
+                        toast.success('Invoice reopened as Draft');
+                      } catch (e) {
+                        toast.error((e as Error).message);
+                      }
+                    }}
+                    disabled={pending}
+                  >
+                    <RotateCcw className="h-4 w-4 mr-1" /> Reopen as Draft
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="outline" onClick={handleSaveDraft} disabled={pending || status === 'Cancelled'}>
+                      <Save className="h-4 w-4 mr-1" /> Save Draft
+                    </Button>
+                    <Button variant="outline" onClick={handleMarkIssued} disabled={pending || status === 'Paid' || status === 'Cancelled'}>
+                      <Send className="h-4 w-4 mr-1" /> Mark as Issued
+                    </Button>
+                    <Button onClick={handleMarkPaid} disabled={pending || status === 'Paid' || status === 'Cancelled'}>
+                      <CheckCircle2 className="h-4 w-4 mr-1" /> Mark as Paid
+                    </Button>
+                    {isEdit && status !== 'Paid' && (
+                      <Button
+                        variant="outline"
+                        onClick={() => setCancelPromptOpen(true)}
+                        disabled={pending}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                      >
+                        <Ban className="h-4 w-4 mr-1" /> Cancel Invoice
+                      </Button>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -408,6 +452,35 @@ export function ClientInvoiceSheet({ open, onOpenChange, invoiceId }: Props) {
             </Button>
             <Button onClick={confirmPaid} disabled={pending}>
               {pending ? 'Saving…' : 'Confirm Paid'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Invoice confirm */}
+      <Dialog open={cancelPromptOpen} onOpenChange={(o) => { if (!pending) setCancelPromptOpen(o); }}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Cancel this invoice?</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 text-sm text-slate-600 space-y-2">
+            <p>
+              The invoice will be marked as <span className="font-semibold">Cancelled</span> and excluded from outstanding receivables. The invoice number is preserved for audit.
+            </p>
+            <p className="text-xs text-slate-500">
+              You can reopen it as a Draft later if cancelled by mistake.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelPromptOpen(false)} disabled={pending}>
+              Keep Invoice
+            </Button>
+            <Button
+              onClick={handleCancelInvoice}
+              disabled={pending}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {pending ? 'Cancelling…' : 'Yes, Cancel Invoice'}
             </Button>
           </DialogFooter>
         </DialogContent>
