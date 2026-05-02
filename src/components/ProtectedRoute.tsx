@@ -13,7 +13,7 @@ export function ProtectedRoute({
   requireAdmin = false, 
   requireStaffOrAdmin = false 
 }: ProtectedRouteProps) {
-  const { user, loading, rolesLoading, isAdmin, isStaffOrAdmin } = useAuth();
+  const { user, loading, rolesLoading, role, isAdmin, isStaffOrAdmin } = useAuth();
   const location = useLocation();
 
   // Wait for both session and roles when role-based access is required
@@ -28,6 +28,11 @@ export function ProtectedRoute({
 
   if (!user) {
     return <Navigate to="/auth" state={{ from: location }} replace />;
+  }
+
+  // Guest firewall: never let guests reach staff/admin-gated routes.
+  if (needsRoleCheck && role === 'guest') {
+    return <Navigate to="/" replace />;
   }
 
   if (requireAdmin && !isAdmin) {

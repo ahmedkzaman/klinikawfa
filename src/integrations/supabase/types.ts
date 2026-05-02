@@ -1112,10 +1112,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "consultation_items_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "packages_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "consultation_items_service_id_fkey"
             columns: ["service_id"]
             isOneToOne: false
             referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultation_items_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -2201,10 +2215,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "package_items_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "packages_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "package_items_service_id_fkey"
             columns: ["service_id"]
             isOneToOne: false
             referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_items_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -2431,6 +2459,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "panel_price_overrides_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "packages_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "panel_price_overrides_panel_id_fkey"
             columns: ["panel_id"]
             isOneToOne: false
@@ -2442,6 +2477,13 @@ export type Database = {
             columns: ["service_id"]
             isOneToOne: false
             referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_price_overrides_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -4321,6 +4363,36 @@ export type Database = {
         }
         Relationships: []
       }
+      packages_safe: {
+        Row: {
+          created_at: string | null
+          id: string | null
+          items: Json | null
+          name: string | null
+          price: number | null
+          status: string | null
+          stock: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string | null
+          items?: Json | null
+          name?: string | null
+          price?: number | null
+          status?: string | null
+          stock?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string | null
+          items?: Json | null
+          name?: string | null
+          price?: number | null
+          status?: string | null
+          stock?: number | null
+        }
+        Relationships: []
+      }
       panel_claims_view: {
         Row: {
           amount: number | null
@@ -4428,6 +4500,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      services_safe: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          description: string | null
+          id: string | null
+          item_code: string | null
+          name: string | null
+          price_to_patient: number | null
+          status: string | null
+          type: string | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          item_code?: string | null
+          name?: string | null
+          price_to_patient?: number | null
+          status?: string | null
+          type?: string | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          item_code?: string | null
+          name?: string | null
+          price_to_patient?: number | null
+          status?: string | null
+          type?: string | null
+        }
+        Relationships: []
       }
     }
     Functions: {

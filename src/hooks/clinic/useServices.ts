@@ -3,6 +3,21 @@ import { supabase } from '@/integrations/supabase/client';
 
 const QUERY_KEY = ['services'];
 
+/** Cost-free read hook safe for locums/guests (queries the services_safe view). */
+export function useServicesSafe() {
+  return useQuery({
+    queryKey: ['services_safe'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('services_safe')
+        .select('*')
+        .order('name');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
 export function useServices() {
   const queryClient = useQueryClient();
 

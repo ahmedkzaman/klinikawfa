@@ -20,7 +20,7 @@ export function ClinicProtectedRoute({
   children,
   requiredRole = 'ops_or_admin',
 }: ClinicProtectedRouteProps) {
-  const { user, loading, rolesLoading, isOpsOrAdmin, isSpecialAdmin, isAdmin, canViewInsights } = useAuth();
+  const { user, loading, rolesLoading, role, isOpsOrAdmin, isSpecialAdmin, isAdmin, canViewInsights } = useAuth();
   const location = useLocation();
 
   if (loading || rolesLoading) {
@@ -34,6 +34,11 @@ export function ClinicProtectedRoute({
   if (!user) {
     const redirect = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/auth?redirect=${redirect}`} replace />;
+  }
+
+  // Guest firewall: guests are quarantined to public marketing pages and /video-call*.
+  if (role === 'guest') {
+    return <Navigate to="/" replace />;
   }
 
   const hasAccess =
