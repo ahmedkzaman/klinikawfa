@@ -13,6 +13,9 @@ export interface ClinicUserRow {
   id: string;
   full_name: string | null;
   email: string;
+  phone: string | null;
+  mmc_number: string | null;
+  requested_role: string | null;
   role: AppRole | null;
   doctor: ClinicUserDoctor | null;
 }
@@ -30,7 +33,7 @@ export function useClinicUsers() {
       const { data, error } = await supabase
         .from('profiles')
         .select(
-          `id, full_name, email,
+          `id, full_name, email, phone, mmc_number, requested_role,
            user_roles!fk_user_roles_profile ( role ),
            doctors!fk_doctors_profile ( id, name, status, on_duty )`,
         )
@@ -45,6 +48,9 @@ export function useClinicUsers() {
           id: row.id,
           full_name: row.full_name ?? null,
           email: row.email,
+          phone: row.phone ?? null,
+          mmc_number: row.mmc_number ?? null,
+          requested_role: row.requested_role ?? null,
           role: (roleRow?.role as AppRole) ?? null,
           doctor: doctorRow
             ? {
