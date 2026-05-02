@@ -42,13 +42,15 @@ export default function QueueTV() {
           const next = payload.new as Record<string, unknown>;
           const prev = (payload.old ?? {}) as Record<string, unknown>;
 
-          const becameWithDoctor =
-            next.clinic_status === 'with_doctor' &&
-            prev.clinic_status !== 'with_doctor';
           const calledTsChanged =
             next.called_at && next.called_at !== prev.called_at;
+          const isActiveCall = [
+            'with_doctor',
+            'sent_to_dispensary',
+            'dispensing_payment',
+          ].includes(next.clinic_status as string);
 
-          if (!(becameWithDoctor || (next.clinic_status === 'with_doctor' && calledTsChanged))) {
+          if (!(calledTsChanged && isActiveCall)) {
             return;
           }
 
