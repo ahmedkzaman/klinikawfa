@@ -902,6 +902,9 @@ export type Database = {
         Row: {
           address_line_1: string
           address_line_2: string
+          bank_account_holder: string | null
+          bank_account_no: string | null
+          bank_name: string | null
           clinic_name: string
           content_margin_top: number
           email: string
@@ -917,6 +920,9 @@ export type Database = {
         Insert: {
           address_line_1?: string
           address_line_2?: string
+          bank_account_holder?: string | null
+          bank_account_no?: string | null
+          bank_name?: string | null
           clinic_name?: string
           content_margin_top?: number
           email?: string
@@ -932,6 +938,9 @@ export type Database = {
         Update: {
           address_line_1?: string
           address_line_2?: string
+          bank_account_holder?: string | null
+          bank_account_no?: string | null
+          bank_name?: string | null
           clinic_name?: string
           content_margin_top?: number
           email?: string
