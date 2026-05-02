@@ -438,7 +438,7 @@ export default function ConsultationDetail() {
     }
     if (treatmentSearch) {
       const q = treatmentSearch.toLowerCase();
-      list = list.filter((i) => i.item_name.toLowerCase().includes(q));
+      list = list.filter((i) => String(i.item_name ?? '').toLowerCase().includes(q));
     }
     return list;
   }, [categorizedItems, treatmentCategory, treatmentSearch]);
