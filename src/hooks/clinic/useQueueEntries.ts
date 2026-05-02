@@ -209,3 +209,32 @@ export function useCallToDispensary() {
 }
 
 export { QUEUE_QUERY_KEY, CONSULT_QUEUE_QUERY_KEY };
+
+/**
+ * Fetch a single queue entry by id with patient/doctor/room/panel joins.
+ * Status-agnostic — works for completed/cancelled rows too (used by the
+ * read-only Visit detail page linked from Billings → Paid).
+ */
+export function useQueueEntry(id?: string) {
+  return useQuery<QueueEntryWithJoins | null>({
+    queryKey: ['clinic', 'queue-entry', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('queue_entries')
+        .select(
+          `
+          *,
+          patients ( * ),
+          doctors:assigned_doctor_id ( id, name, avatar_url ),
+          rooms:assigned_room_id ( id, label ),
+          insurance_providers ( id, name )
+        `,
+        )
+        .eq('id', id!)
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as unknown as QueueEntryWithJoins | null;
+    },
+  });
+}
