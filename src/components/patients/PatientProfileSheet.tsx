@@ -122,11 +122,18 @@ function VisitRow({ row }: { row: PatientVisitHistoryRow }) {
     : null;
 
   const doctorName = doctor?.name ?? '—';
-  const notes =
-    row.visit_notes ||
-    consultation?.case_note ||
-    consultation?.diagnosis_text ||
+  const clinicalNote =
+    consultation?.case_note?.trim() ||
+    consultation?.diagnosis_text?.trim() ||
+    row.visit_notes?.trim() ||
     '';
+  const dispenseNote = consultation?.dispense_note?.trim() ?? '';
+  const billingItems = consultation?.consultation_items ?? [];
+
+  const diagnosisPills = (consultation?.diagnosis_text ?? '')
+    .split(/[,;]+/)
+    .map((d) => d.trim())
+    .filter(Boolean);
 
   const attachmentCount = getAttachmentCount(consultation);
   const Chevron = isExpanded ? ChevronUp : ChevronDown;
@@ -163,20 +170,98 @@ function VisitRow({ row }: { row: PatientVisitHistoryRow }) {
           </div>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">Dr. {doctorName}</p>
-        {notes && !isExpanded && (
+        {diagnosisPills.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {diagnosisPills.slice(0, 4).map((d, i) => (
+              <Badge
+                key={`${d}-${i}`}
+                variant="outline"
+                className="h-5 px-1.5 text-[10px] font-normal bg-blue-50 text-blue-700 border-blue-200"
+              >
+                {d}
+              </Badge>
+            ))}
+            {diagnosisPills.length > 4 && (
+              <span className="text-[10px] text-muted-foreground self-center">
+                +{diagnosisPills.length - 4}
+              </span>
+            )}
+          </div>
+        )}
+        {clinicalNote && !isExpanded && (
           <p className="mt-1 text-xs text-foreground/80 line-clamp-2">
-            {notes}
+            {clinicalNote}
           </p>
         )}
       </button>
 
       {isExpanded && (
-        <div className="px-3 pb-3 border-t bg-muted/10">
-          {notes && (
-            <p className="mt-2 text-xs text-foreground/80 whitespace-pre-wrap">
-              {notes}
-            </p>
+        <div className="px-3 pb-3 border-t bg-muted/10 space-y-3">
+          {/* Clinical Notes */}
+          {clinicalNote && (
+            <div className="mt-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                Clinical Notes
+              </p>
+              <p className="text-xs text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                {clinicalNote}
+              </p>
+            </div>
           )}
+
+          {/* Dispense Notes — visually distinct block */}
+          {dispenseNote && (
+            <div className="bg-slate-50 border-l-4 border-blue-200 pl-4 py-2 my-2 rounded-r">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 mb-1">
+                Dispense Notes
+              </p>
+              <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
+                {dispenseNote}
+              </p>
+            </div>
+          )}
+
+          {/* Billing Items */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+              Billing Items
+            </p>
+            {billingItems.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground italic">
+                No billed items
+              </p>
+            ) : (
+              <div className="rounded-md border overflow-hidden">
+                <table className="w-full text-[11px]">
+                  <thead className="bg-muted/40 text-muted-foreground">
+                    <tr>
+                      <th className="text-left px-2 py-1 font-medium">Item</th>
+                      <th className="text-right px-2 py-1 font-medium w-10">Qty</th>
+                      <th className="text-right px-2 py-1 font-medium w-16">Price</th>
+                      <th className="text-right px-2 py-1 font-medium w-20">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {billingItems.map((it) => {
+                      const qty = Number(it.quantity ?? 0);
+                      const price = Number(it.price ?? 0);
+                      return (
+                        <tr key={it.id} className="border-t">
+                          <td className="px-2 py-1 text-foreground/80 truncate">{it.item_name}</td>
+                          <td className="px-2 py-1 text-right tabular-nums">{qty}</td>
+                          <td className="px-2 py-1 text-right tabular-nums">{price.toFixed(2)}</td>
+                          <td className="px-2 py-1 text-right tabular-nums font-medium">
+                            {(qty * price).toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           {consultation?.id && (
             <VisitAttachmentList consultationId={consultation.id} />
           )}

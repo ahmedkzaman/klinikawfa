@@ -103,7 +103,7 @@ export default function DispenseCheckout() {
         clinic_status: 'completed',
       });
       toast.success('Checkout completed');
-      navigate('/clinic/procurement');
+      navigate('/clinic/dispensary');
     } catch (err) {
       toast.error((err as Error).message);
     }
@@ -134,9 +134,9 @@ export default function DispenseCheckout() {
           </p>
           <Button
             className={cn(secondaryBtn, 'mt-4')}
-            onClick={() => navigate('/clinic/procurement')}
+            onClick={() => navigate('/clinic/dispensary')}
           >
-            <ArrowLeft className="h-4 w-4 mr-2" /> Back to Procurement
+            <ArrowLeft className="h-4 w-4 mr-2" /> Back to Dispensary
           </Button>
         </div>
       </div>
@@ -157,7 +157,7 @@ export default function DispenseCheckout() {
             variant="ghost"
             size="sm"
             className="rounded-lg text-slate-600 hover:bg-slate-50"
-            onClick={() => navigate('/clinic/procurement')}
+            onClick={() => navigate('/clinic/dispensary')}
           >
             <ArrowLeft className="h-4 w-4 mr-1.5" /> Back
           </Button>

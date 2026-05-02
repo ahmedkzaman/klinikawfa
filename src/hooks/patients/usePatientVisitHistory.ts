@@ -2,12 +2,25 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { ClinicStatus } from '@/types/clinic';
 
+export interface PatientVisitBillingItem {
+  id: string;
+  item_name: string;
+  quantity: number;
+  price: number;
+}
+
 export interface PatientVisitConsultation {
   id: string;
   doctor_id: string | null;
   diagnosis_text: string | null;
   case_note: string | null;
+  dispense_note: string | null;
   doctors: { id: string; name: string } | { id: string; name: string }[] | null;
+  /**
+   * Active line items for this consultation (soft-deleted excluded). Powers
+   * the "Billing Items" section of the past-visit card in PatientProfileSheet.
+   */
+  consultation_items?: PatientVisitBillingItem[] | null;
   /**
    * PostgREST aggregate — `consultation_attachments(count)` returns an array
    * of length 1 with the count, e.g. `[{ count: 3 }]`. We surface this so the
@@ -48,8 +61,9 @@ export function usePatientVisitHistory(patientId: string | null) {
           `
           id, created_at, queue_number, clinic_status, visit_notes,
           consultations:consultations!consultations_queue_entry_id_fkey (
-            id, doctor_id, diagnosis_text, case_note,
+            id, doctor_id, diagnosis_text, case_note, dispense_note,
             doctors:doctor_id ( id, name ),
+            consultation_items!left ( id, item_name, quantity, price, deleted_at ),
             consultation_attachments ( count )
           )
         `,
@@ -60,7 +74,22 @@ export function usePatientVisitHistory(patientId: string | null) {
         .limit(10);
 
       if (error) throw error;
-      return (data ?? []) as unknown as PatientVisitHistoryRow[];
+
+      // Filter out soft-deleted billing items client-side (PostgREST nested
+      // .is() filters can't easily target a doubly-nested table).
+      const rows = (data ?? []) as unknown as PatientVisitHistoryRow[];
+      for (const r of rows) {
+        const cs = Array.isArray(r.consultations) ? r.consultations : r.consultations ? [r.consultations] : [];
+        for (const c of cs) {
+          if (c?.consultation_items) {
+            c.consultation_items = c.consultation_items.filter(
+              (it: PatientVisitBillingItem & { deleted_at?: string | null }) =>
+                !it.deleted_at,
+            );
+          }
+        }
+      }
+      return rows;
     },
   });
 }

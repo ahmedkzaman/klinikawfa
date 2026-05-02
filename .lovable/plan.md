@@ -1,94 +1,58 @@
-## Goal
+## Sprint 1 — 4 Operational Tasks
 
-Replace hardcoded ±30 min punch window in `src/pages/staff/Punch.tsx` with admin-configurable buffers, with global defaults and optional per-role overrides. Single-clinic for now (no per-site, since only one geofence zone is currently configured), but design the schema so per-zone overrides can be added later without rework.
+### Task 1: Rename Procurement → Dispensary, add Procurement placeholder
 
-## Scope
+**Files**
+- `src/pages/clinic/Procurement.tsx` → rename to `src/pages/clinic/Dispensary.tsx`. Update component name `Procurement` → `Dispensary`, h1 "Procurement" → "Dispensary", description copy → "Open a patient to dispense items and process payment."
+- `src/pages/clinic/Procurement.tsx` (NEW placeholder) — uses `ClinicPlaceholder` from `_Placeholder.tsx` with title "Procurement Engine", description "Supply chain module coming in Sprint 2.", icon `Package`.
+- `src/App.tsx` — add `import Dispensary`. Add new route `<Route path="dispensary" element={<Dispensary />} />`. Keep `procurement` route but point at the new placeholder.
+- `src/components/clinic/ClinicLayout.tsx` (line 37) — change sidebar entry to `{ href: '/clinic/dispensary', label: 'Dispensary', icon: Pill }` and add a new entry below it `{ href: '/clinic/procurement', label: 'Procurement', icon: ClipboardList }`.
+- `src/pages/clinic/DispenseCheckout.tsx` (lines 106, 137, 139, 160) — replace `/clinic/procurement` navigations and the "Back to Procurement" label with `/clinic/dispensary` / "Back to Dispensary".
 
-- New admin Settings page: **Staff → Admin → Punch Settings**
-- New DB table: `punch_buffer_settings` (one global row + optional per-role rows)
-- `Punch.tsx` reads settings from DB instead of hardcoded ±30 min
-- Asymmetric buffers (separate values for clock-in pre/post and clock-out pre/post)
+(No DB changes. The onboarding views' generic "procurement / purchasing" copy stays — unrelated to the route.)
 
-## Buffer model
+### Task 2: Bulk "Mark as Submitted" on Panel Claims
 
-Four configurable values (in minutes):
+**File:** `src/pages/clinic/PanelClaims.tsx`
+- Add a left-most checkbox column. Increment `COLUMN_COUNT` (10 → 11). Header gets a "Select All" checkbox bound to the currently visible `rows` (intermediate state when partially selected).
+- Local state `const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())`. Reset on tab/page change.
+- Each `ClaimRow` receives `isSelected` + `onToggle`; checkbox cell uses `e.stopPropagation()` so clicking it doesn't open the details sheet.
+- Inline action bar inside the table card (above the table, shown when `selectedIds.size > 0`): shows "{n} selected", a "Clear" button, and a primary **"Mark as Submitted"** button.
+- New mutation hook `useBulkMarkClaimsSubmitted` in `src/hooks/clinic/usePanelClaims.ts`:
+  ```ts
+  await supabase.from('panel_claims')
+    .update({ status: 'submitted', submitted_date: new Date().toISOString().slice(0,10) })
+    .in('id', ids);
+  ```
+  On success: invalidate `['clinic','panel-claims']` query keys, `toast.success("{n} claims marked as submitted")`, clear selection.
+- Confirm `panel_claims` has `submitted_date` column; if missing, add a migration `ALTER TABLE public.panel_claims ADD COLUMN IF NOT EXISTS submitted_date date;` (will be checked at implementation; column likely already exists since the codebase already filters by submitted status).
 
-| Field | Meaning | Default |
-|---|---|---|
-| `clock_in_early_min` | Allowed minutes BEFORE shift start to punch in | 60 |
-| `clock_in_late_min` | Allowed minutes AFTER shift start to punch in (still records lateness) | 60 |
-| `clock_out_early_min` | Allowed minutes BEFORE shift end to punch out | 30 |
-| `clock_out_late_min` | Allowed minutes AFTER shift end to punch out (records OT) | 120 |
+### Task 3: Redesign past-visit notes in `PatientProfileSheet`
 
-## DB schema
+**Files**
+- `src/hooks/patients/usePatientVisitHistory.ts` — extend the select to also pull `dispense_note` from consultations and a nested `consultation_items` list with `item_name, quantity, price, price_tier` (active only — `deleted_at is null`). Update `PatientVisitConsultation` interface accordingly.
+- `src/components/patients/PatientProfileSheet.tsx` `VisitRow` (lines 109-187) — restructure expanded section into 4 stacked blocks:
+  1. **Header** (already in collapsed bar): date · queue#, doctor name, plus diagnosis pill(s) rendered from `consultation.diagnosis_text` (split on comma/semicolon → `Badge`s).
+  2. **Clinical Notes** — `case_note`/`diagnosis_text` rendered with `whitespace-pre-wrap` and a small "Clinical Notes" label.
+  3. **Dispense Notes** — only if `dispense_note` exists; wrapped in `bg-slate-50 border-l-4 border-blue-200 pl-4 py-2 my-2 rounded-r` with a "Dispense Notes" label and `whitespace-pre-wrap` body.
+  4. **Billing Items** — compact `<table>` (Item · Qty · Price · Subtotal). Empty state: small muted "No billed items".
+- Attachments list stays at the bottom.
 
-New table `public.punch_buffer_settings`:
+### Task 4: Allow concurrent (multiple future) appointments
 
-```text
-id                    uuid pk
-scope                 text  -- 'global' or 'role'
-role                  app_role nullable  -- only set when scope='role'
-clock_in_early_min    int  not null default 60
-clock_in_late_min     int  not null default 60
-clock_out_early_min   int  not null default 30
-clock_out_late_min    int  not null default 120
-updated_at            timestamptz default now()
-updated_by            uuid nullable
+**Where the restriction lives:** `src/components/clinic/patient/FollowUpScheduler.tsx` (lines 50-81). When `future.length > 0`, the booking form is hidden behind a green "already scheduled" alert — that's the single-active-appointment block. No DB constraint or Zod rule enforces it (verified: `clinic_appointments` has only PK + FKs, and `appointmentSchema` in `src/lib/validations.ts` has no patient-uniqueness rule).
 
-unique(scope, role)  -- one global, one per role
-check (scope in ('global','role'))
-check ((scope='global' and role is null) or (scope='role' and role is not null))
-check (all four values between 0 and 480)
-```
+**Change:** Always render the booking form. When `future.length > 0`, render the existing green alert *above* the form as an informational summary (list up to 3 upcoming appointments with date/time/doctor) instead of replacing the form. Update `usePatientFutureAppointments` invalidation isn't needed — the create mutation already invalidates the right key.
 
-Migration also seeds one `scope='global'` row with the defaults above.
+No migration required.
 
-RLS:
-- SELECT: any authenticated user (Punch page needs to read)
-- INSERT/UPDATE/DELETE: `is_admin(auth.uid())` only
+### Out-of-scope checks performed
+- `Appointment.tsx` (public lead form) and `submit-appointment` edge function don't enforce per-patient uniqueness — nothing to remove there.
+- `record_appointment_submission` RPC only rate-limits per IP; safe.
 
-Resolution rule (computed in app code): for a given user, look up their highest-priority role; if a `role` row exists for it, use that; otherwise fall back to the `global` row.
-
-## Frontend changes
-
-### 1. New page `src/pages/staff/admin/PunchSettings.tsx`
-- Card showing current global values, 4 number inputs (1 row each with label + helper text)
-- Section below: "Per-role overrides" — list of existing role rows, an "Add override" button that opens a dialog (role dropdown + 4 inputs)
-- Edit / Delete actions per role row
-- Saves via standard supabase client (admin RLS enforces auth)
-- Live preview line: "A staff with shift 8:00 AM – 4:00 PM can punch in between 7:00 AM and 9:00 AM, and punch out between 3:30 PM and 6:00 PM."
-
-### 2. New hook `src/hooks/useUserPunchBuffers.ts`
-- Fetches all `punch_buffer_settings` rows once
-- Looks up user's role from `user_roles`
-- Returns the resolved 4 values (role override → global → hardcoded fallback)
-
-### 3. Update `src/pages/staff/Punch.tsx` (lines 107-120)
-- Use `useUserPunchBuffers()` instead of literal `30 * 60 * 1000`
-- Replace symmetric check with asymmetric (in vs out aware) logic
-- `shiftWindowBlock` message becomes friendlier, e.g.:
-  - "Punch-in opens at 7:00 AM (1 hour before your 8:00 AM shift)"
-  - "Punch-out closed at 6:00 PM (2 hours after your 4:00 PM shift)"
-
-### 4. Wire up routing
-- Add route `/staff/admin/punch-settings` in `src/App.tsx` (admin-protected)
-- Add nav entry in `src/components/staff/StaffLayout.tsx` admin section: "Punch Settings" with `Clock` or `Timer` icon
-
-## Why per-role and not per-site
-
-You currently have one active `geofence_zone`. Per-site overrides add UI complexity for zero benefit today. The schema reserves `scope` so a future `'zone'` scope can be added with a one-line migration when you open a second site. Per-role is useful immediately because doctors, nurses, and admin staff have different punctuality realities (e.g., a doctor finishing late deserves a longer clock-out window than a CA).
-
-## Files touched
-
-- new `supabase/migrations/<ts>_punch_buffer_settings.sql`
-- new `src/pages/staff/admin/PunchSettings.tsx`
-- new `src/hooks/useUserPunchBuffers.ts`
-- edited `src/pages/staff/Punch.tsx` (replace `isWithinShiftWindow`)
-- edited `src/App.tsx` (add route)
-- edited `src/components/staff/StaffLayout.tsx` (add nav item)
-
-## Out of scope
-
-- Per-zone overrides UI (schema-ready, not built)
-- Editing buffers per individual employee (use role overrides)
-- Changing how lateness or OT is recorded (handled separately by `getLatenessSeverity` and `calculateDailyWorkHours` — untouched)
+### Technical sequencing
+1. DB: quick verification that `panel_claims.submitted_date` exists; migration only if missing.
+2. Task 1 file rename + route + sidebar.
+3. Task 2 hook + UI.
+4. Task 3 hook extension + UI restructure.
+5. Task 4 FollowUpScheduler edit.

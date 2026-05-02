@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
-import { FileText, MoreVertical } from 'lucide-react';
+import { CheckCircle2, FileText, MoreVertical, X } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import {
@@ -14,6 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +36,7 @@ import {
 import {
   usePanelClaims,
   usePanelClaimsSummary,
+  useBulkMarkClaimsSubmitted,
   PANEL_CLAIMS_PAGE_SIZE,
   type PanelClaimRow,
   type PanelClaimStatus,
@@ -52,7 +55,7 @@ const TABS: Array<{ key: PanelClaimsTab; label: string }> = [
   { key: 'cancelled', label: 'Cancelled' },
 ];
 
-const COLUMN_COUNT = 10;
+const COLUMN_COUNT = 11;
 
 function formatRM(value: number): string {
   return `RM ${value.toFixed(2)}`;
@@ -88,13 +91,59 @@ export default function PanelClaims() {
   const [tab, setTab] = useState<PanelClaimsTab>('all');
   const [page, setPage] = useState(0);
   const [activeClaim, setActiveClaim] = useState<PanelClaimRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const { data: claims, isLoading } = usePanelClaims(tab, page);
   const { data: summary } = usePanelClaimsSummary();
+  const bulkMark = useBulkMarkClaimsSubmitted();
 
   const rows = claims?.rows ?? [];
   const total = claims?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PANEL_CLAIMS_PAGE_SIZE));
+
+  // Reset selection whenever the visible page changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [tab, page]);
+
+  const visibleIds = useMemo(() => rows.map((r) => r.id), [rows]);
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const someVisibleSelected =
+    !allVisibleSelected && visibleIds.some((id) => selectedIds.has(id));
+
+  const toggleRow = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const toggleAll = () =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        visibleIds.forEach((id) => next.delete(id));
+      } else {
+        visibleIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+
+  const handleBulkSubmit = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    try {
+      const n = await bulkMark.mutateAsync(ids);
+      toast.success(
+        `${n} ${n === 1 ? 'claim' : 'claims'} marked as submitted`,
+      );
+      setSelectedIds(new Set());
+    } catch (err) {
+      toast.error((err as Error).message ?? 'Failed to update claims');
+    }
+  };
 
   const overdueCount = summary?.overdueCount ?? 0;
 
@@ -191,10 +240,47 @@ export default function PanelClaims() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            {selectedIds.size > 0 && (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-2.5">
+                <div className="flex items-center gap-2 text-sm text-blue-900">
+                  <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                  <span className="font-semibold">{selectedIds.size}</span>
+                  <span>selected</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds(new Set())}
+                    className="ml-2 inline-flex items-center gap-1 text-xs text-blue-700 hover:underline"
+                  >
+                    <X className="h-3 w-3" /> Clear
+                  </button>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={handleBulkSubmit}
+                  disabled={bulkMark.isPending}
+                  className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {bulkMark.isPending ? 'Marking…' : 'Mark as Submitted'}
+                </Button>
+              </div>
+            )}
             <div className="rounded-xl overflow-hidden border border-slate-100">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50 hover:bg-slate-50 border-b border-slate-100">
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={
+                          allVisibleSelected
+                            ? true
+                            : someVisibleSelected
+                              ? 'indeterminate'
+                              : false
+                        }
+                        onCheckedChange={toggleAll}
+                        aria-label="Select all visible claims"
+                      />
+                    </TableHead>
                     {[
                       { label: 'Amount', align: 'right' as const },
                       { label: 'Claim No' },
@@ -245,6 +331,8 @@ export default function PanelClaims() {
                         key={row.id}
                         row={row}
                         activeTab={tab}
+                        isSelected={selectedIds.has(row.id)}
+                        onToggle={() => toggleRow(row.id)}
                         onOpen={() => setActiveClaim(row)}
                       />
                     ))
@@ -299,10 +387,14 @@ export default function PanelClaims() {
 function ClaimRow({
   row,
   activeTab,
+  isSelected,
+  onToggle,
   onOpen,
 }: {
   row: PanelClaimRow;
   activeTab: PanelClaimsTab;
+  isSelected: boolean;
+  onToggle: () => void;
   onOpen: () => void;
 }) {
   const displayAmount = row.received_amount ?? row.amount;
@@ -333,11 +425,27 @@ function ClaimRow({
   return (
     <TableRow
       onClick={onOpen}
+      data-state={isSelected ? 'selected' : undefined}
       className={cn(
         'border-b border-slate-100 last:border-0 hover:bg-slate-50/60 cursor-pointer',
         row.is_overdue && 'bg-red-50/40 hover:bg-red-50/60',
+        isSelected && 'bg-blue-50/60 hover:bg-blue-50/70',
       )}
     >
+      <TableCell
+        className="w-10"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
+      >
+        <Checkbox
+          checked={isSelected}
+          onCheckedChange={onToggle}
+          aria-label={`Select claim ${row.claim_no}`}
+          onClick={(e) => e.stopPropagation()}
+        />
+      </TableCell>
       <TableCell className="text-right tabular-nums font-semibold text-slate-800">
         {formatRM(displayAmount)}
         {showClaimedSuffix && (

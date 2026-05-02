@@ -293,6 +293,38 @@ export function useUpdatePanelClaim() {
   });
 }
 
+// ---------- Mutation: bulk mark as submitted ----------
+
+/**
+ * Bulk-marks the given claim ids as `status='submitted'` and stamps
+ * `submitted_date = today`. Used by the multi-row checkbox action bar on
+ * the Panel Claims page.
+ */
+export function useBulkMarkClaimsSubmitted() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (ids.length === 0) return 0;
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: auth } = await supabase.auth.getUser();
+      const { error } = await supabase
+        .from('panel_claims')
+        .update({
+          status: 'submitted',
+          submitted_date: today,
+          updated_by: auth.user?.id ?? null,
+        })
+        .in('id', ids);
+      if (error) throw error;
+      return ids.length;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['panel_claims'] });
+      qc.invalidateQueries({ queryKey: ['panel_claims_summary'] });
+    },
+  });
+}
+
 // ---------- GL document signed URL ----------
 
 export async function getClaimDocSignedUrl(path: string): Promise<string | null> {
