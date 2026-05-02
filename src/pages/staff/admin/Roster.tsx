@@ -1035,6 +1035,80 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
         </div>
       </div>
 
+      {/* Public Holidays */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <CalendarDays className="h-5 w-5" /> Public Holidays
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">Days marked as public holidays will be left empty (no staff assigned) when generating the roster. You can still manually assign staff if needed.</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="ph-date" className="text-xs">Date</Label>
+              <Input
+                id="ph-date"
+                type="date"
+                value={newHolidayDate}
+                onChange={e => setNewHolidayDate(e.target.value)}
+                className="h-9 w-[160px]"
+              />
+            </div>
+            <div className="flex flex-col gap-1 flex-1 min-w-[200px]">
+              <Label htmlFor="ph-name" className="text-xs">Holiday name</Label>
+              <Input
+                id="ph-name"
+                placeholder="e.g. Hari Raya Aidilfitri"
+                value={newHolidayName}
+                onChange={e => setNewHolidayName(e.target.value)}
+                className="h-9"
+              />
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!newHolidayDate || !newHolidayName.trim() || addHolidayMutation.isPending}
+              onClick={async () => {
+                await addHolidayMutation.mutateAsync({ date: newHolidayDate, name: newHolidayName.trim() });
+                setNewHolidayDate('');
+                setNewHolidayName('');
+              }}
+              className="gap-1"
+            >
+              <Plus className="h-4 w-4" /> Add
+            </Button>
+          </div>
+
+          {monthHolidays.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">
+                Holidays in {format(new Date(selectedYear, selectedMonth, 1), 'MMMM yyyy')}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {monthHolidays.map(h => (
+                  <Badge key={h.id} variant="outline" className="gap-2 py-1 pl-2 pr-1 border-destructive/40 bg-destructive/5">
+                    <span className="text-xs font-medium">{format(new Date(h.holiday_date + 'T00:00:00'), 'd MMM')} · {h.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => deleteHolidayMutation.mutate(h.id)}
+                      className="rounded-sm hover:bg-destructive/20 p-0.5"
+                      aria-label="Remove holiday"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {publicHolidays.length > 0 && monthHolidays.length === 0 && (
+            <p className="text-xs text-muted-foreground italic">No holidays in the selected month.</p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Staff Settings — Hybrid & Off Days */}
       <Card>
         <CardHeader className="pb-3">
