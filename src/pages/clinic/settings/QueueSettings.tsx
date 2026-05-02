@@ -23,6 +23,8 @@ export default function QueueSettings() {
   const { settings, isLoading, update } = useClinicSettings();
 
   const [newRoomLabel, setNewRoomLabel] = useState('');
+  const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+  const [editingLabel, setEditingLabel] = useState('');
   const [youtubeId, setYoutubeId] = useState('');
   const [tickerText, setTickerText] = useState('');
   const [callBy, setCallBy] = useState<'name' | 'number'>('number');
