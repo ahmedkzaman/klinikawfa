@@ -224,6 +224,36 @@ export default function UserManagementSettings() {
                         </Select>
                       </TableCell>
                       <TableCell>
+                        {row.mmc_number ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              {row.requested_role === 'locum' && (row.role === 'guest' || row.role === null) && (
+                                <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200">
+                                  Pending Locum
+                                </Badge>
+                              )}
+                              <span className="font-mono text-xs text-foreground">
+                                {row.mmc_number}
+                              </span>
+                            </div>
+                            <a
+                              href="https://meritsmmc.moh.gov.my/"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                            >
+                              Verify on MMC
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                            {row.phone && (
+                              <div className="text-xs text-muted-foreground">📞 {row.phone}</div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         <div className="flex items-center gap-2">
                           {row.doctor ? (
                             <Badge
