@@ -25,12 +25,11 @@ interface CallEvent {
  * audio (chime, TTS), and forces the video player muted. Used by the
  * settings page Live Preview iframe.
  */
-export default function QueueTV() {
-  const isPreview = useMemo(() => {
-    if (typeof window === 'undefined') return false;
-    return new URLSearchParams(window.location.search).get('preview') === 'true';
-  }, []);
+const isPreview =
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).get('preview') === 'true';
 
+export default function QueueTV() {
   const [started, setStarted] = useState(isPreview);
   const { settings } = useClinicSettings();
   const [recentCalls, setRecentCalls] = useState<CallEvent[]>([]);
