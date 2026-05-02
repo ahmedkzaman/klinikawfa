@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
-import { FileText, MoreVertical } from 'lucide-react';
+import { CheckCircle2, FileText, MoreVertical, X } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import {
@@ -14,6 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +36,7 @@ import {
 import {
   usePanelClaims,
   usePanelClaimsSummary,
+  useBulkMarkClaimsSubmitted,
   PANEL_CLAIMS_PAGE_SIZE,
   type PanelClaimRow,
   type PanelClaimStatus,
@@ -52,7 +55,7 @@ const TABS: Array<{ key: PanelClaimsTab; label: string }> = [
   { key: 'cancelled', label: 'Cancelled' },
 ];
 
-const COLUMN_COUNT = 10;
+const COLUMN_COUNT = 11;
 
 function formatRM(value: number): string {
   return `RM ${value.toFixed(2)}`;
