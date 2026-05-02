@@ -75,6 +75,7 @@ export default function Consultation() {
   const [search, setSearch] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [autoSelected, setAutoSelected] = useState(false);
+  const [callTarget, setCallTarget] = useState<{ id: string; name: string } | null>(null);
 
   const allConsultationEntries = useMemo(
     () => entries.filter((e) => e.visit_purpose === 'consultation'),
@@ -402,9 +403,9 @@ export default function Consultation() {
                               size="sm"
                               className={cn(primaryBtn, 'gap-1')}
                               onClick={() =>
-                                callPatient.mutate({
+                                setCallTarget({
                                   id: entry.id,
-                                  called_by_doctor_id: doctor.id,
+                                  name: entry.patients?.name ?? 'Patient',
                                 })
                               }
                               disabled={callPatient.isPending}
@@ -421,6 +422,27 @@ export default function Consultation() {
           </Table>
         </div>
       </div>
+
+      <RoomPickerDialog
+        open={!!callTarget}
+        onOpenChange={(o) => !o && setCallTarget(null)}
+        patientLabel={callTarget?.name}
+        pending={callPatient.isPending}
+        onConfirm={(roomId) => {
+          if (!callTarget || !doctor) return;
+          callPatient.mutate(
+            { id: callTarget.id, called_by_doctor_id: doctor.id, room_id: roomId },
+            {
+              onSuccess: () => {
+                toast.success(`${callTarget.name} called`);
+                setCallTarget(null);
+              },
+              onError: (err) =>
+                toast.error(err instanceof Error ? err.message : 'Failed to call'),
+            },
+          );
+        }}
+      />
     </div>
   );
 }
