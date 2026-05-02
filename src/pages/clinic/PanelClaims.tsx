@@ -387,10 +387,14 @@ export default function PanelClaims() {
 function ClaimRow({
   row,
   activeTab,
+  isSelected,
+  onToggle,
   onOpen,
 }: {
   row: PanelClaimRow;
   activeTab: PanelClaimsTab;
+  isSelected: boolean;
+  onToggle: () => void;
   onOpen: () => void;
 }) {
   const displayAmount = row.received_amount ?? row.amount;
@@ -421,11 +425,27 @@ function ClaimRow({
   return (
     <TableRow
       onClick={onOpen}
+      data-state={isSelected ? 'selected' : undefined}
       className={cn(
         'border-b border-slate-100 last:border-0 hover:bg-slate-50/60 cursor-pointer',
         row.is_overdue && 'bg-red-50/40 hover:bg-red-50/60',
+        isSelected && 'bg-blue-50/60 hover:bg-blue-50/70',
       )}
     >
+      <TableCell
+        className="w-10"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
+      >
+        <Checkbox
+          checked={isSelected}
+          onCheckedChange={onToggle}
+          aria-label={`Select claim ${row.claim_no}`}
+          onClick={(e) => e.stopPropagation()}
+        />
+      </TableCell>
       <TableCell className="text-right tabular-nums font-semibold text-slate-800">
         {formatRM(displayAmount)}
         {showClaimedSuffix && (
