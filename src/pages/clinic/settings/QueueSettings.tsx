@@ -152,28 +152,78 @@ export default function QueueSettings() {
             )}
             {rooms.map((room) => {
               const active = (room.status ?? 'active') === 'active';
+              const isEditing = editingRoomId === room.id;
               return (
                 <div
                   key={room.id}
-                  className="flex items-center justify-between px-4 py-3"
+                  className="flex items-center justify-between px-4 py-3 gap-3"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
                     <span
-                      className={`h-2 w-2 rounded-full ${
+                      className={`h-2 w-2 rounded-full shrink-0 ${
                         active ? 'bg-emerald-500' : 'bg-slate-300'
                       }`}
                     />
-                    <span className="text-sm font-medium text-slate-800">
-                      {room.label}
-                    </span>
-                    {!active && (
-                      <span className="text-xs text-slate-400">(inactive)</span>
+                    {isEditing ? (
+                      <Input
+                        autoFocus
+                        value={editingLabel}
+                        onChange={(e) => setEditingLabel(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && editingLabel.trim()) saveEditRoom(room.id);
+                          if (e.key === 'Escape') cancelEditRoom();
+                        }}
+                        className="h-8 text-sm"
+                      />
+                    ) : (
+                      <>
+                        <span className="text-sm font-medium text-slate-800 truncate">
+                          {room.label}
+                        </span>
+                        {!active && (
+                          <span className="text-xs text-slate-400">(inactive)</span>
+                        )}
+                      </>
                     )}
                   </div>
-                  <Switch
-                    checked={active}
-                    onCheckedChange={() => toggleRoom(room.id, room.status ?? 'active')}
-                  />
+                  <div className="flex items-center gap-1 shrink-0">
+                    {isEditing ? (
+                      <>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-emerald-600"
+                          onClick={() => saveEditRoom(room.id)}
+                          disabled={editingLabel.trim().length === 0 || updateRoom.isPending}
+                        >
+                          <Check className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-slate-500"
+                          onClick={cancelEditRoom}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-slate-500"
+                          onClick={() => startEditRoom(room.id, room.label)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Switch
+                          checked={active}
+                          onCheckedChange={() => toggleRoom(room.id, room.status ?? 'active')}
+                        />
+                      </>
+                    )}
+                  </div>
                 </div>
               );
             })}
