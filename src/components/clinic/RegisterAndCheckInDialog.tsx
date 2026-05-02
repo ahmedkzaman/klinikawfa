@@ -235,6 +235,17 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nationalId]);
 
+  // If the IC matches an existing patient with a default panel, prefill payer.
+  useEffect(() => {
+    const defaultPanel = (existingPatient as { default_panel_id?: string | null } | null)
+      ?.default_panel_id;
+    if (defaultPanel) {
+      setValue('payment_method', 'panel', { shouldDirty: false });
+      setValue('panel_id', defaultPanel, { shouldDirty: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existingPatient?.id]);
+
   // Reset on close
   useEffect(() => {
     if (!open) {
