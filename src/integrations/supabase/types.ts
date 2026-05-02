@@ -913,8 +913,11 @@ export type Database = {
           logo_height_px: number
           logo_url: string
           phone: string
+          queue_call_by: string
           singleton: boolean
           sst_number: string | null
+          tv_ticker_text: string | null
+          tv_youtube_id: string | null
           updated_at: string
         }
         Insert: {
@@ -931,8 +934,11 @@ export type Database = {
           logo_height_px?: number
           logo_url?: string
           phone?: string
+          queue_call_by?: string
           singleton?: boolean
           sst_number?: string | null
+          tv_ticker_text?: string | null
+          tv_youtube_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -949,8 +955,11 @@ export type Database = {
           logo_height_px?: number
           logo_url?: string
           phone?: string
+          queue_call_by?: string
           singleton?: boolean
           sst_number?: string | null
+          tv_ticker_text?: string | null
+          tv_youtube_id?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -3035,16 +3044,19 @@ export type Database = {
           created_at: string
           id: string
           label: string
+          status: string
         }
         Insert: {
           created_at?: string
           id?: string
           label: string
+          status?: string
         }
         Update: {
           created_at?: string
           id?: string
           label?: string
+          status?: string
         }
         Relationships: []
       }
@@ -4365,6 +4377,7 @@ export type Database = {
         | "completed"
         | "cancelled"
         | "no_show"
+        | "arrived"
       clinic_status:
         | "registered"
         | "ready_for_doctor"
@@ -4523,6 +4536,7 @@ export const Constants = {
         "completed",
         "cancelled",
         "no_show",
+        "arrived",
       ],
       clinic_status: [
         "registered",
