@@ -1151,10 +1151,13 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                       <TableHead className="w-32 font-semibold sticky left-0 bg-background z-10">Shift</TableHead>
                       {monthDays.map(day => {
                         const isWkend = isWeekend(day);
+                        const dk = format(day, 'yyyy-MM-dd');
+                        const isPH = isPublicHoliday(dk);
                         return (
-                          <TableHead key={day.toISOString()} className={cn("text-center min-w-[80px]", isWkend && "bg-muted/30")}>
+                          <TableHead key={day.toISOString()} className={cn("text-center min-w-[80px]", isWkend && "bg-muted/30", isPH && "bg-destructive/10")}>
                             <div className="font-semibold text-xs">{DAY_ABBR[getDay(day)]}</div>
                             <div className="text-xs text-muted-foreground font-normal">{format(day, 'd')}</div>
+                            {isPH && <div className="text-[9px] font-bold text-destructive uppercase tracking-wide mt-0.5">PH</div>}
                           </TableHead>
                         );
                       })}
