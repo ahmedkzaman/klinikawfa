@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { CheckCircle2, XCircle, Send } from 'lucide-react';
+import { CheckCircle2, XCircle, Send, Printer } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -34,6 +34,7 @@ import {
 import { useSuppliers } from '@/hooks/clinic/useSuppliers';
 import { usePurchaseOrder, usePurchaseOrders, type POStatus } from '@/hooks/clinic/usePurchaseOrders';
 import { POLineItemsTable } from './POLineItemsTable';
+import { POPrintTemplate } from './POPrintTemplate';
 import { toast } from 'sonner';
 
 interface Props {

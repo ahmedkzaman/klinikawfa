@@ -77,7 +77,7 @@ export function POPrintTemplate({ po, supplier }: Props) {
             {po.items.map((line, idx) => (
               <tr key={line.id}>
                 <td className="border border-black px-2 py-1">{idx + 1}</td>
-                <td className="border border-black px-2 py-1">{line.item_name ?? '—'}</td>
+                <td className="border border-black px-2 py-1">{line.inventory_item?.name ?? '—'}</td>
                 <td className="border border-black px-2 py-1 text-right">{line.order_qty}</td>
                 <td className="border border-black px-2 py-1 text-right">{Number(line.unit_cost).toFixed(2)}</td>
                 <td className="border border-black px-2 py-1 text-right">{Number(line.total_price).toFixed(2)}</td>
