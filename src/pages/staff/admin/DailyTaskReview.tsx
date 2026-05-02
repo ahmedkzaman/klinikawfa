@@ -230,9 +230,29 @@ export default function DailyTaskReview() {
     toast.success('Report downloaded');
   };
 
+  const extractDailyReportPath = (url: string): string | null => {
+    // Match either public or signed URL formats for the daily-reports bucket
+    const m = url.match(/daily-reports\/([^?]+)/);
+    return m ? decodeURIComponent(m[1]) : null;
+  };
+
+  const openSelfiePreview = async (url: string, label: string) => {
+    const path = extractDailyReportPath(url);
+    if (path) {
+      const { data, error } = await supabase.storage
+        .from('daily-reports')
+        .createSignedUrl(path, 60 * 10);
+      if (!error && data?.signedUrl) {
+        setPreviewImage({ url: data.signedUrl, label });
+        return;
+      }
+    }
+    setPreviewImage({ url, label });
+  };
+
   const Check = ({ url, label }: { url?: string | null; label?: string }) => (
     url ? (
-      <button onClick={() => setPreviewImage({ url, label: label || 'Photo' })} className="hover:scale-110 transition-transform">
+      <button onClick={() => openSelfiePreview(url, label || 'Photo')} className="hover:scale-110 transition-transform">
         <CheckCircle className="h-3.5 w-3.5 text-green-500" />
       </button>
     ) : <CheckCircle className="h-3.5 w-3.5 text-green-500" />
