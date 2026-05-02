@@ -87,6 +87,9 @@ export default function ConsultationDetail() {
     [entries, queueEntryId],
   );
   const patient = entry?.patients;
+  const isPanel =
+    !!(entry as { panel_id?: string | null } | undefined)?.panel_id ||
+    (entry?.payment_method ?? '').startsWith('panel');
 
   const { data: consultation, isLoading: consultLoading } = useConsultation(queueEntryId);
   const createConsultation = useCreateConsultation();
