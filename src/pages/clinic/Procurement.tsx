@@ -1,16 +1,31 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { Plus, Package, Building2, Receipt } from 'lucide-react';
+import { Plus, Package, Building2, MoreHorizontal } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useSuppliers, type Supplier } from '@/hooks/clinic/useSuppliers';
 import { usePurchaseOrders, type POStatus } from '@/hooks/clinic/usePurchaseOrders';
+import { useVendorInvoices, type VendorInvoiceStatus } from '@/hooks/clinic/useVendorInvoices';
 import { SupplierDialog } from '@/components/clinic/procurement/SupplierDialog';
 import { POSheet } from '@/components/clinic/procurement/POSheet';
+import { VendorInvoiceDialog } from '@/components/clinic/procurement/VendorInvoiceDialog';
+import { MarkPaidDialog } from '@/components/clinic/procurement/MarkPaidDialog';
 import { toast } from 'sonner';
+
+const invoiceStatusBadge: Record<VendorInvoiceStatus, string> = {
+  Open:    'bg-amber-500/15 text-amber-700 dark:text-amber-400',
+  Paid:    'bg-green-500/15 text-green-700 dark:text-green-400',
+  Overdue: 'bg-destructive/15 text-destructive',
+};
 
 const statusBadge: Record<POStatus, string> = {
   Draft:     'bg-muted text-muted-foreground',
@@ -22,6 +37,7 @@ const statusBadge: Record<POStatus, string> = {
 export default function Procurement() {
   const { suppliers, isLoading: suppliersLoading } = useSuppliers();
   const { orders, isLoading: ordersLoading, createDraft } = usePurchaseOrders();
+  const { data: invoices = [], isLoading: invoicesLoading } = useVendorInvoices();
 
   const [supplierDialog, setSupplierDialog] = useState<{ open: boolean; supplier: Supplier | null }>({
     open: false,
@@ -30,6 +46,10 @@ export default function Procurement() {
   const [poSheet, setPOSheet] = useState<{ open: boolean; poId: string | null }>({
     open: false,
     poId: null,
+  });
+  const [invoiceDialog, setInvoiceDialog] = useState(false);
+  const [paidDialog, setPaidDialog] = useState<{ open: boolean; id: string | null; no: string | null }>({
+    open: false, id: null, no: null,
   });
 
   const onAddPO = async () => {
