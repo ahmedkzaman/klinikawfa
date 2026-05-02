@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { Plus, Tv, Hash, User as UserIcon } from 'lucide-react';
+import { Plus, Tv, Hash, User as UserIcon, Pencil, Check, X } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
