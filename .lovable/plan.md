@@ -1,78 +1,34 @@
-## Migrate TV Announcements to Google Cloud TTS
+## Replace local ding-dong with Supabase-hosted chime
 
-Replace the unreliable browser `speechSynthesis` API with high-quality Google Cloud Text-to-Speech served via a Supabase Edge Function. Audio playback will be event-driven (no `setTimeout` racing).
+### Goal
+Swap the local `/sounds/dingdong.mp3` chime for a professional chime hosted in the public `assets` bucket on Lovable Cloud, capped at 3 seconds so the Google TTS announcement starts promptly.
 
-### Prerequisite — Secret Required
+### Prerequisite (user action)
+Upload the chime file to the **`assets`** storage bucket (already public) with the path **`clinic-chime.mp3`**. The resulting public URL will be:
 
-`GOOGLE_TTS_API_KEY` is **not** currently configured. Before implementation I will request it via the secrets tool. The user will need to:
-1. Create / open a Google Cloud project, enable **Cloud Text-to-Speech API**.
-2. Create an API key (APIs & Services → Credentials → Create credentials → API key).
-3. Restrict the key to the Text-to-Speech API.
-4. Paste it into the Lovable secrets prompt.
+```
+https://ncysmppzfjtiekfnomdv.supabase.co/storage/v1/object/public/assets/clinic-chime.mp3
+```
 
-Implementation pauses until the secret is saved.
+If you'd prefer a different filename or bucket, let me know before I implement.
 
----
+### Changes
 
-### 1. New Edge Function — `supabase/functions/generate-tts/index.ts`
+**1. `src/pages/tv/QueueTV.tsx`**
 
-- Public POST endpoint with full CORS (`OPTIONS` preflight + `corsHeaders` on every response).
-- Validates body via Zod: `{ text: string (1..5000), languageCode: string, voiceName: string }`.
-- Reads `GOOGLE_TTS_API_KEY` from `Deno.env`.
-- POSTs to `https://texttospeech.googleapis.com/v1/text:synthesize?key={KEY}` with:
-  ```json
-  {
-    "input": { "text": "..." },
-    "voice": { "languageCode": "...", "name": "..." },
-    "audioConfig": { "audioEncoding": "MP3" }
-  }
+- Add a top-level constant:
+  ```ts
+  const CHIME_URL = "https://ncysmppzfjtiekfnomdv.supabase.co/storage/v1/object/public/assets/clinic-chime.mp3";
   ```
-- Returns `{ audioContent: "<base64>" }` to the client. Surfaces upstream errors as 502 with sanitized message.
-- No `verify_jwt` override needed (default applies).
+- Remove the two `<audio ref={audioRef} src="/sounds/dingdong.mp3" ...>` elements (lines 260 & 277) — we'll create the Audio object on demand so the URL is centralized and the element isn't needed.
+- Rewrite `playDingDong` to:
+  - Skip in preview mode (unchanged).
+  - Create `new Audio(CHIME_URL)`, set `volume = 0.6`, call `play()`.
+  - Return a Promise that resolves on `ended` **or** after a 3000 ms safety timeout (whichever fires first), and also on `error` so the queue never hangs. The timeout pauses the audio so it stops audibly at ~3s.
+  - Keep the existing synthesized WebAudio two-tone fallback if `play()` rejects (e.g. autoplay blocked, network failure).
+- The downstream `await playDingDong(); ... speakAnnouncement(...)` flow at line 222 continues to work unchanged — TTS still starts only after the chime promise resolves.
 
-### 2. Refactor `src/pages/tv/QueueTV.tsx`
-
-**Remove** all references to:
-- `window.speechSynthesis`
-- `SpeechSynthesisUtterance`
-- The `voiceschanged` listener
-- The "prime" `speak(' ')` call inside the gate-screen Start button (replace with a no-op `new Audio().play()` unlock — needed so iOS/Safari allows later programmatic playback).
-
-**Add** a single managed `currentAudioRef: HTMLAudioElement | null` so we can stop a stale clip if a new call arrives.
-
-**`speakAnnouncement(next)` becomes async:**
-1. Skip entirely if `isPreview`.
-2. Determine:
-   - `lang = settings.tts_language ?? 'ms-MY'`
-   - `voiceName = lang === 'ms-MY' ? 'ms-MY-Wavenet-A' : 'en-US-Journey-F'`
-   - `text` = same Malay/English phrasing already in place.
-3. `const { data, error } = await supabase.functions.invoke('generate-tts', { body: { text, languageCode: lang, voiceName } })`.
-4. On error → log + bail (queue still advances).
-5. Build `audio = new Audio('data:audio/mp3;base64,' + data.audioContent)`, store in ref, `await audio.play()`.
-6. Returns a Promise that resolves on `audio.onended` (and on `onerror` to avoid hangs).
-
-**`processQueue()` rewrite (event-driven, no overlap):**
-1. If `playingRef.current` → return.
-2. Shift next call; if none → return.
-3. `playingRef = true`; push to `recentCalls`.
-4. `await playDingDong()` (chime keeps existing implementation; wraps `audio.onended` in a Promise so it also waits cleanly instead of `wait(900)`).
-5. `await speakAnnouncement(next)` — first pass.
-6. `await wait(800)` — short gap.
-7. `await speakAnnouncement(next)` — repeat once for clarity (replaces the old `setTimeout(..., 2800)` repeat).
-8. `playingRef = false`; if more queued → `processQueue()` recursively.
-
-This guarantees: chime → first announcement → gap → repeat → next patient, with **zero overlap**, because every step awaits real `onended` events.
-
-### 3. Files Touched
-
-- **NEW** `supabase/functions/generate-tts/index.ts`
-- **EDIT** `src/pages/tv/QueueTV.tsx`
-
-No DB migration, no other file changes. The existing `tts_language` setting and language dropdown remain unchanged.
-
-### 4. Verification
-
-After deploy I will:
-- Curl the edge function with a short Malay sample to confirm it returns base64.
-- Confirm no `speechSynthesis` references remain (`rg speechSynthesis src`).
-- Confirm preview iframe still mutes audio (`isPreview` early-returns are preserved).
+### Technical notes
+- `audioRef` and the `<audio>` elements become unused; remove the ref declaration too if nothing else references it (will verify during implementation).
+- The 3-second cap matches the first "ding-dong" of the referenced 11-second clip; adjustable via a single constant.
+- No DB migration, no edge function changes, no new secrets.
