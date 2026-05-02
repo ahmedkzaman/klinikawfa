@@ -52,7 +52,7 @@ import {
   useUpdateConsultationItem,
 } from '@/hooks/clinic/useConsultationItems';
 import { useClinicAppointments } from '@/hooks/clinic/useClinicAppointments';
-import { useInventoryItems } from '@/hooks/clinic/useInventoryItems';
+import { useInventoryItemsSafe } from '@/hooks/clinic/useInventoryItems';
 import { useServices } from '@/hooks/clinic/useServices';
 import { usePackages } from '@/hooks/clinic/usePackages';
 import { useRooms } from '@/hooks/clinic/useRooms';
