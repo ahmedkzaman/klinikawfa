@@ -4308,6 +4308,18 @@ export type Database = {
       }
       generate_po_number: { Args: never; Returns: string }
       get_doctor_id_for_user: { Args: { _user_id: string }; Returns: string }
+      get_video_room_signaling: {
+        Args: { _room_code: string }
+        Returns: {
+          current_offer: Json
+          deposit_amount: number
+          id: string
+          patient_name: string
+          per_minute_rate: number
+          room_code: string
+          status: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
