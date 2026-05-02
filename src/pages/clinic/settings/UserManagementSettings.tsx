@@ -296,6 +296,7 @@ export default function UserManagementSettings() {
           onOpenChange={(open) => !open && setProfileDialogUser(null)}
           user={profileDialogUser}
         />
+        <AddLocumDialog open={addLocumOpen} onOpenChange={setAddLocumOpen} />
       </div>
     </div>
   );
