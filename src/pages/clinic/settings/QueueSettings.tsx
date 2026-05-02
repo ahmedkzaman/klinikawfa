@@ -56,10 +56,22 @@ export default function QueueSettings() {
     }
   };
 
+  const extractYouTubeId = (input: string) => {
+    if (!input) return '';
+    const trimmed = input.trim();
+    if (trimmed.length === 11 && !trimmed.includes('youtube.com') && !trimmed.includes('youtu.be')) {
+      return trimmed;
+    }
+    const match = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?]{11})/);
+    return match ? match[1] : trimmed;
+  };
+
   const saveTv = async () => {
     try {
+      const extractedId = extractYouTubeId(youtubeId);
+      if (extractedId !== youtubeId) setYoutubeId(extractedId);
       await update.mutateAsync({
-        tv_youtube_id: youtubeId.trim() || null,
+        tv_youtube_id: extractedId || null,
         tv_ticker_text: tickerText.trim() || null,
         queue_call_by: callBy,
       });
@@ -153,15 +165,15 @@ export default function QueueSettings() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <Label htmlFor="yt">YouTube Video ID</Label>
+              <Label htmlFor="yt">YouTube Video Link</Label>
               <Input
                 id="yt"
-                placeholder="dQw4w9WgXcQ"
+                placeholder="https://youtu.be/dQw4w9WgXcQ"
                 value={youtubeId}
                 onChange={(e) => setYoutubeId(e.target.value)}
               />
               <p className="text-xs text-slate-500 mt-1">
-                Just the ID (the part after <code>v=</code>).
+                Paste the full YouTube URL (e.g., https://youtu.be/...). The system will automatically extract the video ID.
               </p>
             </div>
 
