@@ -3,6 +3,21 @@ import { supabase } from '@/integrations/supabase/client';
 
 const QUERY_KEY = ['packages'];
 
+/** Cost-free read hook safe for locums/guests (queries the packages_safe view). */
+export function usePackagesSafe() {
+  return useQuery({
+    queryKey: ['packages_safe'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('packages_safe')
+        .select('*')
+        .order('name');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
 export function usePackages() {
   const queryClient = useQueryClient();
 
