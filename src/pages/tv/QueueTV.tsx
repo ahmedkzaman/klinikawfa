@@ -42,13 +42,15 @@ export default function QueueTV() {
           const next = payload.new as Record<string, unknown>;
           const prev = (payload.old ?? {}) as Record<string, unknown>;
 
-          const becameWithDoctor =
-            next.clinic_status === 'with_doctor' &&
-            prev.clinic_status !== 'with_doctor';
           const calledTsChanged =
             next.called_at && next.called_at !== prev.called_at;
+          const isActiveCall = [
+            'with_doctor',
+            'sent_to_dispensary',
+            'dispensing_payment',
+          ].includes(next.clinic_status as string);
 
-          if (!(becameWithDoctor || (next.clinic_status === 'with_doctor' && calledTsChanged))) {
+          if (!(calledTsChanged && isActiveCall)) {
             return;
           }
 
@@ -235,7 +237,7 @@ export default function QueueTV() {
           {ytId ? (
             <iframe
               key={ytId}
-              src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&loop=1&playlist=${ytId}&controls=0&modestbranding=1&rel=0`}
+              src={`https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}&controls=0&modestbranding=1&rel=0`}
               title="Clinic TV"
               allow="autoplay; encrypted-media"
               className="w-full h-full"

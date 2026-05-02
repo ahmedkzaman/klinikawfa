@@ -4,21 +4,22 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import {
-  ListOrdered,
   Users,
   Stethoscope,
   Receipt,
   FileText,
-  ClipboardList,
-  Package,
   Pill,
-  Archive,
   ArrowLeft,
   Menu,
   Settings,
   LineChart,
   Briefcase,
   CalendarDays,
+  LayoutDashboard,
+  PackageSearch,
+  ShoppingCart,
+  Trash2,
+  type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
@@ -26,23 +27,23 @@ import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
 type ClinicNavItem = {
   href: string;
   label: string;
-  icon: typeof ListOrdered;
+  icon: LucideIcon;
   specialAdminOnly?: boolean;
   adminOnly?: boolean;
 };
 
 const clinicNavItems: ClinicNavItem[] = [
-  { href: '/clinic/queue', label: 'Queue Board', icon: ListOrdered },
-  { href: '/clinic/appointments', label: 'Appointments', icon: CalendarDays },
   { href: '/clinic/patients', label: 'Patients', icon: Users },
+  { href: '/clinic/appointments', label: 'Appointments', icon: CalendarDays },
+  { href: '/clinic/queue', label: 'Queue Board', icon: LayoutDashboard },
   { href: '/clinic/consultation', label: 'Consultation', icon: Stethoscope },
+  { href: '/clinic/dispensary', label: 'Dispensary', icon: Pill },
   { href: '/clinic/billings', label: 'Billings', icon: Receipt },
+  { href: '/clinic/inventory', label: 'Inventory', icon: PackageSearch },
   { href: '/clinic/panel-claims', label: 'Panel Claims', icon: FileText },
   { href: '/clinic/receivables', label: 'Receivables', icon: Briefcase },
-  { href: '/clinic/dispensary', label: 'Dispensary', icon: Pill },
-  { href: '/clinic/procurement', label: 'Procurement', icon: ClipboardList },
-  { href: '/clinic/inventory', label: 'Inventory', icon: Package },
-  { href: '/clinic/voided', label: 'Voided Records', icon: Archive, specialAdminOnly: true },
+  { href: '/clinic/procurement', label: 'Procurement', icon: ShoppingCart },
+  { href: '/clinic/voided', label: 'Voided Records', icon: Trash2, specialAdminOnly: true },
   { href: '/clinic/insight', label: 'Insight', icon: LineChart, adminOnly: true },
   { href: '/clinic/settings', label: 'Settings', icon: Settings },
 ];
