@@ -289,6 +289,25 @@ export default function QueueSettings() {
           </div>
 
           <div>
+            <Label htmlFor="tts-lang" className="mb-2 block">Announcement Language</Label>
+            <Select
+              value={ttsLanguage}
+              onValueChange={(v) => setTtsLanguage(v as 'ms-MY' | 'en-US')}
+            >
+              <SelectTrigger id="tts-lang" className="w-full md:w-72">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ms-MY">Bahasa Melayu</SelectItem>
+                <SelectItem value="en-US">English</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-slate-500 mt-1">
+              Language used for spoken queue announcements on the TV display.
+            </p>
+          </div>
+
+          <div>
             <Label htmlFor="ticker">Scrolling Ticker Text</Label>
             <Textarea
               id="ticker"
