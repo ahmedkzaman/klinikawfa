@@ -113,7 +113,18 @@ export default function Dispensary() {
                     {formatDistanceToNow(new Date(entry.created_at), { addSuffix: true })}
                   </span>
                   <StatusBadge status={entry.clinic_status} />
-                  <div>
+                  <div className="flex items-center gap-1">
+                    {isPending && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-xs rounded-lg text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                        onClick={() => setCallTarget(entry)}
+                      >
+                        <Volume2 className="h-3 w-3 mr-1" />
+                        Call
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
