@@ -1,13 +1,18 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Pill, ExternalLink } from 'lucide-react';
+import { Pill, ExternalLink, Volume2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { StatusBadge } from '@/components/clinic/StatusBadge';
-import { useConsultationQueueEntries } from '@/hooks/clinic/useQueueEntries';
-import type { ClinicStatus } from '@/types/clinic';
+import { RoomPickerDialog } from '@/components/clinic/consultation/RoomPickerDialog';
+import {
+  useConsultationQueueEntries,
+  useCallToDispensary,
+} from '@/hooks/clinic/useQueueEntries';
+import type { ClinicStatus, QueueEntryWithJoins } from '@/types/clinic';
 import {
   bento,
   pageInner,
