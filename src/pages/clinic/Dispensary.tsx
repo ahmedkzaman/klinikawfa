@@ -31,6 +31,8 @@ export default function Dispensary() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Pending');
   const { data: entries, isLoading } = useConsultationQueueEntries();
+  const callToDispensary = useCallToDispensary();
+  const [callTarget, setCallTarget] = useState<QueueEntryWithJoins | null>(null);
 
   const filtered = useMemo(() => {
     if (!entries) return [];
