@@ -784,17 +784,15 @@ export function useWebRTC({
           
           try {
             const { data, error } = await supabase
-              .from('video_rooms')
-              .select('current_offer')
-              .eq('room_code', roomCode)
-              .single();
+              .rpc('get_video_room_signaling', { _room_code: roomCode });
             
             if (error) {
               console.warn('[WebRTC] DB poll error:', error.message);
               return;
             }
             
-            if (data?.current_offer && !offerProcessedRef.current && !peerConnectionRef.current?.remoteDescription) {
+            const row = Array.isArray(data) ? data[0] : data;
+            if (row?.current_offer && !offerProcessedRef.current && !peerConnectionRef.current?.remoteDescription) {
               console.log('[WebRTC] Got offer from DATABASE FALLBACK');
               offerProcessedRef.current = true;
               
