@@ -173,7 +173,7 @@ const App = () => (
               <Route
                 path="/clinic"
                 element={
-                  <ClinicProtectedRoute>
+                  <ClinicProtectedRoute requiredRole="any_staff">
                     <ClinicLayout />
                   </ClinicProtectedRoute>
                 }
@@ -181,17 +181,87 @@ const App = () => (
                 <Route index element={<Navigate to="queue" replace />} />
                 <Route path="queue" element={<QueueBoard />} />
                 <Route path="appointments" element={<Appointments />} />
-                <Route path="patients" element={<PatientsList />} />
-                <Route path="consultation" element={<Consultation />} />
-                <Route path="consultation/:queueEntryId" element={<ConsultationDetail />} />
-                <Route path="dispensary" element={<Dispensary />} />
-                <Route path="procurement" element={<Procurement />} />
-                <Route path="queue/checkout/:queueEntryId" element={<DispenseCheckout />} />
+                <Route
+                  path="patients"
+                  element={
+                    <ClinicProtectedRoute requiredRole="clinical">
+                      <PatientsList />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
+                  path="consultation"
+                  element={
+                    <ClinicProtectedRoute requiredRole="clinical">
+                      <Consultation />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
+                  path="consultation/:queueEntryId"
+                  element={
+                    <ClinicProtectedRoute requiredRole="clinical">
+                      <ConsultationDetail />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
+                  path="dispensary"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <Dispensary />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
+                  path="procurement"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <Procurement />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
+                  path="queue/checkout/:queueEntryId"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <DispenseCheckout />
+                    </ClinicProtectedRoute>
+                  }
+                />
                 <Route path="visits/:queueEntryId" element={<VisitDetail />} />
-                <Route path="billings" element={<Billings />} />
-                <Route path="panel-claims" element={<PanelClaims />} />
-                <Route path="receivables" element={<Receivables />} />
-                <Route path="inventory" element={<Inventory />} />
+                <Route
+                  path="billings"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <Billings />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
+                  path="panel-claims"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <PanelClaims />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
+                  path="receivables"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <Receivables />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
+                  path="inventory"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <Inventory />
+                    </ClinicProtectedRoute>
+                  }
+                />
                 <Route
                   path="insight"
                   element={
@@ -200,8 +270,22 @@ const App = () => (
                     </ClinicProtectedRoute>
                   }
                 />
-                <Route path="settings" element={<SettingsPage />} />
-                <Route path="settings/preferences" element={<InClinicSettings />} />
+                <Route
+                  path="settings"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <SettingsPage />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
+                  path="settings/preferences"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <InClinicSettings />
+                    </ClinicProtectedRoute>
+                  }
+                />
                 <Route
                   path="settings/users"
                   element={
