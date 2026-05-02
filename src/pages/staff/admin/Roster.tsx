@@ -1172,8 +1172,12 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                       {monthDays.map(day => {
                         const dateKey = format(day, 'yyyy-MM-dd');
                         const cells = roster[dateKey]?.shift1 || [];
+                        const isPH = isPublicHoliday(dateKey);
                         return (
-                          <TableCell key={dateKey} className={cn("text-center p-1", isWeekend(day) && "bg-muted/20")}>
+                          <TableCell key={dateKey} className={cn("text-center p-1", isWeekend(day) && "bg-muted/20", isPH && "bg-destructive/5")}>
+                            {cells.length === 0 && isPH && (
+                              <span className="text-[10px] text-destructive/70 italic">PH</span>
+                            )}
                             {cells.map((cell, i) => (
                               <Select key={i} value={cell.staffId} onValueChange={v => updateCell(dateKey, 'shift1', i, v)}>
                                 <SelectTrigger className="h-6 text-[11px] border-0 bg-transparent shadow-none px-1 justify-center min-w-[60px]">
@@ -1199,14 +1203,19 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                       {monthDays.map(day => {
                         const dateKey = format(day, 'yyyy-MM-dd');
                         const cells = roster[dateKey]?.shift2 || [];
+                        const isPH = isPublicHoliday(dateKey);
                         return (
-                          <TableCell key={dateKey} className={cn("text-center p-1", isWeekend(day) && "bg-muted/20")}>
+                          <TableCell key={dateKey} className={cn("text-center p-1", isWeekend(day) && "bg-muted/20", isPH && "bg-destructive/5")}>
+                            {cells.length === 0 && isPH && (
+                              <span className="text-[10px] text-destructive/70 italic">PH</span>
+                            )}
                             {cells.map((cell, i) => (
                               <Select key={i} value={cell.staffId} onValueChange={v => updateCell(dateKey, 'shift2', i, v)}>
                                 <SelectTrigger className="h-6 text-[11px] border-0 bg-transparent shadow-none px-1 justify-center min-w-[60px]">
                                   <span className="truncate">{firstName(cell.staffName)}</span>
                                 </SelectTrigger>
                                 <SelectContent>
+                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>
                                   {staffList.map(s => (
                                     <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>
                                   ))}
