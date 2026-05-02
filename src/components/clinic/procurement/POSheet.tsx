@@ -73,6 +73,7 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
 
   const status = (po?.status ?? 'Draft') as POStatus;
   const readOnly = status === 'Received' || status === 'Cancelled';
+  const supplier = suppliers.find((s) => s.id === (po?.supplier_id ?? supplierId)) ?? null;
   const total = (po?.items ?? []).reduce((s, l) => s + Number(l.total_price ?? 0), 0);
 
   const persistHeader = async () => {
@@ -297,6 +298,8 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {po && <POPrintTemplate po={po} supplier={supplier} />}
     </>
   );
 }
