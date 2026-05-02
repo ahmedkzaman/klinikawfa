@@ -107,6 +107,7 @@ export default function QueueSettings() {
         tv_youtube_id: extractedId || null,
         tv_ticker_text: tickerText.trim() || null,
         queue_call_by: callBy,
+        tts_language: ttsLanguage,
       });
       toast.success('Saved');
     } catch (err) {
