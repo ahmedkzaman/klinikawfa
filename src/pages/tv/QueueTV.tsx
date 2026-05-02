@@ -252,7 +252,7 @@ export default function QueueTV() {
             <>
               <ReactPlayer
                 key={ytId}
-                url={`https://www.youtube.com/watch?v=${ytId}`}
+                src={`https://www.youtube.com/watch?v=${ytId}`}
                 playing
                 loop
                 muted={isPreview}
