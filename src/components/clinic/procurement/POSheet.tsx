@@ -234,6 +234,9 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
 
               {/* Actions */}
               <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button variant="outline" onClick={() => window.print()}>
+                  <Printer className="h-4 w-4 mr-1" /> Print / PDF
+                </Button>
                 {status === 'Draft' && (
                   <>
                     <Button variant="outline" onClick={persistHeader}>
