@@ -307,6 +307,18 @@ export default function QueueSettings() {
             </a>{' '}
             on the waiting-room screen.
           </div>
+
+          <div className="space-y-2">
+            <Label>Live Preview</Label>
+            <iframe
+              src="/tv?preview=true"
+              title="TV Preview"
+              className="w-full aspect-video rounded-xl border-4 border-slate-800 pointer-events-none"
+            />
+            <p className="text-xs text-slate-500">
+              Silent preview — audio and announcements are suppressed.
+            </p>
+          </div>
         </Card>
       </div>
     </div>
