@@ -65,7 +65,7 @@ import {
 import { DiagnosisCombobox } from '@/components/clinic/consultation/DiagnosisCombobox';
 import { SessionAttachmentsStrip } from '@/components/clinic/consultation/SessionAttachmentsStrip';
 
-const PRICE_TIERS = ['SELF PAY'];
+const PRICE_TIERS = ['SELF PAY', 'PANEL'];
 
 export default function ConsultationDetail() {
   const { queueEntryId } = useParams<{ queueEntryId: string }>();
@@ -87,6 +87,9 @@ export default function ConsultationDetail() {
     [entries, queueEntryId],
   );
   const patient = entry?.patients;
+  const isPanel =
+    !!(entry as { panel_id?: string | null } | undefined)?.panel_id ||
+    (entry?.payment_method ?? '').startsWith('panel');
 
   const { data: consultation, isLoading: consultLoading } = useConsultation(queueEntryId);
   const createConsultation = useCreateConsultation();
@@ -438,7 +441,7 @@ export default function ConsultationDetail() {
     }
     if (treatmentSearch) {
       const q = treatmentSearch.toLowerCase();
-      list = list.filter((i) => i.item_name.toLowerCase().includes(q));
+      list = list.filter((i) => String(i.item_name ?? '').toLowerCase().includes(q));
     }
     return list;
   }, [categorizedItems, treatmentCategory, treatmentSearch]);
@@ -654,6 +657,7 @@ export default function ConsultationDetail() {
                         key={item.id}
                         item={item as TreatmentItemCardItem}
                         priceTiers={PRICE_TIERS}
+                        isPanel={isPanel}
                         disabled={!canEdit}
                         onRemove={() =>
                           consultationId &&
@@ -976,13 +980,17 @@ export default function ConsultationDetail() {
                                   {consult.consultation_items.map((it) => (
                                     <div
                                       key={it.id}
-                                      className="flex justify-between text-sm pl-2 text-slate-600"
+                                      className="flex justify-between items-start gap-4 w-full pl-2"
                                     >
-                                      <span>
-                                        {it.item_name} x{it.quantity}{' '}
-                                        {it.dosage && `(${it.dosage})`}
+                                      <div className="flex-1 min-w-0 flex flex-col">
+                                        <span className="text-sm text-slate-600 break-words">
+                                          {it.item_name} x{it.quantity}{' '}
+                                          {it.dosage && `(${it.dosage})`}
+                                        </span>
+                                      </div>
+                                      <span className="shrink-0 text-right whitespace-nowrap text-sm text-slate-600">
+                                        RM {Number(it.price).toFixed(2)}
                                       </span>
-                                      <span>RM {Number(it.price).toFixed(2)}</span>
                                     </div>
                                   ))}
                                 </div>

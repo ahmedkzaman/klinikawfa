@@ -231,33 +231,29 @@ function VisitRow({ row }: { row: PatientVisitHistoryRow }) {
                 No billed items
               </p>
             ) : (
-              <div className="rounded-md border overflow-hidden">
-                <table className="w-full text-[11px]">
-                  <thead className="bg-muted/40 text-muted-foreground">
-                    <tr>
-                      <th className="text-left px-2 py-1 font-medium">Item</th>
-                      <th className="text-right px-2 py-1 font-medium w-10">Qty</th>
-                      <th className="text-right px-2 py-1 font-medium w-16">Price</th>
-                      <th className="text-right px-2 py-1 font-medium w-20">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {billingItems.map((it) => {
-                      const qty = Number(it.quantity ?? 0);
-                      const price = Number(it.price ?? 0);
-                      return (
-                        <tr key={it.id} className="border-t">
-                          <td className="px-2 py-1 text-foreground/80 truncate">{it.item_name}</td>
-                          <td className="px-2 py-1 text-right tabular-nums">{qty}</td>
-                          <td className="px-2 py-1 text-right tabular-nums">{price.toFixed(2)}</td>
-                          <td className="px-2 py-1 text-right tabular-nums font-medium">
-                            {(qty * price).toFixed(2)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div className="rounded-md border divide-y">
+                {billingItems.map((it) => {
+                  const qty = Number(it.quantity ?? 0);
+                  const price = Number(it.price ?? 0);
+                  return (
+                    <div
+                      key={it.id}
+                      className="flex justify-between items-start gap-4 w-full px-2 py-1.5"
+                    >
+                      <div className="flex-1 min-w-0 flex flex-col">
+                        <span className="text-[11px] text-foreground/80 break-words">
+                          {it.item_name}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground tabular-nums">
+                          Qty {qty} × RM {price.toFixed(2)}
+                        </span>
+                      </div>
+                      <span className="shrink-0 text-right whitespace-nowrap text-[11px] font-medium tabular-nums">
+                        RM {(qty * price).toFixed(2)}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

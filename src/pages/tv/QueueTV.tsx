@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Volume2, Tv as TvIcon } from 'lucide-react';
+import ReactPlayer from 'react-player';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
+import { Slider } from '@/components/ui/slider';
 
 interface CallEvent {
   id: string;
@@ -18,11 +20,21 @@ interface CallEvent {
  * bottom, glowing & flashing).
  *
  * Mounted at /tv outside any layout. Dark, full-screen, 16:9-friendly.
+ *
+ * Preview mode (?preview=true): bypasses the gate screen, suppresses ALL
+ * audio (chime, TTS), and forces the video player muted. Used by the
+ * settings page Live Preview iframe.
  */
 export default function QueueTV() {
-  const [started, setStarted] = useState(false);
+  const isPreview = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('preview') === 'true';
+  }, []);
+
+  const [started, setStarted] = useState(isPreview);
   const { settings } = useClinicSettings();
   const [recentCalls, setRecentCalls] = useState<CallEvent[]>([]);
+  const [videoVolume, setVideoVolume] = useState(0.5);
   const queueRef = useRef<CallEvent[]>([]);
   const playingRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -31,7 +43,7 @@ export default function QueueTV() {
 
   // Realtime subscription
   useEffect(() => {
-    if (!started) return;
+    if (!started || isPreview) return;
 
     const channel = supabase
       .channel('tv-queue')
@@ -92,9 +104,10 @@ export default function QueueTV() {
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [started, settings.queue_call_by]);
+  }, [started, settings.queue_call_by, isPreview]);
 
   const playDingDong = async () => {
+    if (isPreview) return;
     // Try MP3 first
     if (audioRef.current) {
       try {
@@ -133,6 +146,7 @@ export default function QueueTV() {
   };
 
   const speakMalay = (next: CallEvent) => {
+    if (isPreview) return;
     const callBy = settings.queue_call_by ?? 'number';
     const text =
       callBy === 'name'
@@ -229,19 +243,36 @@ export default function QueueTV() {
 
   return (
     <div className="fixed inset-0 bg-slate-950 text-white flex overflow-hidden">
-      <audio ref={audioRef} src="/sounds/dingdong.mp3" preload="auto" />
+      {!isPreview && <audio ref={audioRef} src="/sounds/dingdong.mp3" preload="auto" />}
 
       {/* Left 65%: Video + ticker */}
       <div className="flex-[65] flex flex-col">
-        <div className="flex-1 bg-black flex items-center justify-center">
+        <div className="flex-1 bg-black flex items-center justify-center relative">
           {ytId ? (
-            <iframe
-              key={ytId}
-              src={`https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}&controls=0&modestbranding=1&rel=0`}
-              title="Clinic TV"
-              allow="autoplay; encrypted-media"
-              className="w-full h-full"
-            />
+            <>
+              <ReactPlayer
+                key={ytId}
+                src={`https://www.youtube.com/watch?v=${ytId}`}
+                playing
+                loop
+                muted={isPreview}
+                volume={videoVolume}
+                width="100%"
+                height="100%"
+                controls={false}
+              />
+              {!isPreview && (
+                <div className="absolute bottom-4 left-4 w-56 px-4 py-2 rounded-full bg-black/40 backdrop-blur-md border border-white/10 flex items-center gap-3 z-10">
+                  <Volume2 className="h-4 w-4 text-white/80 shrink-0" />
+                  <Slider
+                    value={[videoVolume]}
+                    max={1}
+                    step={0.05}
+                    onValueChange={(v) => setVideoVolume(v[0])}
+                  />
+                </div>
+              )}
+            </>
           ) : (
             <div className="text-slate-500 text-center px-8">
               <TvIcon className="h-16 w-16 mx-auto mb-4 opacity-40" />
@@ -271,7 +302,6 @@ export default function QueueTV() {
           {padded.map((call, idx) => {
             const isNewest = idx === 2;
             const isMid = idx === 1;
-            const isOldest = idx === 0;
 
             // Empty placeholder
             if (!call) {
