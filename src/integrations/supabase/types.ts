@@ -916,6 +916,7 @@ export type Database = {
           queue_call_by: string
           singleton: boolean
           sst_number: string | null
+          tts_language: string
           tv_ticker_text: string | null
           tv_youtube_id: string | null
           updated_at: string
@@ -937,6 +938,7 @@ export type Database = {
           queue_call_by?: string
           singleton?: boolean
           sst_number?: string | null
+          tts_language?: string
           tv_ticker_text?: string | null
           tv_youtube_id?: string | null
           updated_at?: string
@@ -958,6 +960,7 @@ export type Database = {
           queue_call_by?: string
           singleton?: boolean
           sst_number?: string | null
+          tts_language?: string
           tv_ticker_text?: string | null
           tv_youtube_id?: string | null
           updated_at?: string

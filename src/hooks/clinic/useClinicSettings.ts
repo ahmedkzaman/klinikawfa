@@ -19,6 +19,7 @@ export interface ClinicSettings {
   queue_call_by: 'name' | 'number';
   tv_youtube_id: string | null;
   tv_ticker_text: string | null;
+  tts_language: 'ms-MY' | 'en-US';
   updated_at: string;
 }
 
@@ -40,6 +41,7 @@ const DEFAULTS: ClinicSettings = {
   queue_call_by: 'number',
   tv_youtube_id: null,
   tv_ticker_text: null,
+  tts_language: 'ms-MY',
   updated_at: new Date().toISOString(),
 };
 

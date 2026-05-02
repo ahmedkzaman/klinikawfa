@@ -9,6 +9,13 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   useAllRooms,
   useCreateRoom,
   useUpdateRoom,
@@ -28,12 +35,14 @@ export default function QueueSettings() {
   const [youtubeId, setYoutubeId] = useState('');
   const [tickerText, setTickerText] = useState('');
   const [callBy, setCallBy] = useState<'name' | 'number'>('number');
+  const [ttsLanguage, setTtsLanguage] = useState<'ms-MY' | 'en-US'>('ms-MY');
   const [hydrated, setHydrated] = useState(false);
 
   if (!hydrated && !isLoading && settings.id) {
     setYoutubeId(settings.tv_youtube_id ?? '');
     setTickerText(settings.tv_ticker_text ?? '');
     setCallBy((settings.queue_call_by as 'name' | 'number') ?? 'number');
+    setTtsLanguage((settings.tts_language as 'ms-MY' | 'en-US') ?? 'ms-MY');
     setHydrated(true);
   }
 
@@ -98,6 +107,7 @@ export default function QueueSettings() {
         tv_youtube_id: extractedId || null,
         tv_ticker_text: tickerText.trim() || null,
         queue_call_by: callBy,
+        tts_language: ttsLanguage,
       });
       toast.success('Saved');
     } catch (err) {
@@ -276,6 +286,25 @@ export default function QueueSettings() {
                 </Label>
               </RadioGroup>
             </div>
+          </div>
+
+          <div>
+            <Label htmlFor="tts-lang" className="mb-2 block">Announcement Language</Label>
+            <Select
+              value={ttsLanguage}
+              onValueChange={(v) => setTtsLanguage(v as 'ms-MY' | 'en-US')}
+            >
+              <SelectTrigger id="tts-lang" className="w-full md:w-72">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ms-MY">Bahasa Melayu</SelectItem>
+                <SelectItem value="en-US">English</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-slate-500 mt-1">
+              Language used for spoken queue announcements on the TV display.
+            </p>
           </div>
 
           <div>
