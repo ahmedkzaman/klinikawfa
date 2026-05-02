@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Users, Search } from 'lucide-react';
+import { ArrowLeft, Users, Search, UserPlus, ExternalLink } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth, type AppRole } from '@/contexts/AuthContext';
 import { useClinicUsers, type ClinicUserRow } from '@/hooks/clinic/useClinicUsers';
@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { DoctorProfileDialog } from '@/components/clinic/settings/DoctorProfileDialog';
+import { AddLocumDialog } from '@/components/clinic/settings/AddLocumDialog';
 import { toast } from 'sonner';
 
 const ROLE_OPTIONS: AppRole[] = [
