@@ -54,13 +54,14 @@ interface Props {
   onRemove: () => void;
   onSave: (updates: ItemUpdate) => void;
   priceTiers: string[];
+  isPanel?: boolean;
   disabled?: boolean;
 }
 
-export function TreatmentItemCard({ item, onRemove, onSave, priceTiers, disabled = false }: Props) {
+export function TreatmentItemCard({ item, onRemove, onSave, priceTiers, isPanel = false, disabled = false }: Props) {
   const [qty, setQty] = useState(item.quantity);
   const [rate, setRate] = useState(Number(item.price));
-  const [tier, setTier] = useState(item.price_tier ?? '');
+  const [tier, setTier] = useState(item.price_tier ?? (isPanel ? 'PANEL' : 'SELF PAY'));
   const [indication, setIndication] = useState(item.indication ?? '');
   const [dosageQty, setDosageQty] = useState<string>(
     item.dosage_qty != null ? String(item.dosage_qty) : '',
