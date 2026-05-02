@@ -22,6 +22,7 @@ export default function DocumentSettings() {
     email: settings.email,
     logo_url: settings.logo_url,
     logo_height_px: settings.logo_height_px,
+    letterhead_text_px: settings.letterhead_text_px,
     content_margin_top: settings.content_margin_top,
   });
 
@@ -35,6 +36,7 @@ export default function DocumentSettings() {
       email: settings.email,
       logo_url: settings.logo_url,
       logo_height_px: settings.logo_height_px,
+      letterhead_text_px: settings.letterhead_text_px,
       content_margin_top: settings.content_margin_top,
     });
   }, [settings.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -217,6 +219,26 @@ export default function DocumentSettings() {
 
             <Separator />
 
+            {/* Letterhead text size */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Letterhead Text Size</Label>
+                <span className="text-sm font-mono text-slate-700">{form.letterhead_text_px}px</span>
+              </div>
+              <Slider
+                min={8}
+                max={32}
+                step={1}
+                value={[form.letterhead_text_px]}
+                onValueChange={([v]) => setForm({ ...form, letterhead_text_px: v })}
+              />
+              <p className="text-xs text-slate-500">
+                Base size for clinic name and address. Clinic name renders ~1.4× larger.
+              </p>
+            </div>
+
+            <Separator />
+
             {/* Margin slider */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -270,8 +292,10 @@ export default function DocumentSettings() {
                         className="rounded bg-slate-100 border border-dashed border-slate-300"
                       />
                     )}
-                    <div className="text-[11px] leading-tight">
-                      <div className="font-bold">{form.clinic_name || 'Clinic Name'}</div>
+                    <div style={{ fontSize: `${form.letterhead_text_px}px`, lineHeight: 1.25 }}>
+                      <div className="font-bold" style={{ fontSize: `${Math.round(form.letterhead_text_px * 1.4)}px` }}>
+                        {form.clinic_name || 'Clinic Name'}
+                      </div>
                       <div className="text-slate-600">{form.address_line_1 || 'Address line 1'}</div>
                       <div className="text-slate-600">{form.address_line_2 || 'Address line 2'}</div>
                       <div className="text-slate-600">
