@@ -322,7 +322,7 @@ export default function Billings() {
                   size="sm"
                   className="h-7 text-xs rounded-lg text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                 >
-                  <Link to={`/clinic/queue/checkout/${e.queueEntryId}`}>
+                  <Link to={`/clinic/visits/${e.queueEntryId}`}>
                     <ExternalLink className="h-3 w-3 mr-1" />
                     Open
                   </Link>
