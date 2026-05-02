@@ -1013,7 +1013,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                                 </SelectContent>
                               </Select>
                             ) : (
-                              <Select value="" onValueChange={v => updateCell(dk, 'shift1', v)}>
+                              <Select value={undefined} onValueChange={v => updateCell(dk, 'shift1', v)}>
                                 <SelectTrigger className="h-6 text-[11px] border-0 bg-transparent shadow-none px-1 justify-center min-w-[60px]">
                                   <span className="text-[10px] text-muted-foreground">—</span>
                                 </SelectTrigger>
@@ -1050,7 +1050,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                                 </SelectContent>
                               </Select>
                             ) : (
-                              <Select value="" onValueChange={v => updateCell(dk, 'shift2', v)}>
+                              <Select value={undefined} onValueChange={v => updateCell(dk, 'shift2', v)}>
                                 <SelectTrigger className="h-6 text-[11px] border-0 bg-transparent shadow-none px-1 justify-center min-w-[60px]">
                                   <span className="text-[10px] text-muted-foreground">—</span>
                                 </SelectTrigger>
@@ -1086,7 +1086,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                                 </SelectContent>
                               </Select>
                             ) : (
-                              <Select value="" onValueChange={v => updateCell(dk, 'shift3', v)}>
+                              <Select value={undefined} onValueChange={v => updateCell(dk, 'shift3', v)}>
                                 <SelectTrigger className="h-6 text-[11px] border-0 bg-transparent shadow-none px-1 justify-center min-w-[60px]">
                                   <span className="text-[10px] text-muted-foreground">—</span>
                                 </SelectTrigger>
