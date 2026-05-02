@@ -176,4 +176,36 @@ export function useCallPatient() {
   });
 }
 
+/**
+ * Calls a patient to a dispensary/pharmacy counter. Updates `called_at`
+ * and `assigned_room_id` but DOES NOT change `clinic_status`, so the entry
+ * remains on the dispensary board. The TV display fires on `called_at`
+ * change for any active dispensary status.
+ */
+export function useCallToDispensary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      room_id,
+    }: {
+      id: string;
+      room_id: string;
+    }) => {
+      const { error } = await supabase
+        .from('queue_entries')
+        .update({
+          called_at: new Date().toISOString(),
+          assigned_room_id: room_id,
+        })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUEUE_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: CONSULT_QUEUE_QUERY_KEY });
+    },
+  });
+}
+
 export { QUEUE_QUERY_KEY, CONSULT_QUEUE_QUERY_KEY };
