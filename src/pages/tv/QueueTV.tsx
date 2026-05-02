@@ -42,7 +42,7 @@ export default function QueueTV() {
   const [videoVolume, setVideoVolume] = useState(0.5);
   const queueRef = useRef<CallEvent[]>([]);
   const playingRef = useRef(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  
   const audioCtxRef = useRef<AudioContext | null>(null);
   const currentTtsAudioRef = useRef<HTMLAudioElement | null>(null);
   const seenRef = useRef<Set<string>>(new Set());
