@@ -12,6 +12,7 @@ export interface ClinicSettings {
   logo_height_px: number;
   letterhead_text_px: number;
   content_margin_top: number;
+  sst_number: string | null;
   updated_at: string;
 }
 
@@ -26,6 +27,7 @@ const DEFAULTS: ClinicSettings = {
   logo_height_px: 64,
   letterhead_text_px: 12,
   content_margin_top: 120,
+  sst_number: null,
   updated_at: new Date().toISOString(),
 };
 
