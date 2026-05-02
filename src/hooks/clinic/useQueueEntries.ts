@@ -151,17 +151,21 @@ export function useCallPatient() {
     mutationFn: async ({
       id,
       called_by_doctor_id,
+      room_id,
     }: {
       id: string;
       called_by_doctor_id: string;
+      room_id?: string | null;
     }) => {
+      const patch: Record<string, unknown> = {
+        clinic_status: 'with_doctor',
+        called_at: new Date().toISOString(),
+        called_by_doctor_id,
+      };
+      if (room_id) patch.assigned_room_id = room_id;
       const { error } = await supabase
         .from('queue_entries')
-        .update({
-          clinic_status: 'with_doctor',
-          called_at: new Date().toISOString(),
-          called_by_doctor_id,
-        })
+        .update(patch)
         .eq('id', id);
       if (error) throw error;
     },
