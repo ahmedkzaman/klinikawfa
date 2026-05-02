@@ -376,6 +376,19 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
       const isoWeek = getISOWeek(day);
       const assignedToday = new Set<string>();
 
+      // Public holiday — leave the day empty for all shifts
+      if (isPublicHoliday(dateKey)) {
+        newRoster[dateKey] = { shift1: [], shift2: [], hybrid: undefined };
+        const ph = publicHolidays.find(h => h.holiday_date === dateKey);
+        newWarnings.push({
+          type: 'info',
+          message: `${format(day, 'dd MMM')}: Public holiday${ph ? ` (${ph.name})` : ''} — no staff assigned`,
+        });
+        // Reset consecutive day counters since no one is working
+        staffList.forEach(s => { consecutiveDays[s.id] = 0; });
+        continue;
+      }
+
       // Track total monthly hours for weighted fairness
       const getMonthHours = (staffId: string) => {
         let total = 0;
