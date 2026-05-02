@@ -362,12 +362,13 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
       return setting?.permanentOffDays?.includes(dow) || false;
     };
 
-    // Determine effective staff per shift (auto-adjust for low headcount)
-    const effectiveS1Count = staffList.length <= 4 ? 1 : staffPerShift1;
-    const effectiveS2Count = staffList.length <= 4 ? 2 : staffPerShift2;
-    // Minimum staffing floors (hard rule 1.2)
-    const minS1 = 1;
-    const minS2 = 2;
+    // Respect admin-selected counts directly. Daily eligibility checks will
+    // leave slots empty if not enough staff are available on a given day.
+    const effectiveS1Count = staffPerShift1;
+    const effectiveS2Count = staffPerShift2;
+    // Minimum staffing floors — never exceed the admin's chosen count
+    const minS1 = Math.min(1, staffPerShift1);
+    const minS2 = Math.min(2, staffPerShift2);
 
     for (const day of sortedDays) {
       const dateKey = format(day, 'yyyy-MM-dd');
@@ -1006,7 +1007,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                   </Select>
                 </div>
                 {staffList.length <= 4 && staffList.length > 0 && (
-                  <span className="text-xs text-muted-foreground">(Auto-adjusted: S1=1, S2=2 due to ≤4 staff)</span>
+                  <span className="text-xs text-muted-foreground">Tip: with ≤4 staff, days may be left under-filled if rest days or leave overlap.</span>
                 )}
               </div>
             </CardContent>
