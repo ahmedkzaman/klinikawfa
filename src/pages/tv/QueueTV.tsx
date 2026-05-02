@@ -202,7 +202,7 @@ export default function QueueTV() {
 
     await playDingDong();
     await wait(900);
-    speakMalay(next);
+    speakAnnouncement(next);
 
     await wait(5000);
     playingRef.current = false;
