@@ -237,7 +237,7 @@ export default function QueueTV() {
           {ytId ? (
             <iframe
               key={ytId}
-              src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&loop=1&playlist=${ytId}&controls=0&modestbranding=1&rel=0`}
+              src={`https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}&controls=0&modestbranding=1&rel=0`}
               title="Clinic TV"
               allow="autoplay; encrypted-media"
               className="w-full h-full"
