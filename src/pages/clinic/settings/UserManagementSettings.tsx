@@ -118,17 +118,25 @@ export default function UserManagementSettings() {
   return (
     <div className={pageShell}>
       <div className={pageInner}>
-        <div>
-          <Button variant="ghost" size="sm" asChild className="mb-2 -ml-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100">
-            <Link to="/clinic/settings">
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              Back to Settings
-            </Link>
-          </Button>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">User Management</h1>
-          <p className="text-sm text-slate-500">
-            Assign roles and manage locum doctor profiles.
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <Button variant="ghost" size="sm" asChild className="mb-2 -ml-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100">
+              <Link to="/clinic/settings">
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back to Settings
+              </Link>
+            </Button>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">User Management</h1>
+            <p className="text-sm text-slate-500">
+              Assign roles and manage locum doctor profiles.
+            </p>
+          </div>
+          {canAddLocum && (
+            <Button onClick={() => setAddLocumOpen(true)} className="shrink-0">
+              <UserPlus className="h-4 w-4 mr-2" />
+              Add Locum
+            </Button>
+          )}
         </div>
 
         <Card className={bento}>
