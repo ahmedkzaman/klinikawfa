@@ -1,95 +1,62 @@
-## Phase 2A: Inventory Core & Master Data
+## Goal
 
-Upgrade `/clinic/inventory` from a read-only table into a tabbed, fully editable inventory dashboard with extended clinical, pricing, and lifecycle fields.
+Two related improvements to the Staff Roster admin page:
 
-### Important: Schema Mapping (avoid duplicates)
+1. Allow admins to clear (set to "None") any shift cell — currently only Shift 1 has the "— None —" option in the dropdown.
+2. Add a Public Holidays selector in the Rules section. Days marked as public holidays will be excluded from auto-generation (no staff assigned) and visually flagged in the roster grid.
 
-The `inventory_items` table already contains most requested fields under existing names. To prevent breaking the rest of the app (consultation, dispensing, settings dialog, hooks), we will **reuse existing columns** rather than create duplicates:
+## Task 1 — Allow "None" in all shifts
 
-| Spec field | Existing column to reuse |
-|---|---|
-| `drug_group` | `groups` (text) — already exists |
-| `default_dosage` | `default_dosage_qty` |
-| `dosage_unit` | `default_dosage_unit` |
-| `frequency` | `default_frequency` |
-| `duration` | `default_duration` (+ `default_duration_unit`) |
-| `instructions` | `default_instruction` |
-| `precautions` | `default_precaution` |
-| Standard price | `price_to_patient_max` (existing) |
-| Low stock threshold | `stock_amount_warning` (existing) |
-| Expiry date | `nearest_expiry_date` (existing) |
+**Support roster (`src/pages/staff/admin/Roster.tsx`)**
+- Add the `<SelectItem value="__none__">— None —</SelectItem>` option to Shift 2's dropdown (line ~1175). The `updateCell` handler already supports `__none__` for both `shift1` and `shift2`, so no logic change is needed.
 
-**New columns to add** (genuinely missing):
-- `price_tier_1` numeric(10,2) NOT NULL DEFAULT 0
-- `price_tier_2` numeric(10,2) NOT NULL DEFAULT 0
-- `archived_at` timestamptz NULL (soft-delete)
+**Doctor roster (`src/components/staff/roster/DoctorRosterPanel.tsx`)**
+- Add `— None —` option to all three dropdowns (Shift 1, Shift 2, Shift 3 around lines 977, 1005, 1033).
+- Update `updateCell` (line 601) to handle the `__none__` value: when received, set the corresponding shift cell to `undefined` (since cells are stored as nullable single objects in this panel) and still record a manual override.
 
-### Task 1 — Database Migration
+## Task 2 — Public Holidays in Rules
 
-Single migration `extend_inventory_schema.sql`:
+**Schema (new migration)**
+Create a new table:
+
 ```sql
-ALTER TABLE public.inventory_items
-  ADD COLUMN IF NOT EXISTS price_tier_1 numeric(10,2) NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS price_tier_2 numeric(10,2) NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS archived_at timestamptz NULL;
-
-CREATE INDEX IF NOT EXISTS idx_inventory_items_archived_at
-  ON public.inventory_items (archived_at);
+public.public_holidays (
+  id uuid pk,
+  holiday_date date unique not null,
+  name text not null,
+  created_by uuid,
+  created_at timestamptz default now()
+)
 ```
-RLS already covers ops/admin updates. Supabase types regenerate automatically.
+RLS: staff/admin can `SELECT`; admin only can `INSERT`/`UPDATE`/`DELETE`.
 
-### Task 2 — Inventory Dashboard UI
+**Rules section UI (`Roster.tsx`)**
+- Add a new card "Public Holidays" inside the Rules grid.
+- Show holidays that fall in the currently selected month/year as removable chips.
+- "Add holiday" inline form: date picker + name input + Add button → inserts to `public.public_holidays`.
+- Persist a local Set of `yyyy-MM-dd` keys derived from the fetched holidays.
 
-Rewrite `src/pages/clinic/Inventory.tsx`:
+**Generator behaviour (`Roster.tsx`)**
+- In `generateRoster`, when iterating each `dateKey`, if the date is a public holiday:
+  - Skip auto-assignment for `shift1`, `shift2`, and `hybrid` (insert empty cells / undefined hybrid).
+  - Skip the day in the balancing pass as well.
+  - Add an info warning entry: "5 Nov: Public holiday — no staff assigned".
 
-**Sub-navigation pills (top)**:
-- "Item Master" (active page)
-- "Stock Take" → empty state card: "Module coming in Phase 2C"
-- "Packages" → empty state card: "Module coming in Phase 2C"
+**Grid rendering**
+- In the table cell wrapper for each day column, when the date is a public holiday, apply a subtle red/orange tint (`bg-destructive/5`) and show a small "PH" badge under the date header.
+- Empty cells on PH days still render the dropdown so admins can manually assign someone if needed (the "None" option from Task 1 supports clearing back).
 
-**Main Tabs (Shadcn `Tabs`)** with badge counts:
-- All — `archived_at IS NULL`
-- In Stock — `stock > (stock_amount_warning ?? 0)` and not archived
-- Low Stock — `0 < stock <= (stock_amount_warning ?? 0)` and not archived
-- Out of Stock — `stock = 0` and not archived
-- Expiring Soon — `nearest_expiry_date` within next 60 days and not archived
-- Archived — `archived_at IS NOT NULL`
+**Doctor roster (`DoctorRosterPanel.tsx`)**
+- Same treatment: holidays cause shift1/shift2/shift3 to be left empty during generation; PH badge shown on the date header.
 
-**Table columns**: Name, Category, Stock, Low-Stock Alert, Base Price, Expiry, Status. Row click → opens `ItemEditSheet`. "Add Item" button in header opens the same sheet in create mode.
+## Out of scope
 
-Hook update: `useInventoryItems` query selects all needed columns including `groups`, `stock_amount_warning`, `nearest_expiry_date`, `price_tier_1`, `price_tier_2`, `archived_at`. Drop the existing `.eq('status', 'active')` filter — tabs handle filtering.
+- No automatic Malaysia federal/state holiday import — admins add them manually.
+- No payroll-side public holiday pay multipliers (existing payroll logic untouched).
 
-### Task 3 — Full CRUD Edit Sheet
+## Files touched
 
-New `src/components/clinic/inventory/ItemEditSheet.tsx` using Shadcn `Sheet` (right-side, `sm:max-w-3xl`).
-
-**Two-column form (react-hook-form + zod)**:
-
-Column 1 — *Item & Pricing*:
-- Name, Category (Select: Medication / Disposable Item / Vaccine / Other)
-- Current Stock, Low Stock Threshold (`stock_amount_warning`)
-- Base Price (`price_to_patient_max`), Tier 1 Price (`price_tier_1`), Tier 2 Price (`price_tier_2`)
-- Expiry Date (`nearest_expiry_date`, date input)
-
-Column 2 — *Clinical Rules* (rendered only when `category === 'Medication'`):
-- Drug Group (`groups`, free-text)
-- Dosage (`default_dosage_qty`), Dosage Unit (Select from `DOSAGE_UNIT_OPTIONS`)
-- Frequency (Select from `FREQUENCY_OPTIONS`)
-- Duration (`default_duration`) + Duration Unit (Select from `DURATION_UNIT_OPTIONS`)
-- Instructions (Combobox `INSTRUCTION_OPTIONS`)
-- Precautions (Combobox `PRECAUTION_OPTIONS`)
-
-**Footer**: Cancel · Save · destructive "Archive Item" (sets `archived_at = now()`) — only in edit mode. For archived items, button becomes "Restore" (sets `archived_at = null`).
-
-**Save**: extends `useUpdateInventoryItem` / `useAddInventoryItem` in `src/hooks/clinic/useInventoryItems.ts` — add the new fields to `InventoryItemInput` and `mapItemPayload` (`groups`, `stock_amount_warning`, `nearest_expiry_date`, `price_tier_1`, `price_tier_2`, `archived_at`). Existing settings dialog continues to work since the mapper only writes provided keys.
-
-### Files Touched
-
-- **New**: `supabase/migrations/<ts>_extend_inventory_schema.sql`
-- **New**: `src/components/clinic/inventory/ItemEditSheet.tsx`
-- **Rewrite**: `src/pages/clinic/Inventory.tsx`
-- **Edit**: `src/hooks/clinic/useInventoryItems.ts` (extend types + payload mapper)
-
-### Out of Scope (Phase 2C)
-
-Stock Take module, Packages CRUD upgrade, expiry batch tracking — placeholders only.
+- `src/pages/staff/admin/Roster.tsx` (None option in S2, Public Holidays card, generator skip, grid styling)
+- `src/components/staff/roster/DoctorRosterPanel.tsx` (None option in S1/S2/S3, updateCell handling, PH styling)
+- New migration: `public_holidays` table + RLS
+- New hook: `src/hooks/usePublicHolidays.ts` (list, add, remove)

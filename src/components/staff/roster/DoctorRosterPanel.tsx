@@ -600,6 +600,40 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
   // ─── Manual cell change ───
   const updateCell = (dateKey: string, shift: 'shift1' | 'shift2' | 'shift3', newStaffId: string) => {
     if (!roster) return;
+
+    // Handle "None" — clear the shift cell
+    if (newStaffId === '__none__') {
+      setRoster(prev => {
+        if (!prev) return prev;
+        const updated = { ...prev };
+        const dd = { ...updated[dateKey] };
+        if (shift === 'shift1') {
+          dd.shift1 = undefined;
+          if (ruleValidCombos) dd.shift2 = undefined;
+        } else if (shift === 'shift2') {
+          dd.shift2 = undefined;
+          if (ruleValidCombos) dd.shift1 = undefined;
+        } else {
+          dd.shift3 = undefined;
+        }
+        updated[dateKey] = dd;
+        return updated;
+      });
+
+      setManualOverrides(prev => {
+        const updated = { ...prev };
+        const s = new Set(updated[dateKey] || []);
+        s.add(shift);
+        if ((shift === 'shift1' || shift === 'shift2') && ruleValidCombos) {
+          s.add('shift1');
+          s.add('shift2');
+        }
+        updated[dateKey] = s;
+        return updated;
+      });
+      return;
+    }
+
     const staff = staffList.find(s => s.id === newStaffId);
     if (!staff) return;
 
@@ -975,10 +1009,19 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                                   <span className="truncate">{firstName(cell.staffName)}</span>
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
                                 </SelectContent>
                               </Select>
-                            ) : <span className="text-[10px] text-muted-foreground">—</span>}
+                            ) : (
+                              <Select value={undefined} onValueChange={v => updateCell(dk, 'shift1', v)}>
+                                <SelectTrigger className="h-6 text-[11px] border-0 bg-transparent shadow-none px-1 justify-center min-w-[60px]">
+                                  <span className="text-[10px] text-muted-foreground">—</span>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            )}
                           </TableCell>
                         );
                       })}
@@ -1003,10 +1046,19 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                                   <span className="truncate">{firstName(cell.staffName)}</span>
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
                                 </SelectContent>
                               </Select>
-                            ) : <span className="text-[10px] text-muted-foreground">—</span>}
+                            ) : (
+                              <Select value={undefined} onValueChange={v => updateCell(dk, 'shift2', v)}>
+                                <SelectTrigger className="h-6 text-[11px] border-0 bg-transparent shadow-none px-1 justify-center min-w-[60px]">
+                                  <span className="text-[10px] text-muted-foreground">—</span>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            )}
                           </TableCell>
                         );
                       })}
@@ -1030,10 +1082,19 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                                   <span className="truncate">{firstName(cell.staffName)}</span>
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
                                 </SelectContent>
                               </Select>
-                            ) : <span className="text-[10px] text-muted-foreground">—</span>}
+                            ) : (
+                              <Select value={undefined} onValueChange={v => updateCell(dk, 'shift3', v)}>
+                                <SelectTrigger className="h-6 text-[11px] border-0 bg-transparent shadow-none px-1 justify-center min-w-[60px]">
+                                  <span className="text-[10px] text-muted-foreground">—</span>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            )}
                           </TableCell>
                         );
                       })}
