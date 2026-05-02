@@ -29,12 +29,14 @@ export function POPrintTemplate({ po, supplier }: Props) {
               crossOrigin="anonymous"
             />
           ) : null}
-          <div>
-            <div className="text-xl font-bold">{settings.clinic_name || 'Klinik Awfa'}</div>
-            {settings.address_line_1 && <div className="text-xs">{settings.address_line_1}</div>}
-            {settings.address_line_2 && <div className="text-xs">{settings.address_line_2}</div>}
-            {settings.phone && <div className="text-xs">Tel: {settings.phone}</div>}
-            {settings.email && <div className="text-xs">{settings.email}</div>}
+          <div style={{ fontSize: `${settings.letterhead_text_px ?? 12}px`, lineHeight: 1.3 }}>
+            <div className="font-bold" style={{ fontSize: `${Math.round((settings.letterhead_text_px ?? 12) * 1.4)}px` }}>
+              {settings.clinic_name || 'Klinik Awfa'}
+            </div>
+            {settings.address_line_1 && <div>{settings.address_line_1}</div>}
+            {settings.address_line_2 && <div>{settings.address_line_2}</div>}
+            {settings.phone && <div>Tel: {settings.phone}</div>}
+            {settings.email && <div>{settings.email}</div>}
           </div>
         </div>
         <div className="text-right">
