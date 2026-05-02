@@ -163,7 +163,7 @@ export function TreatmentItemCard({ item, onRemove, onSave, priceTiers, isPanel 
         </div>
         <div>
           <Label className="text-xs text-muted-foreground">Price tier</Label>
-          <Select value={tier} onValueChange={setTier}>
+          <Select value={tier} onValueChange={setTier} disabled>
             <SelectTrigger className="h-8 text-sm mt-1">
               <SelectValue placeholder="Select tier" />
             </SelectTrigger>
