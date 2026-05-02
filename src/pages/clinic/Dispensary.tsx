@@ -143,6 +143,29 @@ export default function Dispensary() {
           )}
         </div>
       </div>
+
+      <RoomPickerDialog
+        open={!!callTarget}
+        onOpenChange={(o) => !o && setCallTarget(null)}
+        patientLabel={callTarget?.patients?.name ?? undefined}
+        pending={callToDispensary.isPending}
+        onConfirm={(roomId) => {
+          if (!callTarget) return;
+          callToDispensary.mutate(
+            { id: callTarget.id, room_id: roomId },
+            {
+              onSuccess: () => {
+                toast.success('Patient called to dispensary');
+                setCallTarget(null);
+              },
+              onError: (err: unknown) => {
+                const message = err instanceof Error ? err.message : 'Unknown error';
+                toast.error(`Call failed: ${message}`);
+              },
+            },
+          );
+        }}
+      />
     </div>
   );
 }
