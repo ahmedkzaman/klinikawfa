@@ -24,7 +24,8 @@ export function POPrintTemplate({ po, supplier }: Props) {
             <img
               src={settings.logo_url}
               alt={settings.clinic_name}
-              className="h-16 w-auto object-contain"
+              style={{ height: `${settings.logo_height_px ?? 64}px` }}
+              className="w-auto object-contain"
               crossOrigin="anonymous"
             />
           ) : null}
