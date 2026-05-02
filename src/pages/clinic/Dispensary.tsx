@@ -22,7 +22,7 @@ const tabs: Array<{ label: string; filter: ClinicStatus[] }> = [
   { label: 'Completed', filter: ['completed'] },
 ];
 
-export default function Procurement() {
+export default function Dispensary() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Pending');
   const { data: entries, isLoading } = useConsultationQueueEntries();
@@ -37,7 +37,7 @@ export default function Procurement() {
     <div className={pageShell}>
       <div className={pageInner}>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Procurement</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Dispensary</h1>
           <p className="text-sm text-slate-500 mt-1">
             Open a patient to dispense items and process payment.
           </p>
