@@ -53,13 +53,16 @@ const ROLE_LABEL: Record<AppRole, string> = {
 };
 
 export default function UserManagementSettings() {
-  const { user, isAdmin, isSpecialAdmin } = useAuth();
+  const { user, isAdmin, isSpecialAdmin, role } = useAuth();
   const { data: users = [], isLoading } = useClinicUsers();
   const qc = useQueryClient();
+
+  const canAddLocum = isAdmin || isSpecialAdmin || role === 'staff';
 
   const [search, setSearch] = useState('');
   const [pendingUserId, setPendingUserId] = useState<string | null>(null);
   const [profileDialogUser, setProfileDialogUser] = useState<ClinicUserRow | null>(null);
+  const [addLocumOpen, setAddLocumOpen] = useState(false);
 
   if (!isAdmin && !isSpecialAdmin) {
     return (
