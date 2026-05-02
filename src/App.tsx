@@ -15,6 +15,7 @@ import Appointment from "./pages/Appointment";
 import Gallery from "./pages/Gallery";
 import HealthTips from "./pages/HealthTips";
 import Auth from "./pages/Auth";
+import LocumRegister from "./pages/auth/LocumRegister";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 import BlogPost from "./pages/BlogPost";
@@ -119,6 +120,7 @@ const App = () => (
               <Route path="/health-tips" element={<HealthTips />} />
               <Route path="/health-tips/:slug" element={<BlogPost />} />
               <Route path="/auth" element={<Auth />} />
+              <Route path="/locum-register" element={<LocumRegister />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/video-call" element={<VideoCall />} />
               <Route path="/video-call/staff" element={<VideoCallStaff />} />

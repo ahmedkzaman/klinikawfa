@@ -1,120 +1,135 @@
-# Cost Confidentiality for Services + Packages, and Guest Route Firewall
+## Locum Onboarding — Dual Pipeline (with MMC Verification Visibility)
 
-## Context
-- `services` and `packages` both have `USING (true)` SELECT, leaking cost columns to locums/guests.
-- Mirror the inventory pattern: lock base table to cost-aware roles, expose a definer-mode safe view that omits cost columns.
-- Add an explicit guest-eject in the staff/clinic route guards. Guests stay quarantined to public marketing pages and `/video-call*`.
+Two parallel pathways for creating Locum doctor accounts:
+1. **Internal**: Staff/Admin manually creates a Locum from User Management (no session disruption).
+2. **External**: Public `/locum-register` page where a Locum self-signs-up as a `guest` pending Medical Director review.
 
-Verified columns:
-- **services**: `id, name, type, description, cost, price_to_patient, status, created_at, standard_panel_price, category, item_code` → safe view omits `cost`, `standard_panel_price`.
-- **packages**: `id, name, stock, price, items, status, created_at, cost, standard_panel_price` → safe view omits `cost`, `standard_panel_price`.
+`SUPABASE_SERVICE_ROLE_KEY` is already configured. No manual setup required.
 
-## 1. Migration: `sprint4_financials_rls_view.sql`
+---
 
+### 1. Edge Function — `supabase/functions/admin-create-user/index.ts`
+
+New function with `verify_jwt = false` (manual verification in code, per project pattern).
+
+Flow:
+- CORS preflight handler.
+- Zod-validated body: `{ email, fullName, phone? }`.
+- Read `Authorization: Bearer <jwt>`, verify with anon client `getClaims(token)`. Reject 401 if invalid.
+- Use service-role client to check caller's role in `user_roles`. Require `admin | special_admin | doctor_admin | staff`. Otherwise 403.
+- `serviceClient.auth.admin.createUser({ email, password: 'test1234', email_confirm: true, user_metadata: { full_name, phone } })`.
+- Upsert `public.user_roles` with `{ user_id, role: 'locum' }`.
+- Return `{ success: true, user_id }`. Friendly 409 on duplicate email.
+
+`handle_new_user` trigger already creates the `profiles` row — no migration needed.
+
+---
+
+### 2. Public Self-Registration — `src/pages/auth/LocumRegister.tsx`
+
+Public page styled to match `Auth.tsx`:
+- Card with brand gradient header "Locum Doctor Registration".
+- Fields: Full Name, Email, Password (min 8), Phone, **MMC Registration Number** (required).
+- On submit:
+  ```ts
+  supabase.auth.signUp({
+    email, password,
+    options: {
+      emailRedirectTo: `${window.location.origin}/`,
+      data: { requested_role: 'locum', full_name, phone, mmc_number },
+    }
+  })
+  ```
+- Success state: "Registration submitted. Check your email to verify your account. Our Medical Director will review your MMC credentials before granting clinic access."
+- Link back to `/auth` for existing users.
+
+New users land as `guest` (default) — quarantined by the Guest Firewall until promoted.
+
+---
+
+### 3. Database — Surface `mmc_number` for verification
+
+Add a migration so the MMC number persists on the `profiles` table (more reliable than reading raw `auth.users.raw_user_meta_data` from the client).
+
+**Migration**: `supabase/migrations/<ts>_profiles_mmc_number.sql`
 ```sql
--- SERVICES
-drop policy if exists "Services are viewable by everyone" on public.services; -- adjust name to actual policy
-create policy "Cost-aware roles can read services"
-on public.services for select to authenticated
-using (public.can_view_inventory_costs(auth.uid()));
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS mmc_number text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS requested_role text;
 
-create or replace view public.services_safe as
-select id, name, type, description, price_to_patient,
-       status, category, item_code, created_at
-from public.services;
-grant select on public.services_safe to authenticated;
-
--- PACKAGES
-drop policy if exists "Packages are viewable by everyone" on public.packages; -- adjust name to actual policy
-create policy "Cost-aware roles can read packages"
-on public.packages for select to authenticated
-using (public.can_view_inventory_costs(auth.uid()));
-
-create or replace view public.packages_safe as
-select id, name, stock, price, items, status, created_at
-from public.packages;
-grant select on public.packages_safe to authenticated;
+-- Update handle_new_user to capture metadata from public signup
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name, phone, mmc_number, requested_role)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    NEW.raw_user_meta_data->>'full_name',
+    NEW.raw_user_meta_data->>'phone',
+    NEW.raw_user_meta_data->>'mmc_number',
+    NEW.raw_user_meta_data->>'requested_role'
+  );
+  RETURN NEW;
+END;
+$$;
 ```
 
-The actual current SELECT policy names will be looked up at apply time and dropped accordingly. INSERT/UPDATE/DELETE policies (already restricted to ops/admin/staff) remain untouched. Both views run with definer rights (no `security_invoker`) so locums bypass base-table RLS but only see non-cost columns.
+Existing `useClinicUsers` hook will be updated to select these new profile columns.
 
-## 2. New read-only hooks
+---
 
-### `src/hooks/clinic/useServices.ts`
-Add alongside existing exports:
-```ts
-export function useServicesSafe() {
-  return useQuery({
-    queryKey: ['services_safe'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('services_safe').select('*').order('name');
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-}
-```
+### 4. Staff UI — `src/pages/clinic/settings/UserManagementSettings.tsx`
 
-### `src/hooks/clinic/usePackages.ts`
-```ts
-export function usePackagesSafe() {
-  return useQuery({
-    queryKey: ['packages_safe'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('packages_safe').select('*').order('name');
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-}
-```
+**Add Locum button**:
+- Visible only when `isAdmin || isSpecialAdmin || role === 'staff'`.
+- Opens `AddLocumDialog` (new component at `src/components/clinic/settings/AddLocumDialog.tsx`).
+- Form: Full Name, Email, Phone. Helper text: "Default password: `test1234` (locum should change after first login)."
+- Calls `supabase.functions.invoke('admin-create-user', ...)`, then `qc.invalidateQueries(['clinic_users'])`.
 
-Existing `useServices()` / `usePackages()` and admin mutation hooks remain — they're only used from admin/ops settings screens already gated by route guards.
+**MMC verification visibility** (the critical addition):
+- Add a new column **"MMC / Requested Role"** to the user table.
+- For each row, render:
+  - If `requested_role === 'locum'` and `mmc_number` present → show a yellow `Pending Locum` badge alongside the MMC number, with a `Verify on MMC →` external link to `https://meritsmmc.moh.gov.my/` (opens new tab).
+  - Otherwise show `—`.
+- In the `DoctorProfileDialog` (or via tooltip on the badge), surface the `phone` and `mmc_number` fields read-only so the admin can confirm details before changing the role dropdown to `Locum`.
 
-## 3. Consultation picker swap (`src/pages/clinic/ConsultationDetail.tsx`)
-Lines 138–139:
-```ts
-const { data: services = [] } = useServicesSafe();
-const { data: packages = [] } = usePackagesSafe();
-```
-Picker only reads `id, name, category, price_to_patient`/`price` — selling price is resolved server-side by `trg_resolve_selling_price`, so cost columns aren't needed.
+This closes the loop: a self-registered guest is immediately visible with their MMC number, and the admin can verify and promote them in one screen.
 
-## 4. Guest firewall
+---
 
-### `src/components/ClinicProtectedRoute.tsx`
-Pull `role` from `useAuth()` and add right after the unauth redirect:
+### 5. Routing — `src/App.tsx`
+
+Public route OUTSIDE all protected wrappers, alongside `/auth` and `/reset-password`:
 ```tsx
-if (role === 'guest') {
-  return <Navigate to="/" replace />;
-}
+<Route path="/locum-register" element={<LocumRegister />} />
 ```
 
-### `src/components/ProtectedRoute.tsx`
-Same explicit eject in both `requireAdmin` and `requireStaffOrAdmin` branches:
-```tsx
-if (role === 'guest') {
-  return <Navigate to="/" replace />;
-}
-```
+---
 
-`/video-call` and `/video-call/staff` in `App.tsx` are NOT wrapped in these guards (verified), so guests retain teleconsultation access.
+### Files Touched
 
-## 5. Type regeneration
-`src/integrations/supabase/types.ts` regenerates automatically once the migration is applied — both new views become typed.
+**New**
+- `supabase/functions/admin-create-user/index.ts`
+- `supabase/migrations/<ts>_profiles_mmc_number.sql`
+- `src/components/clinic/settings/AddLocumDialog.tsx`
+- `src/pages/auth/LocumRegister.tsx`
 
-## 6. Security finding cleanup
-- Mark `services_cost_open_read` and `packages_cost_open_read` as fixed.
-- Update `@security-memory` to record:
-  - Safe-view pattern now also covers `services` and `packages`.
-  - Guest quarantine rule: guests may only access public marketing routes and `/video-call*`.
+**Edited**
+- `supabase/config.toml` — append `[functions.admin-create-user]\nverify_jwt = false`
+- `src/hooks/clinic/useClinicUsers.ts` — select `phone, mmc_number, requested_role`
+- `src/pages/clinic/settings/UserManagementSettings.tsx` — Add Locum button, MMC column, verify link
+- `src/components/clinic/settings/DoctorProfileDialog.tsx` — show MMC/phone read-only
+- `src/App.tsx` — register `/locum-register` route
 
-Out of scope this pass: `inventory_adjustments_open_read`, `stock_takes_open_read`, `inventory_item_prices_open_read`, markdown XSS, publish-scheduled-posts auth, charge-additional role check, blog-gen role check, public bucket listing, definer-executable warnings.
+---
 
-## Verification
-1. Apply migration.
-2. As a locum: `select * from services` and `select * from packages` → 0 rows; `_safe` views → full list without cost columns.
-3. Open a consultation as a locum: service and package pickers populate and items can be added.
-4. As a guest: `/clinic/...` redirects to `/`; `/video-call?room=...` still works.
-5. As admin: Inventory Settings still shows full cost / standard panel prices for both services and packages.
+### Verification
+
+1. Deploy edge function → log in as staff → click Add Locum → confirm staff session intact and new locum appears.
+2. Log out → visit `/locum-register` → submit with MMC number → confirm guest row created with `mmc_number` populated.
+3. Log back in as admin → confirm new guest displays Pending Locum badge + MMC number + verify link → promote to `locum` via existing role dropdown.

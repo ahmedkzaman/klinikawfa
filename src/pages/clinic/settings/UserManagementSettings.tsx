@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Users, Search } from 'lucide-react';
+import { ArrowLeft, Users, Search, UserPlus, ExternalLink } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth, type AppRole } from '@/contexts/AuthContext';
 import { useClinicUsers, type ClinicUserRow } from '@/hooks/clinic/useClinicUsers';
@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { DoctorProfileDialog } from '@/components/clinic/settings/DoctorProfileDialog';
+import { AddLocumDialog } from '@/components/clinic/settings/AddLocumDialog';
 import { toast } from 'sonner';
 
 const ROLE_OPTIONS: AppRole[] = [
@@ -52,13 +53,16 @@ const ROLE_LABEL: Record<AppRole, string> = {
 };
 
 export default function UserManagementSettings() {
-  const { user, isAdmin, isSpecialAdmin } = useAuth();
+  const { user, isAdmin, isSpecialAdmin, role } = useAuth();
   const { data: users = [], isLoading } = useClinicUsers();
   const qc = useQueryClient();
+
+  const canAddLocum = isAdmin || isSpecialAdmin || role === 'staff';
 
   const [search, setSearch] = useState('');
   const [pendingUserId, setPendingUserId] = useState<string | null>(null);
   const [profileDialogUser, setProfileDialogUser] = useState<ClinicUserRow | null>(null);
+  const [addLocumOpen, setAddLocumOpen] = useState(false);
 
   if (!isAdmin && !isSpecialAdmin) {
     return (
@@ -114,17 +118,25 @@ export default function UserManagementSettings() {
   return (
     <div className={pageShell}>
       <div className={pageInner}>
-        <div>
-          <Button variant="ghost" size="sm" asChild className="mb-2 -ml-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100">
-            <Link to="/clinic/settings">
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              Back to Settings
-            </Link>
-          </Button>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">User Management</h1>
-          <p className="text-sm text-slate-500">
-            Assign roles and manage locum doctor profiles.
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <Button variant="ghost" size="sm" asChild className="mb-2 -ml-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100">
+              <Link to="/clinic/settings">
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back to Settings
+              </Link>
+            </Button>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">User Management</h1>
+            <p className="text-sm text-slate-500">
+              Assign roles and manage locum doctor profiles.
+            </p>
+          </div>
+          {canAddLocum && (
+            <Button onClick={() => setAddLocumOpen(true)} className="shrink-0">
+              <UserPlus className="h-4 w-4 mr-2" />
+              Add Locum
+            </Button>
+          )}
         </div>
 
         <Card className={bento}>
@@ -144,6 +156,7 @@ export default function UserManagementSettings() {
                 <TableRow className={cn(TR, 'hover:bg-transparent bg-slate-50/50')}>
                   <TableHead className={cn(TH, 'min-w-[220px]')}>Name / Email</TableHead>
                   <TableHead className={cn(TH, 'min-w-[200px]')}>Current Role</TableHead>
+                  <TableHead className={cn(TH, 'min-w-[200px]')}>MMC / Verification</TableHead>
                   <TableHead className={cn(TH, 'min-w-[180px]')}>Doctor Profile</TableHead>
                   <TableHead className={cn(TH, 'text-right')}>Action</TableHead>
                 </TableRow>
@@ -160,6 +173,9 @@ export default function UserManagementSettings() {
                       <Skeleton className="h-9 w-40" />
                     </TableCell>
                     <TableCell>
+                      <Skeleton className="h-5 w-24" />
+                    </TableCell>
+                    <TableCell>
                       <Skeleton className="h-5 w-20" />
                     </TableCell>
                     <TableCell className="text-right">
@@ -169,7 +185,7 @@ export default function UserManagementSettings() {
                 ))
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4}>
+                  <TableCell colSpan={5}>
                     <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                       <Users className="h-10 w-10 mb-2 opacity-50" />
                       <p className="text-sm">No users found</p>
@@ -206,6 +222,36 @@ export default function UserManagementSettings() {
                             ))}
                           </SelectContent>
                         </Select>
+                      </TableCell>
+                      <TableCell>
+                        {row.mmc_number ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              {row.requested_role === 'locum' && (row.role === 'guest' || row.role === null) && (
+                                <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200">
+                                  Pending Locum
+                                </Badge>
+                              )}
+                              <span className="font-mono text-xs text-foreground">
+                                {row.mmc_number}
+                              </span>
+                            </div>
+                            <a
+                              href="https://meritsmmc.moh.gov.my/"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                            >
+                              Verify on MMC
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                            {row.phone && (
+                              <div className="text-xs text-muted-foreground">📞 {row.phone}</div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">—</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -250,6 +296,7 @@ export default function UserManagementSettings() {
           onOpenChange={(open) => !open && setProfileDialogUser(null)}
           user={profileDialogUser}
         />
+        <AddLocumDialog open={addLocumOpen} onOpenChange={setAddLocumOpen} />
       </div>
     </div>
   );

@@ -2746,8 +2746,10 @@ export type Database = {
           email: string
           full_name: string | null
           id: string
+          mmc_number: string | null
           phone: string | null
           position: string | null
+          requested_role: string | null
           updated_at: string
         }
         Insert: {
@@ -2756,8 +2758,10 @@ export type Database = {
           email: string
           full_name?: string | null
           id: string
+          mmc_number?: string | null
           phone?: string | null
           position?: string | null
+          requested_role?: string | null
           updated_at?: string
         }
         Update: {
@@ -2766,8 +2770,10 @@ export type Database = {
           email?: string
           full_name?: string | null
           id?: string
+          mmc_number?: string | null
           phone?: string | null
           position?: string | null
+          requested_role?: string | null
           updated_at?: string
         }
         Relationships: []
