@@ -240,10 +240,47 @@ export default function PanelClaims() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            {selectedIds.size > 0 && (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-2.5">
+                <div className="flex items-center gap-2 text-sm text-blue-900">
+                  <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                  <span className="font-semibold">{selectedIds.size}</span>
+                  <span>selected</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds(new Set())}
+                    className="ml-2 inline-flex items-center gap-1 text-xs text-blue-700 hover:underline"
+                  >
+                    <X className="h-3 w-3" /> Clear
+                  </button>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={handleBulkSubmit}
+                  disabled={bulkMark.isPending}
+                  className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {bulkMark.isPending ? 'Marking…' : 'Mark as Submitted'}
+                </Button>
+              </div>
+            )}
             <div className="rounded-xl overflow-hidden border border-slate-100">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50 hover:bg-slate-50 border-b border-slate-100">
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={
+                          allVisibleSelected
+                            ? true
+                            : someVisibleSelected
+                              ? 'indeterminate'
+                              : false
+                        }
+                        onCheckedChange={toggleAll}
+                        aria-label="Select all visible claims"
+                      />
+                    </TableHead>
                     {[
                       { label: 'Amount', align: 'right' as const },
                       { label: 'Claim No' },
@@ -294,6 +331,8 @@ export default function PanelClaims() {
                         key={row.id}
                         row={row}
                         activeTab={tab}
+                        isSelected={selectedIds.has(row.id)}
+                        onToggle={() => toggleRow(row.id)}
                         onOpen={() => setActiveClaim(row)}
                       />
                     ))
