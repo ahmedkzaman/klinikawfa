@@ -21,6 +21,7 @@ export default function DocumentSettings() {
     phone: settings.phone,
     email: settings.email,
     logo_url: settings.logo_url,
+    logo_height_px: settings.logo_height_px,
     content_margin_top: settings.content_margin_top,
   });
 
@@ -33,6 +34,7 @@ export default function DocumentSettings() {
       phone: settings.phone,
       email: settings.email,
       logo_url: settings.logo_url,
+      logo_height_px: settings.logo_height_px,
       content_margin_top: settings.content_margin_top,
     });
   }, [settings.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -195,6 +197,26 @@ export default function DocumentSettings() {
 
             <Separator />
 
+            {/* Logo size slider */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Logo Size</Label>
+                <span className="text-sm font-mono text-slate-700">{form.logo_height_px}px</span>
+              </div>
+              <Slider
+                min={24}
+                max={240}
+                step={2}
+                value={[form.logo_height_px]}
+                onValueChange={([v]) => setForm({ ...form, logo_height_px: v })}
+              />
+              <p className="text-xs text-slate-500">
+                Height of the logo on printed letterhead. Width scales automatically.
+              </p>
+            </div>
+
+            <Separator />
+
             {/* Margin slider */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -239,10 +261,14 @@ export default function DocumentSettings() {
                       <img
                         src={form.logo_url}
                         alt="Logo"
-                        className="h-12 w-12 object-contain"
+                        style={{ height: `${form.logo_height_px}px` }}
+                        className="w-auto object-contain"
                       />
                     ) : (
-                      <div className="h-12 w-12 rounded bg-slate-100 border border-dashed border-slate-300" />
+                      <div
+                        style={{ height: `${form.logo_height_px}px`, width: `${form.logo_height_px}px` }}
+                        className="rounded bg-slate-100 border border-dashed border-slate-300"
+                      />
                     )}
                     <div className="text-[11px] leading-tight">
                       <div className="font-bold">{form.clinic_name || 'Clinic Name'}</div>

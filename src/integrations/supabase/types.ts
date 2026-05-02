@@ -743,6 +743,7 @@ export type Database = {
           content_margin_top: number
           email: string
           id: string
+          logo_height_px: number
           logo_url: string
           phone: string
           singleton: boolean
@@ -755,6 +756,7 @@ export type Database = {
           content_margin_top?: number
           email?: string
           id?: string
+          logo_height_px?: number
           logo_url?: string
           phone?: string
           singleton?: boolean
@@ -767,6 +769,7 @@ export type Database = {
           content_margin_top?: number
           email?: string
           id?: string
+          logo_height_px?: number
           logo_url?: string
           phone?: string
           singleton?: boolean

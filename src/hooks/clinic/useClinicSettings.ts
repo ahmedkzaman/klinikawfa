@@ -9,6 +9,7 @@ export interface ClinicSettings {
   phone: string;
   email: string;
   logo_url: string;
+  logo_height_px: number;
   content_margin_top: number;
   updated_at: string;
 }
@@ -21,6 +22,7 @@ const DEFAULTS: ClinicSettings = {
   phone: '',
   email: '',
   logo_url: '',
+  logo_height_px: 64,
   content_margin_top: 120,
   updated_at: new Date().toISOString(),
 };
