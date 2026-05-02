@@ -72,6 +72,19 @@ export function ClientInvoiceSheet({ open, onOpenChange, invoiceId }: Props) {
 
   const [paidPromptOpen, setPaidPromptOpen] = useState(false);
   const [paidRef, setPaidRef] = useState('');
+  const [cancelPromptOpen, setCancelPromptOpen] = useState(false);
+
+  const handleCancelInvoice = async () => {
+    if (!invoiceId) return;
+    try {
+      await updateHeader.mutateAsync({ id: invoiceId, patch: { status: 'Cancelled' } });
+      setStatus('Cancelled');
+      setCancelPromptOpen(false);
+      toast.success('Invoice cancelled');
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
 
   // Hydrate from detail
   useEffect(() => {
@@ -439,6 +452,35 @@ export function ClientInvoiceSheet({ open, onOpenChange, invoiceId }: Props) {
             </Button>
             <Button onClick={confirmPaid} disabled={pending}>
               {pending ? 'Saving…' : 'Confirm Paid'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Invoice confirm */}
+      <Dialog open={cancelPromptOpen} onOpenChange={(o) => { if (!pending) setCancelPromptOpen(o); }}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Cancel this invoice?</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 text-sm text-slate-600 space-y-2">
+            <p>
+              The invoice will be marked as <span className="font-semibold">Cancelled</span> and excluded from outstanding receivables. The invoice number is preserved for audit.
+            </p>
+            <p className="text-xs text-slate-500">
+              You can reopen it as a Draft later if cancelled by mistake.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelPromptOpen(false)} disabled={pending}>
+              Keep Invoice
+            </Button>
+            <Button
+              onClick={handleCancelInvoice}
+              disabled={pending}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {pending ? 'Cancelling…' : 'Yes, Cancel Invoice'}
             </Button>
           </DialogFooter>
         </DialogContent>
