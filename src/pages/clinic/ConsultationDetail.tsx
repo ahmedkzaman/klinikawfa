@@ -65,7 +65,7 @@ import {
 import { DiagnosisCombobox } from '@/components/clinic/consultation/DiagnosisCombobox';
 import { SessionAttachmentsStrip } from '@/components/clinic/consultation/SessionAttachmentsStrip';
 
-const PRICE_TIERS = ['SELF PAY'];
+const PRICE_TIERS = ['SELF PAY', 'PANEL'];
 
 export default function ConsultationDetail() {
   const { queueEntryId } = useParams<{ queueEntryId: string }>();
