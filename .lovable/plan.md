@@ -1,157 +1,108 @@
-## Sprint 3 — Ready to Execute
+## Sprint 4: Calendar, Rooms & Queue TV — Reconciled Plan
 
-Plan was approved, but I'm still in read-only/plan mode (the migration tool only becomes available once you confirm here). Approve this and I'll run the full sequence in one pass.
+### Architecture audit
 
----
+The original spec collides with three live structures in our DB. Repeating the Sprint 3 lesson, we **reuse** instead of fork.
 
-### Step 1 — Migration (`sprint3_rules_and_panel_tiers.sql`)
+| Spec proposes | Already exists | Decision |
+|---|---|---|
+| `clinic_rooms (name, status)` | `public.rooms (id, label)` — used by `assigned_room_id` on `queue_entries`, `useRooms`, queue board | **Reuse `rooms`.** Add `status text default 'active'` for soft-disable. Keep column `label` (do not rename — touches consultation/queue/room joins everywhere). |
+| `appointments (patient_id, start_time, end_time, status, notes)` | `public.clinic_appointments` — already FK'd from `queue_entries.source_appointment_id`, used by FollowUpScheduler, and intake_appointment_to_queue() RPC. Public `appointments` table is the **lead-form** (name/phone/service strings) — different domain. | **Reuse `clinic_appointments`** as the calendar source of truth. Do NOT touch public `appointments` (lead form). |
+| `queue_entries.room_id`, `called_at` | Both already exist as `assigned_room_id` and `called_at` | **No-op** — wire up UI only. |
+| `clinic_settings.queue_call_by, tv_youtube_id, tv_ticker_text` | New columns | **Add as proposed.** |
+
+### Task 1 — Migration `sprint4_queue_tv_schema.sql`
 
 ```sql
--- 1. Patient guards: NRIC + Passport siblings, religion, emergency contact, default panel
-ALTER TABLE public.patients
-  ADD COLUMN IF NOT EXISTS passport_no             text,
-  ADD COLUMN IF NOT EXISTS religion                text,
-  ADD COLUMN IF NOT EXISTS emergency_contact_name  text,
-  ADD COLUMN IF NOT EXISTS emergency_contact_phone text,
-  ADD COLUMN IF NOT EXISTS default_panel_id        uuid
-    REFERENCES public.insurance_providers(id) ON DELETE SET NULL;
+-- Rooms: add status (active/inactive) for soft-disable
+ALTER TABLE public.rooms
+  ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'active';
 
-CREATE INDEX IF NOT EXISTS idx_patients_default_panel_id
-  ON public.patients(default_panel_id) WHERE default_panel_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_patients_passport_no
-  ON public.patients(passport_no) WHERE passport_no IS NOT NULL;
-
--- 2. Panel default pricing tier on insurance_providers (NOT corporate_clients)
-ALTER TABLE public.insurance_providers
-  ADD COLUMN IF NOT EXISTS default_price_tier text NOT NULL DEFAULT 'standard';
-
-CREATE OR REPLACE FUNCTION public.trg_validate_panel_tier()
+CREATE OR REPLACE FUNCTION public.trg_validate_room_status()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 BEGIN
-  IF NEW.default_price_tier NOT IN ('standard','tier1','tier2') THEN
-    RAISE EXCEPTION 'INVALID_PRICE_TIER: %' , NEW.default_price_tier
-      USING ERRCODE='P0001';
+  IF NEW.status NOT IN ('active','inactive') THEN
+    RAISE EXCEPTION 'INVALID_ROOM_STATUS: %', NEW.status USING ERRCODE='P0001';
   END IF;
   RETURN NEW;
 END $$;
+DROP TRIGGER IF EXISTS trg_rooms_validate ON public.rooms;
+CREATE TRIGGER trg_rooms_validate BEFORE INSERT OR UPDATE ON public.rooms
+  FOR EACH ROW EXECUTE FUNCTION public.trg_validate_room_status();
 
-DROP TRIGGER IF EXISTS validate_panel_tier ON public.insurance_providers;
-CREATE TRIGGER validate_panel_tier
-  BEFORE INSERT OR UPDATE ON public.insurance_providers
-  FOR EACH ROW EXECUTE FUNCTION public.trg_validate_panel_tier();
+-- Allow ops/admin to mutate rooms
+CREATE POLICY "Ops/Admin manage rooms" ON public.rooms
+  FOR ALL TO authenticated
+  USING (public.is_ops_or_admin(auth.uid()))
+  WITH CHECK (public.is_ops_or_admin(auth.uid()));
 
--- 3. Extend price-resolution trigger to honour the panel's default tier.
---    Precedence for panel patients:
---      panel_price_overrides → tier price (price_tier_1 / price_tier_2)
---      → standard_panel_price → price_to_patient_max
---    Self-pay patients unchanged. Services/packages have no per-tier columns
---    today, so they fall through to standard_panel_price as before.
-CREATE OR REPLACE FUNCTION public.trg_resolve_selling_price()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
-DECLARE
-  v_panel_id uuid; v_tier text;
-  v_override numeric(10,2); v_standard numeric(10,2); v_self_pay numeric(10,2);
-  v_tier1 numeric(10,2); v_tier2 numeric(10,2); v_tier_price numeric(10,2);
-BEGIN
-  SELECT qe.panel_id, ip.default_price_tier INTO v_panel_id, v_tier
-  FROM public.consultations c
-  JOIN public.queue_entries qe ON c.queue_entry_id = qe.id
-  LEFT JOIN public.insurance_providers ip ON ip.id = qe.panel_id
-  WHERE c.id = NEW.consultation_id;
+-- TV / call-mode settings on the singleton settings row
+ALTER TABLE public.clinic_settings
+  ADD COLUMN IF NOT EXISTS queue_call_by text NOT NULL DEFAULT 'number',
+  ADD COLUMN IF NOT EXISTS tv_youtube_id text,
+  ADD COLUMN IF NOT EXISTS tv_ticker_text text;
 
-  -- Manual / free-text item: trust caller-supplied price
-  IF NEW.item_id IS NULL AND NEW.service_id IS NULL AND NEW.package_id IS NULL THEN
-    NEW.price := COALESCE(NEW.price, 0);
-    NEW.price_tier := COALESCE(NEW.price_tier,
-      CASE WHEN v_panel_id IS NOT NULL THEN 'PANEL' ELSE 'SELF PAY' END);
-    RETURN NEW;
-  END IF;
+-- Extend existing trg_validate_clinic_settings to enforce queue_call_by IN ('name','number')
+-- (re-create the function with the extra check appended).
 
-  IF NEW.item_id IS NOT NULL THEN
-    SELECT price_to_patient_max, standard_panel_price, price_tier_1, price_tier_2
-      INTO v_self_pay, v_standard, v_tier1, v_tier2
-      FROM public.inventory_items WHERE id = NEW.item_id;
-    IF v_panel_id IS NOT NULL THEN
-      SELECT override_price INTO v_override FROM public.panel_price_overrides
-      WHERE panel_id = v_panel_id AND item_id = NEW.item_id;
-    END IF;
-  ELSIF NEW.service_id IS NOT NULL THEN
-    SELECT price_to_patient, standard_panel_price INTO v_self_pay, v_standard
-      FROM public.services WHERE id = NEW.service_id;
-    IF v_panel_id IS NOT NULL THEN
-      SELECT override_price INTO v_override FROM public.panel_price_overrides
-      WHERE panel_id = v_panel_id AND service_id = NEW.service_id;
-    END IF;
-  ELSIF NEW.package_id IS NOT NULL THEN
-    SELECT price, standard_panel_price INTO v_self_pay, v_standard
-      FROM public.packages WHERE id = NEW.package_id;
-    IF v_panel_id IS NOT NULL THEN
-      SELECT override_price INTO v_override FROM public.panel_price_overrides
-      WHERE panel_id = v_panel_id AND package_id = NEW.package_id;
-    END IF;
-  END IF;
-
-  v_tier_price := CASE
-    WHEN v_tier='tier1' THEN v_tier1
-    WHEN v_tier='tier2' THEN v_tier2
-    ELSE NULL END;
-
-  IF v_panel_id IS NOT NULL THEN
-    NEW.price := COALESCE(v_override, v_tier_price, v_standard, v_self_pay, 0);
-    NEW.price_tier := COALESCE(NEW.price_tier, 'PANEL');
-  ELSE
-    NEW.price := COALESCE(v_self_pay, 0);
-    NEW.price_tier := COALESCE(NEW.price_tier, 'SELF PAY');
-  END IF;
-  RETURN NEW;
-END $$;
+-- Realtime publication for the TV
+ALTER PUBLICATION supabase_realtime ADD TABLE public.queue_entries;
+ALTER TABLE public.queue_entries REPLICA IDENTITY FULL;
 ```
 
-### Step 2 — `RegisterPatientDialog.tsx`
+No new tables. No `appointments` schema change (would break the lead form).
 
-Extend Zod with strict guards:
+### Task 2 — `src/pages/clinic/settings/QueueSettings.tsx` + tile in `SettingsPage`
 
-- `national_id` (12-digit MyKad) **OR** `passport_no` (1–20 alphanumeric) — XOR via `superRefine`
-- `phone` — already required ✓
-- `religion` — required Select: Islam / Buddhism / Christianity / Hinduism / Other / Prefer not to say
-- `emergency_contact_name` — required, ≥2 chars
-- `emergency_contact_phone` — required, same regex as `phone`
-- `default_panel_id` — optional Combobox from `useInsuranceProviders({ activeOnly: true })` with "None / Self-Pay" option
+- **Rooms section**: list `rooms` (label + status toggle), add-row inline (label only). Uses new `useRoomsAdmin` hook with `insert/update`.
+- **TV section**: form bound to `useClinicSettings().update` for `tv_youtube_id`, `tv_ticker_text`, and a radio for `queue_call_by` (`name` / `number`).
+- Add route `/clinic/settings/queue` and a card on `SettingsPage` (admin/ops visible).
 
-Persist all six fields through `useCreatePatient`.
+### Task 3 — `src/pages/clinic/Appointments.tsx` (calendar)
 
-### Step 3 — `PanelDialog.tsx`
+New main nav entry "Appointments" in `ClinicLayout` (between Queue and Patients).
 
-Add a **"Default Pricing Tier"** Select beside the existing freeform "Price Tier (key)" field:
+- Bespoke grid: **Day** view (single column, 30-min rows 08:00–20:00) + **Week** view (7 cols × time rows). Pure CSS grid, no extra deps.
+- Data source: `clinic_appointments` joined to `patients` and `doctors`. New hook `useClinicAppointmentsRange(from, to)`.
+- Click empty slot → "New Appointment" dialog: PatientPicker + date/time + doctor + notes → inserts into `clinic_appointments` (status `scheduled`).
+- Click existing appointment → side sheet showing details + actions:
+  - **Mark Arrived & Check-In**: updates appointment status `arrived`, then opens existing `CheckInWalkInDialog` pre-filled with that patient, which on submit creates the `queue_entries` row (linking via `source_appointment_id`).
+  - Cancel / No Show actions update status only.
+- Statuses use the existing `clinic_appointment_status` enum; if `arrived` / `no_show` / `cancelled` are not in the enum yet, the migration appends them with `ALTER TYPE ... ADD VALUE IF NOT EXISTS`.
 
-- Options: Standard / Tier 1 / Tier 2
-- Bound to `default_price_tier` on the schema/defaults/reset
-- Helper text: *"Drives the inventory price tier the trigger uses when no per-item override exists."*
+### Task 4 — Doctor "Call Patient" with room selector
 
-### Step 4 — Check-in prefill
+Touches `src/pages/clinic/Consultation.tsx` / `ConsultationDetail.tsx` (the live doctor view that already calls `useCallPatient`).
 
-When a patient with `default_panel_id` is selected:
+- Replace the bare "Call Patient" click with a small **Room Picker dialog** (radio of active `rooms`, remembers last choice in localStorage).
+- On confirm, extend `useCallPatient` to also set `assigned_room_id`. `clinic_status` stays as the existing `with_doctor` (which is the queue's "in progress"). `called_at` and `called_by_doctor_id` already get set today.
 
-- `RegisterAndCheckInDialog.tsx`: prefill `payment_method='panel'` + `panel_id` once a matching IC resolves to an existing patient
-- `CheckInWalkInDialog.tsx`: when `PatientPicker` returns a patient with `default_panel_id`, set `payerType='panel'` and `panelId` automatically (still editable)
+### Task 5 — `/tv` route → `src/pages/tv/QueueTV.tsx`
 
-### Step 5 — Diagnoses
+- Mounted in `App.tsx` outside `ClinicLayout` and outside `MainLayout` — bare full-screen route, no header/sidebar/footer.
+- Dark theme (`bg-slate-950 text-white`), 16:9 fixed layout.
+- **Gate screen**: full-screen "Start TV Display" button. On click → `audio.unlock()` + reveal dashboard (sets `started=true` in state). Required because browsers block `speechSynthesis.speak()` and `<audio>` until a user gesture.
+- Layout once started:
+  - Left 65%: YouTube iframe `https://www.youtube.com/embed/{tv_youtube_id}?autoplay=1&mute=1&loop=1&playlist={tv_youtube_id}&controls=0`. Below it, CSS `@keyframes` marquee scrolling `tv_ticker_text`.
+  - Right 35%: huge "NOW CALLING" panel showing the latest called patient (number or name based on `queue_call_by`) and the room label, with a Framer Motion scale-flash animation on change.
+- **Realtime engine**: subscribe to `postgres_changes` on `queue_entries` UPDATE. Trigger fires when `clinic_status` becomes `with_doctor` AND `called_at` was just set.
+  - Fetch the joined patient + room (lightweight follow-up `select` by id since `postgres_changes` payload lacks joins).
+  - Push onto a "currently calling" state.
+  - Play `/sounds/chime.mp3` (1 sec ding, added to `public/`), then `window.speechSynthesis.speak("Calling {name|number}, to {room.label}")`.
+  - Queue announcements so simultaneous calls play sequentially.
 
-Already wired — `SettingsPage.tsx` has the **Diagnosis Sweeper** card pointing at `/clinic/settings/diagnoses` (full CRUD via `useDiagnoses` on the existing 262-row `public.diagnoses` table). No new page or table.
+### Task 6 — Files & route wiring
 
-### Step 6 — Receivables module: untouched
+- `src/App.tsx`: add `<Route path="/tv" element={<QueueTV />} />` (outside layouts) and `<Route path="settings/queue" element={<QueueSettings />} />` inside the clinic layout block. Add Appointments route.
+- `src/components/clinic/ClinicLayout.tsx`: add nav item `{ href: '/clinic/appointments', label: 'Appointments', icon: CalendarDays }`.
+- New: `src/hooks/clinic/useRoomsAdmin.ts` (extend existing `useRooms.ts`).
+- New: `src/hooks/clinic/useClinicAppointmentsRange.ts`.
+- New: `src/components/clinic/appointments/{NewAppointmentDialog,AppointmentDetailsSheet,DayView,WeekView}.tsx`.
+- New: `src/components/clinic/consultation/RoomPickerDialog.tsx`.
+- New: `src/pages/tv/QueueTV.tsx` + `public/sounds/chime.mp3`.
+- Update `useClinicSettings.ts` interface to include the 3 new columns.
+- Update `useQueueEntries.ts` `useCallPatient` to accept optional `room_id`.
 
-`corporate_clients`, `CorporateClientDialog.tsx`, `useCorporateClients.ts`, the AR invoice flow — none of these change. They remain the AR-only B2B billing entity.
+### Open question for confirmation
 
----
-
-### Files to be edited / created
-
-- **New**: `supabase/migrations/<ts>_sprint3_rules_and_panel_tiers.sql` (via migration tool)
-- **Edited**: `src/components/clinic/RegisterPatientDialog.tsx`
-- **Edited**: `src/components/clinic/RegisterAndCheckInDialog.tsx` (prefill panel)
-- **Edited**: `src/components/clinic/CheckInWalkInDialog.tsx` (prefill panel)
-- **Edited**: `src/components/clinic/settings/PanelDialog.tsx` (tier Select)
-- **Notes**: `src/types/clinic.ts` and `useInsuranceProviders.ts` types regenerate automatically once the migration runs (Supabase types are auto-generated).
-
-Approve this and I'll run the migration + ship all four file edits in the next pass.
+The doctor-call status today is `with_doctor` (your `clinic_status` enum). The spec said "in_progress" — they're the same concept. **Plan uses the existing `with_doctor` value** so the queue board, consultation workspace, and panel-claim trigger keep working. The TV will treat any transition into `with_doctor` with a fresh `called_at` as a "now calling" event. Confirm this interpretation when approving.
