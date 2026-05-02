@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { CheckCircle2, XCircle, Send } from 'lucide-react';
+import { CheckCircle2, XCircle, Send, Printer } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -34,6 +34,7 @@ import {
 import { useSuppliers } from '@/hooks/clinic/useSuppliers';
 import { usePurchaseOrder, usePurchaseOrders, type POStatus } from '@/hooks/clinic/usePurchaseOrders';
 import { POLineItemsTable } from './POLineItemsTable';
+import { POPrintTemplate } from './POPrintTemplate';
 import { toast } from 'sonner';
 
 interface Props {
@@ -72,6 +73,7 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
 
   const status = (po?.status ?? 'Draft') as POStatus;
   const readOnly = status === 'Received' || status === 'Cancelled';
+  const supplier = suppliers.find((s) => s.id === (po?.supplier_id ?? supplierId)) ?? null;
   const total = (po?.items ?? []).reduce((s, l) => s + Number(l.total_price ?? 0), 0);
 
   const persistHeader = async () => {
@@ -233,6 +235,9 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
 
               {/* Actions */}
               <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button variant="outline" onClick={() => window.print()}>
+                  <Printer className="h-4 w-4 mr-1" /> Print / PDF
+                </Button>
                 {status === 'Draft' && (
                   <>
                     <Button variant="outline" onClick={persistHeader}>
@@ -293,6 +298,8 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {po && <POPrintTemplate po={po} supplier={supplier} />}
     </>
   );
 }

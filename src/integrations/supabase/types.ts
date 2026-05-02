@@ -735,6 +735,45 @@ export type Database = {
           },
         ]
       }
+      clinic_settings: {
+        Row: {
+          address_line_1: string
+          address_line_2: string
+          clinic_name: string
+          content_margin_top: number
+          email: string
+          id: string
+          logo_url: string
+          phone: string
+          singleton: boolean
+          updated_at: string
+        }
+        Insert: {
+          address_line_1?: string
+          address_line_2?: string
+          clinic_name?: string
+          content_margin_top?: number
+          email?: string
+          id?: string
+          logo_url?: string
+          phone?: string
+          singleton?: boolean
+          updated_at?: string
+        }
+        Update: {
+          address_line_1?: string
+          address_line_2?: string
+          clinic_name?: string
+          content_margin_top?: number
+          email?: string
+          id?: string
+          logo_url?: string
+          phone?: string
+          singleton?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       consultation_attachments: {
         Row: {
           consultation_id: string

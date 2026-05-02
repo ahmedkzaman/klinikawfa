@@ -467,3 +467,17 @@
     pointer-events: none;
   }
 }
+
+@media print {
+  @page { size: A4; margin: 15mm; }
+  html, body { background: #fff !important; }
+  body * { visibility: hidden !important; }
+  .po-print-root, .po-print-root * { visibility: visible !important; }
+  .po-print-root {
+    position: absolute;
+    inset: 0;
+    display: block !important;
+  }
+  [data-radix-popper-content-wrapper],
+  [data-sonner-toaster] { display: none !important; }
+}
