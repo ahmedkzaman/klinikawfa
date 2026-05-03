@@ -164,7 +164,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
         .from('saved_rosters')
         .select('*')
         .eq('roster_type', 'doctor')
-        .eq('month', selectedMonth)
+        .eq('month', selectedMonth + 1)
         .eq('year', selectedYear)
         .maybeSingle();
       if (data) {
@@ -193,7 +193,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
 
     const payload = {
       roster_type: 'doctor' as string,
-      month: selectedMonth,
+      month: selectedMonth + 1,
       year: selectedYear,
       roster_data: roster as unknown as Record<string, unknown>,
       staff_list: staffList as unknown as Record<string, unknown>[],
