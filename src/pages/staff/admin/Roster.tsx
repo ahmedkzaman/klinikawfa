@@ -203,7 +203,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
         .from('saved_rosters')
         .select('*')
         .eq('roster_type', rosterType)
-        .eq('month', selectedMonth)
+        .eq('month', selectedMonth + 1)
         .eq('year', selectedYear)
         .maybeSingle();
       if (data) {
