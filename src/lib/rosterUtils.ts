@@ -77,19 +77,14 @@ export async function getUserShiftForDate(
     if (!dayData) continue;
 
     // Check each shift key (S1, S2, S3, Daytime, Night, etc.)
-    for (const [shiftKey, cellData] of Object.entries(dayData)) {
+    for (const [rawShiftKey, cellData] of Object.entries(dayData)) {
       if (!cellData) continue;
       const cells = Array.isArray(cellData) ? cellData : [cellData];
       const found = cells.find((c: any) => c.staffId === userId);
       if (found) {
+        const shiftKey = normalizeShiftKey(rawShiftKey);
         const shiftDef = SHIFT_TIMES[shiftKey];
-        if (shiftDef) {
-          return { shiftKey, ...shiftDef };
-        }
-        // Handle combined shifts like "Daytime" for doctors
-        if (shiftKey === 'Night' || shiftKey === 'S3') {
-          return { shiftKey: 'S3', ...SHIFT_TIMES.S3 };
-        }
+        if (shiftDef) return { shiftKey, ...shiftDef };
         // Fallback
         return { shiftKey, start: '08:00', end: '20:00', label: shiftKey };
       }
