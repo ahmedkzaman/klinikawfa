@@ -2811,6 +2811,7 @@ export type Database = {
           id: string
           role: Database["public"]["Enums"]["app_role"] | null
           scope: string
+          shift_key: string | null
           updated_at: string
           updated_by: string | null
         }
@@ -2822,6 +2823,7 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"] | null
           scope: string
+          shift_key?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -2833,6 +2835,7 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"] | null
           scope?: string
+          shift_key?: string | null
           updated_at?: string
           updated_by?: string | null
         }

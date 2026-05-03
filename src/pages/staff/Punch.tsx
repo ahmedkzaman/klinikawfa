@@ -105,7 +105,7 @@ export default function StaffPunch() {
   const nextPunchType = isPunchedIn ? 'out' : 'in';
   const assignmentBlock = geofenceResult?.isWithinZone ? checkAssignment(assignments, geofenceResult.zone?.id) : null;
 
-  const { buffers } = useUserPunchBuffers(user?.id);
+  const { buffers } = useUserPunchBuffers(user?.id, todayShift?.shiftKey);
 
   // Format minutes-from-midnight as h:mm AM/PM (handles next-day wraps)
   const fmtTime = (date: Date) => format(date, 'h:mm a');
