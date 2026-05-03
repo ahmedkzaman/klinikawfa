@@ -26,7 +26,15 @@ const ROLE_PRIORITY: Record<string, number> = {
   guest: 10,
 };
 
-export function useUserPunchBuffers(userId: string | undefined) {
+/**
+ * Resolve punch buffers for a user. If `shiftKey` is provided, shift-aware
+ * overrides are considered. Resolution priority (highest first):
+ *   1. role + shift  (scope = 'role_shift')
+ *   2. shift only    (scope = 'shift')
+ *   3. role only     (scope = 'role')
+ *   4. global        (scope = 'global')
+ */
+export function useUserPunchBuffers(userId: string | undefined, shiftKey?: string | null) {
   const [buffers, setBuffers] = useState<PunchBuffers>(DEFAULT_BUFFERS);
   const [loading, setLoading] = useState(true);
 
@@ -43,40 +51,55 @@ export function useUserPunchBuffers(userId: string | undefined) {
 
       if (cancelled) return;
 
-      const settings = settingsRes.data ?? [];
+      const settings = (settingsRes.data ?? []) as any[];
       const roles = (rolesRes.data ?? []).map((r: any) => r.role as string);
 
-      const global = settings.find((s: any) => s.scope === 'global');
-      const roleRows = settings.filter((s: any) => s.scope === 'role');
+      const global = settings.find((s) => s.scope === 'global');
+      const shiftRows = settings.filter((s) => s.scope === 'shift');
+      const roleRows = settings.filter((s) => s.scope === 'role');
+      const roleShiftRows = settings.filter((s) => s.scope === 'role_shift');
 
-      // Pick the highest-priority role the user has that also has an override row
+      // 1. role + shift (highest priority role wins)
       let chosen: any = null;
-      let chosenPriority = -1;
-      for (const r of roles) {
-        const row = roleRows.find((s: any) => s.role === r);
-        if (row) {
-          const p = ROLE_PRIORITY[r] ?? 0;
-          if (p > chosenPriority) {
-            chosen = row;
-            chosenPriority = p;
+      if (shiftKey) {
+        let chosenP = -1;
+        for (const r of roles) {
+          const row = roleShiftRows.find((s) => s.role === r && s.shift_key === shiftKey);
+          if (row) {
+            const p = ROLE_PRIORITY[r] ?? 0;
+            if (p > chosenP) { chosen = row; chosenP = p; }
           }
         }
       }
 
-      const resolved: PunchBuffers = chosen
-        ? pickFields(chosen)
-        : global
-          ? pickFields(global)
-          : DEFAULT_BUFFERS;
+      // 2. shift only
+      if (!chosen && shiftKey) {
+        chosen = shiftRows.find((s) => s.shift_key === shiftKey) ?? null;
+      }
 
-      setBuffers(resolved);
+      // 3. role only (highest priority role wins)
+      if (!chosen) {
+        let chosenP = -1;
+        for (const r of roles) {
+          const row = roleRows.find((s) => s.role === r);
+          if (row) {
+            const p = ROLE_PRIORITY[r] ?? 0;
+            if (p > chosenP) { chosen = row; chosenP = p; }
+          }
+        }
+      }
+
+      // 4. global
+      if (!chosen) chosen = global;
+
+      setBuffers(chosen ? pickFields(chosen) : DEFAULT_BUFFERS);
       setLoading(false);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, shiftKey]);
 
   return { buffers, loading };
 }
