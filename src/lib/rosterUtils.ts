@@ -119,13 +119,16 @@ export async function getUserShiftsForMonth(
     const rosterData = roster.roster_data as Record<string, any>;
     for (const [dayKey, dayData] of Object.entries(rosterData)) {
       if (!dayData || typeof dayData !== 'object') continue;
-      for (const [shiftKey, cellData] of Object.entries(dayData as Record<string, any>)) {
+      for (const [rawShiftKey, cellData] of Object.entries(dayData as Record<string, any>)) {
         if (!cellData) continue;
         const cells = Array.isArray(cellData) ? cellData : [cellData];
         const found = cells.find((c: any) => c.staffId === userId);
         if (found) {
+          const shiftKey = normalizeShiftKey(rawShiftKey);
           const shiftDef = SHIFT_TIMES[shiftKey] || SHIFT_TIMES.S1;
-          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${dayKey.padStart(2, '0')}`;
+          const dateStr = /^\d{4}-\d{2}-\d{2}$/.test(dayKey)
+            ? dayKey
+            : `${year}-${String(month + 1).padStart(2, '0')}-${dayKey.padStart(2, '0')}`;
           result[dateStr] = { shiftKey, ...shiftDef };
         }
       }
