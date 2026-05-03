@@ -164,7 +164,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
         .from('saved_rosters')
         .select('*')
         .eq('roster_type', 'doctor')
-        .eq('month', selectedMonth)
+        .eq('month', selectedMonth + 1)
         .eq('year', selectedYear)
         .maybeSingle();
       if (data) {
