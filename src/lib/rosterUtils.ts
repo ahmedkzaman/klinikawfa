@@ -13,13 +13,30 @@ import { format } from 'date-fns';
 
 const SHIFT_TIMES: Record<string, { start: string; end: string; label: string }> = {
   S1: { start: '08:00', end: '16:00', label: 'Shift 1 (8am – 4pm)' },
-  S2: { start: '16:00', end: '00:00', label: 'Shift 2 (4pm – 12am)' },
-  S3: { start: '20:00', end: '00:00', label: 'Shift 3 (8pm – 12am)' },
+  S2: { start: '16:00', end: '23:59', label: 'Shift 2 (4pm – 12am)' },
+  S3: { start: '20:00', end: '23:59', label: 'Shift 3 (8pm – 12am)' },
   // Combined (doctor daytime = S1+S2)
-  Daytime: { start: '08:00', end: '00:00', label: 'Daytime (8am – 12am)' },
+  Daytime: { start: '08:00', end: '23:59', label: 'Daytime (8am – 12am)' },
   // Hybrid shift (purchaser / housecall nurse) — AM only
   Hybrid: { start: '08:00', end: '13:00', label: 'Hybrid (8am – 1pm)' },
 };
+
+/**
+ * Normalize roster shift keys (e.g. "shift1", "S1", "daytime", "night") into
+ * canonical keys used by SHIFT_TIMES (S1, S2, S3, Daytime, Hybrid).
+ */
+export function normalizeShiftKey(raw: string): string {
+  if (!raw) return raw;
+  const k = raw.toLowerCase().trim();
+  switch (k) {
+    case 's1': case 'shift1': return 'S1';
+    case 's2': case 'shift2': return 'S2';
+    case 's3': case 'shift3': case 'night': return 'S3';
+    case 'daytime': return 'Daytime';
+    case 'hybrid': return 'Hybrid';
+    default: return raw;
+  }
+}
 
 export type ShiftInfo = {
   shiftKey: string;
