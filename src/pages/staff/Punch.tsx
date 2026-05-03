@@ -23,17 +23,34 @@ interface ZoneAssignment {
   is_active: boolean;
 }
 
-function checkAssignment(assignments: ZoneAssignment[], zoneId: string | undefined): string | null {
+function checkAssignment(
+  assignments: ZoneAssignment[],
+  zoneId: string | undefined,
+  nextPunchType: 'in' | 'out',
+  buffers: { clock_in_early_min: number; clock_in_late_min: number; clock_out_early_min: number; clock_out_late_min: number },
+): string | null {
   if (assignments.length === 0) return null;
   if (!zoneId) return 'You are not assigned to this zone.';
   const zoneAssignments = assignments.filter(a => a.zone_id === zoneId);
   if (zoneAssignments.length === 0) return 'You are not assigned to this zone.';
   const now = new Date();
   const currentDay = now.getDay();
-  const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  // Match by day-of-week + buffered window so punch-out after shift end still passes
+  const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const nowMin = now.getHours() * 60 + now.getMinutes();
   const matchingShift = zoneAssignments.find(a => {
     if (!a.days_of_week.includes(currentDay)) return false;
-    return currentTime >= a.start_time && currentTime <= a.end_time;
+    const startMin = toMin(a.start_time);
+    let endMin = toMin(a.end_time);
+    if (endMin <= startMin) endMin += 24 * 60; // crosses midnight
+    const winStart = nextPunchType === 'in'
+      ? startMin - buffers.clock_in_early_min
+      : endMin - buffers.clock_out_early_min;
+    const winEnd = nextPunchType === 'in'
+      ? startMin + buffers.clock_in_late_min
+      : endMin + buffers.clock_out_late_min;
+    const adjNow = nowMin < startMin - 12 * 60 ? nowMin + 24 * 60 : nowMin;
+    return adjNow >= winStart && adjNow <= winEnd;
   });
   if (!matchingShift) {
     const anyDayMatch = zoneAssignments.find(a => a.days_of_week.includes(currentDay));
@@ -103,9 +120,10 @@ export default function StaffPunch() {
   const accuracyStatus = geo.accuracy ? getAccuracyStatus(geo.accuracy) : null;
   const isPunchedIn = lastPunch?.punch_type === 'in';
   const nextPunchType = isPunchedIn ? 'out' : 'in';
-  const assignmentBlock = geofenceResult?.isWithinZone ? checkAssignment(assignments, geofenceResult.zone?.id) : null;
 
   const { buffers } = useUserPunchBuffers(user?.id, todayShift?.shiftKey);
+
+  const assignmentBlock = geofenceResult?.isWithinZone ? checkAssignment(assignments, geofenceResult.zone?.id, nextPunchType, buffers) : null;
 
   // Format minutes-from-midnight as h:mm AM/PM (handles next-day wraps)
   const fmtTime = (date: Date) => format(date, 'h:mm a');

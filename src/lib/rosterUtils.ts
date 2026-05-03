@@ -13,13 +13,30 @@ import { format } from 'date-fns';
 
 const SHIFT_TIMES: Record<string, { start: string; end: string; label: string }> = {
   S1: { start: '08:00', end: '16:00', label: 'Shift 1 (8am – 4pm)' },
-  S2: { start: '16:00', end: '00:00', label: 'Shift 2 (4pm – 12am)' },
-  S3: { start: '20:00', end: '00:00', label: 'Shift 3 (8pm – 12am)' },
+  S2: { start: '16:00', end: '23:59', label: 'Shift 2 (4pm – 12am)' },
+  S3: { start: '20:00', end: '23:59', label: 'Shift 3 (8pm – 12am)' },
   // Combined (doctor daytime = S1+S2)
-  Daytime: { start: '08:00', end: '00:00', label: 'Daytime (8am – 12am)' },
+  Daytime: { start: '08:00', end: '23:59', label: 'Daytime (8am – 12am)' },
   // Hybrid shift (purchaser / housecall nurse) — AM only
   Hybrid: { start: '08:00', end: '13:00', label: 'Hybrid (8am – 1pm)' },
 };
+
+/**
+ * Normalize roster shift keys (e.g. "shift1", "S1", "daytime", "night") into
+ * canonical keys used by SHIFT_TIMES (S1, S2, S3, Daytime, Hybrid).
+ */
+export function normalizeShiftKey(raw: string): string {
+  if (!raw) return raw;
+  const k = raw.toLowerCase().trim();
+  switch (k) {
+    case 's1': case 'shift1': return 'S1';
+    case 's2': case 'shift2': return 'S2';
+    case 's3': case 'shift3': case 'night': return 'S3';
+    case 'daytime': return 'Daytime';
+    case 'hybrid': return 'Hybrid';
+    default: return raw;
+  }
+}
 
 export type ShiftInfo = {
   shiftKey: string;
@@ -60,19 +77,14 @@ export async function getUserShiftForDate(
     if (!dayData) continue;
 
     // Check each shift key (S1, S2, S3, Daytime, Night, etc.)
-    for (const [shiftKey, cellData] of Object.entries(dayData)) {
+    for (const [rawShiftKey, cellData] of Object.entries(dayData)) {
       if (!cellData) continue;
       const cells = Array.isArray(cellData) ? cellData : [cellData];
       const found = cells.find((c: any) => c.staffId === userId);
       if (found) {
+        const shiftKey = normalizeShiftKey(rawShiftKey);
         const shiftDef = SHIFT_TIMES[shiftKey];
-        if (shiftDef) {
-          return { shiftKey, ...shiftDef };
-        }
-        // Handle combined shifts like "Daytime" for doctors
-        if (shiftKey === 'Night' || shiftKey === 'S3') {
-          return { shiftKey: 'S3', ...SHIFT_TIMES.S3 };
-        }
+        if (shiftDef) return { shiftKey, ...shiftDef };
         // Fallback
         return { shiftKey, start: '08:00', end: '20:00', label: shiftKey };
       }
@@ -107,13 +119,16 @@ export async function getUserShiftsForMonth(
     const rosterData = roster.roster_data as Record<string, any>;
     for (const [dayKey, dayData] of Object.entries(rosterData)) {
       if (!dayData || typeof dayData !== 'object') continue;
-      for (const [shiftKey, cellData] of Object.entries(dayData as Record<string, any>)) {
+      for (const [rawShiftKey, cellData] of Object.entries(dayData as Record<string, any>)) {
         if (!cellData) continue;
         const cells = Array.isArray(cellData) ? cellData : [cellData];
         const found = cells.find((c: any) => c.staffId === userId);
         if (found) {
+          const shiftKey = normalizeShiftKey(rawShiftKey);
           const shiftDef = SHIFT_TIMES[shiftKey] || SHIFT_TIMES.S1;
-          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${dayKey.padStart(2, '0')}`;
+          const dateStr = /^\d{4}-\d{2}-\d{2}$/.test(dayKey)
+            ? dayKey
+            : `${year}-${String(month + 1).padStart(2, '0')}-${dayKey.padStart(2, '0')}`;
           result[dateStr] = { shiftKey, ...shiftDef };
         }
       }
@@ -144,15 +159,18 @@ export async function getAllShiftsForMonth(
     const rosterData = roster.roster_data as Record<string, any>;
     for (const [dayKey, dayData] of Object.entries(rosterData)) {
       if (!dayData || typeof dayData !== 'object') continue;
-      for (const [shiftKey, cellData] of Object.entries(dayData as Record<string, any>)) {
+      for (const [rawShiftKey, cellData] of Object.entries(dayData as Record<string, any>)) {
         if (!cellData) continue;
         const cells = Array.isArray(cellData) ? cellData : [cellData];
         for (const cell of cells) {
           if (!cell?.staffId) continue;
           const userId = cell.staffId;
           if (!result[userId]) result[userId] = {};
+          const shiftKey = normalizeShiftKey(rawShiftKey);
           const shiftDef = SHIFT_TIMES[shiftKey] || SHIFT_TIMES.S1;
-          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${dayKey.padStart(2, '0')}`;
+          const dateStr = /^\d{4}-\d{2}-\d{2}$/.test(dayKey)
+            ? dayKey
+            : `${year}-${String(month + 1).padStart(2, '0')}-${dayKey.padStart(2, '0')}`;
           result[userId][dateStr] = { shiftKey, ...shiftDef };
         }
       }
