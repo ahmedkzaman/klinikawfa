@@ -76,8 +76,15 @@ export default function StaffHistory() {
     if (data) { const m: Record<string, any> = {}; data.forEach((z) => { m[z.id] = z; }); setZones(m); }
   };
 
-  const groupedRecords: Record<string, any[]> = records.reduce((acc: Record<string, any[]>, record: any) => {
-    const dateKey = format(new Date(record.punch_time), 'yyyy-MM-dd');
+  // Filter to records whose LOGICAL date falls inside the selected month, then group.
+  const monthStartStr = format(startOfMonth(selectedMonth), 'yyyy-MM-dd');
+  const monthEndStr = format(endOfMonth(selectedMonth), 'yyyy-MM-dd');
+  const inMonthRecords = records.filter((r: any) => {
+    const lwd = logicalWorkDateOf(r);
+    return lwd >= monthStartStr && lwd <= monthEndStr;
+  });
+  const groupedRecords: Record<string, any[]> = inMonthRecords.reduce((acc: Record<string, any[]>, record: any) => {
+    const dateKey = logicalWorkDateOf(record);
     if (!acc[dateKey]) acc[dateKey] = [];
     acc[dateKey].push(record);
     return acc;
