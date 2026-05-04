@@ -78,11 +78,13 @@ export default function AdminAttendanceReview() {
   const { data: attendance } = useQuery({
     queryKey: ['admin-attendance', selectedYear, selectedMonth],
     queryFn: async () => {
+      const fetchStart = new Date(monthStart); fetchStart.setDate(fetchStart.getDate() - 1);
+      const fetchEnd = new Date(monthEnd); fetchEnd.setDate(fetchEnd.getDate() + 1);
       const { data } = await supabase
         .from('attendance_records')
         .select('*')
-        .gte('punch_time', monthStart.toISOString())
-        .lte('punch_time', monthEnd.toISOString());
+        .gte('punch_time', fetchStart.toISOString())
+        .lte('punch_time', fetchEnd.toISOString());
       return data || [];
     },
   });
