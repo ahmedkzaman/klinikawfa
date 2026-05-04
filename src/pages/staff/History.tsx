@@ -58,8 +58,12 @@ export default function StaffHistory() {
     setIsLoading(true);
     const start = startOfMonth(selectedMonth);
     const end = endOfMonth(selectedMonth);
-    let query = supabase.from('attendance_records').select('id, user_id, punch_type, punch_time, zone_id, accuracy_meters')
-      .gte('punch_time', start.toISOString()).lte('punch_time', end.toISOString()).order('punch_time', { ascending: false });
+    // Widen by ±1 day so cross-midnight punches hard-linked to days inside
+    // the selected month are still included.
+    const fetchStart = new Date(start); fetchStart.setDate(fetchStart.getDate() - 1);
+    const fetchEnd = new Date(end); fetchEnd.setDate(fetchEnd.getDate() + 1);
+    let query = supabase.from('attendance_records').select('id, user_id, punch_type, punch_time, zone_id, accuracy_meters, logical_work_date, shift_key')
+      .gte('punch_time', fetchStart.toISOString()).lte('punch_time', fetchEnd.toISOString()).order('punch_time', { ascending: false });
     if (isAdmin) { if (selectedEmployee !== 'all') query = query.eq('user_id', selectedEmployee); }
     else query = query.eq('user_id', user?.id);
     const { data } = await query;
