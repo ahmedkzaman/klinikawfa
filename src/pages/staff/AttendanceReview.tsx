@@ -21,6 +21,7 @@ import {
   type ShiftInfo,
   type LatenessSeverity,
 } from '@/lib/rosterUtils';
+import { logicalWorkDateOf } from '@/lib/attendanceUtils';
 
 const COLORS = {
   working: 'hsl(142, 76%, 36%)',
@@ -68,12 +69,17 @@ export default function StaffAttendanceReview() {
   const { data: attendance } = useQuery({
     queryKey: ['my-attendance', selectedYear, selectedMonth],
     queryFn: async () => {
+      // Widen by ±1 day so cross-midnight punches hard-linked to a date in the
+      // selected month are still included even if their raw punch_time falls
+      // just outside.
+      const fetchStart = new Date(monthStart); fetchStart.setDate(fetchStart.getDate() - 1);
+      const fetchEnd = new Date(monthEnd); fetchEnd.setDate(fetchEnd.getDate() + 1);
       const { data } = await supabase
         .from('attendance_records')
         .select('*')
         .eq('user_id', user!.id)
-        .gte('punch_time', monthStart.toISOString())
-        .lte('punch_time', monthEnd.toISOString());
+        .gte('punch_time', fetchStart.toISOString())
+        .lte('punch_time', fetchEnd.toISOString());
       return data || [];
     },
     enabled: !!user,
@@ -106,9 +112,9 @@ export default function StaffAttendanceReview() {
     workingDays.forEach(day => {
       const dayStr = format(day, 'yyyy-MM-dd');
       const leave = (leaveRequests || []).find(l => l.start_date <= dayStr && l.end_date >= dayStr);
-      const dayAttendance = (attendance || []).filter(a => a.punch_time.startsWith(dayStr));
-      const punchIn = dayAttendance.find(a => a.punch_type === 'in');
-      const punchOut = dayAttendance.find(a => a.punch_type === 'out');
+      const dayAttendance = (attendance || []).filter((a: any) => logicalWorkDateOf(a) === dayStr);
+      const punchIn = dayAttendance.find((a: any) => a.punch_type === 'in');
+      const punchOut = dayAttendance.find((a: any) => a.punch_type === 'out');
       const shiftStart = shifts[dayStr]?.start || DEFAULT_SHIFT_START;
 
       // Calculate work hours if we have both in and out

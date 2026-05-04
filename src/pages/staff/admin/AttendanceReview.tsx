@@ -22,6 +22,7 @@ import {
   type ShiftInfo,
   type LatenessSeverity,
 } from '@/lib/rosterUtils';
+import { logicalWorkDateOf } from '@/lib/attendanceUtils';
 
 const COLORS = {
   working: 'hsl(142, 76%, 36%)',
@@ -77,11 +78,13 @@ export default function AdminAttendanceReview() {
   const { data: attendance } = useQuery({
     queryKey: ['admin-attendance', selectedYear, selectedMonth],
     queryFn: async () => {
+      const fetchStart = new Date(monthStart); fetchStart.setDate(fetchStart.getDate() - 1);
+      const fetchEnd = new Date(monthEnd); fetchEnd.setDate(fetchEnd.getDate() + 1);
       const { data } = await supabase
         .from('attendance_records')
         .select('*')
-        .gte('punch_time', monthStart.toISOString())
-        .lte('punch_time', monthEnd.toISOString());
+        .gte('punch_time', fetchStart.toISOString())
+        .lte('punch_time', fetchEnd.toISOString());
       return data || [];
     },
   });
@@ -131,9 +134,9 @@ export default function AdminAttendanceReview() {
       workingDays.forEach(day => {
         const dayStr = format(day, 'yyyy-MM-dd');
         const isOnLeave = userLeaves.some(l => l.start_date <= dayStr && l.end_date >= dayStr);
-        const dayRecords = userAttendance.filter(a => a.punch_time.startsWith(dayStr));
-        const punchIn = dayRecords.find(a => a.punch_type === 'in');
-        const punchOut = dayRecords.find(a => a.punch_type === 'out');
+        const dayRecords = userAttendance.filter((a: any) => logicalWorkDateOf(a) === dayStr);
+        const punchIn = dayRecords.find((a: any) => a.punch_type === 'in');
+        const punchOut = dayRecords.find((a: any) => a.punch_type === 'out');
         const shiftStart = userShifts[dayStr]?.start || DEFAULT_SHIFT_START;
 
         // Calculate work hours

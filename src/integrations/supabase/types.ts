@@ -374,9 +374,11 @@ export type Database = {
           face_verified: boolean
           id: string
           latitude: number | null
+          logical_work_date: string | null
           longitude: number | null
           punch_time: string
           punch_type: string
+          shift_key: string | null
           user_id: string
           zone_id: string | null
         }
@@ -386,9 +388,11 @@ export type Database = {
           face_verified?: boolean
           id?: string
           latitude?: number | null
+          logical_work_date?: string | null
           longitude?: number | null
           punch_time?: string
           punch_type: string
+          shift_key?: string | null
           user_id: string
           zone_id?: string | null
         }
@@ -398,9 +402,11 @@ export type Database = {
           face_verified?: boolean
           id?: string
           latitude?: number | null
+          logical_work_date?: string | null
           longitude?: number | null
           punch_time?: string
           punch_type?: string
+          shift_key?: string | null
           user_id?: string
           zone_id?: string | null
         }

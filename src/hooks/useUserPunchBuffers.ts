@@ -26,13 +26,72 @@ const ROLE_PRIORITY: Record<string, number> = {
   guest: 10,
 };
 
+function pickFields(row: any): PunchBuffers {
+  return {
+    clock_in_early_min: row.clock_in_early_min ?? 60,
+    clock_in_late_min: row.clock_in_late_min ?? 60,
+    clock_out_early_min: row.clock_out_early_min ?? 30,
+    clock_out_late_min: row.clock_out_late_min ?? 120,
+  };
+}
+
 /**
- * Resolve punch buffers for a user. If `shiftKey` is provided, shift-aware
- * overrides are considered. Resolution priority (highest first):
- *   1. role + shift  (scope = 'role_shift')
- *   2. shift only    (scope = 'shift')
- *   3. role only     (scope = 'role')
- *   4. global        (scope = 'global')
+ * Pure resolver: pick the best-matching buffer row for a user's roles + shift.
+ * Priority (highest first):
+ *   1. role + shift  (scope='role_shift')
+ *   2. shift only    (scope='shift')
+ *   3. role only     (scope='role')
+ *   4. global        (scope='global')
+ * Falls back to DEFAULT_BUFFERS.
+ */
+export function resolvePunchBuffers(
+  settings: any[] | null | undefined,
+  roles: string[] | null | undefined,
+  shiftKey?: string | null,
+): PunchBuffers {
+  const rows = settings ?? [];
+  const userRoles = roles ?? [];
+
+  const global = rows.find((s) => s.scope === 'global');
+  const shiftRows = rows.filter((s) => s.scope === 'shift');
+  const roleRows = rows.filter((s) => s.scope === 'role');
+  const roleShiftRows = rows.filter((s) => s.scope === 'role_shift');
+
+  let chosen: any = null;
+
+  if (shiftKey) {
+    let chosenP = -1;
+    for (const r of userRoles) {
+      const row = roleShiftRows.find((s) => s.role === r && s.shift_key === shiftKey);
+      if (row) {
+        const p = ROLE_PRIORITY[r] ?? 0;
+        if (p > chosenP) { chosen = row; chosenP = p; }
+      }
+    }
+  }
+
+  if (!chosen && shiftKey) {
+    chosen = shiftRows.find((s) => s.shift_key === shiftKey) ?? null;
+  }
+
+  if (!chosen) {
+    let chosenP = -1;
+    for (const r of userRoles) {
+      const row = roleRows.find((s) => s.role === r);
+      if (row) {
+        const p = ROLE_PRIORITY[r] ?? 0;
+        if (p > chosenP) { chosen = row; chosenP = p; }
+      }
+    }
+  }
+
+  if (!chosen) chosen = global;
+
+  return chosen ? pickFields(chosen) : DEFAULT_BUFFERS;
+}
+
+/**
+ * React hook wrapper around resolvePunchBuffers.
  */
 export function useUserPunchBuffers(userId: string | undefined, shiftKey?: string | null) {
   const [buffers, setBuffers] = useState<PunchBuffers>(DEFAULT_BUFFERS);
@@ -53,46 +112,7 @@ export function useUserPunchBuffers(userId: string | undefined, shiftKey?: strin
 
       const settings = (settingsRes.data ?? []) as any[];
       const roles = (rolesRes.data ?? []).map((r: any) => r.role as string);
-
-      const global = settings.find((s) => s.scope === 'global');
-      const shiftRows = settings.filter((s) => s.scope === 'shift');
-      const roleRows = settings.filter((s) => s.scope === 'role');
-      const roleShiftRows = settings.filter((s) => s.scope === 'role_shift');
-
-      // 1. role + shift (highest priority role wins)
-      let chosen: any = null;
-      if (shiftKey) {
-        let chosenP = -1;
-        for (const r of roles) {
-          const row = roleShiftRows.find((s) => s.role === r && s.shift_key === shiftKey);
-          if (row) {
-            const p = ROLE_PRIORITY[r] ?? 0;
-            if (p > chosenP) { chosen = row; chosenP = p; }
-          }
-        }
-      }
-
-      // 2. shift only
-      if (!chosen && shiftKey) {
-        chosen = shiftRows.find((s) => s.shift_key === shiftKey) ?? null;
-      }
-
-      // 3. role only (highest priority role wins)
-      if (!chosen) {
-        let chosenP = -1;
-        for (const r of roles) {
-          const row = roleRows.find((s) => s.role === r);
-          if (row) {
-            const p = ROLE_PRIORITY[r] ?? 0;
-            if (p > chosenP) { chosen = row; chosenP = p; }
-          }
-        }
-      }
-
-      // 4. global
-      if (!chosen) chosen = global;
-
-      setBuffers(chosen ? pickFields(chosen) : DEFAULT_BUFFERS);
+      setBuffers(resolvePunchBuffers(settings, roles, shiftKey));
       setLoading(false);
     })();
 
@@ -102,13 +122,4 @@ export function useUserPunchBuffers(userId: string | undefined, shiftKey?: strin
   }, [userId, shiftKey]);
 
   return { buffers, loading };
-}
-
-function pickFields(row: any): PunchBuffers {
-  return {
-    clock_in_early_min: row.clock_in_early_min ?? 60,
-    clock_in_late_min: row.clock_in_late_min ?? 60,
-    clock_out_early_min: row.clock_out_early_min ?? 30,
-    clock_out_late_min: row.clock_out_late_min ?? 120,
-  };
 }

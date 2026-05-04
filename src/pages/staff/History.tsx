@@ -20,6 +20,7 @@ import {
   DEFAULT_SHIFT_START,
   type ShiftInfo,
 } from '@/lib/rosterUtils';
+import { logicalWorkDateOf } from '@/lib/attendanceUtils';
 
 export default function StaffHistory() {
   const { user, isAdmin } = useAuth();
@@ -57,8 +58,12 @@ export default function StaffHistory() {
     setIsLoading(true);
     const start = startOfMonth(selectedMonth);
     const end = endOfMonth(selectedMonth);
-    let query = supabase.from('attendance_records').select('id, user_id, punch_type, punch_time, zone_id, accuracy_meters')
-      .gte('punch_time', start.toISOString()).lte('punch_time', end.toISOString()).order('punch_time', { ascending: false });
+    // Widen by ±1 day so cross-midnight punches hard-linked to days inside
+    // the selected month are still included.
+    const fetchStart = new Date(start); fetchStart.setDate(fetchStart.getDate() - 1);
+    const fetchEnd = new Date(end); fetchEnd.setDate(fetchEnd.getDate() + 1);
+    let query = supabase.from('attendance_records').select('id, user_id, punch_type, punch_time, zone_id, accuracy_meters, logical_work_date, shift_key')
+      .gte('punch_time', fetchStart.toISOString()).lte('punch_time', fetchEnd.toISOString()).order('punch_time', { ascending: false });
     if (isAdmin) { if (selectedEmployee !== 'all') query = query.eq('user_id', selectedEmployee); }
     else query = query.eq('user_id', user?.id);
     const { data } = await query;
@@ -71,8 +76,15 @@ export default function StaffHistory() {
     if (data) { const m: Record<string, any> = {}; data.forEach((z) => { m[z.id] = z; }); setZones(m); }
   };
 
-  const groupedRecords: Record<string, any[]> = records.reduce((acc: Record<string, any[]>, record: any) => {
-    const dateKey = format(new Date(record.punch_time), 'yyyy-MM-dd');
+  // Filter to records whose LOGICAL date falls inside the selected month, then group.
+  const monthStartStr = format(startOfMonth(selectedMonth), 'yyyy-MM-dd');
+  const monthEndStr = format(endOfMonth(selectedMonth), 'yyyy-MM-dd');
+  const inMonthRecords = records.filter((r: any) => {
+    const lwd = logicalWorkDateOf(r);
+    return lwd >= monthStartStr && lwd <= monthEndStr;
+  });
+  const groupedRecords: Record<string, any[]> = inMonthRecords.reduce((acc: Record<string, any[]>, record: any) => {
+    const dateKey = logicalWorkDateOf(record);
     if (!acc[dateKey]) acc[dateKey] = [];
     acc[dateKey].push(record);
     return acc;
@@ -105,7 +117,7 @@ export default function StaffHistory() {
 
   /** Get the scheduled shift start for a record */
   const getShiftStart = (record: any): string => {
-    const dateKey = format(new Date(record.punch_time), 'yyyy-MM-dd');
+    const dateKey = logicalWorkDateOf(record);
     const userShifts = shifts[record.user_id];
     return userShifts?.[dateKey]?.start || DEFAULT_SHIFT_START;
   };
