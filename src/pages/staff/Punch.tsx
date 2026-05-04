@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -7,15 +7,25 @@ import { MapPin, Loader2, RefreshCw, CheckCircle, AlertTriangle, XCircle, Calend
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useAuth } from '@/contexts/AuthContext';
 import { checkGeofence, formatDistance, getAccuracyStatus } from '@/lib/geofence';
-import { getUserShiftForDate, type ShiftInfo } from '@/lib/rosterUtils';
+import { normalizeShiftKey } from '@/lib/rosterUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useUserPunchBuffers } from '@/hooks/useUserPunchBuffers';
-import { format } from 'date-fns';
+import { resolvePunchBuffers, DEFAULT_BUFFERS, type PunchBuffers } from '@/hooks/useUserPunchBuffers';
+import { format, addDays, subDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { FaceVerificationModal } from '@/components/staff/FaceVerificationModal';
 
-interface ZoneAssignment {
+// Roster row from roster_zone_assignments
+interface RosterRow {
+  zone_id: string;
+  start_time: string; // 'HH:mm:ss' or 'HH:mm'
+  end_time: string;
+  work_date: string;  // 'yyyy-MM-dd'
+  shift_key: string | null;
+}
+
+// Manual recurring assignment
+interface ManualAssignment {
   zone_id: string;
   start_time: string;
   end_time: string;
@@ -23,39 +33,108 @@ interface ZoneAssignment {
   is_active: boolean;
 }
 
-function checkAssignment(
-  assignments: ZoneAssignment[],
-  zoneId: string | undefined,
-  nextPunchType: 'in' | 'out',
-  buffers: { clock_in_early_min: number; clock_in_late_min: number; clock_out_early_min: number; clock_out_late_min: number },
-): string | null {
-  if (assignments.length === 0) return null;
-  if (!zoneId) return 'You are not assigned to this zone.';
-  const zoneAssignments = assignments.filter(a => a.zone_id === zoneId);
-  if (zoneAssignments.length === 0) return 'You are not assigned to this zone.';
-  const now = new Date();
-  const currentDay = now.getDay();
-  // Match by day-of-week + buffered window so punch-out after shift end still passes
-  const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-  const nowMin = now.getHours() * 60 + now.getMinutes();
-  const matchingShift = zoneAssignments.find(a => {
-    if (!a.days_of_week.includes(currentDay)) return false;
-    const startMin = toMin(a.start_time);
-    let endMin = toMin(a.end_time);
-    if (endMin <= startMin) endMin += 24 * 60; // crosses midnight
-    const winStart = nextPunchType === 'in'
-      ? startMin - buffers.clock_in_early_min
-      : endMin - buffers.clock_out_early_min;
-    const winEnd = nextPunchType === 'in'
-      ? startMin + buffers.clock_in_late_min
-      : endMin + buffers.clock_out_late_min;
-    const adjNow = nowMin < startMin - 12 * 60 ? nowMin + 24 * 60 : nowMin;
-    return adjNow >= winStart && adjNow <= winEnd;
-  });
-  if (!matchingShift) {
-    const anyDayMatch = zoneAssignments.find(a => a.days_of_week.includes(currentDay));
-    if (anyDayMatch) return `Outside your shift hours (${anyDayMatch.start_time} – ${anyDayMatch.end_time}).`;
-    return 'You are not scheduled to work today at this zone.';
+type ActiveShift = {
+  source: 'roster' | 'manual';
+  zone_id: string;
+  shiftKey: string | null;       // canonical (S1/S2/S3/Daytime/Hybrid) or null for manual
+  workDate: string;              // 'yyyy-MM-dd'
+  start: Date;
+  end: Date;
+  buffers: PunchBuffers;
+  label: string;
+};
+
+// Build candidate roster shifts from yesterday + today rows
+function pickActiveRosterShift(
+  rows: RosterRow[],
+  settings: any[],
+  roles: string[],
+  now: Date,
+  todayStr: string,
+): { active: ActiveShift | null; nearest: ActiveShift | null } {
+  const sorted = [...rows].sort((a, b) =>
+    b.work_date.localeCompare(a.work_date) ||
+    b.start_time.localeCompare(a.start_time),
+  );
+
+  let nearest: ActiveShift | null = null;
+  let nearestDelta = Infinity;
+
+  for (const row of sorted) {
+    const sk = row.shift_key ? normalizeShiftKey(row.shift_key) : null;
+    const bufs = resolvePunchBuffers(settings, roles, sk);
+    const start = new Date(`${row.work_date}T${row.start_time}`);
+    const end = new Date(`${row.work_date}T${row.end_time}`);
+    if (end.getTime() <= start.getTime()) end.setDate(end.getDate() + 1);
+
+    const winStart = new Date(start.getTime() - bufs.clock_in_early_min * 60_000);
+    const winEnd = new Date(end.getTime() + bufs.clock_out_late_min * 60_000);
+
+    const candidate: ActiveShift = {
+      source: 'roster',
+      zone_id: row.zone_id,
+      shiftKey: sk,
+      workDate: row.work_date,
+      start,
+      end,
+      buffers: bufs,
+      label: `${sk ?? 'Shift'} (${format(start, 'h:mm a')} – ${format(end, 'h:mm a')})${
+        row.work_date !== todayStr ? ' (from yesterday)' : ''
+      }`,
+    };
+
+    if (now >= winStart && now <= winEnd) {
+      return { active: candidate, nearest: candidate };
+    }
+
+    const delta = Math.min(
+      Math.abs(now.getTime() - winStart.getTime()),
+      Math.abs(now.getTime() - winEnd.getTime()),
+    );
+    if (delta < nearestDelta) { nearestDelta = delta; nearest = candidate; }
+  }
+
+  return { active: null, nearest };
+}
+
+function pickActiveManualShift(
+  assignments: ManualAssignment[],
+  settings: any[],
+  roles: string[],
+  now: Date,
+  todayStr: string,
+): ActiveShift | null {
+  const dow = now.getDay();
+  // Also check yesterday's dow for cross-midnight manual shifts
+  const yDow = (dow + 6) % 7;
+  const yStr = format(subDays(now, 1), 'yyyy-MM-dd');
+  const bufs = resolvePunchBuffers(settings, roles, null);
+
+  const candidates: { date: string; dow: number; a: ManualAssignment }[] = [];
+  for (const a of assignments) {
+    if (!a.is_active) continue;
+    if (a.days_of_week.includes(dow)) candidates.push({ date: todayStr, dow, a });
+    if (a.days_of_week.includes(yDow)) candidates.push({ date: yStr, dow: yDow, a });
+  }
+
+  for (const c of candidates) {
+    const start = new Date(`${c.date}T${c.a.start_time}`);
+    const end = new Date(`${c.date}T${c.a.end_time}`);
+    if (end.getTime() <= start.getTime()) end.setDate(end.getDate() + 1);
+    const winStart = new Date(start.getTime() - bufs.clock_in_early_min * 60_000);
+    const winEnd = new Date(end.getTime() + bufs.clock_out_late_min * 60_000);
+    if (now >= winStart && now <= winEnd) {
+      return {
+        source: 'manual',
+        zone_id: c.a.zone_id,
+        shiftKey: null,
+        workDate: c.date,
+        start,
+        end,
+        buffers: bufs,
+        label: `Manual (${format(start, 'h:mm a')} – ${format(end, 'h:mm a')})`,
+      };
+    }
   }
   return null;
 }
@@ -69,140 +148,178 @@ export default function StaffPunch() {
   const [isPunching, setIsPunching] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [showFaceVerification, setShowFaceVerification] = useState(false);
-  const [assignments, setAssignments] = useState<ZoneAssignment[]>([]);
-  const [todayShift, setTodayShift] = useState<ShiftInfo | null>(null);
-  const [shiftLoading, setShiftLoading] = useState(true);
+  const [rosterRows, setRosterRows] = useState<RosterRow[]>([]);
+  const [manualAssignments, setManualAssignments] = useState<ManualAssignment[]>([]);
+  const [bufferSettings, setBufferSettings] = useState<any[]>([]);
+  const [userRoles, setUserRoles] = useState<string[]>([]);
+  const [now, setNow] = useState<Date>(new Date());
 
   useEffect(() => { if (user) fetchData(); }, [user]);
   useEffect(() => { geo.getCurrentPosition(); }, []);
+
+  // Tick every 30s so the active-shift evaluator updates near window boundaries
   useEffect(() => {
-    if (user) {
-      setShiftLoading(true);
-      getUserShiftForDate(user.id, new Date()).then(shift => {
-        setTodayShift(shift);
-        setShiftLoading(false);
-      });
-    }
-  }, [user]);
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   const fetchData = async () => {
     setIsLoadingData(true);
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
-    // Roster-derived assignments (preferred) take precedence over manual recurring
-    const [zonesRes, punchRes, manualRes, rosterRes] = await Promise.all([
+    const today = new Date();
+    const todayStr = format(today, 'yyyy-MM-dd');
+    const yesterdayStr = format(subDays(today, 1), 'yyyy-MM-dd');
+    const tomorrowStr = format(addDays(today, 1), 'yyyy-MM-dd');
+
+    const [zonesRes, punchRes, manualRes, rosterRes, settingsRes, rolesRes] = await Promise.all([
       supabase.from('geofence_zones').select('id, name, latitude, longitude, radius_meters').eq('is_active', true),
-      supabase.from('attendance_records').select('punch_type, punch_time').eq('user_id', user?.id).order('punch_time', { ascending: false }).limit(1).single(),
+      supabase.from('attendance_records').select('punch_type, punch_time').eq('user_id', user?.id).order('punch_time', { ascending: false }).limit(1).maybeSingle(),
       supabase.from('staff_zone_assignments').select('zone_id, start_time, end_time, days_of_week, is_active').eq('user_id', user?.id).eq('is_active', true),
-      supabase.from('roster_zone_assignments').select('zone_id, start_time, end_time').eq('user_id', user?.id).eq('work_date', todayStr),
+      supabase.from('roster_zone_assignments').select('zone_id, start_time, end_time, work_date, shift_key').eq('user_id', user?.id).in('work_date', [yesterdayStr, todayStr, tomorrowStr]),
+      supabase.from('punch_buffer_settings').select('*'),
+      supabase.from('user_roles').select('role').eq('user_id', user?.id),
     ]);
+
     if (zonesRes.data) setZones(zonesRes.data);
     if (punchRes.data) setLastPunch(punchRes.data);
-
-    // If today has roster-derived assignments, use them (mapped to recurring shape with today's day-of-week).
-    // Otherwise fall back to manual recurring assignments.
-    const todayDow = new Date().getDay();
-    if (rosterRes.data && rosterRes.data.length > 0) {
-      setAssignments(rosterRes.data.map((r: any) => ({
-        zone_id: r.zone_id,
-        start_time: r.start_time,
-        end_time: r.end_time,
-        days_of_week: [todayDow],
-        is_active: true,
-      })));
-    } else {
-      setAssignments(manualRes.data || []);
-    }
+    setRosterRows((rosterRes.data ?? []) as RosterRow[]);
+    setManualAssignments((manualRes.data ?? []) as ManualAssignment[]);
+    setBufferSettings(settingsRes.data ?? []);
+    setUserRoles((rolesRes.data ?? []).map((r: any) => r.role as string));
     setIsLoadingData(false);
   };
+
+  const todayStr = format(now, 'yyyy-MM-dd');
+
+  const { activeShift, nearestShift } = useMemo(() => {
+    const { active, nearest } = pickActiveRosterShift(rosterRows, bufferSettings, userRoles, now, todayStr);
+    if (active) return { activeShift: active, nearestShift: nearest };
+    if (rosterRows.length === 0) {
+      const manual = pickActiveManualShift(manualAssignments, bufferSettings, userRoles, now, todayStr);
+      return { activeShift: manual, nearestShift: nearest };
+    }
+    return { activeShift: null, nearestShift: nearest };
+  }, [rosterRows, manualAssignments, bufferSettings, userRoles, now, todayStr]);
+
+  const buffers = activeShift?.buffers ?? nearestShift?.buffers ?? resolvePunchBuffers(bufferSettings, userRoles, null) ?? DEFAULT_BUFFERS;
 
   const geofenceResult = geo.latitude && geo.longitude && zones.length > 0
     ? checkGeofence({ latitude: geo.latitude, longitude: geo.longitude }, zones) : null;
   const accuracyStatus = geo.accuracy ? getAccuracyStatus(geo.accuracy) : null;
   const isPunchedIn = lastPunch?.punch_type === 'in';
-  const nextPunchType = isPunchedIn ? 'out' : 'in';
+  const nextPunchType: 'in' | 'out' = isPunchedIn ? 'out' : 'in';
 
-  const { buffers } = useUserPunchBuffers(user?.id, todayShift?.shiftKey);
+  // Build the unified guard message
+  const fmtTime = (d: Date) => format(d, 'h:mm a');
+  const guardMessage: string | null = useMemo(() => {
+    if (!geofenceResult?.isWithinZone) return null; // zone error handled separately
+    const hasAnyAssignment = rosterRows.length > 0 || manualAssignments.length > 0;
+    if (!hasAnyAssignment) return null; // no roster + no manual: allow (legacy fallback)
 
-  const assignmentBlock = geofenceResult?.isWithinZone ? checkAssignment(assignments, geofenceResult.zone?.id, nextPunchType, buffers) : null;
-
-  // Format minutes-from-midnight as h:mm AM/PM (handles next-day wraps)
-  const fmtTime = (date: Date) => format(date, 'h:mm a');
-
-  // Asymmetric punch window: in vs out have different pre/post buffers
-  const computeShiftWindowBlock = (): string | null => {
-    if (!todayShift) return null; // No roster = allow (fallback)
-    const now = new Date();
-    const [startH, startM] = todayShift.start.split(':').map(Number);
-    const [endH, endM] = todayShift.end.split(':').map(Number);
-    const shiftStart = new Date(now); shiftStart.setHours(startH, startM, 0, 0);
-    const shiftEnd = new Date(now); shiftEnd.setHours(endH, endM, 0, 0);
-    // Handle shifts that cross midnight (e.g. 20:00 → 00:00)
-    if (shiftEnd.getTime() <= shiftStart.getTime()) {
-      shiftEnd.setDate(shiftEnd.getDate() + 1);
+    if (!activeShift) {
+      if (nearestShift) {
+        const winStart = new Date(nearestShift.start.getTime() - nearestShift.buffers.clock_in_early_min * 60_000);
+        const winEnd = new Date(nearestShift.end.getTime() + nearestShift.buffers.clock_out_late_min * 60_000);
+        return `Outside your shift window. Nearest: ${nearestShift.label}. Punch open ${fmtTime(winStart)} – ${fmtTime(winEnd)}.`;
+      }
+      return 'You are not scheduled to work near this time.';
     }
-
+    if (activeShift.zone_id !== geofenceResult.zone?.id) {
+      return 'You are not assigned to this zone.';
+    }
+    // Asymmetric in/out window check inside the active shift
     if (nextPunchType === 'in') {
-      const openAt = new Date(shiftStart.getTime() - buffers.clock_in_early_min * 60_000);
-      const closeAt = new Date(shiftStart.getTime() + buffers.clock_in_late_min * 60_000);
-      if (now < openAt) return `Punch-in opens at ${fmtTime(openAt)} (${buffers.clock_in_early_min} min before your ${fmtTime(shiftStart)} shift)`;
-      if (now > closeAt) return `Punch-in closed at ${fmtTime(closeAt)} (${buffers.clock_in_late_min} min after shift start)`;
-      return null;
+      const closeAt = new Date(activeShift.start.getTime() + buffers.clock_in_late_min * 60_000);
+      if (now > closeAt) return `Punch-in closed at ${fmtTime(closeAt)} (${buffers.clock_in_late_min} min after shift start).`;
+    } else {
+      const openAt = new Date(activeShift.end.getTime() - buffers.clock_out_early_min * 60_000);
+      if (now < openAt) return `Punch-out opens at ${fmtTime(openAt)} (${buffers.clock_out_early_min} min before shift end).`;
     }
-    // Punch out
-    const openAt = new Date(shiftEnd.getTime() - buffers.clock_out_early_min * 60_000);
-    const closeAt = new Date(shiftEnd.getTime() + buffers.clock_out_late_min * 60_000);
-    if (now < openAt) return `Punch-out opens at ${fmtTime(openAt)} (${buffers.clock_out_early_min} min before your ${fmtTime(shiftEnd)} shift end)`;
-    if (now > closeAt) return `Punch-out closed at ${fmtTime(closeAt)} (${buffers.clock_out_late_min} min after shift end)`;
     return null;
-  };
-
-  const shiftWindowBlock = computeShiftWindowBlock();
+  }, [activeShift, nearestShift, geofenceResult, nextPunchType, buffers, now, rosterRows.length, manualAssignments.length]);
 
   const handlePunchClick = () => {
-    if (!geo.latitude || !geo.longitude || !geofenceResult?.isWithinZone) { toast({ title: 'Cannot Punch', description: 'You must be within a valid zone.', variant: 'destructive' }); return; }
-    if (assignmentBlock) { toast({ title: 'Cannot Punch', description: assignmentBlock, variant: 'destructive' }); return; }
-    if (shiftWindowBlock) { toast({ title: 'Cannot Punch', description: shiftWindowBlock, variant: 'destructive' }); return; }
+    if (!geo.latitude || !geo.longitude || !geofenceResult?.isWithinZone) {
+      toast({ title: 'Cannot Punch', description: 'You must be within a valid zone.', variant: 'destructive' });
+      return;
+    }
+    if (guardMessage) {
+      toast({ title: 'Cannot Punch', description: guardMessage, variant: 'destructive' });
+      return;
+    }
     setShowFaceVerification(true);
   };
 
   const handleFaceVerified = async () => {
     setIsPunching(true);
     const { error } = await supabase.from('attendance_records').insert({
-      user_id: user?.id, punch_type: nextPunchType, latitude: geo.latitude!, longitude: geo.longitude!,
-      accuracy_meters: geo.accuracy, zone_id: geofenceResult?.zone?.id, face_verified: true,
-    });
-    if (error) toast({ title: 'Punch Failed', description: 'Error recording punch.', variant: 'destructive' });
-    else { toast({ title: nextPunchType === 'in' ? 'Punched In!' : 'Punched Out!', description: `Recorded at ${geofenceResult?.zone?.name}` }); setLastPunch({ punch_type: nextPunchType, punch_time: new Date().toISOString() }); }
+      user_id: user?.id,
+      punch_type: nextPunchType,
+      latitude: geo.latitude!,
+      longitude: geo.longitude!,
+      accuracy_meters: geo.accuracy,
+      zone_id: geofenceResult?.zone?.id,
+      face_verified: true,
+      // Hard-link the logical shift this punch belongs to so reports
+      // remain stable even if buffer settings change later.
+      logical_work_date: activeShift?.workDate ?? todayStr,
+      shift_key: activeShift?.shiftKey ?? null,
+    } as any);
+    if (error) {
+      toast({ title: 'Punch Failed', description: 'Error recording punch.', variant: 'destructive' });
+    } else {
+      toast({
+        title: nextPunchType === 'in' ? 'Punched In!' : 'Punched Out!',
+        description: `Recorded at ${geofenceResult?.zone?.name}`,
+      });
+      setLastPunch({ punch_type: nextPunchType, punch_time: new Date().toISOString() });
+    }
     setIsPunching(false);
   };
 
-  const canPunch = geofenceResult?.isWithinZone && !assignmentBlock && !shiftWindowBlock && !geo.isLoading && !isPunching;
+  const canPunch = geofenceResult?.isWithinZone && !guardMessage && !geo.isLoading && !isPunching;
 
   return (
     <div className="max-w-lg mx-auto space-y-6">
-      <div><h1 className="text-2xl font-bold tracking-tight">Punch In/Out</h1><p className="text-muted-foreground">Record your attendance using GPS verification</p></div>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Punch In/Out</h1>
+        <p className="text-muted-foreground">Record your attendance using GPS verification</p>
+      </div>
 
-      {/* Today's Shift Info */}
+      {/* Active Shift Info */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base"><CalendarClock className="h-5 w-5" />Today's Shift</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <CalendarClock className="h-5 w-5" />Active Shift
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          {shiftLoading ? (
-            <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="h-4 w-4 animate-spin" />Loading roster...</div>
-          ) : todayShift ? (
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-sm">{todayShift.shiftKey}</Badge>
-              <span className="text-sm font-medium">{todayShift.label}</span>
+          {isLoadingData ? (
+            <div className="flex items-center gap-2 text-muted-foreground text-sm">
+              <Loader2 className="h-4 w-4 animate-spin" />Loading roster...
             </div>
+          ) : activeShift ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              {activeShift.shiftKey && <Badge variant="secondary" className="text-sm">{activeShift.shiftKey}</Badge>}
+              <span className="text-sm font-medium">{activeShift.label}</span>
+              {activeShift.workDate !== todayStr && (
+                <Badge variant="outline" className="text-xs">cross-midnight</Badge>
+              )}
+            </div>
+          ) : nearestShift ? (
+            <p className="text-sm text-muted-foreground">
+              No shift active right now. Nearest: <span className="font-medium text-foreground">{nearestShift.label}</span>
+            </p>
           ) : (
-            <p className="text-sm text-muted-foreground">No shift assigned today (roster not found)</p>
+            <p className="text-sm text-muted-foreground">No shift assigned (roster not found)</p>
           )}
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5" />Location Status</CardTitle><CardDescription>Your current GPS position and zone verification</CardDescription></CardHeader>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5" />Location Status</CardTitle>
+          <CardDescription>Your current GPS position and zone verification</CardDescription>
+        </CardHeader>
         <CardContent className="space-y-4">
           {geo.isLoading && <div className="flex items-center gap-3 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /><span>Getting your location...</span></div>}
           {geo.error && <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertDescription>{geo.error}</AlertDescription></Alert>}
@@ -223,13 +340,17 @@ export default function StaffPunch() {
                   )}
                 </div>
               )}
-              {assignmentBlock && geofenceResult?.isWithinZone && <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertDescription>{assignmentBlock}</AlertDescription></Alert>}
-              {shiftWindowBlock && geofenceResult?.isWithinZone && !assignmentBlock && <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertDescription>{shiftWindowBlock}</AlertDescription></Alert>}
-              <Button variant="outline" size="sm" onClick={geo.getCurrentPosition} disabled={geo.isLoading}><RefreshCw className={cn('h-4 w-4 mr-2', geo.isLoading && 'animate-spin')} />Refresh Location</Button>
+              {guardMessage && geofenceResult?.isWithinZone && (
+                <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertDescription>{guardMessage}</AlertDescription></Alert>
+              )}
+              <Button variant="outline" size="sm" onClick={geo.getCurrentPosition} disabled={geo.isLoading}>
+                <RefreshCw className={cn('h-4 w-4 mr-2', geo.isLoading && 'animate-spin')} />Refresh Location
+              </Button>
             </div>
           )}
         </CardContent>
       </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Record Attendance</CardTitle>
@@ -240,7 +361,11 @@ export default function StaffPunch() {
             {isPunching ? <><Loader2 className="h-6 w-6 mr-2 animate-spin" />Recording...</> : <><MapPin className="h-6 w-6 mr-2" />Punch {nextPunchType === 'in' ? 'In' : 'Out'}</>}
           </Button>
           <FaceVerificationModal open={showFaceVerification} onOpenChange={setShowFaceVerification} onVerified={handleFaceVerified} punchType={nextPunchType} />
-          {!canPunch && !geo.isLoading && !isLoadingData && <p className="text-sm text-muted-foreground text-center mt-4">{shiftWindowBlock || assignmentBlock || (!geo.latitude ? 'Enable location access to punch' : 'Move to an allowed zone to punch')}</p>}
+          {!canPunch && !geo.isLoading && !isLoadingData && (
+            <p className="text-sm text-muted-foreground text-center mt-4">
+              {guardMessage || (!geo.latitude ? 'Enable location access to punch' : 'Move to an allowed zone to punch')}
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>
