@@ -134,9 +134,9 @@ export default function AdminAttendanceReview() {
       workingDays.forEach(day => {
         const dayStr = format(day, 'yyyy-MM-dd');
         const isOnLeave = userLeaves.some(l => l.start_date <= dayStr && l.end_date >= dayStr);
-        const dayRecords = userAttendance.filter(a => a.punch_time.startsWith(dayStr));
-        const punchIn = dayRecords.find(a => a.punch_type === 'in');
-        const punchOut = dayRecords.find(a => a.punch_type === 'out');
+        const dayRecords = userAttendance.filter((a: any) => logicalWorkDateOf(a) === dayStr);
+        const punchIn = dayRecords.find((a: any) => a.punch_type === 'in');
+        const punchOut = dayRecords.find((a: any) => a.punch_type === 'out');
         const shiftStart = userShifts[dayStr]?.start || DEFAULT_SHIFT_START;
 
         // Calculate work hours
