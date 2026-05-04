@@ -20,6 +20,7 @@ import {
   DEFAULT_SHIFT_START,
   type ShiftInfo,
 } from '@/lib/rosterUtils';
+import { logicalWorkDateOf } from '@/lib/attendanceUtils';
 
 export default function StaffHistory() {
   const { user, isAdmin } = useAuth();
