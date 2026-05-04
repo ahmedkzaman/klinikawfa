@@ -111,9 +111,9 @@ export default function StaffAttendanceReview() {
     workingDays.forEach(day => {
       const dayStr = format(day, 'yyyy-MM-dd');
       const leave = (leaveRequests || []).find(l => l.start_date <= dayStr && l.end_date >= dayStr);
-      const dayAttendance = (attendance || []).filter(a => a.punch_time.startsWith(dayStr));
-      const punchIn = dayAttendance.find(a => a.punch_type === 'in');
-      const punchOut = dayAttendance.find(a => a.punch_type === 'out');
+      const dayAttendance = (attendance || []).filter((a: any) => logicalWorkDateOf(a) === dayStr);
+      const punchIn = dayAttendance.find((a: any) => a.punch_type === 'in');
+      const punchOut = dayAttendance.find((a: any) => a.punch_type === 'out');
       const shiftStart = shifts[dayStr]?.start || DEFAULT_SHIFT_START;
 
       // Calculate work hours if we have both in and out
