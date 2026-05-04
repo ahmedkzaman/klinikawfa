@@ -21,6 +21,7 @@ import {
   type ShiftInfo,
   type LatenessSeverity,
 } from '@/lib/rosterUtils';
+import { logicalWorkDateOf } from '@/lib/attendanceUtils';
 
 const COLORS = {
   working: 'hsl(142, 76%, 36%)',
