@@ -117,7 +117,7 @@ export default function StaffHistory() {
 
   /** Get the scheduled shift start for a record */
   const getShiftStart = (record: any): string => {
-    const dateKey = format(new Date(record.punch_time), 'yyyy-MM-dd');
+    const dateKey = logicalWorkDateOf(record);
     const userShifts = shifts[record.user_id];
     return userShifts?.[dateKey]?.start || DEFAULT_SHIFT_START;
   };
