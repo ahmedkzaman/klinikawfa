@@ -68,12 +68,17 @@ export default function StaffAttendanceReview() {
   const { data: attendance } = useQuery({
     queryKey: ['my-attendance', selectedYear, selectedMonth],
     queryFn: async () => {
+      // Widen by ±1 day so cross-midnight punches hard-linked to a date in the
+      // selected month are still included even if their raw punch_time falls
+      // just outside.
+      const fetchStart = new Date(monthStart); fetchStart.setDate(fetchStart.getDate() - 1);
+      const fetchEnd = new Date(monthEnd); fetchEnd.setDate(fetchEnd.getDate() + 1);
       const { data } = await supabase
         .from('attendance_records')
         .select('*')
         .eq('user_id', user!.id)
-        .gte('punch_time', monthStart.toISOString())
-        .lte('punch_time', monthEnd.toISOString());
+        .gte('punch_time', fetchStart.toISOString())
+        .lte('punch_time', fetchEnd.toISOString());
       return data || [];
     },
     enabled: !!user,
