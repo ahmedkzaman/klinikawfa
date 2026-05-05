@@ -15,7 +15,7 @@ import type { Database } from '@/integrations/supabase/types';
 
 type AppRole = Database['public']['Enums']['app_role'];
 type Scope = 'global' | 'role' | 'shift' | 'role_shift';
-type ShiftKey = 'S1' | 'S2' | 'Hybrid' | 'Night';
+type ShiftKey = 'S1' | 'S2' | 'S3' | 'Hybrid' | 'Night';
 
 type Row = {
   id: string;
@@ -29,7 +29,7 @@ type Row = {
 };
 
 const ROLE_OPTIONS: AppRole[] = ['admin', 'staff', 'special_admin', 'doctor_admin', 'operations', 'locum'];
-const SHIFT_OPTIONS: ShiftKey[] = ['S1', 'S2', 'Hybrid', 'Night'];
+const SHIFT_OPTIONS: ShiftKey[] = ['S1', 'S2', 'S3', 'Hybrid', 'Night'];
 
 const ROLE_LABEL: Record<AppRole, string> = {
   admin: 'Admin',
@@ -44,6 +44,7 @@ const ROLE_LABEL: Record<AppRole, string> = {
 const SHIFT_LABEL: Record<ShiftKey, string> = {
   S1: 'S1 — AM (08:00–16:00)',
   S2: 'S2 — PM (16:00–24:00)',
+  S3: 'S3 — Evening (20:00–24:00)',
   Hybrid: 'Hybrid (08:00–13:00)',
   Night: 'Night (20:00–24:00)',
 };
@@ -51,6 +52,7 @@ const SHIFT_LABEL: Record<ShiftKey, string> = {
 const SHIFT_RANGE: Record<ShiftKey, [number, number]> = {
   S1: [480, 960],
   S2: [960, 1440],
+  S3: [1200, 1440],
   Hybrid: [480, 780],
   Night: [1200, 1440],
 };
