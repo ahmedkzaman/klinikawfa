@@ -212,6 +212,9 @@ export default function StaffPunch() {
   const geofenceResult = geo.latitude && geo.longitude && zones.length > 0
     ? checkGeofence({ latitude: geo.latitude, longitude: geo.longitude }, zones) : null;
   const accuracyStatus = geo.accuracy ? getAccuracyStatus(geo.accuracy) : null;
+  const activeWorkDate = activeShift?.workDate ?? todayStr;
+  const lastPunch = attendanceRecords.find((record) => logicalWorkDateOf(record) === activeWorkDate) ?? null;
+  const lastAnyPunch = attendanceRecords[0] ?? null;
   const isPunchedIn = lastPunch?.punch_type === 'in';
   const nextPunchType: 'in' | 'out' = isPunchedIn ? 'out' : 'in';
 
@@ -279,7 +282,12 @@ export default function StaffPunch() {
         title: nextPunchType === 'in' ? 'Punched In!' : 'Punched Out!',
         description: `Recorded at ${geofenceResult?.zone?.name}`,
       });
-      setLastPunch({ punch_type: nextPunchType, punch_time: new Date().toISOString() });
+      setAttendanceRecords((records) => [{
+        punch_type: nextPunchType,
+        punch_time: new Date().toISOString(),
+        logical_work_date: activeShift?.workDate ?? todayStr,
+        shift_key: activeShift?.shiftKey ?? null,
+      }, ...records]);
     }
     setIsPunching(false);
   };
@@ -362,7 +370,7 @@ export default function StaffPunch() {
       <Card>
         <CardHeader>
           <CardTitle>Record Attendance</CardTitle>
-          {lastPunch && <CardDescription>Last punch: {isPunchedIn ? 'In' : 'Out'} at {format(new Date(lastPunch.punch_time), 'h:mm a, MMM d')}</CardDescription>}
+          {lastAnyPunch && <CardDescription>Last punch: {lastAnyPunch.punch_type === 'in' ? 'In' : 'Out'} at {format(new Date(lastAnyPunch.punch_time), 'h:mm a, MMM d')}</CardDescription>}
         </CardHeader>
         <CardContent>
           <Button size="lg" className={cn('w-full h-20 text-lg', nextPunchType === 'in' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700')} disabled={!canPunch || isLoadingData} onClick={handlePunchClick}>
