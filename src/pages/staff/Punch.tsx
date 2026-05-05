@@ -193,10 +193,16 @@ export default function StaffPunch() {
   const { activeShift, nearestShift } = useMemo(() => {
     const { active, nearest } = pickActiveRosterShift(rosterRows, bufferSettings, userRoles, now, todayStr);
     if (active) return { activeShift: active, nearestShift: nearest };
-    if (rosterRows.length === 0) {
+
+    // Roster should take priority for the current work day. However, stale
+    // yesterday/tomorrow roster rows must not block a valid manual assignment
+    // for staff who are not rostered today.
+    const hasTodayRoster = rosterRows.some((row) => row.work_date === todayStr);
+    if (!hasTodayRoster) {
       const manual = pickActiveManualShift(manualAssignments, bufferSettings, userRoles, now, todayStr);
       return { activeShift: manual, nearestShift: nearest };
     }
+
     return { activeShift: null, nearestShift: nearest };
   }, [rosterRows, manualAssignments, bufferSettings, userRoles, now, todayStr]);
 
@@ -265,7 +271,8 @@ export default function StaffPunch() {
       shift_key: activeShift?.shiftKey ?? null,
     } as any);
     if (error) {
-      toast({ title: 'Punch Failed', description: 'Error recording punch.', variant: 'destructive' });
+      console.error('Punch insert failed:', error);
+      toast({ title: 'Punch Failed', description: error.message || 'Error recording punch.', variant: 'destructive' });
     } else {
       toast({
         title: nextPunchType === 'in' ? 'Punched In!' : 'Punched Out!',
