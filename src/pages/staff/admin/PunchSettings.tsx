@@ -433,19 +433,26 @@ function BufferFieldGrid({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <Field label="Clock-in: minutes BEFORE shift start" value={values.clock_in_early_min} onChange={set('clock_in_early_min')} hint="How early can staff punch in?" />
-      <Field label="Clock-in: minutes AFTER shift start" value={values.clock_in_late_min} onChange={set('clock_in_late_min')} hint="Lateness grace window" />
+      <Field
+        label="Clock-in: minutes AFTER shift start"
+        value={values.clock_in_late_min}
+        onChange={set('clock_in_late_min')}
+        hint="Lateness grace window"
+        tip="Tip: Clinical staff often arrive late due to prior consults. We recommend ≥180 mins for doctors and evening shifts."
+      />
       <Field label="Clock-out: minutes BEFORE shift end" value={values.clock_out_early_min} onChange={set('clock_out_early_min')} hint="Allow finishing slightly early" />
       <Field label="Clock-out: minutes AFTER shift end" value={values.clock_out_late_min} onChange={set('clock_out_late_min')} hint="Covers overtime / late finish" />
     </div>
   );
 }
 
-function Field({ label, value, onChange, hint }: { label: string; value: number; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; hint: string }) {
+function Field({ label, value, onChange, hint, tip }: { label: string; value: number; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; hint: string; tip?: string }) {
   return (
     <div className="space-y-1">
       <Label className="text-xs">{label}</Label>
       <Input type="number" min={0} max={480} value={value} onChange={onChange} />
       <p className="text-[11px] text-muted-foreground">{hint}</p>
+      {tip && <p className="text-[11px] text-primary/80 italic">{tip}</p>}
     </div>
   );
 }
