@@ -14,6 +14,7 @@ import { resolvePunchBuffers, DEFAULT_BUFFERS, type PunchBuffers } from '@/hooks
 import { format, addDays, subDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { FaceVerificationModal } from '@/components/staff/FaceVerificationModal';
+import { logicalWorkDateOf } from '@/lib/attendanceUtils';
 
 // Roster row from roster_zone_assignments
 interface RosterRow {
@@ -144,7 +145,7 @@ export default function StaffPunch() {
   const { toast } = useToast();
   const geo = useGeolocation();
   const [zones, setZones] = useState<any[]>([]);
-  const [lastPunch, setLastPunch] = useState<any>(null);
+  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [isPunching, setIsPunching] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [showFaceVerification, setShowFaceVerification] = useState(false);
@@ -172,7 +173,7 @@ export default function StaffPunch() {
 
     const [zonesRes, punchRes, manualRes, rosterRes, settingsRes, rolesRes] = await Promise.all([
       supabase.from('geofence_zones').select('id, name, latitude, longitude, radius_meters').eq('is_active', true),
-      supabase.from('attendance_records').select('punch_type, punch_time').eq('user_id', user?.id).order('punch_time', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('attendance_records').select('punch_type, punch_time, logical_work_date, shift_key').eq('user_id', user?.id).order('punch_time', { ascending: false }).limit(20),
       supabase.from('staff_zone_assignments').select('zone_id, start_time, end_time, days_of_week, is_active').eq('user_id', user?.id).eq('is_active', true),
       supabase.from('roster_zone_assignments').select('zone_id, start_time, end_time, work_date, shift_key').eq('user_id', user?.id).in('work_date', [yesterdayStr, todayStr, tomorrowStr]),
       supabase.from('punch_buffer_settings').select('*'),
@@ -180,7 +181,7 @@ export default function StaffPunch() {
     ]);
 
     if (zonesRes.data) setZones(zonesRes.data);
-    if (punchRes.data) setLastPunch(punchRes.data);
+    setAttendanceRecords(punchRes.data ?? []);
     setRosterRows((rosterRes.data ?? []) as RosterRow[]);
     setManualAssignments((manualRes.data ?? []) as ManualAssignment[]);
     setBufferSettings(settingsRes.data ?? []);
@@ -193,10 +194,16 @@ export default function StaffPunch() {
   const { activeShift, nearestShift } = useMemo(() => {
     const { active, nearest } = pickActiveRosterShift(rosterRows, bufferSettings, userRoles, now, todayStr);
     if (active) return { activeShift: active, nearestShift: nearest };
-    if (rosterRows.length === 0) {
+
+    // Roster should take priority for the current work day. However, stale
+    // yesterday/tomorrow roster rows must not block a valid manual assignment
+    // for staff who are not rostered today.
+    const hasTodayRoster = rosterRows.some((row) => row.work_date === todayStr);
+    if (!hasTodayRoster) {
       const manual = pickActiveManualShift(manualAssignments, bufferSettings, userRoles, now, todayStr);
       return { activeShift: manual, nearestShift: nearest };
     }
+
     return { activeShift: null, nearestShift: nearest };
   }, [rosterRows, manualAssignments, bufferSettings, userRoles, now, todayStr]);
 
@@ -205,6 +212,9 @@ export default function StaffPunch() {
   const geofenceResult = geo.latitude && geo.longitude && zones.length > 0
     ? checkGeofence({ latitude: geo.latitude, longitude: geo.longitude }, zones) : null;
   const accuracyStatus = geo.accuracy ? getAccuracyStatus(geo.accuracy) : null;
+  const activeWorkDate = activeShift?.workDate ?? todayStr;
+  const lastPunch = attendanceRecords.find((record) => logicalWorkDateOf(record) === activeWorkDate) ?? null;
+  const lastAnyPunch = attendanceRecords[0] ?? null;
   const isPunchedIn = lastPunch?.punch_type === 'in';
   const nextPunchType: 'in' | 'out' = isPunchedIn ? 'out' : 'in';
 
@@ -265,13 +275,19 @@ export default function StaffPunch() {
       shift_key: activeShift?.shiftKey ?? null,
     } as any);
     if (error) {
-      toast({ title: 'Punch Failed', description: 'Error recording punch.', variant: 'destructive' });
+      console.error('Punch insert failed:', error);
+      toast({ title: 'Punch Failed', description: error.message || 'Error recording punch.', variant: 'destructive' });
     } else {
       toast({
         title: nextPunchType === 'in' ? 'Punched In!' : 'Punched Out!',
         description: `Recorded at ${geofenceResult?.zone?.name}`,
       });
-      setLastPunch({ punch_type: nextPunchType, punch_time: new Date().toISOString() });
+      setAttendanceRecords((records) => [{
+        punch_type: nextPunchType,
+        punch_time: new Date().toISOString(),
+        logical_work_date: activeShift?.workDate ?? todayStr,
+        shift_key: activeShift?.shiftKey ?? null,
+      }, ...records]);
     }
     setIsPunching(false);
   };
@@ -354,7 +370,7 @@ export default function StaffPunch() {
       <Card>
         <CardHeader>
           <CardTitle>Record Attendance</CardTitle>
-          {lastPunch && <CardDescription>Last punch: {isPunchedIn ? 'In' : 'Out'} at {format(new Date(lastPunch.punch_time), 'h:mm a, MMM d')}</CardDescription>}
+          {lastAnyPunch && <CardDescription>Last punch: {lastAnyPunch.punch_type === 'in' ? 'In' : 'Out'} at {format(new Date(lastAnyPunch.punch_time), 'h:mm a, MMM d')}</CardDescription>}
         </CardHeader>
         <CardContent>
           <Button size="lg" className={cn('w-full h-20 text-lg', nextPunchType === 'in' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700')} disabled={!canPunch || isLoadingData} onClick={handlePunchClick}>
