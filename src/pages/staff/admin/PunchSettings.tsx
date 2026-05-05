@@ -15,7 +15,7 @@ import type { Database } from '@/integrations/supabase/types';
 
 type AppRole = Database['public']['Enums']['app_role'];
 type Scope = 'global' | 'role' | 'shift' | 'role_shift';
-type ShiftKey = 'S1' | 'S2' | 'S3' | 'Hybrid' | 'Night';
+type ShiftKey = 'S1' | 'S2' | 'S3' | 'Hybrid' | 'Night' | 'DOC_S1' | 'DOC_S2' | 'DOC_S3';
 
 type Row = {
   id: string;
@@ -28,8 +28,8 @@ type Row = {
   clock_out_late_min: number;
 };
 
-const ROLE_OPTIONS: AppRole[] = ['admin', 'staff', 'special_admin', 'doctor_admin', 'operations', 'locum'];
-const SHIFT_OPTIONS: ShiftKey[] = ['S1', 'S2', 'S3', 'Hybrid', 'Night'];
+const ROLE_OPTIONS: AppRole[] = ['admin', 'staff', 'special_admin', 'doctor_admin', 'operations', 'locum', 'resident_doctor'];
+const SHIFT_OPTIONS: ShiftKey[] = ['S1', 'S2', 'S3', 'Hybrid', 'Night', 'DOC_S1', 'DOC_S2', 'DOC_S3'];
 
 const ROLE_LABEL: Record<AppRole, string> = {
   admin: 'Admin',
@@ -39,6 +39,7 @@ const ROLE_LABEL: Record<AppRole, string> = {
   doctor_admin: 'Doctor Admin',
   operations: 'Operations',
   locum: 'Locum',
+  resident_doctor: 'Resident Doctor',
 };
 
 const SHIFT_LABEL: Record<ShiftKey, string> = {
@@ -47,6 +48,9 @@ const SHIFT_LABEL: Record<ShiftKey, string> = {
   S3: 'S3 — Evening (20:00–24:00)',
   Hybrid: 'Hybrid (08:00–13:00)',
   Night: 'Night (20:00–24:00)',
+  DOC_S1: 'Doctor S1 (08:00–13:00)',
+  DOC_S2: 'Doctor S2 (14:00–19:00)',
+  DOC_S3: 'Doctor S3 (20:00–24:00)',
 };
 
 const SHIFT_RANGE: Record<ShiftKey, [number, number]> = {
@@ -55,6 +59,9 @@ const SHIFT_RANGE: Record<ShiftKey, [number, number]> = {
   S3: [1200, 1440],
   Hybrid: [480, 780],
   Night: [1200, 1440],
+  DOC_S1: [480, 780],
+  DOC_S2: [840, 1140],
+  DOC_S3: [1200, 1440],
 };
 
 function pad(n: number) { return String(n).padStart(2, '0'); }

@@ -9,6 +9,7 @@ export type AppRole =
   | 'operations'
   | 'staff'
   | 'locum'
+  | 'resident_doctor'
   | 'guest';
 
 interface AuthContextType {
@@ -166,7 +167,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     role === 'special_admin' ||
     role === 'operations' ||
     role === 'doctor_admin' ||
-    role === 'locum';
+    role === 'locum' ||
+    role === 'resident_doctor';
   const isGuest = role === 'guest' || role === null;
   const isSpecialAdmin = role === 'special_admin';
   const isOperations = role === 'operations';
@@ -174,14 +176,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     role === 'operations' ||
     role === 'admin' ||
     role === 'special_admin' ||
-    role === 'doctor_admin';
+    role === 'doctor_admin' ||
+    role === 'resident_doctor';
   const isDoctorAdmin = role === 'doctor_admin';
   const isLocum = role === 'locum';
   const isClinical =
     role === 'locum' ||
     role === 'doctor_admin' ||
     role === 'special_admin' ||
-    role === 'admin';
+    role === 'admin' ||
+    role === 'resident_doctor';
   const canViewInsights =
     role === 'admin' || role === 'special_admin' || role === 'doctor_admin';
 
