@@ -239,7 +239,10 @@ export default function StaffPunch() {
     // Asymmetric in/out window check inside the active shift
     if (nextPunchType === 'in') {
       const closeAt = new Date(activeShift.start.getTime() + buffers.clock_in_late_min * 60_000);
-      if (now > closeAt) return `Punch-in closed at ${fmtTime(closeAt)} (${buffers.clock_in_late_min} min after shift start).`;
+      if (now > closeAt) {
+        console.warn('Blocked late punch-in attempt', { userId: user?.id, shift: activeShift.shiftKey, time: now });
+        return 'Punch-in window has closed. Please ask the administrator to record a manual entry.';
+      }
     } else {
       const openAt = new Date(activeShift.end.getTime() - buffers.clock_out_early_min * 60_000);
       if (now < openAt) return `Punch-out opens at ${fmtTime(openAt)} (${buffers.clock_out_early_min} min before shift end).`;
