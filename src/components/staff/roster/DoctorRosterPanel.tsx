@@ -103,6 +103,9 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  // Tracks the exact key (e.g. 'shift1' or 'DOC_S1') a cell was loaded under,
+  // so untouched legacy cells round-trip without their shift boundaries shrinking.
+  const originalKeyMapRef = useRef<Record<string, Partial<Record<'shift1' | 'shift2' | 'shift3', string>>>>({});
 
   // Roster settings (permanent off days)
   const [rosterSettings, setRosterSettings] = useState<RosterSettings>({});
