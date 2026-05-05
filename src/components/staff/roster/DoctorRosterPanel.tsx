@@ -171,8 +171,33 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
         .eq('year', selectedYear)
         .maybeSingle();
       if (data) {
-        setRoster(data.roster_data as unknown as DoctorRosterData);
-        setOriginalRoster(data.roster_data as unknown as DoctorRosterData);
+        // Translate stored keys (legacy shift1/2/3 + new DOC_S1/2/3) into the
+        // in-memory shift1/2/3 slot model, while remembering each cell's
+        // original key so untouched legacy cells round-trip exactly.
+        const raw = data.roster_data as unknown as Record<string, Record<string, RosterCell | null>>;
+        const translated: DoctorRosterData = {};
+        const keyMap: Record<string, Partial<Record<'shift1' | 'shift2' | 'shift3', string>>> = {};
+        const slotFor = (k: string): 'shift1' | 'shift2' | 'shift3' | null => {
+          if (k === 'shift1' || k === 'DOC_S1') return 'shift1';
+          if (k === 'shift2' || k === 'DOC_S2') return 'shift2';
+          if (k === 'shift3' || k === 'DOC_S3') return 'shift3';
+          return null;
+        };
+        for (const [date, day] of Object.entries(raw || {})) {
+          const dest: DoctorDayRoster = { shift1: null, shift2: null, shift3: null };
+          const km: Partial<Record<'shift1' | 'shift2' | 'shift3', string>> = {};
+          for (const [k, cell] of Object.entries(day || {})) {
+            const slot = slotFor(k);
+            if (!slot) continue;
+            dest[slot] = cell ?? null;
+            km[slot] = k;
+          }
+          translated[date] = dest;
+          keyMap[date] = km;
+        }
+        originalKeyMapRef.current = keyMap;
+        setRoster(translated);
+        setOriginalRoster(translated);
         if (data.staff_list && (data.staff_list as unknown as StaffMember[]).length > 0) {
           setStaffList(data.staff_list as unknown as StaffMember[]);
         }
@@ -181,6 +206,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
         setSavedAt(data.updated_at);
         toast.info('Saved roster loaded');
       } else {
+        originalKeyMapRef.current = {};
         setSavedAt(null);
       }
       setLoading(false);
@@ -194,11 +220,41 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { toast.error('Please sign in to save'); setSaving(false); return; }
 
+    // Per-cell key resolution:
+    //   1. Active intent (admin reassigned this slot today) → graduate to DOC_S*
+    //   2. Untouched legacy cell → keep its original 'shift1/2/3' key
+    //   3. Untouched new cell → keep its original DOC_S* key
+    //   4. Brand-new cell from empty state → DOC_S*
+    const COLUMN_DEFAULT: Record<'shift1' | 'shift2' | 'shift3', string> = {
+      shift1: 'DOC_S1',
+      shift2: 'DOC_S2',
+      shift3: 'DOC_S3',
+    };
+    const serialized: Record<string, Record<string, RosterCell | null>> = {};
+    for (const [date, day] of Object.entries(roster)) {
+      const out: Record<string, RosterCell | null> = {};
+      const overrides = manualOverrides[date];
+      const km = originalKeyMapRef.current[date] || {};
+      (['shift1', 'shift2', 'shift3'] as const).forEach((slot) => {
+        const cell = day?.[slot] ?? null;
+        if (!cell) return; // skip empty slots
+        const explicit = overrides?.has(slot) ?? false;
+        const originalKey = km[slot];
+        let key: string;
+        if (explicit) key = COLUMN_DEFAULT[slot];
+        else if (originalKey?.startsWith('shift')) key = originalKey;
+        else if (originalKey) key = originalKey;
+        else key = COLUMN_DEFAULT[slot];
+        out[key] = cell;
+      });
+      serialized[date] = out;
+    }
+
     const payload = {
       roster_type: 'doctor' as string,
       month: selectedMonth + 1,
       year: selectedYear,
-      roster_data: roster as unknown as Record<string, unknown>,
+      roster_data: serialized as unknown as Record<string, unknown>,
       staff_list: staffList as unknown as Record<string, unknown>[],
       warnings: warnings as unknown as Record<string, unknown>[],
       created_by: user.id,
