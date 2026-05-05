@@ -19,6 +19,10 @@ const SHIFT_TIMES: Record<string, { start: string; end: string; label: string }>
   Daytime: { start: '08:00', end: '23:59', label: 'Daytime (8am – 12am)' },
   // Hybrid shift (purchaser / housecall nurse) — AM only
   Hybrid: { start: '08:00', end: '13:00', label: 'Hybrid (8am – 1pm)' },
+  // Resident-doctor / clinical shifts
+  DOC_S1: { start: '08:00', end: '13:00', label: 'Doctor S1 (8am – 1pm)' },
+  DOC_S2: { start: '14:00', end: '19:00', label: 'Doctor S2 (2pm – 7pm)' },
+  DOC_S3: { start: '20:00', end: '23:59', label: 'Doctor S3 (8pm – 12am)' },
 };
 
 /**
@@ -27,6 +31,8 @@ const SHIFT_TIMES: Record<string, { start: string; end: string; label: string }>
  */
 export function normalizeShiftKey(raw: string): string {
   if (!raw) return raw;
+  // Preserve canonical doctor-shift keys without lowercasing
+  if (raw === 'DOC_S1' || raw === 'DOC_S2' || raw === 'DOC_S3') return raw;
   const k = raw.toLowerCase().trim();
   switch (k) {
     case 's1': case 'shift1': return 'S1';
@@ -34,6 +40,9 @@ export function normalizeShiftKey(raw: string): string {
     case 's3': case 'shift3': case 'night': return 'S3';
     case 'daytime': return 'Daytime';
     case 'hybrid': return 'Hybrid';
+    case 'doc_s1': return 'DOC_S1';
+    case 'doc_s2': return 'DOC_S2';
+    case 'doc_s3': return 'DOC_S3';
     default: return raw;
   }
 }
