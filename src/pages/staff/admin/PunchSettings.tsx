@@ -446,12 +446,13 @@ function BufferFieldGrid({
   );
 }
 
-function Field({ label, value, onChange, hint }: { label: string; value: number; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; hint: string }) {
+function Field({ label, value, onChange, hint, tip }: { label: string; value: number; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; hint: string; tip?: string }) {
   return (
     <div className="space-y-1">
       <Label className="text-xs">{label}</Label>
       <Input type="number" min={0} max={480} value={value} onChange={onChange} />
       <p className="text-[11px] text-muted-foreground">{hint}</p>
+      {tip && <p className="text-[11px] text-primary/80 italic">{tip}</p>}
     </div>
   );
 }
