@@ -433,7 +433,13 @@ function BufferFieldGrid({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <Field label="Clock-in: minutes BEFORE shift start" value={values.clock_in_early_min} onChange={set('clock_in_early_min')} hint="How early can staff punch in?" />
-      <Field label="Clock-in: minutes AFTER shift start" value={values.clock_in_late_min} onChange={set('clock_in_late_min')} hint="Lateness grace window" />
+      <Field
+        label="Clock-in: minutes AFTER shift start"
+        value={values.clock_in_late_min}
+        onChange={set('clock_in_late_min')}
+        hint="Lateness grace window"
+        tip="Tip: Clinical staff often arrive late due to prior consults. We recommend ≥180 mins for doctors and evening shifts."
+      />
       <Field label="Clock-out: minutes BEFORE shift end" value={values.clock_out_early_min} onChange={set('clock_out_early_min')} hint="Allow finishing slightly early" />
       <Field label="Clock-out: minutes AFTER shift end" value={values.clock_out_late_min} onChange={set('clock_out_late_min')} hint="Covers overtime / late finish" />
     </div>
