@@ -14,6 +14,7 @@ import { resolvePunchBuffers, DEFAULT_BUFFERS, type PunchBuffers } from '@/hooks
 import { format, addDays, subDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { FaceVerificationModal } from '@/components/staff/FaceVerificationModal';
+import { logicalWorkDateOf } from '@/lib/attendanceUtils';
 
 // Roster row from roster_zone_assignments
 interface RosterRow {
@@ -144,7 +145,7 @@ export default function StaffPunch() {
   const { toast } = useToast();
   const geo = useGeolocation();
   const [zones, setZones] = useState<any[]>([]);
-  const [lastPunch, setLastPunch] = useState<any>(null);
+  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [isPunching, setIsPunching] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [showFaceVerification, setShowFaceVerification] = useState(false);
@@ -172,7 +173,7 @@ export default function StaffPunch() {
 
     const [zonesRes, punchRes, manualRes, rosterRes, settingsRes, rolesRes] = await Promise.all([
       supabase.from('geofence_zones').select('id, name, latitude, longitude, radius_meters').eq('is_active', true),
-      supabase.from('attendance_records').select('punch_type, punch_time').eq('user_id', user?.id).order('punch_time', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('attendance_records').select('punch_type, punch_time, logical_work_date, shift_key').eq('user_id', user?.id).order('punch_time', { ascending: false }).limit(20),
       supabase.from('staff_zone_assignments').select('zone_id, start_time, end_time, days_of_week, is_active').eq('user_id', user?.id).eq('is_active', true),
       supabase.from('roster_zone_assignments').select('zone_id, start_time, end_time, work_date, shift_key').eq('user_id', user?.id).in('work_date', [yesterdayStr, todayStr, tomorrowStr]),
       supabase.from('punch_buffer_settings').select('*'),
@@ -180,7 +181,7 @@ export default function StaffPunch() {
     ]);
 
     if (zonesRes.data) setZones(zonesRes.data);
-    if (punchRes.data) setLastPunch(punchRes.data);
+    setAttendanceRecords(punchRes.data ?? []);
     setRosterRows((rosterRes.data ?? []) as RosterRow[]);
     setManualAssignments((manualRes.data ?? []) as ManualAssignment[]);
     setBufferSettings(settingsRes.data ?? []);
