@@ -1,6 +1,9 @@
-// Admin-only edge function to silently create a Locum user without
-// disrupting the calling staff member's session. Uses the service-role
-// key to bypass standard auth and assigns the `locum` role on creation.
+// Admin-only edge function to silently create a clinic user (Locum or
+// employee role) without disrupting the calling staff member's session.
+// Uses the service-role key to bypass standard auth and assigns the
+// requested role on creation. For employee roles (resident_doctor,
+// staff, operations) it also seeds a blank staff_onboarding row so HR
+// gates work on first login.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { z } from 'https://esm.sh/zod@3.23.8';
 
@@ -15,7 +18,12 @@ const BodySchema = z.object({
   email: z.string().email().max(255),
   fullName: z.string().min(1).max(255),
   phone: z.string().max(40).optional().nullable(),
+  role: z
+    .enum(['locum', 'resident_doctor', 'staff', 'operations'])
+    .default('locum'),
 });
+
+const EMPLOYEE_ROLES = new Set(['resident_doctor', 'staff', 'operations']);
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -75,7 +83,12 @@ Deno.serve(async (req) => {
   if (!parsed.success) {
     return json({ error: parsed.error.flatten().fieldErrors }, 400);
   }
-  const { email, fullName, phone } = parsed.data;
+  const { email, fullName, phone, role } = parsed.data;
+
+  // Only special_admin can create elevated employee roles
+  if (EMPLOYEE_ROLES.has(role) && roleRow.role !== 'special_admin' && roleRow.role !== 'admin' && roleRow.role !== 'doctor_admin') {
+    return json({ error: 'Only admins can create employee accounts' }, 403);
+  }
 
   // 5. Create the user (auto-confirmed) with default password
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
@@ -85,7 +98,7 @@ Deno.serve(async (req) => {
     user_metadata: {
       full_name: fullName,
       phone: phone ?? null,
-      requested_role: 'locum',
+      requested_role: role,
       created_by_admin: callerId,
     },
   });
@@ -101,13 +114,35 @@ Deno.serve(async (req) => {
   const newUserId = created.user?.id;
   if (!newUserId) return json({ error: 'No user returned' }, 500);
 
-  // 6. Upsert the locum role
+  // 6. Upsert the requested role
   const { error: roleInsertErr } = await admin
     .from('user_roles')
-    .upsert({ user_id: newUserId, role: 'locum' }, { onConflict: 'user_id' });
+    .upsert({ user_id: newUserId, role }, { onConflict: 'user_id' });
 
   if (roleInsertErr) {
     return json({ error: `User created but role assignment failed: ${roleInsertErr.message}` }, 500);
+  }
+
+  // 7. For employee roles, seed an HR onboarding row so the wizard
+  // has a backing record on first login. Locums skip this entirely.
+  if (EMPLOYEE_ROLES.has(role)) {
+    const { error: onboardErr } = await admin
+      .from('staff_onboarding')
+      .upsert(
+        {
+          user_id: newUserId,
+          onboarding_data: {},
+          job_description_acknowledged: false,
+          job_scope_acknowledged: false,
+          company_policy_acknowledged: false,
+          is_completed: false,
+        },
+        { onConflict: 'user_id' },
+      );
+    if (onboardErr) {
+      // Non-fatal: log and continue. Backfill migration can recover.
+      console.error('staff_onboarding seed failed:', onboardErr.message);
+    }
   }
 
   return json({ success: true, user_id: newUserId });

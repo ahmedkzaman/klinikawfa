@@ -197,7 +197,7 @@ function SidebarNav({ isAdmin, isOpsOrAdmin, pathname, onLinkClick, unreadNotice
 }
 
 export function StaffLayout() {
-  const { user, loading, rolesLoading, isAdmin, isStaffOrAdmin, isOpsOrAdmin, signOut } = useAuth();
+  const { user, loading, rolesLoading, isAdmin, isStaffOrAdmin, isOpsOrAdmin, isLocum, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -254,6 +254,13 @@ export function StaffLayout() {
 
   if (!user) {
     navigate('/auth', { state: { from: location } });
+    return null;
+  }
+
+  // Locums are independent contractors — bounce them to the clinic queue,
+  // never let them touch HR-staff routes (onboarding, payroll, leave).
+  if (isLocum) {
+    navigate('/clinic/queue', { replace: true });
     return null;
   }
 

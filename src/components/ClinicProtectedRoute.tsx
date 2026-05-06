@@ -67,9 +67,14 @@ export function ClinicProtectedRoute({
     return <>{children}</>;
   }
 
+  // Locums are excluded from `isStaffOrAdmin` (HR-staff flag) but still
+  // need to enter the /clinic portal for their consultation work. Treat
+  // `any_staff` as "anyone with a clinic keycard", which includes locums.
+  const passesAnyStaff = isStaffOrAdmin || isLocum;
+
   const hasAccess =
     requiredRole === 'any_staff'
-      ? isStaffOrAdmin
+      ? passesAnyStaff
       : requiredRole === 'special_admin'
         ? isSpecialAdmin
         : requiredRole === 'admin'
