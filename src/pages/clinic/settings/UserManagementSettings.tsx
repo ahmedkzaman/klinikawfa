@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { DoctorProfileDialog } from '@/components/clinic/settings/DoctorProfileDialog';
-import { AddLocumDialog } from '@/components/clinic/settings/AddLocumDialog';
+import { AddUserDialog, type CreatableUserRole } from '@/components/clinic/settings/AddUserDialog';
 import { toast } from 'sonner';
 
 const ROLE_OPTIONS: AppRole[] = [
@@ -60,11 +60,16 @@ export default function UserManagementSettings() {
   const qc = useQueryClient();
 
   const canAddLocum = isAdmin || isSpecialAdmin || role === 'staff';
+  // Only admins can create employee accounts (resident doctors). Staff can only invite locums.
+  const canAddResident = isAdmin || isSpecialAdmin;
 
   const [search, setSearch] = useState('');
   const [pendingUserId, setPendingUserId] = useState<string | null>(null);
   const [profileDialogUser, setProfileDialogUser] = useState<ClinicUserRow | null>(null);
-  const [addLocumOpen, setAddLocumOpen] = useState(false);
+  const [addUserDialog, setAddUserDialog] = useState<{ open: boolean; role: CreatableUserRole }>({
+    open: false,
+    role: 'locum',
+  });
 
   if (!isAdmin && !isSpecialAdmin) {
     return (
@@ -133,12 +138,23 @@ export default function UserManagementSettings() {
               Assign roles and manage locum doctor profiles.
             </p>
           </div>
-          {canAddLocum && (
-            <Button onClick={() => setAddLocumOpen(true)} className="shrink-0">
-              <UserPlus className="h-4 w-4 mr-2" />
-              Add Locum
-            </Button>
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {canAddLocum && (
+              <Button
+                variant="outline"
+                onClick={() => setAddUserDialog({ open: true, role: 'locum' })}
+              >
+                <UserPlus className="h-4 w-4 mr-2" />
+                Add Locum
+              </Button>
+            )}
+            {canAddResident && (
+              <Button onClick={() => setAddUserDialog({ open: true, role: 'resident_doctor' })}>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Add Resident Doctor
+              </Button>
+            )}
+          </div>
         </div>
 
         <Card className={bento}>
@@ -298,7 +314,11 @@ export default function UserManagementSettings() {
           onOpenChange={(open) => !open && setProfileDialogUser(null)}
           user={profileDialogUser}
         />
-        <AddLocumDialog open={addLocumOpen} onOpenChange={setAddLocumOpen} />
+        <AddUserDialog
+          open={addUserDialog.open}
+          onOpenChange={(open) => setAddUserDialog((prev) => ({ ...prev, open }))}
+          role={addUserDialog.role}
+        />
       </div>
     </div>
   );

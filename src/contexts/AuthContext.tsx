@@ -161,13 +161,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const isAdmin = role === 'admin' || role === 'special_admin' || role === 'doctor_admin';
+  // NOTE: 'locum' is intentionally excluded. Locums are independent
+  // contractors and must NOT enter the HR/staff portal. Clinic-portal
+  // access for locums is granted separately in ClinicProtectedRoute via
+  // an `isStaffOrAdmin || isLocum` check on the `any_staff` gate.
   const isStaffOrAdmin =
     role === 'admin' ||
     role === 'staff' ||
     role === 'special_admin' ||
     role === 'operations' ||
     role === 'doctor_admin' ||
-    role === 'locum' ||
     role === 'resident_doctor';
   const isGuest = role === 'guest' || role === null;
   const isSpecialAdmin = role === 'special_admin';
