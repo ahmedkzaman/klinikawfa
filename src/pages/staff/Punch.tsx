@@ -1,8 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { MapPin, Loader2, RefreshCw, CheckCircle, AlertTriangle, XCircle, CalendarClock } from 'lucide-react';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useAuth } from '@/contexts/AuthContext';
@@ -15,6 +13,7 @@ import { format, addDays, subDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { FaceVerificationModal } from '@/components/staff/FaceVerificationModal';
 import { logicalWorkDateOf } from '@/lib/attendanceUtils';
+import { bento, bentoHeader, pageInner, pageShell, secondaryBtn, softBadge } from '@/lib/clinic/bentoTokens';
 
 // Roster row from roster_zone_assignments
 interface RosterRow {
