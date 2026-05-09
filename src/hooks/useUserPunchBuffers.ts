@@ -44,6 +44,58 @@ function pickFields(row: any): PunchBuffers {
  *   4. global        (scope='global')
  * Falls back to DEFAULT_BUFFERS.
  */
+export type BufferSource = 'role_shift' | 'shift' | 'role' | 'global' | 'default';
+
+export function resolvePunchBuffersWithSource(
+  settings: any[] | null | undefined,
+  roles: string[] | null | undefined,
+  shiftKey?: string | null,
+): { buffers: PunchBuffers; source: BufferSource } {
+  const rows = settings ?? [];
+  const userRoles = roles ?? [];
+
+  const global = rows.find((s) => s.scope === 'global');
+  const shiftRows = rows.filter((s) => s.scope === 'shift');
+  const roleRows = rows.filter((s) => s.scope === 'role');
+  const roleShiftRows = rows.filter((s) => s.scope === 'role_shift');
+
+  let chosen: any = null;
+  let source: BufferSource = 'default';
+
+  if (shiftKey) {
+    let chosenP = -1;
+    for (const r of userRoles) {
+      const row = roleShiftRows.find((s) => s.role === r && s.shift_key === shiftKey);
+      if (row) {
+        const p = ROLE_PRIORITY[r] ?? 0;
+        if (p > chosenP) { chosen = row; chosenP = p; source = 'role_shift'; }
+      }
+    }
+  }
+
+  if (!chosen && shiftKey) {
+    const row = shiftRows.find((s) => s.shift_key === shiftKey) ?? null;
+    if (row) { chosen = row; source = 'shift'; }
+  }
+
+  if (!chosen) {
+    let chosenP = -1;
+    for (const r of userRoles) {
+      const row = roleRows.find((s) => s.role === r);
+      if (row) {
+        const p = ROLE_PRIORITY[r] ?? 0;
+        if (p > chosenP) { chosen = row; chosenP = p; source = 'role'; }
+      }
+    }
+  }
+
+  if (!chosen && global) { chosen = global; source = 'global'; }
+
+  return chosen
+    ? { buffers: pickFields(chosen), source }
+    : { buffers: DEFAULT_BUFFERS, source: 'default' };
+}
+
 export function resolvePunchBuffers(
   settings: any[] | null | undefined,
   roles: string[] | null | undefined,
