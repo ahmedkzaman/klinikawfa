@@ -324,7 +324,7 @@ export default function AdminAttendanceReview() {
             </div>
             <div className="flex justify-center gap-6 pb-4 flex-wrap">
               {chartData.map(d => (
-                <button key={d.name} className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 hover:underline" onClick={() => setDrillDown(drillDown === d.name ? null : d.name)}>
+                <button key={d.name} className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 hover:underline" onClick={() => toggleCategoryDrill(d.name as 'working' | 'leave' | 'absent' | 'late')}>
                   <span className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[d.name as keyof typeof COLORS] }} />
                   {chartConfig[d.name as keyof typeof chartConfig]?.label}: {d.value}
                 </button>
