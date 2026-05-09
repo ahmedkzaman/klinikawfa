@@ -113,8 +113,9 @@ export default function DrRosterView() {
       });
       for (const dk of Object.keys(roster)) {
         const d = roster[dk];
-        if (d.shift1?.staffId === s.id && d.shift2?.staffId === s.id) dayBlocks++;
-        if (d.shift3?.staffId === s.id) nights++;
+        const s1 = getSlot(d, 1), s2 = getSlot(d, 2), s3 = getSlot(d, 3);
+        if (s1?.staffId === s.id && s2?.staffId === s.id) dayBlocks++;
+        if (s3?.staffId === s.id) nights++;
       }
       const totalHours = totalReg + totalOT;
       return { id: s.id, name: s.name, weeklyRegular: wr, weeklyOvertime: wo, totalRegular: totalReg, totalOvertime: totalOT, totalHours, daytimeBlocks: dayBlocks, nightShifts: nights, diffFromAvg: 0 };
