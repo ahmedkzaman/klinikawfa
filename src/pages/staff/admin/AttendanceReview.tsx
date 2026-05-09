@@ -238,7 +238,16 @@ export default function AdminAttendanceReview() {
     label: format(new Date(2024, i), 'MMMM'),
   }));
 
-  const drillDownRecords = drillDown ? stats.details[drillDown as keyof typeof stats.details] : null;
+  const drillDownRecords: DetailRecord[] | null = drillDown
+    ? drillDown.kind === 'category'
+      ? stats.details[drillDown.category]
+      : (stats.perUser[drillDown.userId] || []).slice().sort((a, b) => a.date.localeCompare(b.date))
+    : null;
+  const drillDownTitle = drillDown
+    ? drillDown.kind === 'category'
+      ? `${chartConfig[drillDown.category].label} Details (${drillDownRecords?.length ?? 0})`
+      : `${drillDown.fullName} — All Records (${drillDownRecords?.length ?? 0})`
+    : '';
 
   return (
     <div className={pageShell}>
