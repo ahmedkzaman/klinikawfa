@@ -876,7 +876,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
             </div>
             <div className="space-y-1 max-h-64 overflow-y-auto">
               {staffList.map(s => (
-                <div key={s.id} className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted/50 text-sm">
+                <div key={s.id} className="flex items-center gap-2 px-3 py-2 rounded-md bg-slate-50 text-sm">
                   {editingId === s.id ? (
                     <>
                       <Input value={editName} onChange={e => setEditName(e.target.value)} className="h-7 text-xs flex-1" onKeyDown={e => e.key === 'Enter' && saveEdit()} />
@@ -886,13 +886,13 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                     <>
                       <span className="flex-1 font-medium cursor-pointer" onClick={() => startEdit(s)}>{s.name}</span>
                       <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => removeStaff(s.id)}>
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        <Trash2 className="h-3.5 w-3.5 text-rose-600" />
                       </Button>
                     </>
                   )}
                 </div>
               ))}
-              {staffList.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No doctors added yet.</p>}
+              {staffList.length === 0 && <p className="text-xs text-slate-500 text-center py-4">No doctors added yet.</p>}
             </div>
           </CardContent>
         </Card>
@@ -907,35 +907,35 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
               <Checkbox id="rule-max-shifts" checked={ruleMaxShifts} onCheckedChange={v => setRuleMaxShifts(!!v)} />
               <div>
                 <Label htmlFor="rule-max-shifts" className="text-sm font-medium">Max 2 shifts per day</Label>
-                <p className="text-xs text-muted-foreground">Doctor works either daytime block (S1+S2) or night (S3)</p>
+                <p className="text-xs text-slate-500">Doctor works either daytime block (S1+S2) or night (S3)</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <Checkbox id="rule-combos" checked={ruleValidCombos} onCheckedChange={v => setRuleValidCombos(!!v)} />
               <div>
                 <Label htmlFor="rule-combos" className="text-sm font-medium">Valid shift combinations only</Label>
-                <p className="text-xs text-muted-foreground">S1+S2 together (12h) or S3 alone (4h). No S1+S3 or S2+S3</p>
+                <p className="text-xs text-slate-500">S1+S2 together (12h) or S3 alone (4h). No S1+S3 or S2+S3</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <Checkbox id="rule-min-hrs" checked={ruleMinHours} onCheckedChange={v => setRuleMinHours(!!v)} />
               <div>
                 <Label htmlFor="rule-min-hrs" className="text-sm font-medium">45h/week target (OT beyond)</Label>
-                <p className="text-xs text-muted-foreground">Normal ≤ 45h/week. Hours beyond are overtime. Max 6 consecutive working days.</p>
+                <p className="text-xs text-slate-500">Normal ≤ 45h/week. Hours beyond are overtime. Max 6 consecutive working days.</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <Checkbox id="rule-overtime" checked={ruleOvertime} onCheckedChange={v => setRuleOvertime(!!v)} />
               <div>
                 <Label htmlFor="rule-overtime" className="text-sm font-medium">Overtime calculation (&gt;45h/week)</Label>
-                <p className="text-xs text-muted-foreground">Hours above 45 per week are tracked as overtime</p>
+                <p className="text-xs text-slate-500">Hours above 45 per week are tracked as overtime</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <Checkbox id="rule-fair" checked={ruleFairDist} onCheckedChange={v => setRuleFairDist(!!v)} />
               <div>
                 <Label htmlFor="rule-fair" className="text-sm font-medium">Fair distribution</Label>
-                <p className="text-xs text-muted-foreground">Weighted assignment prioritising doctors with fewer hours</p>
+                <p className="text-xs text-slate-500">Weighted assignment prioritising doctors with fewer hours</p>
               </div>
             </div>
           </CardContent>
@@ -948,9 +948,9 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
           <CardTitle className="text-lg flex items-center gap-2"><Settings2 className="h-5 w-5" /> Permanent Off Days</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-xs text-muted-foreground mb-4">Select permanent weekly off days for each doctor. These settings are saved automatically.</p>
+          <p className="text-xs text-slate-500 mb-4">Select permanent weekly off days for each doctor. These settings are saved automatically.</p>
           {staffList.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">Add doctors first</p>
+            <p className="text-sm text-slate-500 text-center py-4">Add doctors first</p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -1030,7 +1030,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                           else groups.push({ week: w, span: 1 });
                         });
                         return groups.map((g, i) => (
-                          <TableHead key={g.week} colSpan={g.span} className={cn("text-center text-xs font-semibold border-x", i % 2 === 0 ? "bg-primary/10" : "bg-accent/30")}>
+                          <TableHead key={g.week} colSpan={g.span} className={cn("text-center text-xs font-semibold border-x", i % 2 === 0 ? "bg-blue-50" : "bg-accent/30")}>
                             Week {g.week}
                           </TableHead>
                         ));
@@ -1040,9 +1040,9 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                     <TableRow>
                       <TableHead className="w-32 font-semibold sticky left-0 bg-background z-10">Shift</TableHead>
                       {monthDays.map(day => (
-                        <TableHead key={day.toISOString()} className={cn("text-center min-w-[80px]", isWeekend(day) && "bg-muted/30")}>
+                        <TableHead key={day.toISOString()} className={cn("text-center min-w-[80px]", isWeekend(day) && "bg-slate-50")}>
                           <div className="font-semibold text-xs">{DAY_ABBR[getDay(day)]}</div>
-                          <div className="text-xs text-muted-foreground font-normal">{format(day, 'd')}</div>
+                          <div className="text-xs text-slate-500 font-normal">{format(day, 'd')}</div>
                         </TableHead>
                       ))}
                     </TableRow>
@@ -1050,9 +1050,9 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                   <TableBody>
                     {/* Shift 1 */}
                     <TableRow>
-                      <TableCell className="font-medium bg-muted/30 sticky left-0 z-10">
+                      <TableCell className="font-medium bg-slate-50 sticky left-0 z-10">
                         <div className="text-xs">Shift 1</div>
-                        <div className="text-[10px] text-muted-foreground">8am–2pm</div>
+                        <div className="text-[10px] text-slate-500">8am–2pm</div>
                       </TableCell>
                       {monthDays.map(day => {
                         const dk = format(day, 'yyyy-MM-dd');
@@ -1061,23 +1061,23 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                         const isSameAsS2 = cell && d?.shift2 && cell.staffId === d.shift2.staffId;
                         const isOverride = isManualOverride(dk, 'shift1');
                         return (
-                          <TableCell key={dk} className={cn("text-center p-1", isWeekend(day) && "bg-muted/20", isSameAsS2 && "bg-primary/5", isOverride && "ring-2 ring-inset ring-orange-400")}>
+                          <TableCell key={dk} className={cn("text-center p-1", isWeekend(day) && "bg-slate-50/60", isSameAsS2 && "bg-blue-50/50", isOverride && "ring-2 ring-inset ring-orange-400")}>
                             {cell ? (
                               <Select value={cell.staffId} onValueChange={v => updateCell(dk, 'shift1', v)}>
                                 <SelectTrigger className="h-6 text-[11px] border-0 bg-transparent shadow-none px-1 justify-center min-w-[60px]">
                                   <span className="truncate">{firstName(cell.staffName)}</span>
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                                  <SelectItem value="__none__" className="text-xs text-slate-500">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
                                 </SelectContent>
                               </Select>
                             ) : (
                               <Select value={undefined} onValueChange={v => updateCell(dk, 'shift1', v)}>
                                 <SelectTrigger className="h-6 text-[11px] border-0 bg-transparent shadow-none px-1 justify-center min-w-[60px]">
-                                  <span className="text-[10px] text-muted-foreground">—</span>
+                                  <span className="text-[10px] text-slate-500">—</span>
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                                  <SelectItem value="__none__" className="text-xs text-slate-500">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
                                 </SelectContent>
                               </Select>
                             )}
@@ -1087,9 +1087,9 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                     </TableRow>
                     {/* Shift 2 */}
                     <TableRow>
-                      <TableCell className="font-medium bg-muted/30 sticky left-0 z-10">
+                      <TableCell className="font-medium bg-slate-50 sticky left-0 z-10">
                         <div className="text-xs">Shift 2</div>
-                        <div className="text-[10px] text-muted-foreground">2pm–8pm</div>
+                        <div className="text-[10px] text-slate-500">2pm–8pm</div>
                       </TableCell>
                       {monthDays.map(day => {
                         const dk = format(day, 'yyyy-MM-dd');
@@ -1098,23 +1098,23 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                         const isSameAsS1 = cell && d?.shift1 && cell.staffId === d.shift1.staffId;
                         const isOverride = isManualOverride(dk, 'shift2');
                         return (
-                          <TableCell key={dk} className={cn("text-center p-1", isWeekend(day) && "bg-muted/20", isSameAsS1 && "bg-primary/5", isOverride && "ring-2 ring-inset ring-orange-400")}>
+                          <TableCell key={dk} className={cn("text-center p-1", isWeekend(day) && "bg-slate-50/60", isSameAsS1 && "bg-blue-50/50", isOverride && "ring-2 ring-inset ring-orange-400")}>
                             {cell ? (
                               <Select value={cell.staffId} onValueChange={v => updateCell(dk, 'shift2', v)}>
                                 <SelectTrigger className="h-6 text-[11px] border-0 bg-transparent shadow-none px-1 justify-center min-w-[60px]">
                                   <span className="truncate">{firstName(cell.staffName)}</span>
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                                  <SelectItem value="__none__" className="text-xs text-slate-500">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
                                 </SelectContent>
                               </Select>
                             ) : (
                               <Select value={undefined} onValueChange={v => updateCell(dk, 'shift2', v)}>
                                 <SelectTrigger className="h-6 text-[11px] border-0 bg-transparent shadow-none px-1 justify-center min-w-[60px]">
-                                  <span className="text-[10px] text-muted-foreground">—</span>
+                                  <span className="text-[10px] text-slate-500">—</span>
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                                  <SelectItem value="__none__" className="text-xs text-slate-500">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
                                 </SelectContent>
                               </Select>
                             )}
@@ -1124,9 +1124,9 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                     </TableRow>
                     {/* Shift 3 */}
                     <TableRow>
-                      <TableCell className="font-medium bg-muted/30 sticky left-0 z-10">
+                      <TableCell className="font-medium bg-slate-50 sticky left-0 z-10">
                         <div className="text-xs">Shift 3</div>
-                        <div className="text-[10px] text-muted-foreground">8pm–12am</div>
+                        <div className="text-[10px] text-slate-500">8pm–12am</div>
                       </TableCell>
                       {monthDays.map(day => {
                         const dk = format(day, 'yyyy-MM-dd');
@@ -1134,23 +1134,23 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                         const cell = d?.shift3;
                         const isOverride = isManualOverride(dk, 'shift3');
                         return (
-                          <TableCell key={dk} className={cn("text-center p-1", isWeekend(day) && "bg-muted/20", isOverride && "ring-2 ring-inset ring-orange-400")}>
+                          <TableCell key={dk} className={cn("text-center p-1", isWeekend(day) && "bg-slate-50/60", isOverride && "ring-2 ring-inset ring-orange-400")}>
                             {cell ? (
                               <Select value={cell.staffId} onValueChange={v => updateCell(dk, 'shift3', v)}>
                                 <SelectTrigger className="h-6 text-[11px] border-0 bg-transparent shadow-none px-1 justify-center min-w-[60px]">
                                   <span className="truncate">{firstName(cell.staffName)}</span>
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                                  <SelectItem value="__none__" className="text-xs text-slate-500">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
                                 </SelectContent>
                               </Select>
                             ) : (
                               <Select value={undefined} onValueChange={v => updateCell(dk, 'shift3', v)}>
                                 <SelectTrigger className="h-6 text-[11px] border-0 bg-transparent shadow-none px-1 justify-center min-w-[60px]">
-                                  <span className="text-[10px] text-muted-foreground">—</span>
+                                  <span className="text-[10px] text-slate-500">—</span>
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                                  <SelectItem value="__none__" className="text-xs text-slate-500">— None —</SelectItem>{staffList.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
                                 </SelectContent>
                               </Select>
                             )}
@@ -1160,9 +1160,9 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                     </TableRow>
                     {/* Off row */}
                     <TableRow>
-                      <TableCell className="font-medium bg-destructive/10 sticky left-0 z-10">
+                      <TableCell className="font-medium bg-rose-50 sticky left-0 z-10">
                         <div className="text-xs">Off</div>
-                        <div className="text-[10px] text-muted-foreground">Not assigned</div>
+                        <div className="text-[10px] text-slate-500">Not assigned</div>
                       </TableCell>
                       {monthDays.map(day => {
                         const dk = format(day, 'yyyy-MM-dd');
@@ -1175,7 +1175,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                         }
                         const offStaff = staffList.filter(s => !assignedIds.has(s.id));
                         return (
-                          <TableCell key={dk} className={cn("text-center p-1 text-[10px] text-muted-foreground", isWeekend(day) && "bg-muted/20")}>
+                          <TableCell key={dk} className={cn("text-center p-1 text-[10px] text-slate-500", isWeekend(day) && "bg-slate-50/60")}>
                             {offStaff.length > 0 ? offStaff.map(s => firstName(s.name)).join(', ') : '—'}
                           </TableCell>
                         );
@@ -1194,7 +1194,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                       <TableRow>
                         <TableHead>Doctor</TableHead>
                         {allWeeksSorted.map(w => (
-                          <TableHead key={w} className="text-center text-xs">Wk {w}<br /><span className="text-muted-foreground font-normal">Reg / OT</span></TableHead>
+                          <TableHead key={w} className="text-center text-xs">Wk {w}<br /><span className="text-slate-500 font-normal">Reg / OT</span></TableHead>
                         ))}
                         <TableHead className="text-center">Regular</TableHead>
                         <TableHead className="text-center">Overtime</TableHead>
@@ -1210,18 +1210,18 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                           <TableCell className="font-medium">{s.name}</TableCell>
                           {allWeeksSorted.map(w => (
                             <TableCell key={w} className="text-center text-xs">
-                              {s.weeklyRegular[w] || 0}h{ruleOvertime && s.weeklyOvertime[w] ? <span className="text-destructive"> +{s.weeklyOvertime[w]}h</span> : ''}
+                              {s.weeklyRegular[w] || 0}h{ruleOvertime && s.weeklyOvertime[w] ? <span className="text-rose-600"> +{s.weeklyOvertime[w]}h</span> : ''}
                             </TableCell>
                           ))}
                           <TableCell className="text-center font-medium">{s.totalRegular}h</TableCell>
                           <TableCell className="text-center">
-                            {s.totalOvertime > 0 ? <Badge variant="destructive" className="text-xs">{s.totalOvertime}h</Badge> : <span className="text-muted-foreground">0h</span>}
+                            {s.totalOvertime > 0 ? <Badge variant="destructive" className="text-xs">{s.totalOvertime}h</Badge> : <span className="text-slate-500">0h</span>}
                           </TableCell>
                           <TableCell className="text-center font-semibold">{s.totalHours}h</TableCell>
                           <TableCell className="text-center">{s.daytimeBlocks}</TableCell>
                           <TableCell className="text-center">{s.nightShifts}</TableCell>
                           <TableCell className="text-center">
-                            <span className={cn("text-xs", s.diffFromAvg > 0 ? "text-destructive" : s.diffFromAvg < 0 ? "text-blue-600" : "text-muted-foreground")}>
+                            <span className={cn("text-xs", s.diffFromAvg > 0 ? "text-rose-600" : s.diffFromAvg < 0 ? "text-blue-600" : "text-slate-500")}>
                               {s.diffFromAvg > 0 ? '+' : ''}{s.diffFromAvg}h
                             </span>
                           </TableCell>
@@ -1233,18 +1233,18 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
 
                 {/* Fairness */}
                 {fairnessMetrics && (
-                  <div className="flex flex-wrap items-center gap-3 mt-3 p-3 rounded-lg bg-muted/50">
+                  <div className="flex flex-wrap items-center gap-3 mt-3 p-3 rounded-lg bg-slate-50">
                     <span className="text-sm font-medium">Fairness:</span>
                     <Badge
                       variant={fairnessMetrics.score >= 90 ? 'secondary' : 'destructive'}
                       className={cn("text-xs",
-                        fairnessMetrics.score >= 90 ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" :
-                        fairnessMetrics.score >= 70 ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" : ""
+                        fairnessMetrics.score >= 90 ? "bg-emerald-50 text-emerald-700" :
+                        fairnessMetrics.score >= 70 ? "bg-amber-50 text-amber-700" : ""
                       )}
                     >
                       {fairnessMetrics.score}% balanced
                     </Badge>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-slate-500">
                       Spread: {fairnessMetrics.maxH}h − {fairnessMetrics.minH}h = {fairnessMetrics.spread}h · Avg: {fairnessMetrics.avg}h · Total OT: {fairnessMetrics.totalOT}h
                     </span>
                   </div>
@@ -1262,11 +1262,11 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                 <Button variant="outline" onClick={autoFillEmpty} className="gap-2"><Zap className="h-4 w-4" /> Auto-fill Empty</Button>
                 <Button variant="outline" onClick={exportCSV} className="gap-2"><Download className="h-4 w-4" /> Export CSV</Button>
                 <Button variant="outline" onClick={() => window.print()} className="gap-2"><Printer className="h-4 w-4" /> Print</Button>
-                {savedAt && <span className="text-xs text-muted-foreground ml-2">Last saved: {format(new Date(savedAt), 'dd MMM yyyy, HH:mm')}</span>}
+                {savedAt && <span className="text-xs text-slate-500 ml-2">Last saved: {format(new Date(savedAt), 'dd MMM yyyy, HH:mm')}</span>}
               </div>
             </div>
           ) : (
-            <div className="text-center py-12 text-muted-foreground">
+            <div className="text-center py-12 text-slate-500">
               <Shuffle className="h-10 w-10 mx-auto mb-3 opacity-30" />
               <p className="text-sm">Select a month and click "Generate" to create a doctor roster</p>
               <p className="text-xs mt-1">3 shifts per day · S1+S2 daytime block (12h) · S3 night (4h)</p>

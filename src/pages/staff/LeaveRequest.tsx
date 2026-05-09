@@ -60,7 +60,7 @@ export default function LeaveRequestPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-bold tracking-tight">Leave</h1><p className="text-muted-foreground">Request time off and see team availability</p></div>
+        <div><h1 className="text-2xl font-bold tracking-tight">Leave</h1><p className="text-slate-500">Request time off and see team availability</p></div>
         <Button onClick={() => setShowForm(!showForm)}><Plus className="h-4 w-4 mr-2" /> Request Leave</Button>
       </div>
       {showForm && (
@@ -78,10 +78,10 @@ export default function LeaveRequestPage() {
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><CalendarOff className="h-5 w-5" /> My Requests</CardTitle><CardDescription>Your leave request history</CardDescription></CardHeader>
         <CardContent>
-          {myRequests.length === 0 ? <p className="text-sm text-muted-foreground text-center py-6">No leave requests yet</p> : (
+          {myRequests.length === 0 ? <p className="text-sm text-slate-500 text-center py-6">No leave requests yet</p> : (
             <div className="space-y-2">{myRequests.map((req: any) => (
               <div key={req.id} className="flex items-center justify-between p-3 rounded-md border">
-                <div className="min-w-0 flex-1"><p className="text-sm font-medium">{req.leave_type} Leave</p><p className="text-xs text-muted-foreground">{format(new Date(req.start_date), 'MMM d')} – {format(new Date(req.end_date), 'MMM d, yyyy')}</p>{req.reason && <p className="text-xs text-muted-foreground mt-0.5">"{req.reason}"</p>}</div>
+                <div className="min-w-0 flex-1"><p className="text-sm font-medium">{req.leave_type} Leave</p><p className="text-xs text-slate-500">{format(new Date(req.start_date), 'MMM d')} – {format(new Date(req.end_date), 'MMM d, yyyy')}</p>{req.reason && <p className="text-xs text-slate-500 mt-0.5">"{req.reason}"</p>}</div>
                 {statusBadge(req.status)}
               </div>
             ))}</div>
@@ -91,10 +91,10 @@ export default function LeaveRequestPage() {
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Team Leaves</CardTitle><CardDescription>Approved leaves from your colleagues</CardDescription></CardHeader>
         <CardContent>
-          {teamLeaves.length === 0 ? <p className="text-sm text-muted-foreground text-center py-6">No upcoming team leaves</p> : (
+          {teamLeaves.length === 0 ? <p className="text-sm text-slate-500 text-center py-6">No upcoming team leaves</p> : (
             <div className="space-y-2">{teamLeaves.map((req: any) => (
               <div key={req.id} className="flex items-center justify-between p-3 rounded-md border">
-                <div className="min-w-0 flex-1"><p className="text-sm font-medium">{req.requester_name}</p><p className="text-xs text-muted-foreground">{req.leave_type} · {format(new Date(req.start_date), 'MMM d')} – {format(new Date(req.end_date), 'MMM d')}</p></div>
+                <div className="min-w-0 flex-1"><p className="text-sm font-medium">{req.requester_name}</p><p className="text-xs text-slate-500">{req.leave_type} · {format(new Date(req.start_date), 'MMM d')} – {format(new Date(req.end_date), 'MMM d')}</p></div>
                 <Badge className="bg-green-600">Approved</Badge>
               </div>
             ))}</div>

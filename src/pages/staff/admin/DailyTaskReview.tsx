@@ -258,7 +258,7 @@ export default function DailyTaskReview() {
     ) : <CheckCircle className="h-3.5 w-3.5 text-green-500" />
   );
   const Cross = () => <XCircle className="h-3.5 w-3.5 text-red-400" />;
-  const NA = () => <Minus className="h-3.5 w-3.5 text-muted-foreground" />;
+  const NA = () => <Minus className="h-3.5 w-3.5 text-slate-500" />;
 
   const TypeBadge = ({ type }: { type: EntryType }) => {
     if (type === 'Doctor') return <Badge variant="outline" className="text-[10px] px-1 py-0 ml-1">Dr</Badge>;
@@ -271,7 +271,7 @@ export default function DailyTaskReview() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Daily Task Review</h1>
-          <p className="text-muted-foreground text-sm">Review staff daily report submissions by month</p>
+          <p className="text-slate-500 text-sm">Review staff daily report submissions by month</p>
         </div>
         <Button variant="outline" size="sm" onClick={downloadCSV} disabled={loading || reports.length === 0}>
           <Download className="h-4 w-4 mr-1.5" /> Download CSV
@@ -324,20 +324,20 @@ export default function DailyTaskReview() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <ClipboardList className="h-5 w-5 text-primary" />
+            <ClipboardList className="h-5 w-5 text-blue-600" />
             {MONTHS[selectedMonth]} {selectedYear} — Daily Submissions
           </CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading...</p>
+            <p className="text-sm text-slate-500">Loading...</p>
           ) : Object.keys(supportRosterData).length === 0 && Object.keys(doctorRosterData).length === 0 ? (
-            <p className="text-sm text-muted-foreground">No roster published for this month.</p>
+            <p className="text-sm text-slate-500">No roster published for this month.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b text-muted-foreground">
+                  <tr className="border-b text-slate-500">
                     <th className="text-left py-2 pr-3 font-medium sticky left-0 bg-background">Date</th>
                     <th className="text-left py-2 px-2 font-medium">Staff</th>
                     <th className="text-center py-2 px-2 font-medium">Type</th>
@@ -359,7 +359,7 @@ export default function DailyTaskReview() {
                       const dayName = format(new Date(dateKey), 'EEE');
                       const isDoctor = entry.type === 'Doctor';
                       return (
-                        <tr key={`${dateKey}-${entry.staffId}-${entry.type}`} className="border-b last:border-0 hover:bg-muted/30">
+                        <tr key={`${dateKey}-${entry.staffId}-${entry.type}`} className="border-b last:border-0 hover:bg-slate-50">
                           <td className="py-1.5 pr-3 font-medium sticky left-0 bg-background">
                             {idx === 0 && <span>{dayNum} {dayName}</span>}
                           </td>
@@ -393,11 +393,11 @@ export default function DailyTaskReview() {
                           </td>
                           <td className="py-1.5 px-2 text-center">
                             {isDoctor ? (
-                              <span className="text-muted-foreground">—</span>
+                              <span className="text-slate-500">—</span>
                             ) : (
                               <Badge variant={(r?.whatsapp_blast_count || 0) >= blastTarget ? 'secondary' : 'destructive'}
                                 className={(r?.whatsapp_blast_count || 0) >= blastTarget
-                                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-[10px]'
+                                  ? 'bg-emerald-50 text-emerald-700 text-[10px]'
                                   : 'text-[10px]'}>
                                 {r?.whatsapp_blast_count || 0}/{blastTarget}
                               </Badge>
@@ -424,7 +424,7 @@ export default function DailyTaskReview() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b text-muted-foreground">
+                  <tr className="border-b text-slate-500">
                     <th className="text-left py-2 pr-3 font-medium">Staff</th>
                     <th className="text-center py-2 px-2 font-medium">Type</th>
                     <th className="text-center py-2 px-2 font-medium">Days On Duty</th>

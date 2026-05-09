@@ -24,13 +24,13 @@ const stateMessages: Record<FaceDetectionState, { title: string; description: st
 
 const StateIcon = ({ state }: { state: FaceDetectionState }) => {
   switch (state) {
-    case 'idle': return <Camera className="h-6 w-6 text-muted-foreground" />;
-    case 'loading': return <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />;
-    case 'no-camera': return <Camera className="h-6 w-6 text-destructive" />;
+    case 'idle': return <Camera className="h-6 w-6 text-slate-500" />;
+    case 'loading': return <Loader2 className="h-6 w-6 animate-spin text-slate-500" />;
+    case 'no-camera': return <Camera className="h-6 w-6 text-rose-600" />;
     case 'detecting': return <Eye className="h-6 w-6 text-yellow-500 animate-pulse" />;
-    case 'face-found': return <Eye className="h-6 w-6 text-primary" />;
+    case 'face-found': return <Eye className="h-6 w-6 text-blue-600" />;
     case 'verified': return <CheckCircle className="h-6 w-6 text-green-600" />;
-    case 'timeout': return <AlertTriangle className="h-6 w-6 text-destructive" />;
+    case 'timeout': return <AlertTriangle className="h-6 w-6 text-rose-600" />;
   }
 };
 
@@ -59,7 +59,7 @@ export function FaceVerificationModal({ open, onOpenChange, onVerified, punchTyp
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="relative aspect-[4/3] bg-muted rounded-lg overflow-hidden">
+          <div className="relative aspect-[4/3] bg-slate-100 rounded-lg overflow-hidden">
             {showVideo && (
               <>
                 <video ref={videoRef} autoPlay playsInline muted className={cn("absolute inset-0 w-full h-full object-cover", "transform scale-x-[-1]")} />
@@ -69,15 +69,15 @@ export function FaceVerificationModal({ open, onOpenChange, onVerified, punchTyp
             {state === 'idle' && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center p-4">
-                  <Camera className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-sm text-muted-foreground mb-4">Face verification required</p>
+                  <Camera className="h-12 w-12 mx-auto text-slate-500 mb-4" />
+                  <p className="text-sm text-slate-500 mb-4">Face verification required</p>
                   <Button onClick={handleStartCamera} size="lg"><Play className="h-4 w-4 mr-2" />Start Camera</Button>
                 </div>
               </div>
             )}
             {state === 'loading' && (
               <div className="absolute inset-0 flex items-center justify-center bg-background/80">
-                <div className="text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" /><p className="text-sm text-muted-foreground mt-2">Loading...</p></div>
+                <div className="text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" /><p className="text-sm text-slate-500 mt-2">Loading...</p></div>
               </div>
             )}
             {(state === 'detecting' || state === 'face-found') && (
@@ -91,19 +91,19 @@ export function FaceVerificationModal({ open, onOpenChange, onVerified, punchTyp
               </div>
             )}
             {state === 'no-camera' && (
-              <div className="absolute inset-0 flex items-center justify-center"><div className="text-center p-4"><Camera className="h-12 w-12 mx-auto text-destructive mb-2" /><p className="text-sm text-muted-foreground">Camera access denied</p></div></div>
+              <div className="absolute inset-0 flex items-center justify-center"><div className="text-center p-4"><Camera className="h-12 w-12 mx-auto text-rose-600 mb-2" /><p className="text-sm text-slate-500">Camera access denied</p></div></div>
             )}
             {state === 'timeout' && (
-              <div className="absolute inset-0 flex items-center justify-center bg-background/80"><div className="text-center p-4"><AlertTriangle className="h-12 w-12 mx-auto text-destructive mb-2" /><p className="text-sm text-muted-foreground">Verification timed out</p></div></div>
+              <div className="absolute inset-0 flex items-center justify-center bg-background/80"><div className="text-center p-4"><AlertTriangle className="h-12 w-12 mx-auto text-rose-600 mb-2" /><p className="text-sm text-slate-500">Verification timed out</p></div></div>
             )}
           </div>
           <div className="text-center">
             <h3 className="font-medium">{message.title}</h3>
-            <p className="text-sm text-muted-foreground">{message.description}</p>
+            <p className="text-sm text-slate-500">{message.description}</p>
             {(state === 'face-found' || state === 'detecting') && (
               <div className="mt-2 space-y-1">
                 <div className="flex items-center justify-center gap-2">
-                  <span className="text-sm text-muted-foreground">Blinks detected:</span>
+                  <span className="text-sm text-slate-500">Blinks detected:</span>
                   <div className="flex gap-1">
                     {[0, 1].map((i) => (
                       <div key={i} className={cn("w-3 h-3 rounded-full border-2", blinkCount > i ? "bg-green-600 border-green-600" : "border-muted-foreground")} />
@@ -111,11 +111,11 @@ export function FaceVerificationModal({ open, onOpenChange, onVerified, punchTyp
                   </div>
                 </div>
                 {currentEAR !== null && (
-                  <div className="text-xs text-muted-foreground font-mono">EAR: {currentEAR.toFixed(3)} {currentEAR < 0.28 ? '👁️ closed' : '👀 open'}</div>
+                  <div className="text-xs text-slate-500 font-mono">EAR: {currentEAR.toFixed(3)} {currentEAR < 0.28 ? '👁️ closed' : '👀 open'}</div>
                 )}
               </div>
             )}
-            {error && <p className="text-sm text-destructive mt-2">{error}</p>}
+            {error && <p className="text-sm text-rose-600 mt-2">{error}</p>}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" className="flex-1" onClick={handleClose}>Cancel</Button>

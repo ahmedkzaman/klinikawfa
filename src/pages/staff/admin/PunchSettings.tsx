@@ -167,7 +167,7 @@ export default function PunchSettings() {
   const availableShifts = SHIFT_OPTIONS.filter(s => !usedShifts.has(s));
 
   if (loading) {
-    return <div className="flex items-center gap-2 text-muted-foreground p-8"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>;
+    return <div className="flex items-center gap-2 text-slate-500 p-8"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>;
   }
 
   return (
@@ -176,7 +176,7 @@ export default function PunchSettings() {
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <Clock className="h-6 w-6" /> Punch Buffer Settings
         </h1>
-        <p className="text-muted-foreground text-sm mt-1">
+        <p className="text-slate-500 text-sm mt-1">
           Configure how early or late staff can clock in or out around their rostered shift.
           Resolution order: <strong>Role + Shift</strong> → <strong>Shift</strong> → <strong>Role</strong> → <strong>Global</strong>.
         </p>
@@ -216,7 +216,7 @@ export default function PunchSettings() {
         </CardHeader>
         <CardContent className="space-y-4">
           {shiftRows.length === 0 && (
-            <p className="text-sm text-muted-foreground">No shift overrides yet.</p>
+            <p className="text-sm text-slate-500">No shift overrides yet.</p>
           )}
           {shiftRows.map(row => (
             <BufferCard
@@ -247,7 +247,7 @@ export default function PunchSettings() {
         </CardHeader>
         <CardContent className="space-y-4">
           {roleRows.length === 0 && (
-            <p className="text-sm text-muted-foreground">No role overrides yet.</p>
+            <p className="text-sm text-slate-500">No role overrides yet.</p>
           )}
           {roleRows.map(row => (
             <BufferCard
@@ -277,7 +277,7 @@ export default function PunchSettings() {
         </CardHeader>
         <CardContent className="space-y-4">
           {roleShiftRows.length === 0 && (
-            <p className="text-sm text-muted-foreground">No role+shift overrides yet.</p>
+            <p className="text-sm text-slate-500">No role+shift overrides yet.</p>
           )}
           {roleShiftRows.map(row => (
             <BufferCard
@@ -402,18 +402,18 @@ function BufferCard({
           <CardDescription>{description}</CardDescription>
         </div>
         {onDelete && (
-          <Button variant="ghost" size="icon" onClick={onDelete} className="text-destructive">
+          <Button variant="ghost" size="icon" onClick={onDelete} className="text-rose-600">
             <Trash2 className="h-4 w-4" />
           </Button>
         )}
       </CardHeader>
       <CardContent className="space-y-4">
         <BufferFieldGrid values={values} onChange={setValues} />
-        <div className="rounded-md bg-muted/50 p-3 text-xs space-y-1">
-          <div className="font-medium text-muted-foreground">Preview punch window:</div>
+        <div className="rounded-md bg-slate-50 p-3 text-xs space-y-1">
+          <div className="font-medium text-slate-500">Preview punch window:</div>
           {previews.map(p => (
             <div key={p.label} className="flex flex-wrap items-center gap-2">
-              <span className="text-muted-foreground">{p.label}:</span>
+              <span className="text-slate-500">{p.label}:</span>
               <Badge variant="secondary">{p.range}</Badge>
             </div>
           ))}
@@ -460,8 +460,8 @@ function Field({ label, value, onChange, hint, tip }: { label: string; value: nu
     <div className="space-y-1">
       <Label className="text-xs">{label}</Label>
       <Input type="number" min={0} max={480} value={value} onChange={onChange} />
-      <p className="text-[11px] text-muted-foreground">{hint}</p>
-      {tip && <p className="text-[11px] text-primary/80 italic">{tip}</p>}
+      <p className="text-[11px] text-slate-500">{hint}</p>
+      {tip && <p className="text-[11px] text-blue-600/80 italic">{tip}</p>}
     </div>
   );
 }

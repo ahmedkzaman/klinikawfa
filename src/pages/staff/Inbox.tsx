@@ -63,29 +63,29 @@ export default function Inbox() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Inbox</h1>
-        <p className="text-muted-foreground text-sm">Circular notices & announcements</p>
+        <p className="text-slate-500 text-sm">Circular notices & announcements</p>
       </div>
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-slate-500">Loading...</p>
       ) : notices.length === 0 ? (
-        <Card><CardContent className="py-8 text-center text-muted-foreground">No notices at the moment.</CardContent></Card>
+        <Card><CardContent className="py-8 text-center text-slate-500">No notices at the moment.</CardContent></Card>
       ) : (
         <>
           {unread.length > 0 && (
             <div className="space-y-3">
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Unread ({unread.length})</h2>
+              <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Unread ({unread.length})</h2>
               {unread.map(notice => (
                 <Card key={notice.id} className="border-primary/30">
                   <CardContent className="py-4">
                     <div className="flex items-start gap-3">
-                      <Megaphone className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                      <Megaphone className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <h3 className="font-semibold text-sm">{notice.title}</h3>
                           {notice.priority === 'urgent' && <Badge variant="destructive" className="text-[10px]">Urgent</Badge>}
                         </div>
-                        <p className="text-xs text-muted-foreground mb-1">{format(new Date(notice.published_at), 'MMM d, yyyy h:mm a')}</p>
+                        <p className="text-xs text-slate-500 mb-1">{format(new Date(notice.published_at), 'MMM d, yyyy h:mm a')}</p>
                         <div className={expanded === notice.id ? '' : 'line-clamp-3'}>
                           <p className="text-sm whitespace-pre-wrap">{notice.content}</p>
                         </div>
@@ -107,7 +107,7 @@ export default function Inbox() {
 
           {read.length > 0 && (
             <div className="space-y-3">
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Read ({read.length})</h2>
+              <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Read ({read.length})</h2>
               {read.map(notice => (
                 <Card key={notice.id} className="opacity-70">
                   <CardContent className="py-4">
@@ -118,7 +118,7 @@ export default function Inbox() {
                           <h3 className="font-medium text-sm">{notice.title}</h3>
                           {notice.priority === 'urgent' && <Badge variant="secondary" className="text-[10px]">Urgent</Badge>}
                         </div>
-                        <p className="text-xs text-muted-foreground">{format(new Date(notice.published_at), 'MMM d, yyyy h:mm a')}</p>
+                        <p className="text-xs text-slate-500">{format(new Date(notice.published_at), 'MMM d, yyyy h:mm a')}</p>
                         {expanded === notice.id && <p className="text-sm whitespace-pre-wrap mt-2">{notice.content}</p>}
                         <Button variant="link" size="sm" className="h-auto p-0 text-xs mt-1" onClick={() => setExpanded(expanded === notice.id ? null : notice.id)}>
                           {expanded === notice.id ? 'Hide' : 'View content'}

@@ -53,12 +53,12 @@ export default function AdminOnboarding() {
   const totalStaff = profiles.length;
 
   const StepIcon = ({ done }: { done: boolean }) =>
-    done ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <Circle className="h-4 w-4 text-muted-foreground" />;
+    done ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <Circle className="h-4 w-4 text-slate-500" />;
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
       </div>
     );
   }
@@ -67,7 +67,7 @@ export default function AdminOnboarding() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Staff Onboarding Status</h1>
-        <p className="text-muted-foreground">Track which staff have completed onboarding.</p>
+        <p className="text-slate-500">Track which staff have completed onboarding.</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -109,7 +109,7 @@ export default function AdminOnboarding() {
                     <TableCell>
                       <div>
                         <div className="font-medium text-sm">{profile.full_name || '—'}</div>
-                        <div className="text-xs text-muted-foreground">{profile.email}</div>
+                        <div className="text-xs text-slate-500">{profile.email}</div>
                       </div>
                     </TableCell>
                     <TableCell className="text-center"><StepIcon done={!!hasForm} /></TableCell>
@@ -118,14 +118,14 @@ export default function AdminOnboarding() {
                     <TableCell className="text-center"><StepIcon done={!!record?.company_policy_acknowledged} /></TableCell>
                     <TableCell className="text-center">
                       {record?.is_completed ? (
-                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Done</Badge>
+                        <Badge className="bg-emerald-50 text-emerald-700">Done</Badge>
                       ) : record ? (
                         <Badge variant="outline" className="text-amber-600 border-amber-300">In Progress</Badge>
                       ) : (
-                        <Badge variant="outline" className="text-muted-foreground">Not Started</Badge>
+                        <Badge variant="outline" className="text-slate-500">Not Started</Badge>
                       )}
                     </TableCell>
-                    <TableCell className="hidden sm:table-cell text-xs text-muted-foreground">
+                    <TableCell className="hidden sm:table-cell text-xs text-slate-500">
                       {record?.updated_at ? format(new Date(record.updated_at), 'dd MMM yyyy') : '—'}
                     </TableCell>
                   </TableRow>

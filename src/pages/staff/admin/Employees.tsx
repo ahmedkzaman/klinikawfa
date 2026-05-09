@@ -68,18 +68,18 @@ export default function AdminEmployees() {
 
   return (
     <div className="space-y-6">
-      <div><h1 className="text-2xl font-bold tracking-tight">Employees</h1><p className="text-muted-foreground">Manage staff members and their roles</p></div>
+      <div><h1 className="text-2xl font-bold tracking-tight">Employees</h1><p className="text-slate-500">Manage staff members and their roles</p></div>
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" />Staff Directory</CardTitle><CardDescription>{employees.length} employees registered</CardDescription></CardHeader>
         <CardContent>
-          {isLoading ? <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-          : employees.length === 0 ? <div className="text-center py-8 text-muted-foreground"><Users className="h-12 w-12 mx-auto mb-4 opacity-50" /><p>No employees found.</p></div>
+          {isLoading ? <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-slate-500" /></div>
+          : employees.length === 0 ? <div className="text-center py-8 text-slate-500"><Users className="h-12 w-12 mx-auto mb-4 opacity-50" /><p>No employees found.</p></div>
           : (
             <div className="space-y-4">{employees.map((e) => (
               <div key={e.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 border rounded-lg">
                 <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">{e.role === 'admin' ? <Shield className="h-5 w-5 text-primary" /> : <User className="h-5 w-5 text-muted-foreground" />}</div>
-                  <div><p className="font-medium">{e.full_name || 'Unknown'}</p>{e.position && <p className="text-sm text-foreground/80">{e.position}</p>}<p className="text-sm text-muted-foreground">{e.department || 'No department'}{e.phone && ` • ${e.phone}`}</p></div>
+                  <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center">{e.role === 'admin' ? <Shield className="h-5 w-5 text-blue-600" /> : <User className="h-5 w-5 text-slate-500" />}</div>
+                  <div><p className="font-medium">{e.full_name || 'Unknown'}</p>{e.position && <p className="text-sm text-foreground/80">{e.position}</p>}<p className="text-sm text-slate-500">{e.department || 'No department'}{e.phone && ` • ${e.phone}`}</p></div>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
                   <Select value={e.position || '__none__'} onValueChange={(v) => handlePositionChange(e.id, v)}>

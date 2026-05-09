@@ -16,16 +16,16 @@ import { format } from 'date-fns';
 import { APPRAISAL_TYPE_LABELS, type AppraisalType } from '@/lib/appraisalConstants';
 
 const statusColors: Record<string, string> = {
-  draft: 'bg-muted text-muted-foreground',
-  submitted: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-  reviewed: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-  completed: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+  draft: 'bg-slate-100 text-slate-500',
+  submitted: 'bg-blue-50 text-blue-700',
+  reviewed: 'bg-amber-50 text-amber-700',
+  completed: 'bg-emerald-50 text-emerald-700',
 };
 
 const typeColors: Record<string, string> = {
-  doctor: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-  clinic_assistant: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
-  staff_nurse: 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200',
+  doctor: 'bg-violet-50 text-violet-700',
+  clinic_assistant: 'bg-teal-50 text-teal-700',
+  staff_nurse: 'bg-rose-50 text-rose-700',
 };
 
 export default function PerformanceAppraisal() {
@@ -126,10 +126,10 @@ export default function PerformanceAppraisal() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <ClipboardCheck className="h-6 w-6 text-primary" />
+            <ClipboardCheck className="h-6 w-6 text-blue-600" />
             Performance Appraisal
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">360° Staff Performance Evaluation</p>
+          <p className="text-slate-500 text-sm mt-1">360° Staff Performance Evaluation</p>
         </div>
         {isAdmin && (
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -187,10 +187,10 @@ export default function PerformanceAppraisal() {
       </div>
 
       {isLoading ? (
-        <div className="text-center py-12 text-muted-foreground">Loading appraisals...</div>
+        <div className="text-center py-12 text-slate-500">Loading appraisals...</div>
       ) : !appraisals?.length ? (
         <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
+          <CardContent className="py-12 text-center text-slate-500">
             No appraisals found. {isAdmin ? 'Create one to get started.' : 'Your admin will create appraisals for you.'}
           </CardContent>
         </Card>
@@ -220,18 +220,18 @@ export default function PerformanceAppraisal() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
-                  <div className="flex items-center gap-2 text-muted-foreground">
+                  <div className="flex items-center gap-2 text-slate-500">
                     <Calendar className="h-3.5 w-3.5" />
                     {format(new Date(appraisal.appraisal_period_from), 'dd MMM yyyy')} – {format(new Date(appraisal.appraisal_period_to), 'dd MMM yyyy')}
                   </div>
                   {getMyRole(appraisal.id) && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
+                    <div className="flex items-center gap-2 text-slate-500">
                       <User className="h-3.5 w-3.5" />
                       Your role: {getMyRole(appraisal.id)}
                     </div>
                   )}
                   {appraisal.overall_weighted_score != null && (
-                    <div className="font-semibold text-primary">
+                    <div className="font-semibold text-blue-600">
                       Score: {Number(appraisal.overall_weighted_score).toFixed(2)} / 5.0
                     </div>
                   )}

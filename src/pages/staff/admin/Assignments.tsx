@@ -141,7 +141,7 @@ export default function AdminAssignments() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Zone Assignments</h1>
-        <p className="text-muted-foreground">Auto-synced from roster, plus manual recurring overrides</p>
+        <p className="text-slate-500">Auto-synced from roster, plus manual recurring overrides</p>
       </div>
 
       <Tabs defaultValue="roster" className="w-full">
@@ -183,9 +183,9 @@ export default function AdminAssignments() {
             </CardHeader>
             <CardContent>
               {isLoadingRoster ? (
-                <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+                <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-slate-500" /></div>
               ) : groupedRoster.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">
+                <div className="text-center py-8 text-slate-500 text-sm">
                   No roster-based assignments for {MONTHS[rosterMonth - 1]} {rosterYear}.
                   <br />Save a roster for this month, or click "Re-sync from roster" above.
                 </div>
@@ -193,14 +193,14 @@ export default function AdminAssignments() {
                 <div className="space-y-5">
                   {groupedRoster.map((group) => (
                     <div key={group.name}>
-                      <p className="text-sm font-semibold text-foreground mb-2">{group.name} <span className="text-xs font-normal text-muted-foreground">({group.rows.length} shift{group.rows.length === 1 ? '' : 's'})</span></p>
+                      <p className="text-sm font-semibold text-foreground mb-2">{group.name} <span className="text-xs font-normal text-slate-500">({group.rows.length} shift{group.rows.length === 1 ? '' : 's'})</span></p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 ml-2">
                         {group.rows.map((a) => (
                           <div key={a.id} className="flex items-center justify-between gap-2 p-2.5 border rounded-md text-xs">
                             <div>
                               <p className="font-medium">{format(new Date(a.work_date), 'EEE, MMM d')}</p>
-                              <p className="text-muted-foreground">{formatTime(a.start_time)} – {formatTime(a.end_time)}</p>
-                              <p className="text-muted-foreground truncate">{a.zone_name}</p>
+                              <p className="text-slate-500">{formatTime(a.start_time)} – {formatTime(a.end_time)}</p>
+                              <p className="text-slate-500 truncate">{a.zone_name}</p>
                             </div>
                             <Badge variant="secondary" className="text-[10px]">{a.shift_key}</Badge>
                           </div>
@@ -217,7 +217,7 @@ export default function AdminAssignments() {
         {/* ============ MANUAL RECURRING (existing) ============ */}
         <TabsContent value="manual" className="space-y-4 mt-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <p className="text-sm text-muted-foreground">Recurring weekly patterns. Used as fallback when no roster shift exists for the day.</p>
+            <p className="text-sm text-slate-500">Recurring weekly patterns. Used as fallback when no roster shift exists for the day.</p>
             <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) resetForm(); }}>
               <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-2" />Add Assignment</Button></DialogTrigger>
               <DialogContent>
@@ -235,15 +235,15 @@ export default function AdminAssignments() {
           <Card>
             <CardHeader><CardTitle className="flex items-center gap-2"><CalendarClock className="h-5 w-5" />Manual Recurring Assignments</CardTitle><CardDescription>{assignments.length} assignment(s)</CardDescription></CardHeader>
             <CardContent>
-              {isLoading ? <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-              : assignments.length === 0 ? <div className="text-center py-8 text-muted-foreground">No manual assignments yet.</div>
+              {isLoading ? <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-slate-500" /></div>
+              : assignments.length === 0 ? <div className="text-center py-8 text-slate-500">No manual assignments yet.</div>
               : (
                 <div className="space-y-2">{assignments.map((a: any, i: number) => {
                   const showHeader = i === 0 || a.profile_name !== assignments[i - 1].profile_name;
                   return (<div key={a.id}>{showHeader && <p className="text-sm font-semibold text-foreground mt-4 mb-1 first:mt-0">{a.profile_name}</p>}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 border rounded-lg ml-2">
-                      <div className="space-y-0.5"><p className="text-sm font-medium">{a.zone_name}</p><p className="text-xs text-muted-foreground">{formatTime(a.start_time)} – {formatTime(a.end_time)} • {formatDays(a.days_of_week)}</p></div>
-                      <div className="flex items-center gap-2"><Badge variant={a.is_active ? 'default' : 'secondary'} className="text-xs">{a.is_active ? 'Active' : 'Inactive'}</Badge><Switch checked={a.is_active} onCheckedChange={() => handleToggleActive(a.id, a.is_active)} /><Button variant="ghost" size="icon" onClick={() => handleEdit(a)}><Pencil className="h-4 w-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDelete(a.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button></div>
+                      <div className="space-y-0.5"><p className="text-sm font-medium">{a.zone_name}</p><p className="text-xs text-slate-500">{formatTime(a.start_time)} – {formatTime(a.end_time)} • {formatDays(a.days_of_week)}</p></div>
+                      <div className="flex items-center gap-2"><Badge variant={a.is_active ? 'default' : 'secondary'} className="text-xs">{a.is_active ? 'Active' : 'Inactive'}</Badge><Switch checked={a.is_active} onCheckedChange={() => handleToggleActive(a.id, a.is_active)} /><Button variant="ghost" size="icon" onClick={() => handleEdit(a)}><Pencil className="h-4 w-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDelete(a.id)}><Trash2 className="h-4 w-4 text-rose-600" /></Button></div>
                     </div></div>);
                 })}</div>
               )}

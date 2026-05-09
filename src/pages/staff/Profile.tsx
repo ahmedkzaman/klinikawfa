@@ -121,7 +121,7 @@ function PayrollInfoSection({ userId, isAdmin }: { userId: string; isAdmin: bool
         {items.map(([label, value]) => (
           <div key={label} className="space-y-1">
             <Label>{label}</Label>
-            <p className="text-sm py-2 px-3 bg-muted rounded-md">{value}</p>
+            <p className="text-sm py-2 px-3 bg-slate-100 rounded-md">{value}</p>
           </div>
         ))}
         {isAdmin && (
@@ -129,14 +129,14 @@ function PayrollInfoSection({ userId, isAdmin }: { userId: string; isAdmin: bool
             <Label className="mt-4 block font-semibold">Allowances</Label>
             {allowances.map(([label, value]) => (
               <div key={label} className="flex justify-between text-sm py-1">
-                <span className="text-muted-foreground">{label}</span>
+                <span className="text-slate-500">{label}</span>
                 <span>RM {(value || 0).toFixed(2)}</span>
               </div>
             ))}
             <Label className="mt-4 block font-semibold">Statutory Deductions</Label>
             {statutoryDeductions.map(([label, value]) => (
               <div key={label} className="flex justify-between text-sm py-1">
-                <span className="text-muted-foreground">{label}</span>
+                <span className="text-slate-500">{label}</span>
                 <span>RM {(value || 0).toFixed(2)}</span>
               </div>
             ))}
@@ -295,7 +295,7 @@ export default function StaffProfile() {
                     <Input id={key} value={formData[key]} onChange={e => updateField(key, e.target.value)} />
                   )
                 ) : (
-                  <p className="text-sm py-2 px-3 bg-muted rounded-md min-h-[40px] flex items-center">
+                  <p className="text-sm py-2 px-3 bg-slate-100 rounded-md min-h-[40px] flex items-center">
                     {key === 'bank_account' && !isAdmin ? maskBankAccount(currentData[key]) : (currentData[key] || '-')}
                   </p>
                 )}

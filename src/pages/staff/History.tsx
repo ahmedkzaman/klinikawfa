@@ -150,7 +150,7 @@ export default function StaffHistory() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div><h1 className="text-2xl font-bold tracking-tight">Attendance History</h1><p className="text-muted-foreground">{isAdmin ? 'View all staff attendance records' : 'View your past attendance records'}</p></div>
+        <div><h1 className="text-2xl font-bold tracking-tight">Attendance History</h1><p className="text-slate-500">{isAdmin ? 'View all staff attendance records' : 'View your past attendance records'}</p></div>
         <div className="flex flex-wrap items-center gap-2">
           {isAdmin && (
             <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
@@ -166,28 +166,28 @@ export default function StaffHistory() {
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-3">
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Total Days</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{Object.keys(groupedRecords).length}</div><p className="text-xs text-muted-foreground">Days with punches</p></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Total Punches</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{records.length}</div><p className="text-xs text-muted-foreground">This month</p></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Punch Ins</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{records.filter(r => r.punch_type === 'in').length}</div><p className="text-xs text-muted-foreground">This month</p></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Total Days</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{Object.keys(groupedRecords).length}</div><p className="text-xs text-slate-500">Days with punches</p></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Total Punches</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{records.length}</div><p className="text-xs text-slate-500">This month</p></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Punch Ins</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{records.filter(r => r.punch_type === 'in').length}</div><p className="text-xs text-slate-500">This month</p></CardContent></Card>
       </div>
       <Card>
         <CardHeader><CardTitle>Daily Records</CardTitle><CardDescription>{format(selectedMonth, 'MMMM yyyy')} attendance details</CardDescription></CardHeader>
         <CardContent>
-          {isLoading ? <div className="text-center py-8 text-muted-foreground">Loading records...</div>
-          : Object.keys(groupedRecords).length === 0 ? <div className="text-center py-8 text-muted-foreground">No records found for this month</div>
+          {isLoading ? <div className="text-center py-8 text-slate-500">Loading records...</div>
+          : Object.keys(groupedRecords).length === 0 ? <div className="text-center py-8 text-slate-500">No records found for this month</div>
           : (
             <div className="space-y-6">
               {Object.entries(groupedRecords).sort(([a], [b]) => b.localeCompare(a)).map(([dateKey, dayRecords]) => (
                 <div key={dateKey} className="border-b pb-4 last:border-0 last:pb-0">
-                  <div className="flex items-center justify-between mb-3"><h3 className="font-medium">{format(new Date(dateKey), 'EEEE, MMMM d')}</h3><span className="text-sm text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" />{calculateWorkHours(dayRecords)}</span></div>
+                  <div className="flex items-center justify-between mb-3"><h3 className="font-medium">{format(new Date(dateKey), 'EEEE, MMMM d')}</h3><span className="text-sm text-slate-500 flex items-center gap-1"><Clock className="h-3 w-3" />{calculateWorkHours(dayRecords)}</span></div>
                   <div className="space-y-2">
                     {dayRecords.sort((a: any, b: any) => new Date(a.punch_time).getTime() - new Date(b.punch_time).getTime()).map((r: any) => (
                       <div key={r.id} className="flex items-center gap-3 text-sm">
                         <div className={cn('h-2 w-2 rounded-full', getPunchDotColor(r))} />
                         <span className="font-medium w-16">{r.punch_type === 'in' ? 'In' : 'Out'}</span>
-                        <span className="text-muted-foreground">{format(new Date(r.punch_time), 'h:mm a')}</span>
-                        {r.zone_id && zones[r.zone_id] && <span className="text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" />{zones[r.zone_id].name}</span>}
-                        {isAdmin && <span className="text-muted-foreground ml-auto">{profiles[r.user_id] || 'Unknown'}</span>}
+                        <span className="text-slate-500">{format(new Date(r.punch_time), 'h:mm a')}</span>
+                        {r.zone_id && zones[r.zone_id] && <span className="text-slate-500 flex items-center gap-1"><MapPin className="h-3 w-3" />{zones[r.zone_id].name}</span>}
+                        {isAdmin && <span className="text-slate-500 ml-auto">{profiles[r.user_id] || 'Unknown'}</span>}
                       </div>
                     ))}
                   </div>

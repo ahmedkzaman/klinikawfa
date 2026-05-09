@@ -146,7 +146,7 @@ export default function ProfileApprovals() {
             </TableHeader>
             <TableBody>
               {submissions?.length === 0 && (
-                <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">No submissions found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={4} className="text-center text-slate-500 py-8">No submissions found</TableCell></TableRow>
               )}
               {submissions?.map(s => (
                 <TableRow key={s.id}>
@@ -171,13 +171,13 @@ export default function ProfileApprovals() {
           <DialogHeader><DialogTitle>Profile Submission</DialogTitle></DialogHeader>
           {selectedSubmission && (
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-slate-500">
                 From: {profiles?.[selectedSubmission.user_id]?.full_name || profiles?.[selectedSubmission.user_id]?.email}
               </p>
               <div className="space-y-2">
                 {Object.entries(selectedSubmission.profile_data).map(([key, value]) => (
                   <div key={key} className="flex justify-between text-sm border-b pb-1">
-                    <span className="text-muted-foreground">{fieldLabels[key] || key}</span>
+                    <span className="text-slate-500">{fieldLabels[key] || key}</span>
                     <span className="font-medium text-right max-w-[60%]">{String(value) || '-'}</span>
                   </div>
                 ))}
