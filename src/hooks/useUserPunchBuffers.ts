@@ -44,11 +44,13 @@ function pickFields(row: any): PunchBuffers {
  *   4. global        (scope='global')
  * Falls back to DEFAULT_BUFFERS.
  */
-export function resolvePunchBuffers(
+export type BufferSource = 'role_shift' | 'shift' | 'role' | 'global' | 'default';
+
+export function resolvePunchBuffersWithSource(
   settings: any[] | null | undefined,
   roles: string[] | null | undefined,
   shiftKey?: string | null,
-): PunchBuffers {
+): { buffers: PunchBuffers; source: BufferSource } {
   const rows = settings ?? [];
   const userRoles = roles ?? [];
 
@@ -58,6 +60,7 @@ export function resolvePunchBuffers(
   const roleShiftRows = rows.filter((s) => s.scope === 'role_shift');
 
   let chosen: any = null;
+  let source: BufferSource = 'default';
 
   if (shiftKey) {
     let chosenP = -1;
@@ -65,13 +68,14 @@ export function resolvePunchBuffers(
       const row = roleShiftRows.find((s) => s.role === r && s.shift_key === shiftKey);
       if (row) {
         const p = ROLE_PRIORITY[r] ?? 0;
-        if (p > chosenP) { chosen = row; chosenP = p; }
+        if (p > chosenP) { chosen = row; chosenP = p; source = 'role_shift'; }
       }
     }
   }
 
   if (!chosen && shiftKey) {
-    chosen = shiftRows.find((s) => s.shift_key === shiftKey) ?? null;
+    const row = shiftRows.find((s) => s.shift_key === shiftKey) ?? null;
+    if (row) { chosen = row; source = 'shift'; }
   }
 
   if (!chosen) {
@@ -80,14 +84,24 @@ export function resolvePunchBuffers(
       const row = roleRows.find((s) => s.role === r);
       if (row) {
         const p = ROLE_PRIORITY[r] ?? 0;
-        if (p > chosenP) { chosen = row; chosenP = p; }
+        if (p > chosenP) { chosen = row; chosenP = p; source = 'role'; }
       }
     }
   }
 
-  if (!chosen) chosen = global;
+  if (!chosen && global) { chosen = global; source = 'global'; }
 
-  return chosen ? pickFields(chosen) : DEFAULT_BUFFERS;
+  return chosen
+    ? { buffers: pickFields(chosen), source }
+    : { buffers: DEFAULT_BUFFERS, source: 'default' };
+}
+
+export function resolvePunchBuffers(
+  settings: any[] | null | undefined,
+  roles: string[] | null | undefined,
+  shiftKey?: string | null,
+): PunchBuffers {
+  return resolvePunchBuffersWithSource(settings, roles, shiftKey).buffers;
 }
 
 /**

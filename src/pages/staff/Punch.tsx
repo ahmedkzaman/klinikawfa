@@ -10,7 +10,7 @@ import { checkGeofence, formatDistance, getAccuracyStatus } from '@/lib/geofence
 import { normalizeShiftKey } from '@/lib/rosterUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { resolvePunchBuffers, DEFAULT_BUFFERS, type PunchBuffers } from '@/hooks/useUserPunchBuffers';
+import { resolvePunchBuffers, resolvePunchBuffersWithSource, DEFAULT_BUFFERS, type PunchBuffers, type BufferSource } from '@/hooks/useUserPunchBuffers';
 import { format, addDays, subDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { FaceVerificationModal } from '@/components/staff/FaceVerificationModal';
@@ -42,6 +42,7 @@ type ActiveShift = {
   start: Date;
   end: Date;
   buffers: PunchBuffers;
+  bufferSource: BufferSource;
   label: string;
 };
 
@@ -63,7 +64,7 @@ function pickActiveRosterShift(
 
   for (const row of sorted) {
     const sk = row.shift_key ? normalizeShiftKey(row.shift_key) : null;
-    const bufs = resolvePunchBuffers(settings, roles, sk);
+    const { buffers: bufs, source: bufSrc } = resolvePunchBuffersWithSource(settings, roles, sk);
     const start = new Date(`${row.work_date}T${row.start_time}`);
     const end = new Date(`${row.work_date}T${row.end_time}`);
     if (end.getTime() <= start.getTime()) end.setDate(end.getDate() + 1);
@@ -79,6 +80,7 @@ function pickActiveRosterShift(
       start,
       end,
       buffers: bufs,
+      bufferSource: bufSrc,
       label: `${sk ?? 'Shift'} (${format(start, 'h:mm a')} – ${format(end, 'h:mm a')})${
         row.work_date !== todayStr ? ' (from yesterday)' : ''
       }`,
@@ -109,7 +111,7 @@ function pickActiveManualShift(
   // Also check yesterday's dow for cross-midnight manual shifts
   const yDow = (dow + 6) % 7;
   const yStr = format(subDays(now, 1), 'yyyy-MM-dd');
-  const bufs = resolvePunchBuffers(settings, roles, null);
+  const { buffers: bufs, source: bufSrc } = resolvePunchBuffersWithSource(settings, roles, null);
 
   const candidates: { date: string; dow: number; a: ManualAssignment }[] = [];
   for (const a of assignments) {
@@ -133,6 +135,7 @@ function pickActiveManualShift(
         start,
         end,
         buffers: bufs,
+        bufferSource: bufSrc,
         label: `Manual (${format(start, 'h:mm a')} – ${format(end, 'h:mm a')})`,
       };
     }
@@ -154,6 +157,8 @@ export default function StaffPunch() {
   const [bufferSettings, setBufferSettings] = useState<any[]>([]);
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [now, setNow] = useState<Date>(new Date());
+  const [serverSkewMs, setServerSkewMs] = useState<number | null>(null);
+  const [loggedBlockKey, setLoggedBlockKey] = useState<string | null>(null);
 
   useEffect(() => { if (user) fetchData(); }, [user]);
   useEffect(() => { geo.getCurrentPosition(); }, []);
@@ -162,6 +167,28 @@ export default function StaffPunch() {
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(id);
+  }, []);
+
+  // One-shot device-clock vs server-clock check
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const t0 = Date.now();
+      const { data, error } = await supabase.rpc('get_server_now' as any).maybeSingle?.() ?? { data: null, error: null };
+      // Fallback: use response Date header (always present)
+      try {
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/auth/v1/health`, { method: 'GET' });
+        const dateHeader = res.headers.get('date');
+        if (!cancelled && dateHeader) {
+          const serverMs = new Date(dateHeader).getTime();
+          const rtt = (Date.now() - t0) / 2;
+          setServerSkewMs(Date.now() - rtt - serverMs);
+        }
+      } catch { /* ignore */ }
+      // Suppress unused warnings
+      void data; void error;
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const fetchData = async () => {
@@ -250,6 +277,39 @@ export default function StaffPunch() {
     return null;
   }, [activeShift, nearestShift, geofenceResult, nextPunchType, buffers, now, rosterRows.length, manualAssignments.length]);
 
+  // Compute the resolved punch-in window for display + diagnostics
+  const punchInWindow = useMemo(() => {
+    if (!activeShift) return null;
+    const open = new Date(activeShift.start.getTime() - activeShift.buffers.clock_in_early_min * 60_000);
+    const close = new Date(activeShift.start.getTime() + activeShift.buffers.clock_in_late_min * 60_000);
+    return { open, close };
+  }, [activeShift]);
+
+  // Forensic logging: when the user is blocked because the punch-in window
+  // closed, write one row to punch_block_log so we can diagnose post-mortem.
+  useEffect(() => {
+    if (!user?.id || !activeShift || !guardMessage) return;
+    if (!guardMessage.startsWith('Punch-in window has closed')) return;
+    const key = `${activeShift.workDate}|${activeShift.shiftKey ?? 'manual'}`;
+    if (loggedBlockKey === key) return;
+    setLoggedBlockKey(key);
+    const closeAt = new Date(activeShift.start.getTime() + activeShift.buffers.clock_in_late_min * 60_000);
+    const payload = {
+      user_id: user.id,
+      client_now: new Date().toISOString(),
+      client_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      shift_key: activeShift.shiftKey,
+      shift_start_iso: activeShift.start.toISOString(),
+      close_at_iso: closeAt.toISOString(),
+      clock_in_late_min: activeShift.buffers.clock_in_late_min,
+      buffer_source: activeShift.bufferSource,
+      roster_row_count: rosterRows.length,
+      guard_reason: guardMessage,
+    };
+    console.warn('[punch_block_log]', payload);
+    void supabase.from('punch_block_log' as any).insert(payload as any);
+  }, [guardMessage, activeShift, user?.id, rosterRows.length, loggedBlockKey]);
+
   const handlePunchClick = () => {
     if (!geo.latitude || !geo.longitude || !geofenceResult?.isWithinZone) {
       toast({ title: 'Cannot Punch', description: 'You must be within a valid zone.', variant: 'destructive' });
@@ -317,11 +377,27 @@ export default function StaffPunch() {
               <Loader2 className="h-4 w-4 animate-spin" />Loading roster...
             </div>
           ) : activeShift ? (
-            <div className="flex items-center gap-2 flex-wrap">
-              {activeShift.shiftKey && <Badge variant="secondary" className="text-sm">{activeShift.shiftKey}</Badge>}
-              <span className="text-sm font-medium">{activeShift.label}</span>
-              {activeShift.workDate !== todayStr && (
-                <Badge variant="outline" className="text-xs">cross-midnight</Badge>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {activeShift.shiftKey && <Badge variant="secondary" className="text-sm">{activeShift.shiftKey}</Badge>}
+                <span className="text-sm font-medium">{activeShift.label}</span>
+                {activeShift.workDate !== todayStr && (
+                  <Badge variant="outline" className="text-xs">cross-midnight</Badge>
+                )}
+              </div>
+              {punchInWindow && (
+                <p className="text-xs text-muted-foreground">
+                  Punch-in open <span className="font-medium text-foreground">{fmtTime(punchInWindow.open)} – {fmtTime(punchInWindow.close)}</span>
+                  {' '}(late buffer {activeShift.buffers.clock_in_late_min} min, source: {activeShift.bufferSource})
+                </p>
+              )}
+              {serverSkewMs !== null && Math.abs(serverSkewMs) > 120_000 && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    Your device clock is off by ~{Math.round(Math.abs(serverSkewMs) / 60_000)} min vs server time. Please fix your phone's date/time before punching.
+                  </AlertDescription>
+                </Alert>
               )}
             </div>
           ) : nearestShift ? (

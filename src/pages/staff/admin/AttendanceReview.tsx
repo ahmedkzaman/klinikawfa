@@ -23,6 +23,7 @@ import {
   type LatenessSeverity,
 } from '@/lib/rosterUtils';
 import { logicalWorkDateOf } from '@/lib/attendanceUtils';
+import { ManualPunchDialog } from '@/components/staff/admin/ManualPunchDialog';
 
 const COLORS = {
   working: 'hsl(142, 76%, 36%)',
@@ -208,9 +209,12 @@ export default function AdminAttendanceReview() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <h1 className="text-2xl font-bold">Attendance Review</h1>
-        <Button variant="outline" size="sm" onClick={exportCSV}>
-          <Download className="h-4 w-4 mr-2" /> Export CSV
-        </Button>
+        <div className="flex gap-2">
+          <ManualPunchDialog />
+          <Button variant="outline" size="sm" onClick={exportCSV}>
+            <Download className="h-4 w-4 mr-2" /> Export CSV
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3">

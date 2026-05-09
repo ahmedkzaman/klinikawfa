@@ -370,6 +370,7 @@ export type Database = {
       attendance_records: {
         Row: {
           accuracy_meters: number | null
+          admin_note: string | null
           created_at: string
           face_verified: boolean
           id: string
@@ -378,12 +379,14 @@ export type Database = {
           longitude: number | null
           punch_time: string
           punch_type: string
+          recorded_by: string | null
           shift_key: string | null
           user_id: string
           zone_id: string | null
         }
         Insert: {
           accuracy_meters?: number | null
+          admin_note?: string | null
           created_at?: string
           face_verified?: boolean
           id?: string
@@ -392,12 +395,14 @@ export type Database = {
           longitude?: number | null
           punch_time?: string
           punch_type: string
+          recorded_by?: string | null
           shift_key?: string | null
           user_id: string
           zone_id?: string | null
         }
         Update: {
           accuracy_meters?: number | null
+          admin_note?: string | null
           created_at?: string
           face_verified?: boolean
           id?: string
@@ -406,6 +411,7 @@ export type Database = {
           longitude?: number | null
           punch_time?: string
           punch_type?: string
+          recorded_by?: string | null
           shift_key?: string | null
           user_id?: string
           zone_id?: string | null
@@ -2805,6 +2811,54 @@ export type Database = {
           holiday_date?: string
           id?: string
           name?: string
+        }
+        Relationships: []
+      }
+      punch_block_log: {
+        Row: {
+          attempted_at: string
+          buffer_source: string | null
+          client_now: string | null
+          client_tz: string | null
+          clock_in_late_min: number | null
+          close_at_iso: string | null
+          created_at: string
+          guard_reason: string | null
+          id: string
+          roster_row_count: number | null
+          shift_key: string | null
+          shift_start_iso: string | null
+          user_id: string
+        }
+        Insert: {
+          attempted_at?: string
+          buffer_source?: string | null
+          client_now?: string | null
+          client_tz?: string | null
+          clock_in_late_min?: number | null
+          close_at_iso?: string | null
+          created_at?: string
+          guard_reason?: string | null
+          id?: string
+          roster_row_count?: number | null
+          shift_key?: string | null
+          shift_start_iso?: string | null
+          user_id: string
+        }
+        Update: {
+          attempted_at?: string
+          buffer_source?: string | null
+          client_now?: string | null
+          client_tz?: string | null
+          clock_in_late_min?: number | null
+          close_at_iso?: string | null
+          created_at?: string
+          guard_reason?: string | null
+          id?: string
+          roster_row_count?: number | null
+          shift_key?: string | null
+          shift_start_iso?: string | null
+          user_id?: string
         }
         Relationships: []
       }
