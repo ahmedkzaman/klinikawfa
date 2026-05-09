@@ -34,7 +34,7 @@ export function CalendarHeader({ currentDate, view, onViewChange, onNavigate, on
               key={v}
               onClick={() => onViewChange(v)}
               className={`px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-                view === v ? 'bg-blue-600 text-white' : 'bg-background text-slate-500 hover:bg-muted'
+                view === v ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'
               }`}
             >
               {v}
