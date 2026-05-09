@@ -206,87 +206,85 @@ export default function KanbanBoard() {
         </DialogContent>
       </Dialog>
 
-      <CardContent>
-        <DragDropContext onDragEnd={handleDragEnd}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {COLUMNS.map((col) => (
-              <div key={col.id} className="flex flex-col">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className={`h-2.5 w-2.5 rounded-full ${col.color}`} />
-                  <span className="text-sm font-semibold">{col.title}</span>
-                  <Badge variant="secondary" className="text-xs ml-auto">{grouped[col.id].length}</Badge>
-                </div>
-                <Droppable droppableId={col.id}>
-                  {(provided, snapshot) => (
-                    <div
-                      ref={provided.innerRef}
-                      {...provided.droppableProps}
-                      className={`flex-1 min-h-[120px] rounded-lg border border-dashed p-2 space-y-2 transition-colors ${snapshot.isDraggingOver ? 'bg-accent/50 border-primary' : 'border-border bg-muted/30'}`}
-                    >
-                      {grouped[col.id].map((task, idx) => (
-                        <Draggable key={task.id} draggableId={task.id} index={idx}>
-                          {(prov, snap) => (
-                            <div
-                              ref={prov.innerRef}
-                              {...prov.draggableProps}
-                              className={`rounded-md border bg-card p-3 shadow-sm text-sm ${snap.isDragging ? 'shadow-lg ring-2 ring-primary/30' : ''} ${task.visibility === 'admin_only' ? 'border-l-4 border-l-amber-400' : ''}`}
-                            >
-                              <div className="flex items-start gap-1">
-                                <div {...prov.dragHandleProps} className="mt-0.5 cursor-grab"><GripVertical className="h-3.5 w-3.5 text-muted-foreground" /></div>
-                                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEdit(task)}>
-                                  <p className="font-medium truncate">{task.title}</p>
-                                  {task.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{task.description}</p>}
-                                  <div className="flex items-center gap-1 mt-2 flex-wrap">
-                                    {task.assigned_to ? (
-                                      <Badge variant="outline" className="text-[10px] gap-1"><User className="h-2.5 w-2.5" />{task.assignee_name}</Badge>
-                                    ) : (
-                                      <Badge variant="outline" className="text-[10px] gap-1"><Users className="h-2.5 w-2.5" />All Staff</Badge>
-                                    )}
-                                    {task.visibility === 'admin_only' && <Badge variant="secondary" className="text-[10px]">Admin Only</Badge>}
-                                    {task.deadline && (() => {
-                                      const isOverdue = new Date(task.deadline) < new Date() && task.board_column !== 'done';
-                                      return (
-                                        <Badge variant={isOverdue ? 'destructive' : 'outline'} className="text-[10px] gap-1">
-                                          {isOverdue && <AlertTriangle className="h-2.5 w-2.5" />}
-                                          {format(new Date(task.deadline), 'MMM d')}
-                                        </Badge>
-                                      );
-                                    })()}
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {COLUMNS.map((col) => (
+            <div key={col.id} className="flex flex-col">
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`h-2.5 w-2.5 rounded-full ${col.color}`} />
+                <span className="text-sm font-semibold text-slate-700">{col.title}</span>
+                <Badge className={cn(softBadge, 'text-xs ml-auto')}>{grouped[col.id].length}</Badge>
+              </div>
+              <Droppable droppableId={col.id}>
+                {(provided, snapshot) => (
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                    className={`flex-1 min-h-[120px] rounded-xl border border-dashed p-2 space-y-2 transition-colors ${snapshot.isDraggingOver ? 'bg-blue-50 border-blue-300' : 'border-slate-200 bg-slate-50'}`}
+                  >
+                    {grouped[col.id].map((task, idx) => (
+                      <Draggable key={task.id} draggableId={task.id} index={idx}>
+                        {(prov, snap) => (
+                          <div
+                            ref={prov.innerRef}
+                            {...prov.draggableProps}
+                            className={`rounded-xl border border-slate-100 bg-white p-3 shadow-sm text-sm ${snap.isDragging ? 'shadow-lg ring-2 ring-blue-300' : ''} ${task.visibility === 'admin_only' ? 'border-l-4 border-l-amber-400' : ''}`}
+                          >
+                            <div className="flex items-start gap-1">
+                              <div {...prov.dragHandleProps} className="mt-0.5 cursor-grab"><GripVertical className="h-3.5 w-3.5 text-slate-400" /></div>
+                              <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEdit(task)}>
+                                <p className="font-medium truncate text-slate-800">{task.title}</p>
+                                {task.description && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{task.description}</p>}
+                                <div className="flex items-center gap-1 mt-2 flex-wrap">
+                                  {task.assigned_to ? (
+                                    <Badge variant="outline" className="text-[10px] gap-1 border-slate-200 text-slate-600"><User className="h-2.5 w-2.5" />{task.assignee_name}</Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-[10px] gap-1 border-slate-200 text-slate-600"><Users className="h-2.5 w-2.5" />All Staff</Badge>
+                                  )}
+                                  {task.visibility === 'admin_only' && <Badge className={cn(softBadge, 'text-[10px] bg-amber-50 text-amber-700')}>Admin Only</Badge>}
+                                  {task.deadline && (() => {
+                                    const isOverdue = new Date(task.deadline) < new Date() && task.board_column !== 'done';
+                                    return (
+                                      <Badge variant={isOverdue ? 'destructive' : 'outline'} className={cn('text-[10px] gap-1', !isOverdue && 'border-slate-200 text-slate-600')}>
+                                        {isOverdue && <AlertTriangle className="h-2.5 w-2.5" />}
+                                        {format(new Date(task.deadline), 'MMM d')}
+                                      </Badge>
+                                    );
+                                  })()}
+                                </div>
+                                {isAdmin && (
+                                  <div className="text-[10px] text-slate-500 mt-1.5 space-y-0.5">
+                                    <p>Created by: {task.creator_name}</p>
+                                    {task.last_edited_by && profiles[task.last_edited_by] && <p>Edited by: {profiles[task.last_edited_by]}</p>}
                                   </div>
-                                  {isAdmin && (
-                                    <div className="text-[10px] text-muted-foreground mt-1.5 space-y-0.5">
-                                      <p>Created by: {task.creator_name}</p>
-                                      {task.last_edited_by && profiles[task.last_edited_by] && <p>Edited by: {profiles[task.last_edited_by]}</p>}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex flex-col gap-1 shrink-0">
-                                  <button onClick={() => openEdit(task)} className="p-1 rounded hover:bg-accent" title="Edit task">
-                                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                                )}
+                              </div>
+                              <div className="flex flex-col gap-1 shrink-0">
+                                <button onClick={() => openEdit(task)} className="p-1 rounded hover:bg-slate-100" title="Edit task">
+                                  <Pencil className="h-3.5 w-3.5 text-slate-500" />
+                                </button>
+                                {isAdmin && (
+                                  <button onClick={() => handleVisibilityToggle(task)} className="p-1 rounded hover:bg-slate-100" title={task.visibility === 'admin_only' ? 'Make visible to all' : 'Make admin only'}>
+                                    {task.visibility === 'admin_only' ? <EyeOff className="h-3.5 w-3.5 text-amber-500" /> : <Eye className="h-3.5 w-3.5 text-slate-500" />}
                                   </button>
-                                  {isAdmin && (
-                                    <button onClick={() => handleVisibilityToggle(task)} className="p-1 rounded hover:bg-accent" title={task.visibility === 'admin_only' ? 'Make visible to all' : 'Make admin only'}>
-                                      {task.visibility === 'admin_only' ? <EyeOff className="h-3.5 w-3.5 text-amber-500" /> : <Eye className="h-3.5 w-3.5 text-muted-foreground" />}
-                                    </button>
-                                  )}
-                                  <button onClick={() => handleDelete(task)} className="p-1 rounded hover:bg-destructive/10" title={isAdmin ? 'Delete' : 'Request deletion'}>
-                                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                                  </button>
-                                </div>
+                                )}
+                                <button onClick={() => handleDelete(task)} className="p-1 rounded hover:bg-rose-50" title={isAdmin ? 'Delete' : 'Request deletion'}>
+                                  <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                                </button>
                               </div>
                             </div>
-                          )}
-                        </Draggable>
-                      ))}
-                      {provided.placeholder}
-                    </div>
-                  )}
-                </Droppable>
-              </div>
-            ))}
-          </div>
-        </DragDropContext>
-      </CardContent>
-    </Card>
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </div>
+          ))}
+        </div>
+      </DragDropContext>
+    </div>
   );
 }
