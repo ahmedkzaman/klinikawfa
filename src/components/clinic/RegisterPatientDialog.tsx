@@ -104,7 +104,21 @@ export function RegisterPatientDialog({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="national_id">MyKad / IC *</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="national_id">MyKad / IC *</Label>
+                <ReadMyKadButton
+                  onRead={(data) => {
+                    if (data.name) setValue('name', data.name, { shouldValidate: true, shouldDirty: true });
+                    const ic = cleanIC(data.ic_number);
+                    if (ic) setValue('national_id', ic, { shouldValidate: true, shouldDirty: true });
+                    const dob = mapDOB(data.dob);
+                    if (dob) setValue('date_of_birth', dob, { shouldValidate: true, shouldDirty: true });
+                    const g = mapGender(data.gender);
+                    if (g) setValue('gender', g, { shouldValidate: true, shouldDirty: true });
+                    toast.success('MyKad read successfully');
+                  }}
+                />
+              </div>
               <Input id="national_id" placeholder="12 digits" {...register('national_id')} />
               {errors.national_id && (
                 <p className="text-sm text-destructive mt-1">{errors.national_id.message}</p>
