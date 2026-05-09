@@ -317,16 +317,16 @@ export function StaffLayout() {
   };
 
   return (
-    <div className="min-h-screen flex w-full bg-background">
+    <div className="min-h-screen flex w-full bg-slate-50">
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-60 border-r bg-background min-h-screen sticky top-0 h-screen">
-        <div className="px-4 py-4 border-b">
+      <aside className="hidden md:flex flex-col w-60 border-r border-slate-100 bg-white min-h-screen sticky top-0 h-screen">
+        <div className="px-4 py-4 border-b border-slate-100">
           <Link to="/staff/dashboard" className="flex items-center gap-2">
             <img src={logoKlinikAwfa} alt="Klinik Awfa" className="h-8 w-auto" />
-            <span className="font-semibold text-sm text-primary">Klinik Awfa Staff</span>
+            <span className="font-semibold text-sm text-slate-800">Klinik Awfa Staff</span>
           </Link>
           {isOpsOrAdmin && (
-            <Button asChild size="sm" className="w-full mt-3 gap-2">
+            <Button asChild size="sm" className="w-full mt-3 gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white">
               <Link to="/clinic/queue">
                 <Activity className="h-4 w-4" />
                 Open Clinic System
@@ -337,9 +337,9 @@ export function StaffLayout() {
         <div className="flex-1 overflow-y-auto">
           <SidebarNav isAdmin={isAdmin} isOpsOrAdmin={isOpsOrAdmin} pathname={location.pathname} unreadNoticeCount={unacknowledgedNotices.length} />
         </div>
-        <div className="shrink-0 p-4 border-t">
-          <div className="text-sm text-muted-foreground mb-2 truncate">{user.email}</div>
-          <Button variant="ghost" size="sm" className="w-full justify-start" onClick={handleSignOut}>
+        <div className="shrink-0 p-4 border-t border-slate-100">
+          <div className="text-sm text-slate-500 mb-2 truncate">{user.email}</div>
+          <Button variant="ghost" size="sm" className="w-full justify-start text-slate-600 hover:bg-slate-50 hover:text-slate-900" onClick={handleSignOut}>
             <LogOut className="h-4 w-4 mr-2" />
             Sign Out
           </Button>
@@ -348,15 +348,15 @@ export function StaffLayout() {
 
       {/* Mobile Sidebar */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="w-60 p-0">
+        <SheetContent side="left" className="w-60 p-0 bg-white">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <div className="px-4 py-4 border-b">
+          <div className="px-4 py-4 border-b border-slate-100">
             <Link to="/staff/dashboard" className="flex items-center gap-2" onClick={() => setMobileOpen(false)}>
               <img src={logoKlinikAwfa} alt="Klinik Awfa" className="h-8 w-auto" />
-              <span className="font-semibold text-sm">Klinik Awfa Staff</span>
+              <span className="font-semibold text-sm text-slate-800">Klinik Awfa Staff</span>
             </Link>
             {isOpsOrAdmin && (
-              <Button asChild size="sm" className="w-full mt-3 gap-2" onClick={() => setMobileOpen(false)}>
+              <Button asChild size="sm" className="w-full mt-3 gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white" onClick={() => setMobileOpen(false)}>
                 <Link to="/clinic/queue">
                   <Activity className="h-4 w-4" />
                   Open Clinic System
@@ -367,9 +367,9 @@ export function StaffLayout() {
           <div className="flex-1 overflow-y-auto">
             <SidebarNav isAdmin={isAdmin} isOpsOrAdmin={isOpsOrAdmin} pathname={location.pathname} onLinkClick={() => setMobileOpen(false)} unreadNoticeCount={unacknowledgedNotices.length} />
           </div>
-          <div className="shrink-0 p-4 border-t">
-            <div className="text-sm text-muted-foreground mb-2 truncate">{user.email}</div>
-            <Button variant="ghost" size="sm" className="w-full justify-start" onClick={handleSignOut}>
+          <div className="shrink-0 p-4 border-t border-slate-100">
+            <div className="text-sm text-slate-500 mb-2 truncate">{user.email}</div>
+            <Button variant="ghost" size="sm" className="w-full justify-start text-slate-600 hover:bg-slate-50 hover:text-slate-900" onClick={handleSignOut}>
               <LogOut className="h-4 w-4 mr-2" />
               Sign Out
             </Button>
@@ -378,14 +378,14 @@ export function StaffLayout() {
       </Sheet>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col h-screen overflow-y-auto">
-        <header className="sticky top-0 z-40 h-12 flex items-center border-b bg-background/95 backdrop-blur px-4 md:px-6">
-          <Button variant="ghost" size="icon" className="md:hidden mr-2" onClick={() => setMobileOpen(true)}>
+      <div className="flex-1 flex flex-col h-screen overflow-y-auto bg-slate-50">
+        <header className="sticky top-0 z-40 h-12 flex items-center border-b border-slate-100 bg-white/90 backdrop-blur px-4 md:px-6">
+          <Button variant="ghost" size="icon" className="md:hidden mr-2 text-slate-600 hover:bg-slate-50" onClick={() => setMobileOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
-          <span className="ml-auto text-sm text-muted-foreground hidden sm:inline">{user.email}</span>
+          <span className="ml-auto text-sm text-slate-500 hidden sm:inline">{user.email}</span>
         </header>
-        <main className="flex-1 container py-6">
+        <main className="flex-1">
           <Outlet />
         </main>
       </div>
