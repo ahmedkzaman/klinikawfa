@@ -61,6 +61,7 @@ function buildDefaults(p: PatientRow): FormData {
     default_panel_id: p.default_panel_id ?? null,
     allergies: p.allergies ?? '',
     underlying_conditions: p.underlying_conditions ?? '',
+    address: (p as PatientRow & { address?: string | null }).address ?? '',
   };
 }
 
