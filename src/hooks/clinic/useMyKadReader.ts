@@ -11,7 +11,7 @@ export interface MyKadPayload {
 
 const BRIDGE_URL =
   (import.meta.env.VITE_MYKAD_BRIDGE_URL as string | undefined) ||
-  'http://127.0.0.1:8787/read-mykad';
+  'http://localhost:8787/read-mykad';
 
 const ERROR_MSG =
   'Could not connect to IC Reader. Ensure the bridge software is running.';
