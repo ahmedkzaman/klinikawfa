@@ -334,6 +334,3 @@ export default function AdminAttendanceReview() {
     </div>
   );
 }
-// Suppress unused warning (kept for parity with original imports)
-void primaryBtn;
-void softBadge;
