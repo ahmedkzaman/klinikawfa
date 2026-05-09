@@ -286,11 +286,11 @@ export default function AdminAttendanceReview() {
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className={cn(bento, 'p-4 cursor-pointer hover:ring-2 ring-blue-200 transition flex items-center gap-3')} onClick={() => setDrillDown(drillDown === 'working' ? null : 'working')}>
+          <div className={cn(bento, 'p-4 cursor-pointer hover:ring-2 ring-blue-200 transition flex items-center gap-3')} onClick={() => toggleCategoryDrill('working')}>
             <div className="rounded-full p-2 bg-emerald-50 text-emerald-600"><CalendarCheck className="h-5 w-5" /></div>
             <div><p className="text-sm text-slate-500">Present</p><p className="text-2xl font-bold text-slate-800">{stats.totalPresent}</p></div>
           </div>
-          <div className={cn(bento, 'p-4 cursor-pointer hover:ring-2 ring-blue-200 transition flex items-center gap-3')} onClick={() => setDrillDown(drillDown === 'leave' ? null : 'leave')}>
+          <div className={cn(bento, 'p-4 cursor-pointer hover:ring-2 ring-blue-200 transition flex items-center gap-3')} onClick={() => toggleCategoryDrill('leave')}>
             <div className="rounded-full p-2 bg-blue-50 text-blue-600"><CalendarOff className="h-5 w-5" /></div>
             <div><p className="text-sm text-slate-500">Leave</p><p className="text-2xl font-bold text-slate-800">{stats.totalLeave}</p></div>
           </div>
