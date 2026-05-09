@@ -94,9 +94,10 @@ export default function DrRosterView() {
       const w = getISOWeek(day);
       const d = roster[dk];
       if (!d) continue;
-      if (d.shift1 && weekHrs[d.shift1.staffId]) weekHrs[d.shift1.staffId][w] = (weekHrs[d.shift1.staffId][w] || 0) + SHIFT1_HOURS;
-      if (d.shift2 && weekHrs[d.shift2.staffId]) weekHrs[d.shift2.staffId][w] = (weekHrs[d.shift2.staffId][w] || 0) + SHIFT2_HOURS;
-      if (d.shift3 && weekHrs[d.shift3.staffId]) weekHrs[d.shift3.staffId][w] = (weekHrs[d.shift3.staffId][w] || 0) + SHIFT3_HOURS;
+      const s1 = getSlot(d, 1), s2 = getSlot(d, 2), s3 = getSlot(d, 3);
+      if (s1 && weekHrs[s1.staffId]) weekHrs[s1.staffId][w] = (weekHrs[s1.staffId][w] || 0) + SHIFT1_HOURS;
+      if (s2 && weekHrs[s2.staffId]) weekHrs[s2.staffId][w] = (weekHrs[s2.staffId][w] || 0) + SHIFT2_HOURS;
+      if (s3 && weekHrs[s3.staffId]) weekHrs[s3.staffId][w] = (weekHrs[s3.staffId][w] || 0) + SHIFT3_HOURS;
     }
 
     return staffList.map(s => {
