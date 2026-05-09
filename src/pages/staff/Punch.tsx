@@ -64,7 +64,7 @@ function pickActiveRosterShift(
 
   for (const row of sorted) {
     const sk = row.shift_key ? normalizeShiftKey(row.shift_key) : null;
-    const bufs = resolvePunchBuffers(settings, roles, sk);
+    const { buffers: bufs, source: bufSrc } = resolvePunchBuffersWithSource(settings, roles, sk);
     const start = new Date(`${row.work_date}T${row.start_time}`);
     const end = new Date(`${row.work_date}T${row.end_time}`);
     if (end.getTime() <= start.getTime()) end.setDate(end.getDate() + 1);
@@ -80,6 +80,7 @@ function pickActiveRosterShift(
       start,
       end,
       buffers: bufs,
+      bufferSource: bufSrc,
       label: `${sk ?? 'Shift'} (${format(start, 'h:mm a')} – ${format(end, 'h:mm a')})${
         row.work_date !== todayStr ? ' (from yesterday)' : ''
       }`,
