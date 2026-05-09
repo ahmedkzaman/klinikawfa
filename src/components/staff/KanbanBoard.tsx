@@ -155,8 +155,8 @@ export default function KanbanBoard() {
             </p>
           )}
           <div className="space-y-4">
-            <div><Label>Title</Label><Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Task title" /></div>
-            <div><Label>Description</Label><Textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="Optional description" rows={3} /></div>
+            <div><Label>Title</Label><Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Task title" className={softInput} /></div>
+            <div><Label>Description</Label><Textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="Optional description" rows={3} className={softInput} /></div>
             <div><Label>Assign to</Label>
               <Select value={newAssignee} onValueChange={setNewAssignee}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
