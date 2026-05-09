@@ -126,24 +126,27 @@ export default function DailyReportingCard() {
         shift1?: { staffId: string };
         shift2?: { staffId: string };
         shift3?: { staffId: string };
+        DOC_S1?: { staffId: string };
+        DOC_S2?: { staffId: string };
+        DOC_S3?: { staffId: string };
       }>;
       const todayDoctorRoster = doctorRoster?.[todayStr];
 
       if (todayDoctorRoster) {
-        const isLocum = todayDoctorRoster.shift3?.staffId === user!.id;
-        if (!isLocum) {
-          const onShift1 = todayDoctorRoster.shift1?.staffId === user!.id;
-          const onShift2 = todayDoctorRoster.shift2?.staffId === user!.id;
-          if (onShift1 || onShift2) {
-            detectedType = 'doctor';
-            if (onShift2 && currentHour >= 16) {
-              shift = 'PM';
-            } else if (onShift1) {
-              shift = 'AM';
-            } else {
-              shift = 'PM';
-            }
-          }
+        const uid = user!.id;
+        const onS1 = todayDoctorRoster.shift1?.staffId === uid || todayDoctorRoster.DOC_S1?.staffId === uid;
+        const onS2 = todayDoctorRoster.shift2?.staffId === uid || todayDoctorRoster.DOC_S2?.staffId === uid;
+        const onS3 = todayDoctorRoster.shift3?.staffId === uid || todayDoctorRoster.DOC_S3?.staffId === uid;
+
+        if (onS1) {
+          shift = 'AM';
+          detectedType = 'doctor';
+        } else if (onS2) {
+          shift = currentHour >= 16 ? 'PM' : 'AM';
+          detectedType = 'doctor';
+        } else if (onS3) {
+          shift = 'PM';
+          detectedType = 'doctor';
         }
       }
     }
