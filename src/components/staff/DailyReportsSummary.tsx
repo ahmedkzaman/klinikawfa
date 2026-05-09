@@ -195,10 +195,10 @@ export default function DailyReportsSummary() {
     if (data.length === 0) return null;
     return (
       <div className="space-y-2">
-        <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">{icon} {title}</p>
+        <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">{icon} {title}</p>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b text-xs text-muted-foreground">
+            <tr className="border-b border-slate-100 text-xs text-slate-500">
               <th className="text-left py-2 pr-3 font-medium">Staff</th>
               <th className="text-center py-2 px-2 font-medium">Selfie</th>
               <th className="text-center py-2 px-2 font-medium">Stock 1</th>
@@ -208,8 +208,8 @@ export default function DailyReportsSummary() {
           </thead>
           <tbody>
             {data.map(r => (
-              <tr key={`${r.userId}-${r.type}`} className="border-b last:border-0">
-                <td className="py-2 pr-3 font-medium">
+              <tr key={`${r.userId}-${r.type}`} className="border-b border-slate-100 last:border-0">
+                <td className="py-2 pr-3 font-medium text-slate-700">
                   {r.fullName}
                   <TypeBadge type={r.type} />
                 </td>
@@ -218,11 +218,11 @@ export default function DailyReportsSummary() {
                 <td className="py-2 px-2">{r.stock2 === null ? <NA /> : r.stock2 ? <Check /> : <Cross />}</td>
                 <td className="py-2 pl-2 text-center">
                   {r.blastCount === null ? (
-                    <span className="text-xs text-muted-foreground">—</span>
+                    <span className="text-xs text-slate-500">—</span>
                   ) : (
                     <Badge variant={r.blastCount >= blastTarget ? 'secondary' : 'destructive'}
                       className={r.blastCount >= blastTarget
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs'
+                        ? 'bg-emerald-50 text-emerald-700 text-xs border-none'
                         : 'text-xs'}>
                       {r.blastCount} / {blastTarget}
                     </Badge>
