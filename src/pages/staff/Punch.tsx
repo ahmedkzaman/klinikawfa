@@ -42,6 +42,7 @@ type ActiveShift = {
   start: Date;
   end: Date;
   buffers: PunchBuffers;
+  bufferSource: BufferSource;
   label: string;
 };
 
