@@ -95,12 +95,12 @@ function SidebarNav({ isAdmin, isOpsOrAdmin, pathname, onLinkClick, unreadNotice
       </div>
 
       {/* Applications Section - Collapsible */}
-      <div className="my-4 mx-4 border-t" />
+      <div className="my-4 mx-4 border-t border-slate-100" />
       <Collapsible defaultOpen={applicationsNavItems.some(item => pathname.startsWith(item.href)) || pathname.startsWith('/clinic')}>
         <div className="px-4 mb-2 flex items-center justify-between">
           <CollapsibleTrigger className="flex items-center justify-between w-full group">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Applications</span>
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Applications</span>
+            <ChevronDown className="h-3.5 w-3.5 text-slate-500 transition-transform group-data-[state=open]:rotate-180" />
           </CollapsibleTrigger>
         </div>
         <CollapsibleContent>
@@ -111,10 +111,10 @@ function SidebarNav({ isAdmin, isOpsOrAdmin, pathname, onLinkClick, unreadNotice
                 to={item.href}
                 onClick={onLinkClick}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                  'flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-colors',
                   isActive(item.href)
-                    ? 'bg-primary/10 text-primary font-medium'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                    ? 'bg-blue-50 text-blue-700 font-medium'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                 )}
               >
                 <item.icon className="h-4 w-4" />
@@ -126,10 +126,10 @@ function SidebarNav({ isAdmin, isOpsOrAdmin, pathname, onLinkClick, unreadNotice
                 to="/clinic/queue"
                 onClick={onLinkClick}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                  'flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-colors',
                   pathname.startsWith('/clinic')
-                    ? 'bg-primary/10 text-primary font-medium'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                    ? 'bg-blue-50 text-blue-700 font-medium'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                 )}
               >
                 <Activity className="h-4 w-4" />
