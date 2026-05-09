@@ -330,6 +330,10 @@ export function EditPatientDialog({
           </div>
 
           <div>
+            <Label htmlFor="edit_address">Address</Label>
+            <Textarea id="edit_address" rows={2} placeholder="Auto-filled from MyKad" {...register('address')} />
+          </div>
+          <div>
             <Label htmlFor="edit_allergies">Allergies</Label>
             <Textarea id="edit_allergies" rows={2} {...register('allergies')} />
           </div>
