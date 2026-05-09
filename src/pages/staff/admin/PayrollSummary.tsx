@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DollarSign, Search, AlertTriangle, RefreshCw } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { eachDayOfInterval, startOfMonth, endOfMonth, format } from 'date-fns';
+import { cn } from '@/lib/utils';
+import { bento, bentoHeader, pageInner, pageShell, primaryBtn, softInput } from '@/lib/clinic/bentoTokens';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -17,10 +17,10 @@ const MONTHS = [
 ];
 
 const statusColors: Record<string, string> = {
-  draft: 'bg-muted text-muted-foreground',
-  pending_review: 'bg-yellow-100 text-yellow-800',
-  approved: 'bg-green-100 text-green-800',
-  paid: 'bg-blue-100 text-blue-800',
+  draft: 'bg-slate-100 text-slate-700',
+  pending_review: 'bg-amber-50 text-amber-700',
+  approved: 'bg-emerald-50 text-emerald-700',
+  paid: 'bg-blue-50 text-blue-700',
 };
 
 type PayrollSummaryRow = {
