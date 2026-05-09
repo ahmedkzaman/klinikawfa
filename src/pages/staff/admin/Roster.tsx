@@ -1094,7 +1094,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                     <button
                       type="button"
                       onClick={() => deleteHolidayMutation.mutate(h.id)}
-                      className="rounded-sm hover:bg-destructive/20 p-0.5"
+                      className="rounded-sm hover:bg-rose-100 p-0.5"
                       aria-label="Remove holiday"
                     >
                       <X className="h-3 w-3" />
