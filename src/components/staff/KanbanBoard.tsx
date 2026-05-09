@@ -201,7 +201,7 @@ export default function KanbanBoard() {
                 <Trash2 className="h-4 w-4 mr-1" />{isAdmin ? 'Delete' : 'Request Delete'}
               </Button>
             )}
-            <Button onClick={handleSubmit} disabled={!newTitle.trim()}>{editTask ? 'Update' : 'Create'}</Button>
+            <Button onClick={handleSubmit} disabled={!newTitle.trim()} className={primaryBtn}>{editTask ? 'Update' : 'Create'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
