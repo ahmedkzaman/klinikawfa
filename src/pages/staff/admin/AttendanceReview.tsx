@@ -23,6 +23,7 @@ import {
   type LatenessSeverity,
 } from '@/lib/rosterUtils';
 import { logicalWorkDateOf } from '@/lib/attendanceUtils';
+import { ManualPunchDialog } from '@/components/staff/admin/ManualPunchDialog';
 
 const COLORS = {
   working: 'hsl(142, 76%, 36%)',
