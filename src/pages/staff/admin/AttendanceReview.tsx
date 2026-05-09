@@ -311,7 +311,7 @@ export default function AdminAttendanceReview() {
               <ChartContainer config={chartConfig} className="h-[300px] w-[300px]">
                 <PieChart>
                   <Pie data={chartData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="value"
-                    onClick={(_, index) => { const key = chartData[index].name; setDrillDown(drillDown === key ? null : key); }}
+                    onClick={(_, index) => { toggleCategoryDrill(chartData[index].name as 'working' | 'leave' | 'absent' | 'late'); }}
                     className="cursor-pointer"
                   >
                     {chartData.map((entry) => (
