@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -11,79 +10,20 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCreatePatient } from '@/hooks/clinic/usePatients';
 import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
+import {
+  patientSchema,
+  RELIGIONS,
+  type PatientFormData,
+} from '@/components/clinic/patientFormSchema';
+import {
+  ReadMyKadButton,
+  cleanIC,
+  mapGender,
+  mapDOB,
+} from '@/components/clinic/ReadMyKadButton';
 import type { PatientRow } from '@/types/clinic';
 
-const PHONE_REGEX = /^[+]?[0-9\s-]+$/;
-
-const RELIGIONS = [
-  'Islam',
-  'Buddhism',
-  'Christianity',
-  'Hinduism',
-  'Other',
-  'Prefer not to say',
-] as const;
-
-const patientSchema = z
-  .object({
-    name: z.string().trim().min(2, 'Name must be at least 2 characters').max(120),
-    phone: z
-      .string()
-      .trim()
-      .min(1, 'Phone is required')
-      .max(20)
-      .regex(PHONE_REGEX, 'Invalid phone number'),
-    national_id: z
-      .string()
-      .trim()
-      .optional()
-      .refine((v) => !v || /^[0-9]{12}$/.test(v.replace(/[-\s]/g, '')), {
-        message: 'MyKad must be 12 digits',
-      }),
-    passport_no: z
-      .string()
-      .trim()
-      .max(20, 'Passport must be ≤ 20 characters')
-      .regex(/^[A-Za-z0-9]*$/, 'Passport must be alphanumeric')
-      .optional()
-      .or(z.literal('')),
-    date_of_birth: z.string().optional(),
-    gender: z.enum(['male', 'female', 'other', '']).optional(),
-    email: z.string().trim().email('Invalid email').max(255).optional().or(z.literal('')),
-    religion: z.string().min(1, 'Religion is required'),
-    emergency_contact_name: z
-      .string()
-      .trim()
-      .min(2, 'Emergency contact name is required')
-      .max(120),
-    emergency_contact_phone: z
-      .string()
-      .trim()
-      .min(1, 'Emergency contact phone is required')
-      .max(20)
-      .regex(PHONE_REGEX, 'Invalid phone number'),
-    default_panel_id: z.string().nullable().optional(),
-    allergies: z.string().trim().max(500).optional(),
-    underlying_conditions: z.string().trim().max(500).optional(),
-  })
-  .superRefine((data, ctx) => {
-    const hasIc = !!data.national_id?.trim();
-    const hasPassport = !!data.passport_no?.trim();
-    if (!hasIc && !hasPassport) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['national_id'],
-        message: 'Provide either MyKad or Passport No.',
-      });
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['passport_no'],
-        message: 'Provide either MyKad or Passport No.',
-      });
-    }
-  });
-
-type FormData = z.infer<typeof patientSchema>;
+type FormData = PatientFormData;
 
 interface RegisterPatientDialogProps {
   open: boolean;
