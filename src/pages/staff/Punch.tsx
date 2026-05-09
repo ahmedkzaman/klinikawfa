@@ -10,7 +10,7 @@ import { checkGeofence, formatDistance, getAccuracyStatus } from '@/lib/geofence
 import { normalizeShiftKey } from '@/lib/rosterUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { resolvePunchBuffers, DEFAULT_BUFFERS, type PunchBuffers } from '@/hooks/useUserPunchBuffers';
+import { resolvePunchBuffers, resolvePunchBuffersWithSource, DEFAULT_BUFFERS, type PunchBuffers, type BufferSource } from '@/hooks/useUserPunchBuffers';
 import { format, addDays, subDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { FaceVerificationModal } from '@/components/staff/FaceVerificationModal';
