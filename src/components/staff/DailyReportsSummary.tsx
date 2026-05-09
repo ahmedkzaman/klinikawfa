@@ -237,22 +237,22 @@ export default function DailyReportsSummary() {
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <div className={cn(bento, 'p-4 md:p-5')}>
+      <div className="pb-3 mb-3 border-b border-slate-100">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <ClipboardList className="h-5 w-5 text-primary" /> Daily Reports
-            {isCurrentMonth && <span className="text-muted-foreground font-normal">— {format(now, 'dd MMM')}</span>}
-          </CardTitle>
+          <h2 className={cn(bentoHeader, 'mb-0 normal-case tracking-normal text-base flex items-center gap-2')}>
+            <ClipboardList className="h-5 w-5 text-blue-600" /> Daily Reports
+            {isCurrentMonth && <span className="text-slate-500 font-normal">— {format(now, 'dd MMM')}</span>}
+          </h2>
           <div className="flex items-center gap-2 flex-wrap">
             <Select value={String(selectedMonth)} onValueChange={(v) => setSelectedMonth(Number(v))}>
-              <SelectTrigger className="w-20 h-7 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className={cn(softInput, 'w-20 h-7 text-xs')}><SelectValue /></SelectTrigger>
               <SelectContent>
                 {MONTHS.map((m, i) => <SelectItem key={i} value={String(i)}>{m}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={String(selectedYear)} onValueChange={(v) => setSelectedYear(Number(v))}>
-              <SelectTrigger className="w-20 h-7 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className={cn(softInput, 'w-20 h-7 text-xs')}><SelectValue /></SelectTrigger>
               <SelectContent>
                 {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map(y => (
                   <SelectItem key={y} value={String(y)}>{y}</SelectItem>
@@ -260,31 +260,29 @@ export default function DailyReportsSummary() {
               </SelectContent>
             </Select>
             <div className="flex items-center gap-1 ml-2">
-              <Settings2 className="h-4 w-4 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">WA:</span>
-              <Input type="number" min={1} value={targetInput} onChange={(e) => setTargetInput(e.target.value)} className="w-14 h-7 text-center text-xs" />
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={saveTarget} disabled={saving}>Set</Button>
+              <Settings2 className="h-4 w-4 text-slate-400" />
+              <span className="text-xs text-slate-500">WA:</span>
+              <Input type="number" min={1} value={targetInput} onChange={(e) => setTargetInput(e.target.value)} className={cn(softInput, 'w-14 h-7 text-center text-xs')} />
+              <Button size="sm" className={cn(secondaryBtn, 'h-7 text-xs')} onClick={saveTarget} disabled={saving}>Set</Button>
             </div>
           </div>
         </div>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        ) : reports.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No roster data found for this period.</p>
-        ) : (
-          <div className="space-y-4 overflow-x-auto">
-            <ShiftTable title="AM Shift (8am–4pm)" icon={<Sun className="h-3.5 w-3.5 text-amber-500" />} data={amReports} />
-            <ShiftTable title="PM Shift (4pm–12am)" icon={<Moon className="h-3.5 w-3.5 text-indigo-500" />} data={pmReports} />
-          </div>
-        )}
-        <div className="mt-3 pt-3 border-t">
-          <Button asChild variant="outline" size="sm" className="text-xs">
-            <Link to="/staff/admin/daily-tasks">View Full Daily Task Review →</Link>
-          </Button>
+      </div>
+      {loading ? (
+        <p className="text-sm text-slate-500">Loading...</p>
+      ) : reports.length === 0 ? (
+        <p className="text-sm text-slate-500">No roster data found for this period.</p>
+      ) : (
+        <div className="space-y-4 overflow-x-auto">
+          <ShiftTable title="AM Shift (8am–4pm)" icon={<Sun className="h-3.5 w-3.5 text-amber-500" />} data={amReports} />
+          <ShiftTable title="PM Shift (4pm–12am)" icon={<Moon className="h-3.5 w-3.5 text-indigo-500" />} data={pmReports} />
         </div>
-      </CardContent>
-    </Card>
+      )}
+      <div className="mt-3 pt-3 border-t border-slate-100">
+        <Button asChild className={cn(secondaryBtn, 'text-xs h-8')}>
+          <Link to="/staff/admin/daily-tasks">View Full Daily Task Review →</Link>
+        </Button>
+      </div>
+    </div>
   );
 }
