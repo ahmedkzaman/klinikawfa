@@ -77,16 +77,16 @@ function SidebarNav({ isAdmin, isOpsOrAdmin, pathname, onLinkClick, unreadNotice
             to={item.href}
             onClick={onLinkClick}
             className={cn(
-              'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+              'flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-colors',
               isActive(item.href)
-                ? 'bg-primary/10 text-primary font-medium'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                ? 'bg-blue-50 text-blue-700 font-medium'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
             )}
           >
             <item.icon className="h-4 w-4" />
             {item.label}
             {item.href === '/staff/inbox' && unreadNoticeCount > 0 && (
-              <span className="ml-auto inline-flex items-center justify-center rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-medium text-destructive-foreground">
+              <span className="ml-auto inline-flex items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-medium text-white">
                 {unreadNoticeCount}
               </span>
             )}
