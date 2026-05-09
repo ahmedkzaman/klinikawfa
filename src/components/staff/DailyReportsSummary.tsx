@@ -178,9 +178,9 @@ export default function DailyReportsSummary() {
     setSaving(false);
   };
 
-  const Check = () => <CheckCircle className="h-4 w-4 text-green-500 mx-auto" />;
-  const Cross = () => <XCircle className="h-4 w-4 text-red-400 mx-auto" />;
-  const NA = () => <Minus className="h-4 w-4 text-muted-foreground mx-auto" />;
+  const Check = () => <CheckCircle className="h-4 w-4 text-emerald-500 mx-auto" />;
+  const Cross = () => <XCircle className="h-4 w-4 text-rose-400 mx-auto" />;
+  const NA = () => <Minus className="h-4 w-4 text-slate-400 mx-auto" />;
 
   const amReports = reports.filter(r => r.shift === 'AM');
   const pmReports = reports.filter(r => r.shift === 'PM');
