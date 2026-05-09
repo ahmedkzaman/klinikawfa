@@ -35,6 +35,7 @@ import {
   mapGender,
   mapDOB,
 } from '@/components/clinic/ReadMyKadButton';
+import { toMalayTitleCase, toUpperSafe } from '@/lib/textCase';
 import type { PatientRow } from '@/types/clinic';
 
 type FormData = PatientFormData;

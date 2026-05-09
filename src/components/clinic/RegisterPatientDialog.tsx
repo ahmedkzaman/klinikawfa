@@ -148,14 +148,14 @@ export function RegisterPatientDialog({
                 <ReadMyKadButton
                   disabled={!mykadConsent}
                   onRead={(data) => {
-                    if (data.name) setValue('name', data.name, { shouldValidate: true, shouldDirty: true });
+                    if (data.name) setValue('name', toMalayTitleCase(data.name), { shouldValidate: true, shouldDirty: true });
                     const ic = cleanIC(data.ic_no);
                     if (ic) setValue('national_id', ic, { shouldValidate: true, shouldDirty: true });
                     const dob = mapDOB(data.dob);
                     if (dob) setValue('date_of_birth', dob, { shouldValidate: true, shouldDirty: true });
                     const g = mapGender(data.gender);
                     if (g) setValue('gender', g, { shouldValidate: true, shouldDirty: true });
-                    if (data.address) setValue('address', data.address, { shouldValidate: true, shouldDirty: true });
+                    if (data.address) setValue('address', toUpperSafe(data.address), { shouldValidate: true, shouldDirty: true });
                     setJustRead(true);
                     toast.success('MyKad read successfully');
                   }}
@@ -286,7 +286,7 @@ export function RegisterPatientDialog({
 
           <div>
             <Label htmlFor="address">Address</Label>
-            <Textarea id="address" rows={2} className="capitalize" placeholder="Auto-filled from MyKad" {...register('address')} />
+            <Textarea id="address" rows={2} placeholder="Auto-filled from MyKad" {...register('address')} />
           </div>
           <div>
             <Label htmlFor="allergies">Allergies</Label>
