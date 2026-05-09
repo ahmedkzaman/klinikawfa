@@ -35,10 +35,10 @@ export function JobScopeView({ userId, onComplete }: JobScopeViewProps) {
     <Card>
       <CardHeader>
         <CardTitle className="text-lg">Step 3: Job Scope — Read & Acknowledge</CardTitle>
-        <p className="text-sm text-muted-foreground">Please read the entire document below, then confirm at the bottom.</p>
+        <p className="text-sm text-slate-500">Please read the entire document below, then confirm at the bottom.</p>
       </CardHeader>
-      <CardContent className="prose prose-sm max-w-none dark:prose-invert">
-        <div className="bg-muted/30 rounded-lg p-6 space-y-6 max-h-[60vh] overflow-y-auto">
+      <CardContent className="prose prose-sm max-w-none">
+        <div className="bg-slate-50 rounded-lg p-6 space-y-6 max-h-[60vh] overflow-y-auto">
           <div className="text-center mb-6">
             <h2 className="text-xl font-bold">KLINIK AWFA</h2>
             <h3 className="text-lg font-bold mt-2">JOB SCOPE DOCUMENT</h3>
@@ -136,7 +136,7 @@ export function JobScopeView({ userId, onComplete }: JobScopeViewProps) {
 
           <h4 className="font-bold">05 SUCCESS METRICS & KPIs</h4>
           <table className="w-full text-sm border">
-            <thead><tr className="border-b bg-muted/50"><th className="p-2 text-left">KPI</th><th className="p-2 text-left">Target</th><th className="p-2 text-left">Frequency</th></tr></thead>
+            <thead><tr className="border-b bg-slate-50"><th className="p-2 text-left">KPI</th><th className="p-2 text-left">Target</th><th className="p-2 text-left">Frequency</th></tr></thead>
             <tbody>
               <tr className="border-b"><td className="p-2 border-r">Patient Wait Time</td><td className="p-2 border-r">Average &lt; 15 minutes</td><td className="p-2">Daily</td></tr>
               <tr className="border-b"><td className="p-2 border-r">Patient Satisfaction</td><td className="p-2 border-r">≥ 4.5 / 5.0</td><td className="p-2">Monthly</td></tr>
@@ -148,7 +148,7 @@ export function JobScopeView({ userId, onComplete }: JobScopeViewProps) {
 
           <h4 className="font-bold">06 WEEKLY RHYTHM & TIME ALLOCATION</h4>
           <table className="w-full text-sm border">
-            <thead><tr className="border-b bg-muted/50"><th className="p-2 text-left">Focus Area</th><th className="p-2 text-left">Key Activities</th><th className="p-2 text-left">Est. Time</th></tr></thead>
+            <thead><tr className="border-b bg-slate-50"><th className="p-2 text-left">Focus Area</th><th className="p-2 text-left">Key Activities</th><th className="p-2 text-left">Est. Time</th></tr></thead>
             <tbody>
               <tr className="border-b"><td className="p-2 border-r">Patient Care & Clinical</td><td className="p-2 border-r">Vitals, assisting doctors, wound care</td><td className="p-2">~40%</td></tr>
               <tr className="border-b"><td className="p-2 border-r">Front Desk & Registration</td><td className="p-2 border-r">Check-in, billing, phone calls</td><td className="p-2">~25%</td></tr>
@@ -157,7 +157,7 @@ export function JobScopeView({ userId, onComplete }: JobScopeViewProps) {
             </tbody>
           </table>
 
-          <div className="mt-4 p-3 bg-muted/50 rounded text-sm">
+          <div className="mt-4 p-3 bg-slate-50 rounded text-sm">
             <p><strong>Acknowledgement:</strong> This job scope document outlines the primary responsibilities, authority levels, and success metrics for this position at Klinik Awfa. It is intended as a living document and may be revised as the clinic evolves. Both parties should review and sign upon onboarding.</p>
           </div>
         </div>

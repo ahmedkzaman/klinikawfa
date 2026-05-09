@@ -36,9 +36,9 @@ export function CompanyPolicyView({ userId, onComplete }: CompanyPolicyViewProps
     <Card>
       <CardHeader>
         <CardTitle className="text-lg">Langkah 4: Polisi Syarikat — Baca & Akui</CardTitle>
-        <p className="text-sm text-muted-foreground">Sila baca keseluruhan dokumen di bawah, kemudian sahkan di bahagian bawah.</p>
+        <p className="text-sm text-slate-500">Sila baca keseluruhan dokumen di bawah, kemudian sahkan di bahagian bawah.</p>
       </CardHeader>
-      <CardContent className="prose prose-sm max-w-none dark:prose-invert">
+      <CardContent className="prose prose-sm max-w-none">
         <CompanyPolicyContent />
 
         {/* Acknowledge */}

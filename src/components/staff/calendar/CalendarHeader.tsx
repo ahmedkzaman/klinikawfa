@@ -28,13 +28,13 @@ export function CalendarHeader({ currentDate, view, onViewChange, onNavigate, on
         <h2 className="text-lg font-semibold ml-2">{label}</h2>
       </div>
       <div className="flex items-center gap-2">
-        <div className="flex rounded-md border border-input overflow-hidden">
+        <div className="flex rounded-md border border-slate-200 overflow-hidden">
           {(['month', 'week', 'day'] as CalendarViewType[]).map((v) => (
             <button
               key={v}
               onClick={() => onViewChange(v)}
               className={`px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-                view === v ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
+                view === v ? 'bg-blue-600 text-white' : 'bg-background text-slate-500 hover:bg-muted'
               }`}
             >
               {v}

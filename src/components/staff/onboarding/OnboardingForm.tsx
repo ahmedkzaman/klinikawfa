@@ -108,7 +108,7 @@ export function OnboardingForm({ userId, onComplete }: OnboardingFormProps) {
         <CardTitle className="text-lg">
           Step 1: Onboarding Form — Part {subStep + 1} of 4
         </CardTitle>
-        <p className="text-sm text-muted-foreground">{subStepTitles[subStep]}</p>
+        <p className="text-sm text-slate-500">{subStepTitles[subStep]}</p>
         <div className="flex gap-1 mt-2">
           {[0, 1, 2, 3].map(i => (
             <div key={i} className={cn('h-1.5 flex-1 rounded-full', i <= subStep ? 'bg-primary' : 'bg-muted')} />
@@ -478,7 +478,7 @@ function SubStep4({ defaultValues, onBack, saving, onSubmit }: { defaultValues: 
 
       <div className="space-y-4">
         <h3 className="font-semibold text-base border-b pb-2">Section 9 — Declaration & Sign-Off</h3>
-        <div className="bg-muted/50 rounded-md p-4 text-sm text-muted-foreground">
+        <div className="bg-slate-50 rounded-md p-4 text-sm text-slate-500">
           I, the undersigned, hereby confirm that all information provided in this form is true, accurate, and complete to the best of my knowledge. I understand that providing false or misleading information may result in termination of my employment with Klinik Awfa. I agree to comply with all clinic policies, code of conduct, standard operating procedures, and all applicable laws and regulations. I acknowledge receipt of the Job Scope Document and the terms of my engagement with Klinik Awfa.
         </div>
         <label className="flex items-start gap-2 cursor-pointer">

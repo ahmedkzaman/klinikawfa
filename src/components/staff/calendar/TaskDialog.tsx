@@ -124,7 +124,7 @@ export function TaskDialog({ open, onClose, task, initialDate, profiles, onSave,
       <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>{isEditing ? 'Edit Task' : 'New Task'}</DialogTitle></DialogHeader>
         {isEditing && task && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-slate-500">
             Created by <span className="font-medium">{task.creator_name}</span>
             {task.assignee_name && <> · Assigned to <span className="font-medium">{task.assignee_name}</span></>}
           </p>
@@ -141,17 +141,17 @@ export function TaskDialog({ open, onClose, task, initialDate, profiles, onSave,
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div><Label>End Date</Label>
-              <Popover><PopoverTrigger asChild><Button variant="outline" className={cn('w-full justify-start text-left font-normal', !endDate && 'text-muted-foreground')} disabled={!canEdit}><CalendarIcon className="mr-2 h-4 w-4" />{endDate ? format(endDate, 'MMM d, yyyy') : 'Optional'}</Button></PopoverTrigger>
+              <Popover><PopoverTrigger asChild><Button variant="outline" className={cn('w-full justify-start text-left font-normal', !endDate && 'text-slate-500')} disabled={!canEdit}><CalendarIcon className="mr-2 h-4 w-4" />{endDate ? format(endDate, 'MMM d, yyyy') : 'Optional'}</Button></PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={endDate} onSelect={setEndDate} className="p-3 pointer-events-auto" /></PopoverContent></Popover>
             </div>
             <div><Label>End Time</Label><Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} disabled={!canEdit} /></div>
           </div>
           <div><Label>Deadline</Label>
             {canEdit ? (
-              <Popover><PopoverTrigger asChild><Button variant="outline" className={cn('w-full justify-start text-left font-normal', !deadline && 'text-muted-foreground')}><CalendarIcon className="mr-2 h-4 w-4" />{deadline ? format(deadline, 'MMM d, yyyy') : 'No deadline'}</Button></PopoverTrigger>
+              <Popover><PopoverTrigger asChild><Button variant="outline" className={cn('w-full justify-start text-left font-normal', !deadline && 'text-slate-500')}><CalendarIcon className="mr-2 h-4 w-4" />{deadline ? format(deadline, 'MMM d, yyyy') : 'No deadline'}</Button></PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={deadline} onSelect={(d) => { setDeadline(d); if (d) { setEndDate(d); } }} className="p-3 pointer-events-auto" /></PopoverContent></Popover>
             ) : (
-              <p className="text-sm text-muted-foreground mt-1">{deadline ? format(deadline, 'MMM d, yyyy') : 'No deadline'}</p>
+              <p className="text-sm text-slate-500 mt-1">{deadline ? format(deadline, 'MMM d, yyyy') : 'No deadline'}</p>
             )}
           </div>
           {canEdit && (
