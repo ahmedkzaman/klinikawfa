@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import {
   ChevronDown,
@@ -6,6 +6,7 @@ import {
   FileText,
   Image as ImageIcon,
   Paperclip,
+  Pencil,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,7 @@ import {
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/clinic/StatusBadge';
+import { EditPatientDialog } from '@/components/clinic/EditPatientDialog';
 import {
   usePatientVisitHistory,
   getAttachmentCount,
@@ -280,7 +282,14 @@ export function PatientProfileSheet({
   onClose,
   onRegisterVisit,
 }: PatientProfileSheetProps) {
-  const { data: visits = [], isLoading } = usePatientVisitHistory(patient?.id ?? null);
+  const [currentPatient, setCurrentPatient] = useState<PatientRow | null>(patient);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+
+  useEffect(() => {
+    setCurrentPatient(patient);
+  }, [patient?.id, patient]);
+
+  const { data: visits = [], isLoading } = usePatientVisitHistory(currentPatient?.id ?? null);
 
   return (
     <Sheet open={isOpen} onOpenChange={(o) => !o && onClose()}>
@@ -289,10 +298,25 @@ export function PatientProfileSheet({
         className="w-full sm:max-w-lg flex flex-col p-0"
       >
         <SheetHeader className="p-6 pb-4 border-b">
-          <SheetTitle className="text-xl">{patient?.name ?? 'Patient'}</SheetTitle>
-          <SheetDescription className="font-mono text-xs">
-            IC: {patient?.national_id ?? '—'}
-          </SheetDescription>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <SheetTitle className="text-xl truncate">
+                {currentPatient?.name ?? 'Patient'}
+              </SheetTitle>
+              <SheetDescription className="font-mono text-xs">
+                IC: {currentPatient?.national_id ?? '—'}
+              </SheetDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!currentPatient}
+              onClick={() => setIsEditOpen(true)}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
+            </Button>
+          </div>
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
@@ -304,22 +328,22 @@ export function PatientProfileSheet({
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
               <div>
                 <dt className="text-muted-foreground text-xs">Phone</dt>
-                <dd className="font-medium">{patient?.phone ?? '—'}</dd>
+                <dd className="font-medium">{currentPatient?.phone ?? '—'}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground text-xs">Date of birth</dt>
                 <dd className="font-medium">
-                  {safeFormat(patient?.date_of_birth, 'd MMM yyyy')}
+                  {safeFormat(currentPatient?.date_of_birth, 'd MMM yyyy')}
                 </dd>
               </div>
               <div>
                 <dt className="text-muted-foreground text-xs">Gender</dt>
-                <dd className="font-medium">{capitalize(patient?.gender)}</dd>
+                <dd className="font-medium">{capitalize(currentPatient?.gender)}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground text-xs">Registered</dt>
                 <dd className="font-medium">
-                  {safeFormat(patient?.created_at, 'd MMM yyyy')}
+                  {safeFormat(currentPatient?.created_at, 'd MMM yyyy')}
                 </dd>
               </div>
             </dl>
@@ -359,16 +383,25 @@ export function PatientProfileSheet({
         <SheetFooter className="p-6 pt-4 border-t">
           <Button
             className="w-full sm:w-auto"
-            disabled={!patient}
+            disabled={!currentPatient}
             onClick={() => {
-              if (!patient) return;
+              if (!currentPatient) return;
               onClose();
-              onRegisterVisit(patient);
+              onRegisterVisit(currentPatient);
             }}
           >
             Register new visit
           </Button>
         </SheetFooter>
+
+        {currentPatient && (
+          <EditPatientDialog
+            open={isEditOpen}
+            onOpenChange={setIsEditOpen}
+            patient={currentPatient}
+            onUpdated={(updated) => setCurrentPatient(updated)}
+          />
+        )}
       </SheetContent>
     </Sheet>
   );
