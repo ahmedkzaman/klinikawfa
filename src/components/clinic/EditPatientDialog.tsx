@@ -161,7 +161,7 @@ export function EditPatientDialog({
 
           <div>
             <Label htmlFor="edit_name">Full name *</Label>
-            <Input id="edit_name" {...register('name')} />
+            <Input id="edit_name" className="capitalize" {...register('name')} />
             {errors.name && (
               <p className="text-sm text-destructive mt-1">{errors.name.message}</p>
             )}
