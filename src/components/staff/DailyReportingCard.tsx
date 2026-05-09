@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { bento, bentoHeader, secondaryBtn, softBadge, softInput, softTile } from '@/lib/clinic/bentoTokens';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -203,14 +204,14 @@ export default function DailyReportingCard() {
   };
 
   const StatusIcon = ({ done }: { done: boolean }) =>
-    done ? <CheckCircle className="h-4 w-4 text-green-500" /> : <Clock className="h-4 w-4 text-muted-foreground" />;
+    done ? <CheckCircle className="h-4 w-4 text-emerald-500" /> : <Clock className="h-4 w-4 text-slate-400" />;
 
   const PhotoPreviewBadge = ({ url, label }: { url: string; label: string }) => (
     <button
       onClick={() => { setPreviewUrl(url); setPreviewTitle(label); }}
       className="flex items-center gap-1 cursor-pointer"
     >
-      <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs gap-1 hover:bg-green-200 dark:hover:bg-green-800 transition-colors">
+      <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 text-xs gap-1 hover:bg-emerald-100 transition-colors border-none">
         <Eye className="h-3 w-3" />
         View
       </Badge>
@@ -221,17 +222,13 @@ export default function DailyReportingCard() {
 
   if (rosterChecked && !shiftInfo) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">📋 Daily Reporting — {format(now, 'dd MMM yyyy')}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-3 p-4 rounded-lg border border-dashed text-muted-foreground">
-            <AlertCircle className="h-5 w-5 shrink-0" />
-            <p className="text-sm">You are not on duty today. No daily tasks required.</p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className={cn(bento, 'p-4 md:p-5')}>
+        <h2 className={bentoHeader}>📋 Daily Reporting — {format(now, 'dd MMM yyyy')}</h2>
+        <div className="flex items-center gap-3 p-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 text-slate-500">
+          <AlertCircle className="h-5 w-5 shrink-0" />
+          <p className="text-sm">You are not on duty today. No daily tasks required.</p>
+        </div>
+      </div>
     );
   }
 
@@ -245,21 +242,19 @@ export default function DailyReportingCard() {
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">📋 Daily Reporting — {format(now, 'dd MMM yyyy')}</CardTitle>
-            <Badge variant="secondary" className="text-xs">{shiftLabel}</Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <div className={cn(bento, 'p-4 md:p-5')}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className={cn(bentoHeader, 'mb-0')}>📋 Daily Reporting — {format(now, 'dd MMM yyyy')}</h2>
+          <Badge className={cn(softBadge, 'text-xs')}>{shiftLabel}</Badge>
+        </div>
+        <div className="space-y-4">
           {/* Briefing Selfie */}
-          <div className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-muted/30">
+          <div className={cn(softTile, 'flex items-center justify-between gap-3')}>
             <div className="flex items-center gap-3 min-w-0">
-              <Camera className="h-5 w-5 text-primary shrink-0" />
+              <Camera className="h-5 w-5 text-blue-600 shrink-0" />
               <div className="min-w-0">
-                <p className="text-sm font-medium">{isPM ? 'Evening Passover Selfie' : 'Morning Briefing Selfie'}</p>
-                <p className="text-xs text-muted-foreground">Upload window: {uploadWindowLabel}</p>
+                <p className="text-sm font-medium text-slate-800">{isPM ? 'Evening Passover Selfie' : 'Morning Briefing Selfie'}</p>
+                <p className="text-xs text-slate-500">Upload window: {uploadWindowLabel}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -270,7 +265,7 @@ export default function DailyReportingCard() {
                 <>
                   <input ref={selfieRef} type="file" accept="image/*" capture="user" className="hidden"
                     onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0], selfieField as any)} />
-                  <Button size="sm" variant="outline" disabled={!isUploadWindow || uploading[selfieField]}
+                  <Button size="sm" className={secondaryBtn} disabled={!isUploadWindow || uploading[selfieField]}
                     onClick={() => selfieRef.current?.click()}>
                     {uploading[selfieField] ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
                     Upload
@@ -282,18 +277,18 @@ export default function DailyReportingCard() {
 
           {/* Stock Photos */}
           {showStockAndBlast && (
-            <div className="p-3 rounded-lg border bg-muted/30 space-y-3">
+            <div className={cn(softTile, 'space-y-3')}>
               <div className="flex items-center gap-3">
-                <Image className="h-5 w-5 text-primary shrink-0" />
+                <Image className="h-5 w-5 text-blue-600 shrink-0" />
                 <div>
-                  <p className="text-sm font-medium">Medication Stock Photos</p>
-                  <p className="text-xs text-muted-foreground">Upload window: {uploadWindowLabel} • Must include timestamp & date stamp</p>
+                  <p className="text-sm font-medium text-slate-800">Medication Stock Photos</p>
+                  <p className="text-xs text-slate-500">Upload window: {uploadWindowLabel} • Must include timestamp & date stamp</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {(['stock_photo_1_url', 'stock_photo_2_url'] as const).map((field, i) => (
-                  <div key={field} className="flex items-center justify-between gap-2 p-2 rounded border bg-background">
-                    <span className="text-xs font-medium">Photo {i + 1}</span>
+                  <div key={field} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white border border-slate-100">
+                    <span className="text-xs font-medium text-slate-700">Photo {i + 1}</span>
                     <div className="flex items-center gap-1.5">
                       <StatusIcon done={!!report[field]} />
                       {report[field] ? (
@@ -302,7 +297,7 @@ export default function DailyReportingCard() {
                         <>
                           <input ref={i === 0 ? stock1Ref : stock2Ref} type="file" accept="image/*" className="hidden"
                             onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0], field)} />
-                          <Button size="sm" variant="outline" disabled={!isUploadWindow || uploading[field]}
+                          <Button size="sm" className={secondaryBtn} disabled={!isUploadWindow || uploading[field]}
                             onClick={() => (i === 0 ? stock1Ref : stock2Ref).current?.click()}>
                             {uploading[field] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3 mr-1" />}
                             Upload
@@ -318,25 +313,25 @@ export default function DailyReportingCard() {
 
           {/* WhatsApp Blast Count */}
           {showStockAndBlast && (
-            <div className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-muted/30">
+            <div className={cn(softTile, 'flex items-center justify-between gap-3')}>
               <div className="flex items-center gap-3 min-w-0">
-                <MessageSquare className="h-5 w-5 text-primary shrink-0" />
+                <MessageSquare className="h-5 w-5 text-blue-600 shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-sm font-medium">WhatsApp Blasts</p>
-                  <p className="text-xs text-muted-foreground">Target: {blastTarget} blasts/day</p>
+                  <p className="text-sm font-medium text-slate-800">WhatsApp Blasts</p>
+                  <p className="text-xs text-slate-500">Target: {blastTarget} blasts/day</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <Input type="number" min={0} value={blastInput} onChange={(e) => setBlastInput(e.target.value)}
-                  className="w-16 h-8 text-center text-sm" />
-                <span className="text-xs text-muted-foreground">/ {blastTarget}</span>
-                <Button size="sm" variant="outline" onClick={saveBlastCount}>Save</Button>
+                  className={cn(softInput, 'w-16 h-8 text-center text-sm')} />
+                <span className="text-xs text-slate-500">/ {blastTarget}</span>
+                <Button size="sm" className={secondaryBtn} onClick={saveBlastCount}>Save</Button>
                 <StatusIcon done={report.whatsapp_blast_count >= blastTarget} />
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Image Preview Dialog */}
       <Dialog open={!!previewUrl} onOpenChange={(open) => { if (!open) setPreviewUrl(null); }}>

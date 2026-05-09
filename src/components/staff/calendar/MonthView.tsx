@@ -42,8 +42,8 @@ export function MonthView({ currentDate, tasks, leaveEntries, onTaskClick, onDay
 
   return (
     <div className="border rounded-lg overflow-hidden">
-      <div className="grid grid-cols-7 border-b bg-muted/50">
-        {WEEKDAYS.map((d) => (<div key={d} className="text-center text-xs font-medium text-muted-foreground py-2">{d}</div>))}
+      <div className="grid grid-cols-7 border-b bg-slate-50">
+        {WEEKDAYS.map((d) => (<div key={d} className="text-center text-xs font-medium text-slate-500 py-2">{d}</div>))}
       </div>
       <div className="grid grid-cols-7">
         {days.map((day, i) => {
@@ -52,12 +52,12 @@ export function MonthView({ currentDate, tasks, leaveEntries, onTaskClick, onDay
           const allItems = dayLeave.length + dayTasks.length;
           const inMonth = isSameMonth(day, currentDate);
           return (
-            <div key={i} onClick={() => onDayClick(day)} className={cn('min-h-[100px] border-b border-r p-1 cursor-pointer hover:bg-muted/30 transition-colors', !inMonth && 'bg-muted/20 text-muted-foreground')}>
-              <div className={cn('text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full', isToday(day) && 'bg-primary text-primary-foreground')}>{format(day, 'd')}</div>
+            <div key={i} onClick={() => onDayClick(day)} className={cn('min-h-[100px] border-b border-r p-1 cursor-pointer hover:bg-slate-50 transition-colors', !inMonth && 'bg-slate-50/60 text-slate-500')}>
+              <div className={cn('text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full', isToday(day) && 'bg-blue-600 text-white')}>{format(day, 'd')}</div>
               <div className="space-y-0.5">
                 {dayLeave.map((l) => (<LeavePill key={`leave-${l.id}`} leave={l} compact />))}
                 {dayTasks.slice(0, Math.max(0, MAX_VISIBLE - dayLeave.length)).map((t) => (<TaskPill key={t.id} task={t} onClick={onTaskClick} compact />))}
-                {allItems > MAX_VISIBLE && (<div className="text-[10px] text-muted-foreground pl-1">+{allItems - MAX_VISIBLE} more</div>)}
+                {allItems > MAX_VISIBLE && (<div className="text-[10px] text-slate-500 pl-1">+{allItems - MAX_VISIBLE} more</div>)}
               </div>
             </div>
           );

@@ -35,16 +35,16 @@ export function JobDescriptionView({ userId, onComplete }: JobDescriptionViewPro
     <Card>
       <CardHeader>
         <CardTitle className="text-lg">Step 2: Job Description — Read & Acknowledge</CardTitle>
-        <p className="text-sm text-muted-foreground">Please read the entire document below, then confirm at the bottom.</p>
+        <p className="text-sm text-slate-500">Please read the entire document below, then confirm at the bottom.</p>
       </CardHeader>
-      <CardContent className="prose prose-sm max-w-none dark:prose-invert">
-        <div className="bg-muted/30 rounded-lg p-6 space-y-6 max-h-[60vh] overflow-y-auto">
+      <CardContent className="prose prose-sm max-w-none">
+        <div className="bg-slate-50 rounded-lg p-6 space-y-6 max-h-[60vh] overflow-y-auto">
           <div className="text-center mb-6">
             <h2 className="text-xl font-bold">KLINIK AWFA</h2>
-            <p className="text-muted-foreground">Primary Healthcare & Family Medicine</p>
+            <p className="text-slate-500">Primary Healthcare & Family Medicine</p>
             <h3 className="text-lg font-bold mt-2">JOB DESCRIPTION</h3>
             <p className="font-semibold">Clinic Staff / Healthcare Assistant</p>
-            <p className="text-sm text-muted-foreground">Clinical Operations | Patient Care | Administration</p>
+            <p className="text-sm text-slate-500">Clinical Operations | Patient Care | Administration</p>
           </div>
 
           <table className="w-full text-sm border">
@@ -158,7 +158,7 @@ export function JobDescriptionView({ userId, onComplete }: JobDescriptionViewPro
 
           <h4 className="font-bold">05 KEY PERFORMANCE INDICATORS (KPIs)</h4>
           <table className="w-full text-sm border">
-            <thead><tr className="border-b bg-muted/50"><th className="p-2 text-left">KPI</th><th className="p-2 text-left">Target</th><th className="p-2 text-left">Frequency</th></tr></thead>
+            <thead><tr className="border-b bg-slate-50"><th className="p-2 text-left">KPI</th><th className="p-2 text-left">Target</th><th className="p-2 text-left">Frequency</th></tr></thead>
             <tbody>
               <tr className="border-b"><td className="p-2 border-r">Patient Wait Time</td><td className="p-2 border-r">Average &lt; 15 minutes</td><td className="p-2">Daily</td></tr>
               <tr className="border-b"><td className="p-2 border-r">Patient Satisfaction</td><td className="p-2 border-r">≥ 4.5 / 5.0 rating</td><td className="p-2">Monthly</td></tr>
@@ -169,7 +169,7 @@ export function JobDescriptionView({ userId, onComplete }: JobDescriptionViewPro
             </tbody>
           </table>
 
-          <div className="mt-4 p-3 bg-muted/50 rounded text-sm">
+          <div className="mt-4 p-3 bg-slate-50 rounded text-sm">
             <p><strong>Acknowledgement:</strong> This Job Description outlines the primary responsibilities, authority levels, and success metrics for the Clinic Staff / Healthcare Assistant role at Klinik Awfa. This is a living document and will be reviewed periodically as the clinic evolves.</p>
           </div>
         </div>

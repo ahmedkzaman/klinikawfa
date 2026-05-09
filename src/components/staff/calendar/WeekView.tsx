@@ -27,26 +27,26 @@ export function WeekView({ currentDate, tasks, leaveEntries, onTaskClick, onSlot
 
   return (
     <div className="border rounded-lg overflow-auto max-h-[calc(100vh-220px)]">
-      <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b bg-muted/50 sticky top-0 z-10">
+      <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b bg-slate-50 sticky top-0 z-10">
         <div className="border-r" />
         {days.map((day, i) => (
-          <div key={i} className={cn('text-center py-2 border-r', isToday(day) && 'bg-primary/10')}>
-            <div className="text-xs text-muted-foreground">{format(day, 'EEE')}</div>
-            <div className={cn('text-sm font-medium w-7 h-7 mx-auto flex items-center justify-center rounded-full', isToday(day) && 'bg-primary text-primary-foreground')}>{format(day, 'd')}</div>
+          <div key={i} className={cn('text-center py-2 border-r', isToday(day) && 'bg-blue-50')}>
+            <div className="text-xs text-slate-500">{format(day, 'EEE')}</div>
+            <div className={cn('text-sm font-medium w-7 h-7 mx-auto flex items-center justify-center rounded-full', isToday(day) && 'bg-blue-600 text-white')}>{format(day, 'd')}</div>
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b bg-destructive/5">
-        <div className="text-[10px] text-muted-foreground text-right pr-2 pt-1 border-r">Leave</div>
+      <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b bg-rose-50">
+        <div className="text-[10px] text-slate-500 text-right pr-2 pt-1 border-r">Leave</div>
         {days.map((day, di) => (<div key={di} className="border-r p-0.5 space-y-0.5">{getLeaveForDay(day).map((l) => (<LeavePill key={`leave-${l.id}`} leave={l} compact />))}</div>))}
       </div>
       {HOURS.map((hour) => (
         <div key={hour} className="grid grid-cols-[60px_repeat(7,1fr)] border-b min-h-[48px]">
-          <div className="text-[10px] text-muted-foreground text-right pr-2 pt-1 border-r">{format(new Date(2000, 0, 1, hour), 'ha')}</div>
+          <div className="text-[10px] text-slate-500 text-right pr-2 pt-1 border-r">{format(new Date(2000, 0, 1, hour), 'ha')}</div>
           {days.map((day, di) => {
             const dayTasks = getTasksForDay(day).filter((t) => parseISO(t.start_date).getHours() === hour);
             return (
-              <div key={di} className="border-r p-0.5 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => { const d = new Date(day); d.setHours(hour); onSlotClick(d); }}>
+              <div key={di} className="border-r p-0.5 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => { const d = new Date(day); d.setHours(hour); onSlotClick(d); }}>
                 {dayTasks.map((t) => (<TaskPill key={t.id} task={t} onClick={onTaskClick} />))}
               </div>
             );

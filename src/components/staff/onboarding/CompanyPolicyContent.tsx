@@ -1,12 +1,12 @@
 export function CompanyPolicyContent() {
   return (
-    <div className="bg-muted/30 rounded-lg p-6 space-y-6 max-h-[60vh] overflow-y-auto">
+    <div className="bg-slate-50 rounded-lg p-6 space-y-6 max-h-[60vh] overflow-y-auto">
       {/* Cover */}
       <div className="text-center mb-6">
         <h2 className="text-xl font-bold">KLINIK AWFA</h2>
         <p className="text-sm font-semibold">KUMPULAN IKRAM HEALTH TERENGGANU SDN. BHD.</p>
         <h3 className="text-lg font-bold mt-2">POLISI SYARIKAT 2025</h3>
-        <p className="text-sm text-muted-foreground">Berkuatkuasa mulai 1 Januari 2025</p>
+        <p className="text-sm text-slate-500">Berkuatkuasa mulai 1 Januari 2025</p>
       </div>
 
       {/* Authorization */}
@@ -16,7 +16,7 @@ export function CompanyPolicyContent() {
         <p>Lembaga Pengarah mempunyai kuasa penuh untuk mengubah, memansuh, membatal, menambah mana-mana bahagian dan melaksanakan secara berperingkat mengikut keupayaan dan pencapaian perniagaan KLINIK dan mengikut keadaan semasa.</p>
         <p>Kami menyeru kepada semua pekerja supaya membudayakan cara kerja cemerlang dan amanah dalam menjalankan tugas sebagai barisan penggerak kemajuan untuk Kumpulan Ikram Health Terengganu Sdn Bhd.</p>
         <p className="font-semibold mt-2">Dr. Ahmed Bin Kamarulzaman</p>
-        <p className="text-sm text-muted-foreground">Ahli Lembaga Pengarah Kumpulan Ikram Health Terengganu Sdn Bhd</p>
+        <p className="text-sm text-slate-500">Ahli Lembaga Pengarah Kumpulan Ikram Health Terengganu Sdn Bhd</p>
       </div>
 
       {/* Pendahuluan */}
@@ -101,7 +101,7 @@ export function CompanyPolicyContent() {
       <h5 className="font-semibold">8. Kumpulan Wang Simpanan Pekerja (KWSP)</h5>
       <p>Semua pekerja diwajibkan mencarum kepada KWSP setiap bulan mengikut undang-undang yang dikuatkuasakan.</p>
       <table className="w-full text-sm border mt-2">
-        <thead><tr className="border-b bg-muted/50"><th className="p-2 text-left">Kategori Gaji</th><th className="p-2 text-left">Pekerja</th><th className="p-2 text-left">Majikan</th></tr></thead>
+        <thead><tr className="border-b bg-slate-50"><th className="p-2 text-left">Kategori Gaji</th><th className="p-2 text-left">Pekerja</th><th className="p-2 text-left">Majikan</th></tr></thead>
         <tbody>
           <tr className="border-b"><td className="p-2 border-r">Gaji tidak melebihi RM5,000</td><td className="p-2 border-r">11%</td><td className="p-2">13%</td></tr>
           <tr className="border-b"><td className="p-2 border-r">Gaji lebih dari RM5,000</td><td className="p-2 border-r">11%</td><td className="p-2">12%</td></tr>
@@ -127,7 +127,7 @@ export function CompanyPolicyContent() {
       <h5 className="font-semibold">13. Waktu Bekerja</h5>
       <p className="font-medium">(a) Pekerja di bahagian klinikal (CA/SN/MA):</p>
       <table className="w-full text-sm border mt-2">
-        <thead><tr className="border-b bg-muted/50"><th className="p-2 text-left">Syif</th><th className="p-2 text-left">Pembantu Klinik / Jururawat</th><th className="p-2 text-left">Pembantu Pegawai Perubatan</th></tr></thead>
+        <thead><tr className="border-b bg-slate-50"><th className="p-2 text-left">Syif</th><th className="p-2 text-left">Pembantu Klinik / Jururawat</th><th className="p-2 text-left">Pembantu Pegawai Perubatan</th></tr></thead>
         <tbody>
           <tr className="border-b"><td className="p-2 border-r">Pagi</td><td className="p-2 border-r">8.00 pagi – 4.00 petang (rehat 1.00–1.30 ptg)</td><td className="p-2">8.00 pagi – 5.00 petang (rehat 1.00–2.00 ptg)</td></tr>
           <tr><td className="p-2 border-r">Petang</td><td className="p-2 border-r">4.00 petang – 12.00 mlm (rehat 7.00–7.30 mlm)</td><td className="p-2">3.00 petang – 12.00 mlm (rehat 7.00–8.00 mlm)</td></tr>
@@ -195,7 +195,7 @@ export function CompanyPolicyContent() {
 
       <h5 className="font-semibold">23. Pemeriksaan Kesihatan</h5>
       <table className="w-full text-sm border mt-2">
-        <thead><tr className="border-b bg-muted/50"><th className="p-2 text-left">Peringkat Umur</th><th className="p-2 text-left">Jumlah Saringan / Tahun</th></tr></thead>
+        <thead><tr className="border-b bg-slate-50"><th className="p-2 text-left">Peringkat Umur</th><th className="p-2 text-left">Jumlah Saringan / Tahun</th></tr></thead>
         <tbody>
           <tr className="border-b"><td className="p-2 border-r">Kurang 40 Tahun</td><td className="p-2">1 Kali</td></tr>
           <tr><td className="p-2 border-r">40 Tahun dan ke atas</td><td className="p-2">2 Kali</td></tr>
@@ -209,7 +209,7 @@ export function CompanyPolicyContent() {
       <h5 className="font-semibold">1. Cuti Sakit dan Cuti Hospitalisasi</h5>
       <p>Syarikat hanya mengiktiraf sijil cuti sakit yang dikeluarkan oleh Pegawai Perubatan Kerajaan atau Pegawai Perubatan yang dilantik di klinik di bawah Kumpulan Ikram Health Terengganu Sdn Bhd.</p>
       <table className="w-full text-sm border mt-2">
-        <thead><tr className="border-b bg-muted/50"><th className="p-2 text-left">Tempoh Perkhidmatan</th><th className="p-2 text-left">Jumlah Hari</th></tr></thead>
+        <thead><tr className="border-b bg-slate-50"><th className="p-2 text-left">Tempoh Perkhidmatan</th><th className="p-2 text-left">Jumlah Hari</th></tr></thead>
         <tbody>
           <tr className="border-b"><td className="p-2 border-r">Kurang dari 2 tahun</td><td className="p-2">14</td></tr>
           <tr className="border-b"><td className="p-2 border-r">2 tahun hingga kurang dari 5 tahun</td><td className="p-2">18</td></tr>
@@ -252,7 +252,7 @@ export function CompanyPolicyContent() {
 
       <h5 className="font-semibold">9. Cuti Tahunan</h5>
       <table className="w-full text-sm border mt-2">
-        <thead><tr className="border-b bg-muted/50"><th className="p-2 text-left">Jawatan</th><th className="p-2 text-left">&lt; 2 Tahun</th><th className="p-2 text-left">2–4 Tahun</th><th className="p-2 text-left">5+ Tahun</th></tr></thead>
+        <thead><tr className="border-b bg-slate-50"><th className="p-2 text-left">Jawatan</th><th className="p-2 text-left">&lt; 2 Tahun</th><th className="p-2 text-left">2–4 Tahun</th><th className="p-2 text-left">5+ Tahun</th></tr></thead>
         <tbody>
           <tr className="border-b"><td className="p-2 border-r">Doktor Residen</td><td className="p-2 border-r">20</td><td className="p-2 border-r">24</td><td className="p-2">26</td></tr>
           <tr className="border-b"><td className="p-2 border-r">Pengurus</td><td className="p-2 border-r">14</td><td className="p-2 border-r">16</td><td className="p-2">20</td></tr>
@@ -295,17 +295,17 @@ export function CompanyPolicyContent() {
 
       <h5 className="font-semibold">1. Tuntutan Perjalanan (Kenderaan)</h5>
       <table className="w-full text-sm border mt-2">
-        <thead><tr className="border-b bg-muted/50"><th className="p-2 text-left">Kenderaan</th><th className="p-2 text-left">Kadar (RM) / km</th></tr></thead>
+        <thead><tr className="border-b bg-slate-50"><th className="p-2 text-left">Kenderaan</th><th className="p-2 text-left">Kadar (RM) / km</th></tr></thead>
         <tbody>
           <tr className="border-b"><td className="p-2 border-r">Kereta</td><td className="p-2">RM0.50</td></tr>
           <tr><td className="p-2 border-r">Motosikal</td><td className="p-2">RM0.30</td></tr>
         </tbody>
       </table>
-      <p className="mt-1 text-sm text-muted-foreground">Tol dan bayaran meletak kenderaan perlu disertakan resit. Tuntutan boleh dibuat jika jarak ≥ 50km/hari.</p>
+      <p className="mt-1 text-sm text-slate-500">Tol dan bayaran meletak kenderaan perlu disertakan resit. Tuntutan boleh dibuat jika jarak ≥ 50km/hari.</p>
 
       <h5 className="font-semibold">2. Bayaran Balik Penginapan</h5>
       <table className="w-full text-sm border mt-2">
-        <thead><tr className="border-b bg-muted/50"><th className="p-2 text-left">Jawatan</th><th className="p-2 text-left">Kursus / Program</th><th className="p-2 text-left">Urusan Rasmi</th></tr></thead>
+        <thead><tr className="border-b bg-slate-50"><th className="p-2 text-left">Jawatan</th><th className="p-2 text-left">Kursus / Program</th><th className="p-2 text-left">Urusan Rasmi</th></tr></thead>
         <tbody>
           <tr className="border-b"><td className="p-2 border-r">Pengurusan &amp; Atasan</td><td className="p-2 border-r">RM150.00</td><td className="p-2">RM170.00</td></tr>
           <tr className="border-b"><td className="p-2 border-r">Eksekutif</td><td className="p-2 border-r">RM120.00</td><td className="p-2">RM140.00</td></tr>
@@ -383,7 +383,7 @@ export function CompanyPolicyContent() {
         <li>Memalsukan tandatangan kakitangan lain</li>
         <li>Menyalahgunakan kepala surat, logo, dokumen dan nama syarikat untuk kepentingan peribadi</li>
       </ul>
-      <p className="text-sm text-muted-foreground mt-1">Salahlaku kecil boleh menjadi salahlaku besar sekiranya dilakukan secara kerap.</p>
+      <p className="text-sm text-slate-500 mt-1">Salahlaku kecil boleh menjadi salahlaku besar sekiranya dilakukan secara kerap.</p>
 
       {/* Gangguan Seksual */}
       <h4 className="font-bold mt-6">GANGGUAN SEKSUAL DI TEMPAT KERJA</h4>
@@ -439,7 +439,7 @@ export function CompanyPolicyContent() {
       </ul>
 
       {/* Acknowledgement */}
-      <div className="mt-4 p-3 bg-muted/50 rounded text-sm">
+      <div className="mt-4 p-3 bg-slate-50 rounded text-sm">
         <p><strong>PENGAKUAN PEKERJA:</strong> Saya mengakui bahawa saya telah membaca, memahami dan bersetuju untuk mematuhi Polisi Syarikat Kumpulan Ikram Health Terengganu Sdn Bhd dan sebarang pindaan yang dibuat dari semasa ke semasa.</p>
       </div>
     </div>

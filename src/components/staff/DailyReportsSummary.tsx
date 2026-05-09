@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { bento, bentoHeader, secondaryBtn, softInput } from '@/lib/clinic/bentoTokens';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -177,9 +178,9 @@ export default function DailyReportsSummary() {
     setSaving(false);
   };
 
-  const Check = () => <CheckCircle className="h-4 w-4 text-green-500 mx-auto" />;
-  const Cross = () => <XCircle className="h-4 w-4 text-red-400 mx-auto" />;
-  const NA = () => <Minus className="h-4 w-4 text-muted-foreground mx-auto" />;
+  const Check = () => <CheckCircle className="h-4 w-4 text-emerald-500 mx-auto" />;
+  const Cross = () => <XCircle className="h-4 w-4 text-rose-400 mx-auto" />;
+  const NA = () => <Minus className="h-4 w-4 text-slate-400 mx-auto" />;
 
   const amReports = reports.filter(r => r.shift === 'AM');
   const pmReports = reports.filter(r => r.shift === 'PM');
@@ -194,10 +195,10 @@ export default function DailyReportsSummary() {
     if (data.length === 0) return null;
     return (
       <div className="space-y-2">
-        <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">{icon} {title}</p>
+        <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">{icon} {title}</p>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b text-xs text-muted-foreground">
+            <tr className="border-b border-slate-100 text-xs text-slate-500">
               <th className="text-left py-2 pr-3 font-medium">Staff</th>
               <th className="text-center py-2 px-2 font-medium">Selfie</th>
               <th className="text-center py-2 px-2 font-medium">Stock 1</th>
@@ -207,8 +208,8 @@ export default function DailyReportsSummary() {
           </thead>
           <tbody>
             {data.map(r => (
-              <tr key={`${r.userId}-${r.type}`} className="border-b last:border-0">
-                <td className="py-2 pr-3 font-medium">
+              <tr key={`${r.userId}-${r.type}`} className="border-b border-slate-100 last:border-0">
+                <td className="py-2 pr-3 font-medium text-slate-700">
                   {r.fullName}
                   <TypeBadge type={r.type} />
                 </td>
@@ -217,11 +218,11 @@ export default function DailyReportsSummary() {
                 <td className="py-2 px-2">{r.stock2 === null ? <NA /> : r.stock2 ? <Check /> : <Cross />}</td>
                 <td className="py-2 pl-2 text-center">
                   {r.blastCount === null ? (
-                    <span className="text-xs text-muted-foreground">—</span>
+                    <span className="text-xs text-slate-500">—</span>
                   ) : (
                     <Badge variant={r.blastCount >= blastTarget ? 'secondary' : 'destructive'}
                       className={r.blastCount >= blastTarget
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs'
+                        ? 'bg-emerald-50 text-emerald-700 text-xs border-none'
                         : 'text-xs'}>
                       {r.blastCount} / {blastTarget}
                     </Badge>
@@ -236,22 +237,22 @@ export default function DailyReportsSummary() {
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <div className={cn(bento, 'p-4 md:p-5')}>
+      <div className="pb-3 mb-3 border-b border-slate-100">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <ClipboardList className="h-5 w-5 text-primary" /> Daily Reports
-            {isCurrentMonth && <span className="text-muted-foreground font-normal">— {format(now, 'dd MMM')}</span>}
-          </CardTitle>
+          <h2 className={cn(bentoHeader, 'mb-0 normal-case tracking-normal text-base flex items-center gap-2')}>
+            <ClipboardList className="h-5 w-5 text-blue-600" /> Daily Reports
+            {isCurrentMonth && <span className="text-slate-500 font-normal">— {format(now, 'dd MMM')}</span>}
+          </h2>
           <div className="flex items-center gap-2 flex-wrap">
             <Select value={String(selectedMonth)} onValueChange={(v) => setSelectedMonth(Number(v))}>
-              <SelectTrigger className="w-20 h-7 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className={cn(softInput, 'w-20 h-7 text-xs')}><SelectValue /></SelectTrigger>
               <SelectContent>
                 {MONTHS.map((m, i) => <SelectItem key={i} value={String(i)}>{m}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={String(selectedYear)} onValueChange={(v) => setSelectedYear(Number(v))}>
-              <SelectTrigger className="w-20 h-7 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className={cn(softInput, 'w-20 h-7 text-xs')}><SelectValue /></SelectTrigger>
               <SelectContent>
                 {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map(y => (
                   <SelectItem key={y} value={String(y)}>{y}</SelectItem>
@@ -259,31 +260,29 @@ export default function DailyReportsSummary() {
               </SelectContent>
             </Select>
             <div className="flex items-center gap-1 ml-2">
-              <Settings2 className="h-4 w-4 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">WA:</span>
-              <Input type="number" min={1} value={targetInput} onChange={(e) => setTargetInput(e.target.value)} className="w-14 h-7 text-center text-xs" />
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={saveTarget} disabled={saving}>Set</Button>
+              <Settings2 className="h-4 w-4 text-slate-400" />
+              <span className="text-xs text-slate-500">WA:</span>
+              <Input type="number" min={1} value={targetInput} onChange={(e) => setTargetInput(e.target.value)} className={cn(softInput, 'w-14 h-7 text-center text-xs')} />
+              <Button size="sm" className={cn(secondaryBtn, 'h-7 text-xs')} onClick={saveTarget} disabled={saving}>Set</Button>
             </div>
           </div>
         </div>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        ) : reports.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No roster data found for this period.</p>
-        ) : (
-          <div className="space-y-4 overflow-x-auto">
-            <ShiftTable title="AM Shift (8am–4pm)" icon={<Sun className="h-3.5 w-3.5 text-amber-500" />} data={amReports} />
-            <ShiftTable title="PM Shift (4pm–12am)" icon={<Moon className="h-3.5 w-3.5 text-indigo-500" />} data={pmReports} />
-          </div>
-        )}
-        <div className="mt-3 pt-3 border-t">
-          <Button asChild variant="outline" size="sm" className="text-xs">
-            <Link to="/staff/admin/daily-tasks">View Full Daily Task Review →</Link>
-          </Button>
+      </div>
+      {loading ? (
+        <p className="text-sm text-slate-500">Loading...</p>
+      ) : reports.length === 0 ? (
+        <p className="text-sm text-slate-500">No roster data found for this period.</p>
+      ) : (
+        <div className="space-y-4 overflow-x-auto">
+          <ShiftTable title="AM Shift (8am–4pm)" icon={<Sun className="h-3.5 w-3.5 text-amber-500" />} data={amReports} />
+          <ShiftTable title="PM Shift (4pm–12am)" icon={<Moon className="h-3.5 w-3.5 text-indigo-500" />} data={pmReports} />
         </div>
-      </CardContent>
-    </Card>
+      )}
+      <div className="mt-3 pt-3 border-t border-slate-100">
+        <Button asChild className={cn(secondaryBtn, 'text-xs h-8')}>
+          <Link to="/staff/admin/daily-tasks">View Full Daily Task Review →</Link>
+        </Button>
+      </div>
+    </div>
   );
 }

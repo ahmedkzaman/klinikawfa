@@ -38,7 +38,7 @@ export function OnboardingWizard({ userId, existingData, onComplete }: Onboardin
     <div className="max-w-4xl mx-auto py-8 px-4">
       <div className="mb-8 text-center">
         <h1 className="text-2xl font-bold mb-2">Staff Onboarding</h1>
-        <p className="text-muted-foreground">Please complete all 4 steps before accessing the dashboard.</p>
+        <p className="text-slate-500">Please complete all 4 steps before accessing the dashboard.</p>
       </div>
 
       {/* Progress Steps */}
@@ -51,9 +51,9 @@ export function OnboardingWizard({ userId, existingData, onComplete }: Onboardin
               {i > 0 && <div className={cn('h-px w-4 sm:w-10', done ? 'bg-primary' : 'bg-border')} />}
               <div className={cn(
                 'flex items-center gap-1.5 px-2 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors',
-                done && 'text-primary',
-                active && 'bg-primary/10 text-primary',
-                !done && !active && 'text-muted-foreground'
+                done && 'text-blue-600',
+                active && 'bg-blue-50 text-blue-600',
+                !done && !active && 'text-slate-500'
               )}>
                 {done ? <CheckCircle2 className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
                 <span className="hidden sm:inline">{step.label}</span>
