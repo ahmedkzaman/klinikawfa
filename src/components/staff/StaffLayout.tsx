@@ -272,7 +272,7 @@ export function StaffLayout() {
   // Gate non-admin staff behind onboarding
   if (!isAdmin && !onboardingCompleted) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-slate-50">
         <OnboardingWizard
           userId={user.id}
           existingData={onboardingData || null}
