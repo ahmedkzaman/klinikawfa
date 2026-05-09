@@ -101,45 +101,7 @@ export function resolvePunchBuffers(
   roles: string[] | null | undefined,
   shiftKey?: string | null,
 ): PunchBuffers {
-  const rows = settings ?? [];
-  const userRoles = roles ?? [];
-
-  const global = rows.find((s) => s.scope === 'global');
-  const shiftRows = rows.filter((s) => s.scope === 'shift');
-  const roleRows = rows.filter((s) => s.scope === 'role');
-  const roleShiftRows = rows.filter((s) => s.scope === 'role_shift');
-
-  let chosen: any = null;
-
-  if (shiftKey) {
-    let chosenP = -1;
-    for (const r of userRoles) {
-      const row = roleShiftRows.find((s) => s.role === r && s.shift_key === shiftKey);
-      if (row) {
-        const p = ROLE_PRIORITY[r] ?? 0;
-        if (p > chosenP) { chosen = row; chosenP = p; }
-      }
-    }
-  }
-
-  if (!chosen && shiftKey) {
-    chosen = shiftRows.find((s) => s.shift_key === shiftKey) ?? null;
-  }
-
-  if (!chosen) {
-    let chosenP = -1;
-    for (const r of userRoles) {
-      const row = roleRows.find((s) => s.role === r);
-      if (row) {
-        const p = ROLE_PRIORITY[r] ?? 0;
-        if (p > chosenP) { chosen = row; chosenP = p; }
-      }
-    }
-  }
-
-  if (!chosen) chosen = global;
-
-  return chosen ? pickFields(chosen) : DEFAULT_BUFFERS;
+  return resolvePunchBuffersWithSource(settings, roles, shiftKey).buffers;
 }
 
 /**
