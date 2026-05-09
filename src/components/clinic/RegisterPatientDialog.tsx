@@ -103,6 +103,26 @@ export function RegisterPatientDialog({
           <DialogTitle>Register Patient</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="rounded-md border bg-muted/30 p-3 flex items-start gap-2">
+            <Checkbox
+              id="mykad_consent"
+              checked={mykadConsent}
+              onCheckedChange={(v) => setMykadConsent(v === true)}
+              className="mt-0.5"
+            />
+            <Label htmlFor="mykad_consent" className="text-sm font-normal leading-snug cursor-pointer">
+              Patient consents to MyKad being read for clinic registration purpose.
+            </Label>
+          </div>
+
+          {justRead && (
+            <Alert>
+              <AlertDescription>
+                Please confirm patient details before saving.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div>
             <Label htmlFor="name">Full name *</Label>
             <Input id="name" {...register('name')} />
@@ -114,6 +134,7 @@ export function RegisterPatientDialog({
               <div className="flex items-center justify-between gap-2">
                 <Label htmlFor="national_id">MyKad / IC *</Label>
                 <ReadMyKadButton
+                  disabled={!mykadConsent}
                   onRead={(data) => {
                     if (data.name) setValue('name', data.name, { shouldValidate: true, shouldDirty: true });
                     const ic = cleanIC(data.ic_no);
@@ -122,6 +143,8 @@ export function RegisterPatientDialog({
                     if (dob) setValue('date_of_birth', dob, { shouldValidate: true, shouldDirty: true });
                     const g = mapGender(data.gender);
                     if (g) setValue('gender', g, { shouldValidate: true, shouldDirty: true });
+                    if (data.address) setValue('address', data.address, { shouldValidate: true, shouldDirty: true });
+                    setJustRead(true);
                     toast.success('MyKad read successfully');
                   }}
                 />
