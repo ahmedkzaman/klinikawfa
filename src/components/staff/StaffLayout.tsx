@@ -142,9 +142,9 @@ function SidebarNav({ isAdmin, isOpsOrAdmin, pathname, onLinkClick, unreadNotice
 
       {isAdmin && (
         <>
-          <div className="my-4 mx-4 border-t" />
+          <div className="my-4 mx-4 border-t border-slate-100" />
           <div className="px-4 mb-2">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Admin</span>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Admin</span>
           </div>
           <div className="space-y-1 px-2">
             {adminNavItems.map((item) => (
@@ -153,10 +153,10 @@ function SidebarNav({ isAdmin, isOpsOrAdmin, pathname, onLinkClick, unreadNotice
                 to={item.href}
                 onClick={onLinkClick}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                  'flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-colors',
                   isActive(item.href)
-                    ? 'bg-primary/10 text-primary font-medium'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                    ? 'bg-blue-50 text-blue-700 font-medium'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                 )}
               >
                 <item.icon className="h-4 w-4" />
@@ -169,9 +169,9 @@ function SidebarNav({ isAdmin, isOpsOrAdmin, pathname, onLinkClick, unreadNotice
 
       {/* Content Management - All Staff */}
       <>
-        <div className="my-4 mx-4 border-t" />
+        <div className="my-4 mx-4 border-t border-slate-100" />
         <div className="px-4 mb-2">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Website</span>
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Website</span>
         </div>
         <div className="space-y-1 px-2">
           {contentNavItems.map((item) => (
@@ -180,10 +180,10 @@ function SidebarNav({ isAdmin, isOpsOrAdmin, pathname, onLinkClick, unreadNotice
               to={item.href}
               onClick={onLinkClick}
               className={cn(
-                'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                'flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-colors',
                 isActive(item.href)
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                  ? 'bg-blue-50 text-blue-700 font-medium'
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
               )}
             >
               <item.icon className="h-4 w-4" />
