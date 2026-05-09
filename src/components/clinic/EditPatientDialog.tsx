@@ -93,7 +93,9 @@ export function EditPatientDialog({
   // Re-sync form whenever a different patient is loaded into the dialog.
   useEffect(() => {
     if (open) {
-      reset(buildDefaults(patient));
+      const defaults = buildDefaults(patient);
+      defaults.name = toMalayTitleCase(defaults.name);
+      reset(defaults);
       setMykadConsent(false);
       setJustRead(false);
     }
@@ -106,7 +108,7 @@ export function EditPatientDialog({
       const updated = await update.mutateAsync({
         id: patient.id,
         patch: {
-          name: data.name,
+          name: toUpperSafe(data.name),
           phone: data.phone || null,
           national_id: data.national_id?.trim() || null,
           passport_no: data.passport_no?.trim() || null,
@@ -119,7 +121,7 @@ export function EditPatientDialog({
           default_panel_id: data.default_panel_id || null,
           allergies: data.allergies || null,
           underlying_conditions: data.underlying_conditions || null,
-          address: data.address?.trim() || null,
+          address: data.address ? toUpperSafe(data.address) : null,
         },
       });
       toast.success(`Patient updated: ${updated.name}`);
@@ -162,7 +164,17 @@ export function EditPatientDialog({
 
           <div>
             <Label htmlFor="edit_name">Full name *</Label>
-            <Input id="edit_name" className="capitalize" {...register('name')} />
+            <Input
+              id="edit_name"
+              {...register('name', {
+                onBlur: (e) => {
+                  const formatted = toMalayTitleCase(e.target.value);
+                  if (formatted !== e.target.value) {
+                    setValue('name', formatted, { shouldValidate: true, shouldDirty: true });
+                  }
+                },
+              })}
+            />
             {errors.name && (
               <p className="text-sm text-destructive mt-1">{errors.name.message}</p>
             )}
@@ -176,7 +188,7 @@ export function EditPatientDialog({
                   disabled={!mykadConsent}
                   onRead={(data) => {
                     if (data.name)
-                      setValue('name', data.name, { shouldValidate: true, shouldDirty: true });
+                      setValue('name', toMalayTitleCase(data.name), { shouldValidate: true, shouldDirty: true });
                     const ic = cleanIC(data.ic_no);
                     if (ic)
                       setValue('national_id', ic, { shouldValidate: true, shouldDirty: true });
@@ -186,7 +198,7 @@ export function EditPatientDialog({
                     const g = mapGender(data.gender);
                     if (g) setValue('gender', g, { shouldValidate: true, shouldDirty: true });
                     if (data.address)
-                      setValue('address', data.address, { shouldValidate: true, shouldDirty: true });
+                      setValue('address', toUpperSafe(data.address), { shouldValidate: true, shouldDirty: true });
                     setJustRead(true);
                     toast.success('MyKad read successfully');
                   }}
@@ -332,7 +344,7 @@ export function EditPatientDialog({
 
           <div>
             <Label htmlFor="edit_address">Address</Label>
-            <Textarea id="edit_address" rows={2} className="capitalize" placeholder="Auto-filled from MyKad" {...register('address')} />
+            <Textarea id="edit_address" rows={2} placeholder="Auto-filled from MyKad" {...register('address')} />
           </div>
           <div>
             <Label htmlFor="edit_allergies">Allergies</Label>
