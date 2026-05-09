@@ -377,11 +377,27 @@ export default function StaffPunch() {
               <Loader2 className="h-4 w-4 animate-spin" />Loading roster...
             </div>
           ) : activeShift ? (
-            <div className="flex items-center gap-2 flex-wrap">
-              {activeShift.shiftKey && <Badge variant="secondary" className="text-sm">{activeShift.shiftKey}</Badge>}
-              <span className="text-sm font-medium">{activeShift.label}</span>
-              {activeShift.workDate !== todayStr && (
-                <Badge variant="outline" className="text-xs">cross-midnight</Badge>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {activeShift.shiftKey && <Badge variant="secondary" className="text-sm">{activeShift.shiftKey}</Badge>}
+                <span className="text-sm font-medium">{activeShift.label}</span>
+                {activeShift.workDate !== todayStr && (
+                  <Badge variant="outline" className="text-xs">cross-midnight</Badge>
+                )}
+              </div>
+              {punchInWindow && (
+                <p className="text-xs text-muted-foreground">
+                  Punch-in open <span className="font-medium text-foreground">{fmtTime(punchInWindow.open)} – {fmtTime(punchInWindow.close)}</span>
+                  {' '}(late buffer {activeShift.buffers.clock_in_late_min} min, source: {activeShift.bufferSource})
+                </p>
+              )}
+              {serverSkewMs !== null && Math.abs(serverSkewMs) > 120_000 && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    Your device clock is off by ~{Math.round(Math.abs(serverSkewMs) / 60_000)} min vs server time. Please fix your phone's date/time before punching.
+                  </AlertDescription>
+                </Alert>
               )}
             </div>
           ) : nearestShift ? (
