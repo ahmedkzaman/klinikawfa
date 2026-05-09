@@ -357,36 +357,34 @@ export default function StaffPunch() {
   const canPunch = geofenceResult?.isWithinZone && !guardMessage && !geo.isLoading && !isPunching;
 
   return (
-    <div className="max-w-lg mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Punch In/Out</h1>
-        <p className="text-muted-foreground">Record your attendance using GPS verification</p>
-      </div>
+    <div className={pageShell}>
+      <div className={cn(pageInner, 'max-w-lg mx-auto')}>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-800">Punch In/Out</h1>
+          <p className="text-sm text-slate-500">Record your attendance using GPS verification</p>
+        </div>
 
-      {/* Active Shift Info */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <CalendarClock className="h-5 w-5" />Active Shift
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+        {/* Active Shift Info */}
+        <div className={cn(bento, 'p-4')}>
+          <h2 className={cn(bentoHeader, 'flex items-center gap-2')}>
+            <CalendarClock className="h-4 w-4" />Active Shift
+          </h2>
           {isLoadingData ? (
-            <div className="flex items-center gap-2 text-muted-foreground text-sm">
-              <Loader2 className="h-4 w-4 animate-spin" />Loading roster...
+            <div className="flex items-center gap-2 text-slate-500 text-sm">
+              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />Loading roster...
             </div>
           ) : activeShift ? (
             <div className="space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
-                {activeShift.shiftKey && <Badge variant="secondary" className="text-sm">{activeShift.shiftKey}</Badge>}
-                <span className="text-sm font-medium">{activeShift.label}</span>
+                {activeShift.shiftKey && <span className={cn(softBadge, 'inline-flex items-center px-2.5 py-0.5 text-xs font-medium')}>{activeShift.shiftKey}</span>}
+                <span className="text-sm font-medium text-slate-700">{activeShift.label}</span>
                 {activeShift.workDate !== todayStr && (
-                  <Badge variant="outline" className="text-xs">cross-midnight</Badge>
+                  <span className={cn(softBadge, 'inline-flex items-center px-2 py-0.5 text-[11px]')}>cross-midnight</span>
                 )}
               </div>
               {punchInWindow && (
-                <p className="text-xs text-muted-foreground">
-                  Punch-in open <span className="font-medium text-foreground">{fmtTime(punchInWindow.open)} – {fmtTime(punchInWindow.close)}</span>
+                <p className="text-xs text-slate-500">
+                  Punch-in open <span className="font-medium text-slate-700">{fmtTime(punchInWindow.open)} – {fmtTime(punchInWindow.close)}</span>
                   {' '}(late buffer {activeShift.buffers.clock_in_late_min} min, source: {activeShift.bufferSource})
                 </p>
               )}
@@ -400,68 +398,62 @@ export default function StaffPunch() {
               )}
             </div>
           ) : nearestShift ? (
-            <p className="text-sm text-muted-foreground">
-              No shift active right now. Nearest: <span className="font-medium text-foreground">{nearestShift.label}</span>
+            <p className="text-sm text-slate-500">
+              No shift active right now. Nearest: <span className="font-medium text-slate-700">{nearestShift.label}</span>
             </p>
           ) : (
-            <p className="text-sm text-muted-foreground">No shift assigned (roster not found)</p>
+            <p className="text-sm text-slate-500">No shift assigned (roster not found)</p>
           )}
-        </CardContent>
-      </Card>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5" />Location Status</CardTitle>
-          <CardDescription>Your current GPS position and zone verification</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {geo.isLoading && <div className="flex items-center gap-3 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /><span>Getting your location...</span></div>}
-          {geo.error && <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertDescription>{geo.error}</AlertDescription></Alert>}
-          {geo.latitude && geo.longitude && !geo.isLoading && (
-            <div className="space-y-3">
-              {accuracyStatus && (
-                <div className={cn('flex items-center gap-2 text-sm', accuracyStatus.status === 'good' && 'text-green-600', accuracyStatus.status === 'fair' && 'text-yellow-600', accuracyStatus.status === 'poor' && 'text-red-600')}>
-                  {accuracyStatus.status === 'good' && <CheckCircle className="h-4 w-4" />}{accuracyStatus.status === 'fair' && <AlertTriangle className="h-4 w-4" />}{accuracyStatus.status === 'poor' && <XCircle className="h-4 w-4" />}
-                  <span>{accuracyStatus.message} ({Math.round(geo.accuracy!)}m)</span>
-                </div>
-              )}
-              {geofenceResult && (
-                <div className={cn('p-4 rounded-lg border', geofenceResult.isWithinZone ? 'bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800' : 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800')}>
-                  {geofenceResult.isWithinZone ? (
-                    <div className="flex items-center gap-2 text-green-700 dark:text-green-400"><CheckCircle className="h-5 w-5" /><div><p className="font-medium">Inside Zone</p><p className="text-sm opacity-80">{geofenceResult.zone?.name}</p></div></div>
-                  ) : (
-                    <div className="flex items-center gap-2 text-red-700 dark:text-red-400"><XCircle className="h-5 w-5" /><div><p className="font-medium">Outside Zone</p><p className="text-sm opacity-80">Nearest: {geofenceResult.nearestZone?.name} ({formatDistance(geofenceResult.distance)} away)</p></div></div>
-                  )}
-                </div>
-              )}
-              {guardMessage && geofenceResult?.isWithinZone && (
-                <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertDescription>{guardMessage}</AlertDescription></Alert>
-              )}
-              <Button variant="outline" size="sm" onClick={geo.getCurrentPosition} disabled={geo.isLoading}>
-                <RefreshCw className={cn('h-4 w-4 mr-2', geo.isLoading && 'animate-spin')} />Refresh Location
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        <div className={cn(bento, 'p-4')}>
+          <h2 className={cn(bentoHeader, 'flex items-center gap-2')}><MapPin className="h-4 w-4" />Location Status</h2>
+          <p className="text-sm text-slate-500 -mt-2 mb-4">Your current GPS position and zone verification</p>
+          <div className="space-y-4">
+            {geo.isLoading && <div className="flex items-center gap-3 text-slate-500"><Loader2 className="h-5 w-5 animate-spin text-blue-600" /><span>Getting your location...</span></div>}
+            {geo.error && <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertDescription>{geo.error}</AlertDescription></Alert>}
+            {geo.latitude && geo.longitude && !geo.isLoading && (
+              <div className="space-y-3">
+                {accuracyStatus && (
+                  <div className={cn('flex items-center gap-2 text-sm', accuracyStatus.status === 'good' && 'text-emerald-600', accuracyStatus.status === 'fair' && 'text-amber-600', accuracyStatus.status === 'poor' && 'text-rose-600')}>
+                    {accuracyStatus.status === 'good' && <CheckCircle className="h-4 w-4" />}{accuracyStatus.status === 'fair' && <AlertTriangle className="h-4 w-4" />}{accuracyStatus.status === 'poor' && <XCircle className="h-4 w-4" />}
+                    <span>{accuracyStatus.message} ({Math.round(geo.accuracy!)}m)</span>
+                  </div>
+                )}
+                {geofenceResult && (
+                  <div className={cn('p-4 rounded-xl border', geofenceResult.isWithinZone ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200')}>
+                    {geofenceResult.isWithinZone ? (
+                      <div className="flex items-center gap-2 text-emerald-700"><CheckCircle className="h-5 w-5" /><div><p className="font-medium">Inside Zone</p><p className="text-sm opacity-80">{geofenceResult.zone?.name}</p></div></div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-rose-700"><XCircle className="h-5 w-5" /><div><p className="font-medium">Outside Zone</p><p className="text-sm opacity-80">Nearest: {geofenceResult.nearestZone?.name} ({formatDistance(geofenceResult.distance)} away)</p></div></div>
+                    )}
+                  </div>
+                )}
+                {guardMessage && geofenceResult?.isWithinZone && (
+                  <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertDescription>{guardMessage}</AlertDescription></Alert>
+                )}
+                <Button size="sm" className={secondaryBtn} onClick={geo.getCurrentPosition} disabled={geo.isLoading}>
+                  <RefreshCw className={cn('h-4 w-4 mr-2', geo.isLoading && 'animate-spin')} />Refresh Location
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Record Attendance</CardTitle>
-          {lastAnyPunch && <CardDescription>Last punch: {lastAnyPunch.punch_type === 'in' ? 'In' : 'Out'} at {format(new Date(lastAnyPunch.punch_time), 'h:mm a, MMM d')}</CardDescription>}
-        </CardHeader>
-        <CardContent>
-          <Button size="lg" className={cn('w-full h-20 text-lg', nextPunchType === 'in' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700')} disabled={!canPunch || isLoadingData} onClick={handlePunchClick}>
+        <div className={cn(bento, 'p-4')}>
+          <h2 className={bentoHeader}>Record Attendance</h2>
+          {lastAnyPunch && <p className="text-sm text-slate-500 -mt-2 mb-4">Last punch: {lastAnyPunch.punch_type === 'in' ? 'In' : 'Out'} at {format(new Date(lastAnyPunch.punch_time), 'h:mm a, MMM d')}</p>}
+          <Button size="lg" className={cn('w-full h-20 text-lg rounded-xl text-white', nextPunchType === 'in' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700')} disabled={!canPunch || isLoadingData} onClick={handlePunchClick}>
             {isPunching ? <><Loader2 className="h-6 w-6 mr-2 animate-spin" />Recording...</> : <><MapPin className="h-6 w-6 mr-2" />Punch {nextPunchType === 'in' ? 'In' : 'Out'}</>}
           </Button>
           <FaceVerificationModal open={showFaceVerification} onOpenChange={setShowFaceVerification} onVerified={handleFaceVerified} punchType={nextPunchType} />
           {!canPunch && !geo.isLoading && !isLoadingData && (
-            <p className="text-sm text-muted-foreground text-center mt-4">
+            <p className="text-sm text-slate-500 text-center mt-4">
               {guardMessage || (!geo.latitude ? 'Enable location access to punch' : 'Move to an allowed zone to punch')}
             </p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
