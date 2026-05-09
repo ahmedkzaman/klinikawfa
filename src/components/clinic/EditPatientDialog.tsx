@@ -74,6 +74,8 @@ export function EditPatientDialog({
   const update = useUpdatePatient();
   const { data: panels = [] } = useInsuranceProviders({ activeOnly: true });
   const [submitting, setSubmitting] = useState(false);
+  const [mykadConsent, setMykadConsent] = useState(false);
+  const [justRead, setJustRead] = useState(false);
 
   const {
     register,
