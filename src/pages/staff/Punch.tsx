@@ -111,7 +111,7 @@ function pickActiveManualShift(
   // Also check yesterday's dow for cross-midnight manual shifts
   const yDow = (dow + 6) % 7;
   const yStr = format(subDays(now, 1), 'yyyy-MM-dd');
-  const bufs = resolvePunchBuffers(settings, roles, null);
+  const { buffers: bufs, source: bufSrc } = resolvePunchBuffersWithSource(settings, roles, null);
 
   const candidates: { date: string; dow: number; a: ManualAssignment }[] = [];
   for (const a of assignments) {
