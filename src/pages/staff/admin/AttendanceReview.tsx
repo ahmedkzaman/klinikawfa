@@ -294,11 +294,11 @@ export default function AdminAttendanceReview() {
             <div className="rounded-full p-2 bg-blue-50 text-blue-600"><CalendarOff className="h-5 w-5" /></div>
             <div><p className="text-sm text-slate-500">Leave</p><p className="text-2xl font-bold text-slate-800">{stats.totalLeave}</p></div>
           </div>
-          <div className={cn(bento, 'p-4 cursor-pointer hover:ring-2 ring-blue-200 transition flex items-center gap-3')} onClick={() => setDrillDown(drillDown === 'absent' ? null : 'absent')}>
+          <div className={cn(bento, 'p-4 cursor-pointer hover:ring-2 ring-blue-200 transition flex items-center gap-3')} onClick={() => toggleCategoryDrill('absent')}>
             <div className="rounded-full p-2 bg-rose-50 text-rose-600"><AlertTriangle className="h-5 w-5" /></div>
             <div><p className="text-sm text-slate-500">Absent</p><p className="text-2xl font-bold text-slate-800">{stats.totalAbsent}</p></div>
           </div>
-          <div className={cn(bento, 'p-4 cursor-pointer hover:ring-2 ring-blue-200 transition flex items-center gap-3')} onClick={() => setDrillDown(drillDown === 'late' ? null : 'late')}>
+          <div className={cn(bento, 'p-4 cursor-pointer hover:ring-2 ring-blue-200 transition flex items-center gap-3')} onClick={() => toggleCategoryDrill('late')}>
             <div className="rounded-full p-2 bg-amber-50 text-amber-600"><Clock className="h-5 w-5" /></div>
             <div><p className="text-sm text-slate-500">Late</p><p className="text-2xl font-bold text-slate-800">{stats.totalLate}</p></div>
           </div>
