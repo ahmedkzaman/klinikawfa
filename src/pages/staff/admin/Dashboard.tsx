@@ -48,7 +48,7 @@ export default function StaffAdminDashboard() {
     setRosterLoading(true);
     const today = new Date();
     const todayKey = format(today, 'yyyy-MM-dd');
-    const month = today.getMonth();
+    const month = today.getMonth() + 1;
     const year = today.getFullYear();
 
     const { data: rosters } = await supabase

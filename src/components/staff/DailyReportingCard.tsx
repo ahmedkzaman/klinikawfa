@@ -91,7 +91,7 @@ export default function DailyReportingCard() {
   }, [user]);
 
   const fetchRosterAndReport = async () => {
-    const month = now.getMonth();
+    const month = now.getMonth() + 1;
     const year = now.getFullYear();
 
     const [supportRosterRes, doctorRosterRes, reportRes, settingRes] = await Promise.all([
