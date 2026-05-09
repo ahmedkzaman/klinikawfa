@@ -144,7 +144,7 @@ export default function KanbanBoard() {
         <DialogContent>
           <DialogHeader><DialogTitle>{editTask ? 'Edit Task' : 'New Task'}</DialogTitle></DialogHeader>
           {editTask && isAdmin && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-slate-500">
               Created by <span className="font-medium">{editTask.creator_name}</span>
               {editTask.last_edited_by && profiles[editTask.last_edited_by] && (
                 <> · Last edited by <span className="font-medium">{profiles[editTask.last_edited_by]}</span></>
