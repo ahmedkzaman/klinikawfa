@@ -207,103 +207,95 @@ export default function AdminAttendanceReview() {
   const drillDownRecords = drillDown ? stats.details[drillDown as keyof typeof stats.details] : null;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <h1 className="text-2xl font-bold">Attendance Review</h1>
-        <div className="flex gap-2">
-          <ManualPunchDialog />
-          <Button variant="outline" size="sm" onClick={exportCSV}>
-            <Download className="h-4 w-4 mr-2" /> Export CSV
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-3">
-        <Select value={String(selectedMonth)} onValueChange={v => setSelectedMonth(Number(v))}>
-          <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
-          <SelectContent>{months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
-        </Select>
-        <Select value={String(selectedYear)} onValueChange={v => setSelectedYear(Number(v))}>
-          <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map(y => (
-              <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Input placeholder="Search staff..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-[200px]" />
-        <Select value={positionFilter} onValueChange={setPositionFilter}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="All Positions" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Positions</SelectItem>
-            {positions.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="cursor-pointer hover:ring-2 ring-primary/30 transition" onClick={() => setDrillDown(drillDown === 'working' ? null : 'working')}>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="rounded-full p-2 bg-green-100 text-green-600"><CalendarCheck className="h-5 w-5" /></div>
-            <div><p className="text-sm text-muted-foreground">Present</p><p className="text-2xl font-bold">{stats.totalPresent}</p></div>
-          </CardContent>
-        </Card>
-        <Card className="cursor-pointer hover:ring-2 ring-primary/30 transition" onClick={() => setDrillDown(drillDown === 'leave' ? null : 'leave')}>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="rounded-full p-2 bg-blue-100 text-blue-600"><CalendarOff className="h-5 w-5" /></div>
-            <div><p className="text-sm text-muted-foreground">Leave</p><p className="text-2xl font-bold">{stats.totalLeave}</p></div>
-          </CardContent>
-        </Card>
-        <Card className="cursor-pointer hover:ring-2 ring-primary/30 transition" onClick={() => setDrillDown(drillDown === 'absent' ? null : 'absent')}>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="rounded-full p-2 bg-red-100 text-red-600"><AlertTriangle className="h-5 w-5" /></div>
-            <div><p className="text-sm text-muted-foreground">Absent</p><p className="text-2xl font-bold">{stats.totalAbsent}</p></div>
-          </CardContent>
-        </Card>
-        <Card className="cursor-pointer hover:ring-2 ring-primary/30 transition" onClick={() => setDrillDown(drillDown === 'late' ? null : 'late')}>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="rounded-full p-2 bg-yellow-100 text-yellow-600"><Clock className="h-5 w-5" /></div>
-            <div><p className="text-sm text-muted-foreground">Late</p><p className="text-2xl font-bold">{stats.totalLate}</p></div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {chartData.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>Attendance Overview</CardTitle></CardHeader>
-          <CardContent className="flex justify-center">
-            <ChartContainer config={chartConfig} className="h-[300px] w-[300px]">
-              <PieChart>
-                <Pie data={chartData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="value"
-                  onClick={(_, index) => { const key = chartData[index].name; setDrillDown(drillDown === key ? null : key); }}
-                  className="cursor-pointer"
-                >
-                  {chartData.map((entry) => (
-                    <Cell key={entry.name} fill={COLORS[entry.name as keyof typeof COLORS]} stroke="transparent" />
-                  ))}
-                </Pie>
-                <ChartTooltip content={<ChartTooltipContent />} />
-              </PieChart>
-            </ChartContainer>
-          </CardContent>
-          <div className="flex justify-center gap-6 pb-4 flex-wrap">
-            {chartData.map(d => (
-              <button key={d.name} className="flex items-center gap-2 text-sm hover:underline" onClick={() => setDrillDown(drillDown === d.name ? null : d.name)}>
-                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[d.name as keyof typeof COLORS] }} />
-                {chartConfig[d.name as keyof typeof chartConfig]?.label}: {d.value}
-              </button>
-            ))}
+    <div className={pageShell}>
+      <div className={pageInner}>
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-800">Attendance Review</h1>
+          <div className="flex gap-2">
+            <ManualPunchDialog />
+            <Button size="sm" className={secondaryBtn} onClick={exportCSV}>
+              <Download className="h-4 w-4 mr-2" /> Export CSV
+            </Button>
           </div>
-        </Card>
-      )}
+        </div>
 
-      {drillDown && drillDownRecords && (
-        <Card>
-          <CardHeader className="flex flex-row items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => setDrillDown(null)}><ChevronLeft className="h-4 w-4" /></Button>
-            <CardTitle>{chartConfig[drillDown as keyof typeof chartConfig]?.label} Details ({drillDownRecords.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <div className="flex flex-wrap gap-3">
+          <Select value={String(selectedMonth)} onValueChange={v => setSelectedMonth(Number(v))}>
+            <SelectTrigger className={cn(softInput, 'w-[140px]')}><SelectValue /></SelectTrigger>
+            <SelectContent>{months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
+          </Select>
+          <Select value={String(selectedYear)} onValueChange={v => setSelectedYear(Number(v))}>
+            <SelectTrigger className={cn(softInput, 'w-[100px]')}><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map(y => (
+                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input placeholder="Search staff..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className={cn(softInput, 'w-[200px]')} />
+          <Select value={positionFilter} onValueChange={setPositionFilter}>
+            <SelectTrigger className={cn(softInput, 'w-[160px]')}><SelectValue placeholder="All Positions" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Positions</SelectItem>
+              {positions.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className={cn(bento, 'p-4 cursor-pointer hover:ring-2 ring-blue-200 transition flex items-center gap-3')} onClick={() => setDrillDown(drillDown === 'working' ? null : 'working')}>
+            <div className="rounded-full p-2 bg-emerald-50 text-emerald-600"><CalendarCheck className="h-5 w-5" /></div>
+            <div><p className="text-sm text-slate-500">Present</p><p className="text-2xl font-bold text-slate-800">{stats.totalPresent}</p></div>
+          </div>
+          <div className={cn(bento, 'p-4 cursor-pointer hover:ring-2 ring-blue-200 transition flex items-center gap-3')} onClick={() => setDrillDown(drillDown === 'leave' ? null : 'leave')}>
+            <div className="rounded-full p-2 bg-blue-50 text-blue-600"><CalendarOff className="h-5 w-5" /></div>
+            <div><p className="text-sm text-slate-500">Leave</p><p className="text-2xl font-bold text-slate-800">{stats.totalLeave}</p></div>
+          </div>
+          <div className={cn(bento, 'p-4 cursor-pointer hover:ring-2 ring-blue-200 transition flex items-center gap-3')} onClick={() => setDrillDown(drillDown === 'absent' ? null : 'absent')}>
+            <div className="rounded-full p-2 bg-rose-50 text-rose-600"><AlertTriangle className="h-5 w-5" /></div>
+            <div><p className="text-sm text-slate-500">Absent</p><p className="text-2xl font-bold text-slate-800">{stats.totalAbsent}</p></div>
+          </div>
+          <div className={cn(bento, 'p-4 cursor-pointer hover:ring-2 ring-blue-200 transition flex items-center gap-3')} onClick={() => setDrillDown(drillDown === 'late' ? null : 'late')}>
+            <div className="rounded-full p-2 bg-amber-50 text-amber-600"><Clock className="h-5 w-5" /></div>
+            <div><p className="text-sm text-slate-500">Late</p><p className="text-2xl font-bold text-slate-800">{stats.totalLate}</p></div>
+          </div>
+        </div>
+
+        {chartData.length > 0 && (
+          <div className={cn(bento, 'p-4')}>
+            <h2 className={bentoHeader}>Attendance Overview</h2>
+            <div className="flex justify-center">
+              <ChartContainer config={chartConfig} className="h-[300px] w-[300px]">
+                <PieChart>
+                  <Pie data={chartData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="value"
+                    onClick={(_, index) => { const key = chartData[index].name; setDrillDown(drillDown === key ? null : key); }}
+                    className="cursor-pointer"
+                  >
+                    {chartData.map((entry) => (
+                      <Cell key={entry.name} fill={COLORS[entry.name as keyof typeof COLORS]} stroke="transparent" />
+                    ))}
+                  </Pie>
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                </PieChart>
+              </ChartContainer>
+            </div>
+            <div className="flex justify-center gap-6 pb-4 flex-wrap">
+              {chartData.map(d => (
+                <button key={d.name} className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 hover:underline" onClick={() => setDrillDown(drillDown === d.name ? null : d.name)}>
+                  <span className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[d.name as keyof typeof COLORS] }} />
+                  {chartConfig[d.name as keyof typeof chartConfig]?.label}: {d.value}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {drillDown && drillDownRecords && (
+          <div className={cn(bento, 'p-4')}>
+            <div className="flex flex-row items-center gap-2 mb-3">
+              <Button variant="ghost" size="icon" className="text-slate-600 hover:bg-slate-100" onClick={() => setDrillDown(null)}><ChevronLeft className="h-4 w-4" /></Button>
+              <h2 className={cn(bentoHeader, 'mb-0')}>{chartConfig[drillDown as keyof typeof chartConfig]?.label} Details ({drillDownRecords.length})</h2>
+            </div>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -320,14 +312,14 @@ export default function AdminAttendanceReview() {
                 <TableBody>
                   {drillDownRecords.map((r, i) => (
                     <TableRow key={i}>
-                      <TableCell className="font-medium">{r.fullName}</TableCell>
-                      <TableCell>{r.date}</TableCell>
-                      <TableCell>{r.expectedClockIn}</TableCell>
-                      <TableCell>{r.actualClockIn}</TableCell>
-                      <TableCell>{r.latenessDuration}</TableCell>
-                      <TableCell className="text-xs">{r.workHours}</TableCell>
+                      <TableCell className="font-medium text-slate-800">{r.fullName}</TableCell>
+                      <TableCell className="text-slate-600">{r.date}</TableCell>
+                      <TableCell className="text-slate-600">{r.expectedClockIn}</TableCell>
+                      <TableCell className="text-slate-600">{r.actualClockIn}</TableCell>
+                      <TableCell className="text-slate-600">{r.latenessDuration}</TableCell>
+                      <TableCell className="text-xs text-slate-600">{r.workHours}</TableCell>
                       <TableCell>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getLatenessColorClasses(r.severity)}`}>
+                        <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', getLatenessColorClasses(r.severity))}>
                           {r.status}
                         </span>
                       </TableCell>
@@ -336,9 +328,12 @@ export default function AdminAttendanceReview() {
                 </TableBody>
               </Table>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+// Suppress unused warning (kept for parity with original imports)
+void primaryBtn;
+void softBadge;
