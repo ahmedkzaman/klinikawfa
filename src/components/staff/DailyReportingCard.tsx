@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { getUserShiftsForMonth } from '@/lib/rosterUtils';
 
 interface DailyReport {
   id?: string;
@@ -74,6 +75,15 @@ export default function DailyReportingCard() {
     }
   }, [user]);
 
+  // Midnight ticker — refetch when wall-clock day rolls over
+  useEffect(() => {
+    const id = setInterval(() => {
+      const newToday = format(new Date(), 'yyyy-MM-dd');
+      if (newToday !== todayStr && user) fetchRosterAndReport();
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [user, todayStr]);
+
   useEffect(() => {
     const channel = supabase
       .channel('daily-reporting-card')
@@ -91,65 +101,33 @@ export default function DailyReportingCard() {
   }, [user]);
 
   const fetchRosterAndReport = async () => {
-    const month = now.getMonth() + 1;
-    const year = now.getFullYear();
-
-    const [supportRosterRes, doctorRosterRes, reportRes, settingRes] = await Promise.all([
-      supabase.from('saved_rosters').select('roster_data').eq('roster_type', 'support').eq('month', month).eq('year', year).maybeSingle(),
-      supabase.from('saved_rosters').select('roster_data').eq('roster_type', 'doctor').eq('month', month).eq('year', year).maybeSingle(),
+    const [shifts, reportRes, settingRes] = await Promise.all([
+      getUserShiftsForMonth(user!.id, now.getMonth(), now.getFullYear()),
       supabase.from('daily_reports').select('*').eq('user_id', user!.id).eq('report_date', todayStr).maybeSingle(),
       supabase.from('app_settings').select('value').eq('key', 'daily_whatsapp_blast_target').maybeSingle(),
     ]);
 
-    const supportRoster = supportRosterRes.data?.roster_data as unknown as Record<string, {
-      shift1?: { staffId: string }[];
-      shift2?: { staffId: string }[];
-      hybrid?: { staffId: string }[];
-    }>;
-    const todaySupportRoster = supportRoster?.[todayStr];
+    const todayShift = shifts[todayStr];
 
-    let shift: string | null = null;
+    let shift: 'AM' | 'PM' | null = null;
     let detectedType: UserType = 'staff';
 
-    if (todaySupportRoster) {
-      if (todaySupportRoster.shift1?.some(s => s.staffId === user!.id)) {
-        shift = 'AM'; detectedType = 'staff';
-      } else if (todaySupportRoster.shift2?.some(s => s.staffId === user!.id)) {
-        shift = 'PM'; detectedType = 'staff';
-      } else if (todaySupportRoster.hybrid?.some(s => s.staffId === user!.id)) {
-        shift = 'AM'; detectedType = 'hybrid';
-      }
+    if (todayShift) {
+      const k = todayShift.shiftKey;
+      if (k === 'DOC_S1') { shift = 'AM'; detectedType = 'doctor'; }
+      else if (k === 'DOC_S2') { shift = currentHour >= 16 ? 'PM' : 'AM'; detectedType = 'doctor'; }
+      else if (k === 'DOC_S3') { shift = 'PM'; detectedType = 'doctor'; }
+      else if (k === 'Hybrid') { shift = 'AM'; detectedType = 'hybrid'; }
+      else if (k === 'S1') { shift = 'AM'; detectedType = 'staff'; }
+      else if (k === 'S2') { shift = 'PM'; detectedType = 'staff'; }
+      else if (k === 'S3') { shift = 'PM'; detectedType = 'staff'; }
+      else if (k === 'Daytime') { shift = currentHour >= 16 ? 'PM' : 'AM'; detectedType = 'doctor'; }
     }
 
-    if (!shift) {
-      const doctorRoster = doctorRosterRes.data?.roster_data as unknown as Record<string, {
-        shift1?: { staffId: string };
-        shift2?: { staffId: string };
-        shift3?: { staffId: string };
-        DOC_S1?: { staffId: string };
-        DOC_S2?: { staffId: string };
-        DOC_S3?: { staffId: string };
-      }>;
-      const todayDoctorRoster = doctorRoster?.[todayStr];
-
-      if (todayDoctorRoster) {
-        const uid = user!.id;
-        const onS1 = todayDoctorRoster.shift1?.staffId === uid || todayDoctorRoster.DOC_S1?.staffId === uid;
-        const onS2 = todayDoctorRoster.shift2?.staffId === uid || todayDoctorRoster.DOC_S2?.staffId === uid;
-        const onS3 = todayDoctorRoster.shift3?.staffId === uid || todayDoctorRoster.DOC_S3?.staffId === uid;
-
-        if (onS1) {
-          shift = 'AM';
-          detectedType = 'doctor';
-        } else if (onS2) {
-          shift = currentHour >= 16 ? 'PM' : 'AM';
-          detectedType = 'doctor';
-        } else if (onS3) {
-          shift = 'PM';
-          detectedType = 'doctor';
-        }
-      }
-    }
+    console.debug('[DailyReportingCard] detection', {
+      uid: user?.id, todayStr, todayShiftKey: todayShift?.shiftKey ?? null,
+      resolvedShift: shift, resolvedType: detectedType,
+    });
 
     setShiftInfo(shift);
     setUserType(detectedType);
