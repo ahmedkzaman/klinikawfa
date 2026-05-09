@@ -145,11 +145,27 @@ export default function AdminAttendanceReview() {
     const details: { working: DetailRecord[]; leave: DetailRecord[]; absent: DetailRecord[]; late: DetailRecord[] } = {
       working: [], leave: [], absent: [], late: [],
     };
+    const summaries: StaffSummary[] = [];
+    const perUser: Record<string, DetailRecord[]> = {};
 
     filteredProfiles.forEach(profile => {
       const userAttendance = (attendance || []).filter(a => a.user_id === profile.id);
       const userLeaves = (leaveRequests || []).filter(l => l.user_id === profile.id);
       const userShifts = allShifts[profile.id] || {};
+      const fullName = profile.full_name || profile.email || 'Unknown';
+      const summary: StaffSummary = {
+        userId: profile.id,
+        fullName,
+        position: profile.position ?? null,
+        present: 0, late: 0, absent: 0, leave: 0,
+      };
+      perUser[profile.id] = [];
+
+      const pushRecord = (bucket: DetailRecord[], rec: Omit<DetailRecord, 'userId' | 'fullName'>) => {
+        const full: DetailRecord = { ...rec, userId: profile.id, fullName };
+        bucket.push(full);
+        perUser[profile.id].push(full);
+      };
 
       workingDays.forEach(day => {
         const dayStr = format(day, 'yyyy-MM-dd');
@@ -159,41 +175,41 @@ export default function AdminAttendanceReview() {
         const punchOut = dayRecords.find((a: any) => a.punch_type === 'out');
         const shiftStart = userShifts[dayStr]?.start || DEFAULT_SHIFT_START;
 
-        // Calculate work hours
         let workHoursStr = '-';
         if (punchIn && punchOut) {
           const wh = calculateDailyWorkHours(new Date(punchIn.punch_time), new Date(punchOut.punch_time));
           workHoursStr = formatWorkHours(wh);
         }
 
-        const fullName = profile.full_name || profile.email;
-
         if (isOnLeave) {
-          totalLeave++;
-          details.leave.push({ fullName, date: dayStr, expectedClockIn: shiftStart, actualClockIn: '-', latenessDuration: '-', status: 'Leave', severity: 'on_time', workHours: '-' });
+          totalLeave++; summary.leave++;
+          pushRecord(details.leave, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: '-', latenessDuration: '-', status: 'Leave', severity: 'on_time', workHours: '-' });
         } else if (punchIn) {
           const punchTime = new Date(punchIn.punch_time);
           const lateMin = calculateLatenessMinutes(punchTime, shiftStart, day);
           const severity = getLatenessSeverity(lateMin);
 
           if (severity === 'late') {
-            totalLate++;
-            details.late.push({ fullName, date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: `${Math.round(lateMin)} min`, status: 'Late (≥15 min)', severity, workHours: workHoursStr });
+            totalLate++; summary.late++;
+            pushRecord(details.late, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: `${Math.round(lateMin)} min`, status: 'Late (≥15 min)', severity, workHours: workHoursStr });
           } else if (severity === 'minor_late') {
-            totalLate++;
-            details.late.push({ fullName, date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: `${Math.round(lateMin)} min`, status: 'Minor Late (1-14 min)', severity, workHours: workHoursStr });
+            totalLate++; summary.late++;
+            pushRecord(details.late, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: `${Math.round(lateMin)} min`, status: 'Minor Late (1-14 min)', severity, workHours: workHoursStr });
           } else {
-            totalPresent++;
-            details.working.push({ fullName, date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: '-', status: 'On Time', severity, workHours: workHoursStr });
+            totalPresent++; summary.present++;
+            pushRecord(details.working, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: '-', status: 'On Time', severity, workHours: workHoursStr });
           }
         } else {
-          totalAbsent++;
-          details.absent.push({ fullName, date: dayStr, expectedClockIn: shiftStart, actualClockIn: '-', latenessDuration: '-', status: 'Absent', severity: 'on_time', workHours: '-' });
+          totalAbsent++; summary.absent++;
+          pushRecord(details.absent, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: '-', latenessDuration: '-', status: 'Absent', severity: 'on_time', workHours: '-' });
         }
       });
+
+      summaries.push(summary);
     });
 
-    return { totalPresent, totalLeave, totalAbsent, totalLate, details };
+    summaries.sort((a, b) => a.fullName.localeCompare(b.fullName));
+    return { totalPresent, totalLeave, totalAbsent, totalLate, details, summaries, perUser };
   }, [filteredProfiles, attendance, leaveRequests, monthStart, monthEnd, allShifts]);
 
   const chartData = [
