@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { PatientInsert, PatientRow } from '@/types/clinic';
+import type { Database } from '@/integrations/supabase/types';
+
+type PatientUpdate = Database['public']['Tables']['patients']['Update'];
 
 /**
  * Patients lookup. Empty search → 50 most recent.
@@ -104,6 +107,27 @@ export function useCreatePatient() {
       const { data, error } = await supabase
         .from('patients')
         .insert(input)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['clinic', 'patients'] });
+    },
+  });
+}
+
+export function useUpdatePatient() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: PatientUpdate }) => {
+      const { data, error } = await supabase
+        .from('patients')
+        .update(patch)
+        .eq('id', id)
         .select()
         .single();
 
