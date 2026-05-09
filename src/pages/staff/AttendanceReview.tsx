@@ -184,25 +184,25 @@ export default function StaffAttendanceReview() {
         <Card className="cursor-pointer hover:ring-2 ring-primary/30 transition" onClick={() => setDrillDown(drillDown === 'working' ? null : 'working')}>
           <CardContent className="p-4 flex items-center gap-3">
             <div className="rounded-full p-2 bg-green-100 text-green-600"><CalendarCheck className="h-5 w-5" /></div>
-            <div><p className="text-sm text-muted-foreground">Working</p><p className="text-2xl font-bold">{stats.totalPresent}</p></div>
+            <div><p className="text-sm text-slate-500">Working</p><p className="text-2xl font-bold">{stats.totalPresent}</p></div>
           </CardContent>
         </Card>
         <Card className="cursor-pointer hover:ring-2 ring-primary/30 transition" onClick={() => setDrillDown(drillDown === 'leave' ? null : 'leave')}>
           <CardContent className="p-4 flex items-center gap-3">
             <div className="rounded-full p-2 bg-blue-100 text-blue-600"><CalendarOff className="h-5 w-5" /></div>
-            <div><p className="text-sm text-muted-foreground">Leave</p><p className="text-2xl font-bold">{stats.totalLeave}</p></div>
+            <div><p className="text-sm text-slate-500">Leave</p><p className="text-2xl font-bold">{stats.totalLeave}</p></div>
           </CardContent>
         </Card>
         <Card className="cursor-pointer hover:ring-2 ring-primary/30 transition" onClick={() => setDrillDown(drillDown === 'absent' ? null : 'absent')}>
           <CardContent className="p-4 flex items-center gap-3">
             <div className="rounded-full p-2 bg-red-100 text-red-600"><AlertTriangle className="h-5 w-5" /></div>
-            <div><p className="text-sm text-muted-foreground">Absent</p><p className="text-2xl font-bold">{stats.totalAbsent}</p></div>
+            <div><p className="text-sm text-slate-500">Absent</p><p className="text-2xl font-bold">{stats.totalAbsent}</p></div>
           </CardContent>
         </Card>
         <Card className="cursor-pointer hover:ring-2 ring-primary/30 transition" onClick={() => setDrillDown(drillDown === 'late' ? null : 'late')}>
           <CardContent className="p-4 flex items-center gap-3">
             <div className="rounded-full p-2 bg-yellow-100 text-yellow-600"><Clock className="h-5 w-5" /></div>
-            <div><p className="text-sm text-muted-foreground">Late</p><p className="text-2xl font-bold">{stats.totalLate}</p></div>
+            <div><p className="text-sm text-slate-500">Late</p><p className="text-2xl font-bold">{stats.totalLate}</p></div>
           </CardContent>
         </Card>
       </div>

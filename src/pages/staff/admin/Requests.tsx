@@ -78,7 +78,7 @@ export default function AdminRequests() {
 
   return (
     <div className="space-y-6">
-      <div><h1 className="text-2xl font-bold tracking-tight">Requests</h1><p className="text-muted-foreground">Manage task deletion and leave requests</p></div>
+      <div><h1 className="text-2xl font-bold tracking-tight">Requests</h1><p className="text-slate-500">Manage task deletion and leave requests</p></div>
       <Tabs defaultValue="deletions">
         <TabsList>
           <TabsTrigger value="deletions" className="gap-2"><Trash2 className="h-4 w-4" /> Task Deletions{pendingDeletes.length > 0 && <span className="inline-flex items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-medium text-white ml-1">{pendingDeletes.length}</span>}</TabsTrigger>
@@ -89,16 +89,16 @@ export default function AdminRequests() {
           {pendingDeletes.length > 0 ? (
             <Card><CardHeader><CardTitle>Pending</CardTitle></CardHeader><CardContent className="space-y-3">
               {pendingDeletes.map((req: any) => (
-                <div key={req.id} className="flex items-center justify-between p-3 rounded-md border bg-card">
-                  <div className="min-w-0 flex-1"><p className="text-sm font-medium truncate">{req.task_title}</p><p className="text-xs text-muted-foreground">By {req.requester_name} · {format(new Date(req.created_at), 'MMM d, h:mm a')}</p></div>
+                <div key={req.id} className="flex items-center justify-between p-3 rounded-md border bg-white">
+                  <div className="min-w-0 flex-1"><p className="text-sm font-medium truncate">{req.task_title}</p><p className="text-xs text-slate-500">By {req.requester_name} · {format(new Date(req.created_at), 'MMM d, h:mm a')}</p></div>
                   <div className="flex gap-2 ml-3"><Button size="sm" variant="outline" onClick={() => handleApproveDelete(req)} disabled={processing === req.id}><CheckCircle className="h-4 w-4 mr-1" />Approve</Button><Button size="sm" variant="ghost" onClick={() => handleRejectDelete(req)} disabled={processing === req.id}><XCircle className="h-4 w-4 mr-1" />Reject</Button></div>
                 </div>
               ))}
             </CardContent></Card>
-          ) : <Card><CardContent className="py-8 text-center text-muted-foreground">No pending deletion requests</CardContent></Card>}
+          ) : <Card><CardContent className="py-8 text-center text-slate-500">No pending deletion requests</CardContent></Card>}
           {reviewedDeletes.length > 0 && (
             <Card><CardHeader><CardTitle>History</CardTitle></CardHeader><CardContent className="space-y-2">{reviewedDeletes.map((req: any) => (
-              <div key={req.id} className="flex items-center justify-between p-3 rounded-md border"><div className="min-w-0 flex-1"><p className="text-sm font-medium truncate">{req.task_title}</p><p className="text-xs text-muted-foreground">By {req.requester_name}</p></div>{statusBadge(req.status)}</div>
+              <div key={req.id} className="flex items-center justify-between p-3 rounded-md border"><div className="min-w-0 flex-1"><p className="text-sm font-medium truncate">{req.task_title}</p><p className="text-xs text-slate-500">By {req.requester_name}</p></div>{statusBadge(req.status)}</div>
             ))}</CardContent></Card>
           )}
         </TabsContent>
@@ -107,16 +107,16 @@ export default function AdminRequests() {
           {pendingLeaves.length > 0 ? (
             <Card><CardHeader><CardTitle>Pending</CardTitle></CardHeader><CardContent className="space-y-3">
               {pendingLeaves.map((req: any) => (
-                <div key={req.id} className="flex items-center justify-between p-3 rounded-md border bg-card">
-                  <div className="min-w-0 flex-1"><p className="text-sm font-medium">{req.requester_name}</p><p className="text-xs text-muted-foreground">{req.leave_type} · {format(new Date(req.start_date), 'MMM d')} – {format(new Date(req.end_date), 'MMM d, yyyy')}</p>{req.reason && <p className="text-xs text-muted-foreground mt-1">"{req.reason}"</p>}</div>
+                <div key={req.id} className="flex items-center justify-between p-3 rounded-md border bg-white">
+                  <div className="min-w-0 flex-1"><p className="text-sm font-medium">{req.requester_name}</p><p className="text-xs text-slate-500">{req.leave_type} · {format(new Date(req.start_date), 'MMM d')} – {format(new Date(req.end_date), 'MMM d, yyyy')}</p>{req.reason && <p className="text-xs text-slate-500 mt-1">"{req.reason}"</p>}</div>
                   <div className="flex gap-2 ml-3"><Button size="sm" variant="outline" onClick={() => handleApproveLeave(req)} disabled={processing === req.id}><CheckCircle className="h-4 w-4 mr-1" />Approve</Button><Button size="sm" variant="ghost" onClick={() => handleRejectLeave(req)} disabled={processing === req.id}><XCircle className="h-4 w-4 mr-1" />Reject</Button></div>
                 </div>
               ))}
             </CardContent></Card>
-          ) : <Card><CardContent className="py-8 text-center text-muted-foreground">No pending leave requests</CardContent></Card>}
+          ) : <Card><CardContent className="py-8 text-center text-slate-500">No pending leave requests</CardContent></Card>}
           {reviewedLeaves.length > 0 && (
             <Card><CardHeader><CardTitle>History</CardTitle></CardHeader><CardContent className="space-y-2">{reviewedLeaves.map((req: any) => (
-              <div key={req.id} className="flex items-center justify-between p-3 rounded-md border"><div className="min-w-0 flex-1"><p className="text-sm font-medium">{req.requester_name}</p><p className="text-xs text-muted-foreground">{req.leave_type} · {format(new Date(req.start_date), 'MMM d')} – {format(new Date(req.end_date), 'MMM d')}</p></div>{statusBadge(req.status)}</div>
+              <div key={req.id} className="flex items-center justify-between p-3 rounded-md border"><div className="min-w-0 flex-1"><p className="text-sm font-medium">{req.requester_name}</p><p className="text-xs text-slate-500">{req.leave_type} · {format(new Date(req.start_date), 'MMM d')} – {format(new Date(req.end_date), 'MMM d')}</p></div>{statusBadge(req.status)}</div>
             ))}</CardContent></Card>
           )}
         </TabsContent>

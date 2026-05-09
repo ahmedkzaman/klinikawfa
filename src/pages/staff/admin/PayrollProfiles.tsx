@@ -81,9 +81,9 @@ const emptyProfile: Omit<PayrollProfile, 'user_id'> = {
 };
 
 const statusColors: Record<string, string> = {
-  active: 'bg-green-100 text-green-800',
-  inactive: 'bg-muted text-muted-foreground',
-  suspended: 'bg-destructive/10 text-destructive',
+  active: 'bg-emerald-50 text-emerald-700',
+  inactive: 'bg-slate-100 text-slate-500',
+  suspended: 'bg-rose-50 text-rose-600',
 };
 
 export default function PayrollProfiles() {
@@ -239,7 +239,7 @@ export default function PayrollProfiles() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <DollarSign className="h-6 w-6 text-primary" />
+          <DollarSign className="h-6 w-6 text-blue-600" />
           <h1 className="text-2xl font-bold">Payroll Profiles</h1>
         </div>
         <Button variant="outline" size="sm" onClick={() => bulkSyncMutation.mutate()} disabled={bulkSyncMutation.isPending}>
@@ -281,14 +281,14 @@ export default function PayrollProfiles() {
         </CardHeader>
         <CardContent>
           <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
             <Input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
           </div>
 
           {isLoading ? (
-            <p className="text-center text-muted-foreground py-8">Loading...</p>
+            <p className="text-center text-slate-500 py-8">Loading...</p>
           ) : filtered.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No payroll profiles found</p>
+            <p className="text-center text-slate-500 py-8">No payroll profiles found</p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -338,7 +338,7 @@ export default function PayrollProfiles() {
             <div className="space-y-6">
               {/* Employment */}
               <fieldset className="space-y-3">
-                <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Employment</legend>
+                <legend className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Employment</legend>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Employee ID</Label><Input value={editingProfile.employee_id} onChange={e => updateField('employee_id', e.target.value)} /></div>
                   <div><Label>Full Name</Label><Input value={editingProfile.full_name} onChange={e => updateField('full_name', e.target.value)} /></div>
@@ -375,7 +375,7 @@ export default function PayrollProfiles() {
 
               {/* Bank Details */}
               <fieldset className="space-y-3">
-                <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Bank Details</legend>
+                <legend className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Bank Details</legend>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Bank Name</Label><Input value={editingProfile.bank_name} onChange={e => updateField('bank_name', e.target.value)} /></div>
                   <div><Label>Account Number</Label><Input value={editingProfile.bank_account_number} onChange={e => updateField('bank_account_number', e.target.value)} /></div>
@@ -385,7 +385,7 @@ export default function PayrollProfiles() {
 
               {/* Salary */}
               <fieldset className="space-y-3">
-                <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Salary & Rates</legend>
+                <legend className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Salary & Rates</legend>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Payment Type</Label>
@@ -413,7 +413,7 @@ export default function PayrollProfiles() {
 
               {/* Named Allowances */}
               <fieldset className="space-y-3">
-                <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Allowances</legend>
+                <legend className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Allowances</legend>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>APC (RM)</Label><Input type="number" step="0.01" value={editingProfile.apc_allowance} onChange={e => updateField('apc_allowance', Number(e.target.value))} /></div>
                   <div><Label>Telephone (RM)</Label><Input type="number" step="0.01" value={editingProfile.telephone_allowance} onChange={e => updateField('telephone_allowance', Number(e.target.value))} /></div>
@@ -426,7 +426,7 @@ export default function PayrollProfiles() {
                   <div><Label>On-Call (RM)</Label><Input type="number" step="0.01" value={editingProfile.oncall_allowance} onChange={e => updateField('oncall_allowance', Number(e.target.value))} /></div>
                   <div><Label>Custom (RM)</Label><Input type="number" step="0.01" value={editingProfile.custom_allowance} onChange={e => updateField('custom_allowance', Number(e.target.value))} /></div>
                 </div>
-                <p className="text-xs text-muted-foreground font-medium mt-2">Other Allowance (custom name)</p>
+                <p className="text-xs text-slate-500 font-medium mt-2">Other Allowance (custom name)</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Name</Label><Input value={editingProfile.other_allowance_name} onChange={e => updateField('other_allowance_name', e.target.value)} placeholder="e.g. Housing" /></div>
                   <div><Label>Amount (RM)</Label><Input type="number" step="0.01" value={editingProfile.other_allowance_amount} onChange={e => updateField('other_allowance_amount', Number(e.target.value))} /></div>
@@ -435,7 +435,7 @@ export default function PayrollProfiles() {
 
               {/* Operational Deductions */}
               <fieldset className="space-y-3">
-                <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Operational Deductions</legend>
+                <legend className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Operational Deductions</legend>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Unpaid Leave (RM)</Label><Input type="number" step="0.01" value={editingProfile.unpaid_leave_deduction} onChange={e => updateField('unpaid_leave_deduction', Number(e.target.value))} /></div>
                   <div><Label>Lateness (RM)</Label><Input type="number" step="0.01" value={editingProfile.lateness_deduction} onChange={e => updateField('lateness_deduction', Number(e.target.value))} /></div>
@@ -446,7 +446,7 @@ export default function PayrollProfiles() {
 
               {/* Statutory Deductions */}
               <fieldset className="space-y-3">
-                <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Statutory Deductions</legend>
+                <legend className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Statutory Deductions</legend>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>EPF — Employee (RM)</Label><Input type="number" step="0.01" value={editingProfile.epf_employee} onChange={e => updateField('epf_employee', Number(e.target.value))} /></div>
                   <div><Label>EPF — Employer (RM)</Label><Input type="number" step="0.01" value={editingProfile.epf_employer} onChange={e => updateField('epf_employer', Number(e.target.value))} /></div>
@@ -461,7 +461,7 @@ export default function PayrollProfiles() {
 
               {/* Statutory References */}
               <fieldset className="space-y-3">
-                <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Statutory References</legend>
+                <legend className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Statutory References</legend>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Tax ID</Label><Input value={editingProfile.tax_id} onChange={e => updateField('tax_id', e.target.value)} /></div>
                   <div><Label>EPF Reference</Label><Input value={editingProfile.epf_reference} onChange={e => updateField('epf_reference', e.target.value)} /></div>

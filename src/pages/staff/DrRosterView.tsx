@@ -142,10 +142,10 @@ export default function DrRosterView() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex items-center gap-3">
-        <CalendarDays className="h-7 w-7 text-primary" />
+        <CalendarDays className="h-7 w-7 text-blue-600" />
         <div>
           <h1 className="text-2xl font-bold">Doctor Roster</h1>
-          <p className="text-sm text-muted-foreground">View the published monthly doctor roster</p>
+          <p className="text-sm text-slate-500">View the published monthly doctor roster</p>
         </div>
       </div>
 
@@ -163,11 +163,11 @@ export default function DrRosterView() {
               </div>
             </div>
           </div>
-          {savedAt && <p className="text-xs text-muted-foreground mt-1">Last updated: {format(new Date(savedAt), 'dd MMM yyyy, HH:mm')}</p>}
+          {savedAt && <p className="text-xs text-slate-500 mt-1">Last updated: {format(new Date(savedAt), 'dd MMM yyyy, HH:mm')}</p>}
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-12 text-muted-foreground text-sm">Loading...</div>
+            <div className="text-center py-12 text-slate-500 text-sm">Loading...</div>
           ) : roster ? (
             <div className="space-y-6">
               <div className="overflow-x-auto">
@@ -183,7 +183,7 @@ export default function DrRosterView() {
                           else groups.push({ week: w, span: 1 });
                         });
                         return groups.map((g, i) => (
-                          <TableHead key={g.week} colSpan={g.span} className={cn("text-center text-xs font-semibold border-x", i % 2 === 0 ? "bg-primary/10" : "bg-accent/30")}>
+                          <TableHead key={g.week} colSpan={g.span} className={cn("text-center text-xs font-semibold border-x", i % 2 === 0 ? "bg-blue-50" : "bg-accent/30")}>
                             Week {g.week}
                           </TableHead>
                         ));
@@ -192,9 +192,9 @@ export default function DrRosterView() {
                     <TableRow>
                       <TableHead className="w-32 font-semibold sticky left-0 bg-background z-10">Shift</TableHead>
                       {monthDays.map(day => (
-                        <TableHead key={day.toISOString()} className={cn("text-center min-w-[70px]", isWeekend(day) && "bg-muted/30")}>
+                        <TableHead key={day.toISOString()} className={cn("text-center min-w-[70px]", isWeekend(day) && "bg-slate-50")}>
                           <div className="font-semibold text-xs">{DAY_ABBR[getDay(day)]}</div>
-                          <div className="text-xs text-muted-foreground font-normal">{format(day, 'd')}</div>
+                          <div className="text-xs text-slate-500 font-normal">{format(day, 'd')}</div>
                         </TableHead>
                       ))}
                     </TableRow>
@@ -202,17 +202,17 @@ export default function DrRosterView() {
                   <TableBody>
                     {/* Doctor S1 */}
                     <TableRow>
-                      <TableCell className="font-medium bg-muted/30 sticky left-0 z-10">
+                      <TableCell className="font-medium bg-slate-50 sticky left-0 z-10">
                         <div className="text-xs">Doctor S1</div>
-                        <div className="text-[10px] text-muted-foreground">8am – 1pm</div>
+                        <div className="text-[10px] text-slate-500">8am – 1pm</div>
                       </TableCell>
                       {monthDays.map(day => {
                         const dk = format(day, 'yyyy-MM-dd');
                         const cell = getSlot(roster[dk], 1);
                         return (
-                          <TableCell key={dk} className={cn("text-center p-1 text-[11px]", isWeekend(day) && "bg-muted/20")}>
+                          <TableCell key={dk} className={cn("text-center p-1 text-[11px]", isWeekend(day) && "bg-slate-50/60")}>
                             {cell ? (
-                              <span className="inline-block px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium">
+                              <span className="inline-block px-1.5 py-0.5 rounded bg-primary/15 text-blue-600 font-medium">
                                 {firstName(cell.staffName)}
                               </span>
                             ) : '—'}
@@ -222,15 +222,15 @@ export default function DrRosterView() {
                     </TableRow>
                     {/* Doctor S2 */}
                     <TableRow>
-                      <TableCell className="font-medium bg-muted/30 sticky left-0 z-10">
+                      <TableCell className="font-medium bg-slate-50 sticky left-0 z-10">
                         <div className="text-xs">Doctor S2</div>
-                        <div className="text-[10px] text-muted-foreground">2pm – 7pm</div>
+                        <div className="text-[10px] text-slate-500">2pm – 7pm</div>
                       </TableCell>
                       {monthDays.map(day => {
                         const dk = format(day, 'yyyy-MM-dd');
                         const cell = getSlot(roster[dk], 2);
                         return (
-                          <TableCell key={dk} className={cn("text-center p-1 text-[11px]", isWeekend(day) && "bg-muted/20")}>
+                          <TableCell key={dk} className={cn("text-center p-1 text-[11px]", isWeekend(day) && "bg-slate-50/60")}>
                             {cell ? (
                               <span className="inline-block px-1.5 py-0.5 rounded bg-accent text-accent-foreground font-medium">
                                 {firstName(cell.staffName)}
@@ -242,17 +242,17 @@ export default function DrRosterView() {
                     </TableRow>
                     {/* Doctor S3 */}
                     <TableRow>
-                      <TableCell className="font-medium bg-muted/30 sticky left-0 z-10">
+                      <TableCell className="font-medium bg-slate-50 sticky left-0 z-10">
                         <div className="text-xs">Doctor S3</div>
-                        <div className="text-[10px] text-muted-foreground">8pm – 12am</div>
+                        <div className="text-[10px] text-slate-500">8pm – 12am</div>
                       </TableCell>
                       {monthDays.map(day => {
                         const dk = format(day, 'yyyy-MM-dd');
                         const cell = getSlot(roster[dk], 3);
                         return (
-                          <TableCell key={dk} className={cn("text-center p-1 text-[11px]", isWeekend(day) && "bg-muted/20")}>
+                          <TableCell key={dk} className={cn("text-center p-1 text-[11px]", isWeekend(day) && "bg-slate-50/60")}>
                             {cell ? (
-                              <span className="inline-block px-1.5 py-0.5 rounded bg-destructive/15 text-destructive font-medium">
+                              <span className="inline-block px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 font-medium">
                                 {firstName(cell.staffName)}
                               </span>
                             ) : '—'}
@@ -262,7 +262,7 @@ export default function DrRosterView() {
                     </TableRow>
                     {/* Off row */}
                     <TableRow>
-                      <TableCell className="font-medium bg-destructive/10 sticky left-0 z-10">
+                      <TableCell className="font-medium bg-rose-50 sticky left-0 z-10">
                         <div className="text-xs">Off</div>
                       </TableCell>
                       {monthDays.map(day => {
@@ -275,7 +275,7 @@ export default function DrRosterView() {
                         if (s3) assigned.add(s3.staffId);
                         const off = staffList.filter(s => !assigned.has(s.id));
                         return (
-                          <TableCell key={dk} className={cn("text-center p-1 text-[10px] text-muted-foreground", isWeekend(day) && "bg-muted/20")}>
+                          <TableCell key={dk} className={cn("text-center p-1 text-[10px] text-slate-500", isWeekend(day) && "bg-slate-50/60")}>
                             {off.length > 0 ? off.map(s => firstName(s.name)).join(', ') : '—'}
                           </TableCell>
                         );
@@ -295,7 +295,7 @@ export default function DrRosterView() {
                         <TableRow>
                           <TableHead>Doctor</TableHead>
                           {allWeeksSorted.map(w => (
-                            <TableHead key={w} className="text-center text-xs">Wk {w}<br /><span className="text-muted-foreground font-normal">Reg / OT</span></TableHead>
+                            <TableHead key={w} className="text-center text-xs">Wk {w}<br /><span className="text-slate-500 font-normal">Reg / OT</span></TableHead>
                           ))}
                           <TableHead className="text-center">Regular</TableHead>
                           <TableHead className="text-center">Overtime</TableHead>
@@ -311,18 +311,18 @@ export default function DrRosterView() {
                             <TableCell className="font-medium">{s.name}</TableCell>
                             {allWeeksSorted.map(w => (
                               <TableCell key={w} className="text-center text-xs">
-                                {s.weeklyRegular[w] || 0}h{s.weeklyOvertime[w] ? <span className="text-destructive"> +{s.weeklyOvertime[w]}h</span> : ''}
+                                {s.weeklyRegular[w] || 0}h{s.weeklyOvertime[w] ? <span className="text-rose-600"> +{s.weeklyOvertime[w]}h</span> : ''}
                               </TableCell>
                             ))}
                             <TableCell className="text-center font-medium">{s.totalRegular}h</TableCell>
                             <TableCell className="text-center">
-                              {s.totalOvertime > 0 ? <Badge variant="destructive" className="text-xs">{s.totalOvertime}h</Badge> : <span className="text-muted-foreground">0h</span>}
+                              {s.totalOvertime > 0 ? <Badge variant="destructive" className="text-xs">{s.totalOvertime}h</Badge> : <span className="text-slate-500">0h</span>}
                             </TableCell>
                             <TableCell className="text-center font-semibold">{s.totalHours}h</TableCell>
                             <TableCell className="text-center">{s.daytimeBlocks}</TableCell>
                             <TableCell className="text-center">{s.nightShifts}</TableCell>
                             <TableCell className="text-center">
-                              <span className={cn("text-xs", s.diffFromAvg > 0 ? "text-destructive" : s.diffFromAvg < 0 ? "text-blue-600" : "text-muted-foreground")}>
+                              <span className={cn("text-xs", s.diffFromAvg > 0 ? "text-rose-600" : s.diffFromAvg < 0 ? "text-blue-600" : "text-slate-500")}>
                                 {s.diffFromAvg > 0 ? '+' : ''}{s.diffFromAvg}h
                               </span>
                             </TableCell>
@@ -333,18 +333,18 @@ export default function DrRosterView() {
                   </div>
 
                   {fairnessMetrics && (
-                    <div className="flex flex-wrap items-center gap-3 mt-3 p-3 rounded-lg bg-muted/50">
+                    <div className="flex flex-wrap items-center gap-3 mt-3 p-3 rounded-lg bg-slate-50">
                       <span className="text-sm font-medium">Fairness:</span>
                       <Badge
                         variant={fairnessMetrics.score >= 90 ? 'secondary' : 'destructive'}
                         className={cn("text-xs",
-                          fairnessMetrics.score >= 90 ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" :
-                          fairnessMetrics.score >= 70 ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" : ""
+                          fairnessMetrics.score >= 90 ? "bg-emerald-50 text-emerald-700" :
+                          fairnessMetrics.score >= 70 ? "bg-amber-50 text-amber-700" : ""
                         )}
                       >
                         {fairnessMetrics.score}% balanced
                       </Badge>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-slate-500">
                         Spread: {fairnessMetrics.maxH}h − {fairnessMetrics.minH}h = {fairnessMetrics.spread}h · Avg: {fairnessMetrics.avg}h · Total OT: {fairnessMetrics.totalOT}h
                       </span>
                     </div>
@@ -357,7 +357,7 @@ export default function DrRosterView() {
               </div>
             </div>
           ) : (
-            <div className="text-center py-12 text-muted-foreground">
+            <div className="text-center py-12 text-slate-500">
               <CalendarDays className="h-10 w-10 mx-auto mb-3 opacity-30" />
               <p className="text-sm">No roster has been published for {monthLabel} yet.</p>
             </div>

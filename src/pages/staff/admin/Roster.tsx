@@ -95,22 +95,22 @@ function WarningSection({ warnings }: { warnings: RosterWarning[] }) {
         </Alert>
       )}
       {compliance.length > 0 && (
-        <Alert className="border-orange-300 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-800">
+        <Alert className="border-orange-300 bg-orange-50">
           <ShieldAlert className="h-4 w-4 text-orange-600" />
           <AlertDescription>
-            <p className="font-medium text-xs mb-1 text-orange-800 dark:text-orange-300">Compliance Warnings ({compliance.length})</p>
-            <ul className="text-xs space-y-0.5 list-disc list-inside max-h-32 overflow-y-auto text-orange-700 dark:text-orange-400">
+            <p className="font-medium text-xs mb-1 text-orange-800">Compliance Warnings ({compliance.length})</p>
+            <ul className="text-xs space-y-0.5 list-disc list-inside max-h-32 overflow-y-auto text-orange-700">
               {compliance.map((w, i) => <li key={i}>{w.message}</li>)}
             </ul>
           </AlertDescription>
         </Alert>
       )}
       {info.length > 0 && (
-        <Alert className="border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800">
+        <Alert className="border-blue-300 bg-blue-50">
           <Info className="h-4 w-4 text-blue-600" />
           <AlertDescription>
-            <p className="font-medium text-xs mb-1 text-blue-800 dark:text-blue-300">Informational ({info.length})</p>
-            <ul className="text-xs space-y-0.5 list-disc list-inside max-h-32 overflow-y-auto text-blue-700 dark:text-blue-400">
+            <p className="font-medium text-xs mb-1 text-blue-800">Informational ({info.length})</p>
+            <ul className="text-xs space-y-0.5 list-disc list-inside max-h-32 overflow-y-auto text-blue-700">
               {info.map((w, i) => <li key={i}>{w.message}</li>)}
             </ul>
           </AlertDescription>
@@ -934,7 +934,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
             </div>
             <div className="space-y-1 max-h-64 overflow-y-auto">
               {staffList.map(s => (
-                <div key={s.id} className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted/50 text-sm">
+                <div key={s.id} className="flex items-center gap-2 px-3 py-2 rounded-md bg-slate-50 text-sm">
                   {editingId === s.id ? (
                     <>
                       <Input value={editName} onChange={e => setEditName(e.target.value)} className="h-7 text-xs flex-1" />
@@ -946,16 +946,16 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                       <span className="flex-1 font-medium cursor-pointer" onClick={() => startEdit(s)}>{s.name}</span>
                       {s.position && <Badge variant="secondary" className="text-xs">{s.position}</Badge>}
                       {rosterSettings[s.id]?.hybridType && (
-                        <Badge variant="outline" className="text-xs text-primary">{rosterSettings[s.id].hybridType === 'purchaser' ? 'Purchaser' : 'Housecall'}</Badge>
+                        <Badge variant="outline" className="text-xs text-blue-600">{rosterSettings[s.id].hybridType === 'purchaser' ? 'Purchaser' : 'Housecall'}</Badge>
                       )}
                       <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => removeStaff(s.id)}>
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        <Trash2 className="h-3.5 w-3.5 text-rose-600" />
                       </Button>
                     </>
                   )}
                 </div>
               ))}
-              {staffList.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No staff found for this roster type.</p>}
+              {staffList.length === 0 && <p className="text-xs text-slate-500 text-center py-4">No staff found for this roster type.</p>}
             </div>
           </CardContent>
         </Card>
@@ -971,21 +971,21 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                 <Checkbox id={`maxHours-${rosterType}`} checked={maxHoursEnabled} onCheckedChange={(v) => setMaxHoursEnabled(!!v)} />
                 <div>
                    <Label htmlFor={`maxHours-${rosterType}`} className="text-sm font-medium">Working hours: max {OT_THRESHOLD} hours/week (OT beyond)</Label>
-                   <p className="text-xs text-muted-foreground">Normal ≤ {OT_THRESHOLD}h/week. Hours beyond are overtime. Max {MAX_CONSECUTIVE_DAYS} consecutive working days enforced.</p>
+                   <p className="text-xs text-slate-500">Normal ≤ {OT_THRESHOLD}h/week. Hours beyond are overtime. Max {MAX_CONSECUTIVE_DAYS} consecutive working days enforced.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <Checkbox id={`fixedShift-${rosterType}`} checked={fixedShiftEnabled} onCheckedChange={(v) => setFixedShiftEnabled(!!v)} />
                 <div>
                   <Label htmlFor={`fixedShift-${rosterType}`} className="text-sm font-medium">Fixed shift hours</Label>
-                  <p className="text-xs text-muted-foreground">Shift 1: 8:00 AM – 4:00 PM · Shift 2: 4:00 PM – 12:00 AM · Hybrid: 8:00 AM – 1:00 PM</p>
+                  <p className="text-xs text-slate-500">Shift 1: 8:00 AM – 4:00 PM · Shift 2: 4:00 PM – 12:00 AM · Hybrid: 8:00 AM – 1:00 PM</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <Checkbox id={`weekdayConstraint-${rosterType}`} checked={weekdayConstraintEnabled} onCheckedChange={(v) => setWeekdayConstraintEnabled(!!v)} />
                 <div>
                   <Label htmlFor={`weekdayConstraint-${rosterType}`} className="text-sm font-medium">Weekday Shift 2 restriction</Label>
-                  <p className="text-xs text-muted-foreground">Selected staff shall not be assigned to Shift 2 from Monday to Friday</p>
+                  <p className="text-xs text-slate-500">Selected staff shall not be assigned to Shift 2 from Monday to Friday</p>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3 pt-2 border-t">
@@ -1008,7 +1008,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                   </Select>
                 </div>
                 {staffList.length <= 4 && staffList.length > 0 && (
-                  <span className="text-xs text-muted-foreground">Tip: with ≤4 staff, days may be left under-filled if rest days or leave overlap.</span>
+                  <span className="text-xs text-slate-500">Tip: with ≤4 staff, days may be left under-filled if rest days or leave overlap.</span>
                 )}
               </div>
             </CardContent>
@@ -1020,7 +1020,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                 <CardTitle className="text-lg">Weekday Shift 2 Restricted Staff</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-xs text-muted-foreground mb-3">Select staff who shall not be assigned to Shift 2 on weekdays (Mon–Fri).</p>
+                <p className="text-xs text-slate-500 mb-3">Select staff who shall not be assigned to Shift 2 on weekdays (Mon–Fri).</p>
                 <div className="space-y-2 max-h-48 overflow-y-auto">
                   {staffList.map(s => (
                     <div key={s.id} className="flex items-center gap-3">
@@ -1029,7 +1029,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                       {s.position && <Badge variant="outline" className="text-xs">{s.position}</Badge>}
                     </div>
                   ))}
-                  {staffList.length === 0 && <p className="text-xs text-muted-foreground">Add staff first</p>}
+                  {staffList.length === 0 && <p className="text-xs text-slate-500">Add staff first</p>}
                 </div>
               </CardContent>
             </Card>
@@ -1043,7 +1043,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
           <CardTitle className="text-lg flex items-center gap-2">
             <CalendarDays className="h-5 w-5" /> Public Holidays
           </CardTitle>
-          <p className="text-xs text-muted-foreground">Days marked as public holidays will be left empty (no staff assigned) when generating the roster. You can still manually assign staff if needed.</p>
+          <p className="text-xs text-slate-500">Days marked as public holidays will be left empty (no staff assigned) when generating the roster. You can still manually assign staff if needed.</p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-2">
@@ -1084,12 +1084,12 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
 
           {monthHolidays.length > 0 && (
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2">
+              <p className="text-xs font-medium text-slate-500 mb-2">
                 Holidays in {format(new Date(selectedYear, selectedMonth, 1), 'MMMM yyyy')}
               </p>
               <div className="flex flex-wrap gap-2">
                 {monthHolidays.map(h => (
-                  <Badge key={h.id} variant="outline" className="gap-2 py-1 pl-2 pr-1 border-destructive/40 bg-destructive/5">
+                  <Badge key={h.id} variant="outline" className="gap-2 py-1 pl-2 pr-1 border-destructive/40 bg-rose-50/60">
                     <span className="text-xs font-medium">{format(new Date(h.holiday_date + 'T00:00:00'), 'd MMM')} · {h.name}</span>
                     <button
                       type="button"
@@ -1106,7 +1106,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
           )}
 
           {publicHolidays.length > 0 && monthHolidays.length === 0 && (
-            <p className="text-xs text-muted-foreground italic">No holidays in the selected month.</p>
+            <p className="text-xs text-slate-500 italic">No holidays in the selected month.</p>
           )}
         </CardContent>
       </Card>
@@ -1117,11 +1117,11 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
           <CardTitle className="text-lg flex items-center gap-2"><Settings2 className="h-5 w-5" /> Staff Settings (Hybrid & Off Days)</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-xs text-muted-foreground mb-4">Configure hybrid roles and permanent weekly off days. Hybrid staff remain eligible for regular shifts unless manually assigned via the hybrid row.</p>
+          <p className="text-xs text-slate-500 mb-4">Configure hybrid roles and permanent weekly off days. Hybrid staff remain eligible for regular shifts unless manually assigned via the hybrid row.</p>
           {settingsLoading ? (
-            <p className="text-sm text-muted-foreground text-center py-4">Loading settings...</p>
+            <p className="text-sm text-slate-500 text-center py-4">Loading settings...</p>
           ) : staffList.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">Add staff first</p>
+            <p className="text-sm text-slate-500 text-center py-4">Add staff first</p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -1215,7 +1215,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                           <TableHead
                             key={g.week}
                             colSpan={g.span}
-                            className={cn("text-center text-xs font-semibold border-x", i % 2 === 0 ? "bg-primary/10" : "bg-accent/30")}
+                            className={cn("text-center text-xs font-semibold border-x", i % 2 === 0 ? "bg-blue-50" : "bg-accent/30")}
                           >
                             Week {g.week}
                           </TableHead>
@@ -1230,10 +1230,10 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                         const dk = format(day, 'yyyy-MM-dd');
                         const isPH = isPublicHoliday(dk);
                         return (
-                          <TableHead key={day.toISOString()} className={cn("text-center min-w-[80px]", isWkend && "bg-muted/30", isPH && "bg-destructive/10")}>
+                          <TableHead key={day.toISOString()} className={cn("text-center min-w-[80px]", isWkend && "bg-slate-50", isPH && "bg-rose-50")}>
                             <div className="font-semibold text-xs">{DAY_ABBR[getDay(day)]}</div>
-                            <div className="text-xs text-muted-foreground font-normal">{format(day, 'd')}</div>
-                            {isPH && <div className="text-[9px] font-bold text-destructive uppercase tracking-wide mt-0.5">PH</div>}
+                            <div className="text-xs text-slate-500 font-normal">{format(day, 'd')}</div>
+                            {isPH && <div className="text-[9px] font-bold text-rose-600 uppercase tracking-wide mt-0.5">PH</div>}
                           </TableHead>
                         );
                       })}
@@ -1241,18 +1241,18 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                   </TableHeader>
                   <TableBody>
                     <TableRow>
-                      <TableCell className="font-medium bg-muted/30 sticky left-0 z-10">
+                      <TableCell className="font-medium bg-slate-50 sticky left-0 z-10">
                         <div className="text-xs">Shift 1</div>
-                        <div className="text-[10px] text-muted-foreground">8am–4pm</div>
+                        <div className="text-[10px] text-slate-500">8am–4pm</div>
                       </TableCell>
                       {monthDays.map(day => {
                         const dateKey = format(day, 'yyyy-MM-dd');
                         const cells = roster[dateKey]?.shift1 || [];
                         const isPH = isPublicHoliday(dateKey);
                         return (
-                          <TableCell key={dateKey} className={cn("text-center p-1", isWeekend(day) && "bg-muted/20", isPH && "bg-destructive/5")}>
+                          <TableCell key={dateKey} className={cn("text-center p-1", isWeekend(day) && "bg-slate-50/60", isPH && "bg-rose-50/60")}>
                             {cells.length === 0 && isPH && (
-                              <span className="text-[10px] text-destructive/70 italic">PH</span>
+                              <span className="text-[10px] text-rose-600/70 italic">PH</span>
                             )}
                             {cells.map((cell, i) => (
                               <Select key={i} value={cell.staffId} onValueChange={v => updateCell(dateKey, 'shift1', i, v)}>
@@ -1260,7 +1260,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                                   <span className="truncate">{firstName(cell.staffName)}</span>
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>
+                                  <SelectItem value="__none__" className="text-xs text-slate-500">— None —</SelectItem>
                                   {staffList.map(s => (
                                     <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>
                                   ))}
@@ -1272,18 +1272,18 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                       })}
                     </TableRow>
                     <TableRow>
-                      <TableCell className="font-medium bg-muted/30 sticky left-0 z-10">
+                      <TableCell className="font-medium bg-slate-50 sticky left-0 z-10">
                         <div className="text-xs">Shift 2</div>
-                        <div className="text-[10px] text-muted-foreground">4pm–12am</div>
+                        <div className="text-[10px] text-slate-500">4pm–12am</div>
                       </TableCell>
                       {monthDays.map(day => {
                         const dateKey = format(day, 'yyyy-MM-dd');
                         const cells = roster[dateKey]?.shift2 || [];
                         const isPH = isPublicHoliday(dateKey);
                         return (
-                          <TableCell key={dateKey} className={cn("text-center p-1", isWeekend(day) && "bg-muted/20", isPH && "bg-destructive/5")}>
+                          <TableCell key={dateKey} className={cn("text-center p-1", isWeekend(day) && "bg-slate-50/60", isPH && "bg-rose-50/60")}>
                             {cells.length === 0 && isPH && (
-                              <span className="text-[10px] text-destructive/70 italic">PH</span>
+                              <span className="text-[10px] text-rose-600/70 italic">PH</span>
                             )}
                             {cells.map((cell, i) => (
                               <Select key={i} value={cell.staffId} onValueChange={v => updateCell(dateKey, 'shift2', i, v)}>
@@ -1291,7 +1291,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                                   <span className="truncate">{firstName(cell.staffName)}</span>
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>
+                                  <SelectItem value="__none__" className="text-xs text-slate-500">— None —</SelectItem>
                                   {staffList.map(s => (
                                     <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>
                                   ))}
@@ -1305,9 +1305,9 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                     {/* Hybrid Row — manual assignment */}
                     {hybridStaff.length > 0 && (
                       <TableRow>
-                        <TableCell className="font-medium bg-blue-50 dark:bg-blue-950/30 sticky left-0 z-10">
+                        <TableCell className="font-medium bg-blue-50 sticky left-0 z-10">
                           <div className="text-xs">Hybrid</div>
-                          <div className="text-[10px] text-muted-foreground">8am–1pm</div>
+                          <div className="text-[10px] text-slate-500">8am–1pm</div>
                         </TableCell>
                         {monthDays.map(day => {
                           const dateKey = format(day, 'yyyy-MM-dd');
@@ -1315,7 +1315,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                           const assignedIds = new Set(cells.map(c => c.staffId));
                           const dow = getDay(day);
                           return (
-                            <TableCell key={dateKey} className={cn("text-center p-0.5", isWeekend(day) && "bg-muted/20")}>
+                            <TableCell key={dateKey} className={cn("text-center p-0.5", isWeekend(day) && "bg-slate-50/60")}>
                               <div className="flex flex-col gap-0.5 items-center">
                                 {hybridStaff.map(hs => {
                                   const isOff = rosterSettings[hs.id]?.permanentOffDays?.includes(dow);
@@ -1327,10 +1327,10 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                                       className={cn(
                                         "text-[10px] px-1 py-0.5 rounded cursor-pointer transition-colors w-full truncate",
                                         assignedIds.has(hs.id)
-                                          ? "bg-primary text-primary-foreground font-medium"
+                                          ? "bg-blue-600 text-white font-medium"
                                           : isOff
-                                            ? "text-muted-foreground/40 line-through cursor-not-allowed"
-                                            : "text-muted-foreground hover:bg-muted"
+                                            ? "text-slate-500/40 line-through cursor-not-allowed"
+                                            : "text-slate-500 hover:bg-slate-100"
                                       )}
                                       title={isOff ? `${hs.name} — Off day` : assignedIds.has(hs.id) ? `Remove ${hs.name}` : `Assign ${hs.name}`}
                                     >
@@ -1346,9 +1346,9 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                     )}
                     {/* Off / Not working row */}
                     <TableRow>
-                      <TableCell className="font-medium bg-destructive/10 sticky left-0 z-10">
+                      <TableCell className="font-medium bg-rose-50 sticky left-0 z-10">
                         <div className="text-xs">Off</div>
-                        <div className="text-[10px] text-muted-foreground">Not assigned</div>
+                        <div className="text-[10px] text-slate-500">Not assigned</div>
                       </TableCell>
                       {monthDays.map(day => {
                         const dateKey = format(day, 'yyyy-MM-dd');
@@ -1360,7 +1360,7 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                         }
                         const offStaff = staffList.filter(s => !assignedIds.has(s.id));
                         return (
-                          <TableCell key={dateKey} className={cn("text-center p-1 text-[10px] text-muted-foreground", isWeekend(day) && "bg-muted/20")}>
+                          <TableCell key={dateKey} className={cn("text-center p-1 text-[10px] text-slate-500", isWeekend(day) && "bg-slate-50/60")}>
                             {offStaff.length > 0 ? offStaff.map(s => firstName(s.name)).join(', ') : '—'}
                           </TableCell>
                         );
@@ -1408,15 +1408,15 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
 
                 {/* Fairness Score */}
                 {fairnessMetrics && (
-                  <div className="flex flex-wrap items-center gap-3 mt-3 p-3 rounded-lg bg-muted/50">
+                  <div className="flex flex-wrap items-center gap-3 mt-3 p-3 rounded-lg bg-slate-50">
                     <span className="text-sm font-medium">Fairness:</span>
                     <Badge
                       variant={fairnessMetrics.score >= 90 ? 'secondary' : 'destructive'}
-                      className={cn("text-xs", fairnessMetrics.score >= 90 ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : fairnessMetrics.score >= 70 ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" : "")}
+                      className={cn("text-xs", fairnessMetrics.score >= 90 ? "bg-emerald-50 text-emerald-700" : fairnessMetrics.score >= 70 ? "bg-amber-50 text-amber-700" : "")}
                     >
                       {fairnessMetrics.score}% balanced
                     </Badge>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-slate-500">
                       Spread: {fairnessMetrics.maxH}h − {fairnessMetrics.minH}h = {fairnessMetrics.spread}h difference · Avg: {fairnessMetrics.avg}h
                     </span>
                   </div>
@@ -1429,11 +1429,11 @@ function RosterPanel({ initialStaff, title, rosterType }: { initialStaff: StaffM
                 <Button variant="outline" onClick={clearRoster} className="gap-2"><X className="h-4 w-4" /> Clear Roster</Button>
                 <Button variant="outline" onClick={exportCSV} className="gap-2"><Download className="h-4 w-4" /> Export CSV</Button>
                 <Button variant="outline" onClick={() => window.print()} className="gap-2"><Printer className="h-4 w-4" /> Print</Button>
-                {savedAt && <span className="text-xs text-muted-foreground ml-2">Last saved: {format(new Date(savedAt), 'dd MMM yyyy, HH:mm')}</span>}
+                {savedAt && <span className="text-xs text-slate-500 ml-2">Last saved: {format(new Date(savedAt), 'dd MMM yyyy, HH:mm')}</span>}
               </div>
             </div>
           ) : (
-            <div className="text-center py-12 text-muted-foreground">
+            <div className="text-center py-12 text-slate-500">
               <Shuffle className="h-10 w-10 mx-auto mb-3 opacity-30" />
               <p className="text-sm">Select a month and click "Generate" to create a roster</p>
             </div>

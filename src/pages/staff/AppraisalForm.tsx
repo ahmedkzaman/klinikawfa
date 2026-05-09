@@ -59,7 +59,7 @@ function CriteriaSection({
         <div key={c.key} className="border rounded-lg p-4 space-y-3">
           <div>
             <h4 className="font-medium">{c.label}</h4>
-            <p className="text-xs text-muted-foreground">{c.description}</p>
+            <p className="text-xs text-slate-500">{c.description}</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -109,7 +109,7 @@ function CACompetencySection({
               <div key={ind.key} className="border rounded-lg p-4 space-y-3">
                 <div>
                   <h4 className="font-medium text-sm">{ind.label}</h4>
-                  <p className="text-xs text-muted-foreground">{ind.description}</p>
+                  <p className="text-xs text-slate-500">{ind.description}</p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -242,12 +242,12 @@ function ReviewPanel({
         <CardContent className="pt-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-slate-500">
                 {submitted.length} of {responses.length} evaluator(s) submitted
               </p>
               {getOverallAvg() != null && (
                 <p className="text-lg font-bold mt-1">
-                  Consolidated Score: <span className="text-primary">{getOverallAvg()!.toFixed(2)} / 5.0</span>
+                  Consolidated Score: <span className="text-blue-600">{getOverallAvg()!.toFixed(2)} / 5.0</span>
                 </p>
               )}
             </div>
@@ -331,7 +331,7 @@ function ReviewPanel({
                     <TableRow key={k.kpi_number}>
                       <TableCell>{k.kpi_number}</TableCell>
                       <TableCell className="text-sm">{def?.description}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{k.target}</TableCell>
+                      <TableCell className="text-xs text-slate-500">{k.target}</TableCell>
                       <TableCell className="text-sm">{k.actual_result || '—'}</TableCell>
                       <TableCell>
                         {k.status ? (
@@ -344,7 +344,7 @@ function ReviewPanel({
               </TableBody>
             </Table>
           ) : (
-            <p className="text-sm text-muted-foreground text-center py-4">No KPI data from self-assessment yet.</p>
+            <p className="text-sm text-slate-500 text-center py-4">No KPI data from self-assessment yet.</p>
           )}
         </CardContent>
       </Card>
@@ -406,7 +406,7 @@ function ReviewPanel({
             );
           })}
           {submitted.every((r) => !Array.isArray(r.development_objectives) || !(r.development_objectives as any[]).length) && (
-            <p className="text-sm text-muted-foreground text-center py-4">No development objectives submitted yet.</p>
+            <p className="text-sm text-slate-500 text-center py-4">No development objectives submitted yet.</p>
           )}
         </CardContent>
       </Card>
@@ -735,7 +735,7 @@ export default function AppraisalForm() {
 
   const getProfileName = (uid: string) => profiles?.find((p) => p.id === uid)?.full_name || profiles?.find((p) => p.id === uid)?.email || uid;
 
-  if (!appraisal) return <div className="py-12 text-center text-muted-foreground">Loading...</div>;
+  if (!appraisal) return <div className="py-12 text-center text-slate-500">Loading...</div>;
 
   const formTitle = APPRAISAL_TYPE_LABELS[appraisalType] + ' Performance Appraisal';
 
@@ -781,7 +781,7 @@ export default function AppraisalForm() {
         </Button>
         <div className="flex-1">
           <h1 className="text-xl font-bold">{formTitle}</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-slate-500">
             Period: {appraisal.appraisal_period_from} to {appraisal.appraisal_period_to}
           </p>
         </div>
@@ -845,7 +845,7 @@ export default function AppraisalForm() {
 
       {!myResponse ? (
         <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
+          <CardContent className="py-12 text-center text-slate-500">
             You are not assigned as an evaluator for this appraisal.
             {isAdmin && ' Use the "Add" button above to assign yourself.'}
           </CardContent>
@@ -906,7 +906,7 @@ export default function AppraisalForm() {
                           <div key={kpi.kpi_number} className="border rounded-lg p-4 space-y-3">
                             <div>
                               <span className="font-medium text-sm">{kpi.kpi_number}. {def?.description}</span>
-                              <p className="text-xs text-muted-foreground">Target: {kpi.target}</p>
+                              <p className="text-xs text-slate-500">Target: {kpi.target}</p>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                               <div>
@@ -996,7 +996,7 @@ export default function AppraisalForm() {
                     ))}
                   </div>
                   {formData.total_working_days && formData.days_present && (
-                    <div className="text-sm text-muted-foreground">
+                    <div className="text-sm text-slate-500">
                       Attendance Rate: {((Number(formData.days_present) / Number(formData.total_working_days)) * 100).toFixed(1)}%
                     </div>
                   )}
@@ -1057,7 +1057,7 @@ export default function AppraisalForm() {
                             <div className="flex items-start justify-between gap-2">
                               <div>
                                 <span className="font-medium text-sm">{kpi.kpi_number}. {def?.description}</span>
-                                <p className="text-xs text-muted-foreground">Target: {kpi.target}</p>
+                                <p className="text-xs text-slate-500">Target: {kpi.target}</p>
                               </div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1102,16 +1102,16 @@ export default function AppraisalForm() {
                       <div key={s.label} className="flex items-center justify-between border rounded-lg p-4">
                         <div>
                           <div className="font-medium text-sm">{s.label}</div>
-                          <div className="text-xs text-muted-foreground">Weighting: {s.weight}</div>
+                          <div className="text-xs text-slate-500">Weighting: {s.weight}</div>
                         </div>
-                        <div className="text-lg font-bold text-primary">
+                        <div className="text-lg font-bold text-blue-600">
                           {s.score != null ? s.score.toFixed(2) : '—'} / 5.0
                         </div>
                       </div>
                     ))}
                     <div className="border-t pt-4 flex items-center justify-between">
                       <span className="text-lg font-bold">Overall Weighted Score</span>
-                      <span className="text-2xl font-bold text-primary">
+                      <span className="text-2xl font-bold text-blue-600">
                         {calcOverall() != null ? calcOverall()!.toFixed(2) : '—'} / 5.0
                       </span>
                     </div>
@@ -1129,7 +1129,7 @@ export default function AppraisalForm() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {staffObjectives.length === 0 && !isSelfEvaluator && (
-                    <p className="text-sm text-muted-foreground text-center py-4">The staff member has not submitted their development objectives yet.</p>
+                    <p className="text-sm text-slate-500 text-center py-4">The staff member has not submitted their development objectives yet.</p>
                   )}
                   {staffObjectives.map((obj, idx) => (
                     <div key={idx} className="border rounded-lg p-4 space-y-3">

@@ -123,15 +123,15 @@ export default function CircularNotices() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Circular Notices</h1>
-          <p className="text-muted-foreground text-sm">Create and manage announcements for all staff</p>
+          <p className="text-slate-500 text-sm">Create and manage announcements for all staff</p>
         </div>
         <Button onClick={openCreate}><Plus className="h-4 w-4 mr-1.5" /> New Notice</Button>
       </div>
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-slate-500">Loading...</p>
       ) : notices.length === 0 ? (
-        <Card><CardContent className="py-8 text-center text-muted-foreground">No notices yet. Create your first announcement.</CardContent></Card>
+        <Card><CardContent className="py-8 text-center text-slate-500">No notices yet. Create your first announcement.</CardContent></Card>
       ) : (
         <div className="space-y-3">
           {notices.map(notice => (
@@ -140,15 +140,15 @@ export default function CircularNotices() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <Megaphone className="h-4 w-4 text-primary shrink-0" />
+                      <Megaphone className="h-4 w-4 text-blue-600 shrink-0" />
                       <h3 className="font-semibold text-sm truncate">{notice.title}</h3>
                       <Badge variant={notice.priority === 'urgent' ? 'destructive' : 'secondary'} className="text-[10px]">
                         {notice.priority}
                       </Badge>
                       {!notice.is_active && <Badge variant="outline" className="text-[10px]">Inactive</Badge>}
                     </div>
-                    <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{notice.content}</p>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <p className="text-xs text-slate-500 line-clamp-2 mb-2">{notice.content}</p>
+                    <div className="flex items-center gap-3 text-xs text-slate-500">
                       <span>Published {format(new Date(notice.published_at), 'MMM d, yyyy h:mm a')}</span>
                       <span className="flex items-center gap-1"><Users className="h-3 w-3" />{getAckCount(notice.id)} acknowledged</span>
                     </div>
@@ -213,13 +213,13 @@ export default function CircularNotices() {
           </DialogHeader>
           <div className="space-y-2 max-h-80 overflow-y-auto">
             {selectedNotice && getAcksForNotice(selectedNotice.id).length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No staff have acknowledged this notice yet.</p>
+              <p className="text-sm text-slate-500 text-center py-4">No staff have acknowledged this notice yet.</p>
             ) : (
               selectedNotice && getAcksForNotice(selectedNotice.id).map(ack => (
-                <div key={ack.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                <div key={ack.id} className="flex items-center gap-2 p-2 rounded-md bg-slate-50">
                   <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
                   <span className="text-sm flex-1">{profiles[ack.user_id] || ack.user_id.slice(0, 8)}</span>
-                  <span className="text-xs text-muted-foreground">{format(new Date(ack.acknowledged_at), 'MMM d, h:mm a')}</span>
+                  <span className="text-xs text-slate-500">{format(new Date(ack.acknowledged_at), 'MMM d, h:mm a')}</span>
                 </div>
               ))
             )}
