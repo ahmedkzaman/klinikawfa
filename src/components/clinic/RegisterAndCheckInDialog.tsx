@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { Check, ChevronsUpDown, Search, X } from 'lucide-react';
+import { toMalayTitleCase } from '@/lib/textCase';
 import {
   Dialog,
   DialogContent,
@@ -527,7 +528,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                                       className="flex items-center justify-between gap-2"
                                     >
                                       <div className="min-w-0 flex-1">
-                                        <p className="font-medium truncate">{p.name}</p>
+                                        <p className="font-medium truncate">{toMalayTitleCase(p.name)}</p>
                                         <p className="text-xs text-muted-foreground truncate">
                                           {p.national_id ?? 'No IC'} •{' '}
                                           {p.phone ?? 'No phone'}

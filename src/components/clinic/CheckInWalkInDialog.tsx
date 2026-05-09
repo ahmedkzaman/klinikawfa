@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { PatientPicker } from '@/components/clinic/PatientPicker';
+import { toMalayTitleCase } from '@/lib/textCase';
 import { RegisterPatientDialog } from '@/components/clinic/RegisterPatientDialog';
 import { useCheckInWalkIn } from '@/hooks/clinic/useIntakeAppointment';
 import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
@@ -92,7 +93,7 @@ export function CheckInWalkInDialog({
         notes: notes || null,
         panelId: payerType === 'panel' ? panelId : null,
       });
-      toast.success(`${patient.name} added to queue`);
+      toast.success(`${toMalayTitleCase(patient.name)} added to queue`);
       reset();
       onOpenChange(false);
     } catch (err) {
