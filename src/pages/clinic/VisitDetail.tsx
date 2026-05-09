@@ -13,6 +13,7 @@ import { useConsultation } from '@/hooks/clinic/useConsultations';
 import { useConsultationItems } from '@/hooks/clinic/useConsultationItems';
 import { usePayments } from '@/hooks/clinic/usePayments';
 import { cn } from '@/lib/utils';
+import { toMalayTitleCase } from '@/lib/textCase';
 import {
   bento,
   bentoHeader,
@@ -104,7 +105,7 @@ export default function VisitDetail() {
           </Button>
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold text-slate-900 truncate">
-              {patient?.name ?? 'Unknown patient'}
+              {patient?.name ? toMalayTitleCase(patient.name) : 'Unknown patient'}
             </h1>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mt-0.5">
               Queue #{entry.queue_number ?? '—'} · Visit record
@@ -117,7 +118,7 @@ export default function VisitDetail() {
         <div className="grid lg:grid-cols-[280px_1fr_360px] gap-4 items-start">
           <div className={cn(bento, 'p-4 space-y-3 text-sm')}>
             <h2 className={bentoHeader}>Patient</h2>
-            <Field label="Name" value={patient?.name ?? '—'} />
+            <Field label="Name" value={patient?.name ? toMalayTitleCase(patient.name) : '—'} />
             <Field label="IC / NRIC" value={patient?.national_id ?? '—'} />
             <Field label="Phone" value={patient?.phone ?? '—'} />
             <Field label="Date of Birth" value={dob} />

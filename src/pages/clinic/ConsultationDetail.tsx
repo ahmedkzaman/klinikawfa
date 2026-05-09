@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { toMalayTitleCase } from '@/lib/textCase';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -417,7 +418,7 @@ export default function ConsultationDetail() {
       called_at: new Date().toISOString(),
       clinic_status: 'with_doctor',
     });
-    toast.success(`${patient.name} called to ${roomLabel}`);
+    toast.success(`${toMalayTitleCase(patient.name)} called to ${roomLabel}`);
   };
 
   const serviceNameSet = useMemo(
@@ -790,7 +791,7 @@ export default function ConsultationDetail() {
                     </div>
                     <div className="min-w-0">
                       <h2 className="text-base font-semibold text-slate-800 truncate">
-                        {patient.name}
+                        {toMalayTitleCase(patient.name)}
                       </h2>
                       <p className="text-xs text-slate-500 mt-0.5">
                         {patient.date_of_birth

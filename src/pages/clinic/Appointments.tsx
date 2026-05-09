@@ -3,6 +3,7 @@ import { addDays, format, parse, startOfWeek } from 'date-fns';
 import { ChevronLeft, ChevronRight, Plus, CalendarDays, Calendar as CalIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { toMalayTitleCase } from '@/lib/textCase';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -351,7 +352,7 @@ function FragmentRow({
                   STATUS_STYLES[a.status] ?? STATUS_STYLES.scheduled,
                 )}
               >
-                {a.appointment_time.slice(0, 5)} · {a.patients?.name ?? 'Patient'}
+                {a.appointment_time.slice(0, 5)} · {a.patients?.name ? toMalayTitleCase(a.patients.name) : 'Patient'}
               </span>
             ))}
           </button>
@@ -525,7 +526,7 @@ function AppointmentDetailsSheet({
             <div className="rounded-lg bg-slate-50 p-3 space-y-1">
               <div className="text-xs text-slate-500 uppercase">Patient</div>
               <div className="font-semibold text-slate-900">
-                {appt.patients?.name ?? 'Patient'}
+                {appt.patients?.name ? toMalayTitleCase(appt.patients.name) : 'Patient'}
               </div>
               {appt.patients?.phone && (
                 <div className="text-sm text-slate-600">{appt.patients.phone}</div>

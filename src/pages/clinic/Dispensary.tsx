@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { toMalayTitleCase } from '@/lib/textCase';
 import { StatusBadge } from '@/components/clinic/StatusBadge';
 import { RoomPickerDialog } from '@/components/clinic/consultation/RoomPickerDialog';
 import {
@@ -104,7 +105,7 @@ export default function Dispensary() {
                   className="grid grid-cols-5 gap-2 px-4 py-3 border-t border-slate-100 items-center hover:bg-slate-50/60 transition-colors"
                 >
                   <span className="text-sm font-medium text-slate-800 truncate">
-                    {entry.patients?.name ?? '—'}
+                    {entry.patients?.name ? toMalayTitleCase(entry.patients.name) : '—'}
                   </span>
                   <span className="text-sm text-slate-500">
                     {entry.doctors?.name || '—'}
@@ -147,7 +148,7 @@ export default function Dispensary() {
       <RoomPickerDialog
         open={!!callTarget}
         onOpenChange={(o) => !o && setCallTarget(null)}
-        patientLabel={callTarget?.patients?.name ?? undefined}
+        patientLabel={callTarget?.patients?.name ? toMalayTitleCase(callTarget.patients.name) : undefined}
         pending={callToDispensary.isPending}
         onConfirm={(roomId) => {
           if (!callTarget) return;

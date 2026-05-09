@@ -23,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { toMalayTitleCase } from '@/lib/textCase';
 import {
   bento,
   bentoHeader,
@@ -456,7 +457,7 @@ function ClaimRow({
       </TableCell>
       <TableCell className="font-mono text-xs text-slate-700">{row.claim_no}</TableCell>
       <TableCell className="text-slate-700">{row.insurance_providers?.name ?? '—'}</TableCell>
-      <TableCell className="text-slate-700">{row.patients?.name ?? '—'}</TableCell>
+      <TableCell className="text-slate-700">{row.patients?.name ? toMalayTitleCase(row.patients.name) : '—'}</TableCell>
       <TableCell>
         <StatusBadge status={row.status} />
       </TableCell>

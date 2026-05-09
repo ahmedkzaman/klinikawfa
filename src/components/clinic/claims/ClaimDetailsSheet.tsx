@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { toMalayTitleCase } from '@/lib/textCase';
 import {
   Select,
   SelectContent,
@@ -234,7 +235,7 @@ export default function ClaimDetailsSheet({
             <section>
               <h3 className={bentoHeader}>Billing Details</h3>
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <Field label="Patient" value={claim?.patients?.name ?? '—'} />
+                <Field label="Patient" value={claim?.patients?.name ? toMalayTitleCase(claim.patients.name) : '—'} />
                 <Field label="Reg No" value={claim?.patients?.reg_no ?? '—'} mono />
               </div>
             </section>

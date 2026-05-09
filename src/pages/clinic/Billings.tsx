@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { toMalayTitleCase } from '@/lib/textCase';
 import {
   bento,
   pageInner,
@@ -136,7 +137,7 @@ export default function Billings() {
         byQueue.set(qe.id, {
           queueEntryId: qe.id,
           queueNumber: qe.queue_number,
-          patientName: qe.patients?.name ?? '—',
+          patientName: qe.patients?.name ? toMalayTitleCase(qe.patients.name) : '—',
           createdAt: qe.created_at,
           clinicStatus: qe.clinic_status,
           subtotal: itemsByQueue[qe.id] ?? 0,
