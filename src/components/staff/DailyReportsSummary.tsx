@@ -60,7 +60,7 @@ export default function DailyReportsSummary() {
         .from('saved_rosters')
         .select('roster_data, staff_list')
         .eq('roster_type', 'support')
-        .eq('month', selectedMonth)
+        .eq('month', selectedMonth + 1)
         .eq('year', selectedYear)
         .maybeSingle(),
       supabase
