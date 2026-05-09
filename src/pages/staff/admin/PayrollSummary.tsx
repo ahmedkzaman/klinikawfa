@@ -352,20 +352,18 @@ export default function PayrollSummary() {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <DollarSign className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold">Payroll Summary</h1>
-      </div>
+    <div className={pageShell}>
+      <div className={pageInner}>
+        <div className="flex items-center gap-2">
+          <DollarSign className="h-6 w-6 text-blue-600" />
+          <h1 className="text-2xl font-bold tracking-tight text-slate-800">Payroll Summary</h1>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Monthly Overview</CardTitle>
-        </CardHeader>
-        <CardContent>
+        <div className={cn(bento, 'p-4')}>
+          <h2 className={bentoHeader}>Monthly Overview</h2>
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <Select value={String(month)} onValueChange={v => setMonth(Number(v))}>
-              <SelectTrigger className="w-40">
+              <SelectTrigger className={cn(softInput, 'w-40')}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -376,7 +374,7 @@ export default function PayrollSummary() {
             </Select>
 
             <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
-              <SelectTrigger className="w-28">
+              <SelectTrigger className={cn(softInput, 'w-28')}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -389,29 +387,29 @@ export default function PayrollSummary() {
             <Button
               onClick={() => generateMutation.mutate()}
               disabled={generateMutation.isPending}
-              variant="default"
+              className={primaryBtn}
             >
-              <RefreshCw className={`h-4 w-4 mr-2 ${generateMutation.isPending ? 'animate-spin' : ''}`} />
+              <RefreshCw className={cn('h-4 w-4 mr-2', generateMutation.isPending && 'animate-spin')} />
               {generateMutation.isPending ? 'Generating...' : 'Generate Summary'}
             </Button>
 
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
                 placeholder="Search staff or department..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="pl-9"
+                className={cn(softInput, 'pl-9')}
               />
             </div>
           </div>
 
           {isLoading ? (
-            <p className="text-muted-foreground text-center py-8">Loading...</p>
+            <p className="text-slate-500 text-center py-8">Loading...</p>
           ) : filtered.length === 0 ? (
             <div className="text-center py-8 space-y-3">
-              <p className="text-muted-foreground">No payroll data for {MONTHS[month - 1]} {year}</p>
-              <p className="text-sm text-muted-foreground">Click "Generate Summary" to create payroll summaries from attendance and roster data.</p>
+              <p className="text-slate-500">No payroll data for {MONTHS[month - 1]} {year}</p>
+              <p className="text-sm text-slate-500">Click "Generate Summary" to create payroll summaries from attendance and roster data.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -437,27 +435,27 @@ export default function PayrollSummary() {
                 <TableBody>
                   {filtered.map(s => (
                     <TableRow key={s.id}>
-                      <TableCell className="font-medium">{s.name}</TableCell>
-                      <TableCell>{s.department}</TableCell>
-                      <TableCell className="text-center">{s.total_present_days}</TableCell>
-                      <TableCell className="text-center">{s.total_leave_days}</TableCell>
-                      <TableCell className="text-center">{s.total_absent_days}</TableCell>
-                      <TableCell className="text-center">{s.total_late_incidents}</TableCell>
-                      <TableCell className="text-center">{s.total_overtime_hours}</TableCell>
-                      <TableCell className="text-center">{s.unpaid_leave_count}</TableCell>
-                      <TableCell className="text-right">{Number(s.gross_pay).toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{Number(s.total_deductions).toFixed(2)}</TableCell>
-                      <TableCell className="text-right font-semibold">{Number(s.net_pay).toFixed(2)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{s.employer_cost.toFixed(2)}</TableCell>
+                      <TableCell className="font-medium text-slate-800">{s.name}</TableCell>
+                      <TableCell className="text-slate-600">{s.department}</TableCell>
+                      <TableCell className="text-center text-slate-600">{s.total_present_days}</TableCell>
+                      <TableCell className="text-center text-slate-600">{s.total_leave_days}</TableCell>
+                      <TableCell className="text-center text-slate-600">{s.total_absent_days}</TableCell>
+                      <TableCell className="text-center text-slate-600">{s.total_late_incidents}</TableCell>
+                      <TableCell className="text-center text-slate-600">{s.total_overtime_hours}</TableCell>
+                      <TableCell className="text-center text-slate-600">{s.unpaid_leave_count}</TableCell>
+                      <TableCell className="text-right text-slate-700">{Number(s.gross_pay).toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-slate-700">{Number(s.total_deductions).toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-semibold text-slate-800">{Number(s.net_pay).toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-slate-500">{s.employer_cost.toFixed(2)}</TableCell>
                       <TableCell className="text-center">
-                        <Badge className={statusColors[s.payroll_status] || ''}>
+                        <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', statusColors[s.payroll_status] || 'bg-slate-100 text-slate-700')}>
                           {s.payroll_status}
-                        </Badge>
+                        </span>
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-1">
                           {(s.unpaid_leave_count > 0 || s.total_absent_days > 0 || s.total_late_incidents > 0) && (
-                            <AlertTriangle className="h-4 w-4 text-destructive" />
+                            <AlertTriangle className="h-4 w-4 text-rose-600" />
                           )}
                         </div>
                       </TableCell>
@@ -467,8 +465,8 @@ export default function PayrollSummary() {
               </Table>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
