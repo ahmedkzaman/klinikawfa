@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { toMalayTitleCase } from '@/lib/textCase';
 import {
   Sheet,
   SheetContent,
@@ -301,7 +302,7 @@ export function PatientProfileSheet({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <SheetTitle className="text-xl truncate">
-                {currentPatient?.name ?? 'Patient'}
+                {currentPatient?.name ? toMalayTitleCase(currentPatient.name) : 'Patient'}
               </SheetTitle>
               <SheetDescription className="font-mono text-xs">
                 IC: {currentPatient?.national_id ?? '—'}
