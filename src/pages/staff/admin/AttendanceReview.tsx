@@ -285,6 +285,47 @@ export default function AdminAttendanceReview() {
           </Select>
         </div>
 
+        <div className={cn(bento, 'p-4')}>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className={cn(bentoHeader, 'mb-0')}>Staff Summary ({stats.summaries.length})</h2>
+            <p className="text-xs text-slate-500">Click a row to see all records for that staff this month</p>
+          </div>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Position</TableHead>
+                  <TableHead className="text-right">Present</TableHead>
+                  <TableHead className="text-right">Late</TableHead>
+                  <TableHead className="text-right">Absent</TableHead>
+                  <TableHead className="text-right">Leave</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {stats.summaries.length === 0 ? (
+                  <TableRow><TableCell colSpan={7} className="text-center text-slate-500 py-6">No staff match your search.</TableCell></TableRow>
+                ) : stats.summaries.map(s => (
+                  <TableRow key={s.userId} className="cursor-pointer hover:bg-slate-50" onClick={() => setDrillDown({ kind: 'staff', userId: s.userId, fullName: s.fullName })}>
+                    <TableCell className="font-medium text-slate-800">{s.fullName}</TableCell>
+                    <TableCell className="text-slate-600">{s.position || '—'}</TableCell>
+                    <TableCell className="text-right"><span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">{s.present}</span></TableCell>
+                    <TableCell className="text-right"><span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">{s.late}</span></TableCell>
+                    <TableCell className="text-right"><span className="px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700">{s.absent}</span></TableCell>
+                    <TableCell className="text-right"><span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">{s.leave}</span></TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" className="text-blue-600 hover:bg-blue-50" onClick={(e) => { e.stopPropagation(); setDrillDown({ kind: 'staff', userId: s.userId, fullName: s.fullName }); }}>
+                        View details
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className={cn(bento, 'p-4 cursor-pointer hover:ring-2 ring-blue-200 transition flex items-center gap-3')} onClick={() => toggleCategoryDrill('working')}>
             <div className="rounded-full p-2 bg-emerald-50 text-emerald-600"><CalendarCheck className="h-5 w-5" /></div>
