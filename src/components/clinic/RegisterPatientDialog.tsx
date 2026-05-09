@@ -23,6 +23,7 @@ import {
   mapGender,
   mapDOB,
 } from '@/components/clinic/ReadMyKadButton';
+import { toMalayTitleCase, toUpperSafe } from '@/lib/textCase';
 import type { PatientRow } from '@/types/clinic';
 
 type FormData = PatientFormData;
@@ -68,7 +69,7 @@ export function RegisterPatientDialog({
     setSubmitting(true);
     try {
       const created = await create.mutateAsync({
-        name: data.name,
+        name: toUpperSafe(data.name),
         phone: data.phone || null,
         national_id: data.national_id?.trim() || null,
         passport_no: data.passport_no?.trim() || null,
@@ -81,7 +82,7 @@ export function RegisterPatientDialog({
         default_panel_id: data.default_panel_id || null,
         allergies: data.allergies || null,
         underlying_conditions: data.underlying_conditions || null,
-        address: data.address?.trim() || null,
+        address: data.address ? toUpperSafe(data.address) : null,
       });
       toast.success(`Patient registered: ${created.name}`);
       reset();
@@ -126,7 +127,17 @@ export function RegisterPatientDialog({
 
           <div>
             <Label htmlFor="name">Full name *</Label>
-            <Input id="name" className="capitalize" {...register('name')} />
+            <Input
+              id="name"
+              {...register('name', {
+                onBlur: (e) => {
+                  const formatted = toMalayTitleCase(e.target.value);
+                  if (formatted !== e.target.value) {
+                    setValue('name', formatted, { shouldValidate: true, shouldDirty: true });
+                  }
+                },
+              })}
+            />
             {errors.name && <p className="text-sm text-destructive mt-1">{errors.name.message}</p>}
           </div>
 
