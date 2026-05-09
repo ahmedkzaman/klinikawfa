@@ -1,74 +1,86 @@
-## Goal
+## Investigation: Noraslinda's 4:10 PM punch-in block
 
-1. Add an Edit Patient dialog to fix data-entry errors, opened from the patient profile sheet.
-2. Add a reusable "💳 Read MyKad" button (shared by Register and Edit) that calls a local hardware bridge to auto-fill demographics, with safe parsers for IC and gender.
+### What the data says
 
-Address fields are explicitly out of scope.
+- **Staff**: NORASLINDA BINTI ZAMRI (`3431b2d6…`), role `operations`
+- **Roster for 2026-05-09**: `shift2`, zone Klinik Awfa, **16:00 – 23:59**
+- **Resolved punch buffer** (scope=shift, S2): clock-in early `60 min`, **clock-in late `180 min`**
+- **Expected punch-in window**: **15:00 – 19:00 MYT**
+- **She tried at**: 16:10 MYT (well inside the window)
+- **Yet the UI showed**: *"Punch-in window has closed…"* — this exact string is only emitted on line 244 of `src/pages/staff/Punch.tsx`, which fires when `now > activeShift.start + clock_in_late_min`
 
-## Changes
+So per the current code/data she should have been allowed. Something between the device and the resolver produced a `closeAt` that was already in the past at 16:10. The plausible suspects (in priority order):
 
-### 1. Shared schema — `src/components/clinic/patientFormSchema.ts` (new)
+1. **Device clock or timezone wrong** — `new Date('2026-05-09T16:00:00')` is parsed as **local time**. If her phone was set to a TZ other than Asia/Kuala_Lumpur (or its clock was off by hours), `closeAt` and `now` end up in different reference frames.
+2. **Stale roster row** — if her `roster_zone_assignments` row for May 9 had a different `start_time` earlier today and was later corrected, a cached app state could still hold the old start.
+3. **Race in `useMemo`** — `pickActiveRosterShift` runs once with `bufferSettings=[]` before the settings query resolves, so the active shift's `buffers` snapshot can be `DEFAULT_BUFFERS` (60/60). With 60-min late, `closeAt` would be 17:00 — still allows 16:10, but tightens the margin enough that any clock skew would block.
+4. **Wrong shift picked as active** — unlikely given current data (today's shift2 wins the iteration), but worth confirming with logs.
 
-- Move `patientSchema`, `RELIGIONS`, `PHONE_REGEX`, and `PatientFormData` out of `RegisterPatientDialog`.
-- Refactor `RegisterPatientDialog` to import from this module — no behavior change.
+### Plan
 
-### 2. MyKad reader hook — `src/hooks/clinic/useMyKadReader.ts` (new)
+```text
+1. Add diagnostic logging on every blocked punch attempt
+2. Make the resolver resilient to a stale/empty bufferSettings render
+3. Surface the real numbers to the user so they (and we) can self-diagnose
+4. Provide an admin escape hatch to record a manual punch (no schema change)
+5. (Optional) Sanity-check device time against server time
+```
 
-- Exposes `{ readMyKad, isReading }`.
-- Fetches `import.meta.env.VITE_MYKAD_BRIDGE_URL || 'http://127.0.0.1:8080/api/read-mykad'` with `AbortSignal.timeout(8000)`.
-- Returns parsed JSON `{ name?, ic_number?, dob?, gender?, address? }` on 2xx.
-- On any failure (network error, non-2xx, timeout, JSON parse): `toast.error("Could not connect to IC Reader. Ensure the bridge software is running.")` → returns `null`.
+#### Step 1 — Diagnostic logging (`src/pages/staff/Punch.tsx`)
 
-### 3. Reusable button — `src/components/clinic/ReadMyKadButton.tsx` (new)
+When `guardMessage` resolves to the "Punch-in window has closed" branch:
 
-- Props: `onRead(data)`, optional `size`/`variant`.
-- Renders `💳 Read MyKad`; swaps to `<Loader2 className="animate-spin" />` while `isReading`. Disabled while reading.
+- Log to `console.warn` (already exists) **and** insert a row into a new lightweight `punch_block_log` table with: `user_id`, `attempted_at` (server `now()`), `client_now` (ISO from device), `client_tz` (`Intl.DateTimeFormat().resolvedOptions().timeZone`), `shift_key`, `shift_start_iso`, `close_at_iso`, `clock_in_late_min`, `buffer_source` (`shift|role_shift|role|global|default`), `roster_row_count`. This gives us a forensic trail the next time it happens.
 
-### 4. Shared MyKad mapping helpers — colocated in `ReadMyKadButton.tsx` (exported)
+#### Step 2 — Make the resolver wait for buffers
 
-- `cleanIC(raw)`: strips all non-digit characters → `"880101-14-5555"` becomes `"880101145555"`.
-- `mapGender(raw)`:
-  ```ts
-  const n = (raw ?? '').toLowerCase().trim();
-  if (['lelaki', 'l', 'male', 'm'].includes(n)) return 'male';
-  if (['perempuan', 'p', 'female', 'f'].includes(n)) return 'female';
-  return undefined; // skip setValue → user picks manually
-  ```
-- `mapDOB(raw)`: passes through ISO `yyyy-mm-dd`; if MyKad returns `dd/mm/yyyy` or `ddmmyyyy`, normalize to ISO. Returns `undefined` if unparseable.
-- Both Register and Edit dialogs use these helpers in their `onRead` mappers — guarantees identical behavior.
+In `pickActiveRosterShift` (and the `useMemo` in `Punch.tsx`), short-circuit and return `{ active: null, nearest: null, loading: true }` while either `bufferSettings` **or** `userRoles` query is still pending. Currently both default to `[]`, which silently downgrades to `DEFAULT_BUFFERS` on the first render — a real footgun. Track loading explicitly and gate `canPunch` on it.
 
-### 5. `useUpdatePatient` — append to `src/hooks/clinic/usePatients.ts`
+#### Step 3 — Show the actual window in the UI
 
-- `mutateAsync({ id, patch })` → `supabase.from('patients').update(patch).eq('id', id).select().single()`.
-- On success, invalidates `['clinic', 'patients']`.
+Below the "Active Shift" badge, render the resolved window: e.g., *"Punch open 15:00 – 19:00 (180-min late buffer)"*. When blocked, the helper text becomes *"Punch-in closed at 19:00. Your device shows {clientNow}. If those don't match, fix your phone's clock."* This exposes step-1 data to the staff member directly.
 
-### 6. `EditPatientDialog` — `src/components/clinic/EditPatientDialog.tsx` (new)
+#### Step 4 — Admin manual-punch entry
 
-- Same fields and shared Zod schema as Register.
-- Props: `{ open, onOpenChange, patient: PatientRow, onUpdated?: (p: PatientRow) => void }`.
-- `useEffect` watching `patient?.id` resets the form to the patient's current values.
-- `<ReadMyKadButton onRead={...}>` next to the MyKad input; mapper uses `cleanIC` / `mapGender` / `mapDOB` and calls `setValue(..., { shouldValidate: true, shouldDirty: true })`. Skips fields whose mappers return `undefined`.
-- On submit: `useUpdatePatient`, `toast.success("Patient updated: {name}")`, close dialog, fire `onUpdated(updated)`.
+Add a simple admin tool (already a stated requirement in `mem://features/hr-portal/attendance-tracking`) — but scoped here to: HR Portal → Attendance Review → row-level "Record manual punch" dialog that inserts an `attendance_records` row with `face_verified=false`, an `admin_note`, and the explicit `logical_work_date` + `shift_key`. (Trigger `trg_set_attendance_logical_fields` already handles defaults if omitted.) This unblocks staff in the moment without code changes per incident.
 
-### 7. Wire `RegisterPatientDialog`
+#### Step 5 — Optional: server-time check
 
-- Add `<ReadMyKadButton>` next to MyKad input using the same shared mapping helpers.
+On the Punch page mount, fetch `select now() as server_now` once. If `|server_now - client_now|` > 2 minutes, show a yellow warning *"Your device clock is X minutes off. Punch decisions use your device clock — please fix it before punching."* This catches 80% of cases like this one.
 
-### 8. Wire `PatientProfileSheet` (stale-state fix)
+### Database changes
 
-- Add an `Edit` (pencil icon) button in the `SheetHeader`.
-- Local state `const [currentPatient, setCurrentPatient] = useState(patient)` synced via `useEffect` on `patient?.id`.
-- Render demographics from `currentPatient` (visit history hook still keyed by stable `patient.id`).
-- Mount `<EditPatientDialog patient={currentPatient} onUpdated={setCurrentPatient} ... />` so the open sheet updates instantly.
+One small new table (with RLS):
 
-## Verification
+```text
+public.punch_block_log
+  user_id          uuid
+  attempted_at     timestamptz default now()
+  client_now       timestamptz
+  client_tz        text
+  shift_key        text
+  shift_start_iso  text
+  close_at_iso     text
+  clock_in_late_min int
+  buffer_source    text
+  roster_row_count int
+  guard_reason     text
+```
 
-1. Open profile sheet → Edit → form pre-filled → change phone → Save → toast fires, sheet header/details update in place without closing, patients list also refreshes.
-2. With no bridge: click 💳 Read MyKad → spinner → ~8s timeout toast `"Could not connect to IC Reader…"`.
-3. Mock bridge `{ "name": "Ali", "ic_number": "880101-14-5555", "dob": "1988-01-01", "gender": "Lelaki" }` → fields populate with `national_id = "880101145555"` (no dash), `gender = "male"`, no validation errors.
-4. Mock bridge with `gender: "Perempuan"` → maps to `female`. Mock with `gender: "X"` → gender field left untouched.
+RLS: insertable by any authenticated user for their own row; readable by admins (`is_admin`).
 
-## Out of scope
+### Files touched
 
-- Address columns and UI (deferred).
-- Bridge software itself (separate Python/C# service for the Iris SCR51u).
+- `src/pages/staff/Punch.tsx` — wait for loading, show window, log blocks
+- `src/hooks/useUserPunchBuffers.ts` — expose `loading` from resolver path
+- `src/components/staff/AttendanceReview/*` (new dialog) — admin manual-punch
+- New migration: `punch_block_log` table + RLS
+
+### Out of scope
+
+- Changing the 60/180 buffer values (data, not code)
+- Reworking how `roster_zone_assignments` are written (separate concern)
+
+### What we'll learn
+
+After deploy, the next "can't punch in" case will leave a row in `punch_block_log` with the device clock + TZ + chosen buffer source, and we'll know within seconds whether it's a clock issue, a stale roster, or a real bug in the resolver.
