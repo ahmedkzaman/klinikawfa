@@ -1,104 +1,147 @@
-## Retraction
+## Why this revision
 
-Earlier `bypassStaffHRGates = isAdmin || isClinical` patch is **withdrawn**. Resident doctors are W-2 employees and must complete onboarding + acknowledge circulars. The bug is a data-pipeline failure, not a UI gate failure.
+Previous draft used `jsonb_array_elements(...)` inside a `CASE` expression. Postgres rejects set-returning functions inside `CASE` (`ERROR: set-returning functions are not allowed in CASE`). Fixed by normalizing single-object shifts into a 1-element array via `jsonb_build_array`, then unnesting in the `FROM` clause.
 
-## Root cause (confirmed in DB)
+## Task 1 — Hardened sync function (new migration `…_rebuild_roster_sync.sql`)
 
-Every `staff` / `operations` user has a `staff_onboarding` row. The lone `resident_doctor` (`ezark_muhd@yahoo.com`) does **not**, so they hit OnboardingWizard with no backing record and are stuck. Nothing in the codebase seeds `staff_onboarding` at user-creation time, and `admin-create-user` is hardcoded to `'locum'`.
+`CREATE OR REPLACE FUNCTION public.sync_roster_zone_assignments(p_roster_id uuid) RETURNS void`:
 
-## Fix — two layers + critical addendum
+1. `SELECT month, year, roster_data INTO v_month, v_year, v_data FROM public.saved_rosters WHERE id = p_roster_id;` → if not found, `RETURN;`.
+2. Collect every referenced `staffId` using the SRF-safe pattern:
+   ```sql
+   SELECT array_agg(DISTINCT (cell->>'staffId')::uuid)
+     INTO v_user_ids
+   FROM jsonb_each(v_data) day,
+        jsonb_each(day.value) shift,
+        jsonb_array_elements(
+          CASE jsonb_typeof(shift.value)
+            WHEN 'array'  THEN shift.value
+            WHEN 'object' THEN jsonb_build_array(shift.value)
+            ELSE '[]'::jsonb
+          END
+        ) AS cell
+   WHERE cell ? 'staffId';
+   ```
+3. **Targeted purge** — only this roster's users for this month/year:
+   ```sql
+   DELETE FROM public.roster_zone_assignments
+   WHERE source = 'roster'
+     AND EXTRACT(MONTH FROM work_date) = v_month
+     AND EXTRACT(YEAR  FROM work_date) = v_year
+     AND user_id = ANY(v_user_ids);
+   ```
+4. Re-insert by walking `jsonb_each(v_data) → jsonb_each(day_data) → shift_data`, with a `CASE` covering every existing legacy key (`S1/S2/S3`, `shift1/shift2/shift3`, `Daytime`, `Night`, `Hybrid`, `daytime`, `night`, `hybrid`) **plus** the new keys exactly:
+   ```
+   WHEN 'DOC_S1' THEN start_t := '08:00'; end_t := '13:00';
+   WHEN 'DOC_S2' THEN start_t := '14:00'; end_t := '19:00';
+   WHEN 'DOC_S3' THEN start_t := '20:00'; end_t := '23:59';
+   ```
+5. **Exact key write**: `shift_key` column receives the literal JSON key (`DOC_S1`, `shift1`, …). `ON CONFLICT (user_id, work_date, shift_key) DO UPDATE` for idempotency.
+6. **Backward-compat wrapper** keeps the `(integer, integer)` signature:
+   ```sql
+   CREATE OR REPLACE FUNCTION public.sync_roster_zone_assignments(_month int, _year int)
+   RETURNS void … AS $$
+   BEGIN
+     PERFORM public.sync_roster_zone_assignments(id)
+       FROM public.saved_rosters WHERE month = _month AND year = _year;
+   END $$;
+   ```
 
-### Layer 1: HR data pipeline
+## Task 2 — DELETE-aware trigger (SRF-safe)
 
-**A. Generalize `supabase/functions/admin-create-user/index.ts`**
-- Extend `BodySchema` with `role: z.enum(['locum','resident_doctor','staff','operations']).default('locum')`.
-- Pass `requested_role: role` into `user_metadata`.
-- Upsert `user_roles` with the chosen role.
-- For employee roles (`resident_doctor`, `staff`, `operations`) — NOT `locum` — upsert a blank `staff_onboarding` row:
-  ```ts
-  await admin.from('staff_onboarding').upsert({
-    user_id: newUserId,
-    onboarding_data: {},
-    job_description_acknowledged: false,
-    job_scope_acknowledged: false,
-    company_policy_acknowledged: false,
-    is_completed: false,
-  }, { onConflict: 'user_id' });
-  ```
+Drop the stale `trg_sync_roster_zone_assignments`. Create:
 
-**B. Generalize the dialog**
-- Rename `src/components/clinic/settings/AddLocumDialog.tsx` → `AddUserDialog.tsx` with a `role` prop ('locum' | 'resident_doctor'). Pass `role` to the edge function.
-- In `src/pages/clinic/settings/UserManagementSettings.tsx`, render two buttons: "Add Locum" and "Add Resident Doctor", each opening `AddUserDialog` with the matching role.
-
-**C. Backfill migration**
 ```sql
-INSERT INTO public.staff_onboarding (user_id, onboarding_data, is_completed)
-SELECT ur.user_id, '{}'::jsonb, false
-FROM public.user_roles ur
-WHERE ur.role IN ('resident_doctor','staff','operations')
-  AND NOT EXISTS (SELECT 1 FROM public.staff_onboarding so WHERE so.user_id = ur.user_id)
-ON CONFLICT (user_id) DO NOTHING;
+CREATE OR REPLACE FUNCTION public.trg_saved_rosters_sync()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_user_ids uuid[];
+BEGIN
+  IF TG_OP IN ('INSERT','UPDATE') THEN
+    PERFORM public.sync_roster_zone_assignments(NEW.id);
+
+    -- If month/year changed on UPDATE, also purge the OLD scope for OLD's users
+    IF TG_OP = 'UPDATE' AND (OLD.month <> NEW.month OR OLD.year <> NEW.year) THEN
+      SELECT array_agg(DISTINCT (cell->>'staffId')::uuid)
+        INTO v_user_ids
+      FROM jsonb_each(OLD.roster_data) day,
+           jsonb_each(day.value) shift,
+           jsonb_array_elements(
+             CASE jsonb_typeof(shift.value)
+               WHEN 'array'  THEN shift.value
+               WHEN 'object' THEN jsonb_build_array(shift.value)
+               ELSE '[]'::jsonb
+             END
+           ) AS cell
+      WHERE cell ? 'staffId';
+
+      DELETE FROM public.roster_zone_assignments
+        WHERE source = 'roster'
+          AND EXTRACT(MONTH FROM work_date) = OLD.month
+          AND EXTRACT(YEAR  FROM work_date) = OLD.year
+          AND user_id = ANY(v_user_ids);
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'DELETE' THEN
+    -- Row is gone after the delete commits; do the cleanup inline using OLD.
+    SELECT array_agg(DISTINCT (cell->>'staffId')::uuid)
+      INTO v_user_ids
+    FROM jsonb_each(OLD.roster_data) day,
+         jsonb_each(day.value) shift,
+         jsonb_array_elements(
+           CASE jsonb_typeof(shift.value)
+             WHEN 'array'  THEN shift.value
+             WHEN 'object' THEN jsonb_build_array(shift.value)
+             ELSE '[]'::jsonb
+           END
+         ) AS cell
+    WHERE cell ? 'staffId';
+
+    DELETE FROM public.roster_zone_assignments
+      WHERE source = 'roster'
+        AND EXTRACT(MONTH FROM work_date) = OLD.month
+        AND EXTRACT(YEAR  FROM work_date) = OLD.year
+        AND user_id = ANY(v_user_ids);
+    RETURN OLD;
+  END IF;
+
+  RETURN NULL;
+END $$;
+
+CREATE TRIGGER trg_saved_rosters_sync
+AFTER INSERT OR UPDATE OR DELETE ON public.saved_rosters
+FOR EACH ROW EXECUTE FUNCTION public.trg_saved_rosters_sync();
 ```
 
-After this, the existing resident doctor logs in → sees OnboardingWizard with a real row → completes it → reads circulars → reaches dashboard. HR compliance preserved.
-
-### Layer 2: Routing firewall (locums out of `/staff/*`)
-
-**`src/contexts/AuthContext.tsx`**
-- Remove `'locum'` from the `isStaffOrAdmin` union. Keep `isClinical` and `isLocum` unchanged.
-
-**`src/components/staff/StaffLayout.tsx`** (around line 260)
-```ts
-if (isLocum) { navigate('/clinic/queue', { replace: true }); return null; }
-if (!isStaffOrAdmin) { navigate('/'); return null; }
+**One-time backfill** at the end of the migration:
+```sql
+SELECT public.sync_roster_zone_assignments(id) FROM public.saved_rosters;
 ```
 
-Header's "Staff Portal" link uses `isStaffOrAdmin` and will hide for locums automatically.
+## Task 3 — `src/pages/staff/DrRosterView.tsx`
 
-### CRITICAL Addendum — prevent `/clinic` lockout for locums
+- Translate stored JSON into 3 logical slots, accepting both legacy and new keys per day:
+  - Slot 1 ← `shift1` OR `DOC_S1`
+  - Slot 2 ← `shift2` OR `DOC_S2`
+  - Slot 3 ← `shift3` OR `DOC_S3`
+- Update row headers + sublabels:
+  - **Doctor S1 (8am – 1pm)**
+  - **Doctor S2 (2pm – 7pm)**
+  - **Doctor S3 (8pm – 12am)**
+- Render each filled cell as a coloured pill using semantic tokens:
+  - S1 → `bg-primary/15 text-primary`
+  - S2 → `bg-accent text-accent-foreground`
+  - S3 → `bg-destructive/15 text-destructive`
+- Update hours constants: `SHIFT1_HOURS = 5`, `SHIFT2_HOURS = 5`, `SHIFT3_HOURS = 4`. Existing weekly/OT logic continues to work.
 
-The previous sprint set `requiredRole="any_staff"` as the front-door gate for all `/clinic/*` routes, and that gate is implemented in `src/components/ClinicProtectedRoute.tsx` line 72 as:
-```ts
-requiredRole === 'any_staff' ? isStaffOrAdmin : ...
-```
+No other UI files need editing — `rosterUtils.ts` and `Punch.tsx` already understand `DOC_S*`.
 
-If we drop `locum` from `isStaffOrAdmin` without patching this gate, locums will be:
-1. Bounced out of `/staff/*` by StaffLayout → redirected to `/clinic/queue`.
-2. Bounced out of `/clinic/*` by ClinicProtectedRoute → redirected to `/staff/dashboard`.
-3. Infinite redirect loop.
+## Stop-and-confirm
 
-**Patch in the same change:**
-`src/components/ClinicProtectedRoute.tsx` line 70-72:
-```ts
-const passesAnyStaff = isStaffOrAdmin || isLocum;
-
-const hasAccess =
-  requiredRole === 'any_staff'
-    ? passesAnyStaff
-    : ...
-```
-
-This decouples "Clinic Access" (clinic building keycard) from "Staff HR Access" (HR office keycard). Locums keep the former, lose the latter.
-
-## Files to change
-
-- `supabase/functions/admin-create-user/index.ts` — accept `role`, seed `staff_onboarding` for employee roles
-- `src/components/clinic/settings/AddLocumDialog.tsx` → rename to `AddUserDialog.tsx` with `role` prop
-- `src/pages/clinic/settings/UserManagementSettings.tsx` — add "Add Resident Doctor" CTA
-- `src/contexts/AuthContext.tsx` — drop `locum` from `isStaffOrAdmin`
-- `src/components/staff/StaffLayout.tsx` — explicit `isLocum → /clinic/queue` redirect
-- `src/components/ClinicProtectedRoute.tsx` — `passesAnyStaff = isStaffOrAdmin || isLocum`
-- New migration — backfill `staff_onboarding` for employee roles missing a row
-
-## Untouched
-
-- HR onboarding gate logic (`!isAdmin && !onboardingCompleted`)
-- Circular notice gate
-- `resident_doctor` permission flags (still clinical + ops, not admin)
-
-## Verification
-
-1. Existing resident doctor logs in (post-backfill) → OnboardingWizard with real row → completes → dashboard. Sidebar hides admin items.
-2. New resident doctor created via "Add Resident Doctor" → row exists immediately → same flow.
-3. Locum logs in → StaffLayout boots to `/clinic/queue`. ClinicProtectedRoute admits via `passesAnyStaff`. No redirect loop. No "Staff Portal" link in header.
-4. `staff` / `operations` / `admin` users — zero behavioral change.
+After the migration runs and the UI is updated, I'll pause and ask you to verify:
+1. Saving the Doctor roster only touches doctor users' rows; Nurse/CA rows for the same month are intact.
+2. Doctors can clock in inside the new windows (08–13, 14–19, 20–24) and `attendance_records.shift_key` reads `DOC_S1/2/3`.
+3. Deleting a `saved_rosters` row removes only that roster's users' assignments.
+4. `/staff/dr-roster` shows the new shift labels and coloured pills.
