@@ -81,7 +81,7 @@ export async function getUserShiftForDate(
 
   for (const roster of rosters) {
     const staffList = roster.staff_list as any[];
-    const isInRoster = staffList?.some((s: any) => s.staffId === userId);
+    const isInRoster = staffList?.some((s: any) => s.id === userId || s.staffId === userId);
     if (!isInRoster) continue;
 
     const rosterData = roster.roster_data as Record<string, any>;
@@ -135,7 +135,7 @@ export async function getUserShiftsForMonth(
 
   for (const roster of rosters) {
     const staffList = roster.staff_list as any[];
-    if (!staffList?.some((s: any) => s.staffId === userId)) continue;
+    if (!staffList?.some((s: any) => s.id === userId || s.staffId === userId)) continue;
 
     const rosterData = roster.roster_data as Record<string, any>;
     for (const [dayKey, dayData] of Object.entries(rosterData)) {
