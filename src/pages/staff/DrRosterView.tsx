@@ -10,11 +10,23 @@ import { cn } from '@/lib/utils';
 
 interface StaffMember { id: string; name: string; position: string; }
 interface RosterCell { staffId: string; staffName: string; }
-interface DoctorDayRoster { shift1: RosterCell | null; shift2: RosterCell | null; shift3: RosterCell | null; }
+interface DoctorDayRoster {
+  shift1?: RosterCell | null; shift2?: RosterCell | null; shift3?: RosterCell | null;
+  DOC_S1?: RosterCell | null; DOC_S2?: RosterCell | null; DOC_S3?: RosterCell | null;
+  [k: string]: RosterCell | null | undefined;
+}
 interface DoctorRosterData { [dateKey: string]: DoctorDayRoster; }
 
-const SHIFT1_HOURS = 6;
-const SHIFT2_HOURS = 6;
+// Normalise a stored day to the 3 logical doctor slots, accepting both legacy and new keys.
+function getSlot(day: DoctorDayRoster | undefined, n: 1 | 2 | 3): RosterCell | null {
+  if (!day) return null;
+  const legacy = day[`shift${n}` as 'shift1' | 'shift2' | 'shift3'];
+  const next = day[`DOC_S${n}` as 'DOC_S1' | 'DOC_S2' | 'DOC_S3'];
+  return (next ?? legacy) ?? null;
+}
+
+const SHIFT1_HOURS = 5;
+const SHIFT2_HOURS = 5;
 const SHIFT3_HOURS = 4;
 const WEEKLY_MIN = 45;
 const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -82,9 +94,10 @@ export default function DrRosterView() {
       const w = getISOWeek(day);
       const d = roster[dk];
       if (!d) continue;
-      if (d.shift1 && weekHrs[d.shift1.staffId]) weekHrs[d.shift1.staffId][w] = (weekHrs[d.shift1.staffId][w] || 0) + SHIFT1_HOURS;
-      if (d.shift2 && weekHrs[d.shift2.staffId]) weekHrs[d.shift2.staffId][w] = (weekHrs[d.shift2.staffId][w] || 0) + SHIFT2_HOURS;
-      if (d.shift3 && weekHrs[d.shift3.staffId]) weekHrs[d.shift3.staffId][w] = (weekHrs[d.shift3.staffId][w] || 0) + SHIFT3_HOURS;
+      const s1 = getSlot(d, 1), s2 = getSlot(d, 2), s3 = getSlot(d, 3);
+      if (s1 && weekHrs[s1.staffId]) weekHrs[s1.staffId][w] = (weekHrs[s1.staffId][w] || 0) + SHIFT1_HOURS;
+      if (s2 && weekHrs[s2.staffId]) weekHrs[s2.staffId][w] = (weekHrs[s2.staffId][w] || 0) + SHIFT2_HOURS;
+      if (s3 && weekHrs[s3.staffId]) weekHrs[s3.staffId][w] = (weekHrs[s3.staffId][w] || 0) + SHIFT3_HOURS;
     }
 
     return staffList.map(s => {
@@ -100,8 +113,9 @@ export default function DrRosterView() {
       });
       for (const dk of Object.keys(roster)) {
         const d = roster[dk];
-        if (d.shift1?.staffId === s.id && d.shift2?.staffId === s.id) dayBlocks++;
-        if (d.shift3?.staffId === s.id) nights++;
+        const s1 = getSlot(d, 1), s2 = getSlot(d, 2), s3 = getSlot(d, 3);
+        if (s1?.staffId === s.id && s2?.staffId === s.id) dayBlocks++;
+        if (s3?.staffId === s.id) nights++;
       }
       const totalHours = totalReg + totalOT;
       return { id: s.id, name: s.name, weeklyRegular: wr, weeklyOvertime: wo, totalRegular: totalReg, totalOvertime: totalOT, totalHours, daytimeBlocks: dayBlocks, nightShifts: nights, diffFromAvg: 0 };
@@ -186,50 +200,62 @@ export default function DrRosterView() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {/* Shift 1 */}
+                    {/* Doctor S1 */}
                     <TableRow>
                       <TableCell className="font-medium bg-muted/30 sticky left-0 z-10">
-                        <div className="text-xs">Shift 1</div>
-                        <div className="text-[10px] text-muted-foreground">8am–2pm</div>
+                        <div className="text-xs">Doctor S1</div>
+                        <div className="text-[10px] text-muted-foreground">8am – 1pm</div>
                       </TableCell>
                       {monthDays.map(day => {
                         const dk = format(day, 'yyyy-MM-dd');
-                        const cell = roster[dk]?.shift1;
+                        const cell = getSlot(roster[dk], 1);
                         return (
                           <TableCell key={dk} className={cn("text-center p-1 text-[11px]", isWeekend(day) && "bg-muted/20")}>
-                            {cell ? firstName(cell.staffName) : '—'}
+                            {cell ? (
+                              <span className="inline-block px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium">
+                                {firstName(cell.staffName)}
+                              </span>
+                            ) : '—'}
                           </TableCell>
                         );
                       })}
                     </TableRow>
-                    {/* Shift 2 */}
+                    {/* Doctor S2 */}
                     <TableRow>
                       <TableCell className="font-medium bg-muted/30 sticky left-0 z-10">
-                        <div className="text-xs">Shift 2</div>
-                        <div className="text-[10px] text-muted-foreground">2pm–8pm</div>
+                        <div className="text-xs">Doctor S2</div>
+                        <div className="text-[10px] text-muted-foreground">2pm – 7pm</div>
                       </TableCell>
                       {monthDays.map(day => {
                         const dk = format(day, 'yyyy-MM-dd');
-                        const cell = roster[dk]?.shift2;
+                        const cell = getSlot(roster[dk], 2);
                         return (
                           <TableCell key={dk} className={cn("text-center p-1 text-[11px]", isWeekend(day) && "bg-muted/20")}>
-                            {cell ? firstName(cell.staffName) : '—'}
+                            {cell ? (
+                              <span className="inline-block px-1.5 py-0.5 rounded bg-accent text-accent-foreground font-medium">
+                                {firstName(cell.staffName)}
+                              </span>
+                            ) : '—'}
                           </TableCell>
                         );
                       })}
                     </TableRow>
-                    {/* Shift 3 */}
+                    {/* Doctor S3 */}
                     <TableRow>
                       <TableCell className="font-medium bg-muted/30 sticky left-0 z-10">
-                        <div className="text-xs">Shift 3</div>
-                        <div className="text-[10px] text-muted-foreground">8pm–12am</div>
+                        <div className="text-xs">Doctor S3</div>
+                        <div className="text-[10px] text-muted-foreground">8pm – 12am</div>
                       </TableCell>
                       {monthDays.map(day => {
                         const dk = format(day, 'yyyy-MM-dd');
-                        const cell = roster[dk]?.shift3;
+                        const cell = getSlot(roster[dk], 3);
                         return (
                           <TableCell key={dk} className={cn("text-center p-1 text-[11px]", isWeekend(day) && "bg-muted/20")}>
-                            {cell ? firstName(cell.staffName) : '—'}
+                            {cell ? (
+                              <span className="inline-block px-1.5 py-0.5 rounded bg-destructive/15 text-destructive font-medium">
+                                {firstName(cell.staffName)}
+                              </span>
+                            ) : '—'}
                           </TableCell>
                         );
                       })}
@@ -243,11 +269,10 @@ export default function DrRosterView() {
                         const dk = format(day, 'yyyy-MM-dd');
                         const d = roster[dk];
                         const assigned = new Set<string>();
-                        if (d) {
-                          if (d.shift1) assigned.add(d.shift1.staffId);
-                          if (d.shift2) assigned.add(d.shift2.staffId);
-                          if (d.shift3) assigned.add(d.shift3.staffId);
-                        }
+                        const s1 = getSlot(d, 1), s2 = getSlot(d, 2), s3 = getSlot(d, 3);
+                        if (s1) assigned.add(s1.staffId);
+                        if (s2) assigned.add(s2.staffId);
+                        if (s3) assigned.add(s3.staffId);
                         const off = staffList.filter(s => !assigned.has(s.id));
                         return (
                           <TableCell key={dk} className={cn("text-center p-1 text-[10px] text-muted-foreground", isWeekend(day) && "bg-muted/20")}>

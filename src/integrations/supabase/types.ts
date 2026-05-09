@@ -4638,10 +4638,9 @@ export type Database = {
         Args: { _invoice_id: string; _items: Json }
         Returns: undefined
       }
-      sync_roster_zone_assignments: {
-        Args: { _month: number; _year: number }
-        Returns: undefined
-      }
+      sync_roster_zone_assignments:
+        | { Args: { _month: number; _year: number }; Returns: undefined }
+        | { Args: { p_roster_id: string }; Returns: undefined }
     }
     Enums: {
       app_role:
