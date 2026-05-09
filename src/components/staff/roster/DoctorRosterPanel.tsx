@@ -87,7 +87,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
 
   // Rules
   const [ruleMaxShifts, setRuleMaxShifts] = useState(true);
-  const [ruleValidCombos, setRuleValidCombos] = useState(true);
+  // Removed ruleValidCombos: S1/S2/S3 are independent slots; auto-generator still prefers pairing S1+S2.
   const [ruleMinHours, setRuleMinHours] = useState(true);
   const [ruleOvertime, setRuleOvertime] = useState(true);
   const [ruleFairDist, setRuleFairDist] = useState(true);
@@ -455,11 +455,16 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
         }
       }
 
-      newRoster[dateKey] = {
-        shift1: daytimeDoc,
-        shift2: daytimeDoc, // same doctor for S1+S2
-        shift3: nightDoc,
-      };
+      // Auto-generator preference: pair S1+S2 with the same daytime doctor for a 12h block.
+      // Slots are written independently — admins can later edit any single slot without affecting the others.
+      newRoster[dateKey] = { shift1: null, shift2: null, shift3: null };
+      if (daytimeDoc) {
+        newRoster[dateKey].shift1 = daytimeDoc;
+        newRoster[dateKey].shift2 = daytimeDoc;
+      }
+      if (nightDoc) {
+        newRoster[dateKey].shift3 = nightDoc;
+      }
 
       // Update consecutive day counters
       staffList.forEach(s => {
@@ -656,25 +661,19 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
     toast.success(`Filled ${filled} empty slot(s)`);
   };
 
-  // ─── Manual cell change ───
+  // ─── Manual cell change (S1/S2/S3 are fully independent) ───
   const updateCell = (dateKey: string, shift: 'shift1' | 'shift2' | 'shift3', newStaffId: string) => {
     if (!roster) return;
 
-    // Handle "None" — clear the shift cell
+    // Handle "None" — clear only the targeted shift cell
     if (newStaffId === '__none__') {
       setRoster(prev => {
         if (!prev) return prev;
         const updated = { ...prev };
         const dd = { ...updated[dateKey] };
-        if (shift === 'shift1') {
-          dd.shift1 = undefined;
-          if (ruleValidCombos) dd.shift2 = undefined;
-        } else if (shift === 'shift2') {
-          dd.shift2 = undefined;
-          if (ruleValidCombos) dd.shift1 = undefined;
-        } else {
-          dd.shift3 = undefined;
-        }
+        if (shift === 'shift1') dd.shift1 = undefined;
+        else if (shift === 'shift2') dd.shift2 = undefined;
+        else dd.shift3 = undefined;
         updated[dateKey] = dd;
         return updated;
       });
@@ -683,10 +682,6 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
         const updated = { ...prev };
         const s = new Set(updated[dateKey] || []);
         s.add(shift);
-        if ((shift === 'shift1' || shift === 'shift2') && ruleValidCombos) {
-          s.add('shift1');
-          s.add('shift2');
-        }
         updated[dateKey] = s;
         return updated;
       });
@@ -696,36 +691,15 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
     const staff = staffList.find(s => s.id === newStaffId);
     if (!staff) return;
 
-    const dayData = roster[dateKey];
     const cell: RosterCell = { staffId: staff.id, staffName: staff.name };
-
-    if (ruleValidCombos) {
-      if (shift === 'shift1' || shift === 'shift2') {
-        if (dayData.shift3?.staffId === newStaffId) {
-          toast.warning(`${firstName(staff.name)} is on night shift — invalid combo. Assigning anyway (override).`);
-        }
-      }
-      if (shift === 'shift3') {
-        if (dayData.shift1?.staffId === newStaffId || dayData.shift2?.staffId === newStaffId) {
-          toast.warning(`${firstName(staff.name)} is on daytime — invalid combo. Assigning anyway (override).`);
-        }
-      }
-    }
 
     setRoster(prev => {
       if (!prev) return prev;
       const updated = { ...prev };
       const dd = { ...updated[dateKey] };
-
-      if (shift === 'shift1') {
-        dd.shift1 = cell;
-        if (ruleValidCombos) dd.shift2 = cell;
-      } else if (shift === 'shift2') {
-        dd.shift2 = cell;
-        if (ruleValidCombos) dd.shift1 = cell;
-      } else {
-        dd.shift3 = cell;
-      }
+      if (shift === 'shift1') dd.shift1 = cell;
+      else if (shift === 'shift2') dd.shift2 = cell;
+      else dd.shift3 = cell;
       updated[dateKey] = dd;
       return updated;
     });
@@ -735,10 +709,6 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
       if (!updated[dateKey]) updated[dateKey] = new Set();
       const s = new Set(updated[dateKey]);
       s.add(shift);
-      if ((shift === 'shift1' || shift === 'shift2') && ruleValidCombos) {
-        s.add('shift1');
-        s.add('shift2');
-      }
       updated[dateKey] = s;
       return updated;
     });
@@ -908,13 +878,6 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
               <div>
                 <Label htmlFor="rule-max-shifts" className="text-sm font-medium">Max 2 shifts per day</Label>
                 <p className="text-xs text-slate-500">Doctor works either daytime block (S1+S2) or night (S3)</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <Checkbox id="rule-combos" checked={ruleValidCombos} onCheckedChange={v => setRuleValidCombos(!!v)} />
-              <div>
-                <Label htmlFor="rule-combos" className="text-sm font-medium">Valid shift combinations only</Label>
-                <p className="text-xs text-slate-500">S1+S2 together (12h) or S3 alone (4h). No S1+S3 or S2+S3</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
