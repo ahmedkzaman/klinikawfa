@@ -23,6 +23,7 @@ import {
   useCallPatient,
   useUpdateQueueEntry,
 } from '@/hooks/clinic/useQueueEntries';
+import { toMalayTitleCase } from '@/lib/textCase';
 import { useCurrentDoctor } from '@/hooks/clinic/useCurrentDoctor';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -299,7 +300,7 @@ export default function Consultation() {
                 filtered.map((entry, i) => (
                   <TableRow key={entry.id} className="border-slate-100 hover:bg-slate-50/60">
                     <TableCell>
-                      <div className="font-medium text-slate-800">{entry.patients?.name ?? '—'}</div>
+                      <div className="font-medium text-slate-800">{entry.patients?.name ? toMalayTitleCase(entry.patients.name) : '—'}</div>
                       <div className="text-xs text-slate-500">
                         {formatAge(entry.patients?.date_of_birth)}
                       </div>

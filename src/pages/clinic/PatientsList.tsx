@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePatients } from '@/hooks/clinic/usePatients';
+import { toMalayTitleCase } from '@/lib/textCase';
 import { RegisterPatientDialog } from '@/components/clinic/RegisterPatientDialog';
 import { PatientProfileSheet } from '@/components/patients/PatientProfileSheet';
 import { CheckInWalkInDialog } from '@/components/clinic/CheckInWalkInDialog';
@@ -152,7 +153,7 @@ export default function PatientsList() {
                           key={p.id}
                           className="border-slate-100 hover:bg-slate-50/60"
                         >
-                          <TableCell className="font-medium text-slate-800">{p.name}</TableCell>
+                          <TableCell className="font-medium text-slate-800">{toMalayTitleCase(p.name)}</TableCell>
                           <TableCell className="text-slate-600">{p.phone ?? '—'}</TableCell>
                           <TableCell className="font-mono text-xs text-slate-500">
                             {p.national_id ?? '—'}

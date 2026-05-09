@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { usePatients } from '@/hooks/clinic/usePatients';
 import type { PatientRow } from '@/types/clinic';
 import { cn } from '@/lib/utils';
+import { toMalayTitleCase } from '@/lib/textCase';
 
 interface PatientPickerProps {
   value: PatientRow | null;
@@ -91,7 +92,7 @@ export function PatientPicker({ value, onChange, onRegisterNew }: PatientPickerP
                 >
                   <Check className="h-4 w-4 opacity-0" />
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium text-foreground truncate">{p.name}</p>
+                    <p className="font-medium text-foreground truncate">{toMalayTitleCase(p.name)}</p>
                     <p className="text-xs text-muted-foreground truncate">
                       {p.phone ?? '—'}
                       {p.national_id ? ` · ${p.national_id}` : ''}

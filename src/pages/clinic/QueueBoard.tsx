@@ -27,6 +27,7 @@ import {
   type QueueEntryWithJoins,
 } from '@/types/clinic';
 import { cn } from '@/lib/utils';
+import { toMalayTitleCase } from '@/lib/textCase';
 import {
   bento,
   bentoHeader,
@@ -82,7 +83,7 @@ function QueueCard({
         )}
       </div>
       <p className="font-medium text-sm text-slate-800 truncate">
-        {entry.patients?.name ?? 'Unknown patient'}
+        {entry.patients?.name ? toMalayTitleCase(entry.patients.name) : 'Unknown patient'}
       </p>
       <div className="flex items-center justify-between mt-2 gap-2">
         <span
@@ -267,7 +268,7 @@ export default function QueueBoard() {
               )}
             </SheetTitle>
             <SheetDescription className="text-slate-500">
-              {activeEntry?.patients?.name ?? 'Unknown patient'}
+              {activeEntry?.patients?.name ? toMalayTitleCase(activeEntry.patients.name) : 'Unknown patient'}
             </SheetDescription>
           </SheetHeader>
 
