@@ -704,7 +704,6 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
       if (!updated[dateKey]) updated[dateKey] = new Set();
       const s = new Set(updated[dateKey]);
       s.add(shift);
-      }
       updated[dateKey] = s;
       return updated;
     });
