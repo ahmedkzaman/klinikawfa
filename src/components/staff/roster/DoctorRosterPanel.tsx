@@ -87,7 +87,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
 
   // Rules
   const [ruleMaxShifts, setRuleMaxShifts] = useState(true);
-  const [ruleValidCombos, setRuleValidCombos] = useState(true);
+  // Removed ruleValidCombos: S1/S2/S3 are independent slots; auto-generator still prefers pairing S1+S2.
   const [ruleMinHours, setRuleMinHours] = useState(true);
   const [ruleOvertime, setRuleOvertime] = useState(true);
   const [ruleFairDist, setRuleFairDist] = useState(true);
