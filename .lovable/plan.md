@@ -1,34 +1,34 @@
-# Sprint 1 — Core Shell
+# Sprint 2 — Dashboard.tsx & Punch.tsx
 
-Presentation-only update to `src/components/staff/StaffLayout.tsx`. No routing, logic, or guard changes. All `dark:` variants removed from this file.
+Presentation only. No data, hooks, routing, or guard changes. Strip `dark:` variants in touched files.
 
-## Changes to `StaffLayout.tsx`
+## Shared changes (both files)
 
-### Outer canvas
-- Root wrapper: `bg-background` → `bg-slate-50`.
-- Loader / "Important Notice" gate screens: `bg-background` → `bg-slate-50`. Notice card becomes a white rounded-2xl bento card (`bg-white rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.03)] p-6`) with blue-600 acknowledge button.
-- Main scroll column: `bg-slate-50`. Drop the `container` class on `<main>` so each page can apply its own `pageShell` / `pageInner` later. Replace with simple `flex-1` + light padding fallback.
+- Wrap entire return in `<div className={pageShell}><div className={pageInner}> … </div></div>`.
+- Page header: `<h1 className="text-2xl font-bold tracking-tight text-slate-800">` + `<p className="text-sm text-slate-500">`.
+- Replace shadcn `<Card>` with `<div className={cn(bento, 'p-4')}>` (or `p-5/p-6`); drop `<CardHeader>/<CardTitle>/<CardDescription>/<CardContent>` and use semantic `<h2 className={bentoHeader}>` + `<p className="text-sm text-slate-500">`.
+- Loader spinners → `text-blue-600`.
 
-### Desktop + Mobile sidebar
-- Surface: `bg-white border-r border-slate-100` (no shadow).
-- Logo header: `border-b border-slate-100`; brand text `text-slate-800`.
-- "Open Clinic System" CTA: `rounded-xl bg-blue-600 hover:bg-blue-700 text-white`.
-- Section labels (Staff / Applications / Admin / Website): `text-xs font-bold text-slate-500 uppercase tracking-wider`.
-- Group dividers: `border-slate-100`.
-- Idle nav links: `text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-xl`.
-- Active nav links: `bg-blue-50 text-blue-700 font-medium rounded-xl` (replaces `bg-primary/10 text-primary`).
-- Inbox unread pill: `bg-rose-500 text-white`.
-- Footer (sign-out): `border-t border-slate-100`, email `text-slate-500`, sign-out button `text-slate-600 hover:bg-slate-50`.
+## `src/pages/staff/Dashboard.tsx`
 
-### Top header bar
-- `bg-white/90 backdrop-blur border-b border-slate-100`.
-- Email text: `text-slate-500`.
-- Mobile menu trigger: `text-slate-600 hover:bg-slate-50`.
+- Notifications card: bento with `border border-blue-100 bg-blue-50/40` accent (preserved blue tint), header uses `bentoHeader`, "Mark all read" button stays ghost but `text-blue-700`. Unread count pill → `bg-blue-600 text-white`. Each notification row → `softTile` with `hover:bg-slate-100`.
+- Stat cards (Current Status, Today's Punches): bento, label `fieldLabel`, value `text-2xl font-bold text-slate-800`, helper `text-xs text-slate-500`. Status icon colors: green-500 / slate-400 stay.
+- Quick Actions card: bento. Primary CTA `primaryBtn`; secondary `secondaryBtn`.
+- Today's Timeline card: bento, header `bentoHeader`, each row uses slate dots (in=emerald-500, out=rose-500), text `text-slate-700` / `text-slate-500`.
+- `KanbanBoard` and `DailyReportingCard` stay rendered as-is (Sprint 4 will restyle them); they'll inherit the slate-50 canvas.
 
-## Out of scope for this sprint
-- Inner page contents (Dashboard, Punch, etc.) — handled in Sprint 2+.
-- `bentoTokens.ts` itself — reused as-is, not modified.
-- Auth, onboarding, circular-notice gating logic — untouched.
+## `src/pages/staff/Punch.tsx`
+
+- Outer container: `pageShell` + `pageInner` with an inner `max-w-lg mx-auto` for the form column.
+- Active Shift bento: header `bentoHeader` ("Active Shift"), shift label text `text-slate-700`. Badges (`shiftKey`, "cross-midnight") use `softBadge` + variant; clock-skew alert keeps `Alert variant="destructive"`.
+- Location Status bento: header `bentoHeader` ("Location Status"), description `text-sm text-slate-500`. Accuracy line keeps semantic colors (emerald-600 / amber-600 / rose-600). Inside/outside zone block uses `rounded-xl` with emerald-50/border-emerald-200 or rose-50/border-rose-200 (drop `dark:` variants). Refresh button → `secondaryBtn`.
+- Record Attendance bento: header `bentoHeader` ("Record Attendance"), last-punch line `text-sm text-slate-500`. The big Punch button keeps semantic green/red (emerald-600 / rose-600 with `rounded-xl h-20 text-lg`) — this is the "carve-out" for the punch CTA per Sprint 1's note (semantic urgency wins over blue brand). Helper text `text-slate-500`.
+- `FaceVerificationModal` invocation untouched (camera frame + logic).
+
+## Out of scope
+- `KanbanBoard`, `DailyReportingCard`, `FaceVerificationModal` internals (Sprint 4).
+- Any business logic, geofence math, RPC, or state.
 
 ## Verification
-Open `/staff/dashboard` after the change: white sidebar with blue-50 active pill, slate-50 page canvas, white frosted top header. No dark seams remain in the shell.
+- `/staff/dashboard` shows slate-50 canvas, white bento cards, blue accents, no dark seams.
+- `/staff/punch` shows three bento cards in a centered column; punch button still green/red; camera modal unchanged.
