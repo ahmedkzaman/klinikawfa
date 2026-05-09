@@ -91,7 +91,11 @@ export function EditPatientDialog({
 
   // Re-sync form whenever a different patient is loaded into the dialog.
   useEffect(() => {
-    if (open) reset(buildDefaults(patient));
+    if (open) {
+      reset(buildDefaults(patient));
+      setMykadConsent(false);
+      setJustRead(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patient.id, open]);
 
