@@ -75,14 +75,26 @@ export async function getUserShiftForDate(
 
   if (!rosters || rosters.length === 0) return null;
 
+  const targetDateStr = format(date, 'yyyy-MM-dd');
+  const paddedDay = String(dayOfMonth).padStart(2, '0');
+  const unpaddedDay = String(dayOfMonth);
+
   for (const roster of rosters) {
     const staffList = roster.staff_list as any[];
     const isInRoster = staffList?.some((s: any) => s.staffId === userId);
     if (!isInRoster) continue;
 
     const rosterData = roster.roster_data as Record<string, any>;
-    const dayKey = String(dayOfMonth);
-    const dayData = rosterData[dayKey];
+
+    // Find the matching day key — supports yyyy-MM-dd or padded/unpadded day-of-month
+    let dayData: any = null;
+    for (const [k, v] of Object.entries(rosterData)) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(k)) {
+        if (k === targetDateStr) { dayData = v; break; }
+      } else if (k === paddedDay || k === unpaddedDay) {
+        dayData = v; break;
+      }
+    }
     if (!dayData) continue;
 
     // Check each shift key (S1, S2, S3, Daytime, Night, etc.)
