@@ -9,12 +9,18 @@ export interface MyKadPayload {
   address?: string;
 }
 
+interface BridgeResponse {
+  success: boolean;
+  message?: string;
+  data?: MyKadPayload;
+}
+
 const BRIDGE_URL =
   (import.meta.env.VITE_MYKAD_BRIDGE_URL as string | undefined) ||
   'http://localhost:8787/read-mykad';
 
-const ERROR_MSG =
-  'Could not connect to IC Reader. Ensure the bridge software is running.';
+const BRIDGE_DOWN_MSG =
+  'MyKad Bridge is not running. Please open the MyKad Bridge app on this computer.';
 
 export function useMyKadReader() {
   const [isReading, setIsReading] = useState(false);
@@ -22,23 +28,29 @@ export function useMyKadReader() {
   const readMyKad = useCallback(async (): Promise<MyKadPayload | null> => {
     setIsReading(true);
     try {
-      const res = await fetch(BRIDGE_URL, {
-        method: 'GET',
-        signal: AbortSignal.timeout(8000),
-      });
+      let res: Response;
+      try {
+        res = await fetch(BRIDGE_URL, {
+          method: 'GET',
+          signal: AbortSignal.timeout(8000),
+        });
+      } catch {
+        // Network failure / CORS / timeout / mixed-content block
+        toast.error(BRIDGE_DOWN_MSG);
+        return null;
+      }
+
       if (!res.ok) {
-        toast.error(ERROR_MSG);
+        toast.error('MyKad Bridge returned an unexpected error.');
         return null;
       }
-      const result = (await res.json()) as { success: boolean; data: MyKadPayload };
+
+      const result = (await res.json()) as BridgeResponse;
       if (!result.success) {
-        toast.error('IC Reader returned an error.');
+        toast.error(result.message || 'IC Reader returned an error.');
         return null;
       }
-      return result.data;
-    } catch {
-      toast.error(ERROR_MSG);
-      return null;
+      return result.data ?? null;
     } finally {
       setIsReading(false);
     }
