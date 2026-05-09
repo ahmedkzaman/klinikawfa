@@ -277,6 +277,39 @@ export default function StaffPunch() {
     return null;
   }, [activeShift, nearestShift, geofenceResult, nextPunchType, buffers, now, rosterRows.length, manualAssignments.length]);
 
+  // Compute the resolved punch-in window for display + diagnostics
+  const punchInWindow = useMemo(() => {
+    if (!activeShift) return null;
+    const open = new Date(activeShift.start.getTime() - activeShift.buffers.clock_in_early_min * 60_000);
+    const close = new Date(activeShift.start.getTime() + activeShift.buffers.clock_in_late_min * 60_000);
+    return { open, close };
+  }, [activeShift]);
+
+  // Forensic logging: when the user is blocked because the punch-in window
+  // closed, write one row to punch_block_log so we can diagnose post-mortem.
+  useEffect(() => {
+    if (!user?.id || !activeShift || !guardMessage) return;
+    if (!guardMessage.startsWith('Punch-in window has closed')) return;
+    const key = `${activeShift.workDate}|${activeShift.shiftKey ?? 'manual'}`;
+    if (loggedBlockKey === key) return;
+    setLoggedBlockKey(key);
+    const closeAt = new Date(activeShift.start.getTime() + activeShift.buffers.clock_in_late_min * 60_000);
+    const payload = {
+      user_id: user.id,
+      client_now: new Date().toISOString(),
+      client_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      shift_key: activeShift.shiftKey,
+      shift_start_iso: activeShift.start.toISOString(),
+      close_at_iso: closeAt.toISOString(),
+      clock_in_late_min: activeShift.buffers.clock_in_late_min,
+      buffer_source: activeShift.bufferSource,
+      roster_row_count: rosterRows.length,
+      guard_reason: guardMessage,
+    };
+    console.warn('[punch_block_log]', payload);
+    void supabase.from('punch_block_log' as any).insert(payload as any);
+  }, [guardMessage, activeShift, user?.id, rosterRows.length, loggedBlockKey]);
+
   const handlePunchClick = () => {
     if (!geo.latitude || !geo.longitude || !geofenceResult?.isWithinZone) {
       toast({ title: 'Cannot Punch', description: 'You must be within a valid zone.', variant: 'destructive' });
