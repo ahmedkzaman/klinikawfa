@@ -109,7 +109,7 @@ export function RegisterPatientDialog({
                 <ReadMyKadButton
                   onRead={(data) => {
                     if (data.name) setValue('name', data.name, { shouldValidate: true, shouldDirty: true });
-                    const ic = cleanIC(data.ic_number);
+                    const ic = cleanIC(data.ic_no);
                     if (ic) setValue('national_id', ic, { shouldValidate: true, shouldDirty: true });
                     const dob = mapDOB(data.dob);
                     if (dob) setValue('date_of_birth', dob, { shouldValidate: true, shouldDirty: true });
