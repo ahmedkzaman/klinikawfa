@@ -27,10 +27,10 @@ import { logicalWorkDateOf } from '@/lib/attendanceUtils';
 import { ManualPunchDialog } from '@/components/staff/admin/ManualPunchDialog';
 
 const COLORS = {
-  working: 'hsl(142, 76%, 36%)',
-  leave: 'hsl(217, 91%, 60%)',
-  absent: 'hsl(0, 84%, 60%)',
-  late: 'hsl(45, 93%, 47%)',
+  working: chartColors.emerald,
+  leave: chartColors.blue,
+  absent: chartColors.rose,
+  late: chartColors.amber,
 };
 
 const chartConfig = {
