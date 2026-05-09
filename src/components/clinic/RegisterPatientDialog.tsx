@@ -273,6 +273,10 @@ export function RegisterPatientDialog({
           </div>
 
           <div>
+            <Label htmlFor="address">Address</Label>
+            <Textarea id="address" rows={2} placeholder="Auto-filled from MyKad" {...register('address')} />
+          </div>
+          <div>
             <Label htmlFor="allergies">Allergies</Label>
             <Textarea id="allergies" rows={2} {...register('allergies')} />
           </div>
