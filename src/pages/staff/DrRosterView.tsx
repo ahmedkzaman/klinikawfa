@@ -200,50 +200,62 @@ export default function DrRosterView() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {/* Shift 1 */}
+                    {/* Doctor S1 */}
                     <TableRow>
                       <TableCell className="font-medium bg-muted/30 sticky left-0 z-10">
-                        <div className="text-xs">Shift 1</div>
-                        <div className="text-[10px] text-muted-foreground">8am–2pm</div>
+                        <div className="text-xs">Doctor S1</div>
+                        <div className="text-[10px] text-muted-foreground">8am – 1pm</div>
                       </TableCell>
                       {monthDays.map(day => {
                         const dk = format(day, 'yyyy-MM-dd');
-                        const cell = roster[dk]?.shift1;
+                        const cell = getSlot(roster[dk], 1);
                         return (
                           <TableCell key={dk} className={cn("text-center p-1 text-[11px]", isWeekend(day) && "bg-muted/20")}>
-                            {cell ? firstName(cell.staffName) : '—'}
+                            {cell ? (
+                              <span className="inline-block px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium">
+                                {firstName(cell.staffName)}
+                              </span>
+                            ) : '—'}
                           </TableCell>
                         );
                       })}
                     </TableRow>
-                    {/* Shift 2 */}
+                    {/* Doctor S2 */}
                     <TableRow>
                       <TableCell className="font-medium bg-muted/30 sticky left-0 z-10">
-                        <div className="text-xs">Shift 2</div>
-                        <div className="text-[10px] text-muted-foreground">2pm–8pm</div>
+                        <div className="text-xs">Doctor S2</div>
+                        <div className="text-[10px] text-muted-foreground">2pm – 7pm</div>
                       </TableCell>
                       {monthDays.map(day => {
                         const dk = format(day, 'yyyy-MM-dd');
-                        const cell = roster[dk]?.shift2;
+                        const cell = getSlot(roster[dk], 2);
                         return (
                           <TableCell key={dk} className={cn("text-center p-1 text-[11px]", isWeekend(day) && "bg-muted/20")}>
-                            {cell ? firstName(cell.staffName) : '—'}
+                            {cell ? (
+                              <span className="inline-block px-1.5 py-0.5 rounded bg-accent text-accent-foreground font-medium">
+                                {firstName(cell.staffName)}
+                              </span>
+                            ) : '—'}
                           </TableCell>
                         );
                       })}
                     </TableRow>
-                    {/* Shift 3 */}
+                    {/* Doctor S3 */}
                     <TableRow>
                       <TableCell className="font-medium bg-muted/30 sticky left-0 z-10">
-                        <div className="text-xs">Shift 3</div>
-                        <div className="text-[10px] text-muted-foreground">8pm–12am</div>
+                        <div className="text-xs">Doctor S3</div>
+                        <div className="text-[10px] text-muted-foreground">8pm – 12am</div>
                       </TableCell>
                       {monthDays.map(day => {
                         const dk = format(day, 'yyyy-MM-dd');
-                        const cell = roster[dk]?.shift3;
+                        const cell = getSlot(roster[dk], 3);
                         return (
                           <TableCell key={dk} className={cn("text-center p-1 text-[11px]", isWeekend(day) && "bg-muted/20")}>
-                            {cell ? firstName(cell.staffName) : '—'}
+                            {cell ? (
+                              <span className="inline-block px-1.5 py-0.5 rounded bg-destructive/15 text-destructive font-medium">
+                                {firstName(cell.staffName)}
+                              </span>
+                            ) : '—'}
                           </TableCell>
                         );
                       })}
@@ -257,11 +269,10 @@ export default function DrRosterView() {
                         const dk = format(day, 'yyyy-MM-dd');
                         const d = roster[dk];
                         const assigned = new Set<string>();
-                        if (d) {
-                          if (d.shift1) assigned.add(d.shift1.staffId);
-                          if (d.shift2) assigned.add(d.shift2.staffId);
-                          if (d.shift3) assigned.add(d.shift3.staffId);
-                        }
+                        const s1 = getSlot(d, 1), s2 = getSlot(d, 2), s3 = getSlot(d, 3);
+                        if (s1) assigned.add(s1.staffId);
+                        if (s2) assigned.add(s2.staffId);
+                        if (s3) assigned.add(s3.staffId);
                         const off = staffList.filter(s => !assigned.has(s.id));
                         return (
                           <TableCell key={dk} className={cn("text-center p-1 text-[10px] text-muted-foreground", isWeekend(day) && "bg-muted/20")}>
