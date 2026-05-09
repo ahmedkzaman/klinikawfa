@@ -58,7 +58,14 @@ export default function AdminAttendanceReview() {
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [searchQuery, setSearchQuery] = useState('');
   const [positionFilter, setPositionFilter] = useState('all');
-  const [drillDown, setDrillDown] = useState<string | null>(null);
+  type DrillDown =
+    | { kind: 'category'; category: 'working' | 'leave' | 'absent' | 'late' }
+    | { kind: 'staff'; userId: string; fullName: string };
+  const [drillDown, setDrillDown] = useState<DrillDown | null>(null);
+
+  const toggleCategoryDrill = (category: 'working' | 'leave' | 'absent' | 'late') => {
+    setDrillDown(prev => (prev?.kind === 'category' && prev.category === category ? null : { kind: 'category', category }));
+  };
   const [allShifts, setAllShifts] = useState<Record<string, Record<string, ShiftInfo>>>({});
 
   const monthStart = startOfMonth(new Date(selectedYear, selectedMonth));
