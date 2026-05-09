@@ -23,6 +23,7 @@ import {
   mapGender,
   mapDOB,
 } from '@/components/clinic/ReadMyKadButton';
+import { toMalayTitleCase, toUpperSafe } from '@/lib/textCase';
 import type { PatientRow } from '@/types/clinic';
 
 type FormData = PatientFormData;
@@ -68,7 +69,7 @@ export function RegisterPatientDialog({
     setSubmitting(true);
     try {
       const created = await create.mutateAsync({
-        name: data.name,
+        name: toUpperSafe(data.name),
         phone: data.phone || null,
         national_id: data.national_id?.trim() || null,
         passport_no: data.passport_no?.trim() || null,
@@ -81,7 +82,7 @@ export function RegisterPatientDialog({
         default_panel_id: data.default_panel_id || null,
         allergies: data.allergies || null,
         underlying_conditions: data.underlying_conditions || null,
-        address: data.address?.trim() || null,
+        address: data.address ? toUpperSafe(data.address) : null,
       });
       toast.success(`Patient registered: ${created.name}`);
       reset();
@@ -126,7 +127,17 @@ export function RegisterPatientDialog({
 
           <div>
             <Label htmlFor="name">Full name *</Label>
-            <Input id="name" className="capitalize" {...register('name')} />
+            <Input
+              id="name"
+              {...register('name', {
+                onBlur: (e) => {
+                  const formatted = toMalayTitleCase(e.target.value);
+                  if (formatted !== e.target.value) {
+                    setValue('name', formatted, { shouldValidate: true, shouldDirty: true });
+                  }
+                },
+              })}
+            />
             {errors.name && <p className="text-sm text-destructive mt-1">{errors.name.message}</p>}
           </div>
 
@@ -137,14 +148,14 @@ export function RegisterPatientDialog({
                 <ReadMyKadButton
                   disabled={!mykadConsent}
                   onRead={(data) => {
-                    if (data.name) setValue('name', data.name, { shouldValidate: true, shouldDirty: true });
+                    if (data.name) setValue('name', toMalayTitleCase(data.name), { shouldValidate: true, shouldDirty: true });
                     const ic = cleanIC(data.ic_no);
                     if (ic) setValue('national_id', ic, { shouldValidate: true, shouldDirty: true });
                     const dob = mapDOB(data.dob);
                     if (dob) setValue('date_of_birth', dob, { shouldValidate: true, shouldDirty: true });
                     const g = mapGender(data.gender);
                     if (g) setValue('gender', g, { shouldValidate: true, shouldDirty: true });
-                    if (data.address) setValue('address', data.address, { shouldValidate: true, shouldDirty: true });
+                    if (data.address) setValue('address', toUpperSafe(data.address), { shouldValidate: true, shouldDirty: true });
                     setJustRead(true);
                     toast.success('MyKad read successfully');
                   }}
@@ -275,7 +286,7 @@ export function RegisterPatientDialog({
 
           <div>
             <Label htmlFor="address">Address</Label>
-            <Textarea id="address" rows={2} className="capitalize" placeholder="Auto-filled from MyKad" {...register('address')} />
+            <Textarea id="address" rows={2} placeholder="Auto-filled from MyKad" {...register('address')} />
           </div>
           <div>
             <Label htmlFor="allergies">Allergies</Label>
