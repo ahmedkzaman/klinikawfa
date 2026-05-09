@@ -157,6 +157,8 @@ export default function StaffPunch() {
   const [bufferSettings, setBufferSettings] = useState<any[]>([]);
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [now, setNow] = useState<Date>(new Date());
+  const [serverSkewMs, setServerSkewMs] = useState<number | null>(null);
+  const [loggedBlockKey, setLoggedBlockKey] = useState<string | null>(null);
 
   useEffect(() => { if (user) fetchData(); }, [user]);
   useEffect(() => { geo.getCurrentPosition(); }, []);
@@ -165,6 +167,28 @@ export default function StaffPunch() {
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(id);
+  }, []);
+
+  // One-shot device-clock vs server-clock check
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const t0 = Date.now();
+      const { data, error } = await supabase.rpc('get_server_now' as any).maybeSingle?.() ?? { data: null, error: null };
+      // Fallback: use response Date header (always present)
+      try {
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/auth/v1/health`, { method: 'GET' });
+        const dateHeader = res.headers.get('date');
+        if (!cancelled && dateHeader) {
+          const serverMs = new Date(dateHeader).getTime();
+          const rtt = (Date.now() - t0) / 2;
+          setServerSkewMs(Date.now() - rtt - serverMs);
+        }
+      } catch { /* ignore */ }
+      // Suppress unused warnings
+      void data; void error;
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const fetchData = async () => {
