@@ -161,7 +161,7 @@ export function EditPatientDialog({
 
           <div>
             <Label htmlFor="edit_name">Full name *</Label>
-            <Input id="edit_name" {...register('name')} />
+            <Input id="edit_name" className="capitalize" {...register('name')} />
             {errors.name && (
               <p className="text-sm text-destructive mt-1">{errors.name.message}</p>
             )}
@@ -331,7 +331,7 @@ export function EditPatientDialog({
 
           <div>
             <Label htmlFor="edit_address">Address</Label>
-            <Textarea id="edit_address" rows={2} placeholder="Auto-filled from MyKad" {...register('address')} />
+            <Textarea id="edit_address" rows={2} className="capitalize" placeholder="Auto-filled from MyKad" {...register('address')} />
           </div>
           <div>
             <Label htmlFor="edit_allergies">Allergies</Label>

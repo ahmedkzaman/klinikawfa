@@ -126,7 +126,7 @@ export function RegisterPatientDialog({
 
           <div>
             <Label htmlFor="name">Full name *</Label>
-            <Input id="name" {...register('name')} />
+            <Input id="name" className="capitalize" {...register('name')} />
             {errors.name && <p className="text-sm text-destructive mt-1">{errors.name.message}</p>}
           </div>
 
@@ -275,7 +275,7 @@ export function RegisterPatientDialog({
 
           <div>
             <Label htmlFor="address">Address</Label>
-            <Textarea id="address" rows={2} placeholder="Auto-filled from MyKad" {...register('address')} />
+            <Textarea id="address" rows={2} className="capitalize" placeholder="Auto-filled from MyKad" {...register('address')} />
           </div>
           <div>
             <Label htmlFor="allergies">Allergies</Label>
