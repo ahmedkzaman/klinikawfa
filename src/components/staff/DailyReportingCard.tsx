@@ -204,7 +204,7 @@ export default function DailyReportingCard() {
   };
 
   const StatusIcon = ({ done }: { done: boolean }) =>
-    done ? <CheckCircle className="h-4 w-4 text-green-500" /> : <Clock className="h-4 w-4 text-muted-foreground" />;
+    done ? <CheckCircle className="h-4 w-4 text-emerald-500" /> : <Clock className="h-4 w-4 text-slate-400" />;
 
   const PhotoPreviewBadge = ({ url, label }: { url: string; label: string }) => (
     <button
