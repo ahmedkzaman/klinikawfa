@@ -222,17 +222,13 @@ export default function DailyReportingCard() {
 
   if (rosterChecked && !shiftInfo) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">📋 Daily Reporting — {format(now, 'dd MMM yyyy')}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-3 p-4 rounded-lg border border-dashed text-muted-foreground">
-            <AlertCircle className="h-5 w-5 shrink-0" />
-            <p className="text-sm">You are not on duty today. No daily tasks required.</p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className={cn(bento, 'p-4 md:p-5')}>
+        <h2 className={bentoHeader}>📋 Daily Reporting — {format(now, 'dd MMM yyyy')}</h2>
+        <div className="flex items-center gap-3 p-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 text-slate-500">
+          <AlertCircle className="h-5 w-5 shrink-0" />
+          <p className="text-sm">You are not on duty today. No daily tasks required.</p>
+        </div>
+      </div>
     );
   }
 
