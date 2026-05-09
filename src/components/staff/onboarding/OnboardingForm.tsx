@@ -111,7 +111,7 @@ export function OnboardingForm({ userId, onComplete }: OnboardingFormProps) {
         <p className="text-sm text-slate-500">{subStepTitles[subStep]}</p>
         <div className="flex gap-1 mt-2">
           {[0, 1, 2, 3].map(i => (
-            <div key={i} className={cn('h-1.5 flex-1 rounded-full', i <= subStep ? 'bg-primary' : 'bg-muted')} />
+            <div key={i} className={cn('h-1.5 flex-1 rounded-full', i <= subStep ? 'bg-blue-600' : 'bg-slate-200')} />
           ))}
         </div>
       </CardHeader>
