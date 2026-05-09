@@ -68,7 +68,7 @@ function SidebarNav({ isAdmin, isOpsOrAdmin, pathname, onLinkClick, unreadNotice
   return (
     <nav className="flex flex-col flex-1 py-4">
       <div className="px-4 mb-2">
-        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Staff</span>
+        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Staff</span>
       </div>
       <div className="space-y-1 px-2">
         {staffNavItems.map((item) => (
