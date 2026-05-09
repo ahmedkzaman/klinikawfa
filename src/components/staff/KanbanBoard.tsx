@@ -177,7 +177,7 @@ export default function KanbanBoard() {
             <div><Label>Deadline</Label>
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" className={cn('w-full justify-start text-left font-normal', !newDeadline && 'text-muted-foreground')}>
+                  <Button variant="outline" className={cn('w-full justify-start text-left font-normal', !newDeadline && 'text-slate-500')}>
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {newDeadline ? format(newDeadline, 'MMM d, yyyy') : 'No deadline'}
                   </Button>
