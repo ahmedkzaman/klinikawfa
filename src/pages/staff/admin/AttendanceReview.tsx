@@ -41,6 +41,7 @@ const chartConfig = {
 };
 
 type DetailRecord = {
+  userId: string;
   fullName: string;
   date: string;
   expectedClockIn: string;
@@ -49,6 +50,16 @@ type DetailRecord = {
   status: string;
   severity: LatenessSeverity;
   workHours: string;
+};
+
+type StaffSummary = {
+  userId: string;
+  fullName: string;
+  position: string | null;
+  present: number;
+  late: number;
+  absent: number;
+  leave: number;
 };
 
 export default function AdminAttendanceReview() {
