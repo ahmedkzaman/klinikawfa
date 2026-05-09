@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { pageShell, pageInner } from '@/lib/clinic/bentoTokens';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -1465,33 +1466,35 @@ export default function Roster() {
   }, []);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="flex items-center gap-3">
-        <CalendarDays className="h-7 w-7 text-primary" />
-        <div>
-          <h1 className="text-2xl font-bold">Roster Generator</h1>
-          <p className="text-sm text-muted-foreground">Generate monthly shift rosters with configurable rules</p>
+    <div className={pageShell}>
+      <div className={cn(pageInner, 'max-w-7xl mx-auto')}>
+        <div className="flex items-center gap-3">
+          <CalendarDays className="h-7 w-7 text-blue-600" />
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-800">Roster Generator</h1>
+            <p className="text-sm text-slate-500">Generate monthly shift rosters with configurable rules</p>
+          </div>
         </div>
+
+        <Tabs defaultValue="doctor" className="w-full">
+          <TabsList className="grid w-full max-w-md grid-cols-2 bg-white">
+            <TabsTrigger value="doctor" className="gap-2 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700">
+              <Stethoscope className="h-4 w-4" /> Doctor Roster
+            </TabsTrigger>
+            <TabsTrigger value="support" className="gap-2 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700">
+              <UserCog className="h-4 w-4" /> Support Staff Roster
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="doctor" className="mt-6">
+            <DoctorRosterPanel initialStaff={doctorStaff} />
+          </TabsContent>
+
+          <TabsContent value="support" className="mt-6">
+            <RosterPanel initialStaff={supportStaff} title="Support Staff Roster" rosterType="support" />
+          </TabsContent>
+        </Tabs>
       </div>
-
-      <Tabs defaultValue="doctor" className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="doctor" className="gap-2">
-            <Stethoscope className="h-4 w-4" /> Doctor Roster
-          </TabsTrigger>
-          <TabsTrigger value="support" className="gap-2">
-            <UserCog className="h-4 w-4" /> Support Staff Roster
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="doctor" className="mt-6">
-          <DoctorRosterPanel initialStaff={doctorStaff} />
-        </TabsContent>
-
-        <TabsContent value="support" className="mt-6">
-          <RosterPanel initialStaff={supportStaff} title="Support Staff Roster" rosterType="support" />
-        </TabsContent>
-      </Tabs>
     </div>
   );
 }
