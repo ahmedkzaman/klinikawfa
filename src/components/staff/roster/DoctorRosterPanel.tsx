@@ -455,11 +455,16 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
         }
       }
 
-      newRoster[dateKey] = {
-        shift1: daytimeDoc,
-        shift2: daytimeDoc, // same doctor for S1+S2
-        shift3: nightDoc,
-      };
+      // Auto-generator preference: pair S1+S2 with the same daytime doctor for a 12h block.
+      // Slots are written independently — admins can later edit any single slot without affecting the others.
+      newRoster[dateKey] = { shift1: null, shift2: null, shift3: null };
+      if (daytimeDoc) {
+        newRoster[dateKey].shift1 = daytimeDoc;
+        newRoster[dateKey].shift2 = daytimeDoc;
+      }
+      if (nightDoc) {
+        newRoster[dateKey].shift3 = nightDoc;
+      }
 
       // Update consecutive day counters
       staffList.forEach(s => {
