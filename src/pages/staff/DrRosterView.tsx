@@ -10,11 +10,23 @@ import { cn } from '@/lib/utils';
 
 interface StaffMember { id: string; name: string; position: string; }
 interface RosterCell { staffId: string; staffName: string; }
-interface DoctorDayRoster { shift1: RosterCell | null; shift2: RosterCell | null; shift3: RosterCell | null; }
+interface DoctorDayRoster {
+  shift1?: RosterCell | null; shift2?: RosterCell | null; shift3?: RosterCell | null;
+  DOC_S1?: RosterCell | null; DOC_S2?: RosterCell | null; DOC_S3?: RosterCell | null;
+  [k: string]: RosterCell | null | undefined;
+}
 interface DoctorRosterData { [dateKey: string]: DoctorDayRoster; }
 
-const SHIFT1_HOURS = 6;
-const SHIFT2_HOURS = 6;
+// Normalise a stored day to the 3 logical doctor slots, accepting both legacy and new keys.
+function getSlot(day: DoctorDayRoster | undefined, n: 1 | 2 | 3): RosterCell | null {
+  if (!day) return null;
+  const legacy = day[`shift${n}` as 'shift1' | 'shift2' | 'shift3'];
+  const next = day[`DOC_S${n}` as 'DOC_S1' | 'DOC_S2' | 'DOC_S3'];
+  return (next ?? legacy) ?? null;
+}
+
+const SHIFT1_HOURS = 5;
+const SHIFT2_HOURS = 5;
 const SHIFT3_HOURS = 4;
 const WEEKLY_MIN = 45;
 const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
