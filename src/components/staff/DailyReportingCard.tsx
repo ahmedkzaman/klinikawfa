@@ -211,7 +211,7 @@ export default function DailyReportingCard() {
       onClick={() => { setPreviewUrl(url); setPreviewTitle(label); }}
       className="flex items-center gap-1 cursor-pointer"
     >
-      <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs gap-1 hover:bg-green-200 dark:hover:bg-green-800 transition-colors">
+      <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 text-xs gap-1 hover:bg-emerald-100 transition-colors border-none">
         <Eye className="h-3 w-3" />
         View
       </Badge>
