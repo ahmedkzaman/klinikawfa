@@ -1,34 +1,54 @@
-# Sprint 2 — Dashboard.tsx & Punch.tsx
+# Sprint Patch: Decouple Shift State (Option C)
 
-Presentation only. No data, hooks, routing, or guard changes. Strip `dark:` variants in touched files.
+Decouple S1/S2/S3 in the doctor roster admin so admins have granular control. Auto-generator still prefers 12-hour blocks but writes each slot independently.
 
-## Shared changes (both files)
+## Scope
+Single file: `src/components/staff/roster/DoctorRosterPanel.tsx`. No DB schema or save-format changes — the storage already holds shift1/2/3 as independent cells, so the wire format stays compatible.
 
-- Wrap entire return in `<div className={pageShell}><div className={pageInner}> … </div></div>`.
-- Page header: `<h1 className="text-2xl font-bold tracking-tight text-slate-800">` + `<p className="text-sm text-slate-500">`.
-- Replace shadcn `<Card>` with `<div className={cn(bento, 'p-4')}>` (or `p-5/p-6`); drop `<CardHeader>/<CardTitle>/<CardDescription>/<CardContent>` and use semantic `<h2 className={bentoHeader}>` + `<p className="text-sm text-slate-500">`.
-- Loader spinners → `text-blue-600`.
+## Changes
 
-## `src/pages/staff/Dashboard.tsx`
+### 1. `updateCell` — remove all mirroring (lines ~660–745)
+- When `shift === 'shift1'`, set only `dd.shift1`. Do not touch `dd.shift2`.
+- When `shift === 'shift2'`, set only `dd.shift2`. Do not touch `dd.shift1`.
+- "None" / `__none__` clear path: only clear the targeted slot.
+- `manualOverrides` set: only add the targeted shift key (no S1↔S2 propagation).
+- Drop the daytime-vs-night `ruleValidCombos` warning toasts in this function (kept-warning behavior is no longer meaningful for combos that are now allowed).
 
-- Notifications card: bento with `border border-blue-100 bg-blue-50/40` accent (preserved blue tint), header uses `bentoHeader`, "Mark all read" button stays ghost but `text-blue-700`. Unread count pill → `bg-blue-600 text-white`. Each notification row → `softTile` with `hover:bg-slate-100`.
-- Stat cards (Current Status, Today's Punches): bento, label `fieldLabel`, value `text-2xl font-bold text-slate-800`, helper `text-xs text-slate-500`. Status icon colors: green-500 / slate-400 stay.
-- Quick Actions card: bento. Primary CTA `primaryBtn`; secondary `secondaryBtn`.
-- Today's Timeline card: bento, header `bentoHeader`, each row uses slate dots (in=emerald-500, out=rose-500), text `text-slate-700` / `text-slate-500`.
-- `KanbanBoard` and `DailyReportingCard` stay rendered as-is (Sprint 4 will restyle them); they'll inherit the slate-50 canvas.
+### 2. Remove the `ruleValidCombos` rule entirely
+- Delete `useState(true)` for `ruleValidCombos` (line 90).
+- Remove the checkbox UI block at lines ~913–919 ("Valid shift combinations only").
+- Remove every remaining `ruleValidCombos` reference (search confirms they live only inside `updateCell` after the UI removal).
 
-## `src/pages/staff/Punch.tsx`
+### 3. Auto-generator — explicit independent assignments (lines ~458–462)
+Replace the object literal that assigns `daytimeDoc` to both slots with two explicit, independent assignments so the side-effect-style mirroring is gone:
 
-- Outer container: `pageShell` + `pageInner` with an inner `max-w-lg mx-auto` for the form column.
-- Active Shift bento: header `bentoHeader` ("Active Shift"), shift label text `text-slate-700`. Badges (`shiftKey`, "cross-midnight") use `softBadge` + variant; clock-skew alert keeps `Alert variant="destructive"`.
-- Location Status bento: header `bentoHeader` ("Location Status"), description `text-sm text-slate-500`. Accuracy line keeps semantic colors (emerald-600 / amber-600 / rose-600). Inside/outside zone block uses `rounded-xl` with emerald-50/border-emerald-200 or rose-50/border-rose-200 (drop `dark:` variants). Refresh button → `secondaryBtn`.
-- Record Attendance bento: header `bentoHeader` ("Record Attendance"), last-punch line `text-sm text-slate-500`. The big Punch button keeps semantic green/red (emerald-600 / rose-600 with `rounded-xl h-20 text-lg`) — this is the "carve-out" for the punch CTA per Sprint 1's note (semantic urgency wins over blue brand). Helper text `text-slate-500`.
-- `FaceVerificationModal` invocation untouched (camera frame + logic).
+```text
+newRoster[dateKey] = { shift1: null, shift2: null, shift3: null };
+if (daytimeDoc) {
+  newRoster[dateKey].shift1 = daytimeDoc;
+  newRoster[dateKey].shift2 = daytimeDoc; // generator preference: pair daytime block
+}
+if (nightDoc) {
+  newRoster[dateKey].shift3 = nightDoc;
+}
+```
+
+Behaviorally identical for the auto-run, but the intent ("pairing is a generator preference, not a state invariant") is now explicit. The night-shift swap pass (lines ~496+) already operates on slots independently and needs no change.
+
+### 4. Sanity sweep
+After the edits, grep the file for `ruleValidCombos` and any remaining `dd.shift2 = cell` / `dd.shift1 = cell` cross-writes and remove leftovers. Also verify the "None" branch (lines 664–693) only clears the targeted shift.
 
 ## Out of scope
-- `KanbanBoard`, `DailyReportingCard`, `FaceVerificationModal` internals (Sprint 4).
-- Any business logic, geofence math, RPC, or state.
+- Support-staff roster (different panel, S1/S2 are already independent there).
+- Database schema, save/load format, payroll hour calculations — all unchanged.
+- Other rule toggles (`ruleMaxShifts`, `ruleMinHours`, `ruleNoSplitDuty`) — untouched.
+
+## Memory update
+Update `mem://features/hr-portal/roster-generator`:
+> S1, S2, S3 are functionally independent slots in the doctor roster. The auto-generator *prefers* placing the same doctor in S1+S2 to form a 12-hour daytime block, but admins can manually edit any single slot without affecting the others. There is no UI rule that hard-mirrors S1↔S2.
 
 ## Verification
-- `/staff/dashboard` shows slate-50 canvas, white bento cards, blue accents, no dark seams.
-- `/staff/punch` shows three bento cards in a centered column; punch button still green/red; camera modal unchanged.
+1. Open `/staff/admin/roster`, generate a roster, confirm S1 and S2 still get the same doctor by default.
+2. Manually change S2 on any day → S1 must remain untouched.
+3. Manually clear S1 (None) → S2 must remain untouched.
+4. Confirm the "Valid shift combinations only" checkbox is gone from the Rules panel.
