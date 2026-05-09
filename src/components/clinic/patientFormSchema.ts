@@ -52,6 +52,7 @@ export const patientSchema = z
     default_panel_id: z.string().nullable().optional(),
     allergies: z.string().trim().max(500).optional(),
     underlying_conditions: z.string().trim().max(500).optional(),
+    address: z.string().trim().max(500).optional(),
   })
   .superRefine((data, ctx) => {
     const hasIc = !!data.national_id?.trim();
