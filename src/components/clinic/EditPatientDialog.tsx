@@ -118,6 +118,7 @@ export function EditPatientDialog({
           default_panel_id: data.default_panel_id || null,
           allergies: data.allergies || null,
           underlying_conditions: data.underlying_conditions || null,
+          address: data.address?.trim() || null,
         },
       });
       toast.success(`Patient updated: ${updated.name}`);
