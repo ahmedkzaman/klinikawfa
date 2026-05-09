@@ -876,13 +876,6 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
               </div>
             </div>
             <div className="flex items-start gap-3">
-              <Checkbox id="rule-combos" checked={ruleValidCombos} onCheckedChange={v => setRuleValidCombos(!!v)} />
-              <div>
-                <Label htmlFor="rule-combos" className="text-sm font-medium">Valid shift combinations only</Label>
-                <p className="text-xs text-slate-500">S1+S2 together (12h) or S3 alone (4h). No S1+S3 or S2+S3</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
               <Checkbox id="rule-min-hrs" checked={ruleMinHours} onCheckedChange={v => setRuleMinHours(!!v)} />
               <div>
                 <Label htmlFor="rule-min-hrs" className="text-sm font-medium">45h/week target (OT beyond)</Label>
