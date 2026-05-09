@@ -1,54 +1,61 @@
-# Sprint Patch: Decouple Shift State (Option C)
+# Per-Staff Summary List on Attendance Review
 
-Decouple S1/S2/S3 in the doctor roster admin so admins have granular control. Auto-generator still prefers 12-hour blocks but writes each slot independently.
+Add a searchable per-staff summary table on `/staff/admin/attendance-review` so typing in the "Search staff…" box produces visible results immediately, instead of only changing pie-chart totals.
 
 ## Scope
-Single file: `src/components/staff/roster/DoctorRosterPanel.tsx`. No DB schema or save-format changes — the storage already holds shift1/2/3 as independent cells, so the wire format stays compatible.
+Single file: `src/pages/staff/admin/AttendanceReview.tsx`. No DB or schema changes.
 
 ## Changes
 
-### 1. `updateCell` — remove all mirroring (lines ~660–745)
-- When `shift === 'shift1'`, set only `dd.shift1`. Do not touch `dd.shift2`.
-- When `shift === 'shift2'`, set only `dd.shift2`. Do not touch `dd.shift1`.
-- "None" / `__none__` clear path: only clear the targeted slot.
-- `manualOverrides` set: only add the targeted shift key (no S1↔S2 propagation).
-- Drop the daytime-vs-night `ruleValidCombos` warning toasts in this function (kept-warning behavior is no longer meaningful for combos that are now allowed).
-
-### 2. Remove the `ruleValidCombos` rule entirely
-- Delete `useState(true)` for `ruleValidCombos` (line 90).
-- Remove the checkbox UI block at lines ~913–919 ("Valid shift combinations only").
-- Remove every remaining `ruleValidCombos` reference (search confirms they live only inside `updateCell` after the UI removal).
-
-### 3. Auto-generator — explicit independent assignments (lines ~458–462)
-Replace the object literal that assigns `daytimeDoc` to both slots with two explicit, independent assignments so the side-effect-style mirroring is gone:
+### 1. Build a per-staff summary in `useMemo`
+Alongside the existing `stats` aggregator, compute a parallel array `staffSummaries: StaffSummary[]` derived from `filteredProfiles` + `attendance` + `leaveRequests` + `allShifts` for the selected month:
 
 ```text
-newRoster[dateKey] = { shift1: null, shift2: null, shift3: null };
-if (daytimeDoc) {
-  newRoster[dateKey].shift1 = daytimeDoc;
-  newRoster[dateKey].shift2 = daytimeDoc; // generator preference: pair daytime block
-}
-if (nightDoc) {
-  newRoster[dateKey].shift3 = nightDoc;
-}
+type StaffSummary = {
+  userId: string;
+  fullName: string;
+  position: string | null;
+  present: number;
+  late: number;     // minor_late + late combined
+  absent: number;
+  leave: number;
+  workingDays: number;
+};
 ```
 
-Behaviorally identical for the auto-run, but the intent ("pairing is a generator preference, not a state invariant") is now explicit. The night-shift swap pass (lines ~496+) already operates on slots independently and needs no change.
+Reuse the existing day-loop logic (working days, leave overlap check, lateness severity) — just bucket per `profile.id` instead of into global counters.
 
-### 4. Sanity sweep
-After the edits, grep the file for `ruleValidCombos` and any remaining `dd.shift2 = cell` / `dd.shift1 = cell` cross-writes and remove leftovers. Also verify the "None" branch (lines 664–693) only clears the targeted shift.
+### 2. Render a new "Staff Summary" table (always visible)
+Insert a new bento card between the Filters row and the existing pie-chart card. It shows:
+
+| Name (avatar + full_name/email) | Position | Present | Late | Absent | Leave | Action |
+
+- Sorted by full name asc by default.
+- Live-filtered by the existing `searchQuery` and `positionFilter` (no new state needed).
+- Empty-state row when `staffSummaries.length === 0`: "No staff match your search."
+- Each row's "Action" cell: a small "View details" button that opens the existing drill-down for that staff, scoped to ALL their records this month (combined working/leave/absent/late).
+
+### 3. Extend the drill-down to support a per-staff view
+Currently `drillDown` is one of `'working' | 'leave' | 'absent' | 'late'`. Widen it to also accept `{ kind: 'staff'; userId: string; fullName: string }`:
+
+- When set to a staff object, `drillDownRecords` returns every record belonging to that user across all four buckets, sorted by date asc.
+- Drill-down header shows `"<Full Name> — All Records (<count>)"` instead of a category label.
+- Existing chart-slice click behavior (filter by category) is unchanged.
+- `ChevronLeft` back button clears `drillDown` either way.
+
+### 4. Cosmetic polish
+- Use the bento token classes already in the file (`bento`, `bentoHeader`, `softInput`) so the new card matches the page.
+- Lateness/absent counts colored with the same soft palette already used (rose for late/absent, emerald for present, blue for leave).
+- Compact row height; mobile: horizontal scroll wrapper (the existing drill-down already uses `overflow-x-auto`).
 
 ## Out of scope
-- Support-staff roster (different panel, S1/S2 are already independent there).
-- Database schema, save/load format, payroll hour calculations — all unchanged.
-- Other rule toggles (`ruleMaxShifts`, `ruleMinHours`, `ruleNoSplitDuty`) — untouched.
-
-## Memory update
-Update `mem://features/hr-portal/roster-generator`:
-> S1, S2, S3 are functionally independent slots in the doctor roster. The auto-generator *prefers* placing the same doctor in S1+S2 to form a 12-hour daytime block, but admins can manually edit any single slot without affecting the others. There is no UI rule that hard-mirrors S1↔S2.
+- Changing how the pie chart calculates totals.
+- Adding new filters (date range, status filter) — the existing month + position filters stay.
+- Backend or RLS changes — `profiles`, `attendance_records`, and `leave_requests` queries are reused as-is.
 
 ## Verification
-1. Open `/staff/admin/roster`, generate a roster, confirm S1 and S2 still get the same doctor by default.
-2. Manually change S2 on any day → S1 must remain untouched.
-3. Manually clear S1 (None) → S2 must remain untouched.
-4. Confirm the "Valid shift combinations only" checkbox is gone from the Rules panel.
+1. Open `/staff/admin/attendance-review`. The new "Staff Summary" table appears above the pie chart.
+2. Type a staff name → table filters live; pie totals also update (existing behavior).
+3. Click "View details" on a row → drill-down opens showing every working/leave/absent/late row for that staff for the month.
+4. Click a pie-chart slice → drill-down still works as before (filtered by category).
+5. Change month or position filter → both the summary table and the pie chart update consistently.
