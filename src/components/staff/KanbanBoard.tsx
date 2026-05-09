@@ -133,11 +133,11 @@ export default function KanbanBoard() {
   };
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-        <CardTitle className="text-lg">Task Board</CardTitle>
-        <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Add Task</Button>
-      </CardHeader>
+    <div className={cn(bento, 'p-4 md:p-5')}>
+      <div className="flex flex-row items-center justify-between mb-4">
+        <h2 className={bentoHeader + ' mb-0'}>Task Board</h2>
+        <Button size="sm" className={primaryBtn} onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Add Task</Button>
+      </div>
 
       {/* Add / Edit Dialog */}
       <Dialog open={addOpen} onOpenChange={(o) => { if (!o) { setEditTask(null); resetForm(); } setAddOpen(o); }}>
