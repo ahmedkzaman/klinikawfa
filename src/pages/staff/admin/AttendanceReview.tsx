@@ -337,7 +337,7 @@ export default function AdminAttendanceReview() {
           <div className={cn(bento, 'p-4')}>
             <div className="flex flex-row items-center gap-2 mb-3">
               <Button variant="ghost" size="icon" className="text-slate-600 hover:bg-slate-100" onClick={() => setDrillDown(null)}><ChevronLeft className="h-4 w-4" /></Button>
-              <h2 className={cn(bentoHeader, 'mb-0')}>{chartConfig[drillDown as keyof typeof chartConfig]?.label} Details ({drillDownRecords.length})</h2>
+              <h2 className={cn(bentoHeader, 'mb-0')}>{drillDownTitle}</h2>
             </div>
             <div className="overflow-x-auto">
               <Table>
