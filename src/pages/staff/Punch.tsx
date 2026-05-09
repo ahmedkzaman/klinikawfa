@@ -135,6 +135,7 @@ function pickActiveManualShift(
         start,
         end,
         buffers: bufs,
+        bufferSource: bufSrc,
         label: `Manual (${format(start, 'h:mm a')} – ${format(end, 'h:mm a')})`,
       };
     }
