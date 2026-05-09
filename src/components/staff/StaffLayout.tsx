@@ -286,23 +286,23 @@ export function StaffLayout() {
   if (!isAdmin && unacknowledgedNotices.length > 0) {
     const notice = unacknowledgedNotices[0];
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="max-w-lg w-full">
           <div className="flex items-center gap-3 mb-4">
             <AlertTriangle className="h-6 w-6 text-amber-500" />
-            <h1 className="text-xl font-bold">Important Notice</h1>
+            <h1 className="text-xl font-bold text-slate-800">Important Notice</h1>
             {notice.priority === 'urgent' && (
-              <span className="inline-flex items-center rounded-full bg-destructive px-2.5 py-0.5 text-xs font-medium text-destructive-foreground">Urgent</span>
+              <span className="inline-flex items-center rounded-full bg-rose-500 px-2.5 py-0.5 text-xs font-medium text-white">Urgent</span>
             )}
           </div>
-          <div className="rounded-lg border bg-card p-6 mb-4">
-            <h2 className="text-lg font-semibold mb-2">{notice.title}</h2>
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{notice.content}</p>
+          <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.03)] p-6 mb-4">
+            <h2 className="text-lg font-semibold text-slate-800 mb-2">{notice.title}</h2>
+            <p className="text-sm text-slate-600 whitespace-pre-wrap">{notice.content}</p>
           </div>
-          <p className="text-xs text-muted-foreground mb-4">
+          <p className="text-xs text-slate-500 mb-4">
             {unacknowledgedNotices.length > 1 && `${unacknowledgedNotices.length - 1} more notice(s) remaining after this.`}
           </p>
-          <Button className="w-full" size="lg" disabled={acknowledging} onClick={() => acknowledgeNotice(notice.id)}>
+          <Button className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white" size="lg" disabled={acknowledging} onClick={() => acknowledgeNotice(notice.id)}>
             <CheckSquare className="h-4 w-4 mr-2" />
             I've read &amp; understood this notice/announcement
           </Button>
