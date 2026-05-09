@@ -2502,6 +2502,7 @@ export type Database = {
       }
       patients: {
         Row: {
+          address: string | null
           allergies: string | null
           created_at: string
           date_of_birth: string | null
@@ -2526,6 +2527,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          address?: string | null
           allergies?: string | null
           created_at?: string
           date_of_birth?: string | null
@@ -2550,6 +2552,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          address?: string | null
           allergies?: string | null
           created_at?: string
           date_of_birth?: string | null
