@@ -978,14 +978,11 @@ export default function ConsultationDetail() {
                           variant="outline"
                           className="shrink-0"
                           onClick={() => {
-                            const w = window.open('', '_blank', 'width=900,height=1100');
-                            if (!w) return;
-                            const safe = doc.content
-                              .replace(/&/g, '&amp;')
-                              .replace(/</g, '&lt;')
-                              .replace(/>/g, '&gt;');
-                            w.document.write(`<!doctype html><html><head><title>${doc.template_name}</title><style>@page{size:${doc.paper_size} ${doc.orientation};margin:25mm}body{font-family:system-ui,sans-serif;white-space:pre-wrap;font-size:12pt;line-height:1.5;color:#0f172a}</style></head><body>${safe}<script>window.onload=()=>{window.print()}<\/script></body></html>`);
-                            w.document.close();
+                            setPrintingDoc(doc);
+                            setTimeout(() => {
+                              window.print();
+                              setPrintingDoc(null);
+                            }, 100);
                           }}
                         >
                           View / Print
