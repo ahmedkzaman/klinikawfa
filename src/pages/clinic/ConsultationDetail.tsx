@@ -82,6 +82,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { DocumentPrintLayer } from '@/components/clinic/consultation/DocumentPrintLayer';
+import { ViewDocumentModal } from '@/components/clinic/consultation/ViewDocumentModal';
 import { VitalHistoryTrends } from '@/components/clinic/consultation/VitalHistoryTrends';
 import {
   TreatmentItemCard,
@@ -327,6 +328,7 @@ export default function ConsultationDetail() {
   const [editingDoc, setEditingDoc] = useState<ConsultationDocument | null>(null);
   const [voidingDoc, setVoidingDoc] = useState<ConsultationDocument | null>(null);
   const [printingDoc, setPrintingDoc] = useState<ConsultationDocument | null>(null);
+  const [viewingDoc, setViewingDoc] = useState<ConsultationDocument | null>(null);
   const deleteDoc = useDeleteConsultationDocument();
   const addItem = useAddConsultationItem();
   const removeItem = useRemoveConsultationItem();
@@ -993,13 +995,7 @@ export default function ConsultationDetail() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => {
-                              setPrintingDoc(doc);
-                              setTimeout(() => {
-                                window.print();
-                                setPrintingDoc(null);
-                              }, 250);
-                            }}
+                            onClick={() => setViewingDoc(doc)}
                           >
                             View / Print
                           </Button>
@@ -1381,6 +1377,19 @@ export default function ConsultationDetail() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <ViewDocumentModal
+          doc={viewingDoc}
+          onClose={() => setViewingDoc(null)}
+          onPrint={(d) => {
+            setViewingDoc(null);
+            setPrintingDoc(d);
+            setTimeout(() => {
+              window.print();
+              setPrintingDoc(null);
+            }, 250);
+          }}
+        />
 
         <DocumentPrintLayer doc={printingDoc} />
       </div>
