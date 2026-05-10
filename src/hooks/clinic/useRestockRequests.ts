@@ -63,8 +63,11 @@ export function useCloseRestockRequest() {
       } = await supabase.auth.getUser();
       const { error } = await supabase
         .from('restock_requests' as never)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .update({ status: 'closed', closed_at: new Date().toISOString(), closed_by: user?.id ?? null } as any)
+        .update({
+          status: 'closed',
+          closed_at: new Date().toISOString(),
+          closed_by: user?.id ?? null,
+        } as never)
         .eq('id', id);
       if (error) throw error;
     },
