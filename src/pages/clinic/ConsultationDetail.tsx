@@ -66,7 +66,9 @@ import { IssueDocumentModal } from '@/components/clinic/consultation/IssueDocume
 import {
   useConsultationDocuments,
   type DocumentTemplate,
+  type ConsultationDocument,
 } from '@/hooks/clinic/useClinicDocuments';
+import { DocumentPrintLayer } from '@/components/clinic/consultation/DocumentPrintLayer';
 import { VitalHistoryTrends } from '@/components/clinic/consultation/VitalHistoryTrends';
 import {
   TreatmentItemCard,
@@ -309,6 +311,7 @@ export default function ConsultationDetail() {
   const { data: items = [] } = useConsultationItems(consultationId);
   const { data: attachedDocs = [] } = useConsultationDocuments(consultationId);
   const [issuingTemplate, setIssuingTemplate] = useState<DocumentTemplate | null>(null);
+  const [printingDoc, setPrintingDoc] = useState<ConsultationDocument | null>(null);
   const addItem = useAddConsultationItem();
   const removeItem = useRemoveConsultationItem();
   const updateItem = useUpdateConsultationItem();
@@ -975,14 +978,11 @@ export default function ConsultationDetail() {
                           variant="outline"
                           className="shrink-0"
                           onClick={() => {
-                            const w = window.open('', '_blank', 'width=900,height=1100');
-                            if (!w) return;
-                            const safe = doc.content
-                              .replace(/&/g, '&amp;')
-                              .replace(/</g, '&lt;')
-                              .replace(/>/g, '&gt;');
-                            w.document.write(`<!doctype html><html><head><title>${doc.template_name}</title><style>@page{size:${doc.paper_size} ${doc.orientation};margin:25mm}body{font-family:system-ui,sans-serif;white-space:pre-wrap;font-size:12pt;line-height:1.5;color:#0f172a}</style></head><body>${safe}<script>window.onload=()=>{window.print()}<\/script></body></html>`);
-                            w.document.close();
+                            setPrintingDoc(doc);
+                            setTimeout(() => {
+                              window.print();
+                              setPrintingDoc(null);
+                            }, 100);
                           }}
                         >
                           View / Print
@@ -1311,6 +1311,8 @@ export default function ConsultationDetail() {
           patient={patient?.id ? (patient as { id: string; name?: string | null; national_id?: string | null; phone?: string | null }) : null}
           consultationId={consultationId ?? null}
         />
+
+        <DocumentPrintLayer doc={printingDoc} />
       </div>
     </div>
   );
