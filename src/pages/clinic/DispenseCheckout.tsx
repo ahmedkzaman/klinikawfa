@@ -284,6 +284,8 @@ export default function DispenseCheckout() {
             consultationId={consultation?.id ?? null}
             items={items}
             payments={payments}
+            showOtherCharges
+            onChargesChange={handleChargesChange}
           />
         </div>
 
