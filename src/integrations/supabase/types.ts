@@ -737,6 +737,33 @@ export type Database = {
           },
         ]
       }
+      clinic_charge_types: {
+        Row: {
+          created_at: string
+          default_amount: number
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          default_amount?: number
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          default_amount?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       clinic_feedback_form_fields: {
         Row: {
           created_at: string

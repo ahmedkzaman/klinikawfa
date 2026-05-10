@@ -1,64 +1,96 @@
-# Pharmacy Supply Chain Loop
+# Dynamic "Other Charges" — Settings + Checkout (revised)
 
-Two coordinated changes that connect the doctor's prescribing screen to an operations dashboard via the existing `restock_requests` table.
+A clinic-wide registry of optional billing charges that admins manage in Settings and front-desk staff toggle on per visit. **Part 3 revised to batch-commit on checkout** to avoid ghost rows / race conditions.
 
-## Part 1 — Doctor-side: `AddTreatmentBulkDialog.tsx`
+## Part 1 — Database (`clinic_charge_types`)
 
-### 1a. Inline stock badges (search results)
-For rows where `type === 'item'`, render a small badge under the item name based on `stock` (already in `inventory_items`):
-- `0` → red destructive badge "Out of stock"
-- `1–10` → amber/warning badge "Low stock: N"
-- `>10` → muted/green badge "N in stock"
+Single migration:
 
-If `nearest_expiry_date` exists and is within 30 days of today, append an orange "Expiring soon" badge with a `Clock` icon.
+- Table `public.clinic_charge_types`
+  - `id uuid pk default gen_random_uuid()`
+  - `name text not null unique`
+  - `default_amount numeric(10,2) not null default 0`
+  - `is_active boolean not null default true`
+  - `created_at timestamptz not null default now()`
+  - `updated_at timestamptz not null default now()` + `update_updated_at_column` trigger
+- RLS:
+  - **Select** — any user passing `is_staff_or_admin(auth.uid())`.
+  - **Insert / Update / Delete** — only `is_ops_or_admin(auth.uid())`.
+- Seed (idempotent `INSERT … ON CONFLICT (name) DO NOTHING`):
+  - "Documentation Fees", "Prescription Fees", "Regulatory Compliance Charges", "Special Care Charges", "Special Procedure Charges" — all `default_amount = 0`, `is_active = true`.
 
-Non-inventory rows (services, packages, free text) get no badge.
+## Part 2 — Settings page
 
-### 1b. Low-stock warning banner (Selected Items section)
-Above the Selected list (or just below its header), compute selected rows whose underlying inventory item has `stock <= 10`. If any exist, render a single `<Alert variant="destructive">` (shadcn alert — no `warning` variant exists, so we use destructive styling tinted amber via className) titled "Low stock on selected items".
+**Route:** `/clinic/settings/charges` — gated `ops_or_admin`.
+**File:** `src/pages/clinic/settings/ChargesSettings.tsx`
 
-Inside, list each low-stock item as a row: item name + current stock + a "Request Restock" button.
+Bento layout matching other settings pages. Table: Name · Default Amount (RM) · Status · Actions.
+- **Add new** — header button → dialog (`name`, `default_amount`).
+- **Edit** — pencil icon → same dialog prefilled.
+- **Toggle active** — `Switch` in Status column (soft-disable; row hidden from checkout when off).
 
-### 1c. One-click restock
-Each row's button calls `useCreateRestockRequest().mutate({ itemId })`. On success (or while pending) the button disables and changes label to "Pharmacy notified". Track per-item state with a local `Set<itemId>` so multiple items can be requested independently. Toast already handled inside the hook.
+**Hook:** `src/hooks/clinic/useClinicChargeTypes.ts` exporting `useClinicChargeTypes({ activeOnly })`, `useUpsertChargeType`, `useToggleChargeType`. Cache key `['clinic_charge_types']`, toast feedback.
 
-## Part 2 — Ops dashboard: `src/pages/clinic/RestockReview.tsx`
+**Sidebar:** add "Other Charges" card to `SettingsPage.tsx` (visible to `isOpsOrAdmin`).
 
-### 2a. Access control
-Use the existing `useAuth()` role system (the app does not have `staff nurse` / `admin manager` / `staff purchaser` roles — see Technical Notes for mapping). The page is gated to `isStaffOrAdmin` which already covers operations, staff, admin, special_admin, doctor_admin, resident_doctor. Locum doctors are excluded.
+## Part 3 — Checkout integration (batch-commit)
 
-If role check fails: render an "Access denied" card. The sidebar link is hidden for the same condition.
+**File:** `src/components/clinic/visit/BillingDetailsColumn.tsx`
 
-### 2b. UI
-- Page header: "Restock Requests" + count badge of open items.
-- Fetch via `useRestockRequests('open')` — already returns `inventory_items(name)` and core fields. Extend the hook (or add a sibling hook) to also join `profiles!requested_by(full_name)` so we can show the requester.
-- Data table columns: **Date Requested** (relative + tooltip), **Item**, **Requested By**, **Reason**, **Action**.
-- Empty state: friendly card "No open restock requests — pharmacy is caught up."
+New "Other Charges" section between Tax/Discount and Total:
 
-### 2c. "Mark as Ordered" action
-New mutation `useCloseRestockRequest` in `useRestockRequests.ts`:
+```text
+[ ] Documentation Fees           [ amount ]
+[ ] Prescription Fees            [ amount ]
+[ ] Regulatory Compliance        [ amount ]
+…
 ```
-update restock_requests set status='closed', closed_at=now(), closed_by=auth.uid() where id=$1
+
+### Local-state model (no DB writes on toggle)
+
+```ts
+const [selectedCharges, setSelectedCharges] =
+  useState<Record<string, number>>({}); // key = charge_type_id, value = amount
 ```
-Invalidates `['restock_requests']`. Button shows confirm via `AlertDialog`, then row disappears from the open queue.
 
-### 2d. Routing & sidebar
-- Add `<Route path="/clinic/inventory/restock-review" element={<RestockReview />} />` inside the existing clinic protected route block in `App.tsx`.
-- Add link to the **Inventory** sidebar group (in whichever clinic sidebar component is used — will read it during build to confirm exact file). Link is conditionally rendered using the same role check.
+- Toggle ON → set `selectedCharges[id] = chargeType.default_amount`.
+- Toggle OFF → delete the key.
+- Edit amount → update the value in place (purely local; no flashing loading states).
+- `useClinicChargeTypes({ activeOnly: true })` provides the list.
 
-## Technical Notes
+### Live total preview
 
-**Role mapping.** The app's `AppRole` enum is: `special_admin | admin | doctor_admin | operations | staff | locum | resident_doctor | guest`. The roles you listed don't exist as-is, so I'll map them to the closest existing equivalents and gate with `isStaffOrAdmin` (which equals: admin, staff, special_admin, operations, doctor_admin, resident_doctor — locum excluded). If you want a stricter gate (e.g. exclude generic `staff`), say the word and I'll narrow it.
+Extend the existing memo:
 
-**No DB migration needed.** `restock_requests` table, RLS, and the `useCreateRestockRequest` hook already exist. We only need to add a `close` mutation that runs an UPDATE — RLS for that update must already permit ops roles; if it doesn't, I'll add a migration in the build step.
+```ts
+const otherChargesTotal = Object.values(selectedCharges)
+  .reduce((a, v) => a + (Number(v) || 0), 0);
+const subtotalWithCharges = subtotal + otherChargesTotal;
+const afterDiscount = Math.max(subtotalWithCharges - discountRm, 0);
+const total = afterDiscount * (1 + taxPct / 100);
+```
 
-**Stock data.** `inventory_items` rows already include `stock` and `nearest_expiry_date`, both surfaced through the picker's `allItems` mapping — no extra query needed.
+A new "Other Charges" subtotal row appears above Total when any are selected so the pharmacist sees exactly what's being added.
 
-**Files touched**
-- `src/components/clinic/consultation/AddTreatmentBulkDialog.tsx` (badges + warning alert + restock buttons)
-- `src/hooks/clinic/useRestockRequests.ts` (add requester join + `useCloseRestockRequest`)
-- `src/pages/clinic/RestockReview.tsx` (new page)
-- `src/App.tsx` (route)
-- Clinic sidebar component (add gated nav link — exact file confirmed at build)
+### Batch commit on Complete Checkout
 
-**Out of scope:** auto-PO generation, supplier selection, notification emails, or schema changes to `restock_requests`.
+Lift commit responsibility into `BillingDetailsColumn` via a small imperative handle (or pass `selectedCharges` + a commit callback up to `DispenseCheckout` — preferred so existing `handleComplete` stays the orchestrator):
+
+1. `BillingDetailsColumn` exposes `selectedCharges` through a new `onChargesChange` prop.
+2. `DispenseCheckout.handleComplete` does, **in order**, before status updates:
+   - For each `[id, amount]` in `selectedCharges`, call `useAddConsultationItem` with
+     `{ consultation_id, item_name: chargeType.name, quantity: 1, price: amount }`.
+     Use `Promise.all` so it's a single round of parallel inserts.
+   - Then run the existing `updateConsultation → completed` and `updateQueue → completed`.
+3. If any insert fails, abort the status updates and surface the toast — the visit stays open so the user can retry.
+
+The "Outstanding > 0 disables Complete Checkout" guard already uses `total`, which now includes `otherChargesTotal` via the lifted state — so the existing tooltip behaviour Just Works.
+
+### Why no marker prefix or pre-check logic
+
+Because charges are written only at the moment of completion, there's no need to recognise pre-existing `[Charge] …` rows on mount. `item_name` is stored verbatim from `clinic_charge_types.name`. The `trg_resolve_selling_price` trigger trusts the supplied `price` (no `item_id`), and `trg_lock_cogs` defaults `unit_cost` to 0 — both behave correctly for this use case.
+
+## Files
+
+- New: migration, `useClinicChargeTypes.ts`, `ChargesSettings.tsx`
+- Edited: `App.tsx` (route), `SettingsPage.tsx` (card), `BillingDetailsColumn.tsx` (Other Charges section + lifted state), `DispenseCheckout.tsx` (batch-insert in `handleComplete`)
