@@ -30,7 +30,7 @@ export function useQueueEntries() {
         `,
         )
         .is("deleted_at", null)
-        // FIXED: Changed 'cancelled' to 'canceled' to match DB Enum
+        // Ensure there is only ONE 'l' in canceled
         .not("clinic_status", "in", "(completed,canceled)")
         .gte("created_at", startOfDay.toISOString())
         .order("is_urgent", { ascending: false })
