@@ -65,6 +65,8 @@ interface CombinedRow {
   categoryLower: string;
   /** Lowercase generic name, blank when none / not applicable. */
   genericLower: string;
+  /** ISO date for the next-expiring batch, or null. Inventory items only. */
+  nearestExpiry: string | null;
   defaults?: SelectedDefaults;
 }
 
