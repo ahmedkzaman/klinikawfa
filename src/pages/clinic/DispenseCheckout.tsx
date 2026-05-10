@@ -247,6 +247,8 @@ export default function DispenseCheckout() {
               patientName={patient?.name ?? null}
             />
 
+            <DispensePanel items={items} consultationId={consultation?.id ?? null} />
+
             <AttachmentsCard consultationId={consultation?.id} />
 
             {(consultation?.patient_id || entry.patient_id) && (
