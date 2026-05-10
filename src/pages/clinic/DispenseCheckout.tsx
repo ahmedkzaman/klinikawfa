@@ -79,11 +79,13 @@ export default function DispenseCheckout() {
 
   const subtotal = useMemo(
     () =>
-      items.reduce(
-        (acc, item) =>
-          acc + Number(item.price ?? 0) * Number(item.quantity ?? 0),
-        0,
-      ),
+      items.reduce((acc, item) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dispensed = (item as any).dispensed_qty as number | null;
+        const qty =
+          dispensed != null && item.item_id ? dispensed : Number(item.quantity ?? 0);
+        return acc + Number(item.price ?? 0) * qty;
+      }, 0),
     [items],
   );
   const paid = useMemo(
@@ -91,6 +93,20 @@ export default function DispenseCheckout() {
     [payments],
   );
   const outstanding = Math.max(subtotal - paid, 0);
+
+  const anyPartialMissingReason = useMemo(
+    () =>
+      items.some((it) => {
+        if (!it.item_id) return false;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dispensed = (it as any).dispensed_qty as number | null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const reason = (it as any).partial_reason as string | null;
+        if (dispensed == null) return false;
+        return dispensed < Number(it.quantity ?? 0) && !reason;
+      }),
+    [items],
+  );
 
   const handleComplete = async () => {
     if (!queueEntryId || !consultation?.id) return;
