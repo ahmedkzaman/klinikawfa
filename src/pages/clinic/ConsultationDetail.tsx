@@ -1060,80 +1060,13 @@ export default function ConsultationDetail() {
                   </p>
                 ) : (
                   <>
-                    <div className="divide-y divide-slate-100">
-                      {pagedHistory.map((c) => {
-                        const consult = c as {
-                          id: string;
-                          created_at: string;
-                          doctors?: { name?: string };
-                          diagnoses?: { name?: string };
-                          diagnosis_text?: string;
-                          case_note?: string;
-                          dispense_note?: string;
-                          consultation_items?: Array<{
-                            id: string;
-                            item_name: string;
-                            quantity: number;
-                            dosage?: string;
-                            price: number;
-                          }>;
-                        };
-                        return (
-                          <div key={consult.id} className="py-3 space-y-1.5 first:pt-0 last:pb-0">
-                            <div className="flex justify-between text-sm">
-                              <span className="font-medium text-slate-800">
-                                {format(new Date(consult.created_at), 'dd MMM yyyy')}
-                              </span>
-                              <span className="text-slate-500">
-                                {consult.doctors?.name ?? '—'}
-                              </span>
-                            </div>
-                            {consult.diagnoses?.name && (
-                              <Badge className="rounded-full bg-blue-50 text-blue-700 border-none">
-                                {consult.diagnoses.name}
-                              </Badge>
-                            )}
-                            {consult.diagnosis_text && (
-                              <Badge className="rounded-full bg-blue-50 text-blue-700 border-none">
-                                {consult.diagnosis_text}
-                              </Badge>
-                            )}
-                            {consult.case_note && (
-                              <p className="text-sm whitespace-pre-wrap text-slate-700">
-                                {consult.case_note}
-                              </p>
-                            )}
-                            {consult.dispense_note && (
-                              <div>
-                                <span className="text-xs text-slate-400">Dispense note:</span>
-                                <p className="text-sm text-slate-700">{consult.dispense_note}</p>
-                              </div>
-                            )}
-                            {consult.consultation_items &&
-                              consult.consultation_items.length > 0 && (
-                                <div className="space-y-0.5 pt-1">
-                                  <span className="text-xs text-slate-400">Items:</span>
-                                  {consult.consultation_items.map((it) => (
-                                    <div
-                                      key={it.id}
-                                      className="flex justify-between items-start gap-4 w-full pl-2"
-                                    >
-                                      <div className="flex-1 min-w-0 flex flex-col">
-                                        <span className="text-sm text-slate-600 break-words">
-                                          {it.item_name} x{it.quantity}{' '}
-                                          {it.dosage && `(${it.dosage})`}
-                                        </span>
-                                      </div>
-                                      <span className="shrink-0 text-right whitespace-nowrap text-sm text-slate-600">
-                                        RM {Number(it.price).toFixed(2)}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                          </div>
-                        );
-                      })}
+                    <div className="space-y-1">
+                      {pagedHistory.map((c) => (
+                        <PastVisitCard
+                          key={(c as { id: string }).id}
+                          visit={c as PastVisit}
+                        />
+                      ))}
                     </div>
                     {history.length > HISTORY_PER_PAGE && (
                       <div className="flex justify-center gap-2 pt-3">
