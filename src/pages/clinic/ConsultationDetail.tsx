@@ -10,7 +10,9 @@ import {
   Phone,
   PauseCircle,
   CheckCircle2,
+  Stethoscope,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -68,6 +70,134 @@ import { SessionAttachmentsStrip } from '@/components/clinic/consultation/Sessio
 import { useAuth } from '@/contexts/AuthContext';
 
 const PRICE_TIERS = ['SELF PAY', 'PANEL'];
+
+interface PastVisit {
+  id: string;
+  created_at: string;
+  doctors?: { name?: string } | null;
+  diagnoses?: { name?: string } | null;
+  diagnosis_text?: string | null;
+  case_note?: string | null;
+  dispense_note?: string | null;
+  consultation_items?: Array<{
+    id: string;
+    item_name: string;
+    quantity: number;
+    dosage?: string | null;
+    price: number;
+  }> | null;
+}
+
+/**
+ * Single entry in the doctor-side Past Visits timeline. Owns its own
+ * expand/collapse state so opening one card doesn't affect siblings.
+ * Notes longer than ~120 chars truncate to two lines until expanded.
+ */
+function PastVisitCard({ visit }: { visit: PastVisit }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const diagnosisDisplay =
+    visit.diagnoses?.name?.trim() || visit.diagnosis_text?.trim() || '';
+  const note = (visit.case_note ?? '').trim();
+  const isLongNote = note.length > 120;
+  const dispenseNote = (visit.dispense_note ?? '').trim();
+
+  return (
+    <div className="relative pl-6 py-3 border-l-2 border-slate-100 first:pt-0 last:pb-0">
+      {/* Timeline dot */}
+      <span
+        aria-hidden="true"
+        className="absolute -left-[5px] top-4 h-2 w-2 rounded-full bg-blue-400 ring-2 ring-white"
+      />
+
+      {/* Date + doctor */}
+      <div className="text-sm">
+        <span className="font-semibold text-slate-800">
+          {format(new Date(visit.created_at), 'dd MMM yyyy')}
+        </span>
+        {visit.doctors?.name && (
+          <span className="text-slate-500"> — Dr. {visit.doctors.name}</span>
+        )}
+      </div>
+
+      {/* Diagnosis */}
+      {diagnosisDisplay && (
+        <div className="mt-1 flex items-start gap-1.5">
+          <Stethoscope className="h-3.5 w-3.5 text-blue-600 mt-[2px] shrink-0" />
+          <Badge className="rounded-full bg-blue-50 text-blue-700 border-none font-medium">
+            {diagnosisDisplay}
+          </Badge>
+        </div>
+      )}
+
+      {/* Collapsible clinical note */}
+      {note && (
+        <div className="mt-2">
+          <p
+            onClick={() => isLongNote && setIsExpanded((v) => !v)}
+            className={cn(
+              'text-xs leading-relaxed transition-colors',
+              isLongNote && 'cursor-pointer hover:text-slate-700',
+              isExpanded
+                ? 'text-slate-800 whitespace-pre-wrap'
+                : 'text-slate-500 line-clamp-2',
+            )}
+          >
+            {note}
+          </p>
+          {isLongNote && (
+            <button
+              type="button"
+              onClick={() => setIsExpanded((v) => !v)}
+              className="mt-1 inline-flex items-center gap-0.5 text-[10px] font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+            >
+              {isExpanded ? (
+                <>
+                  Show less <ChevronUp className="h-3 w-3" />
+                </>
+              ) : (
+                <>
+                  Read full notes <ChevronDown className="h-3 w-3" />
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Dispense note */}
+      {dispenseNote && (
+        <div className="mt-2">
+          <span className="text-xs text-slate-400">Dispense note:</span>
+          <p className="text-sm text-slate-700 whitespace-pre-wrap">{dispenseNote}</p>
+        </div>
+      )}
+
+      {/* Items */}
+      {visit.consultation_items && visit.consultation_items.length > 0 && (
+        <div className="space-y-0.5 pt-2">
+          <span className="text-xs text-slate-400">Items:</span>
+          {visit.consultation_items.map((it) => (
+            <div
+              key={it.id}
+              className="flex justify-between items-start gap-4 w-full pl-2"
+            >
+              <div className="flex-1 min-w-0 flex flex-col">
+                <span className="text-sm text-slate-600 break-words">
+                  {it.item_name} x{it.quantity}{' '}
+                  {it.dosage && `(${it.dosage})`}
+                </span>
+              </div>
+              <span className="shrink-0 text-right whitespace-nowrap text-sm text-slate-600">
+                RM {Number(it.price).toFixed(2)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ConsultationDetail() {
   const { queueEntryId } = useParams<{ queueEntryId: string }>();
@@ -930,80 +1060,13 @@ export default function ConsultationDetail() {
                   </p>
                 ) : (
                   <>
-                    <div className="divide-y divide-slate-100">
-                      {pagedHistory.map((c) => {
-                        const consult = c as {
-                          id: string;
-                          created_at: string;
-                          doctors?: { name?: string };
-                          diagnoses?: { name?: string };
-                          diagnosis_text?: string;
-                          case_note?: string;
-                          dispense_note?: string;
-                          consultation_items?: Array<{
-                            id: string;
-                            item_name: string;
-                            quantity: number;
-                            dosage?: string;
-                            price: number;
-                          }>;
-                        };
-                        return (
-                          <div key={consult.id} className="py-3 space-y-1.5 first:pt-0 last:pb-0">
-                            <div className="flex justify-between text-sm">
-                              <span className="font-medium text-slate-800">
-                                {format(new Date(consult.created_at), 'dd MMM yyyy')}
-                              </span>
-                              <span className="text-slate-500">
-                                {consult.doctors?.name ?? '—'}
-                              </span>
-                            </div>
-                            {consult.diagnoses?.name && (
-                              <Badge className="rounded-full bg-blue-50 text-blue-700 border-none">
-                                {consult.diagnoses.name}
-                              </Badge>
-                            )}
-                            {consult.diagnosis_text && (
-                              <Badge className="rounded-full bg-blue-50 text-blue-700 border-none">
-                                {consult.diagnosis_text}
-                              </Badge>
-                            )}
-                            {consult.case_note && (
-                              <p className="text-sm whitespace-pre-wrap text-slate-700">
-                                {consult.case_note}
-                              </p>
-                            )}
-                            {consult.dispense_note && (
-                              <div>
-                                <span className="text-xs text-slate-400">Dispense note:</span>
-                                <p className="text-sm text-slate-700">{consult.dispense_note}</p>
-                              </div>
-                            )}
-                            {consult.consultation_items &&
-                              consult.consultation_items.length > 0 && (
-                                <div className="space-y-0.5 pt-1">
-                                  <span className="text-xs text-slate-400">Items:</span>
-                                  {consult.consultation_items.map((it) => (
-                                    <div
-                                      key={it.id}
-                                      className="flex justify-between items-start gap-4 w-full pl-2"
-                                    >
-                                      <div className="flex-1 min-w-0 flex flex-col">
-                                        <span className="text-sm text-slate-600 break-words">
-                                          {it.item_name} x{it.quantity}{' '}
-                                          {it.dosage && `(${it.dosage})`}
-                                        </span>
-                                      </div>
-                                      <span className="shrink-0 text-right whitespace-nowrap text-sm text-slate-600">
-                                        RM {Number(it.price).toFixed(2)}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                          </div>
-                        );
-                      })}
+                    <div className="space-y-1">
+                      {pagedHistory.map((c) => (
+                        <PastVisitCard
+                          key={(c as { id: string }).id}
+                          visit={c as PastVisit}
+                        />
+                      ))}
                     </div>
                     {history.length > HISTORY_PER_PAGE && (
                       <div className="flex justify-center gap-2 pt-3">
