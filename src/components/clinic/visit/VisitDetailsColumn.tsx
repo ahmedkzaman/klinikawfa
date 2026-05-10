@@ -519,6 +519,25 @@ function ItemList({
               <div className="text-sm font-semibold tabular-nums">
                 RM {lineTotal.toFixed(2)}
               </div>
+              {(() => {
+                if (!item.item_id) return null;
+                const prescribed = item.quantity ?? 0;
+                const dispensed = item.dispensed_qty;
+                if (dispensed == null || dispensed >= prescribed) return null;
+                const owe = prescribed - dispensed;
+                const isOwe = item.partial_reason === 'out_of_stock';
+                return (
+                  <Badge
+                    className={
+                      isOwe
+                        ? 'text-[10px] py-0 px-2 h-5 bg-amber-100 text-amber-800 hover:bg-amber-100'
+                        : 'text-[10px] py-0 px-2 h-5 bg-slate-100 text-slate-700 hover:bg-slate-100'
+                    }
+                  >
+                    {isOwe ? `Owe ${owe}` : 'Partial'}
+                  </Badge>
+                );
+              })()}
               {item.item_id && canEdit && (
                 <Button
                   type="button"
