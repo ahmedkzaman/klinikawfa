@@ -68,6 +68,7 @@ import VisitDetail from "./pages/clinic/VisitDetail";
 import Billings from "./pages/clinic/Billings";
 import PanelClaims from "./pages/clinic/PanelClaims";
 import Inventory from "./pages/clinic/Inventory";
+import RestockReview from "./pages/clinic/RestockReview";
 import OweSlips from "./pages/clinic/OweSlips";
 import Receivables from "./pages/clinic/Receivables";
 import VoidedRecords from "./pages/clinic/VoidedRecords";
