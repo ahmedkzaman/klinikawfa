@@ -764,6 +764,45 @@ export type Database = {
         }
         Relationships: []
       }
+      clinic_document_templates: {
+        Row: {
+          content: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          name: string
+          orientation: string
+          paper_size: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          orientation?: string
+          paper_size?: string
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          orientation?: string
+          paper_size?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       clinic_feedback_form_fields: {
         Row: {
           created_at: string
@@ -1047,6 +1086,70 @@ export type Database = {
             columns: ["consultation_id"]
             isOneToOne: false
             referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consultation_documents: {
+        Row: {
+          consultation_id: string
+          content: string
+          created_at: string
+          created_by: string | null
+          id: string
+          orientation: string
+          paper_size: string
+          patient_id: string
+          template_id: string | null
+          template_name: string
+          type: string | null
+        }
+        Insert: {
+          consultation_id: string
+          content: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          orientation?: string
+          paper_size?: string
+          patient_id: string
+          template_id?: string | null
+          template_name: string
+          type?: string | null
+        }
+        Update: {
+          consultation_id?: string
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          orientation?: string
+          paper_size?: string
+          patient_id?: string
+          template_id?: string | null
+          template_name?: string
+          type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultation_documents_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: false
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultation_documents_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultation_documents_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "clinic_document_templates"
             referencedColumns: ["id"]
           },
         ]
