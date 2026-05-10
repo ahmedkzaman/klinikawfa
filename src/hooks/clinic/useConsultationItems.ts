@@ -115,6 +115,32 @@ export function useRemoveConsultationItem() {
   });
 }
 
+export function useUpdateDispensedQty() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      id: string;
+      consultationId: string;
+      dispensed_qty: number | null;
+      partial_reason: 'patient_request' | 'out_of_stock' | null;
+    }) => {
+      const { error } = await supabase
+        .from('consultation_items')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .update({
+          dispensed_qty: input.dispensed_qty,
+          partial_reason: input.partial_reason,
+        } as any)
+        .eq('id', input.id);
+      if (error) throw error;
+      return input.consultationId;
+    },
+    onSuccess: (consultationId) =>
+      qc.invalidateQueries({ queryKey: ['consultation_items', consultationId] }),
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
 export function useUpdateConsultationItem() {
   const qc = useQueryClient();
   return useMutation({
