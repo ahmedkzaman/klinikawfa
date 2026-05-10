@@ -316,7 +316,6 @@ export default function QueueBoard() {
                   <div className="space-y-2">
                     <Button
                       className={cn(primaryBtn, "w-full shadow-lg shadow-blue-100")}
-                      disabled={isLocum}
                       onClick={() => setVitalsOpen(true)}
                     >
                       <Activity className="h-4 w-4 mr-2" /> Take Vitals / Triage
@@ -324,7 +323,7 @@ export default function QueueBoard() {
                     <Button
                       variant="ghost"
                       className="w-full text-slate-400 text-xs hover:text-slate-600"
-                      disabled={updateQueue.isPending || isLocum}
+                      disabled={updateQueue.isPending}
                       onClick={() => {
                         updateQueue.mutate(
                           { id: activeEntry.id, clinic_status: "ready_for_doctor" },
@@ -347,7 +346,6 @@ export default function QueueBoard() {
                   <Button
                     variant="ghost"
                     className={secondaryBtn}
-                    disabled={isLocum}
                     onClick={() => {
                       navigate(`/clinic/queue/checkout/${activeEntry.id}`);
                       setActiveEntry(null);
@@ -369,6 +367,11 @@ export default function QueueBoard() {
                     >
                       <UserX className="h-4 w-4" /> Patient Absconded / Cancel
                     </Button>
+                    {isLocum && (
+                      <p className="text-[10px] text-slate-400 mt-1 text-center italic">
+                        Cancellations must be processed by permanent staff.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
