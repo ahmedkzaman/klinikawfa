@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Sliders, Users, Archive, Package, ChevronRight, Stethoscope, Shield, Tag, FileText, Tv, Coins } from 'lucide-react';
+import { Sliders, Users, Archive, Package, ChevronRight, Stethoscope, Shield, Tag, FileText, FileEdit, Tv, Coins } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -72,6 +72,13 @@ export default function SettingsPage() {
       title: 'Document & Print',
       description: 'Letterhead, logo, and content position for printed POs and invoices.',
       icon: FileText,
+      visible: adminAccess,
+    },
+    {
+      href: '/clinic/settings/document-templates',
+      title: 'Document Templates',
+      description: 'Build templates with live tag substitution and A4/A5 paper preview.',
+      icon: FileEdit,
       visible: adminAccess,
     },
     {
