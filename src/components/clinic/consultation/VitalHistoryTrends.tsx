@@ -40,7 +40,13 @@ const METRICS = [
 
 type MetricKey = (typeof METRICS)[number]['key'];
 
-export function VitalHistoryTrends({ patientId }: { patientId: string }) {
+export function VitalHistoryTrends({
+  patientId,
+  currentQueueId,
+}: {
+  patientId: string;
+  currentQueueId?: string;
+}) {
   const { data: history = [] } = usePatientVitalHistory(patientId);
   const qc = useQueryClient();
   const [selectedMetrics, setSelectedMetrics] = useState<Set<MetricKey>>(
