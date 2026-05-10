@@ -265,6 +265,14 @@ const App = () => (
                   }
                 />
                 <Route
+                  path="inventory/restock-review"
+                  element={
+                    <ClinicProtectedRoute>
+                      <RestockReview />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
                   path="owe-slips"
                   element={
                     <ClinicProtectedRoute>
