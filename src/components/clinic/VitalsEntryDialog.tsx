@@ -114,6 +114,7 @@ export function VitalsEntryDialog({
         await updateQueue.mutateAsync({
           id: queueEntryId,
           clinic_status: 'ready_for_doctor',
+          assigned_doctor_id: assignedDoctorId,
         });
         toast.success('Triage complete: patient sent to doctor');
       } else {
