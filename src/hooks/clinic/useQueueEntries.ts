@@ -49,7 +49,8 @@ export function useQueueEntries() {
           `created_at.gte.${startOfDay.toISOString()},clinic_status.in.(${activeStatuses.join(",")})`,
         )
         .order("is_urgent", { ascending: false })
-        .order("queue_number", { ascending: true });
+        .order("created_at", { ascending: true })
+        .order("queue_sequence", { ascending: true, nullsFirst: false });
 
       if (error) {
         console.error("Queue Query Error:", error);

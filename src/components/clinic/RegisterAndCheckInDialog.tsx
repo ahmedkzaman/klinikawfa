@@ -288,7 +288,14 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
         relationship: data.is_dependent ? data.relationship || null : null,
       });
 
-      // 2. Insert queue entry (today's ephemeral visit)
+      // 2. Insert queue entry (today's ephemeral visit) with atomic daily sequence
+      const { data: seq, error: seqError } = await supabase.rpc('get_next_queue_number');
+      if (seqError) {
+        toast.error(`Patient saved but failed to allocate queue number: ${seqError.message}`);
+        qc.invalidateQueries({ queryKey: ['clinic', 'patients'] });
+        return;
+      }
+
       const { error: queueError } = await supabase.from('queue_entries').insert({
         patient_id: patient.id,
         clinic_status: 'registered',
@@ -297,6 +304,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
         payment_method: data.payment_method,
         panel_id: data.payment_method === 'panel' ? data.panel_id : null,
         created_by: user?.id ?? null,
+        queue_sequence: seq as number,
       });
 
       if (queueError) {

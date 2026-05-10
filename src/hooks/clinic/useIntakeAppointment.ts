@@ -67,6 +67,11 @@ export function useCheckInWalkIn() {
   return useMutation({
     mutationFn: async ({ patientId, visitPurpose, notes, panelId }: WalkInArgs) => {
       const { data: userData } = await supabase.auth.getUser();
+
+      // Atomic daily sequence (race-safe via advisory lock in the SQL fn)
+      const { data: seq, error: seqError } = await supabase.rpc('get_next_queue_number');
+      if (seqError) throw seqError;
+
       const { data, error } = await supabase
         .from('queue_entries')
         .insert({
@@ -77,6 +82,7 @@ export function useCheckInWalkIn() {
           clinic_status: 'registered',
           panel_id: panelId ?? null,
           payment_method: panelId ? 'panel' : null,
+          queue_sequence: seq as number,
         })
         .select()
         .single();
