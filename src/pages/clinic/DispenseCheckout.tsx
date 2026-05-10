@@ -48,6 +48,12 @@ export default function DispenseCheckout() {
     useConsultationQueueEntries();
   const updateQueue = useUpdateQueueEntry();
   const updateConsultation = useUpdateConsultation();
+  const addConsultationItem = useAddConsultationItem();
+
+  const [selectedCharges, setSelectedCharges] = useState<SelectedCharge[]>([]);
+  const handleChargesChange = useCallback((c: SelectedCharge[]) => {
+    setSelectedCharges(c);
+  }, []);
 
   const entry = useMemo(
     () => entries.find((e) => e.id === queueEntryId),
