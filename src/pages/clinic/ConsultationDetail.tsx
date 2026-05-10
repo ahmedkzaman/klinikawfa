@@ -307,6 +307,8 @@ export default function ConsultationDetail() {
       | undefined,
   );
   const { data: items = [] } = useConsultationItems(consultationId);
+  const { data: attachedDocs = [] } = useConsultationDocuments(consultationId);
+  const [issuingTemplate, setIssuingTemplate] = useState<DocumentTemplate | null>(null);
   const addItem = useAddConsultationItem();
   const removeItem = useRemoveConsultationItem();
   const updateItem = useUpdateConsultationItem();
