@@ -54,6 +54,13 @@ export default function SettingsPage() {
       visible: isOpsOrAdmin,
     },
     {
+      href: '/clinic/settings/charges',
+      title: 'Other Charges',
+      description: 'Manage optional billing charges shown at checkout.',
+      icon: Coins,
+      visible: isOpsOrAdmin,
+    },
+    {
       href: '/clinic/settings/queue',
       title: 'Queue & TV',
       description: 'Manage clinic rooms and the waiting-room TV display.',
