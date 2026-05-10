@@ -264,6 +264,37 @@ export function VitalsEntryDialog({
           </div>
         </div>
 
+        {/* Attending Doctor Assignment — required to send to doctor */}
+        <div className="pt-4 border-t border-slate-100 space-y-2">
+          <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+            <Stethoscope className="h-3 w-3" /> Attending Doctor
+          </Label>
+          <Select
+            value={assignedDoctorId ?? undefined}
+            onValueChange={(v) => setAssignedDoctorId(v)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select doctor on duty" />
+            </SelectTrigger>
+            <SelectContent>
+              {activeDoctors.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-slate-400">No active doctors</div>
+              ) : (
+                activeDoctors.map((doc) => (
+                  <SelectItem key={doc.id} value={doc.id}>
+                    Dr. {doc.name}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+          {!assignedDoctorId && (
+            <p className="text-[10px] text-amber-600 italic">
+              A doctor must be assigned before the patient can be sent through.
+            </p>
+          )}
+        </div>
+
         <DialogFooter className="gap-2 sm:gap-2">
           <Button
             variant="ghost"
@@ -277,7 +308,7 @@ export function VitalsEntryDialog({
           <Button
             className={cn(primaryBtn)}
             onClick={() => handleSave(true)}
-            disabled={submitting}
+            disabled={submitting || !assignedDoctorId}
           >
             {submitting ? 'Saving…' : 'Save & Send to Doctor'}
             <ArrowRight className="h-4 w-4 ml-2" />
