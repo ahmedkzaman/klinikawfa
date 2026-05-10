@@ -75,6 +75,13 @@ export default function SettingsPage() {
       visible: adminAccess,
     },
     {
+      href: '/clinic/settings/document-templates',
+      title: 'Document Templates',
+      description: 'Build templates with live tag substitution and A4/A5 paper preview.',
+      icon: FileEdit,
+      visible: adminAccess,
+    },
+    {
       href: '/clinic/settings/users',
       title: 'User Management',
       description: 'Manage staff roles and locum doctor profiles.',
