@@ -117,6 +117,19 @@ export default function DispenseCheckout() {
   const handleComplete = async () => {
     if (!queueEntryId || !consultation?.id) return;
     try {
+      // Batch-commit Other Charges as consultation_items first.
+      if (selectedCharges.length > 0) {
+        await Promise.all(
+          selectedCharges.map((c) =>
+            addConsultationItem.mutateAsync({
+              consultation_id: consultation.id,
+              item_name: c.name,
+              quantity: 1,
+              price: c.amount,
+            }),
+          ),
+        );
+      }
       await updateConsultation.mutateAsync({
         id: consultation.id,
         status: 'completed',
