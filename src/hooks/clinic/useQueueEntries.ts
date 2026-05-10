@@ -6,10 +6,6 @@ import type { QueueEntryWithJoins, QueueEntryRow } from "@/types/clinic";
 const QUEUE_QUERY_KEY = ["clinic", "queue-entries"] as const;
 const CONSULT_QUEUE_QUERY_KEY = ["clinic", "consultation-queue-entries"] as const;
 
-/**
- * Today's active queue entries for the main Queue Board.
- * Uses 'canceled' (one L) to match Supabase Enum.
- */
 export function useQueueEntries() {
   const qc = useQueryClient();
 
@@ -30,7 +26,8 @@ export function useQueueEntries() {
         `,
         )
         .is("deleted_at", null)
-        .not("clinic_status", "in", "(completed,canceled)")
+        // REVERTED: Changed back to 'cancelled' (two Ls) to match your DB Enum
+        .not("clinic_status", "in", "(completed,cancelled)")
         .gte("created_at", startOfDay.toISOString())
         .order("is_urgent", { ascending: false })
         .order("queue_number", { ascending: true });
@@ -57,14 +54,11 @@ export function useQueueEntries() {
   return query;
 }
 
-/**
- * Consultation workspace feed.
- * Required for the build to pass.
- */
+// Keep this for the Consultation page build
 export function useConsultationQueueEntries() {
   const qc = useQueryClient();
 
-  const query = useQuery<QueueEntryWithJoins[]>({
+  return useQuery<QueueEntryWithJoins[]>({
     queryKey: CONSULT_QUEUE_QUERY_KEY,
     queryFn: async () => {
       const startOfDay = new Date();
@@ -92,21 +86,6 @@ export function useConsultationQueueEntries() {
     },
     staleTime: 15_000,
   });
-
-  useEffect(() => {
-    const channel = supabase
-      .channel("clinic-consultation-queue")
-      .on("postgres_changes", { event: "*", schema: "public", table: "queue_entries" }, () => {
-        qc.invalidateQueries({ queryKey: CONSULT_QUEUE_QUERY_KEY });
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [qc]);
-
-  return query;
 }
 
 export function useUpdateQueueEntry() {
@@ -158,10 +137,7 @@ export function useCallToDispensary() {
     mutationFn: async ({ id, room_id }: { id: string; room_id: string }) => {
       const { error } = await supabase
         .from("queue_entries")
-        .update({
-          called_at: new Date().toISOString(),
-          assigned_room_id: room_id,
-        })
+        .update({ called_at: new Date().toISOString(), assigned_room_id: room_id })
         .eq("id", id);
       if (error) throw error;
     },
@@ -180,13 +156,7 @@ export function useQueueEntry(id?: string) {
       const { data, error } = await supabase
         .from("queue_entries")
         .select(
-          `
-          *,
-          patients ( * ),
-          doctors:assigned_doctor_id ( id, name, avatar_url ),
-          rooms:assigned_room_id ( id, label ),
-          insurance_providers ( id, name )
-        `,
+          `*, patients (*), doctors:assigned_doctor_id (id, name, avatar_url), rooms:assigned_room_id (id, label), insurance_providers (id, name)`,
         )
         .eq("id", id!)
         .maybeSingle();
