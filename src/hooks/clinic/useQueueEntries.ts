@@ -31,7 +31,7 @@ export function useQueueEntries() {
         `,
         )
         .is("deleted_at", null)
-        .not("clinic_status", "in", "(completed,cancelled)")
+        .not("clinic_status", "in", "(completed,canceled)")
         .gte("created_at", startOfDay.toISOString())
         .order("is_urgent", { ascending: false })
         .order("queue_number", { ascending: true });
@@ -188,7 +188,7 @@ export function useCallToDispensary() {
 
 /**
  * Fetch a single queue entry by id with patient/doctor/room/panel joins.
- * Status-agnostic — works for completed/cancelled rows too.
+ * Status-agnostic — works for completed/canceled rows too.
  */
 export function useQueueEntry(id?: string) {
   return useQuery<QueueEntryWithJoins | null>({
