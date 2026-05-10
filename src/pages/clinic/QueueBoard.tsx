@@ -285,6 +285,61 @@ export default function QueueBoard() {
               })}
             </div>
           )}
+
+          {/* Recently Cancelled (today) — audit drawer */}
+          <Collapsible className="mt-8 w-full border border-slate-200 rounded-xl overflow-hidden bg-white">
+            <CollapsibleTrigger className="group flex w-full items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+              <div className="flex items-center gap-2">
+                <UserX className="h-4 w-4 text-slate-400" />
+                <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                  Recently Cancelled Today
+                </span>
+                <span className={cn(softBadge, 'inline-flex items-center px-2 py-0.5 text-xs tabular-nums')}>
+                  {cancelledToday.length}
+                </span>
+              </div>
+              <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="border-t border-slate-100 p-3 space-y-2 bg-slate-50/40">
+              {cancelledToday.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-4">
+                  No cancelled visits today.
+                </p>
+              ) : (
+                cancelledToday.map((c) => (
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between gap-3 p-3 bg-white rounded-lg border border-slate-100"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-700 truncate">
+                        <span className="font-mono text-slate-500 mr-1.5">#{c.queue_number ?? '—'}</span>
+                        {c.patients?.name ? toMalayTitleCase(c.patients.name) : 'Unknown patient'}
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                        {c.cancelled_at ? format(new Date(c.cancelled_at), 'HH:mm') : '—'} ·{' '}
+                        {c.cancellation_reason ?? '—'}
+                      </p>
+                    </div>
+                    {isAdmin && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[11px] gap-1"
+                        disabled={restoreEntry.isPending}
+                        onClick={() =>
+                          restoreEntry.mutate({ id: c.id, existingNotes: c.visit_notes })
+                        }
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        Restore
+                      </Button>
+                    )}
+                  </div>
+                ))
+              )}
+            </CollapsibleContent>
+          </Collapsible>
         </div>
       </div>
 
