@@ -15,6 +15,7 @@ import { usePatientVitalHistory } from '@/hooks/clinic/useVitalSigns';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import {
   LineChart,
   Line,
