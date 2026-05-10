@@ -80,6 +80,7 @@ import InventorySettings from "./pages/clinic/settings/InventorySettings";
 import DiagnosisSweeper from "./pages/clinic/settings/DiagnosisSweeper";
 import PanelsSettings from "./pages/clinic/settings/PanelsSettings";
 import DrugLabelSettings from "./pages/clinic/settings/DrugLabelSettings";
+import ChargesSettings from "./pages/clinic/settings/ChargesSettings";
 import DocumentSettings from "./pages/clinic/settings/DocumentSettings";
 import QueueSettings from "./pages/clinic/settings/QueueSettings";
 import Appointments from "./pages/clinic/Appointments";
@@ -349,6 +350,14 @@ const App = () => (
                   element={
                     <ClinicProtectedRoute requiredRole="admin">
                       <DocumentSettings />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
+                  path="settings/charges"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <ChargesSettings />
                     </ClinicProtectedRoute>
                   }
                 />

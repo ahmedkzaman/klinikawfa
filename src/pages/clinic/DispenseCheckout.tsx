@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, Info } from 'lucide-react';
 import { format } from 'date-fns';
@@ -16,7 +16,7 @@ import { StatusBadge } from '@/components/clinic/StatusBadge';
 import { FollowUpScheduler } from '@/components/clinic/patient/FollowUpScheduler';
 import { VisitDetailsColumn } from '@/components/clinic/visit/VisitDetailsColumn';
 import { AttachmentsCard } from '@/components/clinic/visit/AttachmentsCard';
-import { BillingDetailsColumn } from '@/components/clinic/visit/BillingDetailsColumn';
+import { BillingDetailsColumn, type SelectedCharge } from '@/components/clinic/visit/BillingDetailsColumn';
 import { DispensePanel } from '@/components/clinic/visit/DispensePanel';
 import {
   useConsultationQueueEntries,
@@ -28,7 +28,7 @@ import {
 } from '@/hooks/clinic/useConsultations';
 import { useConsultationLock } from '@/hooks/clinic/useConsultationLock';
 import { ConsultationLockBanner } from '@/components/clinic/consultation/ConsultationLockBanner';
-import { useConsultationItems } from '@/hooks/clinic/useConsultationItems';
+import { useConsultationItems, useAddConsultationItem } from '@/hooks/clinic/useConsultationItems';
 import { usePayments } from '@/hooks/clinic/usePayments';
 import { cn } from '@/lib/utils';
 import {
@@ -48,6 +48,12 @@ export default function DispenseCheckout() {
     useConsultationQueueEntries();
   const updateQueue = useUpdateQueueEntry();
   const updateConsultation = useUpdateConsultation();
+  const addConsultationItem = useAddConsultationItem();
+
+  const [selectedCharges, setSelectedCharges] = useState<SelectedCharge[]>([]);
+  const handleChargesChange = useCallback((c: SelectedCharge[]) => {
+    setSelectedCharges(c);
+  }, []);
 
   const entry = useMemo(
     () => entries.find((e) => e.id === queueEntryId),
@@ -111,6 +117,19 @@ export default function DispenseCheckout() {
   const handleComplete = async () => {
     if (!queueEntryId || !consultation?.id) return;
     try {
+      // Batch-commit Other Charges as consultation_items first.
+      if (selectedCharges.length > 0) {
+        await Promise.all(
+          selectedCharges.map((c) =>
+            addConsultationItem.mutateAsync({
+              consultation_id: consultation.id,
+              item_name: c.name,
+              quantity: 1,
+              price: c.amount,
+            }),
+          ),
+        );
+      }
       await updateConsultation.mutateAsync({
         id: consultation.id,
         status: 'completed',
@@ -265,6 +284,8 @@ export default function DispenseCheckout() {
             consultationId={consultation?.id ?? null}
             items={items}
             payments={payments}
+            showOtherCharges
+            onChargesChange={handleChargesChange}
           />
         </div>
 

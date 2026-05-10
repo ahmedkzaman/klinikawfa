@@ -1,20 +1,32 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { Plus, Trash2, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/AuthContext';
 import { useVoidPayment } from '@/hooks/clinic/usePayments';
+import { useClinicChargeTypes } from '@/hooks/clinic/useClinicChargeTypes';
 import { RecordPaymentDialog } from './RecordPaymentDialog';
 import type { ConsultationItemRow, PaymentRow } from '@/types/clinic';
+
+export interface SelectedCharge {
+  charge_type_id: string;
+  name: string;
+  amount: number;
+}
 
 interface Props {
   queueEntryId: string;
   consultationId: string | null;
   items: ConsultationItemRow[];
   payments: PaymentRow[];
+  /** When true, render the "Other Charges" picker. Selections are NOT
+   *  persisted on toggle — parent commits them at checkout via onChargesChange. */
+  showOtherCharges?: boolean;
+  onChargesChange?: (charges: SelectedCharge[]) => void;
   onTotalsChange?: (totals: {
     subtotal: number;
     total: number;
@@ -28,13 +40,21 @@ export function BillingDetailsColumn({
   consultationId,
   items,
   payments,
+  showOtherCharges = false,
+  onChargesChange,
 }: Props) {
   const { isSpecialAdmin } = useAuth();
   const voidPayment = useVoidPayment();
+  const { data: chargeTypes = [] } = useClinicChargeTypes({ activeOnly: true });
 
   const [taxPct, setTaxPct] = useState<number>(0);
   const [discountRm, setDiscountRm] = useState<number>(0);
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  // Local-only Other Charges state (committed to DB on Complete Checkout)
+  const [selectedCharges, setSelectedCharges] = useState<
+    Record<string, number>
+  >({});
 
   const subtotal = useMemo(
     () =>
@@ -48,7 +68,29 @@ export function BillingDetailsColumn({
     [items],
   );
 
-  const afterDiscount = Math.max(subtotal - discountRm, 0);
+  const otherChargesTotal = useMemo(
+    () =>
+      Object.values(selectedCharges).reduce(
+        (a, v) => a + (Number(v) || 0),
+        0,
+      ),
+    [selectedCharges],
+  );
+
+  // Bubble selections up so the checkout page can commit them.
+  useEffect(() => {
+    if (!onChargesChange) return;
+    const list: SelectedCharge[] = Object.entries(selectedCharges)
+      .map(([id, amount]) => {
+        const ct = chargeTypes.find((c) => c.id === id);
+        return ct ? { charge_type_id: id, name: ct.name, amount } : null;
+      })
+      .filter((x): x is SelectedCharge => x !== null);
+    onChargesChange(list);
+  }, [selectedCharges, chargeTypes, onChargesChange]);
+
+  const subtotalWithCharges = subtotal + otherChargesTotal;
+  const afterDiscount = Math.max(subtotalWithCharges - discountRm, 0);
   const total = afterDiscount * (1 + taxPct / 100);
   const paid = useMemo(
     () => payments.reduce((acc, p) => acc + Number(p.amount ?? 0), 0),
@@ -65,6 +107,22 @@ export function BillingDetailsColumn({
     }
   };
 
+  const toggleCharge = (id: string, checked: boolean, defaultAmt: number) => {
+    setSelectedCharges((prev) => {
+      const next = { ...prev };
+      if (checked) next[id] = defaultAmt;
+      else delete next[id];
+      return next;
+    });
+  };
+
+  const updateChargeAmount = (id: string, value: string) => {
+    setSelectedCharges((prev) => ({
+      ...prev,
+      [id]: parseFloat(value) || 0,
+    }));
+  };
+
   return (
     <>
       <div className="rounded-xl bg-card border flex flex-col">
@@ -74,6 +132,65 @@ export function BillingDetailsColumn({
 
         <div className="p-4 space-y-3 text-sm">
           <Row label="Subtotal" value={`RM ${subtotal.toFixed(2)}`} />
+
+          {showOtherCharges && chargeTypes.length > 0 && (
+            <div className="space-y-2 border-t border-border pt-3">
+              <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Other Charges
+              </div>
+              <div className="space-y-1.5">
+                {chargeTypes.map((ct) => {
+                  const checked = ct.id in selectedCharges;
+                  return (
+                    <div
+                      key={ct.id}
+                      className="flex items-center gap-2"
+                    >
+                      <Checkbox
+                        id={`charge-${ct.id}`}
+                        checked={checked}
+                        onCheckedChange={(v) =>
+                          toggleCharge(
+                            ct.id,
+                            v === true,
+                            Number(ct.default_amount) || 0,
+                          )
+                        }
+                      />
+                      <Label
+                        htmlFor={`charge-${ct.id}`}
+                        className="flex-1 text-xs font-normal cursor-pointer"
+                      >
+                        {ct.name}
+                      </Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className="h-7 w-20 text-xs tabular-nums"
+                        value={
+                          checked
+                            ? selectedCharges[ct.id]
+                            : Number(ct.default_amount) || 0
+                        }
+                        disabled={!checked}
+                        onChange={(e) =>
+                          updateChargeAmount(ct.id, e.target.value)
+                        }
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              {otherChargesTotal > 0 && (
+                <Row
+                  label="Charges subtotal"
+                  value={`RM ${otherChargesTotal.toFixed(2)}`}
+                  muted
+                />
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
