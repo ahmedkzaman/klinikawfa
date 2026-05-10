@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Activity, ArrowRight, Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Activity, ArrowRight, Save, Stethoscope } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -12,8 +12,16 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useUpdateQueueEntry } from '@/hooks/clinic/useQueueEntries';
 import { useRecordVitalSigns } from '@/hooks/clinic/useVitalSigns';
+import { useDoctors } from '@/hooks/clinic/useDoctors';
 import { primaryBtn, secondaryBtn } from '@/lib/clinic/bentoTokens';
 import { cn } from '@/lib/utils';
 
@@ -64,14 +72,26 @@ export function VitalsEntryDialog({
 }: VitalsEntryDialogProps) {
   const recordVitals = useRecordVitalSigns();
   const updateQueue = useUpdateQueueEntry();
+  const { data: doctors } = useDoctors();
+  const activeDoctors = (doctors ?? []).filter((d) => d.status === 'active');
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [assignedDoctorId, setAssignedDoctorId] = useState<string | null>(null);
+
+  // Reset assignment when dialog closes so the next patient starts clean
+  useEffect(() => {
+    if (!open) setAssignedDoctorId(null);
+  }, [open]);
 
   const set = <K extends keyof FormState>(key: K, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
   const handleSave = async (sendToDoctor: boolean) => {
     if (!queueEntryId || !patientId) return;
+    if (sendToDoctor && !assignedDoctorId) {
+      toast.error('Select an attending doctor before sending');
+      return;
+    }
     setSubmitting(true);
     try {
       // pain_scale is collected for triage context but not yet a column on vital_signs.
@@ -94,6 +114,7 @@ export function VitalsEntryDialog({
         await updateQueue.mutateAsync({
           id: queueEntryId,
           clinic_status: 'ready_for_doctor',
+          assigned_doctor_id: assignedDoctorId,
         });
         toast.success('Triage complete: patient sent to doctor');
       } else {
@@ -243,6 +264,37 @@ export function VitalsEntryDialog({
           </div>
         </div>
 
+        {/* Attending Doctor Assignment — required to send to doctor */}
+        <div className="pt-4 border-t border-slate-100 space-y-2">
+          <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+            <Stethoscope className="h-3 w-3" /> Attending Doctor
+          </Label>
+          <Select
+            value={assignedDoctorId ?? undefined}
+            onValueChange={(v) => setAssignedDoctorId(v)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select doctor on duty" />
+            </SelectTrigger>
+            <SelectContent>
+              {activeDoctors.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-slate-400">No active doctors</div>
+              ) : (
+                activeDoctors.map((doc) => (
+                  <SelectItem key={doc.id} value={doc.id}>
+                    Dr. {doc.name}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+          {!assignedDoctorId && (
+            <p className="text-[10px] text-amber-600 italic">
+              A doctor must be assigned before the patient can be sent through.
+            </p>
+          )}
+        </div>
+
         <DialogFooter className="gap-2 sm:gap-2">
           <Button
             variant="ghost"
@@ -256,7 +308,7 @@ export function VitalsEntryDialog({
           <Button
             className={cn(primaryBtn)}
             onClick={() => handleSave(true)}
-            disabled={submitting}
+            disabled={submitting || !assignedDoctorId}
           >
             {submitting ? 'Saving…' : 'Save & Send to Doctor'}
             <ArrowRight className="h-4 w-4 ml-2" />

@@ -1,44 +1,84 @@
-# Defensive Cancellation — Final Wire-Up
+# Daily Queue Numbers + Triage Doctor Assignment
 
-DB migration, `ClinicStatus` union, and `VitalsEntryDialog` already shipped. This round wires the cancellation flow + Recently Cancelled drawer into the live `QueueBoard`.
+## Stress-test responses
 
-## 1. New helper — `src/lib/clinic/redFlagVitals.ts`
+1. **Midnight carry-over** — Treated as a feature, not a bug. A `260509-99` ticket showing alongside `260510-01` is correct: the date prefix proves the carry-over and lets the doctor see who has been waiting the longest. No extra logic needed; the existing "active OR today" filter already keeps these visible.
+2. **Doctor FK** — Verified. `queue_entries.assigned_doctor_id` is a UUID FK to `public.doctors.id` (not `auth.users`). `useDoctors()` returns rows from the same table, so `doc.id` is the correct value to write.
+3. **TV overflow** — Will downsize the queue-number font in `QueueTV.tsx` (and let the row reflow naturally) so the 9-character `YYMMDD-NN` string fits without wrapping on 1080p.
 
-`checkRedFlagVitals(vitals)` returns a short label or `null`. Thresholds (first match wins): BP > 180 sys OR > 120 dia → `"Critical BP: 190/130"`; SpO₂ < 92 (and > 0) → `"Critical SpO₂: 89%"`; HR > 130 → `"Critical HR: 142 bpm"`.
+## TV behaviour on Unassign
 
-## 2. `src/hooks/clinic/useQueueEntries.ts` — three new exports
+Patient simply moves back to the "Registered/Awaiting" column on the next polling tick. No flash overlay this round — staff at the front desk will redirect verbally. We can layer a flash notification later once we measure how often this actually happens.
 
-- `useCancelQueueEntry()` — resolves `auth.user`, pulls `full_name` from `profiles`, builds Malaysia-time `[CANCELLED <ts>] Reason: <reason> — by <name>` and appends to `visit_notes`. Writes `clinic_status='cancelled'`, `cancelled_at`, `cancelled_by`, `cancellation_reason`. Invalidates `queue-entries`, `consultation-queue-entries`, and `cancelled-today`. Sonner success/error toasts.
-- `useRestoreQueueEntry()` — admin-only. Clears `cancelled_*`, sets `clinic_status='registered'`, appends `[RESTORED <ts>] by <name>`. Same invalidations.
-- `useCancelledTodayEntries()` — query keyed `['clinic','queue-entries','cancelled-today']`. Today's `cancelled` rows with patient join, ordered by `cancelled_at desc`.
+## 1. Database migration
 
-## 3. New component — `src/components/clinic/CancelQueueEntryDialog.tsx`
+```sql
+CREATE OR REPLACE FUNCTION public.get_next_queue_number()
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE next_num integer;
+BEGIN
+  PERFORM pg_advisory_xact_lock(
+    ('x' || to_char(CURRENT_DATE,'YYYYMMDD'))::bit(32)::int
+  );
+  SELECT COALESCE(MAX(queue_sequence), 0) + 1
+    INTO next_num
+  FROM public.queue_entries
+  WHERE created_at::date = CURRENT_DATE;
+  RETURN next_num;
+END;
+$$;
+```
 
-Props `{ open, onOpenChange, entry }`.
+Also patch `intake_appointment_to_queue(...)` to call `get_next_queue_number()` and store `queue_sequence` in the same transaction. Legacy `queue_number` column stays untouched (audit continuity).
 
-- Loads latest vitals via `useVitalSigns(entry.patient_id)`, runs `checkRedFlagVitals` on the most recent row.
-- If red-flagged: destructive banner with the offending value + a required acknowledgment checkbox ("I have reviewed this patient's critical vitals and accept clinical responsibility for terminating the visit").
-- Reason `RadioGroup`: LWBS, Called 3× — no response, Left before treatment, Duplicate / Registration error, Other. "Other" reveals a `Textarea` (required, min 5 chars).
-- Header copy: *"This is a terminal action. The visit leaves the live board and appears in Recently Cancelled for the rest of today. If the patient returns, register a new visit."*
-- Footer: "Keep Active" (ghost) + "Confirm Termination" (destructive). Confirm disabled until reason valid AND red-flag ack (when applicable) AND not pending.
-- No staff-initials field — attribution auto-resolved in the hook.
+## 2. New formatter
 
-## 4. `src/pages/clinic/QueueBoard.tsx` wiring
+**`src/lib/clinic/queueNumber.ts`**
+```ts
+import { format } from 'date-fns';
+export const formatQueueNo = (createdAt: string | Date, seq: number | null) => {
+  if (seq == null) return '—';
+  try {
+    const d = typeof createdAt === 'string' ? new Date(createdAt) : createdAt;
+    return `${format(d, 'yyMMdd')}-${String(seq).padStart(2, '0')}`;
+  } catch { return '—'; }
+};
+```
 
-- Add `cancelOpen` state alongside `vitalsOpen`. Add `useCancelledTodayEntries()` + `useRestoreQueueEntry()` and resolve `isAdmin` from existing auth context (mirror the pattern used elsewhere on the board; if not present, derive via `useAuth().roles`).
-- In the active-entry action stack, render a destructive **"Patient Absconded / Cancel"** button (ghost, rose) for any status in `['registered','ready_for_doctor','with_doctor','on_hold']`. Sits below existing buttons under a border-top divider.
-- Mount `<CancelQueueEntryDialog>` once at the bottom alongside `<VitalsEntryDialog>`. On success → close sheet, clear `activeEntry`.
-- Add a **collapsible "Recently Cancelled Today (N)"** section at the bottom of the board (default closed). Each row: `#queue_number patient_name`, time, reason. Admin users get a small **Restore** button per row → `useRestoreQueueEntry`.
+## 3. Walk-in / Register insert paths
 
-## 5. Out of scope (deferred)
+**`src/hooks/clinic/useQueueEntries.ts`** — in the create mutations used by `CheckInWalkInDialog` and `RegisterAndCheckInDialog`, call `supabase.rpc('get_next_queue_number')` first, then include `queue_sequence` in the insert payload. Listing order switches to `created_at, queue_sequence`.
 
-60-second sonner Undo, triage Red/Amber/Green priority, LWBS analytics dashboard, queue-number reset RPC.
+## 4. Triage doctor assignment
 
-## Files
+**`src/components/clinic/VitalsEntryDialog.tsx`**
+- shadcn `Select` "Attending Doctor" populated by `useDoctors()`.
+- Local `assignedDoctorId` state, reset on dialog close.
+- "Save & Send to Doctor" disabled until a doctor is selected. "Save Only" stays enabled.
+- On send, the same `updateQueue.mutateAsync` call also writes `assigned_doctor_id`.
 
-- `src/lib/clinic/redFlagVitals.ts` (new)
-- `src/components/clinic/CancelQueueEntryDialog.tsx` (new)
-- `src/hooks/clinic/useQueueEntries.ts` (edited — three new hooks)
-- `src/pages/clinic/QueueBoard.tsx` (edited — button, dialog mount, Recently Cancelled drawer)
+## 5. QueueBoard + TV visuals
 
-No DB migration this round — schema already in place.
+- **QueueCard** (`QueueBoard.tsx`): `formatQueueNo(entry.created_at, entry.queue_sequence)` replaces `#{queue_number}`. Below the patient name:
+  - `Attending: Dr. {entry.doctors?.name}` in slate-600 when assigned.
+  - `Awaiting Assignment` in amber-600 italic when null and status is `registered`.
+- **Detail-sheet header** + **Recently Cancelled drawer**: same formatter.
+- **`QueueTV.tsx`**: include `queue_sequence, created_at` in the select; render via formatter; reduce queue-number font size to fit the longer string.
+
+## 6. Admin "Unassign Doctor" recovery
+
+In the QueueBoard detail sheet, admin-only button visible when `assigned_doctor_id` is set:
+- Sets `assigned_doctor_id = NULL`, `clinic_status = 'registered'`.
+- Appends `[REASSIGN <Malaysia ts>] Doctor unassigned — returning to registered pool.` to `visit_notes`.
+- Closes the sheet and shows an info toast.
+
+## Out of scope
+
+- Auto-load-balancer / round-robin assignment.
+- SMS / TV flash on reassignment.
+- Backfilling `queue_sequence` for historical rows.
+- Retiring the legacy `queue_number` sequence.
