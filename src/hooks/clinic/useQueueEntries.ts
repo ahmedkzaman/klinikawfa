@@ -151,4 +151,6 @@ export function useQueueEntry(id?: string) {
   });
 }
 
+export const useConsultationQueueEntries = useQueueEntries;
+
 export { QUEUE_QUERY_KEY };
