@@ -482,6 +482,7 @@ export function AddTreatmentBulkDialog({
                 <TableBody>
                   {filtered.map((item) => {
                     const isSelected = selected.some((s) => s.id === item.id);
+                    const isDoc = item.type === 'document';
                     return (
                       <TableRow
                         key={`${item.type}-${item.id}`}
@@ -489,7 +490,11 @@ export function AddTreatmentBulkDialog({
                         onClick={() => toggleItem(item)}
                       >
                         <TableCell>
-                          <Checkbox checked={isSelected} />
+                          {isDoc ? (
+                            <FileText className="h-4 w-4 text-blue-600" />
+                          ) : (
+                            <Checkbox checked={isSelected} />
+                          )}
                         </TableCell>
                         <TableCell className="text-sm font-medium">
                           <div>{item.name}</div>
