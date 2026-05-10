@@ -916,7 +916,7 @@ export default function ConsultationDetail() {
                 {!vitals && !showVitalForm && (
                   <p className="text-sm text-slate-400">No vitals recorded yet.</p>
                 )}
-                {patient.id && <VitalHistoryTrends patientId={patient.id} />}
+                {patient.id && <VitalHistoryTrends patientId={patient.id} currentQueueId={queueEntryId} />}
               </CardContent>
             </Card>
 

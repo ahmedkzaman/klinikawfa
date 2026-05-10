@@ -6,6 +6,16 @@ import type { QueueEntryWithJoins, QueueEntryRow } from "@/types/clinic";
 const QUEUE_QUERY_KEY = ["clinic", "queue-entries"] as const;
 const CONSULT_QUEUE_QUERY_KEY = ["clinic", "consultation-queue-entries"] as const;
 
+/** Shared "Active" statuses — entries in any of these stay visible across day boundaries. */
+export const ACTIVE_STATUSES = [
+  "registered",
+  "ready_for_doctor",
+  "with_doctor",
+  "sent_to_dispensary",
+  "dispensing_payment",
+  "on_hold",
+] as const;
+
 /**
  * Today's active queue entries for the main Queue Board.
  * Uses an "Allow-list" of statuses to prevent enum spelling errors.
@@ -20,14 +30,7 @@ export function useQueueEntries() {
       startOfDay.setHours(0, 0, 0, 0);
 
       // Define exactly which statuses should appear on the board
-      const activeStatuses = [
-        "registered",
-        "ready_for_doctor",
-        "with_doctor",
-        "sent_to_dispensary",
-        "dispensing_payment",
-        "on_hold",
-      ] as const;
+      const activeStatuses = ACTIVE_STATUSES;
 
       const { data, error } = await supabase
         .from("queue_entries")
@@ -40,8 +43,9 @@ export function useQueueEntries() {
         `,
         )
         .is("deleted_at", null)
-        .in("clinic_status", activeStatuses)
-        .gte("created_at", startOfDay.toISOString())
+        .or(
+          `created_at.gte.${startOfDay.toISOString()},clinic_status.in.(${activeStatuses.join(",")})`,
+        )
         .order("is_urgent", { ascending: false })
         .order("queue_number", { ascending: true });
 
@@ -84,14 +88,7 @@ export function useConsultationQueueEntries() {
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
 
-      const activeStatuses = [
-        "registered",
-        "ready_for_doctor",
-        "with_doctor",
-        "sent_to_dispensary",
-        "dispensing_payment",
-        "on_hold",
-      ] as const;
+      const activeStatuses = ACTIVE_STATUSES;
 
       const { data, error } = await supabase
         .from("queue_entries")

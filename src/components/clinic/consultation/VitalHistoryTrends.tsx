@@ -15,6 +15,7 @@ import { usePatientVitalHistory } from '@/hooks/clinic/useVitalSigns';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import {
   LineChart,
   Line,
@@ -40,7 +41,13 @@ const METRICS = [
 
 type MetricKey = (typeof METRICS)[number]['key'];
 
-export function VitalHistoryTrends({ patientId }: { patientId: string }) {
+export function VitalHistoryTrends({
+  patientId,
+  currentQueueId,
+}: {
+  patientId: string;
+  currentQueueId?: string;
+}) {
   const { data: history = [] } = usePatientVitalHistory(patientId);
   const qc = useQueryClient();
   const [selectedMetrics, setSelectedMetrics] = useState<Set<MetricKey>>(
@@ -106,13 +113,23 @@ export function VitalHistoryTrends({ patientId }: { patientId: string }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {history.map((r) => (
-                <TableRow key={r.id}>
+              {history.map((r) => {
+                const isThisVisit =
+                  !!currentQueueId && r.queue_entry_id === currentQueueId;
+                return (
+                <TableRow key={r.id} className={cn(isThisVisit && 'bg-primary/5')}>
                   <TableCell className="text-xs py-2">
                     {format(new Date(r.created_at), 'dd/MM/yyyy')}
                   </TableCell>
                   <TableCell className="text-xs py-2">
-                    {format(new Date(r.created_at), 'HH:mm')}
+                    <div className="flex items-center gap-1.5">
+                      <span>{format(new Date(r.created_at), 'HH:mm')}</span>
+                      {isThisVisit && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary">
+                          This visit
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-xs py-2">{r.height_cm ?? '—'}</TableCell>
                   <TableCell className="text-xs py-2">{r.weight_kg ?? '—'}</TableCell>
@@ -137,7 +154,8 @@ export function VitalHistoryTrends({ patientId }: { patientId: string }) {
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </div>

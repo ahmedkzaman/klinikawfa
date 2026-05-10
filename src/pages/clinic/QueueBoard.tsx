@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertCircle, ListOrdered, Plus, UserPlus, Users } from 'lucide-react';
+import { Activity, AlertCircle, ListOrdered, Plus, UserPlus, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { SEOHead } from '@/components/seo/SEOHead';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ import { useTodayAppointments } from '@/hooks/clinic/useTodayAppointments';
 import { CheckInAppointmentDialog } from '@/components/clinic/CheckInAppointmentDialog';
 import { CheckInWalkInDialog } from '@/components/clinic/CheckInWalkInDialog';
 import { RegisterAndCheckInDialog } from '@/components/clinic/RegisterAndCheckInDialog';
+import { VitalsEntryDialog } from '@/components/clinic/VitalsEntryDialog';
 import {
   QUEUE_COLUMNS,
   STATUS_COLORS,
@@ -119,6 +120,7 @@ export default function QueueBoard() {
   const [walkInDialog, setWalkInDialog] = useState(false);
   const [registerDialog, setRegisterDialog] = useState(false);
   const [activeEntry, setActiveEntry] = useState<QueueEntryWithJoins | null>(null);
+  const [vitalsOpen, setVitalsOpen] = useState(false);
 
   const ACTIVE_STATUSES: ClinicStatus[] = [
     'registered',
@@ -215,7 +217,7 @@ export default function QueueBoard() {
                     key={col.key}
                     className={cn(bento, 'p-3 flex flex-col min-h-[180px]')}
                   >
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-1">
                       <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                         {col.label}
                       </h2>
@@ -225,6 +227,11 @@ export default function QueueBoard() {
                         {items.length}
                       </span>
                     </div>
+                    {col.key === 'registered' ? (
+                      <p className="text-[11px] text-slate-400 mb-2">Awaiting triage</p>
+                    ) : (
+                      <div className="mb-2" />
+                    )}
                     <div className="space-y-2 flex-1">
                       <AnimatePresence mode="popLayout">
                         {items.length === 0 && (
@@ -312,32 +319,40 @@ export default function QueueBoard() {
 
               <div className="pt-4 border-t border-slate-100 flex flex-col gap-2">
                 {activeEntry.clinic_status === 'registered' && (
-                  <Button
-                    className={primaryBtn}
-                    disabled={updateQueue.isPending || !activeEntry}
-                    onClick={() => {
-                      if (!activeEntry) return;
-                      updateQueue.mutate(
-                        { id: activeEntry.id, clinic_status: 'ready_for_doctor' },
-                        {
-                          onSuccess: () => {
-                            setActiveEntry(null);
-                            toast.success('Patient called to doctor');
+                  <>
+                    <Button
+                      className={primaryBtn}
+                      disabled={updateQueue.isPending}
+                      onClick={() => setVitalsOpen(true)}
+                    >
+                      <Activity className="h-4 w-4 mr-2" />
+                      Take Vitals / Triage
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className={secondaryBtn}
+                      disabled={updateQueue.isPending}
+                      onClick={() => {
+                        if (!activeEntry) return;
+                        updateQueue.mutate(
+                          { id: activeEntry.id, clinic_status: 'ready_for_doctor' },
+                          {
+                            onSuccess: () => {
+                              setActiveEntry(null);
+                              toast.success('Patient sent to doctor');
+                            },
+                            onError: (error: unknown) => {
+                              const message =
+                                error instanceof Error ? error.message : 'Unknown error';
+                              toast.error(`Update failed: ${message}`);
+                            },
                           },
-                          onError: (error: unknown) => {
-                            const message =
-                              error instanceof Error ? error.message : 'Unknown error';
-                            toast.error(`Update failed: ${message}`);
-                          },
-                        },
-                      );
-                    }}
-                  >
-                    {updateQueue.isPending &&
-                    updateQueue.variables?.clinic_status === 'ready_for_doctor'
-                      ? 'Updating…'
-                      : 'Send to Doctor'}
-                  </Button>
+                        );
+                      }}
+                    >
+                      Skip Triage → Send to Doctor
+                    </Button>
+                  </>
                 )}
 
                 {(activeEntry.clinic_status === 'sent_to_dispensary' ||
@@ -372,6 +387,18 @@ export default function QueueBoard() {
       />
       <CheckInWalkInDialog open={walkInDialog} onOpenChange={setWalkInDialog} />
       <RegisterAndCheckInDialog open={registerDialog} onOpenChange={setRegisterDialog} />
+
+      {activeEntry && (
+        <VitalsEntryDialog
+          open={vitalsOpen}
+          onOpenChange={(o) => {
+            setVitalsOpen(o);
+            if (!o) setActiveEntry(null);
+          }}
+          queueEntryId={activeEntry.id}
+          patientId={activeEntry.patient_id}
+        />
+      )}
     </>
   );
 }
