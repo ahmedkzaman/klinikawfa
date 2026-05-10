@@ -334,6 +334,48 @@ export default function ConsultationDetail() {
     (historyPage + 1) * HISTORY_PER_PAGE,
   );
 
+  const { diagnoses: diagnosisCatalog = [] } = useDiagnoses();
+
+  /**
+   * Append-not-overwrite copy of a past diagnosis into today's form state.
+   * - Empty field → set structured id (if known) or free text.
+   * - Already structured → demote to text and append `, <new>`.
+   * - Already free text → append `, <new>`.
+   * Case-insensitive duplicate guard prevents repeated chips.
+   */
+  const handleCopyDiagnosis = ({ diagnosis_id, name }: CopyDiagnosisPayload) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+
+    const currentText = diagnosisText.trim();
+    const currentStructuredName = diagnosisId
+      ? diagnosisCatalog.find((d) => d.id === diagnosisId)?.name?.trim() ?? ''
+      : '';
+    const currentDisplay = currentStructuredName || currentText;
+
+    // Duplicate guard
+    const tokens = currentDisplay
+      .split(',')
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
+    if (tokens.includes(trimmed.toLowerCase())) return;
+
+    if (!currentDisplay) {
+      if (diagnosis_id) {
+        setDiagnosisId(diagnosis_id);
+        setDiagnosisText('');
+      } else {
+        setDiagnosisId(null);
+        setDiagnosisText(trimmed);
+      }
+      return;
+    }
+
+    // Demote any structured selection so we can hold multiple labels as text.
+    setDiagnosisId(null);
+    setDiagnosisText(`${currentDisplay}, ${trimmed}`);
+  };
+
   const waitingCount = useMemo(() => {
     if (!doctor) return 0;
     return entries.filter(
