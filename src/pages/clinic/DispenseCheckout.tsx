@@ -28,7 +28,7 @@ import {
 } from '@/hooks/clinic/useConsultations';
 import { useConsultationLock } from '@/hooks/clinic/useConsultationLock';
 import { ConsultationLockBanner } from '@/components/clinic/consultation/ConsultationLockBanner';
-import { useConsultationItems } from '@/hooks/clinic/useConsultationItems';
+import { useConsultationItems, useAddConsultationItem } from '@/hooks/clinic/useConsultationItems';
 import { usePayments } from '@/hooks/clinic/usePayments';
 import { cn } from '@/lib/utils';
 import {
