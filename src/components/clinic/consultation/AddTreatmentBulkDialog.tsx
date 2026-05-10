@@ -103,6 +103,49 @@ const resolvePrice = (
   return 0;
 };
 
+const LOW_STOCK_THRESHOLD = 10;
+const EXPIRY_WARNING_DAYS = 30;
+
+function daysUntil(iso: string | null): number | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return Math.ceil((d.getTime() - Date.now()) / 86_400_000);
+}
+
+function StockBadges({
+  stock,
+  nearestExpiry,
+}: {
+  stock: number | null;
+  nearestExpiry: string | null;
+}) {
+  const days = daysUntil(nearestExpiry);
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {stock === 0 ? (
+        <Badge variant="destructive" className="text-[10px] py-0 px-1.5">
+          Out of stock
+        </Badge>
+      ) : stock !== null && stock <= LOW_STOCK_THRESHOLD ? (
+        <Badge className="text-[10px] py-0 px-1.5 bg-amber-100 text-amber-800 hover:bg-amber-100 border-transparent">
+          Low stock: {stock}
+        </Badge>
+      ) : stock !== null ? (
+        <Badge className="text-[10px] py-0 px-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-transparent">
+          {stock} in stock
+        </Badge>
+      ) : null}
+      {days !== null && days <= EXPIRY_WARNING_DAYS && days >= 0 && (
+        <Badge className="text-[10px] py-0 px-1.5 bg-orange-100 text-orange-800 hover:bg-orange-100 border-transparent inline-flex items-center gap-0.5">
+          <Clock className="h-2.5 w-2.5" />
+          Expiring in {days}d
+        </Badge>
+      )}
+    </div>
+  );
+}
+
 export function AddTreatmentBulkDialog({
   open,
   onOpenChange,
