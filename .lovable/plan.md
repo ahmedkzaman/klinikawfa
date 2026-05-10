@@ -1,96 +1,44 @@
-# Clinical Triage + Defensive LWBS Protocol (final)
+# Defensive Cancellation — Final Wire-Up
 
-Incorporates: auto-resolved staff identity, hard red-flag block before LWBS, and a "Recently Cancelled (today)" drawer with admin restore.
+DB migration, `ClinicStatus` union, and `VitalsEntryDialog` already shipped. This round wires the cancellation flow + Recently Cancelled drawer into the live `QueueBoard`.
 
-## 1. Database migration
+## 1. New helper — `src/lib/clinic/redFlagVitals.ts`
 
-```sql
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_type t
-    JOIN pg_enum e ON t.oid = e.enumtypid
-    WHERE t.typname = 'clinic_status' AND e.enumlabel = 'cancelled'
-  ) THEN
-    ALTER TYPE clinic_status ADD VALUE 'cancelled';
-  END IF;
-END $$;
+`checkRedFlagVitals(vitals)` returns a short label or `null`. Thresholds (first match wins): BP > 180 sys OR > 120 dia → `"Critical BP: 190/130"`; SpO₂ < 92 (and > 0) → `"Critical SpO₂: 89%"`; HR > 130 → `"Critical HR: 142 bpm"`.
 
-ALTER TABLE public.queue_entries
-  ADD COLUMN IF NOT EXISTS cancelled_at        timestamptz,
-  ADD COLUMN IF NOT EXISTS cancelled_by        uuid REFERENCES auth.users(id),
-  ADD COLUMN IF NOT EXISTS cancellation_reason text;
-```
+## 2. `src/hooks/clinic/useQueueEntries.ts` — three new exports
 
-`ACTIVE_STATUSES` (already exported) deliberately excludes `cancelled`, so cancelled entries leave the live board immediately.
+- `useCancelQueueEntry()` — resolves `auth.user`, pulls `full_name` from `profiles`, builds Malaysia-time `[CANCELLED <ts>] Reason: <reason> — by <name>` and appends to `visit_notes`. Writes `clinic_status='cancelled'`, `cancelled_at`, `cancelled_by`, `cancellation_reason`. Invalidates `queue-entries`, `consultation-queue-entries`, and `cancelled-today`. Sonner success/error toasts.
+- `useRestoreQueueEntry()` — admin-only. Clears `cancelled_*`, sets `clinic_status='registered'`, appends `[RESTORED <ts>] by <name>`. Same invalidations.
+- `useCancelledTodayEntries()` — query keyed `['clinic','queue-entries','cancelled-today']`. Today's `cancelled` rows with patient join, ordered by `cancelled_at desc`.
 
-## 2. `VitalsEntryDialog.tsx` (new)
+## 3. New component — `src/components/clinic/CancelQueueEntryDialog.tsx`
 
-- Two-column grid — Circulation (BP sys/dia, HR, Pain 0–10) and Metabolic & Respiratory (Temp °C, SpO₂, Weight, Height, Glucose).
-- Empty inputs serialise to `null`, otherwise `Number(v)`.
-- Hooks: `useRecordVitalSigns()` + `useUpdateQueueEntry()`.
-- Footer:
-  - **Save Only** (ghost) — vitals only.
-  - **Save & Send to Doctor** (primary) — vitals, then status → `ready_for_doctor`.
-- `pain_scale` kept in UI state; included in payload only if the column exists.
+Props `{ open, onOpenChange, entry }`.
 
-## 3. Red-flag check (shared helper)
+- Loads latest vitals via `useVitalSigns(entry.patient_id)`, runs `checkRedFlagVitals` on the most recent row.
+- If red-flagged: destructive banner with the offending value + a required acknowledgment checkbox ("I have reviewed this patient's critical vitals and accept clinical responsibility for terminating the visit").
+- Reason `RadioGroup`: LWBS, Called 3× — no response, Left before treatment, Duplicate / Registration error, Other. "Other" reveals a `Textarea` (required, min 5 chars).
+- Header copy: *"This is a terminal action. The visit leaves the live board and appears in Recently Cancelled for the rest of today. If the patient returns, register a new visit."*
+- Footer: "Keep Active" (ghost) + "Confirm Termination" (destructive). Confirm disabled until reason valid AND red-flag ack (when applicable) AND not pending.
+- No staff-initials field — attribution auto-resolved in the hook.
 
-New `src/lib/clinic/redFlagVitals.ts`:
+## 4. `src/pages/clinic/QueueBoard.tsx` wiring
 
-```ts
-export function isRedFlag(v?: { bp_systolic?: number|null; bp_diastolic?: number|null; spo2?: number|null; heart_rate?: number|null }) {
-  if (!v) return null;
-  if ((v.spo2 ?? 100) < 92)                              return 'SpO₂ < 92%';
-  if ((v.bp_systolic ?? 0) > 180 || (v.bp_diastolic ?? 0) > 120) return 'BP > 180/120';
-  if ((v.heart_rate ?? 0) > 130)                          return 'HR > 130 bpm';
-  return null;
-}
-```
+- Add `cancelOpen` state alongside `vitalsOpen`. Add `useCancelledTodayEntries()` + `useRestoreQueueEntry()` and resolve `isAdmin` from existing auth context (mirror the pattern used elsewhere on the board; if not present, derive via `useAuth().roles`).
+- In the active-entry action stack, render a destructive **"Patient Absconded / Cancel"** button (ghost, rose) for any status in `['registered','ready_for_doctor','with_doctor','on_hold']`. Sits below existing buttons under a border-top divider.
+- Mount `<CancelQueueEntryDialog>` once at the bottom alongside `<VitalsEntryDialog>`. On success → close sheet, clear `activeEntry`.
+- Add a **collapsible "Recently Cancelled Today (N)"** section at the bottom of the board (default closed). Each row: `#queue_number patient_name`, time, reason. Admin users get a small **Restore** button per row → `useRestoreQueueEntry`.
 
-Used by the cancellation dialog to gate destructive submit.
+## 5. Out of scope (deferred)
 
-## 4. `CancelQueueEntryDialog.tsx` (new) — terminate visit
-
-- Props: `open`, `onOpenChange`, `queueEntry`.
-- Reason `RadioGroup`: LWBS, Called 3× — no response, Left before treatment complete, Duplicate/Error, Other (with required textarea).
-- **Red-flag block (mandatory):** on open, fetches the latest `vital_signs` row for `queue_entry_id`. If `isRedFlag()` returns a label:
-  - Renders a destructive alert banner ("⚠ Critical vitals on file: SpO₂ < 92% — clinical review required").
-  - Confirm button is replaced by a 2-step pattern: a checkbox "I have attempted to retain this patient and documented the clinical risk" must be ticked before the destructive **Confirm Cancellation** unlocks.
-  - This is a hard UI block, not a soft toast.
-- Staff identity is **auto-resolved** (no input field): the mutation looks up the current user's display name (profiles → fallback email → `'Staff'`) and writes the line `\n\n[CANCELLED <ISO>] <reason> — by <name>` into `visit_notes`.
-- Header copy: *"This action is final. The entry will leave the active board. The cancellation appears in 'Recently Cancelled' for the rest of today."*
-
-## 5. `useQueueEntries.ts` updates
-
-- `useCancelQueueEntry()` mutation — resolves `auth.user`, looks up `profiles.full_name`, builds the `[CANCELLED ...]` line, then updates `clinic_status='cancelled'`, `cancelled_at`, `cancelled_by`, `cancellation_reason`, and the appended `visit_notes`. Invalidates board + consultation queues + the new cancelled-today query.
-- `useRestoreQueueEntry()` mutation — admin-only on the client (gated by role check); clears `cancelled_*` columns, sets `clinic_status='registered'`, and appends `\n\n[RESTORED <ISO>] by <name>` to `visit_notes`.
-- `useCancelledTodayEntries()` query — `clinic_status='cancelled'` AND `cancelled_at >= startOfDay`; subscribes to the same realtime channel.
-
-## 6. `QueueBoard.tsx` wiring
-
-- New state: `vitalsOpen`, `cancelOpen`.
-- Detail-sheet action stack:
-  - `registered` → **Take Vitals / Triage** (primary) above existing **Skip Triage → Send to Doctor**.
-  - For all active statuses except `completed`/`cancelled` → divider + destructive **Patient Absconded** opens `CancelQueueEntryDialog`.
-- New collapsible **"Recently Cancelled (today)"** drawer at the bottom of the board:
-  - Lists each cancelled entry with patient name, queue #, `cancelled_at` time, reason, and (admin only) a **Restore** button.
-  - Powered by `useCancelledTodayEntries()`.
-- Render `VitalsEntryDialog` and `CancelQueueEntryDialog` once at page bottom.
-
-## Out of scope
-
-- Pre-cancel red-flag toast for non-critical vitals (the hard block covers the liability case).
-- 60-second sonner Undo (superseded by the drawer's Restore action).
-- Triage priority Red/Amber/Green.
-- `safe_reset_queue_number_seq()` doesn't need changes — `cancelled` already isn't in its active set.
-- LWBS-rate analytics dashboard.
+60-second sonner Undo, triage Red/Amber/Green priority, LWBS analytics dashboard, queue-number reset RPC.
 
 ## Files
 
-- **Migration:** enum value + 3 audit columns.
-- **New:** `src/lib/clinic/redFlagVitals.ts`.
-- **New:** `src/components/clinic/VitalsEntryDialog.tsx`.
-- **New:** `src/components/clinic/CancelQueueEntryDialog.tsx`.
-- **Edited:** `src/hooks/clinic/useQueueEntries.ts` — `useCancelQueueEntry`, `useRestoreQueueEntry`, `useCancelledTodayEntries`.
-- **Edited:** `src/pages/clinic/QueueBoard.tsx` — triage + absconded buttons, Recently Cancelled drawer, dialog wiring.
+- `src/lib/clinic/redFlagVitals.ts` (new)
+- `src/components/clinic/CancelQueueEntryDialog.tsx` (new)
+- `src/hooks/clinic/useQueueEntries.ts` (edited — three new hooks)
+- `src/pages/clinic/QueueBoard.tsx` (edited — button, dialog mount, Recently Cancelled drawer)
+
+No DB migration this round — schema already in place.
