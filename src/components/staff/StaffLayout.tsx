@@ -348,9 +348,9 @@ export function StaffLayout() {
 
       {/* Mobile Sidebar */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="w-60 p-0 bg-white">
+        <SheetContent side="left" className="w-60 p-0 bg-white flex flex-col h-full">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <div className="px-4 py-4 border-b border-slate-100">
+          <div className="shrink-0 px-4 py-4 border-b border-slate-100">
             <Link to="/staff/dashboard" className="flex items-center gap-2" onClick={() => setMobileOpen(false)}>
               <img src={logoKlinikAwfa} alt="Klinik Awfa" className="h-8 w-auto" />
               <span className="font-semibold text-sm text-slate-800">Klinik Awfa Staff</span>
