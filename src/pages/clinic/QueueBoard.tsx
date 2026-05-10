@@ -2,11 +2,26 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Activity, AlertCircle, ListOrdered, Plus, UserPlus, Users } from 'lucide-react';
+import {
+  Activity,
+  AlertCircle,
+  ChevronDown,
+  ListOrdered,
+  Plus,
+  RotateCcw,
+  UserPlus,
+  Users,
+  UserX,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { SEOHead } from '@/components/seo/SEOHead';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
   Sheet,
   SheetContent,
@@ -14,12 +29,19 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { useQueueEntries, useUpdateQueueEntry } from '@/hooks/clinic/useQueueEntries';
+import {
+  useCancelledTodayEntries,
+  useQueueEntries,
+  useRestoreQueueEntry,
+  useUpdateQueueEntry,
+} from '@/hooks/clinic/useQueueEntries';
 import { useTodayAppointments } from '@/hooks/clinic/useTodayAppointments';
+import { useAuth } from '@/contexts/AuthContext';
 import { CheckInAppointmentDialog } from '@/components/clinic/CheckInAppointmentDialog';
 import { CheckInWalkInDialog } from '@/components/clinic/CheckInWalkInDialog';
 import { RegisterAndCheckInDialog } from '@/components/clinic/RegisterAndCheckInDialog';
 import { VitalsEntryDialog } from '@/components/clinic/VitalsEntryDialog';
+import { CancelQueueEntryDialog } from '@/components/clinic/CancelQueueEntryDialog';
 import {
   QUEUE_COLUMNS,
   STATUS_COLORS,
