@@ -107,12 +107,15 @@ export default function DailyTaskReview() {
     supportStaffList.forEach(s => staffMap.set(s.id, { id: s.id, name: s.name, type: 'Staff' }));
 
     // Add doctors from roster data
-    Object.values(dRoster).forEach(day => {
-      if (day.shift1 && !staffMap.has(day.shift1.staffId)) {
-        staffMap.set(day.shift1.staffId, { id: day.shift1.staffId, name: day.shift1.staffName, type: 'Doctor' });
-      }
-      if (day.shift2 && !staffMap.has(day.shift2.staffId)) {
-        staffMap.set(day.shift2.staffId, { id: day.shift2.staffId, name: day.shift2.staffName, type: 'Doctor' });
+    Object.values(dRoster).forEach((day: any) => {
+      if (!day || typeof day !== 'object') return;
+      for (const [rawKey, val] of Object.entries(day)) {
+        if (!doctorShiftBucket(rawKey)) continue;
+        cellsOf(val).forEach(c => {
+          if (c.staffId && !staffMap.has(c.staffId)) {
+            staffMap.set(c.staffId, { id: c.staffId, name: c.staffName, type: 'Doctor' });
+          }
+        });
       }
     });
 
