@@ -169,6 +169,8 @@ export function AddTreatmentBulkDialog({
         price: `RM ${priceNum.toFixed(2)}${isPanel ? ' (Panel)' : ''}`,
         priceNum,
         type: 'service',
+        categoryLower: '',
+        genericLower: '',
       });
     });
 
