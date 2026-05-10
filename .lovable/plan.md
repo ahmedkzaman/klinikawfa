@@ -1,47 +1,36 @@
 ## Goal
-Fix the blank print preview (portal-based isolation), add Edit + Void actions to attached consultation documents, and stabilize print timing.
+Replace the fragile "hide #root" print strategy with a hidden-iframe print, and confirm the Attached Documents list refreshes immediately after save.
 
-## 1. Print Preview — `DocumentPrintLayer.tsx`
-- Mount `.doc-print-root` via `createPortal(..., document.body)` so it sits as a sibling of `#root`.
-- Replace the broad `body > *:not(.doc-print-root)` rule with a surgical one:
-  ```css
-  @page { size: <size> <orientation>; margin: 0mm; }
-  @media print {
-    #root, header, nav, aside, footer { display: none !important; }
-    .doc-print-root {
-      display: block !important;
-      position: absolute;
-      top: 0; left: 0;
-      width: 100%;
-      background: white;
-    }
-  }
-  ```
-- Inject the `<style>` tag inside the same portal, keep `getPaperStyle()` and `<pre>` content rendering.
+## 1. New iframe print helper — `src/lib/clinic/printDocument.ts`
+Export `printDocument(doc: ConsultationDocument)`:
+- Create a hidden `<iframe>` (`position:fixed; right:0; bottom:0; width:0; height:0; border:0; visibility:hidden`) and append to `document.body`.
+- Open its document and write a full HTML page:
+  - `<head><style>` with:
+    - `@page { size: <doc.paper_size> <doc.orientation>; margin: 0 }`
+    - `html, body { margin:0; padding:0; background:#fff; color:#0f172a }`
+    - `.sheet { padding: 15mm; }` for A6, `25mm` otherwise.
+    - `pre { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12pt; line-height: 1.5; white-space: pre-wrap; margin:0 }`
+  - `<body><div class="sheet"><pre>{HTML-escaped doc.content}</pre></div></body>`
+- After `iframe.onload` (with a 200ms safety fallback), call `iframe.contentWindow.focus()` then `iframe.contentWindow.print()`.
+- Remove the iframe ~1000ms after print returns (and on `onafterprint` if available).
 
-## 2. Void (Delete) Documents
-- **Migration**: add a DELETE policy on `consultation_documents` using `public.is_ops_or_admin(auth.uid())`.
-- **Hook** (`useClinicDocuments.ts`): new `useDeleteConsultationDocument` — `delete().eq('id', id)`, invalidates `['consultation-documents', consultationId]`, toast "Document voided".
-- **UI** (`ConsultationDetail.tsx`): add a red ghost Trash icon button per doc, wrapped in `AlertDialog` ("Void this document? This action cannot be undone."). Hidden when `isLocked`.
+## 2. Wire it into `ConsultationDetail.tsx`
+- Remove `DocumentPrintLayer` import + render and the `printingDoc` state + `setTimeout(() => window.print(), 250)` block.
+- Keep Eye (View), Pencil (Edit), Trash (Void) row actions; both the row's Print trigger and `ViewDocumentModal`'s `onPrint` now call `printDocument(doc)` directly.
+- `ViewDocumentModal` `onPrint`: close the modal, then call `printDocument(doc)`.
 
-## 3. Edit Documents
-- **Hook**: `useUpdateConsultationDocument` — `update({ content }).eq('id', id)`, invalidates the same query.
-- **`IssueDocumentModal`**: add optional `existingDoc?: ConsultationDocument | null` prop.
-  - When present: skip tag substitution, seed `content` from `existingDoc.content`, use its `paper_size`/`orientation`, change title to "Edit: {name}", and Save calls the update mutation instead of insert.
-  - Otherwise: existing template-issue behavior unchanged.
-- **UI**: add a Pencil icon button per doc; new state `editingDoc: ConsultationDocument | null` controls the modal in edit mode. Hidden when `isLocked`.
+## 3. Delete dead code
+- Delete `src/components/clinic/consultation/DocumentPrintLayer.tsx`.
 
-## 4. Print Reliability
-- Bump View/Print `setTimeout` from 100ms → 250ms so the portal + injected `<style>` are flushed before `window.print()`.
-
-## Files Touched
-- `src/components/clinic/consultation/DocumentPrintLayer.tsx`
-- `src/components/clinic/consultation/IssueDocumentModal.tsx`
-- `src/hooks/clinic/useClinicDocuments.ts`
-- `src/pages/clinic/ConsultationDetail.tsx`
-- New migration: DELETE policy on `consultation_documents`
+## 4. List refresh sanity check
+- Confirm `useAddConsultationDocument` invalidates `['consultation-documents', consultation_id]` matching `useConsultationDocuments(consultationId)` — already aligned. No code change unless a mismatch is found while editing.
 
 ## Out of Scope
-- Soft-delete (table is not in the four soft-deletable clinic tables; uses hard delete).
-- Audit log of voided documents.
-- Re-substituting tags on edit (intentionally preserves manual edits).
+- Branded letterhead/logo/signature line in the print output (keeps current plain `<pre>` rendering).
+- Edit/Void flows (already implemented previously).
+- Soft-delete or audit logging.
+
+## Files Touched
+- New: `src/lib/clinic/printDocument.ts`
+- Edited: `src/pages/clinic/ConsultationDetail.tsx`, `src/components/clinic/consultation/ViewDocumentModal.tsx`
+- Deleted: `src/components/clinic/consultation/DocumentPrintLayer.tsx`
