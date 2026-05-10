@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import type { ConsultationDocument } from '@/hooks/clinic/useClinicDocuments';
 
 function escapeHtml(s: string): string {
@@ -9,12 +10,29 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
+const DIMS: Record<string, { w: string; h: string }> = {
+  A4: { w: '210mm', h: '297mm' },
+  A5: { w: '148mm', h: '210mm' },
+  A6: { w: '105mm', h: '148mm' },
+};
+
+function resolveDims(size: string, orientation: string): { width: string; height: string } {
+  const base = DIMS[size] ?? DIMS.A4;
+  if (orientation === 'landscape') return { width: base.h, height: base.w };
+  return { width: base.w, height: base.h };
+}
+
 export function printDocument(doc: ConsultationDocument): void {
   if (typeof document === 'undefined') return;
 
   const size = (doc.paper_size || 'A4').toUpperCase();
   const orientation = (doc.orientation || 'portrait').toLowerCase();
+  const { width, height } = resolveDims(size, orientation);
   const padding = size === 'A6' ? '15mm' : '25mm';
+
+  toast("Pro-tip: set Margins to ‘None’ in the print dialog for best fit.", {
+    duration: 6000,
+  });
 
   const iframe = document.createElement('iframe');
   iframe.setAttribute('aria-hidden', 'true');
@@ -28,9 +46,27 @@ export function printDocument(doc: ConsultationDocument): void {
 <meta charset="utf-8" />
 <title>${escapeHtml(doc.template_name || 'Document')}</title>
 <style>
-  @page { size: ${size} ${orientation}; margin: 0; }
-  html, body { margin: 0; padding: 0; background: #fff; color: #0f172a; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .sheet { padding: ${padding}; box-sizing: border-box; }
+  @page {
+    size: ${width} ${height};
+    margin: 0 !important;
+  }
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: ${width};
+    height: ${height};
+    background: #fff;
+    color: #0f172a;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .sheet {
+    width: ${width};
+    height: ${height};
+    padding: ${padding};
+    box-sizing: border-box;
+    overflow: hidden;
+  }
   pre {
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     font-size: 12pt;
@@ -78,6 +114,5 @@ export function printDocument(doc: ConsultationDocument): void {
   cd.write(html);
   cd.close();
 
-  // Fallback in case onload doesn't fire (some browsers)
   setTimeout(triggerPrint, 300);
 }
