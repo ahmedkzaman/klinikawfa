@@ -353,6 +353,16 @@ export function AddTreatmentBulkDialog({
     onOpenChange(v);
   };
 
+  const lowStockSelected = useMemo(() => {
+    const byId = new Map(allItems.map((r) => [r.id, r]));
+    return selected
+      .map((s) => byId.get(s.id))
+      .filter(
+        (r): r is CombinedRow =>
+          !!r && r.type === 'item' && r.stock !== null && r.stock <= LOW_STOCK_THRESHOLD,
+      );
+  }, [selected, allItems]);
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-5xl h-[80vh] flex flex-col p-0">
