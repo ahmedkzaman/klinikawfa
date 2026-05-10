@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertCircle, ListOrdered, Plus, UserPlus, Users } from 'lucide-react';
+import { Activity, AlertCircle, ListOrdered, Plus, UserPlus, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { SEOHead } from '@/components/seo/SEOHead';
 import { Button } from '@/components/ui/button';
