@@ -27,7 +27,7 @@ export function useQueueEntries() {
         "sent_to_dispensary",
         "dispensing_payment",
         "on_hold",
-      ];
+      ] as const;
 
       const { data, error } = await supabase
         .from("queue_entries")
@@ -91,7 +91,7 @@ export function useConsultationQueueEntries() {
         "sent_to_dispensary",
         "dispensing_payment",
         "on_hold",
-      ];
+      ] as const;
 
       const { data, error } = await supabase
         .from("queue_entries")
