@@ -1,74 +1,83 @@
 ## Goal
-Upgrade `src/components/clinic/settings/DocumentTemplateBuilder.tsx` to expose document-level settings (name, type, paper size, orientation) that dynamically drive the live A4/A5/A6 paper preview, and add a placeholder Save button.
+Wire the Document Template Builder into the live consultation flow: persist templates, surface them in the treatment picker, let the doctor edit a substituted copy, and attach finalized documents to the visit.
 
-## Changes (single file: DocumentTemplateBuilder.tsx)
+## Part 1 — Database (single migration)
 
-### 1. State model
-Replace `paperSize` with a single settings object:
-```ts
-type PaperSize = 'A4' | 'A5' | 'A6';
-type Orientation = 'portrait' | 'landscape';
-type DocType = 'memo' | 'referral' | 'prescription' | 'mc' | 'quarantine';
+**`clinic_document_templates`**
+- `id uuid pk default gen_random_uuid()`
+- `name text not null`
+- `type text not null` (memo, referral, prescription, mc, quarantine)
+- `content text not null default ''`
+- `paper_size text not null default 'A4'` (A4 | A5 | A6)
+- `orientation text not null default 'portrait'` (portrait | landscape)
+- `is_active boolean not null default true`
+- `created_by uuid`, `created_at`, `updated_at` (trigger via `update_updated_at_column`)
+- RLS: `SELECT` for `is_staff_or_admin(auth.uid())`; `INSERT/UPDATE/DELETE` for `is_ops_or_admin(auth.uid())`
 
-const [settings, setSettings] = useState({
-  name: 'New Template',
-  type: 'memo' as DocType,
-  paperSize: 'A4' as PaperSize,
-  orientation: 'portrait' as Orientation,
-});
+**`consultation_documents`**
+- `id uuid pk default gen_random_uuid()`
+- `consultation_id uuid not null references consultations(id) on delete cascade`
+- `patient_id uuid not null references patients(id) on delete cascade`
+- `template_id uuid references clinic_document_templates(id) on delete set null` (nice-to-have, optional)
+- `template_name text not null`
+- `type text` (carry from template for filtering/printing)
+- `content text not null`
+- `paper_size text not null`
+- `orientation text not null`
+- `created_by uuid`, `created_at timestamptz default now()`
+- Indexes on `consultation_id`, `patient_id`
+- RLS: `SELECT/INSERT/UPDATE` for `is_staff_or_admin(auth.uid())`; no DELETE policy (immutable record)
+
+## Part 2 — Hooks (`src/hooks/clinic/useClinicDocuments.ts`)
+- `useDocumentTemplates()` → all rows where `is_active = true`, ordered by `name`.
+- `useConsultationDocuments(consultationId)` → rows for that consultation, newest first; `enabled: !!consultationId`.
+- `useAddConsultationDocument()` → mutation accepting `{ consultation_id, patient_id, template_id?, template_name, type, content, paper_size, orientation }`; sets `created_by = auth user id`; invalidates `['consultation-documents', consultation_id]`.
+- (Settings page bonus, not strictly required) `useUpsertDocumentTemplate` / `useDeleteDocumentTemplate` so the builder can actually save — currently the Save button only console.logs. Will wire the existing builder's Save button to `useUpsertDocumentTemplate`.
+
+## Part 3 — Treatment Picker (`AddTreatmentBulkDialog.tsx`)
+- Import `useDocumentTemplates`.
+- Extend `CombinedRow` union with `type: 'document'` carrying `{ id, name, type: 'document', subtitle: docType label }`.
+- Map active templates into `allItems` alongside medicines/procedures/packages.
+- Add a new tab pill **Documents** with its own count.
+- Update `rowMatchesTab` and the count map to include `document`.
+- Click handler: when `row.type === 'document'`, instead of toggling into `selected`, call a new prop `onIssueDocument(template)` and close the picker (or stay open — close for clarity). Document rows render without checkbox/qty controls.
+
+## Part 4 — Issue Document Modal (`src/components/clinic/consultation/IssueDocumentModal.tsx`)
+Props: `{ isOpen, onClose, template, patient, consultationId }` where `patient` already exists in `ConsultationDetail` (`entry.patients`).
+
+**Substitution map** (use the actual patient field names in this codebase):
 ```
-Helper `updateSetting(key, value)` for clean handlers.
-
-### 2. Top bar
-Add a sticky header row with template name on the left and a **Save Template** button on the right that `console.log(settings, content)` for now.
-
-### 3. Document Settings panel (left column, above tag toolbox)
-A compact card with:
-- **Template Name** — `Input`
-- **Document Type** — shadcn `Select` (Memo, Referral Letter, Prescription Slip, Medical Certificate, Quarantine Notice)
-- **Paper Size** — `ToggleGroup` (A4 / A5 / A6)
-- **Orientation** — `ToggleGroup` (Portrait / Landscape)
-
-Left column gets `overflow-y-auto` on its content region so settings + tags + editor stay usable when stacked.
-
-### 4. Dynamic preview engine (right column)
-Replace the hardcoded width/aspect-ratio with a derived dimension table:
-
-```text
-A4: 210 x 297 mm
-A5: 148 x 210 mm
-A6: 105 x 148 mm
+{{patient_name}}   → patient.name
+{{patient_ic}}     → patient.national_id ?? ''
+{{patient_phone}}  → patient.phone ?? ''
+{{current_date}}   → new Date().toLocaleDateString('en-MY')
+{{clinic_name}}    → from useClinicSettings (fallback constant)
+{{doctor_name}}    → from useCurrentDoctor (fallback '')
 ```
+Run substitution once on open, store result in local `content` state via `useState(() => substitute(template.content))`.
 
-```ts
-const PAPER_DIMS: Record<PaperSize, { w: number; h: number }> = {
-  A4: { w: 210, h: 297 },
-  A5: { w: 148, h: 210 },
-  A6: { w: 105, h: 148 },
-};
-const base = PAPER_DIMS[settings.paperSize];
-const isLandscape = settings.orientation === 'landscape';
-const finalW = isLandscape ? base.h : base.w;
-const finalH = isLandscape ? base.w : base.h;
-const padding = settings.paperSize === 'A6' ? '15mm' : '25mm';
-```
+**UI** (Dialog, `max-w-5xl`):
+- Header: template name + paper size / orientation badge.
+- Two-column body (stack on mobile):
+  - Left: `<Textarea>` bound to `content`, monospace, full height.
+  - Right: paper preview reusing the same dynamic `maxWidth` / `aspectRatio` math from `DocumentTemplateBuilder` — extract a tiny shared helper `getPaperStyle(paperSize, orientation)` into `src/lib/clinic/paperStyle.ts` so the modal and the builder share it. Preview shows the substituted text (no shortcode highlights here — values are real).
+- Footer: **Cancel** + **Save to Consultation** → calls `useAddConsultationDocument`, toasts success, closes modal. Print button optional (out of scope).
 
-Apply via inline style:
-```ts
-style={{
-  width: '100%',
-  maxWidth: `${finalW}mm`,
-  aspectRatio: `${finalW} / ${finalH}`,
-  padding,
-}}
-```
-Add a `transition-all` for a smooth flip when toggling orientation/size.
+## Part 5 — Treatment Plan UI (`ConsultationDetail.tsx`)
+- Wire `<AddTreatmentBulkDialog onIssueDocument={tpl => setIssuingTemplate(tpl)} />`.
+- Render `<IssueDocumentModal>` controlled by `issuingTemplate` state, passing `patient` and `consultationId`.
+- Below the existing Treatment Plan list (around line ~847), add an **Attached Documents** section:
+  - `useConsultationDocuments(consultationId)`.
+  - Empty state: muted "No documents attached".
+  - Each row: doc name + type badge + created timestamp + **View / Print** button. View opens a lightweight read-only dialog rendering the saved content inside the same paper preview container; Print uses `window.print()` after rendering into a print-only container (or `react-to-print` if already in deps — otherwise simple `window.open` + `document.write`).
 
-### 5. Preserve existing behavior
-- Tag toolbox, cursor-aware insertion, `PREVIEW_DICTIONARY` substitution, and highlighted preview HTML stay untouched.
-- No DB / persistence work in this pass (Save is a stub).
+## Technical notes / decisions
+- Patient fields in this project are `name`, `national_id`, `phone` (not `full_name` / `ic_number` from the prompt). Substitution map adjusted accordingly.
+- Shared `getPaperStyle` helper avoids duplicating dimension math between builder, issue modal, and viewer.
+- Saved documents are immutable: no edit-after-save UI in this pass; admins can void via DB if needed.
+- Hooking the builder's existing console.log Save into `useUpsertDocumentTemplate` is included so templates fetched in Part 3 actually exist.
 
 ## Out of scope
-- Persisting templates to Supabase
-- Rich text editing
-- Per-document-type starter content (can be added later by keying off `settings.type`)
+- PDF export / e-signing / letterhead branding pass.
+- Per-doc-type starter content presets in the builder.
+- Versioning of templates.

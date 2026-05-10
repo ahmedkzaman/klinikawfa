@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { Search, Package, Clock, AlertTriangle } from 'lucide-react';
+import { Search, Package, Clock, AlertTriangle, FileText } from 'lucide-react';
+import { useDocumentTemplates, type DocumentTemplate } from '@/hooks/clinic/useClinicDocuments';
 import {
   Dialog,
   DialogContent,
@@ -50,6 +51,8 @@ interface Props {
   onInsert: (items: SelectedItem[]) => void;
   /** When true, use panel/standard tier pricing first; otherwise self-pay first. */
   isPanel?: boolean;
+  /** Called when a row of type=document is clicked. */
+  onIssueDocument?: (template: DocumentTemplate) => void;
 }
 
 interface CombinedRow {
@@ -60,7 +63,7 @@ interface CombinedRow {
   group: string;
   price: string;
   priceNum: number;
-  type: 'item' | 'service' | 'package';
+  type: 'item' | 'service' | 'package' | 'document';
   /** Lowercase inventory category, blank for services/packages. */
   categoryLower: string;
   /** Lowercase generic name, blank when none / not applicable. */
@@ -68,9 +71,11 @@ interface CombinedRow {
   /** ISO date for the next-expiring batch, or null. Inventory items only. */
   nearestExpiry: string | null;
   defaults?: SelectedDefaults;
+  /** Original document template payload, only set when type=document. */
+  template?: DocumentTemplate;
 }
 
-type PickerTab = 'all' | 'medicine' | 'procedure' | 'package';
+type PickerTab = 'all' | 'medicine' | 'procedure' | 'package' | 'document';
 
 const PROCEDURE_NAME_RE = /\b(fee|procedure|service)\b/i;
 
@@ -86,6 +91,7 @@ function rowMatchesTab(row: CombinedRow, tab: PickerTab): boolean {
     return false;
   }
   if (tab === 'package') return row.type === 'package';
+  if (tab === 'document') return row.type === 'document';
   return true;
 }
 
@@ -151,6 +157,7 @@ export function AddTreatmentBulkDialog({
   onOpenChange,
   onInsert,
   isPanel = false,
+  onIssueDocument,
 }: Props) {
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<PickerTab>('all');
@@ -160,6 +167,7 @@ export function AddTreatmentBulkDialog({
   const { items: inventoryItems } = useInventoryItems();
   const { services } = useServices();
   const { packages } = usePackages();
+  const { data: documentTemplates = [] } = useDocumentTemplates();
   const createRestock = useCreateRestockRequest();
 
   const requestRestock = (itemId: string) => {
@@ -264,8 +272,35 @@ export function AddTreatmentBulkDialog({
       });
     });
 
+    documentTemplates.forEach((t) => {
+      const typeLabel =
+        t.type === 'mc'
+          ? 'Medical Certificate'
+          : t.type === 'referral'
+            ? 'Referral Letter'
+            : t.type === 'prescription'
+              ? 'Prescription Slip'
+              : t.type === 'quarantine'
+                ? 'Quarantine Notice'
+                : 'Memo';
+      combined.push({
+        id: t.id,
+        name: t.name,
+        stock: null,
+        uom: typeLabel,
+        group: 'Document',
+        price: '—',
+        priceNum: 0,
+        type: 'document',
+        categoryLower: '',
+        genericLower: '',
+        nearestExpiry: null,
+        template: t,
+      });
+    });
+
     return combined;
-  }, [inventoryItems, services, packages, isPanel]);
+  }, [inventoryItems, services, packages, documentTemplates, isPanel]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -288,11 +323,19 @@ export function AddTreatmentBulkDialog({
       medicine: allItems.filter((i) => rowMatchesTab(i, 'medicine')).length,
       procedure: allItems.filter((i) => rowMatchesTab(i, 'procedure')).length,
       package: allItems.filter((i) => rowMatchesTab(i, 'package')).length,
+      document: allItems.filter((i) => rowMatchesTab(i, 'document')).length,
     }),
     [allItems],
   );
 
   const toggleItem = (item: CombinedRow) => {
+    if (item.type === 'document') {
+      if (item.template && onIssueDocument) {
+        onIssueDocument(item.template);
+        onOpenChange(false);
+      }
+      return;
+    }
     setSelected((prev) => {
       const exists = prev.find((s) => s.id === item.id);
       if (exists) return prev.filter((s) => s.id !== item.id);
@@ -302,7 +345,7 @@ export function AddTreatmentBulkDialog({
           id: item.id,
           name: item.name,
           price: item.priceNum,
-          type: item.type,
+          type: item.type as SelectedItem['type'],
           defaults: item.defaults,
         },
       ];
@@ -310,20 +353,23 @@ export function AddTreatmentBulkDialog({
   };
 
   const toggleAll = () => {
-    const allSelected = filtered.every((item) => selected.some((s) => s.id === item.id));
+    const selectable = filtered.filter((i) => i.type !== 'document');
+    const allSelected =
+      selectable.length > 0 &&
+      selectable.every((item) => selected.some((s) => s.id === item.id));
     if (allSelected) {
-      const filteredIds = new Set(filtered.map((i) => i.id));
-      setSelected((prev) => prev.filter((s) => !filteredIds.has(s.id)));
+      const ids = new Set(selectable.map((i) => i.id));
+      setSelected((prev) => prev.filter((s) => !ids.has(s.id)));
     } else {
       setSelected((prev) => {
         const existing = new Set(prev.map((s) => s.id));
-        const newItems = filtered
+        const newItems: SelectedItem[] = selectable
           .filter((i) => !existing.has(i.id))
           .map((i) => ({
             id: i.id,
             name: i.name,
             price: i.priceNum,
-            type: i.type,
+            type: i.type as SelectedItem['type'],
             defaults: i.defaults,
           }));
         return [...prev, ...newItems];
@@ -397,6 +443,7 @@ export function AddTreatmentBulkDialog({
                 { key: 'medicine', label: 'Medicine' },
                 { key: 'procedure', label: 'Procedures' },
                 { key: 'package', label: 'Packages' },
+                { key: 'document', label: 'Documents' },
               ] as { key: PickerTab; label: string }[]).map((t) => {
                 const active = tab === t.key;
                 const disabled = !!search.trim();
@@ -435,6 +482,7 @@ export function AddTreatmentBulkDialog({
                 <TableBody>
                   {filtered.map((item) => {
                     const isSelected = selected.some((s) => s.id === item.id);
+                    const isDoc = item.type === 'document';
                     return (
                       <TableRow
                         key={`${item.type}-${item.id}`}
@@ -442,7 +490,11 @@ export function AddTreatmentBulkDialog({
                         onClick={() => toggleItem(item)}
                       >
                         <TableCell>
-                          <Checkbox checked={isSelected} />
+                          {isDoc ? (
+                            <FileText className="h-4 w-4 text-blue-600" />
+                          ) : (
+                            <Checkbox checked={isSelected} />
+                          )}
                         </TableCell>
                         <TableCell className="text-sm font-medium">
                           <div>{item.name}</div>

@@ -62,6 +62,11 @@ import { useServicesSafe } from '@/hooks/clinic/useServices';
 import { usePackagesSafe } from '@/hooks/clinic/usePackages';
 import { useRooms } from '@/hooks/clinic/useRooms';
 import { AddTreatmentBulkDialog } from '@/components/clinic/consultation/AddTreatmentBulkDialog';
+import { IssueDocumentModal } from '@/components/clinic/consultation/IssueDocumentModal';
+import {
+  useConsultationDocuments,
+  type DocumentTemplate,
+} from '@/hooks/clinic/useClinicDocuments';
 import { VitalHistoryTrends } from '@/components/clinic/consultation/VitalHistoryTrends';
 import {
   TreatmentItemCard,
@@ -302,6 +307,8 @@ export default function ConsultationDetail() {
       | undefined,
   );
   const { data: items = [] } = useConsultationItems(consultationId);
+  const { data: attachedDocs = [] } = useConsultationDocuments(consultationId);
+  const [issuingTemplate, setIssuingTemplate] = useState<DocumentTemplate | null>(null);
   const addItem = useAddConsultationItem();
   const removeItem = useRemoveConsultationItem();
   const updateItem = useUpdateConsultationItem();
@@ -938,7 +945,55 @@ export default function ConsultationDetail() {
               </CardContent>
             </Card>
 
-            {/* Sticky action footer */}
+            {/* Attached Documents */}
+            <Card className={bento}>
+              <CardContent className="p-5 space-y-3">
+                <h2 className={`${bentoHeader} mb-0`}>ATTACHED DOCUMENTS</h2>
+                {attachedDocs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No documents attached. Use the "Documents" tab in Add in bulk to issue one.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {attachedDocs.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-slate-800 truncate">
+                            {doc.template_name}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {doc.type ?? 'document'} ·{' '}
+                            {new Date(doc.created_at).toLocaleString('en-MY')} · {doc.paper_size}{' '}
+                            {doc.orientation}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0"
+                          onClick={() => {
+                            const w = window.open('', '_blank', 'width=900,height=1100');
+                            if (!w) return;
+                            const safe = doc.content
+                              .replace(/&/g, '&amp;')
+                              .replace(/</g, '&lt;')
+                              .replace(/>/g, '&gt;');
+                            w.document.write(`<!doctype html><html><head><title>${doc.template_name}</title><style>@page{size:${doc.paper_size} ${doc.orientation};margin:25mm}body{font-family:system-ui,sans-serif;white-space:pre-wrap;font-size:12pt;line-height:1.5;color:#0f172a}</style></head><body>${safe}<script>window.onload=()=>{window.print()}<\/script></body></html>`);
+                            w.document.close();
+                          }}
+                        >
+                          View / Print
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             <div className="sticky bottom-4 z-10 bg-white/90 backdrop-blur-md border border-slate-100 rounded-2xl shadow-lg p-4 flex items-center justify-between gap-3 flex-wrap">
               <div className="text-sm">
                 <span className="text-slate-500">Total</span>{' '}
@@ -1246,6 +1301,15 @@ export default function ConsultationDetail() {
           onOpenChange={setBulkDialogOpen}
           onInsert={handleBulkInsert}
           isPanel={(entry?.payment_method ?? '').startsWith('panel')}
+          onIssueDocument={(tpl) => setIssuingTemplate(tpl)}
+        />
+
+        <IssueDocumentModal
+          isOpen={!!issuingTemplate}
+          onClose={() => setIssuingTemplate(null)}
+          template={issuingTemplate}
+          patient={patient?.id ? (patient as { id: string; name?: string | null; national_id?: string | null; phone?: string | null }) : null}
+          consultationId={consultationId ?? null}
         />
       </div>
     </div>
