@@ -387,6 +387,18 @@ export default function QueueBoard() {
       />
       <CheckInWalkInDialog open={walkInDialog} onOpenChange={setWalkInDialog} />
       <RegisterAndCheckInDialog open={registerDialog} onOpenChange={setRegisterDialog} />
+
+      {activeEntry && (
+        <VitalsEntryDialog
+          open={vitalsOpen}
+          onOpenChange={(o) => {
+            setVitalsOpen(o);
+            if (!o) setActiveEntry(null);
+          }}
+          queueEntryId={activeEntry.id}
+          patientId={activeEntry.patient_id}
+        />
+      )}
     </>
   );
 }
