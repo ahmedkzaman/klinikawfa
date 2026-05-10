@@ -155,10 +155,28 @@ export function AddTreatmentBulkDialog({
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<PickerTab>('all');
   const [selected, setSelected] = useState<SelectedItem[]>([]);
+  const [restockNotified, setRestockNotified] = useState<Set<string>>(new Set());
 
   const { items: inventoryItems } = useInventoryItems();
   const { services } = useServices();
   const { packages } = usePackages();
+  const createRestock = useCreateRestockRequest();
+
+  const requestRestock = (itemId: string) => {
+    if (restockNotified.has(itemId)) return;
+    createRestock.mutate(
+      { itemId, reason: 'Low stock flagged in treatment picker' },
+      {
+        onSuccess: () => {
+          setRestockNotified((prev) => {
+            const next = new Set(prev);
+            next.add(itemId);
+            return next;
+          });
+        },
+      },
+    );
+  };
 
   const allItems = useMemo<CombinedRow[]>(() => {
     const combined: CombinedRow[] = [];
