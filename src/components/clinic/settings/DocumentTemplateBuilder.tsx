@@ -130,9 +130,16 @@ export default function DocumentTemplateBuilder() {
     }, 0);
   };
 
+  const upsert = useUpsertDocumentTemplate();
+
   const handleSave = () => {
-    // eslint-disable-next-line no-console
-    console.log('Save template:', { settings, content });
+    upsert.mutate({
+      name: settings.name,
+      type: settings.type,
+      content,
+      paper_size: settings.paperSize,
+      orientation: settings.orientation,
+    });
   };
 
   return (
@@ -148,9 +155,9 @@ export default function DocumentTemplateBuilder() {
             {settings.paperSize} · {settings.orientation}
           </span>
         </div>
-        <Button size="sm" onClick={handleSave} className="gap-1.5">
+        <Button size="sm" onClick={handleSave} disabled={upsert.isPending} className="gap-1.5">
           <Save className="h-4 w-4" />
-          Save Template
+          {upsert.isPending ? 'Saving…' : 'Save Template'}
         </Button>
       </div>
 
