@@ -1,53 +1,96 @@
-## Goal
+# Clinical Triage + Defensive LWBS Protocol (final)
 
-Turn the Queue Board into a complete clinical workflow: fix the carry-over visibility bug, add a Nurse Station triage step, and surface today's vitals to the doctor.
+Incorporates: auto-resolved staff identity, hard red-flag block before LWBS, and a "Recently Cancelled (today)" drawer with admin restore.
 
-## 1. Fix carry-over visibility — `src/hooks/clinic/useQueueEntries.ts`
+## 1. Database migration
 
-- Extract `ACTIVE_STATUSES` to a shared module-level const.
-- Switch the `useQueueEntries` query from a strict `created_at >= startOfDay` filter to an OR condition so any entry in an active status remains visible regardless of registration date:
-  ```
-  .or(`created_at.gte.${startOfDay.toISOString()},clinic_status.in.(${ACTIVE_STATUSES.join(',')})`)
-  ```
-- Apply the same shared list to `useConsultationQueueEntries` for consistency.
-- Preserve `useUpdateQueueEntry`, `useCallPatient`, `useCallToDispensary`, `useQueueEntry`, and the realtime channel subscriptions.
+```sql
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_type t
+    JOIN pg_enum e ON t.oid = e.enumtypid
+    WHERE t.typname = 'clinic_status' AND e.enumlabel = 'cancelled'
+  ) THEN
+    ALTER TYPE clinic_status ADD VALUE 'cancelled';
+  END IF;
+END $$;
 
-## 2. New component — `src/components/clinic/VitalsEntryDialog.tsx`
+ALTER TABLE public.queue_entries
+  ADD COLUMN IF NOT EXISTS cancelled_at        timestamptz,
+  ADD COLUMN IF NOT EXISTS cancelled_by        uuid REFERENCES auth.users(id),
+  ADD COLUMN IF NOT EXISTS cancellation_reason text;
+```
 
-- Props: `open`, `onOpenChange`, `queueEntryId`, `patientId`.
-- Reuses `useRecordVitalSigns()` (writes to `vital_signs`) and `useUpdateQueueEntry()`.
-- Two-column layout:
-  - **Circulation:** BP systolic, BP diastolic, Heart rate, Pain scale (0–10).
-  - **Metabolic & Respiratory:** Temperature, SpO2, Weight, Height, Blood glucose. (Respiratory rate kept in state for future use.)
-- All fields optional. Empty strings → `null`; otherwise `Number(v)`.
-- Footer actions:
-  - **Save Only** (ghost) — saves vitals, leaves status as `registered`.
-  - **Save & Send to Doctor** (primary) — saves vitals, then flips `clinic_status='ready_for_doctor'`.
-- Styled via `primaryBtn` from `@/lib/clinic/bentoTokens`. Semantic tokens only — no raw hex.
-- Before including `pain_scale` in the insert, verify the `vital_signs` schema has the column; if missing, drop it from the payload (no DB migration this pass) and flag follow-up.
+`ACTIVE_STATUSES` (already exported) deliberately excludes `cancelled`, so cancelled entries leave the live board immediately.
 
-## 3. Wire `src/pages/clinic/QueueBoard.tsx`
+## 2. `VitalsEntryDialog.tsx` (new)
 
-- Add `vitalsOpen` state.
-- In the `QUEUE_COLUMNS` map, when `col.key === 'registered'`, render an "Awaiting triage" subtitle in muted foreground beneath the column label.
-- In the detail sheet, when `activeEntry.clinic_status === 'registered'`, replace the existing "Ready for Doctor" button with two stacked actions:
-  - **Take Vitals / Triage** → opens `VitalsEntryDialog`.
-  - **Skip Triage → Send to Doctor** → immediate `useUpdateQueueEntry` to `ready_for_doctor`, then close the sheet.
-- Render `<VitalsEntryDialog />` once at the bottom, sourcing IDs from `activeEntry`.
-- Keep "Open Checkout" and "On Hold" actions unchanged.
+- Two-column grid — Circulation (BP sys/dia, HR, Pain 0–10) and Metabolic & Respiratory (Temp °C, SpO₂, Weight, Height, Glucose).
+- Empty inputs serialise to `null`, otherwise `Number(v)`.
+- Hooks: `useRecordVitalSigns()` + `useUpdateQueueEntry()`.
+- Footer:
+  - **Save Only** (ghost) — vitals only.
+  - **Save & Send to Doctor** (primary) — vitals, then status → `ready_for_doctor`.
+- `pain_scale` kept in UI state; included in payload only if the column exists.
 
-## 4. Doctor visibility — `src/components/clinic/consultation/VitalHistoryTrends.tsx`
+## 3. Red-flag check (shared helper)
 
-In the vitals table row map, compute `isThisVisit = row.queue_entry_id === currentQueueId`. When true, apply a subtle accent background and append a "This visit" badge next to the timestamp so doctors instantly see today's triage versus historical readings.
+New `src/lib/clinic/redFlagVitals.ts`:
 
-## Files
+```ts
+export function isRedFlag(v?: { bp_systolic?: number|null; bp_diastolic?: number|null; spo2?: number|null; heart_rate?: number|null }) {
+  if (!v) return null;
+  if ((v.spo2 ?? 100) < 92)                              return 'SpO₂ < 92%';
+  if ((v.bp_systolic ?? 0) > 180 || (v.bp_diastolic ?? 0) > 120) return 'BP > 180/120';
+  if ((v.heart_rate ?? 0) > 130)                          return 'HR > 130 bpm';
+  return null;
+}
+```
 
-- `src/hooks/clinic/useQueueEntries.ts` — shared `ACTIVE_STATUSES` + OR filter on board query
-- `src/components/clinic/VitalsEntryDialog.tsx` — new
-- `src/pages/clinic/QueueBoard.tsx` — column subtitle, triage + skip buttons, dialog wiring
-- `src/components/clinic/consultation/VitalHistoryTrends.tsx` — "This visit" highlight
+Used by the cancellation dialog to gate destructive submit.
+
+## 4. `CancelQueueEntryDialog.tsx` (new) — terminate visit
+
+- Props: `open`, `onOpenChange`, `queueEntry`.
+- Reason `RadioGroup`: LWBS, Called 3× — no response, Left before treatment complete, Duplicate/Error, Other (with required textarea).
+- **Red-flag block (mandatory):** on open, fetches the latest `vital_signs` row for `queue_entry_id`. If `isRedFlag()` returns a label:
+  - Renders a destructive alert banner ("⚠ Critical vitals on file: SpO₂ < 92% — clinical review required").
+  - Confirm button is replaced by a 2-step pattern: a checkbox "I have attempted to retain this patient and documented the clinical risk" must be ticked before the destructive **Confirm Cancellation** unlocks.
+  - This is a hard UI block, not a soft toast.
+- Staff identity is **auto-resolved** (no input field): the mutation looks up the current user's display name (profiles → fallback email → `'Staff'`) and writes the line `\n\n[CANCELLED <ISO>] <reason> — by <name>` into `visit_notes`.
+- Header copy: *"This action is final. The entry will leave the active board. The cancellation appears in 'Recently Cancelled' for the rest of today."*
+
+## 5. `useQueueEntries.ts` updates
+
+- `useCancelQueueEntry()` mutation — resolves `auth.user`, looks up `profiles.full_name`, builds the `[CANCELLED ...]` line, then updates `clinic_status='cancelled'`, `cancelled_at`, `cancelled_by`, `cancellation_reason`, and the appended `visit_notes`. Invalidates board + consultation queues + the new cancelled-today query.
+- `useRestoreQueueEntry()` mutation — admin-only on the client (gated by role check); clears `cancelled_*` columns, sets `clinic_status='registered'`, and appends `\n\n[RESTORED <ISO>] by <name>` to `visit_notes`.
+- `useCancelledTodayEntries()` query — `clinic_status='cancelled'` AND `cancelled_at >= startOfDay`; subscribes to the same realtime channel.
+
+## 6. `QueueBoard.tsx` wiring
+
+- New state: `vitalsOpen`, `cancelOpen`.
+- Detail-sheet action stack:
+  - `registered` → **Take Vitals / Triage** (primary) above existing **Skip Triage → Send to Doctor**.
+  - For all active statuses except `completed`/`cancelled` → divider + destructive **Patient Absconded** opens `CancelQueueEntryDialog`.
+- New collapsible **"Recently Cancelled (today)"** drawer at the bottom of the board:
+  - Lists each cancelled entry with patient name, queue #, `cancelled_at` time, reason, and (admin only) a **Restore** button.
+  - Powered by `useCancelledTodayEntries()`.
+- Render `VitalsEntryDialog` and `CancelQueueEntryDialog` once at page bottom.
 
 ## Out of scope
 
-- No DB migrations or enum changes.
-- No changes to `QUEUE_COLUMNS` — `with_doctor` already has its own column; the perceived "vanishing" is the `created_at` filter, fixed in step 1.
+- Pre-cancel red-flag toast for non-critical vitals (the hard block covers the liability case).
+- 60-second sonner Undo (superseded by the drawer's Restore action).
+- Triage priority Red/Amber/Green.
+- `safe_reset_queue_number_seq()` doesn't need changes — `cancelled` already isn't in its active set.
+- LWBS-rate analytics dashboard.
+
+## Files
+
+- **Migration:** enum value + 3 audit columns.
+- **New:** `src/lib/clinic/redFlagVitals.ts`.
+- **New:** `src/components/clinic/VitalsEntryDialog.tsx`.
+- **New:** `src/components/clinic/CancelQueueEntryDialog.tsx`.
+- **Edited:** `src/hooks/clinic/useQueueEntries.ts` — `useCancelQueueEntry`, `useRestoreQueueEntry`, `useCancelledTodayEntries`.
+- **Edited:** `src/pages/clinic/QueueBoard.tsx` — triage + absconded buttons, Recently Cancelled drawer, dialog wiring.
