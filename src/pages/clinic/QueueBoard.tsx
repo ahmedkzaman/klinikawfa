@@ -364,6 +364,40 @@ export default function QueueBoard() {
                   </Button>
                 )}
 
+                {/* Admin: Unassign Doctor (Emergency Re-assignment) */}
+                {isAdmin && activeEntry.assigned_doctor_id && (
+                  <div className="mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-slate-500 border-dashed hover:text-slate-700 hover:bg-slate-50 gap-2 font-normal"
+                      onClick={() => {
+                        const ts = new Date().toLocaleString("en-MY", {
+                          timeZone: "Asia/Kuala_Lumpur",
+                          hour12: false,
+                        });
+                        const log = `\n\n[REASSIGN ${ts}] Doctor unassigned — returning to registered pool.`;
+                        updateQueue.mutate(
+                          {
+                            id: activeEntry.id,
+                            assigned_doctor_id: null,
+                            clinic_status: "registered",
+                            visit_notes: (activeEntry.visit_notes || "") + log,
+                          },
+                          {
+                            onSuccess: () => {
+                              setActiveEntry(null);
+                              toast.info("Doctor unassigned. Patient returned to triage pool.");
+                            },
+                          },
+                        );
+                      }}
+                    >
+                      <RefreshCcw className="h-3.5 w-3.5" /> Unassign Doctor (Emergency)
+                    </Button>
+                  </div>
+                )}
+
                 {/* Terminal Cancellation Action */}
                 {ACTIVE_STATUSES.includes(activeEntry.clinic_status as ClinicStatus) && (
                   <div className="mt-4 pt-4 border-t border-slate-100">
