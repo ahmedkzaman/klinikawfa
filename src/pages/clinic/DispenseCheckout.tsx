@@ -17,6 +17,7 @@ import { FollowUpScheduler } from '@/components/clinic/patient/FollowUpScheduler
 import { VisitDetailsColumn } from '@/components/clinic/visit/VisitDetailsColumn';
 import { AttachmentsCard } from '@/components/clinic/visit/AttachmentsCard';
 import { BillingDetailsColumn } from '@/components/clinic/visit/BillingDetailsColumn';
+import { DispensePanel } from '@/components/clinic/visit/DispensePanel';
 import {
   useConsultationQueueEntries,
   useUpdateQueueEntry,
@@ -78,11 +79,13 @@ export default function DispenseCheckout() {
 
   const subtotal = useMemo(
     () =>
-      items.reduce(
-        (acc, item) =>
-          acc + Number(item.price ?? 0) * Number(item.quantity ?? 0),
-        0,
-      ),
+      items.reduce((acc, item) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dispensed = (item as any).dispensed_qty as number | null;
+        const qty =
+          dispensed != null && item.item_id ? dispensed : Number(item.quantity ?? 0);
+        return acc + Number(item.price ?? 0) * qty;
+      }, 0),
     [items],
   );
   const paid = useMemo(
@@ -90,6 +93,20 @@ export default function DispenseCheckout() {
     [payments],
   );
   const outstanding = Math.max(subtotal - paid, 0);
+
+  const anyPartialMissingReason = useMemo(
+    () =>
+      items.some((it) => {
+        if (!it.item_id) return false;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dispensed = (it as any).dispensed_qty as number | null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const reason = (it as any).partial_reason as string | null;
+        if (dispensed == null) return false;
+        return dispensed < Number(it.quantity ?? 0) && !reason;
+      }),
+    [items],
+  );
 
   const handleComplete = async () => {
     if (!queueEntryId || !consultation?.id) return;
@@ -230,6 +247,8 @@ export default function DispenseCheckout() {
               patientName={patient?.name ?? null}
             />
 
+            <DispensePanel items={items} consultationId={consultation?.id ?? null} />
+
             <AttachmentsCard consultationId={consultation?.id} />
 
             {(consultation?.patient_id || entry.patient_id) && (
@@ -266,6 +285,7 @@ export default function DispenseCheckout() {
                     onClick={handleComplete}
                     disabled={
                       outstanding > 0 ||
+                      anyPartialMissingReason ||
                       !consultation?.id ||
                       updateQueue.isPending ||
                       updateConsultation.isPending
@@ -279,6 +299,11 @@ export default function DispenseCheckout() {
               {outstanding > 0 && (
                 <TooltipContent>
                   Settle outstanding balance before completing checkout.
+                </TooltipContent>
+              )}
+              {anyPartialMissingReason && (
+                <TooltipContent>
+                  Select a reason for every partially dispensed item.
                 </TooltipContent>
               )}
               {!consultation?.id && (
