@@ -1,112 +1,44 @@
+import { jsPDF } from 'jspdf';
 import { toast } from 'sonner';
 import type { ConsultationDocument } from '@/hooks/clinic/useClinicDocuments';
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-const DIMS: Record<string, { w: number; h: number }> = {
-  A4: { w: 210, h: 297 },
-  A5: { w: 148, h: 210 },
-  A6: { w: 105, h: 148 },
-};
-
-function resolveDims(size: string, orientation: string): { width: number; height: number } {
-  const base = DIMS[size] ?? DIMS.A4;
-  if (orientation === 'landscape') return { width: base.h, height: base.w };
-  return { width: base.w, height: base.h };
-}
+type PdfFormat = 'a4' | 'a5' | 'a6';
 
 export function printDocument(doc: ConsultationDocument): void {
-  if (typeof document === 'undefined') return;
+  const sizeRaw = (doc.paper_size || 'A4').toUpperCase();
+  const size: PdfFormat = (['A4', 'A5', 'A6'].includes(sizeRaw) ? sizeRaw.toLowerCase() : 'a4') as PdfFormat;
+  const orientation: 'p' | 'l' = doc.orientation === 'landscape' ? 'l' : 'p';
 
-  const size = (doc.paper_size || 'A4').toUpperCase();
-  const orientation = (doc.orientation || 'portrait').toLowerCase();
-  const { width, height } = resolveDims(size, orientation);
-  const padding = size === 'A6' ? 15 : 25;
+  const pdf = new jsPDF({ orientation, unit: 'mm', format: size });
 
-  toast("Pro-tip: set Margins to ‘None’ in the print dialog for best fit.", {
-    duration: 6000,
-  });
+  pdf.setFont('helvetica');
+  pdf.setFontSize(11);
 
-  const html = `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>${escapeHtml(doc.template_name || 'Document')}</title>
-<style>
-  @page {
-    size: ${width}mm ${height}mm;
-    margin: 0 !important;
+  const margin = size === 'a6' ? 15 : 25;
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const usableWidth = pageWidth - margin * 2;
+  const usableHeight = pageHeight - margin * 2;
+  const lineHeight = 5; // mm at 11pt
+
+  const lines = pdf.splitTextToSize(doc.content || '', usableWidth) as string[];
+  const linesPerPage = Math.max(1, Math.floor(usableHeight / lineHeight));
+
+  for (let i = 0; i < lines.length; i += linesPerPage) {
+    if (i > 0) pdf.addPage(size, orientation);
+    const chunk = lines.slice(i, i + linesPerPage);
+    pdf.text(chunk, margin, margin + lineHeight);
   }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body {
-    width: ${width}mm;
-    height: ${height}mm;
-    overflow: hidden;
-    background: white;
-    color: #0f172a;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  .sheet {
-    width: 100%;
-    height: 100%;
-    padding: ${padding}mm;
-    display: flex;
-    flex-direction: column;
-  }
-  pre {
-    font-family: sans-serif;
-    font-size: 11pt;
-    line-height: 1.4;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-  }
-</style>
-</head>
-<body>
-  <div class="sheet"><pre>${escapeHtml(doc.content || '')}</pre></div>
-</body>
-</html>`;
 
-  const blob = new Blob([html], { type: 'text/html' });
-  const url = URL.createObjectURL(blob);
-
-  const iframe = document.createElement('iframe');
-  iframe.setAttribute('aria-hidden', 'true');
-  iframe.style.cssText =
-    'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
-
-  let printed = false;
-  const cleanup = () => {
-    URL.revokeObjectURL(url);
-    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-  };
-
-  const triggerPrint = () => {
-    if (printed) return;
-    printed = true;
-    const cw = iframe.contentWindow;
-    try {
-      cw?.focus();
-      cw?.print();
-    } catch (e) {
-      console.error('Print failed', e);
+  try {
+    pdf.autoPrint();
+    const url = pdf.output('bloburl');
+    const win = window.open(url, '_blank');
+    if (!win) {
+      toast.error('Pop-up blocked — allow pop-ups to print.');
     }
-    if (cw) cw.onafterprint = cleanup;
-    setTimeout(cleanup, 2000);
-  };
-
-  iframe.onload = () => setTimeout(triggerPrint, 100);
-  iframe.src = url;
-  document.body.appendChild(iframe);
-
-  // Safety fallback if onload never fires
-  setTimeout(triggerPrint, 1500);
+  } catch (e) {
+    console.error('Print failed', e);
+    toast.error('Failed to generate print preview');
+  }
 }
