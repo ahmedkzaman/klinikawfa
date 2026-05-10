@@ -1311,6 +1311,8 @@ export default function ConsultationDetail() {
           patient={patient?.id ? (patient as { id: string; name?: string | null; national_id?: string | null; phone?: string | null }) : null}
           consultationId={consultationId ?? null}
         />
+
+        <DocumentPrintLayer doc={printingDoc} />
       </div>
     </div>
   );
