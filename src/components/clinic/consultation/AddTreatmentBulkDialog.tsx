@@ -307,10 +307,37 @@ export function AddTreatmentBulkDialog({
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search item name or group…"
+                placeholder="Search by name, generic name, or group… (searches all tabs)"
                 className="pr-9"
               />
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {([
+                { key: 'all', label: 'All' },
+                { key: 'medicine', label: 'Medicine' },
+                { key: 'procedure', label: 'Procedures' },
+                { key: 'package', label: 'Packages' },
+              ] as { key: PickerTab; label: string }[]).map((t) => {
+                const active = tab === t.key;
+                const disabled = !!search.trim();
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => setTab(t.key)}
+                    disabled={disabled}
+                    title={disabled ? 'Clear search to filter by tab' : undefined}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      active && !disabled
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                    } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  >
+                    {t.label} ({tabCounts[t.key]})
+                  </button>
+                );
+              })}
             </div>
             <ScrollArea className="flex-1">
               <Table>
