@@ -1149,6 +1149,7 @@ export default function ConsultationDetail() {
                         <PastVisitCard
                           key={(c as { id: string }).id}
                           visit={c as PastVisit}
+                          onCopyDiagnosis={canEdit ? handleCopyDiagnosis : undefined}
                         />
                       ))}
                     </div>
