@@ -3039,6 +3039,7 @@ export type Database = {
           patient_id: string
           payment_method: string | null
           queue_number: number | null
+          queue_sequence: number | null
           source_appointment_id: string | null
           updated_at: string
           visit_notes: string | null
@@ -3064,6 +3065,7 @@ export type Database = {
           patient_id: string
           payment_method?: string | null
           queue_number?: number | null
+          queue_sequence?: number | null
           source_appointment_id?: string | null
           updated_at?: string
           visit_notes?: string | null
@@ -3089,6 +3091,7 @@ export type Database = {
           patient_id?: string
           payment_method?: string | null
           queue_number?: number | null
+          queue_sequence?: number | null
           source_appointment_id?: string | null
           updated_at?: string
           visit_notes?: string | null
@@ -4641,6 +4644,7 @@ export type Database = {
       }
       generate_po_number: { Args: never; Returns: string }
       get_doctor_id_for_user: { Args: { _user_id: string }; Returns: string }
+      get_next_queue_number: { Args: never; Returns: number }
       get_server_now: { Args: never; Returns: string }
       get_video_room_signaling: {
         Args: { _room_code: string }
