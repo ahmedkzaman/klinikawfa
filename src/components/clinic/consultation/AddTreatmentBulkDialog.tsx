@@ -147,6 +147,7 @@ export function AddTreatmentBulkDialog({
         type: 'item',
         categoryLower: (i.category ?? '').toLowerCase(),
         genericLower: (ii.generic_name ?? '').toLowerCase(),
+        nearestExpiry: (ii.nearest_expiry_date as string | null) ?? null,
         defaults: {
           indication: ii.default_indication ?? null,
           dosage_qty: ii.default_dosage_qty ?? null,
