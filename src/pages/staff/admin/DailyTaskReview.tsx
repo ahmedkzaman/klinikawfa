@@ -10,16 +10,25 @@ import { format, getDaysInMonth } from 'date-fns';
 import { toast } from 'sonner';
 
 interface RosterEntry { staffId: string; staffName: string; }
-interface DayRoster {
-  shift1?: RosterEntry[];
-  shift2?: RosterEntry[];
-  hybrid?: RosterEntry[];
-}
-interface DoctorDayRoster {
-  shift1?: { staffId: string; staffName: string };
-  shift2?: { staffId: string; staffName: string };
-  shift3?: { staffId: string; staffName: string };
-}
+type DayRoster = Record<string, any>;
+type DoctorDayRoster = Record<string, any>;
+
+const supportShiftBucket = (raw: string): 'AM' | 'PM' | 'HYBRID' | null => {
+  const k = raw.toLowerCase();
+  if (k === 'shift1' || k === 's1' || k === 'doc_s1') return 'AM';
+  if (k === 'shift2' || k === 's2' || k === 'doc_s2' || k === 'shift3' || k === 's3' || k === 'doc_s3' || k === 'night') return 'PM';
+  if (k === 'hybrid') return 'HYBRID';
+  return null;
+};
+const doctorShiftBucket = (raw: string): 'AM' | 'PM' | 'LOCUM' | null => {
+  const k = raw.toLowerCase();
+  if (k === 'shift1' || k === 's1' || k === 'doc_s1') return 'AM';
+  if (k === 'shift2' || k === 's2' || k === 'doc_s2') return 'PM';
+  if (k === 'shift3' || k === 's3' || k === 'doc_s3' || k === 'night') return 'LOCUM';
+  return null;
+};
+const cellsOf = (v: any): RosterEntry[] =>
+  Array.isArray(v) ? v.filter(Boolean) : v && typeof v === 'object' && v.staffId ? [v] : [];
 interface DailyReportRow {
   user_id: string;
   report_date: string;
