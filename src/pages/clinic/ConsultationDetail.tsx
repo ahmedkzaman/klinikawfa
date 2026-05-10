@@ -100,14 +100,33 @@ interface CopyDiagnosisPayload {
  * expand/collapse state so opening one card doesn't affect siblings.
  * Notes longer than ~120 chars truncate to two lines until expanded.
  */
-function PastVisitCard({ visit }: { visit: PastVisit }) {
+function PastVisitCard({
+  visit,
+  onCopyDiagnosis,
+}: {
+  visit: PastVisit;
+  onCopyDiagnosis?: (payload: CopyDiagnosisPayload) => void;
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  const diagnosisDisplay =
-    visit.diagnoses?.name?.trim() || visit.diagnosis_text?.trim() || '';
+  const structuredName = visit.diagnoses?.name?.trim() || '';
+  const freeText = visit.diagnosis_text?.trim() || '';
+  const diagnosisDisplay = structuredName || freeText;
+  const diagnosisId = visit.diagnoses?.id ?? null;
   const note = (visit.case_note ?? '').trim();
   const isLongNote = note.length > 120;
   const dispenseNote = (visit.dispense_note ?? '').trim();
+
+  const handleCopy = () => {
+    if (!diagnosisDisplay || !onCopyDiagnosis) return;
+    onCopyDiagnosis({
+      diagnosis_id: structuredName ? diagnosisId : null,
+      name: diagnosisDisplay,
+    });
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div className="relative pl-6 py-3 border-l-2 border-slate-100 first:pt-0 last:pb-0">
@@ -129,11 +148,26 @@ function PastVisitCard({ visit }: { visit: PastVisit }) {
 
       {/* Diagnosis */}
       {diagnosisDisplay && (
-        <div className="mt-1 flex items-start gap-1.5">
+        <div className="mt-1 flex items-start gap-1.5 group/diag">
           <Stethoscope className="h-3.5 w-3.5 text-blue-600 mt-[2px] shrink-0" />
           <Badge className="rounded-full bg-blue-50 text-blue-700 border-none font-medium">
             {diagnosisDisplay}
           </Badge>
+          {onCopyDiagnosis && (
+            <button
+              type="button"
+              onClick={handleCopy}
+              title="Copy diagnosis to today's visit"
+              aria-label="Copy diagnosis to today's visit"
+              className="opacity-100 sm:opacity-0 sm:group-hover/diag:opacity-100 focus-visible:opacity-100 transition-opacity p-1 rounded text-blue-600 hover:bg-blue-100"
+            >
+              {copied ? (
+                <Check className="h-3 w-3" />
+              ) : (
+                <Copy className="h-3 w-3" />
+              )}
+            </button>
+          )}
         </div>
       )}
 
