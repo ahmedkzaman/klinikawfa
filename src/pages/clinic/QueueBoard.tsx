@@ -25,7 +25,7 @@ import {
   useCancelledTodayEntries,
   useRestoreQueueEntry,
 } from "@/hooks/clinic/useQueueEntries";
-import { useProfile } from "@/hooks/auth/useProfile"; // Assumed hook for locum check
+import { useAuth } from "@/contexts/AuthContext";
 import { useTodayAppointments } from "@/hooks/clinic/useTodayAppointments";
 import { CheckInAppointmentDialog } from "@/components/clinic/CheckInAppointmentDialog";
 import { CheckInWalkInDialog } from "@/components/clinic/CheckInWalkInDialog";
@@ -100,7 +100,7 @@ export default function QueueBoard() {
   const { data: entries = [], isLoading } = useQueueEntries();
   const { data: cancelledToday = [] } = useCancelledTodayEntries();
   const { data: appointments = [] } = useTodayAppointments();
-  const { data: profile } = useProfile();
+  const { isLocum, isAdmin } = useAuth();
 
   const updateQueue = useUpdateQueueEntry();
   const restoreEntry = useRestoreQueueEntry();
@@ -112,11 +112,6 @@ export default function QueueBoard() {
   const [vitalsOpen, setVitalsOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [activeEntry, setActiveEntry] = useState<QueueEntryWithJoins | null>(null);
-
-  // Permission Checks
-  const isLocum = profile?.position?.toLowerCase() === "locum";
-  const isAdmin =
-    profile?.position?.toLowerCase() === "admin" || profile?.position?.toLowerCase() === "medical director";
 
   const ACTIVE_STATUSES: ClinicStatus[] = [
     "registered",
@@ -145,7 +140,7 @@ export default function QueueBoard() {
 
   return (
     <>
-      <SEOHead title="Queue Board — Clinic Portal" noIndex />
+      <SEOHead title="Queue Board — Clinic Portal" description="Real-time patient queue board for clinic staff." noIndex />
 
       <div className={pageShell}>
         <div className={pageInner}>
