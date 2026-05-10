@@ -120,6 +120,7 @@ export default function QueueBoard() {
   const [walkInDialog, setWalkInDialog] = useState(false);
   const [registerDialog, setRegisterDialog] = useState(false);
   const [activeEntry, setActiveEntry] = useState<QueueEntryWithJoins | null>(null);
+  const [vitalsOpen, setVitalsOpen] = useState(false);
 
   const ACTIVE_STATUSES: ClinicStatus[] = [
     'registered',
