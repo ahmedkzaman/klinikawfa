@@ -58,7 +58,30 @@ interface CombinedRow {
   price: string;
   priceNum: number;
   type: 'item' | 'service' | 'package';
+  /** Lowercase inventory category, blank for services/packages. */
+  categoryLower: string;
+  /** Lowercase generic name, blank when none / not applicable. */
+  genericLower: string;
   defaults?: SelectedDefaults;
+}
+
+type PickerTab = 'all' | 'medicine' | 'procedure' | 'package';
+
+const PROCEDURE_NAME_RE = /\b(fee|procedure|service)\b/i;
+
+/** Shared mapping rule used by both the picker and the Treatment Plan tabs. */
+function rowMatchesTab(row: CombinedRow, tab: PickerTab): boolean {
+  if (tab === 'all') return true;
+  if (tab === 'medicine') {
+    return row.type === 'item' && row.categoryLower === 'medication';
+  }
+  if (tab === 'procedure') {
+    if (row.type === 'service') return true;
+    if (row.type === 'item' && PROCEDURE_NAME_RE.test(row.name)) return true;
+    return false;
+  }
+  if (tab === 'package') return row.type === 'package';
+  return true;
 }
 
 /**
