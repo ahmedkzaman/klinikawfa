@@ -327,7 +327,6 @@ export default function ConsultationDetail() {
   const [issuingTemplate, setIssuingTemplate] = useState<DocumentTemplate | null>(null);
   const [editingDoc, setEditingDoc] = useState<ConsultationDocument | null>(null);
   const [voidingDoc, setVoidingDoc] = useState<ConsultationDocument | null>(null);
-  const [printingDoc, setPrintingDoc] = useState<ConsultationDocument | null>(null);
   const [viewingDoc, setViewingDoc] = useState<ConsultationDocument | null>(null);
   const deleteDoc = useDeleteConsultationDocument();
   const addItem = useAddConsultationItem();
