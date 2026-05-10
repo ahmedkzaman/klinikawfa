@@ -10,7 +10,9 @@ import {
   Phone,
   PauseCircle,
   CheckCircle2,
+  Stethoscope,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
