@@ -62,6 +62,11 @@ import { useServicesSafe } from '@/hooks/clinic/useServices';
 import { usePackagesSafe } from '@/hooks/clinic/usePackages';
 import { useRooms } from '@/hooks/clinic/useRooms';
 import { AddTreatmentBulkDialog } from '@/components/clinic/consultation/AddTreatmentBulkDialog';
+import { IssueDocumentModal } from '@/components/clinic/consultation/IssueDocumentModal';
+import {
+  useConsultationDocuments,
+  type DocumentTemplate,
+} from '@/hooks/clinic/useClinicDocuments';
 import { VitalHistoryTrends } from '@/components/clinic/consultation/VitalHistoryTrends';
 import {
   TreatmentItemCard,
