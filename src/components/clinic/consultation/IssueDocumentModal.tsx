@@ -16,6 +16,8 @@ import {
 } from '@/lib/clinic/paperStyle';
 import {
   useAddConsultationDocument,
+  useUpdateConsultationDocument,
+  type ConsultationDocument,
   type DocumentTemplate,
 } from '@/hooks/clinic/useClinicDocuments';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
@@ -34,6 +36,7 @@ interface Props {
   template: DocumentTemplate | null;
   patient: PatientLite | null;
   consultationId: string | null;
+  existingDoc?: ConsultationDocument | null;
 }
 
 export function IssueDocumentModal({
@@ -42,11 +45,15 @@ export function IssueDocumentModal({
   template,
   patient,
   consultationId,
+  existingDoc,
 }: Props) {
   const { settings } = useClinicSettings();
   const { data: doctor } = useCurrentDoctor();
   const addDoc = useAddConsultationDocument();
+  const updateDoc = useUpdateConsultationDocument();
   const [content, setContent] = useState('');
+
+  const isEdit = !!existingDoc;
 
   const substitutions = useMemo<Record<string, string>>(
     () => ({
@@ -65,23 +72,39 @@ export function IssueDocumentModal({
   );
 
   useEffect(() => {
-    if (!isOpen || !template) return;
+    if (!isOpen) return;
+    if (existingDoc) {
+      setContent(existingDoc.content || '');
+      return;
+    }
+    if (!template) return;
     let next = template.content || '';
     Object.entries(substitutions).forEach(([tag, value]) => {
       const re = new RegExp(tag.replace(/[{}]/g, '\\$&'), 'g');
       next = next.replace(re, value);
     });
     setContent(next);
-  }, [isOpen, template, substitutions]);
+  }, [isOpen, template, existingDoc, substitutions]);
 
-  if (!template) return null;
+  const source = existingDoc ?? template;
+  if (!source) return null;
 
-  const paperSize = (template.paper_size as PaperSize) ?? 'A4';
-  const orientation = (template.orientation as PaperOrientation) ?? 'portrait';
+  const paperSize = (source.paper_size as PaperSize) ?? 'A4';
+  const orientation = (source.orientation as PaperOrientation) ?? 'portrait';
   const paperStyle = getPaperStyle(paperSize, orientation);
+  const displayName = existingDoc?.template_name ?? template?.name ?? 'Document';
 
   const handleSave = async () => {
-    if (!consultationId || !patient?.id) return;
+    if (isEdit && existingDoc) {
+      await updateDoc.mutateAsync({
+        id: existingDoc.id,
+        consultation_id: existingDoc.consultation_id,
+        content,
+      });
+      onClose();
+      return;
+    }
+    if (!consultationId || !patient?.id || !template) return;
     await addDoc.mutateAsync({
       consultation_id: consultationId,
       patient_id: patient.id,
@@ -95,13 +118,18 @@ export function IssueDocumentModal({
     onClose();
   };
 
+  const isPending = isEdit ? updateDoc.isPending : addDoc.isPending;
+  const saveDisabled = isEdit
+    ? isPending
+    : !consultationId || !patient?.id || isPending;
+
   return (
     <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-6xl h-[85vh] flex flex-col p-0">
         <DialogHeader className="px-6 pt-6 pb-3 border-b">
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Issue: {template.name}
+            {isEdit ? 'Edit' : 'Issue'}: {displayName}
             <Badge variant="secondary" className="ml-2 text-xs">
               {paperSize} · {orientation}
             </Badge>
@@ -141,11 +169,11 @@ export function IssueDocumentModal({
           </Button>
           <Button
             onClick={handleSave}
-            disabled={!consultationId || !patient?.id || addDoc.isPending}
+            disabled={saveDisabled}
             className="gap-1.5"
           >
             <Save className="h-4 w-4" />
-            {addDoc.isPending ? 'Saving…' : 'Save to Consultation'}
+            {isPending ? 'Saving…' : isEdit ? 'Save Changes' : 'Save to Consultation'}
           </Button>
         </div>
       </DialogContent>

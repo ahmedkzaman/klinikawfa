@@ -1,4 +1,4 @@
-import React from 'react';
+import { createPortal } from 'react-dom';
 import { getPaperStyle, type PaperSize, type PaperOrientation } from '@/lib/clinic/paperStyle';
 import type { ConsultationDocument } from '@/hooks/clinic/useClinicDocuments';
 
@@ -7,7 +7,7 @@ interface Props {
 }
 
 export function DocumentPrintLayer({ doc }: Props) {
-  if (!doc) return null;
+  if (!doc || typeof document === 'undefined') return null;
 
   const size = (doc.paper_size as PaperSize) ?? 'A4';
   const orientation = (doc.orientation as PaperOrientation) ?? 'portrait';
@@ -23,19 +23,21 @@ export function DocumentPrintLayer({ doc }: Props) {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
-      body > *:not(.doc-print-root) {
+      #root, header, nav, aside, footer {
         display: none !important;
       }
       .doc-print-root {
         display: block !important;
         position: absolute;
-        inset: 0;
+        top: 0;
+        left: 0;
+        width: 100%;
         background: white;
       }
     }
   `;
 
-  return (
+  return createPortal(
     <>
       <style media="print" dangerouslySetInnerHTML={{ __html: printCss }} />
       <div className="doc-print-root hidden print:block">
@@ -48,6 +50,7 @@ export function DocumentPrintLayer({ doc }: Props) {
           </pre>
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   );
 }

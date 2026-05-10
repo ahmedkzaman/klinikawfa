@@ -90,6 +90,46 @@ export function useAddConsultationDocument() {
   });
 }
 
+export function useUpdateConsultationDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; consultation_id: string; content: string }) => {
+      const { data, error } = await supabase
+        .from('consultation_documents')
+        .update({ content: input.content })
+        .eq('id', input.id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as ConsultationDocument;
+    },
+    onSuccess: (doc) => {
+      qc.invalidateQueries({ queryKey: ['consultation-documents', doc.consultation_id] });
+      toast.success('Document updated');
+    },
+    onError: (e: Error) => toast.error(e.message || 'Failed to update document'),
+  });
+}
+
+export function useDeleteConsultationDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; consultation_id: string }) => {
+      const { error } = await supabase
+        .from('consultation_documents')
+        .delete()
+        .eq('id', input.id);
+      if (error) throw error;
+      return input;
+    },
+    onSuccess: (input) => {
+      qc.invalidateQueries({ queryKey: ['consultation-documents', input.consultation_id] });
+      toast.success('Document voided');
+    },
+    onError: (e: Error) => toast.error(e.message || 'Failed to void document'),
+  });
+}
+
 export function useUpsertDocumentTemplate() {
   const qc = useQueryClient();
   const { user } = useAuth();
