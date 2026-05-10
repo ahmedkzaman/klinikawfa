@@ -644,6 +644,14 @@ export default function ConsultationDetail() {
     [packages],
   );
 
+  /**
+   * Tag each consultation_items row with a UI-side category, mirroring the
+   * picker mapping:
+   *   - 'service'  → name matches a service in the catalog
+   *   - 'package'  → name matches a package in the catalog
+   *   - 'item'     → everything else (defaults to medicine)
+   */
+  const PROCEDURE_RE = /\b(fee|procedure|service)\b/i;
   const categorizedItems = useMemo(() => {
     return items.map((item) => {
       const nameLower = item.item_name.toLowerCase();
@@ -654,25 +662,44 @@ export default function ConsultationDetail() {
     });
   }, [items, serviceNameSet, packageNameSet]);
 
+  /**
+   * Map a categorized row to one of the new UI tabs.
+   * Procedure ⇢ services + item-typed rows whose name reads like a fee/procedure.
+   */
+  const matchesTreatmentTab = (
+    row: { category: string; item_name: string },
+    tab: string,
+  ): boolean => {
+    if (tab === 'all') return true;
+    if (tab === 'medicine')
+      return row.category === 'item' && !PROCEDURE_RE.test(row.item_name);
+    if (tab === 'procedure')
+      return (
+        row.category === 'service' ||
+        (row.category === 'item' && PROCEDURE_RE.test(row.item_name))
+      );
+    if (tab === 'package') return row.category === 'package';
+    return true;
+  };
+
   const filteredTreatmentItems = useMemo(() => {
-    let list = categorizedItems;
-    if (treatmentCategory !== 'all') {
-      list = list.filter((i) => i.category === treatmentCategory);
-    }
+    let list = categorizedItems.filter((i) => matchesTreatmentTab(i, treatmentCategory));
     if (treatmentSearch) {
       const q = treatmentSearch.toLowerCase();
       list = list.filter((i) => String(i.item_name ?? '').toLowerCase().includes(q));
     }
     return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categorizedItems, treatmentCategory, treatmentSearch]);
 
   const itemCounts = useMemo(
     () => ({
       all: categorizedItems.length,
-      item: categorizedItems.filter((i) => i.category === 'item').length,
-      service: categorizedItems.filter((i) => i.category === 'service').length,
-      package: categorizedItems.filter((i) => i.category === 'package').length,
+      medicine: categorizedItems.filter((i) => matchesTreatmentTab(i, 'medicine')).length,
+      procedure: categorizedItems.filter((i) => matchesTreatmentTab(i, 'procedure')).length,
+      package: categorizedItems.filter((i) => matchesTreatmentTab(i, 'package')).length,
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [categorizedItems],
   );
 
