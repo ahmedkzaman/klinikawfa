@@ -1382,15 +1382,10 @@ export default function ConsultationDetail() {
           onClose={() => setViewingDoc(null)}
           onPrint={(d) => {
             setViewingDoc(null);
-            setPrintingDoc(d);
-            setTimeout(() => {
-              window.print();
-              setPrintingDoc(null);
-            }, 250);
+            printDocument(d);
           }}
         />
 
-        <DocumentPrintLayer doc={printingDoc} />
       </div>
     </div>
   );
