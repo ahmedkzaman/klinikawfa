@@ -319,32 +319,40 @@ export default function QueueBoard() {
 
               <div className="pt-4 border-t border-slate-100 flex flex-col gap-2">
                 {activeEntry.clinic_status === 'registered' && (
-                  <Button
-                    className={primaryBtn}
-                    disabled={updateQueue.isPending || !activeEntry}
-                    onClick={() => {
-                      if (!activeEntry) return;
-                      updateQueue.mutate(
-                        { id: activeEntry.id, clinic_status: 'ready_for_doctor' },
-                        {
-                          onSuccess: () => {
-                            setActiveEntry(null);
-                            toast.success('Patient called to doctor');
+                  <>
+                    <Button
+                      className={primaryBtn}
+                      disabled={updateQueue.isPending}
+                      onClick={() => setVitalsOpen(true)}
+                    >
+                      <Activity className="h-4 w-4 mr-2" />
+                      Take Vitals / Triage
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className={secondaryBtn}
+                      disabled={updateQueue.isPending}
+                      onClick={() => {
+                        if (!activeEntry) return;
+                        updateQueue.mutate(
+                          { id: activeEntry.id, clinic_status: 'ready_for_doctor' },
+                          {
+                            onSuccess: () => {
+                              setActiveEntry(null);
+                              toast.success('Patient sent to doctor');
+                            },
+                            onError: (error: unknown) => {
+                              const message =
+                                error instanceof Error ? error.message : 'Unknown error';
+                              toast.error(`Update failed: ${message}`);
+                            },
                           },
-                          onError: (error: unknown) => {
-                            const message =
-                              error instanceof Error ? error.message : 'Unknown error';
-                            toast.error(`Update failed: ${message}`);
-                          },
-                        },
-                      );
-                    }}
-                  >
-                    {updateQueue.isPending &&
-                    updateQueue.variables?.clinic_status === 'ready_for_doctor'
-                      ? 'Updating…'
-                      : 'Send to Doctor'}
-                  </Button>
+                        );
+                      }}
+                    >
+                      Skip Triage → Send to Doctor
+                    </Button>
+                  </>
                 )}
 
                 {(activeEntry.clinic_status === 'sent_to_dispensary' ||
