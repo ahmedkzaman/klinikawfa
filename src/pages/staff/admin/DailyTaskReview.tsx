@@ -163,29 +163,47 @@ export default function DailyTaskReview() {
 
     const daySupportRoster = supportRosterData[dateKey];
     if (daySupportRoster) {
-      daySupportRoster.shift1?.forEach(s => {
-        if (filteredStaffIds.includes(s.staffId)) entries.push({ ...s, shift: 'AM', type: 'Staff' });
-      });
-      daySupportRoster.shift2?.forEach(s => {
-        if (filteredStaffIds.includes(s.staffId)) entries.push({ ...s, shift: 'PM', type: 'Staff' });
-      });
-      daySupportRoster.hybrid?.forEach(s => {
-        if (filteredStaffIds.includes(s.staffId)) entries.push({ ...s, shift: 'AM', type: 'Hybrid' });
-      });
+      for (const [rawKey, val] of Object.entries(daySupportRoster)) {
+        const bucket = supportShiftBucket(rawKey);
+        if (!bucket) continue;
+        cellsOf(val).forEach(s => {
+          if (!s.staffId || !filteredStaffIds.includes(s.staffId)) return;
+          if (bucket === 'HYBRID') {
+            entries.push({ staffId: s.staffId, staffName: s.staffName, shift: 'AM', type: 'Hybrid' });
+          } else {
+            entries.push({ staffId: s.staffId, staffName: s.staffName, shift: bucket, type: 'Staff' });
+          }
+        });
+      }
     }
 
     const dayDoctorRoster = doctorRosterData[dateKey];
     if (dayDoctorRoster) {
-      const locumId = dayDoctorRoster.shift3?.staffId;
-      if (dayDoctorRoster.shift1 && dayDoctorRoster.shift1.staffId !== locumId && filteredStaffIds.includes(dayDoctorRoster.shift1.staffId)) {
-        entries.push({ staffId: dayDoctorRoster.shift1.staffId, staffName: dayDoctorRoster.shift1.staffName, shift: 'AM', type: 'Doctor' });
+      let locumId: string | undefined;
+      for (const [rawKey, val] of Object.entries(dayDoctorRoster)) {
+        if (doctorShiftBucket(rawKey) === 'LOCUM') {
+          const c = cellsOf(val)[0];
+          if (c?.staffId) { locumId = c.staffId; break; }
+        }
       }
-      if (dayDoctorRoster.shift2 && dayDoctorRoster.shift2.staffId !== locumId && filteredStaffIds.includes(dayDoctorRoster.shift2.staffId)) {
-        entries.push({ staffId: dayDoctorRoster.shift2.staffId, staffName: dayDoctorRoster.shift2.staffName, shift: 'PM', type: 'Doctor' });
+      for (const [rawKey, val] of Object.entries(dayDoctorRoster)) {
+        const bucket = doctorShiftBucket(rawKey);
+        if (bucket !== 'AM' && bucket !== 'PM') continue;
+        cellsOf(val).forEach(c => {
+          if (!c.staffId || c.staffId === locumId || !filteredStaffIds.includes(c.staffId)) return;
+          entries.push({ staffId: c.staffId, staffName: c.staffName, shift: bucket, type: 'Doctor' });
+        });
       }
     }
 
-    return entries;
+    // Deduplicate
+    const seen = new Set<string>();
+    return entries.filter(e => {
+      const k = `${e.staffId}-${e.shift}-${e.type}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
   };
 
   // Summary stats
