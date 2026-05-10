@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { Search, Package, Clock, AlertTriangle } from 'lucide-react';
+import { Search, Package, Clock, AlertTriangle, FileText } from 'lucide-react';
+import { useDocumentTemplates, type DocumentTemplate } from '@/hooks/clinic/useClinicDocuments';
 import {
   Dialog,
   DialogContent,
