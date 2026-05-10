@@ -199,6 +199,7 @@ export function AddTreatmentBulkDialog({
         type: 'package',
         categoryLower: '',
         genericLower: '',
+        nearestExpiry: null,
       });
     });
 
