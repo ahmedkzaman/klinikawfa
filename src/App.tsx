@@ -354,6 +354,14 @@ const App = () => (
                   }
                 />
                 <Route
+                  path="settings/charges"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <ChargesSettings />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
                   path="settings/queue"
                   element={
                     <ClinicProtectedRoute requiredRole="ops_or_admin">
