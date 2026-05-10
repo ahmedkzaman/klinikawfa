@@ -17,7 +17,8 @@ export type ClinicStatus =
   | 'sent_to_dispensary'
   | 'dispensing_payment'
   | 'on_hold'
-  | 'completed';
+  | 'completed'
+  | 'cancelled';
 
 export const STATUS_LABELS: Record<ClinicStatus, string> = {
   registered: 'Registered',
@@ -27,6 +28,7 @@ export const STATUS_LABELS: Record<ClinicStatus, string> = {
   dispensing_payment: 'Payment',
   on_hold: 'On Hold',
   completed: 'Completed',
+  cancelled: 'Cancelled',
 };
 
 /** Soft, desaturated palette aligned with the clinic bento design. */
@@ -38,6 +40,7 @@ export const STATUS_COLORS: Record<ClinicStatus, string> = {
   dispensing_payment: 'bg-amber-50 text-amber-700 border-transparent',
   on_hold: 'bg-rose-50 text-rose-700 border-transparent',
   completed: 'bg-emerald-50 text-emerald-700 border-transparent',
+  cancelled: 'bg-zinc-100 text-zinc-600 border-transparent line-through',
 };
 
 /** Five visible columns for the kanban board (completed/cancelled drop off). */
