@@ -66,7 +66,9 @@ import { IssueDocumentModal } from '@/components/clinic/consultation/IssueDocume
 import {
   useConsultationDocuments,
   type DocumentTemplate,
+  type ConsultationDocument,
 } from '@/hooks/clinic/useClinicDocuments';
+import { DocumentPrintLayer } from '@/components/clinic/consultation/DocumentPrintLayer';
 import { VitalHistoryTrends } from '@/components/clinic/consultation/VitalHistoryTrends';
 import {
   TreatmentItemCard,
