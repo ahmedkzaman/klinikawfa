@@ -1301,6 +1301,15 @@ export default function ConsultationDetail() {
           onOpenChange={setBulkDialogOpen}
           onInsert={handleBulkInsert}
           isPanel={(entry?.payment_method ?? '').startsWith('panel')}
+          onIssueDocument={(tpl) => setIssuingTemplate(tpl)}
+        />
+
+        <IssueDocumentModal
+          isOpen={!!issuingTemplate}
+          onClose={() => setIssuingTemplate(null)}
+          template={issuingTemplate}
+          patient={patient ?? null}
+          consultationId={consultationId ?? null}
         />
       </div>
     </div>
