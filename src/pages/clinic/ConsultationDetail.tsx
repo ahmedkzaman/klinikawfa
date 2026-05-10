@@ -871,8 +871,8 @@ export default function ConsultationDetail() {
                 <div className="flex gap-2 flex-wrap">
                   {[
                     { key: 'all', label: 'All' },
-                    { key: 'item', label: 'Items' },
-                    { key: 'service', label: 'Services' },
+                    { key: 'medicine', label: 'Medicine' },
+                    { key: 'procedure', label: 'Procedures' },
                     { key: 'package', label: 'Packages' },
                   ].map((cat) => {
                     const active = treatmentCategory === cat.key;
