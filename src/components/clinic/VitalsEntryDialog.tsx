@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Activity, ArrowRight, Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Activity, ArrowRight, Save, Stethoscope } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -12,8 +12,16 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useUpdateQueueEntry } from '@/hooks/clinic/useQueueEntries';
 import { useRecordVitalSigns } from '@/hooks/clinic/useVitalSigns';
+import { useDoctors } from '@/hooks/clinic/useDoctors';
 import { primaryBtn, secondaryBtn } from '@/lib/clinic/bentoTokens';
 import { cn } from '@/lib/utils';
 
@@ -64,14 +72,26 @@ export function VitalsEntryDialog({
 }: VitalsEntryDialogProps) {
   const recordVitals = useRecordVitalSigns();
   const updateQueue = useUpdateQueueEntry();
+  const { data: doctors } = useDoctors();
+  const activeDoctors = (doctors ?? []).filter((d) => d.status === 'active');
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [assignedDoctorId, setAssignedDoctorId] = useState<string | null>(null);
+
+  // Reset assignment when dialog closes so the next patient starts clean
+  useEffect(() => {
+    if (!open) setAssignedDoctorId(null);
+  }, [open]);
 
   const set = <K extends keyof FormState>(key: K, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
   const handleSave = async (sendToDoctor: boolean) => {
     if (!queueEntryId || !patientId) return;
+    if (sendToDoctor && !assignedDoctorId) {
+      toast.error('Select an attending doctor before sending');
+      return;
+    }
     setSubmitting(true);
     try {
       // pain_scale is collected for triage context but not yet a column on vital_signs.
