@@ -4632,6 +4632,7 @@ export type Database = {
       }
       generate_po_number: { Args: never; Returns: string }
       get_doctor_id_for_user: { Args: { _user_id: string }; Returns: string }
+      get_server_now: { Args: never; Returns: string }
       get_video_room_signaling: {
         Args: { _room_code: string }
         Returns: {
