@@ -105,6 +105,7 @@ export function AddTreatmentBulkDialog({
   isPanel = false,
 }: Props) {
   const [search, setSearch] = useState('');
+  const [tab, setTab] = useState<PickerTab>('all');
   const [selected, setSelected] = useState<SelectedItem[]>([]);
 
   const { items: inventoryItems } = useInventoryItems();
