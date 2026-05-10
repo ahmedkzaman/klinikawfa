@@ -11,6 +11,8 @@ import {
   PauseCircle,
   CheckCircle2,
   Stethoscope,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
