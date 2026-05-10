@@ -88,14 +88,7 @@ export function useConsultationQueueEntries() {
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
 
-      const activeStatuses = [
-        "registered",
-        "ready_for_doctor",
-        "with_doctor",
-        "sent_to_dispensary",
-        "dispensing_payment",
-        "on_hold",
-      ] as const;
+      const activeStatuses = ACTIVE_STATUSES;
 
       const { data, error } = await supabase
         .from("queue_entries")
