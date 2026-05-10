@@ -81,8 +81,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { DocumentPrintLayer } from '@/components/clinic/consultation/DocumentPrintLayer';
 import { ViewDocumentModal } from '@/components/clinic/consultation/ViewDocumentModal';
+import { printDocument } from '@/lib/clinic/printDocument';
 import { VitalHistoryTrends } from '@/components/clinic/consultation/VitalHistoryTrends';
 import {
   TreatmentItemCard,
