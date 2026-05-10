@@ -199,12 +199,29 @@ export function AddTreatmentBulkDialog({
   }, [inventoryItems, services, packages, isPanel]);
 
   const filtered = useMemo(() => {
-    if (!search) return allItems;
-    const q = search.toLowerCase();
-    return allItems.filter(
-      (i) => i.name.toLowerCase().includes(q) || i.group.toLowerCase().includes(q),
-    );
-  }, [allItems, search]);
+    const q = search.trim().toLowerCase();
+    // Search wins over tabs: a non-empty query searches the entire combined list
+    // across name, generic_name, and the group label (case-insensitive).
+    if (q) {
+      return allItems.filter(
+        (i) =>
+          i.name.toLowerCase().includes(q) ||
+          i.genericLower.includes(q) ||
+          i.group.toLowerCase().includes(q),
+      );
+    }
+    return allItems.filter((i) => rowMatchesTab(i, tab));
+  }, [allItems, search, tab]);
+
+  const tabCounts = useMemo(
+    () => ({
+      all: allItems.length,
+      medicine: allItems.filter((i) => rowMatchesTab(i, 'medicine')).length,
+      procedure: allItems.filter((i) => rowMatchesTab(i, 'procedure')).length,
+      package: allItems.filter((i) => rowMatchesTab(i, 'package')).length,
+    }),
+    [allItems],
+  );
 
   const toggleItem = (item: CombinedRow) => {
     setSelected((prev) => {
