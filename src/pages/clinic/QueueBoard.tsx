@@ -19,6 +19,7 @@ import { useTodayAppointments } from '@/hooks/clinic/useTodayAppointments';
 import { CheckInAppointmentDialog } from '@/components/clinic/CheckInAppointmentDialog';
 import { CheckInWalkInDialog } from '@/components/clinic/CheckInWalkInDialog';
 import { RegisterAndCheckInDialog } from '@/components/clinic/RegisterAndCheckInDialog';
+import { VitalsEntryDialog } from '@/components/clinic/VitalsEntryDialog';
 import {
   QUEUE_COLUMNS,
   STATUS_COLORS,
