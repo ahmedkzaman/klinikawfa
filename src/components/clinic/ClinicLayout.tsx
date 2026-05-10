@@ -20,6 +20,7 @@ import {
   ShoppingCart,
   Trash2,
   PackageX,
+  ClipboardList,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
