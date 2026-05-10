@@ -434,7 +434,12 @@ export function AddTreatmentBulkDialog({
                         <TableCell>
                           <Checkbox checked={isSelected} />
                         </TableCell>
-                        <TableCell className="text-sm font-medium">{item.name}</TableCell>
+                        <TableCell className="text-sm font-medium">
+                          <div>{item.name}</div>
+                          {item.type === 'item' && (
+                            <StockBadges stock={item.stock} nearestExpiry={item.nearestExpiry} />
+                          )}
+                        </TableCell>
                         <TableCell className="text-sm">{item.stock ?? '—'}</TableCell>
                         <TableCell className="text-sm">{item.uom}</TableCell>
                         <TableCell className="text-sm">{item.group}</TableCell>
