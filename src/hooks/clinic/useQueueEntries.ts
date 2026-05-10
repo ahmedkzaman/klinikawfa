@@ -4,7 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import type { QueueEntryWithJoins, QueueEntryRow } from "@/types/clinic";
 
 const QUEUE_QUERY_KEY = ["clinic", "queue-entries"] as const;
-const CONSULT_QUEUE_QUERY_KEY = ["clinic", "consultation-queue-entries"] as const;
 
 /**
  * Today's active queue entries with patient + doctor joins.
@@ -31,6 +30,7 @@ export function useQueueEntries() {
         `,
         )
         .is("deleted_at", null)
+        // FIXED: Changed 'cancelled' to 'canceled' to match DB Enum
         .not("clinic_status", "in", "(completed,canceled)")
         .gte("created_at", startOfDay.toISOString())
         .order("is_urgent", { ascending: false })
@@ -49,62 +49,6 @@ export function useQueueEntries() {
     const channel = supabase
       .channel("clinic-queue-entries")
       .on("postgres_changes", { event: "*", schema: "public", table: "queue_entries" }, () => {
-        qc.invalidateQueries({ queryKey: QUEUE_QUERY_KEY });
-        qc.invalidateQueries({ queryKey: CONSULT_QUEUE_QUERY_KEY });
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [qc]);
-
-  return query;
-}
-
-/**
- * Consultation workspace feed. Returns today's entries OR any active
- * carry-over entries from prior days (so a patient who registered yesterday
- * but is still `with_doctor` remains visible). Includes patient, doctor,
- * and room joins required by the ConsultationDetail header.
- */
-export function useConsultationQueueEntries() {
-  const qc = useQueryClient();
-
-  const query = useQuery<QueueEntryWithJoins[]>({
-    queryKey: CONSULT_QUEUE_QUERY_KEY,
-    queryFn: async () => {
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
-
-      const { data, error } = await supabase
-        .from("queue_entries")
-        .select(
-          `
-          *,
-          patients ( * ),
-          doctors:assigned_doctor_id ( id, name, avatar_url ),
-          rooms:assigned_room_id ( id, label ),
-          insurance_providers ( id, name )
-        `,
-        )
-        .is("deleted_at", null)
-        .or(
-          `created_at.gte.${startOfDay.toISOString()},clinic_status.in.(registered,ready_for_doctor,with_doctor,sent_to_dispensary,dispensing_payment,on_hold)`,
-        )
-        .order("created_at", { ascending: true });
-
-      if (error) throw error;
-      return (data ?? []) as unknown as QueueEntryWithJoins[];
-    },
-    staleTime: 15_000,
-  });
-
-  useEffect(() => {
-    const channel = supabase
-      .channel("clinic-consultation-queue")
-      .on("postgres_changes", { event: "*", schema: "public", table: "queue_entries" }, () => {
-        qc.invalidateQueries({ queryKey: CONSULT_QUEUE_QUERY_KEY });
         qc.invalidateQueries({ queryKey: QUEUE_QUERY_KEY });
       })
       .subscribe();
@@ -127,7 +71,6 @@ export function useUpdateQueueEntry() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUEUE_QUERY_KEY });
-      qc.invalidateQueries({ queryKey: CONSULT_QUEUE_QUERY_KEY });
     },
   });
 }
@@ -155,16 +98,12 @@ export function useCallPatient() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUEUE_QUERY_KEY });
-      qc.invalidateQueries({ queryKey: CONSULT_QUEUE_QUERY_KEY });
     },
   });
 }
 
 /**
- * Calls a patient to a dispensary/pharmacy counter. Updates `called_at`
- * and `assigned_room_id` but DOES NOT change `clinic_status`, so the entry
- * remains on the dispensary board. The TV display fires on `called_at`
- * change for any active dispensary status.
+ * Calls a patient to a dispensary/pharmacy counter.
  */
 export function useCallToDispensary() {
   const qc = useQueryClient();
@@ -181,14 +120,12 @@ export function useCallToDispensary() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUEUE_QUERY_KEY });
-      qc.invalidateQueries({ queryKey: CONSULT_QUEUE_QUERY_KEY });
     },
   });
 }
 
 /**
- * Fetch a single queue entry by id with patient/doctor/room/panel joins.
- * Status-agnostic — works for completed/canceled rows too.
+ * Fetch a single queue entry by id.
  */
 export function useQueueEntry(id?: string) {
   return useQuery<QueueEntryWithJoins | null>({
@@ -214,4 +151,4 @@ export function useQueueEntry(id?: string) {
   });
 }
 
-export { QUEUE_QUERY_KEY, CONSULT_QUEUE_QUERY_KEY };
+export { QUEUE_QUERY_KEY };
