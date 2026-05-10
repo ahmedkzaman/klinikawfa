@@ -456,6 +456,21 @@ export default function QueueBoard() {
                     Patient is on hold. Status can only be resumed by the attending doctor.
                   </p>
                 )}
+
+                {(['registered', 'ready_for_doctor', 'with_doctor', 'on_hold'] as ClinicStatus[]).includes(
+                  activeEntry.clinic_status as ClinicStatus,
+                ) && (
+                  <div className="mt-2 pt-3 border-t border-slate-100">
+                    <Button
+                      variant="ghost"
+                      className="w-full text-rose-500 hover:text-rose-700 hover:bg-rose-50"
+                      onClick={() => setCancelOpen(true)}
+                    >
+                      <UserX className="h-4 w-4 mr-2" />
+                      Patient Absconded / Cancel
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           )}
