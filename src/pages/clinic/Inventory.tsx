@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Package, Plus, Pill, ClipboardList, Boxes } from 'lucide-react';
+import { ItemBatchesSheet } from '@/components/clinic/inventory/ItemBatchesSheet';
 import { SEOHead } from '@/components/seo/SEOHead';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -88,6 +89,7 @@ export default function Inventory() {
   const [activeTab, setActiveTab] = useState<TabKey>('all');
   const [editTarget, setEditTarget] = useState<InventoryDashboardRow | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [batchesTarget, setBatchesTarget] = useState<InventoryDashboardRow | null>(null);
 
   const tagged = useMemo(
     () => items.map((it) => ({ item: it, tags: classify(it) })),
@@ -221,6 +223,7 @@ export default function Inventory() {
                             <TableHead className="text-[11px] font-semibold text-slate-500 uppercase text-right">Base Price</TableHead>
                             <TableHead className="text-[11px] font-semibold text-slate-500 uppercase">Expiry</TableHead>
                             <TableHead className="text-[11px] font-semibold text-slate-500 uppercase">Status</TableHead>
+                            <TableHead className="text-[11px] font-semibold text-slate-500 uppercase text-right">Batches</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -256,6 +259,17 @@ export default function Inventory() {
                                     <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-none">In Stock</Badge>
                                   )}
                                 </TableCell>
+                                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={() => setBatchesTarget(it)}
+                                  >
+                                    <Boxes className="h-3.5 w-3.5 mr-1" />
+                                    Batches
+                                  </Button>
+                                </TableCell>
                               </TableRow>
                             );
                           })}
@@ -271,6 +285,12 @@ export default function Inventory() {
       </div>
 
       <ItemEditSheet open={sheetOpen} onOpenChange={setSheetOpen} item={editTarget} />
+      <ItemBatchesSheet
+        open={!!batchesTarget}
+        onOpenChange={(v) => { if (!v) setBatchesTarget(null); }}
+        itemId={batchesTarget?.id ?? null}
+        itemName={batchesTarget?.name ?? null}
+      />
     </>
   );
 }
