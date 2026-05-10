@@ -486,6 +486,40 @@ export function AddTreatmentBulkDialog({
                 </button>
               )}
             </div>
+            {lowStockSelected.length > 0 && (
+              <Alert className="mb-3 border-amber-300 bg-amber-50 text-amber-900">
+                <AlertTriangle className="h-4 w-4 !text-amber-700" />
+                <AlertTitle className="text-amber-900">Low stock on selected items</AlertTitle>
+                <AlertDescription className="text-amber-900">
+                  <div className="mt-2 space-y-1.5">
+                    {lowStockSelected.map((row) => {
+                      const notified = restockNotified.has(row.id);
+                      return (
+                        <div
+                          key={row.id}
+                          className="flex items-center justify-between gap-2 text-xs"
+                        >
+                          <span className="truncate">
+                            <span className="font-medium">{row.name}</span>
+                            <span className="text-amber-700"> · {row.stock} left</span>
+                          </span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={notified ? 'outline' : 'default'}
+                            disabled={notified || createRestock.isPending}
+                            onClick={() => requestRestock(row.id)}
+                            className="h-7 text-[11px] shrink-0"
+                          >
+                            {notified ? 'Pharmacy notified' : 'Request Restock'}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
             {selected.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center text-center">
                 <Package className="h-10 w-10 text-muted-foreground/40 mb-2" />
