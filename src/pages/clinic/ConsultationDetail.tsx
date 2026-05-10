@@ -995,13 +995,7 @@ export default function ConsultationDetail() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => {
-                              setPrintingDoc(doc);
-                              setTimeout(() => {
-                                window.print();
-                                setPrintingDoc(null);
-                              }, 250);
-                            }}
+                            onClick={() => setViewingDoc(doc)}
                           >
                             View / Print
                           </Button>
