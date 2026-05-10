@@ -11,6 +11,8 @@ import {
   PauseCircle,
   CheckCircle2,
   Stethoscope,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -66,6 +68,7 @@ import {
   type TreatmentItemCardItem,
 } from '@/components/clinic/consultation/TreatmentItemCard';
 import { DiagnosisCombobox } from '@/components/clinic/consultation/DiagnosisCombobox';
+import { useDiagnoses } from '@/hooks/clinic/useDiagnoses';
 import { SessionAttachmentsStrip } from '@/components/clinic/consultation/SessionAttachmentsStrip';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -75,7 +78,7 @@ interface PastVisit {
   id: string;
   created_at: string;
   doctors?: { name?: string } | null;
-  diagnoses?: { name?: string } | null;
+  diagnoses?: { id?: string; name?: string } | null;
   diagnosis_text?: string | null;
   case_note?: string | null;
   dispense_note?: string | null;
@@ -88,19 +91,43 @@ interface PastVisit {
   }> | null;
 }
 
+interface CopyDiagnosisPayload {
+  diagnosis_id: string | null;
+  name: string;
+}
+
 /**
  * Single entry in the doctor-side Past Visits timeline. Owns its own
  * expand/collapse state so opening one card doesn't affect siblings.
  * Notes longer than ~120 chars truncate to two lines until expanded.
  */
-function PastVisitCard({ visit }: { visit: PastVisit }) {
+function PastVisitCard({
+  visit,
+  onCopyDiagnosis,
+}: {
+  visit: PastVisit;
+  onCopyDiagnosis?: (payload: CopyDiagnosisPayload) => void;
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  const diagnosisDisplay =
-    visit.diagnoses?.name?.trim() || visit.diagnosis_text?.trim() || '';
+  const structuredName = visit.diagnoses?.name?.trim() || '';
+  const freeText = visit.diagnosis_text?.trim() || '';
+  const diagnosisDisplay = structuredName || freeText;
+  const diagnosisId = visit.diagnoses?.id ?? null;
   const note = (visit.case_note ?? '').trim();
   const isLongNote = note.length > 120;
   const dispenseNote = (visit.dispense_note ?? '').trim();
+
+  const handleCopy = () => {
+    if (!diagnosisDisplay || !onCopyDiagnosis) return;
+    onCopyDiagnosis({
+      diagnosis_id: structuredName ? diagnosisId : null,
+      name: diagnosisDisplay,
+    });
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div className="relative pl-6 py-3 border-l-2 border-slate-100 first:pt-0 last:pb-0">
@@ -122,11 +149,26 @@ function PastVisitCard({ visit }: { visit: PastVisit }) {
 
       {/* Diagnosis */}
       {diagnosisDisplay && (
-        <div className="mt-1 flex items-start gap-1.5">
+        <div className="mt-1 flex items-start gap-1.5 group/diag">
           <Stethoscope className="h-3.5 w-3.5 text-blue-600 mt-[2px] shrink-0" />
           <Badge className="rounded-full bg-blue-50 text-blue-700 border-none font-medium">
             {diagnosisDisplay}
           </Badge>
+          {onCopyDiagnosis && (
+            <button
+              type="button"
+              onClick={handleCopy}
+              title="Copy diagnosis to today's visit"
+              aria-label="Copy diagnosis to today's visit"
+              className="opacity-100 sm:opacity-0 sm:group-hover/diag:opacity-100 focus-visible:opacity-100 transition-opacity p-1 rounded text-blue-600 hover:bg-blue-100"
+            >
+              {copied ? (
+                <Check className="h-3 w-3" />
+              ) : (
+                <Copy className="h-3 w-3" />
+              )}
+            </button>
+          )}
         </div>
       )}
 
@@ -291,6 +333,48 @@ export default function ConsultationDetail() {
     historyPage * HISTORY_PER_PAGE,
     (historyPage + 1) * HISTORY_PER_PAGE,
   );
+
+  const { diagnoses: diagnosisCatalog = [] } = useDiagnoses();
+
+  /**
+   * Append-not-overwrite copy of a past diagnosis into today's form state.
+   * - Empty field → set structured id (if known) or free text.
+   * - Already structured → demote to text and append `, <new>`.
+   * - Already free text → append `, <new>`.
+   * Case-insensitive duplicate guard prevents repeated chips.
+   */
+  const handleCopyDiagnosis = ({ diagnosis_id, name }: CopyDiagnosisPayload) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+
+    const currentText = diagnosisText.trim();
+    const currentStructuredName = diagnosisId
+      ? diagnosisCatalog.find((d) => d.id === diagnosisId)?.name?.trim() ?? ''
+      : '';
+    const currentDisplay = currentStructuredName || currentText;
+
+    // Duplicate guard
+    const tokens = currentDisplay
+      .split(',')
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
+    if (tokens.includes(trimmed.toLowerCase())) return;
+
+    if (!currentDisplay) {
+      if (diagnosis_id) {
+        setDiagnosisId(diagnosis_id);
+        setDiagnosisText('');
+      } else {
+        setDiagnosisId(null);
+        setDiagnosisText(trimmed);
+      }
+      return;
+    }
+
+    // Demote any structured selection so we can hold multiple labels as text.
+    setDiagnosisId(null);
+    setDiagnosisText(`${currentDisplay}, ${trimmed}`);
+  };
 
   const waitingCount = useMemo(() => {
     if (!doctor) return 0;
@@ -1065,6 +1149,7 @@ export default function ConsultationDetail() {
                         <PastVisitCard
                           key={(c as { id: string }).id}
                           visit={c as PastVisit}
+                          onCopyDiagnosis={canEdit ? handleCopyDiagnosis : undefined}
                         />
                       ))}
                     </div>
