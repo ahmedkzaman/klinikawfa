@@ -54,6 +54,8 @@ type ConsultationItemRow = {
   instruction: string | null;
   duration: string | null;
   precaution: string | null;
+  dispensed_qty?: number | null;
+  partial_reason?: string | null;
 };
 
 /**
