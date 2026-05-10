@@ -102,6 +102,17 @@ export default function QueueBoard() {
   const { data: appointments = [] } = useTodayAppointments();
   const { isLocum, isAdmin } = useAuth();
 
+  const updateQueue = useUpdateQueueEntry();
+  const restoreEntry = useRestoreQueueEntry();
+  const navigate = useNavigate();
+
+  const [appointmentDialog, setAppointmentDialog] = useState(false);
+  const [walkInDialog, setWalkInDialog] = useState(false);
+  const [registerDialog, setRegisterDialog] = useState(false);
+  const [vitalsOpen, setVitalsOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [activeEntry, setActiveEntry] = useState<QueueEntryWithJoins | null>(null);
+
   const ACTIVE_STATUSES: ClinicStatus[] = [
     "registered",
     "ready_for_doctor",
