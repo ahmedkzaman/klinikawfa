@@ -157,6 +157,7 @@ export function AddTreatmentBulkDialog({
   onOpenChange,
   onInsert,
   isPanel = false,
+  onIssueDocument,
 }: Props) {
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<PickerTab>('all');
@@ -166,6 +167,7 @@ export function AddTreatmentBulkDialog({
   const { items: inventoryItems } = useInventoryItems();
   const { services } = useServices();
   const { packages } = usePackages();
+  const { data: documentTemplates = [] } = useDocumentTemplates();
   const createRestock = useCreateRestockRequest();
 
   const requestRestock = (itemId: string) => {
