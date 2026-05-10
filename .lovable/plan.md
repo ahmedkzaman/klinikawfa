@@ -1,84 +1,162 @@
-# Daily Queue Numbers + Triage Doctor Assignment
+# Smart Pharmacy: Batch Tracking, FEFO & Partial Dispensing
 
-## Stress-test responses
+Layered on top of the existing `inventory_items` / `consultation_items` / reserve-commit pipeline. **No parallel "medicines" schema** — we extend, not fork.
 
-1. **Midnight carry-over** — Treated as a feature, not a bug. A `260509-99` ticket showing alongside `260510-01` is correct: the date prefix proves the carry-over and lets the doctor see who has been waiting the longest. No extra logic needed; the existing "active OR today" filter already keeps these visible.
-2. **Doctor FK** — Verified. `queue_entries.assigned_doctor_id` is a UUID FK to `public.doctors.id` (not `auth.users`). `useDoctors()` returns rows from the same table, so `doc.id` is the correct value to write.
-3. **TV overflow** — Will downsize the queue-number font in `QueueTV.tsx` (and let the row reflow naturally) so the 9-character `YYMMDD-NN` string fits without wrapping on 1080p.
+## Goals
 
-## TV behaviour on Unassign
+1. Stock counted at **batch** level (batch no, expiry, qty remaining, cost).
+2. **FEFO** consumption — oldest unexpired batch consumed first, with row-level locking.
+3. **Partial dispensing** — `dispensed_qty` becomes the source of truth for inventory + billing + COGS.
+4. **Owe-slip** queue when dispense < prescribed because of OOS, with a dashboard.
+5. **Doctor-side visibility** — green/amber/red badges on the prescribing picker + soft warning + "Request restock".
+6. **Full audit ledger** (`inventory_transactions`) with a per-item history drawer.
 
-Patient simply moves back to the "Registered/Awaiting" column on the next polling tick. No flash overlay this round — staff at the front desk will redirect verbally. We can layer a flash notification later once we measure how often this actually happens.
+---
 
-## 1. Database migration
+## 1. Database (single migration)
+
+### New tables
+
+`inventory_item_batches`
+- `id`, `inventory_item_id` → `inventory_items.id`
+- `batch_number` text, `expiry_date` date NOT NULL
+- `quantity_initial` int, `quantity_remaining` int (>= 0)
+- `cost_price` numeric(10,2)
+- `received_at` timestamptz, `received_by` uuid, `po_id` uuid nullable
+- Indexes: `(inventory_item_id, expiry_date ASC)` partial where `quantity_remaining > 0`
+
+`inventory_transactions`
+- `id`, `inventory_item_id`, `batch_id` (nullable for adjustments)
+- `transaction_type` check `('restock','dispense','adjustment','return','write-off','expire')`
+- `qty_change` int (signed)
+- `consultation_item_id` uuid nullable, `consultation_id` uuid nullable, `patient_id` uuid nullable
+- `reason_code` text nullable (`patient_request`, `out_of_stock`, `expired`, `count_correction`, …)
+- `notes` text, `performed_by` uuid, `created_at` timestamptz
+- Indexes on `(inventory_item_id, created_at DESC)` and `(consultation_id)`
+
+`pharmacy_owe_slips`
+- `id`, `consultation_item_id` UNIQUE, `consultation_id`, `patient_id`, `inventory_item_id`
+- `qty_owed` int, `qty_fulfilled` int default 0
+- `status` text check `('open','partially_fulfilled','fulfilled','cancelled')`
+- `created_at`, `created_by`, `closed_at`, `closed_by`, `notes`
+
+### Schema changes
 
 ```sql
-CREATE OR REPLACE FUNCTION public.get_next_queue_number()
-RETURNS integer
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE next_num integer;
-BEGIN
-  PERFORM pg_advisory_xact_lock(
-    ('x' || to_char(CURRENT_DATE,'YYYYMMDD'))::bit(32)::int
-  );
-  SELECT COALESCE(MAX(queue_sequence), 0) + 1
-    INTO next_num
-  FROM public.queue_entries
-  WHERE created_at::date = CURRENT_DATE;
-  RETURN next_num;
-END;
-$$;
+ALTER TABLE consultation_items
+  ADD COLUMN dispensed_qty integer,
+  ADD COLUMN is_partial boolean GENERATED ALWAYS AS
+    (dispensed_qty IS NOT NULL AND dispensed_qty < quantity) STORED,
+  ADD COLUMN partial_reason text;  -- 'patient_request' | 'out_of_stock' | null
 ```
 
-Also patch `intake_appointment_to_queue(...)` to call `get_next_queue_number()` and store `queue_sequence` in the same transaction. Legacy `queue_number` column stays untouched (audit continuity).
+### RLS
+- `inventory_item_batches`, `inventory_transactions`, `pharmacy_owe_slips`: SELECT for `is_staff_or_admin`, INSERT/UPDATE via SECURITY DEFINER RPCs only.
 
-## 2. New formatter
+### RPCs (all `SECURITY DEFINER`, `SET search_path = public`)
 
-**`src/lib/clinic/queueNumber.ts`**
-```ts
-import { format } from 'date-fns';
-export const formatQueueNo = (createdAt: string | Date, seq: number | null) => {
-  if (seq == null) return '—';
-  try {
-    const d = typeof createdAt === 'string' ? new Date(createdAt) : createdAt;
-    return `${format(d, 'yyMMdd')}-${String(seq).padStart(2, '0')}`;
-  } catch { return '—'; }
-};
-```
+`add_inventory_batch(_item_id, _batch_number, _expiry, _qty, _cost, _po_id)`
+- Inserts batch, increments `inventory_items.stock`, refreshes `nearest/latest_expiry_date`, logs `restock` transaction.
 
-## 3. Walk-in / Register insert paths
+`commit_inventory_fefo(_item_id, _qty, _consultation_item_id, _consultation_id, _patient_id, _reason)` — **replaces direct call to `commit_inventory` for batch-tracked items**
+1. `pg_advisory_xact_lock(hashtext('inv:'||_item_id))`
+2. Loop: pick oldest batch where `expiry_date >= CURRENT_DATE` and `quantity_remaining > 0`, `FOR UPDATE`.
+3. Decrement batch + insert `inventory_transactions(type='dispense', batch_id, ...)`.
+4. Continue until `_qty` consumed or no batches → return `{dispensed: int, shortfall: int}`.
+5. Caller decides whether shortfall becomes an owe-slip.
 
-**`src/hooks/clinic/useQueueEntries.ts`** — in the create mutations used by `CheckInWalkInDialog` and `RegisterAndCheckInDialog`, call `supabase.rpc('get_next_queue_number')` first, then include `queue_sequence` in the insert payload. Listing order switches to `created_at, queue_sequence`.
+`adjust_inventory_batch(_batch_id, _delta, _reason, _notes)` — stock-take corrections, write-offs.
 
-## 4. Triage doctor assignment
+`expire_inventory_batches()` — nightly cron candidate; zeroes expired batches and logs `expire` rows. (Out of scope to schedule; just create the function.)
 
-**`src/components/clinic/VitalsEntryDialog.tsx`**
-- shadcn `Select` "Attending Doctor" populated by `useDoctors()`.
-- Local `assignedDoctorId` state, reset on dialog close.
-- "Save & Send to Doctor" disabled until a doctor is selected. "Save Only" stays enabled.
-- On send, the same `updateQueue.mutateAsync` call also writes `assigned_doctor_id`.
+### Trigger refactor
 
-## 5. QueueBoard + TV visuals
+Patch `trg_consultations_inventory` so on consultation `completed`:
+- For each active `consultation_items` row, call `commit_inventory_fefo(item, COALESCE(dispensed_qty, quantity), …, partial_reason)`.
+- If `dispensed_qty < quantity` and `partial_reason = 'out_of_stock'`, INSERT into `pharmacy_owe_slips`.
+- `release_inventory` for the unused reserved portion.
 
-- **QueueCard** (`QueueBoard.tsx`): `formatQueueNo(entry.created_at, entry.queue_sequence)` replaces `#{queue_number}`. Below the patient name:
-  - `Attending: Dr. {entry.doctors?.name}` in slate-600 when assigned.
-  - `Awaiting Assignment` in amber-600 italic when null and status is `registered`.
-- **Detail-sheet header** + **Recently Cancelled drawer**: same formatter.
-- **`QueueTV.tsx`**: include `queue_sequence, created_at` in the select; render via formatter; reduce queue-number font size to fit the longer string.
+`reserve_inventory` / `release_inventory` keep their current job (allocated_quantity guard at master level).
 
-## 6. Admin "Unassign Doctor" recovery
+### Backfill
+- One synthetic batch per existing `inventory_items` with `quantity_initial = quantity_remaining = stock`, `expiry_date = COALESCE(latest_expiry_date, current_date + 365)`, `batch_number = 'LEGACY'`. Keeps existing stock visible without breaking anything.
 
-In the QueueBoard detail sheet, admin-only button visible when `assigned_doctor_id` is set:
-- Sets `assigned_doctor_id = NULL`, `clinic_status = 'registered'`.
-- Appends `[REASSIGN <Malaysia ts>] Doctor unassigned — returning to registered pool.` to `visit_notes`.
-- Closes the sheet and shows an info toast.
+---
 
-## Out of scope
+## 2. Hooks (`src/hooks/clinic/`)
 
-- Auto-load-balancer / round-robin assignment.
-- SMS / TV flash on reassignment.
-- Backfilling `queue_sequence` for historical rows.
-- Retiring the legacy `queue_number` sequence.
+- `useInventoryBatches(itemId)` — list batches with computed status (expired / expiring ≤ 90d / ok).
+- `useAddBatch()` — calls `add_inventory_batch` RPC.
+- `useAdjustBatch()` — calls `adjust_inventory_batch`.
+- `useInventoryTransactions(itemId)` — paginated ledger.
+- `useOweSlips({ status })` — for the dashboard.
+- `useFulfillOweSlip()` — closes owe-slip + commits FEFO for the fulfilled qty.
+- Update `useInventoryItems` to expose derived `total_unexpired_stock`, `nearest_expiry_date_live`, and a `stock_status: 'green'|'amber'|'red'`.
+
+---
+
+## 3. UI
+
+### A. Stock Master (`src/pages/clinic/Inventory.tsx`)
+- New **status pill column**: Red (expired or stock = 0), Amber (below `stock_amount_warning` OR nearest batch expires < 90 days), Green otherwise.
+- Row click → existing detail sheet, gains two new tabs:
+  - **Batches** — table of batches (FEFO order), "Add Batch" button, edit/adjust per row. Expired rows greyed.
+  - **Ledger** — `inventory_transactions` history with type, qty, who, when, linked patient/consultation.
+
+### B. Dispensary / Checkout (`src/pages/clinic/DispenseCheckout.tsx`)
+- Each prescription line shows `prescribed_qty` and an editable `dispensed_qty` (defaults equal, max = prescribed).
+- If pharmacist reduces it → required `partial_reason` select (`Patient request` / `Out of stock`).
+- Live total recalculates from `dispensed_qty × price` — **invoice/bill uses dispensed_qty**.
+- "Partial Dispense" badge on the bill when any line is partial.
+- Disabled "Confirm & Dispense" until all partial lines have a reason.
+
+### C. Doctor prescribing picker (`Consultation.tsx` add-item search)
+- Each result shows a coloured dot + tooltip:
+  - Green: `available ≥ 10`
+  - Amber: `1–9` → "Limited stock"
+  - Red: `0` → still selectable (soft) but with banner "Out of stock — patient may receive owe-slip"
+- Inline **"Request restock"** link on amber/red → inserts a row in a lightweight `restock_requests` table (or reuses `notifications`); admin sees it in the Inventory page.
+
+### D. Owe-Slip Dashboard (`src/pages/clinic/OweSlips.tsx`, new route `/clinic/owe-slips`)
+- Table grouped by patient: item, qty owed, days open, consultation link.
+- Filters: open / partially fulfilled / fulfilled.
+- "Fulfill" action → opens a small dialog, FEFO commits the qty, updates owe-slip status, logs transaction with `reason_code='owe_slip_fulfilled'`.
+- Auto-surfaces a banner on the Inventory page: *"5 patients waiting on Amoxicillin — restock arrived?"*
+
+### E. Navigation
+- Add "Owe Slips" link inside the existing Clinic sidebar group.
+
+---
+
+## 4. Out of scope (next round)
+
+- Cron scheduling for `expire_inventory_batches`.
+- Panel-claim "under-served" flag synchronisation with TPAs.
+- Inventory Turnover dashboard / COGS reporting page.
+- SMS / WhatsApp notification to patients when their owe-slip is ready (we'll add the hook point only).
+- Multi-location batches (`location_id` exists but stays single-site for now).
+
+---
+
+## 5. Risk register
+
+| Risk | Mitigation |
+|---|---|
+| Existing items have no batches → FEFO fails | LEGACY batch backfill in the migration |
+| Two pharmacists dispense same item simultaneously | `pg_advisory_xact_lock` per item + `FOR UPDATE` on batch row |
+| Pharmacist forgets reason on partial → silent revenue leak | UI hard-block + DB check `(is_partial = false) OR (partial_reason IS NOT NULL)` |
+| Backfill batch with no real expiry date masks expiring stock | Surface "LEGACY" batches in amber on Stock Master and prompt admin to edit |
+| Trigger change breaks current consultation completion flow | `commit_inventory_fefo` falls back to `commit_inventory` if no batches exist for the item |
+
+---
+
+## 6. Implementation order
+
+1. Migration (tables + RPCs + trigger patch + backfill).
+2. Hooks.
+3. Inventory page: status pills + Batches tab + Ledger tab + Add Batch flow.
+4. Dispensary: partial qty + reason + dispensed_qty billing.
+5. Consultation picker: stock badges + request restock.
+6. Owe-Slip dashboard + nav link.
+
+Approve this and I'll execute it in that order.

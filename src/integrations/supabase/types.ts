@@ -1030,6 +1030,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           deleted_by: string | null
+          dispensed_qty: number | null
           dosage: string | null
           dosage_qty: number | null
           dosage_unit: string | null
@@ -1038,9 +1039,11 @@ export type Database = {
           id: string
           indication: string | null
           instruction: string | null
+          is_partial: boolean | null
           item_id: string | null
           item_name: string
           package_id: string | null
+          partial_reason: string | null
           precaution: string | null
           price: number
           price_tier: string | null
@@ -1053,6 +1056,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           deleted_by?: string | null
+          dispensed_qty?: number | null
           dosage?: string | null
           dosage_qty?: number | null
           dosage_unit?: string | null
@@ -1061,9 +1065,11 @@ export type Database = {
           id?: string
           indication?: string | null
           instruction?: string | null
+          is_partial?: boolean | null
           item_id?: string | null
           item_name: string
           package_id?: string | null
+          partial_reason?: string | null
           precaution?: string | null
           price?: number
           price_tier?: string | null
@@ -1076,6 +1082,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           deleted_by?: string | null
+          dispensed_qty?: number | null
           dosage?: string | null
           dosage_qty?: number | null
           dosage_unit?: string | null
@@ -1084,9 +1091,11 @@ export type Database = {
           id?: string
           indication?: string | null
           instruction?: string | null
+          is_partial?: boolean | null
           item_id?: string | null
           item_name?: string
           package_id?: string | null
+          partial_reason?: string | null
           precaution?: string | null
           price?: number
           price_tier?: string | null
@@ -1838,6 +1847,76 @@ export type Database = {
           },
         ]
       }
+      inventory_item_batches: {
+        Row: {
+          batch_number: string
+          cost_price: number | null
+          created_at: string
+          expiry_date: string
+          id: string
+          inventory_item_id: string
+          notes: string | null
+          po_id: string | null
+          quantity_initial: number
+          quantity_remaining: number
+          received_at: string
+          received_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          batch_number: string
+          cost_price?: number | null
+          created_at?: string
+          expiry_date: string
+          id?: string
+          inventory_item_id: string
+          notes?: string | null
+          po_id?: string | null
+          quantity_initial: number
+          quantity_remaining: number
+          received_at?: string
+          received_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          batch_number?: string
+          cost_price?: number | null
+          created_at?: string
+          expiry_date?: string
+          id?: string
+          inventory_item_id?: string
+          notes?: string | null
+          po_id?: string | null
+          quantity_initial?: number
+          quantity_remaining?: number
+          received_at?: string
+          received_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_item_batches_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_item_batches_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_item_batches_po_id_fkey"
+            columns: ["po_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inventory_item_prices: {
         Row: {
           created_at: string
@@ -2055,6 +2134,87 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      inventory_transactions: {
+        Row: {
+          batch_id: string | null
+          consultation_id: string | null
+          consultation_item_id: string | null
+          created_at: string
+          id: string
+          inventory_item_id: string
+          notes: string | null
+          patient_id: string | null
+          performed_by: string | null
+          qty_change: number
+          reason_code: string | null
+          transaction_type: string
+        }
+        Insert: {
+          batch_id?: string | null
+          consultation_id?: string | null
+          consultation_item_id?: string | null
+          created_at?: string
+          id?: string
+          inventory_item_id: string
+          notes?: string | null
+          patient_id?: string | null
+          performed_by?: string | null
+          qty_change: number
+          reason_code?: string | null
+          transaction_type: string
+        }
+        Update: {
+          batch_id?: string | null
+          consultation_id?: string | null
+          consultation_item_id?: string | null
+          created_at?: string
+          id?: string
+          inventory_item_id?: string
+          notes?: string | null
+          patient_id?: string | null
+          performed_by?: string | null
+          qty_change?: number
+          reason_code?: string | null
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_transactions_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_item_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: false
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       leave_requests: {
         Row: {
@@ -2754,6 +2914,86 @@ export type Database = {
           },
         ]
       }
+      pharmacy_owe_slips: {
+        Row: {
+          closed_at: string | null
+          closed_by: string | null
+          consultation_id: string | null
+          consultation_item_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          inventory_item_id: string
+          notes: string | null
+          patient_id: string | null
+          qty_fulfilled: number
+          qty_owed: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          closed_at?: string | null
+          closed_by?: string | null
+          consultation_id?: string | null
+          consultation_item_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          inventory_item_id: string
+          notes?: string | null
+          patient_id?: string | null
+          qty_fulfilled?: number
+          qty_owed: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          closed_at?: string | null
+          closed_by?: string | null
+          consultation_id?: string | null
+          consultation_item_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          inventory_item_id?: string
+          notes?: string | null
+          patient_id?: string | null
+          qty_fulfilled?: number
+          qty_owed?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pharmacy_owe_slips_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: false
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pharmacy_owe_slips_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pharmacy_owe_slips_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pharmacy_owe_slips_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -3138,6 +3378,54 @@ export type Database = {
             columns: ["source_appointment_id"]
             isOneToOne: false
             referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      restock_requests: {
+        Row: {
+          closed_at: string | null
+          closed_by: string | null
+          created_at: string
+          id: string
+          inventory_item_id: string
+          reason: string | null
+          requested_by: string | null
+          status: string
+        }
+        Insert: {
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          id?: string
+          inventory_item_id: string
+          reason?: string | null
+          requested_by?: string | null
+          status?: string
+        }
+        Update: {
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          id?: string
+          inventory_item_id?: string
+          reason?: string | null
+          requested_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "restock_requests_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "restock_requests_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -4627,6 +4915,27 @@ export type Database = {
         Args: { _item_name: string }
         Returns: string
       }
+      add_inventory_batch: {
+        Args: {
+          _batch_number: string
+          _cost?: number
+          _expiry: string
+          _item_id: string
+          _notes?: string
+          _po_id?: string
+          _qty: number
+        }
+        Returns: string
+      }
+      adjust_inventory_batch: {
+        Args: {
+          _batch_id: string
+          _delta: number
+          _notes?: string
+          _reason: string
+        }
+        Returns: undefined
+      }
       admin_assign_role: {
         Args: {
           new_role: Database["public"]["Enums"]["app_role"]
@@ -4641,6 +4950,22 @@ export type Database = {
       commit_inventory: {
         Args: { _item_id: string; _qty: number }
         Returns: undefined
+      }
+      commit_inventory_fefo: {
+        Args: {
+          _consultation_id?: string
+          _consultation_item_id?: string
+          _item_id: string
+          _patient_id?: string
+          _qty: number
+          _reason?: string
+        }
+        Returns: Json
+      }
+      expire_inventory_batches: { Args: never; Returns: number }
+      fulfill_owe_slip: {
+        Args: { _notes?: string; _qty: number; _slip_id: string }
+        Returns: Json
       }
       generate_po_number: { Args: never; Returns: string }
       get_doctor_id_for_user: { Args: { _user_id: string }; Returns: string }
