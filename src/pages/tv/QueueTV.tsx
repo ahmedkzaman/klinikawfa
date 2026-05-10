@@ -4,6 +4,7 @@ import { Volume2, Tv as TvIcon } from 'lucide-react';
 import ReactPlayer from 'react-player';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
+import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { Slider } from '@/components/ui/slider';
 
 interface CallEvent {
@@ -80,7 +81,7 @@ export default function QueueTV() {
           const { data, error } = await supabase
             .from('queue_entries')
             .select(
-              'id, queue_number, patients:patient_id(name), rooms:assigned_room_id(label)',
+              'id, queue_number, queue_sequence, created_at, patients:patient_id(name), rooms:assigned_room_id(label)',
             )
             .eq('id', id)
             .maybeSingle();
@@ -92,7 +93,7 @@ export default function QueueTV() {
           const display =
             callBy === 'name'
               ? patient
-              : `${data.queue_number ?? ''}`.trim();
+              : formatQueueNo(data.created_at, data.queue_sequence);
 
           const evt: CallEvent = {
             id: `${id}-${next.called_at}`,
@@ -365,10 +366,10 @@ export default function QueueTV() {
               ? 'border-blue-400 bg-blue-950/30 shadow-[0_0_40px_rgba(59,130,246,0.35)]'
               : 'border-slate-800 bg-slate-900/40';
             const textSize = isNewest
-              ? 'text-7xl'
+              ? 'text-5xl md:text-6xl'
               : isMid
-              ? 'text-4xl'
-              : 'text-3xl';
+              ? 'text-3xl'
+              : 'text-2xl';
             const roomSize = isNewest ? 'text-3xl' : 'text-lg';
             const glow = isNewest
               ? 'drop-shadow-[0_0_30px_rgba(59,130,246,0.6)]'
