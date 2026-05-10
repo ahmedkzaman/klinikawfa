@@ -30,14 +30,7 @@ export function useQueueEntries() {
       startOfDay.setHours(0, 0, 0, 0);
 
       // Define exactly which statuses should appear on the board
-      const activeStatuses = [
-        "registered",
-        "ready_for_doctor",
-        "with_doctor",
-        "sent_to_dispensary",
-        "dispensing_payment",
-        "on_hold",
-      ] as const;
+      const activeStatuses = ACTIVE_STATUSES;
 
       const { data, error } = await supabase
         .from("queue_entries")
@@ -50,8 +43,9 @@ export function useQueueEntries() {
         `,
         )
         .is("deleted_at", null)
-        .in("clinic_status", activeStatuses)
-        .gte("created_at", startOfDay.toISOString())
+        .or(
+          `created_at.gte.${startOfDay.toISOString()},clinic_status.in.(${activeStatuses.join(",")})`,
+        )
         .order("is_urgent", { ascending: false })
         .order("queue_number", { ascending: true });
 
