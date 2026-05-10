@@ -1308,7 +1308,7 @@ export default function ConsultationDetail() {
           isOpen={!!issuingTemplate}
           onClose={() => setIssuingTemplate(null)}
           template={issuingTemplate}
-          patient={patient ?? null}
+          patient={patient?.id ? (patient as { id: string; name?: string | null; national_id?: string | null; phone?: string | null }) : null}
           consultationId={consultationId ?? null}
         />
       </div>
