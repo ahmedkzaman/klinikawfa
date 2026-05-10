@@ -217,7 +217,7 @@ export default function QueueBoard() {
                     key={col.key}
                     className={cn(bento, 'p-3 flex flex-col min-h-[180px]')}
                   >
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-1">
                       <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                         {col.label}
                       </h2>
@@ -227,6 +227,11 @@ export default function QueueBoard() {
                         {items.length}
                       </span>
                     </div>
+                    {col.key === 'registered' ? (
+                      <p className="text-[11px] text-slate-400 mb-2">Awaiting triage</p>
+                    ) : (
+                      <div className="mb-2" />
+                    )}
                     <div className="space-y-2 flex-1">
                       <AnimatePresence mode="popLayout">
                         {items.length === 0 && (
