@@ -81,8 +81,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { DocumentPrintLayer } from '@/components/clinic/consultation/DocumentPrintLayer';
 import { ViewDocumentModal } from '@/components/clinic/consultation/ViewDocumentModal';
+import { printDocument } from '@/lib/clinic/printDocument';
 import { VitalHistoryTrends } from '@/components/clinic/consultation/VitalHistoryTrends';
 import {
   TreatmentItemCard,
@@ -327,7 +327,6 @@ export default function ConsultationDetail() {
   const [issuingTemplate, setIssuingTemplate] = useState<DocumentTemplate | null>(null);
   const [editingDoc, setEditingDoc] = useState<ConsultationDocument | null>(null);
   const [voidingDoc, setVoidingDoc] = useState<ConsultationDocument | null>(null);
-  const [printingDoc, setPrintingDoc] = useState<ConsultationDocument | null>(null);
   const [viewingDoc, setViewingDoc] = useState<ConsultationDocument | null>(null);
   const deleteDoc = useDeleteConsultationDocument();
   const addItem = useAddConsultationItem();
@@ -1383,15 +1382,10 @@ export default function ConsultationDetail() {
           onClose={() => setViewingDoc(null)}
           onPrint={(d) => {
             setViewingDoc(null);
-            setPrintingDoc(d);
-            setTimeout(() => {
-              window.print();
-              setPrintingDoc(null);
-            }, 250);
+            printDocument(d);
           }}
         />
 
-        <DocumentPrintLayer doc={printingDoc} />
       </div>
     </div>
   );
