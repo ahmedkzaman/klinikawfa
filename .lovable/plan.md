@@ -1,9 +1,35 @@
-Cause found: the Daily Reports summary reads doctor AM/PM shifts only from `DOC_S1`/`DOC_S2`, but the saved doctor roster for today stores Ahmed under legacy keys `shift1` and `shift2`. Because `shift1` is an object for doctor rosters and an array for support rosters, the current summary logic misses the doctor AM row.
+## Problem
 
-Plan:
-1. Update `DailyReportsSummary.tsx` to normalize roster shift keys before building AM/PM entries:
-   - Support both `shift1`/`shift2` and `S1`/`S2` for support staff.
-   - Support both `shift1`/`shift2` and `DOC_S1`/`DOC_S2` for doctors.
-2. Fix selfie status selection so PM rows check `evening_selfie_url` and AM rows check `briefing_selfie_url`.
-3. Apply the same normalization to `DailyTaskReview.tsx` so the full Daily Task Review matches the dashboard summary.
-4. Verify with the current May 2026 roster data that AM shift rows appear for both support and doctor rosters.
+On phone and tablet, the staff portal sidebar (opened from the menu button) cannot scroll. Long sections like Admin and Website get clipped at the bottom and are unreachable.
+
+## Root cause
+
+In `src/components/staff/StaffLayout.tsx`, the mobile `<SheetContent>` contains three stacked children:
+
+1. Header (logo + Open Clinic button)
+2. Scroll area (`flex-1 overflow-y-auto` wrapping `SidebarNav`)
+3. Footer (email + Sign Out)
+
+But `SheetContent` itself is not a flex column with a constrained height, so `flex-1` on the middle div collapses to its content height instead of filling the remaining space. The nav grows past the viewport and the page can't scroll because `overflow-y-auto` only applies to that middle div, which has no bounded height.
+
+## Fix
+
+Add `flex flex-col h-full` to the mobile `SheetContent`, so the three stacked sections behave as a proper column: fixed header, scrollable middle, fixed footer.
+
+```text
+SheetContent (h-full, flex-col)
+├── header        (shrink-0)
+├── scroll area   (flex-1, overflow-y-auto)  ← becomes scrollable
+└── footer        (shrink-0)
+```
+
+Also explicitly mark the header as `shrink-0` for safety (the footer already is).
+
+## Files to change
+
+- `src/components/staff/StaffLayout.tsx` — add `flex flex-col h-full` to the mobile `SheetContent`, add `shrink-0` to its header wrapper.
+
+## Out of scope
+
+- Desktop sidebar layout (already works: `aside` is `flex flex-col h-screen` with an inner `flex-1 overflow-y-auto`).
+- Any visual redesign of the sidebar — only the scroll behavior is fixed.
