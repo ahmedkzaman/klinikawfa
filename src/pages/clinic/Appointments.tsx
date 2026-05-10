@@ -44,7 +44,7 @@ import type { PatientRow } from '@/types/clinic';
 
 const SLOT_MINUTES = 30;
 const DAY_START_HOUR = 8;
-const DAY_END_HOUR = 20;
+const DAY_END_HOUR = 23;
 const SLOTS_PER_HOUR = 60 / SLOT_MINUTES;
 const TOTAL_SLOTS = (DAY_END_HOUR - DAY_START_HOUR) * SLOTS_PER_HOUR;
 
