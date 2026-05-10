@@ -82,17 +82,26 @@ export default function DailyReportsSummary() {
     setBlastTarget(target);
     setTargetInput(String(target));
 
-    const supportRosterData = supportRosterRes.data?.roster_data as unknown as Record<string, {
-      shift1?: { staffId: string; staffName: string }[];
-      shift2?: { staffId: string; staffName: string }[];
-      hybrid?: { staffId: string; staffName: string }[];
-    }>;
+    const supportRosterData = supportRosterRes.data?.roster_data as unknown as Record<string, Record<string, any>>;
+    const doctorRosterData = doctorRosterRes.data?.roster_data as unknown as Record<string, Record<string, any>>;
 
-    const doctorRosterData = doctorRosterRes.data?.roster_data as unknown as Record<string, {
-      shift1?: { staffId: string; staffName: string };
-      shift2?: { staffId: string; staffName: string };
-      shift3?: { staffId: string; staffName: string };
-    }>;
+    // Normalize raw shift keys (shift1/S1/DOC_S1, etc.) into AM/PM buckets.
+    const supportShiftBucket = (raw: string): 'AM' | 'PM' | 'HYBRID' | null => {
+      const k = raw.toLowerCase();
+      if (k === 'shift1' || k === 's1' || k === 'doc_s1') return 'AM';
+      if (k === 'shift2' || k === 's2' || k === 'doc_s2' || k === 'shift3' || k === 's3' || k === 'doc_s3' || k === 'night') return 'PM';
+      if (k === 'hybrid') return 'HYBRID';
+      return null;
+    };
+    const doctorShiftBucket = (raw: string): 'AM' | 'PM' | 'LOCUM' | null => {
+      const k = raw.toLowerCase();
+      if (k === 'shift1' || k === 's1' || k === 'doc_s1') return 'AM';
+      if (k === 'shift2' || k === 's2' || k === 'doc_s2') return 'PM';
+      if (k === 'shift3' || k === 's3' || k === 'doc_s3' || k === 'night') return 'LOCUM';
+      return null;
+    };
+    const cellsOf = (v: any): { staffId: string; staffName: string }[] =>
+      Array.isArray(v) ? v.filter(Boolean) : v && typeof v === 'object' && v.staffId ? [v] : [];
 
     // Determine date key
     const dateKey = isCurrentMonth
