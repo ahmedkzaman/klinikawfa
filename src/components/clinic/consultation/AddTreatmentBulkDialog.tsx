@@ -58,7 +58,30 @@ interface CombinedRow {
   price: string;
   priceNum: number;
   type: 'item' | 'service' | 'package';
+  /** Lowercase inventory category, blank for services/packages. */
+  categoryLower: string;
+  /** Lowercase generic name, blank when none / not applicable. */
+  genericLower: string;
   defaults?: SelectedDefaults;
+}
+
+type PickerTab = 'all' | 'medicine' | 'procedure' | 'package';
+
+const PROCEDURE_NAME_RE = /\b(fee|procedure|service)\b/i;
+
+/** Shared mapping rule used by both the picker and the Treatment Plan tabs. */
+function rowMatchesTab(row: CombinedRow, tab: PickerTab): boolean {
+  if (tab === 'all') return true;
+  if (tab === 'medicine') {
+    return row.type === 'item' && row.categoryLower === 'medication';
+  }
+  if (tab === 'procedure') {
+    if (row.type === 'service') return true;
+    if (row.type === 'item' && PROCEDURE_NAME_RE.test(row.name)) return true;
+    return false;
+  }
+  if (tab === 'package') return row.type === 'package';
+  return true;
 }
 
 /**
@@ -82,6 +105,7 @@ export function AddTreatmentBulkDialog({
   isPanel = false,
 }: Props) {
   const [search, setSearch] = useState('');
+  const [tab, setTab] = useState<PickerTab>('all');
   const [selected, setSelected] = useState<SelectedItem[]>([]);
 
   const { items: inventoryItems } = useInventoryItems();
@@ -116,6 +140,8 @@ export function AddTreatmentBulkDialog({
         price: priceLabel,
         priceNum,
         type: 'item',
+        categoryLower: (i.category ?? '').toLowerCase(),
+        genericLower: (ii.generic_name ?? '').toLowerCase(),
         defaults: {
           indication: ii.default_indication ?? null,
           dosage_qty: ii.default_dosage_qty ?? null,
@@ -144,6 +170,8 @@ export function AddTreatmentBulkDialog({
         price: `RM ${priceNum.toFixed(2)}${isPanel ? ' (Panel)' : ''}`,
         priceNum,
         type: 'service',
+        categoryLower: '',
+        genericLower: '',
       });
     });
 
@@ -162,6 +190,8 @@ export function AddTreatmentBulkDialog({
         price: `RM ${priceNum.toFixed(2)}${isPanel ? ' (Panel)' : ''}`,
         priceNum,
         type: 'package',
+        categoryLower: '',
+        genericLower: '',
       });
     });
 
@@ -169,12 +199,29 @@ export function AddTreatmentBulkDialog({
   }, [inventoryItems, services, packages, isPanel]);
 
   const filtered = useMemo(() => {
-    if (!search) return allItems;
-    const q = search.toLowerCase();
-    return allItems.filter(
-      (i) => i.name.toLowerCase().includes(q) || i.group.toLowerCase().includes(q),
-    );
-  }, [allItems, search]);
+    const q = search.trim().toLowerCase();
+    // Search wins over tabs: a non-empty query searches the entire combined list
+    // across name, generic_name, and the group label (case-insensitive).
+    if (q) {
+      return allItems.filter(
+        (i) =>
+          i.name.toLowerCase().includes(q) ||
+          i.genericLower.includes(q) ||
+          i.group.toLowerCase().includes(q),
+      );
+    }
+    return allItems.filter((i) => rowMatchesTab(i, tab));
+  }, [allItems, search, tab]);
+
+  const tabCounts = useMemo(
+    () => ({
+      all: allItems.length,
+      medicine: allItems.filter((i) => rowMatchesTab(i, 'medicine')).length,
+      procedure: allItems.filter((i) => rowMatchesTab(i, 'procedure')).length,
+      package: allItems.filter((i) => rowMatchesTab(i, 'package')).length,
+    }),
+    [allItems],
+  );
 
   const toggleItem = (item: CombinedRow) => {
     setSelected((prev) => {
@@ -260,10 +307,37 @@ export function AddTreatmentBulkDialog({
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search item name or group…"
+                placeholder="Search by name, generic name, or group… (searches all tabs)"
                 className="pr-9"
               />
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {([
+                { key: 'all', label: 'All' },
+                { key: 'medicine', label: 'Medicine' },
+                { key: 'procedure', label: 'Procedures' },
+                { key: 'package', label: 'Packages' },
+              ] as { key: PickerTab; label: string }[]).map((t) => {
+                const active = tab === t.key;
+                const disabled = !!search.trim();
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => setTab(t.key)}
+                    disabled={disabled}
+                    title={disabled ? 'Clear search to filter by tab' : undefined}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      active && !disabled
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                    } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  >
+                    {t.label} ({tabCounts[t.key]})
+                  </button>
+                );
+              })}
             </div>
             <ScrollArea className="flex-1">
               <Table>
