@@ -1378,6 +1378,19 @@ export default function ConsultationDetail() {
           </AlertDialogContent>
         </AlertDialog>
 
+        <ViewDocumentModal
+          doc={viewingDoc}
+          onClose={() => setViewingDoc(null)}
+          onPrint={(d) => {
+            setViewingDoc(null);
+            setPrintingDoc(d);
+            setTimeout(() => {
+              window.print();
+              setPrintingDoc(null);
+            }, 250);
+          }}
+        />
+
         <DocumentPrintLayer doc={printingDoc} />
       </div>
     </div>
