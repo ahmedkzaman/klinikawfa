@@ -8,25 +8,42 @@ export function useRestockRequests(status: 'open' | 'all' = 'open') {
     queryFn: async () => {
       const q = supabase
         .from('restock_requests' as never)
-        .select(
-          'id, inventory_item_id, requested_by, reason, status, created_at, inventory_items(name, stock), requester:profiles!restock_requests_requested_by_fkey(full_name, email)'
-        )
+        .select('id, inventory_item_id, requested_by, reason, status, created_at, inventory_items(name, stock)')
         .order('created_at', { ascending: false })
         .limit(200);
       const { data, error } = status === 'open' ? await q.eq('status', 'open') : await q;
-      if (error) {
-        // Fallback without profile join if FK alias is missing
-        const q2 = supabase
-          .from('restock_requests' as never)
-          .select('id, inventory_item_id, requested_by, reason, status, created_at, inventory_items(name, stock)')
-          .order('created_at', { ascending: false })
-          .limit(200);
-        const { data: d2, error: e2 } =
-          status === 'open' ? await q2.eq('status', 'open') : await q2;
-        if (e2) throw e2;
-        return d2 ?? [];
+      if (error) throw error;
+      const rows = (data ?? []) as Array<Record<string, unknown>>;
+
+      const userIds = Array.from(
+        new Set(
+          rows
+            .map((r) => r.requested_by as string | null)
+            .filter((v): v is string => !!v),
+        ),
+      );
+
+      let profileMap: Record<string, { full_name: string | null; email: string | null }> = {};
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', userIds);
+        profileMap = Object.fromEntries(
+          (profiles ?? []).map((p) => [
+            p.id as string,
+            { full_name: p.full_name as string | null, email: p.email as string | null },
+          ]),
+        );
       }
-      return data ?? [];
+
+      return rows.map((r) => ({
+        ...r,
+        requester:
+          r.requested_by && profileMap[r.requested_by as string]
+            ? profileMap[r.requested_by as string]
+            : null,
+      }));
     },
   });
 }
