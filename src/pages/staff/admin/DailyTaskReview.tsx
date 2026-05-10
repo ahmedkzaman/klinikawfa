@@ -10,16 +10,25 @@ import { format, getDaysInMonth } from 'date-fns';
 import { toast } from 'sonner';
 
 interface RosterEntry { staffId: string; staffName: string; }
-interface DayRoster {
-  shift1?: RosterEntry[];
-  shift2?: RosterEntry[];
-  hybrid?: RosterEntry[];
-}
-interface DoctorDayRoster {
-  shift1?: { staffId: string; staffName: string };
-  shift2?: { staffId: string; staffName: string };
-  shift3?: { staffId: string; staffName: string };
-}
+type DayRoster = Record<string, any>;
+type DoctorDayRoster = Record<string, any>;
+
+const supportShiftBucket = (raw: string): 'AM' | 'PM' | 'HYBRID' | null => {
+  const k = raw.toLowerCase();
+  if (k === 'shift1' || k === 's1' || k === 'doc_s1') return 'AM';
+  if (k === 'shift2' || k === 's2' || k === 'doc_s2' || k === 'shift3' || k === 's3' || k === 'doc_s3' || k === 'night') return 'PM';
+  if (k === 'hybrid') return 'HYBRID';
+  return null;
+};
+const doctorShiftBucket = (raw: string): 'AM' | 'PM' | 'LOCUM' | null => {
+  const k = raw.toLowerCase();
+  if (k === 'shift1' || k === 's1' || k === 'doc_s1') return 'AM';
+  if (k === 'shift2' || k === 's2' || k === 'doc_s2') return 'PM';
+  if (k === 'shift3' || k === 's3' || k === 'doc_s3' || k === 'night') return 'LOCUM';
+  return null;
+};
+const cellsOf = (v: any): RosterEntry[] =>
+  Array.isArray(v) ? v.filter(Boolean) : v && typeof v === 'object' && v.staffId ? [v] : [];
 interface DailyReportRow {
   user_id: string;
   report_date: string;
@@ -98,12 +107,15 @@ export default function DailyTaskReview() {
     supportStaffList.forEach(s => staffMap.set(s.id, { id: s.id, name: s.name, type: 'Staff' }));
 
     // Add doctors from roster data
-    Object.values(dRoster).forEach(day => {
-      if (day.shift1 && !staffMap.has(day.shift1.staffId)) {
-        staffMap.set(day.shift1.staffId, { id: day.shift1.staffId, name: day.shift1.staffName, type: 'Doctor' });
-      }
-      if (day.shift2 && !staffMap.has(day.shift2.staffId)) {
-        staffMap.set(day.shift2.staffId, { id: day.shift2.staffId, name: day.shift2.staffName, type: 'Doctor' });
+    Object.values(dRoster).forEach((day: any) => {
+      if (!day || typeof day !== 'object') return;
+      for (const [rawKey, val] of Object.entries(day)) {
+        if (!doctorShiftBucket(rawKey)) continue;
+        cellsOf(val).forEach(c => {
+          if (c.staffId && !staffMap.has(c.staffId)) {
+            staffMap.set(c.staffId, { id: c.staffId, name: c.staffName, type: 'Doctor' });
+          }
+        });
       }
     });
 
@@ -151,29 +163,47 @@ export default function DailyTaskReview() {
 
     const daySupportRoster = supportRosterData[dateKey];
     if (daySupportRoster) {
-      daySupportRoster.shift1?.forEach(s => {
-        if (filteredStaffIds.includes(s.staffId)) entries.push({ ...s, shift: 'AM', type: 'Staff' });
-      });
-      daySupportRoster.shift2?.forEach(s => {
-        if (filteredStaffIds.includes(s.staffId)) entries.push({ ...s, shift: 'PM', type: 'Staff' });
-      });
-      daySupportRoster.hybrid?.forEach(s => {
-        if (filteredStaffIds.includes(s.staffId)) entries.push({ ...s, shift: 'AM', type: 'Hybrid' });
-      });
+      for (const [rawKey, val] of Object.entries(daySupportRoster)) {
+        const bucket = supportShiftBucket(rawKey);
+        if (!bucket) continue;
+        cellsOf(val).forEach(s => {
+          if (!s.staffId || !filteredStaffIds.includes(s.staffId)) return;
+          if (bucket === 'HYBRID') {
+            entries.push({ staffId: s.staffId, staffName: s.staffName, shift: 'AM', type: 'Hybrid' });
+          } else {
+            entries.push({ staffId: s.staffId, staffName: s.staffName, shift: bucket, type: 'Staff' });
+          }
+        });
+      }
     }
 
     const dayDoctorRoster = doctorRosterData[dateKey];
     if (dayDoctorRoster) {
-      const locumId = dayDoctorRoster.shift3?.staffId;
-      if (dayDoctorRoster.shift1 && dayDoctorRoster.shift1.staffId !== locumId && filteredStaffIds.includes(dayDoctorRoster.shift1.staffId)) {
-        entries.push({ staffId: dayDoctorRoster.shift1.staffId, staffName: dayDoctorRoster.shift1.staffName, shift: 'AM', type: 'Doctor' });
+      let locumId: string | undefined;
+      for (const [rawKey, val] of Object.entries(dayDoctorRoster)) {
+        if (doctorShiftBucket(rawKey) === 'LOCUM') {
+          const c = cellsOf(val)[0];
+          if (c?.staffId) { locumId = c.staffId; break; }
+        }
       }
-      if (dayDoctorRoster.shift2 && dayDoctorRoster.shift2.staffId !== locumId && filteredStaffIds.includes(dayDoctorRoster.shift2.staffId)) {
-        entries.push({ staffId: dayDoctorRoster.shift2.staffId, staffName: dayDoctorRoster.shift2.staffName, shift: 'PM', type: 'Doctor' });
+      for (const [rawKey, val] of Object.entries(dayDoctorRoster)) {
+        const bucket = doctorShiftBucket(rawKey);
+        if (bucket !== 'AM' && bucket !== 'PM') continue;
+        cellsOf(val).forEach(c => {
+          if (!c.staffId || c.staffId === locumId || !filteredStaffIds.includes(c.staffId)) return;
+          entries.push({ staffId: c.staffId, staffName: c.staffName, shift: bucket, type: 'Doctor' });
+        });
       }
     }
 
-    return entries;
+    // Deduplicate
+    const seen = new Set<string>();
+    return entries.filter(e => {
+      const k = `${e.staffId}-${e.shift}-${e.type}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
   };
 
   // Summary stats
