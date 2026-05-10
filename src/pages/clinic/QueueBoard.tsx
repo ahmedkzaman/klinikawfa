@@ -41,6 +41,7 @@ import {
 } from "@/types/clinic";
 import { cn } from "@/lib/utils";
 import { toMalayTitleCase } from "@/lib/textCase";
+import { formatQueueNo } from "@/lib/clinic/queueNumber";
 import { bento, pageInner, pageShell, primaryBtn, secondaryBtn, softBadge } from "@/lib/clinic/bentoTokens";
 
 function useTickEveryMinute() {
@@ -70,8 +71,8 @@ function QueueCard({ entry, onClick }: { entry: QueueEntryWithJoins; onClick: ()
       )}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
-        <span className="font-mono text-2xl font-semibold text-slate-800 leading-none">
-          {entry.queue_number ?? "—"}
+        <span className="font-mono text-base font-semibold text-slate-800 leading-none tabular-nums">
+          {formatQueueNo(entry.created_at, entry.queue_sequence)}
         </span>
         {entry.is_urgent && (
           <span className="h-2 w-2 rounded-full bg-rose-500 mt-1" aria-label="Urgent" title="Urgent" />
@@ -80,6 +81,13 @@ function QueueCard({ entry, onClick }: { entry: QueueEntryWithJoins; onClick: ()
       <p className="font-medium text-sm text-slate-800 truncate">
         {entry.patients?.name ? toMalayTitleCase(entry.patients.name) : "Unknown patient"}
       </p>
+      {entry.assigned_doctor_id ? (
+        <p className="text-[11px] text-slate-600 truncate mt-0.5">
+          Attending: Dr. {entry.doctors?.name ?? "—"}
+        </p>
+      ) : status === "registered" ? (
+        <p className="text-[11px] text-amber-600 italic truncate mt-0.5">Awaiting Assignment</p>
+      ) : null}
       <div className="flex items-center justify-between mt-2 gap-2">
         <span
           className={cn(
@@ -232,8 +240,9 @@ export default function QueueBoard() {
                     className="flex items-center justify-between p-3 bg-white rounded-lg border shadow-sm"
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-slate-700">
-                        #{entry.queue_number} {entry.patients?.name}
+                      <p className="text-sm font-bold text-slate-700 font-mono tabular-nums">
+                        {formatQueueNo(entry.created_at, entry.queue_sequence)}
+                        <span className="ml-2 font-sans font-medium">{entry.patients?.name}</span>
                       </p>
                       <p className="text-[10px] text-slate-400 truncate">
                         {format(new Date(entry.cancelled_at), "HH:mm")} • {entry.cancellation_reason}
@@ -261,10 +270,10 @@ export default function QueueBoard() {
       <Sheet open={!!activeEntry} onOpenChange={(o) => !o && setActiveEntry(null)}>
         <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto bg-slate-50">
           <SheetHeader>
-            <SheetTitle className="text-slate-800">
-              Queue #{activeEntry?.queue_number ?? "—"}
+            <SheetTitle className="text-slate-800 font-mono tabular-nums">
+              {formatQueueNo(activeEntry?.created_at, activeEntry?.queue_sequence)}
               {activeEntry?.is_urgent && (
-                <span className="ml-2 inline-flex items-center gap-1 text-rose-600 text-sm font-normal">
+                <span className="ml-2 inline-flex items-center gap-1 text-rose-600 text-sm font-normal font-sans">
                   <AlertCircle className="h-4 w-4" /> Urgent
                 </span>
               )}
