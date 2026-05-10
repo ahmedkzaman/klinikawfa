@@ -10,13 +10,13 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
-const DIMS: Record<string, { w: string; h: string }> = {
-  A4: { w: '210mm', h: '297mm' },
-  A5: { w: '148mm', h: '210mm' },
-  A6: { w: '105mm', h: '148mm' },
+const DIMS: Record<string, { w: number; h: number }> = {
+  A4: { w: 210, h: 297 },
+  A5: { w: 148, h: 210 },
+  A6: { w: 105, h: 148 },
 };
 
-function resolveDims(size: string, orientation: string): { width: string; height: string } {
+function resolveDims(size: string, orientation: string): { width: number; height: number } {
   const base = DIMS[size] ?? DIMS.A4;
   if (orientation === 'landscape') return { width: base.h, height: base.w };
   return { width: base.w, height: base.h };
@@ -28,17 +28,11 @@ export function printDocument(doc: ConsultationDocument): void {
   const size = (doc.paper_size || 'A4').toUpperCase();
   const orientation = (doc.orientation || 'portrait').toLowerCase();
   const { width, height } = resolveDims(size, orientation);
-  const padding = size === 'A6' ? '15mm' : '25mm';
+  const padding = size === 'A6' ? 15 : 25;
 
   toast("Pro-tip: set Margins to ‘None’ in the print dialog for best fit.", {
     duration: 6000,
   });
-
-  const iframe = document.createElement('iframe');
-  iframe.setAttribute('aria-hidden', 'true');
-  iframe.style.cssText =
-    'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
-  document.body.appendChild(iframe);
 
   const html = `<!doctype html>
 <html>
@@ -47,33 +41,32 @@ export function printDocument(doc: ConsultationDocument): void {
 <title>${escapeHtml(doc.template_name || 'Document')}</title>
 <style>
   @page {
-    size: ${width} ${height};
+    size: ${width}mm ${height}mm;
     margin: 0 !important;
   }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
-    margin: 0 !important;
-    padding: 0 !important;
-    width: ${width};
-    height: ${height};
-    background: #fff;
+    width: ${width}mm;
+    height: ${height}mm;
+    overflow: hidden;
+    background: white;
     color: #0f172a;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
   .sheet {
-    width: ${width};
-    height: ${height};
-    padding: ${padding};
-    box-sizing: border-box;
-    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    padding: ${padding}mm;
+    display: flex;
+    flex-direction: column;
   }
   pre {
-    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    font-size: 12pt;
-    line-height: 1.5;
+    font-family: sans-serif;
+    font-size: 11pt;
+    line-height: 1.4;
     white-space: pre-wrap;
     word-wrap: break-word;
-    margin: 0;
   }
 </style>
 </head>
@@ -82,37 +75,38 @@ export function printDocument(doc: ConsultationDocument): void {
 </body>
 </html>`;
 
-  const cw = iframe.contentWindow;
-  const cd = iframe.contentDocument || cw?.document;
-  if (!cw || !cd) {
-    iframe.remove();
-    return;
-  }
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.cssText =
+    'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
 
   let printed = false;
+  const cleanup = () => {
+    URL.revokeObjectURL(url);
+    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+  };
+
   const triggerPrint = () => {
     if (printed) return;
     printed = true;
+    const cw = iframe.contentWindow;
     try {
-      cw.focus();
-      cw.print();
+      cw?.focus();
+      cw?.print();
     } catch (e) {
       console.error('Print failed', e);
     }
-    const cleanup = () => {
-      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-    };
-    if (cw) {
-      cw.onafterprint = cleanup;
-    }
-    setTimeout(cleanup, 1500);
+    if (cw) cw.onafterprint = cleanup;
+    setTimeout(cleanup, 2000);
   };
 
-  iframe.onload = () => setTimeout(triggerPrint, 50);
+  iframe.onload = () => setTimeout(triggerPrint, 100);
+  iframe.src = url;
+  document.body.appendChild(iframe);
 
-  cd.open();
-  cd.write(html);
-  cd.close();
-
-  setTimeout(triggerPrint, 300);
+  // Safety fallback if onload never fires
+  setTimeout(triggerPrint, 1500);
 }
