@@ -119,24 +119,51 @@ export default function DailyReportsSummary() {
     const daySupportRoster = supportRosterData?.[dateKey];
 
     if (daySupportRoster) {
-      daySupportRoster.shift1?.forEach(s => staffEntries.push({ staffId: s.staffId, staffName: s.staffName, shift: 'AM', type: 'Staff' }));
-      daySupportRoster.shift2?.forEach(s => staffEntries.push({ staffId: s.staffId, staffName: s.staffName, shift: 'PM', type: 'Staff' }));
-      daySupportRoster.hybrid?.forEach(s => staffEntries.push({ staffId: s.staffId, staffName: s.staffName, shift: 'AM', type: 'Hybrid' }));
+      for (const [rawKey, val] of Object.entries(daySupportRoster)) {
+        const bucket = supportShiftBucket(rawKey);
+        if (!bucket) continue;
+        cellsOf(val).forEach(s => {
+          if (!s.staffId) return;
+          if (bucket === 'HYBRID') {
+            staffEntries.push({ staffId: s.staffId, staffName: s.staffName, shift: 'AM', type: 'Hybrid' });
+          } else {
+            staffEntries.push({ staffId: s.staffId, staffName: s.staffName, shift: bucket, type: 'Staff' });
+          }
+        });
+      }
     }
 
     // Collect doctor entries (non-locum)
     const dayDoctorRoster = doctorRosterData?.[dateKey];
     if (dayDoctorRoster) {
-      const locumId = dayDoctorRoster.shift3?.staffId;
-      if (dayDoctorRoster.shift1 && dayDoctorRoster.shift1.staffId !== locumId) {
-        staffEntries.push({ staffId: dayDoctorRoster.shift1.staffId, staffName: dayDoctorRoster.shift1.staffName, shift: 'AM', type: 'Doctor' });
+      // Identify locum staffId (any S3-like key)
+      let locumId: string | undefined;
+      for (const [rawKey, val] of Object.entries(dayDoctorRoster)) {
+        if (doctorShiftBucket(rawKey) === 'LOCUM') {
+          const c = cellsOf(val)[0];
+          if (c?.staffId) { locumId = c.staffId; break; }
+        }
       }
-      if (dayDoctorRoster.shift2 && dayDoctorRoster.shift2.staffId !== locumId) {
-        staffEntries.push({ staffId: dayDoctorRoster.shift2.staffId, staffName: dayDoctorRoster.shift2.staffName, shift: 'PM', type: 'Doctor' });
+      for (const [rawKey, val] of Object.entries(dayDoctorRoster)) {
+        const bucket = doctorShiftBucket(rawKey);
+        if (bucket !== 'AM' && bucket !== 'PM') continue;
+        cellsOf(val).forEach(c => {
+          if (!c.staffId || c.staffId === locumId) return;
+          staffEntries.push({ staffId: c.staffId, staffName: c.staffName, shift: bucket, type: 'Doctor' });
+        });
       }
     }
 
-    if (staffEntries.length === 0) {
+    // Deduplicate same staff/shift/type combinations
+    const seen = new Set<string>();
+    const uniqueEntries = staffEntries.filter(e => {
+      const k = `${e.staffId}-${e.shift}-${e.type}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+
+    if (uniqueEntries.length === 0) {
       setReports([]);
       setLoading(false);
       return;
@@ -147,20 +174,21 @@ export default function DailyReportsSummary() {
       .from('daily_reports')
       .select('*')
       .eq('report_date', dateKey)
-      .in('user_id', staffEntries.map(s => s.staffId));
+      .in('user_id', uniqueEntries.map(s => s.staffId));
 
     const reportMap = new Map<string, any>();
     dailyReports?.forEach(r => reportMap.set(r.user_id, r));
 
-    const staffReports: StaffReport[] = staffEntries.map(s => {
+    const staffReports: StaffReport[] = uniqueEntries.map(s => {
       const r = reportMap.get(s.staffId);
       const isDoctor = s.type === 'Doctor';
+      const selfieUrl = s.shift === 'PM' ? r?.evening_selfie_url : r?.briefing_selfie_url;
       return {
         userId: s.staffId,
         fullName: s.staffName,
         shift: s.shift,
         type: s.type,
-        selfie: !!r?.briefing_selfie_url,
+        selfie: !!selfieUrl,
         stock1: isDoctor ? null : !!r?.stock_photo_1_url,
         stock2: isDoctor ? null : !!r?.stock_photo_2_url,
         blastCount: isDoctor ? null : (r?.whatsapp_blast_count || 0),
