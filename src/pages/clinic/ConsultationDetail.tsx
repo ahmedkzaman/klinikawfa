@@ -13,6 +13,8 @@ import {
   Stethoscope,
   Copy,
   Check,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -65,9 +67,20 @@ import { AddTreatmentBulkDialog } from '@/components/clinic/consultation/AddTrea
 import { IssueDocumentModal } from '@/components/clinic/consultation/IssueDocumentModal';
 import {
   useConsultationDocuments,
+  useDeleteConsultationDocument,
   type DocumentTemplate,
   type ConsultationDocument,
 } from '@/hooks/clinic/useClinicDocuments';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { DocumentPrintLayer } from '@/components/clinic/consultation/DocumentPrintLayer';
 import { VitalHistoryTrends } from '@/components/clinic/consultation/VitalHistoryTrends';
 import {
@@ -311,7 +324,10 @@ export default function ConsultationDetail() {
   const { data: items = [] } = useConsultationItems(consultationId);
   const { data: attachedDocs = [] } = useConsultationDocuments(consultationId);
   const [issuingTemplate, setIssuingTemplate] = useState<DocumentTemplate | null>(null);
+  const [editingDoc, setEditingDoc] = useState<ConsultationDocument | null>(null);
+  const [voidingDoc, setVoidingDoc] = useState<ConsultationDocument | null>(null);
   const [printingDoc, setPrintingDoc] = useState<ConsultationDocument | null>(null);
+  const deleteDoc = useDeleteConsultationDocument();
   const addItem = useAddConsultationItem();
   const removeItem = useRemoveConsultationItem();
   const updateItem = useUpdateConsultationItem();
@@ -973,20 +989,43 @@ export default function ConsultationDetail() {
                             {doc.orientation}
                           </div>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="shrink-0"
-                          onClick={() => {
-                            setPrintingDoc(doc);
-                            setTimeout(() => {
-                              window.print();
-                              setPrintingDoc(null);
-                            }, 100);
-                          }}
-                        >
-                          View / Print
-                        </Button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setPrintingDoc(doc);
+                              setTimeout(() => {
+                                window.print();
+                                setPrintingDoc(null);
+                              }, 250);
+                            }}
+                          >
+                            View / Print
+                          </Button>
+                          {!isLocked && (
+                            <>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8"
+                                onClick={() => setEditingDoc(doc)}
+                                aria-label="Edit document"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => setVoidingDoc(doc)}
+                                aria-label="Void document"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1305,12 +1344,43 @@ export default function ConsultationDetail() {
         />
 
         <IssueDocumentModal
-          isOpen={!!issuingTemplate}
-          onClose={() => setIssuingTemplate(null)}
+          isOpen={!!issuingTemplate || !!editingDoc}
+          onClose={() => {
+            setIssuingTemplate(null);
+            setEditingDoc(null);
+          }}
           template={issuingTemplate}
+          existingDoc={editingDoc}
           patient={patient?.id ? (patient as { id: string; name?: string | null; national_id?: string | null; phone?: string | null }) : null}
           consultationId={consultationId ?? null}
         />
+
+        <AlertDialog open={!!voidingDoc} onOpenChange={(v) => !v && setVoidingDoc(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Void this document?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. The document will be permanently removed from this consultation.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={async () => {
+                  if (!voidingDoc) return;
+                  await deleteDoc.mutateAsync({
+                    id: voidingDoc.id,
+                    consultation_id: voidingDoc.consultation_id,
+                  });
+                  setVoidingDoc(null);
+                }}
+              >
+                Void Document
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <DocumentPrintLayer doc={printingDoc} />
       </div>
