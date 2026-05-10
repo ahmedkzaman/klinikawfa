@@ -6,6 +6,10 @@ import type { QueueEntryWithJoins, QueueEntryRow } from "@/types/clinic";
 const QUEUE_QUERY_KEY = ["clinic", "queue-entries"] as const;
 const CONSULT_QUEUE_QUERY_KEY = ["clinic", "consultation-queue-entries"] as const;
 
+/**
+ * Today's active queue entries for the main Queue Board.
+ * Uses an "Allow-list" of statuses to prevent enum spelling errors.
+ */
 export function useQueueEntries() {
   const qc = useQueryClient();
 
@@ -14,6 +18,16 @@ export function useQueueEntries() {
     queryFn: async () => {
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
+
+      // Define exactly which statuses should appear on the board
+      const activeStatuses = [
+        "registered",
+        "ready_for_doctor",
+        "with_doctor",
+        "sent_to_dispensary",
+        "dispensing_payment",
+        "on_hold",
+      ];
 
       const { data, error } = await supabase
         .from("queue_entries")
@@ -26,13 +40,15 @@ export function useQueueEntries() {
         `,
         )
         .is("deleted_at", null)
-        // REVERTED: Changed back to 'cancelled' (two Ls) to match your DB Enum
-        .not("clinic_status", "in", "(completed,cancelled)")
+        .in("clinic_status", activeStatuses)
         .gte("created_at", startOfDay.toISOString())
         .order("is_urgent", { ascending: false })
         .order("queue_number", { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Queue Query Error:", error);
+        throw error;
+      }
       return (data ?? []) as unknown as QueueEntryWithJoins[];
     },
     staleTime: 30_000,
@@ -54,15 +70,28 @@ export function useQueueEntries() {
   return query;
 }
 
-// Keep this for the Consultation page build
+/**
+ * Consultation workspace feed.
+ * Includes today's entries and carry-overs from previous days.
+ * Restored to fix production build errors.
+ */
 export function useConsultationQueueEntries() {
   const qc = useQueryClient();
 
-  return useQuery<QueueEntryWithJoins[]>({
+  const query = useQuery<QueueEntryWithJoins[]>({
     queryKey: CONSULT_QUEUE_QUERY_KEY,
     queryFn: async () => {
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
+
+      const activeStatuses = [
+        "registered",
+        "ready_for_doctor",
+        "with_doctor",
+        "sent_to_dispensary",
+        "dispensing_payment",
+        "on_hold",
+      ];
 
       const { data, error } = await supabase
         .from("queue_entries")
@@ -76,9 +105,7 @@ export function useConsultationQueueEntries() {
         `,
         )
         .is("deleted_at", null)
-        .or(
-          `created_at.gte.${startOfDay.toISOString()},clinic_status.in.(registered,ready_for_doctor,with_doctor,sent_to_dispensary,dispensing_payment,on_hold)`,
-        )
+        .or(`created_at.gte.${startOfDay.toISOString()},clinic_status.in.(${activeStatuses.join(",")})`)
         .order("created_at", { ascending: true });
 
       if (error) throw error;
@@ -86,6 +113,21 @@ export function useConsultationQueueEntries() {
     },
     staleTime: 15_000,
   });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("clinic-consultation-queue")
+      .on("postgres_changes", { event: "*", schema: "public", table: "queue_entries" }, () => {
+        qc.invalidateQueries({ queryKey: CONSULT_QUEUE_QUERY_KEY });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
+  return query;
 }
 
 export function useUpdateQueueEntry() {
@@ -137,7 +179,10 @@ export function useCallToDispensary() {
     mutationFn: async ({ id, room_id }: { id: string; room_id: string }) => {
       const { error } = await supabase
         .from("queue_entries")
-        .update({ called_at: new Date().toISOString(), assigned_room_id: room_id })
+        .update({
+          called_at: new Date().toISOString(),
+          assigned_room_id: room_id,
+        })
         .eq("id", id);
       if (error) throw error;
     },
@@ -156,7 +201,13 @@ export function useQueueEntry(id?: string) {
       const { data, error } = await supabase
         .from("queue_entries")
         .select(
-          `*, patients (*), doctors:assigned_doctor_id (id, name, avatar_url), rooms:assigned_room_id (id, label), insurance_providers (id, name)`,
+          `
+          *,
+          patients ( * ),
+          doctors:assigned_doctor_id ( id, name, avatar_url ),
+          rooms:assigned_room_id ( id, label ),
+          insurance_providers ( id, name )
+        `,
         )
         .eq("id", id!)
         .maybeSingle();
