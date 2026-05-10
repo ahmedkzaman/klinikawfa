@@ -272,8 +272,35 @@ export function AddTreatmentBulkDialog({
       });
     });
 
+    documentTemplates.forEach((t) => {
+      const typeLabel =
+        t.type === 'mc'
+          ? 'Medical Certificate'
+          : t.type === 'referral'
+            ? 'Referral Letter'
+            : t.type === 'prescription'
+              ? 'Prescription Slip'
+              : t.type === 'quarantine'
+                ? 'Quarantine Notice'
+                : 'Memo';
+      combined.push({
+        id: t.id,
+        name: t.name,
+        stock: null,
+        uom: typeLabel,
+        group: 'Document',
+        price: '—',
+        priceNum: 0,
+        type: 'document',
+        categoryLower: '',
+        genericLower: '',
+        nearestExpiry: null,
+        template: t,
+      });
+    });
+
     return combined;
-  }, [inventoryItems, services, packages, isPanel]);
+  }, [inventoryItems, services, packages, documentTemplates, isPanel]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -296,11 +323,19 @@ export function AddTreatmentBulkDialog({
       medicine: allItems.filter((i) => rowMatchesTab(i, 'medicine')).length,
       procedure: allItems.filter((i) => rowMatchesTab(i, 'procedure')).length,
       package: allItems.filter((i) => rowMatchesTab(i, 'package')).length,
+      document: allItems.filter((i) => rowMatchesTab(i, 'document')).length,
     }),
     [allItems],
   );
 
   const toggleItem = (item: CombinedRow) => {
+    if (item.type === 'document') {
+      if (item.template && onIssueDocument) {
+        onIssueDocument(item.template);
+        onOpenChange(false);
+      }
+      return;
+    }
     setSelected((prev) => {
       const exists = prev.find((s) => s.id === item.id);
       if (exists) return prev.filter((s) => s.id !== item.id);
@@ -310,7 +345,7 @@ export function AddTreatmentBulkDialog({
           id: item.id,
           name: item.name,
           price: item.priceNum,
-          type: item.type,
+          type: item.type as SelectedItem['type'],
           defaults: item.defaults,
         },
       ];
@@ -318,20 +353,23 @@ export function AddTreatmentBulkDialog({
   };
 
   const toggleAll = () => {
-    const allSelected = filtered.every((item) => selected.some((s) => s.id === item.id));
+    const selectable = filtered.filter((i) => i.type !== 'document');
+    const allSelected =
+      selectable.length > 0 &&
+      selectable.every((item) => selected.some((s) => s.id === item.id));
     if (allSelected) {
-      const filteredIds = new Set(filtered.map((i) => i.id));
-      setSelected((prev) => prev.filter((s) => !filteredIds.has(s.id)));
+      const ids = new Set(selectable.map((i) => i.id));
+      setSelected((prev) => prev.filter((s) => !ids.has(s.id)));
     } else {
       setSelected((prev) => {
         const existing = new Set(prev.map((s) => s.id));
-        const newItems = filtered
+        const newItems: SelectedItem[] = selectable
           .filter((i) => !existing.has(i.id))
           .map((i) => ({
             id: i.id,
             name: i.name,
             price: i.priceNum,
-            type: i.type,
+            type: i.type as SelectedItem['type'],
             defaults: i.defaults,
           }));
         return [...prev, ...newItems];
