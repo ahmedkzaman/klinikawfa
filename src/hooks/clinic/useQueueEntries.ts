@@ -6,6 +6,16 @@ import type { QueueEntryWithJoins, QueueEntryRow } from "@/types/clinic";
 const QUEUE_QUERY_KEY = ["clinic", "queue-entries"] as const;
 const CONSULT_QUEUE_QUERY_KEY = ["clinic", "consultation-queue-entries"] as const;
 
+/** Shared "Active" statuses — entries in any of these stay visible across day boundaries. */
+export const ACTIVE_STATUSES = [
+  "registered",
+  "ready_for_doctor",
+  "with_doctor",
+  "sent_to_dispensary",
+  "dispensing_payment",
+  "on_hold",
+] as const;
+
 /**
  * Today's active queue entries for the main Queue Board.
  * Uses an "Allow-list" of statuses to prevent enum spelling errors.
