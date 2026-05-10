@@ -3024,6 +3024,9 @@ export type Database = {
           assigned_room_id: string | null
           called_at: string | null
           called_by_doctor_id: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
           clinic_status: Database["public"]["Enums"]["clinic_status"]
           created_at: string
           created_by: string | null
@@ -3046,6 +3049,9 @@ export type Database = {
           assigned_room_id?: string | null
           called_at?: string | null
           called_by_doctor_id?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           clinic_status?: Database["public"]["Enums"]["clinic_status"]
           created_at?: string
           created_by?: string | null
@@ -3068,6 +3074,9 @@ export type Database = {
           assigned_room_id?: string | null
           called_at?: string | null
           called_by_doctor_id?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           clinic_status?: Database["public"]["Enums"]["clinic_status"]
           created_at?: string
           created_by?: string | null
@@ -4726,6 +4735,7 @@ export type Database = {
         | "sent_to_dispensary"
         | "dispensing_payment"
         | "completed"
+        | "cancelled"
       panel_claim_status:
         | "pending"
         | "submitted"
@@ -4887,6 +4897,7 @@ export const Constants = {
         "sent_to_dispensary",
         "dispensing_payment",
         "completed",
+        "cancelled",
       ],
       panel_claim_status: [
         "pending",
