@@ -443,6 +443,7 @@ export function AddTreatmentBulkDialog({
                 { key: 'medicine', label: 'Medicine' },
                 { key: 'procedure', label: 'Procedures' },
                 { key: 'package', label: 'Packages' },
+                { key: 'document', label: 'Documents' },
               ] as { key: PickerTab; label: string }[]).map((t) => {
                 const active = tab === t.key;
                 const disabled = !!search.trim();
