@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, Package } from 'lucide-react';
+import { Search, Package, Clock, AlertTriangle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import {
   Table,
   TableBody,
@@ -21,6 +23,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useInventoryItems } from '@/hooks/clinic/useInventoryItems';
 import { useServices } from '@/hooks/clinic/useServices';
 import { usePackages } from '@/hooks/clinic/usePackages';
+import { useCreateRestockRequest } from '@/hooks/clinic/useRestockRequests';
 
 export interface SelectedDefaults {
   indication?: string | null;
