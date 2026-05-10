@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, Package } from 'lucide-react';
+import { Search, Package, Clock, AlertTriangle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import {
   Table,
   TableBody,
@@ -21,6 +23,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useInventoryItems } from '@/hooks/clinic/useInventoryItems';
 import { useServices } from '@/hooks/clinic/useServices';
 import { usePackages } from '@/hooks/clinic/usePackages';
+import { useCreateRestockRequest } from '@/hooks/clinic/useRestockRequests';
 
 export interface SelectedDefaults {
   indication?: string | null;
@@ -62,6 +65,8 @@ interface CombinedRow {
   categoryLower: string;
   /** Lowercase generic name, blank when none / not applicable. */
   genericLower: string;
+  /** ISO date for the next-expiring batch, or null. Inventory items only. */
+  nearestExpiry: string | null;
   defaults?: SelectedDefaults;
 }
 
@@ -98,6 +103,49 @@ const resolvePrice = (
   return 0;
 };
 
+const LOW_STOCK_THRESHOLD = 10;
+const EXPIRY_WARNING_DAYS = 30;
+
+function daysUntil(iso: string | null): number | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return Math.ceil((d.getTime() - Date.now()) / 86_400_000);
+}
+
+function StockBadges({
+  stock,
+  nearestExpiry,
+}: {
+  stock: number | null;
+  nearestExpiry: string | null;
+}) {
+  const days = daysUntil(nearestExpiry);
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {stock === 0 ? (
+        <Badge variant="destructive" className="text-[10px] py-0 px-1.5">
+          Out of stock
+        </Badge>
+      ) : stock !== null && stock <= LOW_STOCK_THRESHOLD ? (
+        <Badge className="text-[10px] py-0 px-1.5 bg-amber-100 text-amber-800 hover:bg-amber-100 border-transparent">
+          Low stock: {stock}
+        </Badge>
+      ) : stock !== null ? (
+        <Badge className="text-[10px] py-0 px-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-transparent">
+          {stock} in stock
+        </Badge>
+      ) : null}
+      {days !== null && days <= EXPIRY_WARNING_DAYS && days >= 0 && (
+        <Badge className="text-[10px] py-0 px-1.5 bg-orange-100 text-orange-800 hover:bg-orange-100 border-transparent inline-flex items-center gap-0.5">
+          <Clock className="h-2.5 w-2.5" />
+          Expiring in {days}d
+        </Badge>
+      )}
+    </div>
+  );
+}
+
 export function AddTreatmentBulkDialog({
   open,
   onOpenChange,
@@ -107,10 +155,28 @@ export function AddTreatmentBulkDialog({
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<PickerTab>('all');
   const [selected, setSelected] = useState<SelectedItem[]>([]);
+  const [restockNotified, setRestockNotified] = useState<Set<string>>(new Set());
 
   const { items: inventoryItems } = useInventoryItems();
   const { services } = useServices();
   const { packages } = usePackages();
+  const createRestock = useCreateRestockRequest();
+
+  const requestRestock = (itemId: string) => {
+    if (restockNotified.has(itemId)) return;
+    createRestock.mutate(
+      { itemId, reason: 'Low stock flagged in treatment picker' },
+      {
+        onSuccess: () => {
+          setRestockNotified((prev) => {
+            const next = new Set(prev);
+            next.add(itemId);
+            return next;
+          });
+        },
+      },
+    );
+  };
 
   const allItems = useMemo<CombinedRow[]>(() => {
     const combined: CombinedRow[] = [];
@@ -142,6 +208,7 @@ export function AddTreatmentBulkDialog({
         type: 'item',
         categoryLower: (i.category ?? '').toLowerCase(),
         genericLower: (ii.generic_name ?? '').toLowerCase(),
+        nearestExpiry: (ii.nearest_expiry_date as string | null) ?? null,
         defaults: {
           indication: ii.default_indication ?? null,
           dosage_qty: ii.default_dosage_qty ?? null,
@@ -172,6 +239,7 @@ export function AddTreatmentBulkDialog({
         type: 'service',
         categoryLower: '',
         genericLower: '',
+        nearestExpiry: null,
       });
     });
 
@@ -192,6 +260,7 @@ export function AddTreatmentBulkDialog({
         type: 'package',
         categoryLower: '',
         genericLower: '',
+        nearestExpiry: null,
       });
     });
 
@@ -284,6 +353,16 @@ export function AddTreatmentBulkDialog({
     onOpenChange(v);
   };
 
+  const lowStockSelected = useMemo(() => {
+    const byId = new Map(allItems.map((r) => [r.id, r]));
+    return selected
+      .map((s) => byId.get(s.id))
+      .filter(
+        (r): r is CombinedRow =>
+          !!r && r.type === 'item' && r.stock !== null && r.stock <= LOW_STOCK_THRESHOLD,
+      );
+  }, [selected, allItems]);
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-5xl h-[80vh] flex flex-col p-0">
@@ -365,7 +444,12 @@ export function AddTreatmentBulkDialog({
                         <TableCell>
                           <Checkbox checked={isSelected} />
                         </TableCell>
-                        <TableCell className="text-sm font-medium">{item.name}</TableCell>
+                        <TableCell className="text-sm font-medium">
+                          <div>{item.name}</div>
+                          {item.type === 'item' && (
+                            <StockBadges stock={item.stock} nearestExpiry={item.nearestExpiry} />
+                          )}
+                        </TableCell>
                         <TableCell className="text-sm">{item.stock ?? '—'}</TableCell>
                         <TableCell className="text-sm">{item.uom}</TableCell>
                         <TableCell className="text-sm">{item.group}</TableCell>
@@ -402,6 +486,40 @@ export function AddTreatmentBulkDialog({
                 </button>
               )}
             </div>
+            {lowStockSelected.length > 0 && (
+              <Alert className="mb-3 border-amber-300 bg-amber-50 text-amber-900">
+                <AlertTriangle className="h-4 w-4 !text-amber-700" />
+                <AlertTitle className="text-amber-900">Low stock on selected items</AlertTitle>
+                <AlertDescription className="text-amber-900">
+                  <div className="mt-2 space-y-1.5">
+                    {lowStockSelected.map((row) => {
+                      const notified = restockNotified.has(row.id);
+                      return (
+                        <div
+                          key={row.id}
+                          className="flex items-center justify-between gap-2 text-xs"
+                        >
+                          <span className="truncate">
+                            <span className="font-medium">{row.name}</span>
+                            <span className="text-amber-700"> · {row.stock} left</span>
+                          </span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={notified ? 'outline' : 'default'}
+                            disabled={notified || createRestock.isPending}
+                            onClick={() => requestRestock(row.id)}
+                            className="h-7 text-[11px] shrink-0"
+                          >
+                            {notified ? 'Pharmacy notified' : 'Request Restock'}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
             {selected.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center text-center">
                 <Package className="h-10 w-10 text-muted-foreground/40 mb-2" />

@@ -20,6 +20,7 @@ import {
   ShoppingCart,
   Trash2,
   PackageX,
+  ClipboardList,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -42,6 +43,7 @@ const clinicNavItems: ClinicNavItem[] = [
   { href: '/clinic/dispensary', label: 'Dispensary', icon: Pill },
   { href: '/clinic/billings', label: 'Billings', icon: Receipt },
   { href: '/clinic/inventory', label: 'Inventory', icon: PackageSearch },
+  { href: '/clinic/inventory/restock-review', label: 'Restock Requests', icon: ClipboardList },
   { href: '/clinic/owe-slips', label: 'Owe Slips', icon: PackageX },
   { href: '/clinic/panel-claims', label: 'Panel Claims', icon: FileText },
   { href: '/clinic/receivables', label: 'Receivables', icon: Briefcase },

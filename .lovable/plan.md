@@ -1,49 +1,64 @@
-## Treatment Picker — global search + tabbed mapping
+# Pharmacy Supply Chain Loop
 
-Two surfaces, same mental model. Both get **case-insensitive global search across `name` + `generic_name`** and **tabs that filter by mapped category**, with **search overriding tabs** when active.
+Two coordinated changes that connect the doctor's prescribing screen to an operations dashboard via the existing `restock_requests` table.
 
-### A. `AddTreatmentBulkDialog.tsx` (the picker — currently no tabs, single combined table)
+## Part 1 — Doctor-side: `AddTreatmentBulkDialog.tsx`
 
-1. **Global search upgrade** (existing `filtered` memo)
-   - Match against `name`, `generic_name` (inventory items only — services/packages don't have it), and `group` label.
-   - Already case-insensitive via `toLowerCase`. Just widen the field set; today only `name` + `group` are checked. *(`sku` does not exist on `inventory_items`, skipping.)*
+### 1a. Inline stock badges (search results)
+For rows where `type === 'item'`, render a small badge under the item name based on `stock` (already in `inventory_items`):
+- `0` → red destructive badge "Out of stock"
+- `1–10` → amber/warning badge "Low stock: N"
+- `>10` → muted/green badge "N in stock"
 
-2. **Add tab strip** above the table — pill buttons in the existing dialog style:
-   - `All` · `Medicine` · `Procedures` · `Packages`
-   - State: `const [tab, setTab] = useState<'all'|'medicine'|'procedure'|'package'>('all')`.
-   - Counts shown in pill labels (mirror Treatment Plan tabs in `ConsultationDetail`).
+If `nearest_expiry_date` exists and is within 30 days of today, append an orange "Expiring soon" badge with a `Clock` icon.
 
-3. **Mapping rule** — applied to the combined `allItems` rows when computing `filtered`:
-   - **Medicine** → `row.type === 'item'` AND inventory `category?.toLowerCase() === 'medication'`.
-   - **Procedures** → `row.type === 'service'` (per your decision: procedures live in `services`). Plus inventory rows whose `name` matches `/fee|procedure|service/i` as a fallback so legacy fee items still appear.
-   - **Packages** → `row.type === 'package'`.
-   - **All** → no filter.
+Non-inventory rows (services, packages, free text) get no badge.
 
-4. **Search overrides tab** — if `search.trim()` is non-empty, ignore the tab filter and search the entire combined list. Tab filter only applies when search is empty (matches your "Global Search wins" rule).
+### 1b. Low-stock warning banner (Selected Items section)
+Above the Selected list (or just below its header), compute selected rows whose underlying inventory item has `stock <= 10`. If any exist, render a single `<Alert variant="destructive">` (shadcn alert — no `warning` variant exists, so we use destructive styling tinted amber via className) titled "Low stock on selected items".
 
-5. **Null-safe category** — coerce `category ?? ''` and lowercase before comparing to avoid runtime errors on partial inventory rows.
+Inside, list each low-stock item as a row: item name + current stock + a "Request Restock" button.
 
-### B. `ConsultationDetail.tsx` Treatment Plan tabs (lines ~844–867)
+### 1c. One-click restock
+Each row's button calls `useCreateRestockRequest().mutate({ itemId })`. On success (or while pending) the button disables and changes label to "Pharmacy notified". Track per-item state with a local `Set<itemId>` so multiple items can be requested independently. Toast already handled inside the hook.
 
-1. **Rename** keys/labels to the new mapping vocabulary:
-   - `all` · `medicine` · `procedure` · `package` (was `all/item/service/package`).
-2. **Update `itemCounts` and `filteredTreatmentItems` memos** to use the same mapping rule as the picker:
-   - `medicine` ⇢ items whose underlying inventory category (case-insensitive) is `medication`.
-   - `procedure` ⇢ items of type `service`, plus item-typed rows whose `item_name` matches `/fee|procedure|service/i`.
-   - `package` ⇢ type `package`.
-3. **Case-insensitive everywhere** — wherever a string compare touches `category` or a UI tag, use `value?.toLowerCase()`.
+## Part 2 — Ops dashboard: `src/pages/clinic/RestockReview.tsx`
 
-### Data fetching — no change needed
+### 2a. Access control
+Use the existing `useAuth()` role system (the app does not have `staff nurse` / `admin manager` / `staff purchaser` roles — see Technical Notes for mapping). The page is gated to `isStaffOrAdmin` which already covers operations, staff, admin, special_admin, doctor_admin, resident_doctor. Locum doctors are excluded.
 
-- `useInventoryItems` already returns all rows regardless of category. No null filtering happens upstream. Confirmed by the picker showing both `Medication` and `Disposable Item` rows in one table today.
-- DB only has `Medication` and `Disposable Item` as inventory categories (verified). No schema change. The "procedure" tab pulls from the existing `services` table, matching your answer.
+If role check fails: render an "Access denied" card. The sidebar link is hidden for the same condition.
 
-### Out of scope
+### 2b. UI
+- Page header: "Restock Requests" + count badge of open items.
+- Fetch via `useRestockRequests('open')` — already returns `inventory_items(name)` and core fields. Extend the hook (or add a sibling hook) to also join `profiles!requested_by(full_name)` so we can show the requester.
+- Data table columns: **Date Requested** (relative + tooltip), **Item**, **Requested By**, **Reason**, **Action**.
+- Empty state: friendly card "No open restock requests — pharmacy is caught up."
 
-- No DB migrations. No new `Procedure` enum. Mapping is pure UI.
-- No changes to dispense/checkout pickers. Only the consultation-side picker and Treatment Plan list.
+### 2c. "Mark as Ordered" action
+New mutation `useCloseRestockRequest` in `useRestockRequests.ts`:
+```
+update restock_requests set status='closed', closed_at=now(), closed_by=auth.uid() where id=$1
+```
+Invalidates `['restock_requests']`. Button shows confirm via `AlertDialog`, then row disappears from the open queue.
 
-### Files touched
+### 2d. Routing & sidebar
+- Add `<Route path="/clinic/inventory/restock-review" element={<RestockReview />} />` inside the existing clinic protected route block in `App.tsx`.
+- Add link to the **Inventory** sidebar group (in whichever clinic sidebar component is used — will read it during build to confirm exact file). Link is conditionally rendered using the same role check.
 
-- `src/components/clinic/consultation/AddTreatmentBulkDialog.tsx` — extend search fields, add tab state + pill UI + count badges, mapping-aware `filtered` memo, search-overrides-tab branch.
-- `src/pages/clinic/ConsultationDetail.tsx` — relabel tabs, replace `itemCounts` / `filteredTreatmentItems` logic with the shared mapping rule.
+## Technical Notes
+
+**Role mapping.** The app's `AppRole` enum is: `special_admin | admin | doctor_admin | operations | staff | locum | resident_doctor | guest`. The roles you listed don't exist as-is, so I'll map them to the closest existing equivalents and gate with `isStaffOrAdmin` (which equals: admin, staff, special_admin, operations, doctor_admin, resident_doctor — locum excluded). If you want a stricter gate (e.g. exclude generic `staff`), say the word and I'll narrow it.
+
+**No DB migration needed.** `restock_requests` table, RLS, and the `useCreateRestockRequest` hook already exist. We only need to add a `close` mutation that runs an UPDATE — RLS for that update must already permit ops roles; if it doesn't, I'll add a migration in the build step.
+
+**Stock data.** `inventory_items` rows already include `stock` and `nearest_expiry_date`, both surfaced through the picker's `allItems` mapping — no extra query needed.
+
+**Files touched**
+- `src/components/clinic/consultation/AddTreatmentBulkDialog.tsx` (badges + warning alert + restock buttons)
+- `src/hooks/clinic/useRestockRequests.ts` (add requester join + `useCloseRestockRequest`)
+- `src/pages/clinic/RestockReview.tsx` (new page)
+- `src/App.tsx` (route)
+- Clinic sidebar component (add gated nav link — exact file confirmed at build)
+
+**Out of scope:** auto-PO generation, supplier selection, notification emails, or schema changes to `restock_requests`.
