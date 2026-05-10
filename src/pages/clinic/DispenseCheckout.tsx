@@ -285,6 +285,7 @@ export default function DispenseCheckout() {
                     onClick={handleComplete}
                     disabled={
                       outstanding > 0 ||
+                      anyPartialMissingReason ||
                       !consultation?.id ||
                       updateQueue.isPending ||
                       updateConsultation.isPending
@@ -298,6 +299,11 @@ export default function DispenseCheckout() {
               {outstanding > 0 && (
                 <TooltipContent>
                   Settle outstanding balance before completing checkout.
+                </TooltipContent>
+              )}
+              {anyPartialMissingReason && (
+                <TooltipContent>
+                  Select a reason for every partially dispensed item.
                 </TooltipContent>
               )}
               {!consultation?.id && (
