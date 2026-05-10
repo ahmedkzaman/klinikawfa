@@ -51,6 +51,8 @@ interface Props {
   onInsert: (items: SelectedItem[]) => void;
   /** When true, use panel/standard tier pricing first; otherwise self-pay first. */
   isPanel?: boolean;
+  /** Called when a row of type=document is clicked. */
+  onIssueDocument?: (template: DocumentTemplate) => void;
 }
 
 interface CombinedRow {
@@ -61,7 +63,7 @@ interface CombinedRow {
   group: string;
   price: string;
   priceNum: number;
-  type: 'item' | 'service' | 'package';
+  type: 'item' | 'service' | 'package' | 'document';
   /** Lowercase inventory category, blank for services/packages. */
   categoryLower: string;
   /** Lowercase generic name, blank when none / not applicable. */
@@ -69,9 +71,11 @@ interface CombinedRow {
   /** ISO date for the next-expiring batch, or null. Inventory items only. */
   nearestExpiry: string | null;
   defaults?: SelectedDefaults;
+  /** Original document template payload, only set when type=document. */
+  template?: DocumentTemplate;
 }
 
-type PickerTab = 'all' | 'medicine' | 'procedure' | 'package';
+type PickerTab = 'all' | 'medicine' | 'procedure' | 'package' | 'document';
 
 const PROCEDURE_NAME_RE = /\b(fee|procedure|service)\b/i;
 
@@ -87,6 +91,7 @@ function rowMatchesTab(row: CombinedRow, tab: PickerTab): boolean {
     return false;
   }
   if (tab === 'package') return row.type === 'package';
+  if (tab === 'document') return row.type === 'document';
   return true;
 }
 
