@@ -355,6 +355,14 @@ const App = () => (
                   }
                 />
                 <Route
+                  path="settings/document-templates"
+                  element={
+                    <ClinicProtectedRoute requiredRole="admin">
+                      <DocumentTemplates />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
                   path="settings/charges"
                   element={
                     <ClinicProtectedRoute requiredRole="ops_or_admin">
