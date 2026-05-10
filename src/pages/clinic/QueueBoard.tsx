@@ -485,15 +485,25 @@ export default function QueueBoard() {
       <RegisterAndCheckInDialog open={registerDialog} onOpenChange={setRegisterDialog} />
 
       {activeEntry && (
-        <VitalsEntryDialog
-          open={vitalsOpen}
-          onOpenChange={(o) => {
-            setVitalsOpen(o);
-            if (!o) setActiveEntry(null);
-          }}
-          queueEntryId={activeEntry.id}
-          patientId={activeEntry.patient_id}
-        />
+        <>
+          <VitalsEntryDialog
+            open={vitalsOpen}
+            onOpenChange={(o) => {
+              setVitalsOpen(o);
+              if (!o && !cancelOpen) setActiveEntry(null);
+            }}
+            queueEntryId={activeEntry.id}
+            patientId={activeEntry.patient_id}
+          />
+          <CancelQueueEntryDialog
+            open={cancelOpen}
+            onOpenChange={(o) => {
+              setCancelOpen(o);
+              if (!o) setActiveEntry(null);
+            }}
+            entry={activeEntry}
+          />
+        </>
       )}
     </>
   );
