@@ -68,6 +68,7 @@ import VisitDetail from "./pages/clinic/VisitDetail";
 import Billings from "./pages/clinic/Billings";
 import PanelClaims from "./pages/clinic/PanelClaims";
 import Inventory from "./pages/clinic/Inventory";
+import OweSlips from "./pages/clinic/OweSlips";
 import Receivables from "./pages/clinic/Receivables";
 import VoidedRecords from "./pages/clinic/VoidedRecords";
 import Insight from "./pages/clinic/Insight";
@@ -259,6 +260,14 @@ const App = () => (
                   element={
                     <ClinicProtectedRoute requiredRole="ops_or_admin">
                       <Inventory />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
+                  path="owe-slips"
+                  element={
+                    <ClinicProtectedRoute>
+                      <OweSlips />
                     </ClinicProtectedRoute>
                   }
                 />
