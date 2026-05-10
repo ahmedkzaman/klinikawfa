@@ -77,7 +77,7 @@ interface PastVisit {
   id: string;
   created_at: string;
   doctors?: { name?: string } | null;
-  diagnoses?: { name?: string } | null;
+  diagnoses?: { id?: string; name?: string } | null;
   diagnosis_text?: string | null;
   case_note?: string | null;
   dispense_note?: string | null;
@@ -88,6 +88,11 @@ interface PastVisit {
     dosage?: string | null;
     price: number;
   }> | null;
+}
+
+interface CopyDiagnosisPayload {
+  diagnosis_id: string | null;
+  name: string;
 }
 
 /**
