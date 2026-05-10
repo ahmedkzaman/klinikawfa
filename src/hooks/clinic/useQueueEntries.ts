@@ -1,10 +1,12 @@
 import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { QueueEntryWithJoins, QueueEntryRow } from "@/types/clinic";
 
 const QUEUE_QUERY_KEY = ["clinic", "queue-entries"] as const;
 const CONSULT_QUEUE_QUERY_KEY = ["clinic", "consultation-queue-entries"] as const;
+const CANCELLED_TODAY_QUERY_KEY = ["clinic", "queue-entries", "cancelled-today"] as const;
 
 /** Shared "Active" statuses — entries in any of these stay visible across day boundaries. */
 export const ACTIVE_STATUSES = [
@@ -214,4 +216,143 @@ export function useQueueEntry(id?: string) {
   });
 }
 
-export { QUEUE_QUERY_KEY, CONSULT_QUEUE_QUERY_KEY };
+// ─────────────────────────────────────────────────────────────────────────────
+// Defensive Cancellation (LWBS / Absconded) — terminal status with audit trail.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function malayTimestamp(): string {
+  return new Date().toLocaleString("en-MY", {
+    timeZone: "Asia/Kuala_Lumpur",
+    hour12: false,
+  });
+}
+
+async function resolveStaffName(): Promise<{ userId: string | null; name: string }> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { userId: null, name: "Staff" };
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, email")
+    .eq("id", user.id)
+    .maybeSingle();
+  const name = profile?.full_name || profile?.email || user.email || "Staff";
+  return { userId: user.id, name };
+}
+
+export function useCancelQueueEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      reason,
+      existingNotes,
+    }: {
+      id: string;
+      reason: string;
+      existingNotes?: string | null;
+    }) => {
+      const { userId, name } = await resolveStaffName();
+      const cancelLine = `\n\n[CANCELLED ${malayTimestamp()}] Reason: ${reason} — by ${name}`;
+
+      const { error } = await supabase
+        .from("queue_entries")
+        .update({
+          clinic_status: "cancelled",
+          cancelled_at: new Date().toISOString(),
+          cancelled_by: userId,
+          cancellation_reason: reason,
+          visit_notes: (existingNotes ?? "") + cancelLine,
+        })
+        .eq("id", id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUEUE_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: CONSULT_QUEUE_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: CANCELLED_TODAY_QUERY_KEY });
+      toast.success("Visit terminated and documented.");
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Failed to terminate visit";
+      toast.error(msg);
+    },
+  });
+}
+
+export function useRestoreQueueEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      existingNotes,
+    }: {
+      id: string;
+      existingNotes?: string | null;
+    }) => {
+      const { name } = await resolveStaffName();
+      const restoreLine = `\n\n[RESTORED ${malayTimestamp()}] by ${name}`;
+
+      const { error } = await supabase
+        .from("queue_entries")
+        .update({
+          clinic_status: "registered",
+          cancelled_at: null,
+          cancelled_by: null,
+          cancellation_reason: null,
+          visit_notes: (existingNotes ?? "") + restoreLine,
+        })
+        .eq("id", id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUEUE_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: CONSULT_QUEUE_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: CANCELLED_TODAY_QUERY_KEY });
+      toast.success("Entry restored to Registered.");
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Failed to restore entry";
+      toast.error(msg);
+    },
+  });
+}
+
+export function useCancelledTodayEntries() {
+  const qc = useQueryClient();
+  const query = useQuery<QueueEntryWithJoins[]>({
+    queryKey: CANCELLED_TODAY_QUERY_KEY,
+    queryFn: async () => {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const { data, error } = await supabase
+        .from("queue_entries")
+        .select(`*, patients ( name, phone )`)
+        .eq("clinic_status", "cancelled")
+        .gte("cancelled_at", startOfDay.toISOString())
+        .order("cancelled_at", { ascending: false });
+
+      if (error) throw error;
+      return (data ?? []) as unknown as QueueEntryWithJoins[];
+    },
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("clinic-queue-cancelled-today")
+      .on("postgres_changes", { event: "*", schema: "public", table: "queue_entries" }, () => {
+        qc.invalidateQueries({ queryKey: CANCELLED_TODAY_QUERY_KEY });
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
+  return query;
+}
+
+export { QUEUE_QUERY_KEY, CONSULT_QUEUE_QUERY_KEY, CANCELLED_TODAY_QUERY_KEY };

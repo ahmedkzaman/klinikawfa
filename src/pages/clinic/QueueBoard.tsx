@@ -2,11 +2,26 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Activity, AlertCircle, ListOrdered, Plus, UserPlus, Users } from 'lucide-react';
+import {
+  Activity,
+  AlertCircle,
+  ChevronDown,
+  ListOrdered,
+  Plus,
+  RotateCcw,
+  UserPlus,
+  Users,
+  UserX,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { SEOHead } from '@/components/seo/SEOHead';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
   Sheet,
   SheetContent,
@@ -14,12 +29,19 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { useQueueEntries, useUpdateQueueEntry } from '@/hooks/clinic/useQueueEntries';
+import {
+  useCancelledTodayEntries,
+  useQueueEntries,
+  useRestoreQueueEntry,
+  useUpdateQueueEntry,
+} from '@/hooks/clinic/useQueueEntries';
 import { useTodayAppointments } from '@/hooks/clinic/useTodayAppointments';
+import { useAuth } from '@/contexts/AuthContext';
 import { CheckInAppointmentDialog } from '@/components/clinic/CheckInAppointmentDialog';
 import { CheckInWalkInDialog } from '@/components/clinic/CheckInWalkInDialog';
 import { RegisterAndCheckInDialog } from '@/components/clinic/RegisterAndCheckInDialog';
 import { VitalsEntryDialog } from '@/components/clinic/VitalsEntryDialog';
+import { CancelQueueEntryDialog } from '@/components/clinic/CancelQueueEntryDialog';
 import {
   QUEUE_COLUMNS,
   STATUS_COLORS,
@@ -113,14 +135,18 @@ export default function QueueBoard() {
   useTickEveryMinute();
   const { data: entries = [], isLoading } = useQueueEntries();
   const { data: appointments = [] } = useTodayAppointments();
+  const { data: cancelledToday = [] } = useCancelledTodayEntries();
   const updateQueue = useUpdateQueueEntry();
+  const restoreEntry = useRestoreQueueEntry();
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
 
   const [appointmentDialog, setAppointmentDialog] = useState(false);
   const [walkInDialog, setWalkInDialog] = useState(false);
   const [registerDialog, setRegisterDialog] = useState(false);
   const [activeEntry, setActiveEntry] = useState<QueueEntryWithJoins | null>(null);
   const [vitalsOpen, setVitalsOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   const ACTIVE_STATUSES: ClinicStatus[] = [
     'registered',
@@ -259,6 +285,61 @@ export default function QueueBoard() {
               })}
             </div>
           )}
+
+          {/* Recently Cancelled (today) — audit drawer */}
+          <Collapsible className="mt-8 w-full border border-slate-200 rounded-xl overflow-hidden bg-white">
+            <CollapsibleTrigger className="group flex w-full items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+              <div className="flex items-center gap-2">
+                <UserX className="h-4 w-4 text-slate-400" />
+                <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                  Recently Cancelled Today
+                </span>
+                <span className={cn(softBadge, 'inline-flex items-center px-2 py-0.5 text-xs tabular-nums')}>
+                  {cancelledToday.length}
+                </span>
+              </div>
+              <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="border-t border-slate-100 p-3 space-y-2 bg-slate-50/40">
+              {cancelledToday.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-4">
+                  No cancelled visits today.
+                </p>
+              ) : (
+                cancelledToday.map((c) => (
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between gap-3 p-3 bg-white rounded-lg border border-slate-100"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-700 truncate">
+                        <span className="font-mono text-slate-500 mr-1.5">#{c.queue_number ?? '—'}</span>
+                        {c.patients?.name ? toMalayTitleCase(c.patients.name) : 'Unknown patient'}
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                        {c.cancelled_at ? format(new Date(c.cancelled_at), 'HH:mm') : '—'} ·{' '}
+                        {c.cancellation_reason ?? '—'}
+                      </p>
+                    </div>
+                    {isAdmin && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[11px] gap-1"
+                        disabled={restoreEntry.isPending}
+                        onClick={() =>
+                          restoreEntry.mutate({ id: c.id, existingNotes: c.visit_notes })
+                        }
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        Restore
+                      </Button>
+                    )}
+                  </div>
+                ))
+              )}
+            </CollapsibleContent>
+          </Collapsible>
         </div>
       </div>
 
@@ -375,6 +456,21 @@ export default function QueueBoard() {
                     Patient is on hold. Status can only be resumed by the attending doctor.
                   </p>
                 )}
+
+                {(['registered', 'ready_for_doctor', 'with_doctor', 'on_hold'] as ClinicStatus[]).includes(
+                  activeEntry.clinic_status as ClinicStatus,
+                ) && (
+                  <div className="mt-2 pt-3 border-t border-slate-100">
+                    <Button
+                      variant="ghost"
+                      className="w-full text-rose-500 hover:text-rose-700 hover:bg-rose-50"
+                      onClick={() => setCancelOpen(true)}
+                    >
+                      <UserX className="h-4 w-4 mr-2" />
+                      Patient Absconded / Cancel
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -389,15 +485,25 @@ export default function QueueBoard() {
       <RegisterAndCheckInDialog open={registerDialog} onOpenChange={setRegisterDialog} />
 
       {activeEntry && (
-        <VitalsEntryDialog
-          open={vitalsOpen}
-          onOpenChange={(o) => {
-            setVitalsOpen(o);
-            if (!o) setActiveEntry(null);
-          }}
-          queueEntryId={activeEntry.id}
-          patientId={activeEntry.patient_id}
-        />
+        <>
+          <VitalsEntryDialog
+            open={vitalsOpen}
+            onOpenChange={(o) => {
+              setVitalsOpen(o);
+              if (!o && !cancelOpen) setActiveEntry(null);
+            }}
+            queueEntryId={activeEntry.id}
+            patientId={activeEntry.patient_id}
+          />
+          <CancelQueueEntryDialog
+            open={cancelOpen}
+            onOpenChange={(o) => {
+              setCancelOpen(o);
+              if (!o) setActiveEntry(null);
+            }}
+            entry={activeEntry}
+          />
+        </>
       )}
     </>
   );
