@@ -23,6 +23,7 @@ import {
 } from '@/hooks/clinic/useConsultationItems';
 import { useConsultationAttachments } from '@/hooks/clinic/useAttachments';
 import { useDrugLabelSettings } from '@/hooks/clinic/useDrugLabelSettings';
+import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { generateDrugLabelPdf } from '@/lib/clinic/printDrugLabel';
 
 interface Props {
@@ -120,6 +121,7 @@ export function VisitDetailsColumn({
     useConsultationAttachments(consultationId);
 
   const { data: labelSettings } = useDrugLabelSettings();
+  const { settings: clinicSettings } = useClinicSettings();
 
   const updateItem = useUpdateConsultationItem();
   const removeItem = useRemoveConsultationItem();
@@ -136,10 +138,22 @@ export function VisitDetailsColumn({
   const openLabelPdf = (rows: ConsultationItemRow[]) => {
     if (rows.length === 0) return;
     try {
+      const addressFull = [
+        clinicSettings.address_line_1,
+        clinicSettings.address_line_2,
+      ]
+        .map((s) => (s ?? '').trim())
+        .filter(Boolean)
+        .join(', ');
       const url = generateDrugLabelPdf(
         rows,
         patientName ?? null,
         labelSettings ?? null,
+        {
+          name: clinicSettings.clinic_name,
+          addressFull,
+          phone: clinicSettings.phone,
+        },
       );
       const win = window.open(url, '_blank', 'noopener,noreferrer');
       if (!win) {
