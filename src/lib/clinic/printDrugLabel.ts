@@ -14,8 +14,6 @@ export interface ClinicLabelInfo {
   phone: string;
 }
 
-import type { DrugLabelSettings } from '@/hooks/clinic/useDrugLabelSettings';
-
 /**
  * Subset of the consultation-item row that the label needs. Kept loose so
  * the helper doesn't depend on the page component's full row type.
@@ -82,21 +80,22 @@ function drawLabel(
   item: DrugLabelItem,
   patientName: string | null,
   toggles: LabelToggles,
+  clinic: ClinicLabelInfo,
 ): void {
   let y = 3; // mm — top edge tolerance
 
   // ── Header: clinic name (always) ─────────────────────────────────────────
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
-  doc.text(`${CLINIC_INFO.name.toUpperCase()}, KOTASAS`, MARGIN_X, y);
+  doc.text((clinic.name || 'Clinic').toUpperCase(), MARGIN_X, y);
   y += 3;
 
   // ── Address (toggle) ─────────────────────────────────────────────────────
-  if (toggles.show_address) {
+  if (toggles.show_address && clinic.addressFull) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(5);
     const addrLines = doc.splitTextToSize(
-      CLINIC_INFO.address.full,
+      clinic.addressFull,
       SAFE_W,
     ) as string[];
     addrLines.slice(0, 2).forEach((line) => {
@@ -106,10 +105,10 @@ function drawLabel(
   }
 
   // ── Tel (toggle) ─────────────────────────────────────────────────────────
-  if (toggles.show_tel_number) {
+  if (toggles.show_tel_number && clinic.phone) {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(5);
-    doc.text(`Tel: ${CLINIC_INFO.phone}`, MARGIN_X, y);
+    doc.text(`Tel: ${clinic.phone}`, MARGIN_X, y);
     y += 2;
   }
 
@@ -225,6 +224,7 @@ export function generateDrugLabelPdf(
   items: DrugLabelItem[],
   patientName: string | null,
   toggles: LabelToggles | null | undefined,
+  clinic: ClinicLabelInfo,
 ): string {
   const doc = new jsPDF({
     unit: 'mm',
@@ -236,7 +236,7 @@ export function generateDrugLabelPdf(
 
   items.forEach((item, idx) => {
     if (idx > 0) doc.addPage([PAGE_W, PAGE_H], 'landscape');
-    drawLabel(doc, item, patientName, t);
+    drawLabel(doc, item, patientName, t, clinic);
   });
 
   return doc.output('bloburl').toString();
