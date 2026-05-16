@@ -4949,6 +4949,47 @@ export type Database = {
         }
         Relationships: []
       }
+      mv_diagnosis_stock_correlation: {
+        Row: {
+          case_count_current_month: number | null
+          case_count_prior_month: number | null
+          case_trend_pct: number | null
+          co_occurrence_cases: number | null
+          confidence_pct: number | null
+          diagnosis_group: string | null
+          inventory_item_id: string | null
+          item_name: string | null
+          item_usage_count: number | null
+          last_refreshed_at: string | null
+          lift_score: number | null
+          total_cases_90d: number | null
+          total_cases_for_group_90d: number | null
+          total_cases_with_item_90d: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_transactions_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_inventory_movement_stats"
+            referencedColumns: ["item_id"]
+          },
+        ]
+      }
       packages_safe: {
         Row: {
           created_at: string | null
@@ -5123,6 +5164,47 @@ export type Database = {
         }
         Relationships: []
       }
+      v_diagnosis_stock_correlation: {
+        Row: {
+          case_count_current_month: number | null
+          case_count_prior_month: number | null
+          case_trend_pct: number | null
+          co_occurrence_cases: number | null
+          confidence_pct: number | null
+          diagnosis_group: string | null
+          inventory_item_id: string | null
+          item_name: string | null
+          item_usage_count: number | null
+          last_refreshed_at: string | null
+          lift_score: number | null
+          total_cases_90d: number | null
+          total_cases_for_group_90d: number | null
+          total_cases_with_item_90d: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_transactions_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_inventory_movement_stats"
+            referencedColumns: ["item_id"]
+          },
+        ]
+      }
       v_inventory_movement_stats: {
         Row: {
           avg_daily_usage: number | null
@@ -5250,6 +5332,7 @@ export type Database = {
         }
         Returns: string
       }
+      refresh_diagnosis_correlation: { Args: never; Returns: undefined }
       release_inventory: {
         Args: { _item_id: string; _qty: number }
         Returns: undefined
