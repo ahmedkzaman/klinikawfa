@@ -76,3 +76,136 @@ export function useStockMovements(opts: {
     staleTime: 30_000,
   });
 }
+
+/* ───────────────────────── Stage 3 & 4: Correlation & Recommendations ───────────────────────── */
+
+export type DiagnosisCorrelationRow = {
+  diagnosis_group: string;
+  inventory_item_id: string;
+  item_name: string | null;
+  case_count_current_month: number;
+  case_count_prior_month: number;
+  case_trend_pct: number | null;
+  item_usage_count: number;
+  co_occurrence_cases: number;
+  total_cases_for_group_90d: number;
+  total_cases_with_item_90d: number;
+  total_cases_90d: number;
+  confidence_pct: number | null;
+  lift_score: number | null;
+  last_refreshed_at: string;
+};
+
+export function useDiagnosisCorrelation(opts: { minLift?: number; includeUnlinked?: boolean } = {}) {
+  const { minLift = 0, includeUnlinked = false } = opts;
+  return useQuery({
+    queryKey: ['procurement', 'correlation', { minLift, includeUnlinked }],
+    queryFn: async (): Promise<DiagnosisCorrelationRow[]> => {
+      const { data, error } = await supabase
+        .from('v_diagnosis_stock_correlation' as never)
+        .select('*');
+      if (error) throw error;
+      const rows = ((data ?? []) as unknown as DiagnosisCorrelationRow[])
+        .filter((r) => includeUnlinked || r.diagnosis_group !== '__UNLINKED__')
+        .filter((r) => (r.lift_score ?? 0) >= minLift)
+        .sort((a, b) => (b.lift_score ?? -1) - (a.lift_score ?? -1));
+      return rows;
+    },
+    staleTime: 60_000,
+  });
+}
+
+export function useRefreshCorrelation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc('refresh_diagnosis_correlation' as never);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['procurement', 'correlation'] });
+      qc.invalidateQueries({ queryKey: ['procurement', 'movement-stats'] });
+    },
+  });
+}
+
+export type UrgentRec = {
+  kind: 'urgent';
+  item_id: string;
+  item_name: string;
+  days_cover: number;
+  avg_daily_usage: number;
+  current_stock: number;
+  suggested_qty: number;
+};
+export type SurgeRec = {
+  kind: 'surge';
+  item_id: string;
+  item_name: string;
+  diagnosis_group: string;
+  trend_pct: number;
+  lift_score: number;
+  days_cover: number | null;
+  suggested_qty: number;
+};
+export type OverstockRec = {
+  kind: 'overstock';
+  item_id: string;
+  item_name: string;
+  current_stock: number;
+};
+export type Recommendations = { urgent: UrgentRec[]; surge: SurgeRec[]; overstock: OverstockRec[] };
+
+export function useProcurementRecommendations(): {
+  data: Recommendations;
+  isLoading: boolean;
+} {
+  const { data: stats = [], isLoading: a } = useProcurementStats();
+  const { data: corr = [], isLoading: b } = useDiagnosisCorrelation({ minLift: 1.5 });
+
+  const urgent: UrgentRec[] = stats
+    .filter((s) => s.movement_status === 'fast' && s.days_cover != null && Number(s.days_cover) < 7)
+    .map((s) => ({
+      kind: 'urgent',
+      item_id: s.item_id,
+      item_name: s.name,
+      days_cover: Number(s.days_cover),
+      avg_daily_usage: Number(s.avg_daily_usage),
+      current_stock: Number(s.current_stock),
+      suggested_qty: Math.max(
+        Math.ceil(Number(s.avg_daily_usage) * 30) - Number(s.current_stock),
+        1,
+      ),
+    }));
+
+  const statsById = new Map(stats.map((s) => [s.item_id, s]));
+  const surge: SurgeRec[] = corr
+    .filter((c) => (c.case_trend_pct ?? 0) > 20 && (c.lift_score ?? 0) > 1.5)
+    .map((c) => {
+      const s = statsById.get(c.inventory_item_id);
+      const dc = s?.days_cover == null ? null : Number(s.days_cover);
+      if (dc == null || dc >= 30) return null;
+      return {
+        kind: 'surge' as const,
+        item_id: c.inventory_item_id,
+        item_name: c.item_name ?? s?.name ?? '—',
+        diagnosis_group: c.diagnosis_group,
+        trend_pct: Number(c.case_trend_pct),
+        lift_score: Number(c.lift_score),
+        days_cover: dc,
+        suggested_qty: Math.max(Math.ceil(Number(s?.avg_daily_usage ?? 0) * 30) - Number(s?.current_stock ?? 0), 1),
+      };
+    })
+    .filter((x): x is SurgeRec => x !== null);
+
+  const overstock: OverstockRec[] = stats
+    .filter((s) => s.movement_status === 'dead' && Number(s.current_stock) > 0)
+    .map((s) => ({
+      kind: 'overstock',
+      item_id: s.item_id,
+      item_name: s.name,
+      current_stock: Number(s.current_stock),
+    }));
+
+  return { data: { urgent, surge, overstock }, isLoading: a || b };
+}
