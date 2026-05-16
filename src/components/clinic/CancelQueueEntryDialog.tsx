@@ -17,6 +17,7 @@ import { useCancelQueueEntry } from '@/hooks/clinic/useQueueEntries';
 import { usePatientVitalHistory } from '@/hooks/clinic/useVitalSigns';
 import { checkRedFlagVitals } from '@/lib/clinic/redFlagVitals';
 import type { QueueEntryWithJoins } from '@/types/clinic';
+import { formatQueueNo } from '@/lib/clinic/queueNumber';
 
 const REASONS = [
   'LWBS (Left Without Being Seen)',
@@ -79,7 +80,7 @@ export function CancelQueueEntryDialog({ open, onOpenChange, entry }: Props) {
             <span className="font-medium text-foreground">
               {entry?.patients?.name ?? 'Unknown patient'}
             </span>{' '}
-            · Queue #{entry?.queue_number ?? '—'}
+            · Queue {formatQueueNo(entry?.created_at, entry?.queue_sequence)}
             <br />
             This is a terminal action. The visit will leave the live board and appear in
             <span className="font-medium"> Recently Cancelled </span>

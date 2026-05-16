@@ -56,7 +56,7 @@ export function usePayments(queueEntryId: string | undefined) {
 export type LedgerPayment = PaymentRow & {
   queue_entries: {
     id: string;
-    queue_number: number | null;
+    queue_sequence: number | null;
     clinic_status: string;
     created_at: string;
     patient_id: string;
@@ -75,7 +75,7 @@ export function usePaymentsLedger(fromISO: string, toISO: string) {
           `
           *,
           queue_entries (
-            id, queue_number, clinic_status, created_at, patient_id,
+            id, queue_sequence, clinic_status, created_at, patient_id,
             patients ( name, phone )
           )
         `,

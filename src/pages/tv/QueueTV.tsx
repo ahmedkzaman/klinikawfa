@@ -81,7 +81,7 @@ export default function QueueTV() {
           const { data, error } = await supabase
             .from('queue_entries')
             .select(
-              'id, queue_number, queue_sequence, created_at, patients:patient_id(name), rooms:assigned_room_id(label)',
+              'id, queue_sequence, created_at, patients:patient_id(name), rooms:assigned_room_id(label)',
             )
             .eq('id', id)
             .maybeSingle();

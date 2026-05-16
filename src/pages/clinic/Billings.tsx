@@ -17,13 +17,14 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { usePaymentsLedger } from '@/hooks/clinic/usePayments';
+import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import type { ConsultationRow, ConsultationItemRow } from '@/types/clinic';
 
 type TabKey = 'paid' | 'panel' | 'self_pay';
 
 interface LedgerEntry {
   queueEntryId: string;
-  queueNumber: number | null;
+  queueLabel: string;
   patientName: string;
   createdAt: string;
   clinicStatus: string;
@@ -136,7 +137,7 @@ export default function Billings() {
       } else {
         byQueue.set(qe.id, {
           queueEntryId: qe.id,
-          queueNumber: qe.queue_number,
+          queueLabel: formatQueueNo(qe.created_at, qe.queue_sequence),
           patientName: qe.patients?.name ? toMalayTitleCase(qe.patients.name) : '—',
           createdAt: qe.created_at,
           clinicStatus: qe.clinic_status,
@@ -295,7 +296,7 @@ export default function Billings() {
                 className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_80px] gap-2 px-4 py-3 border-b border-slate-100 last:border-0 items-center hover:bg-slate-50/60 transition-colors"
               >
                 <span className="text-sm tabular-nums text-slate-600">
-                  #{e.queueNumber ?? '—'}
+                  {e.queueLabel}
                 </span>
                 <span className="text-sm font-medium text-slate-800 truncate">
                   {e.patientName}

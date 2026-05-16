@@ -11,6 +11,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { toMalayTitleCase } from '@/lib/textCase';
+import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import {
   Sheet,
   SheetContent,
@@ -155,7 +156,7 @@ function VisitRow({ row }: { row: PatientVisitHistoryRow }) {
             </span>
             <span>·</span>
             <span className="font-mono">
-              #{row.queue_number ?? '—'}
+              {formatQueueNo(row.created_at, row.queue_sequence)}
             </span>
             {attachmentCount > 0 && (
               <Badge

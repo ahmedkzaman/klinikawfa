@@ -28,6 +28,7 @@ import { useCurrentDoctor } from '@/hooks/clinic/useCurrentDoctor';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import type { ClinicStatus } from '@/types/clinic';
+import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { cn } from '@/lib/utils';
 import {
   bento,
@@ -306,7 +307,7 @@ export default function Consultation() {
                       </div>
                     </TableCell>
                     <TableCell className="font-mono text-sm text-slate-600">
-                      {entry.queue_number ?? i + 1}
+                      {formatQueueNo(entry.created_at, entry.queue_sequence)}
                     </TableCell>
                     <TableCell className="text-sm text-slate-600">
                       {format(new Date(entry.created_at), 'dd/MM/yy HH:mm')}
