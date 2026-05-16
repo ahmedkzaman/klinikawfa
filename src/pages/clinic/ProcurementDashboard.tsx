@@ -228,6 +228,12 @@ export default function ProcurementDashboard() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* CORRELATION */}
+        <TabsContent value="correlation"><CorrelationTab /></TabsContent>
+
+        {/* PLANNING */}
+        <TabsContent value="planning"><PlanningTab /></TabsContent>
       </Tabs>
     </div>
   );
