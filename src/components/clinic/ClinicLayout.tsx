@@ -21,6 +21,7 @@ import {
   Trash2,
   PackageX,
   ClipboardList,
+  Activity,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -48,6 +49,7 @@ const clinicNavItems: ClinicNavItem[] = [
   { href: '/clinic/panel-claims', label: 'Panel Claims', icon: FileText },
   { href: '/clinic/receivables', label: 'Receivables', icon: Briefcase },
   { href: '/clinic/procurement', label: 'Procurement', icon: ShoppingCart },
+  { href: '/clinic/procurement-dashboard', label: 'Procurement Dashboard', icon: Activity },
   { href: '/clinic/voided', label: 'Voided Records', icon: Trash2, specialAdminOnly: true },
   { href: '/clinic/insight', label: 'Insight', icon: LineChart, adminOnly: true },
   { href: '/clinic/settings', label: 'Settings', icon: Settings },
