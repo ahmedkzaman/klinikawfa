@@ -202,7 +202,7 @@ export default function DispenseCheckout() {
               {patient?.name ?? 'Unknown patient'}
             </h1>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mt-0.5">
-              Queue #{entry.queue_number ?? '—'} · Checkout
+              Queue {formatQueueNo(entry.created_at, entry.queue_sequence)} · Checkout
             </p>
           </div>
           <StatusBadge status={entry.clinic_status} />

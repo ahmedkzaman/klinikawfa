@@ -1131,7 +1131,7 @@ export default function ConsultationDetail() {
                     </div>
                   </div>
                   <span className="rounded-xl bg-blue-50 text-blue-700 font-mono text-base px-2.5 py-1 shrink-0">
-                    Q{entry.queue_number ?? '—'}
+                    {formatQueueNo(entry.created_at, entry.queue_sequence)}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm text-slate-600">

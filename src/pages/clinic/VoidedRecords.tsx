@@ -18,6 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { fetchVoided, type SoftDeletableTable } from '@/lib/clinic/softDelete';
 import { cn } from '@/lib/utils';
 import { bento, pageInner, pageShell } from '@/lib/clinic/bentoTokens';
+import { formatQueueNo } from '@/lib/clinic/queueNumber';
 
 const TABS: Array<{ key: SoftDeletableTable; label: string; entity: string }> = [
   { key: 'consultations', label: 'Consultations', entity: 'consultations' },
@@ -86,13 +87,14 @@ function VoidedTable({ table, entity }: { table: SoftDeletableTable; entity: str
     );
   }
 
+  const isQueueEntries = 'queue_sequence' in (rows[0] ?? {}) || 'queue_number' in (rows[0] ?? {});
   const labelKey =
     'item_name' in (rows[0] ?? {})
       ? 'item_name'
       : 'amount' in (rows[0] ?? {})
         ? 'amount'
-        : 'queue_number' in (rows[0] ?? {})
-          ? 'queue_number'
+        : isQueueEntries
+          ? 'queue_sequence'
           : 'diagnosis_text' in (rows[0] ?? {})
             ? 'diagnosis_text'
             : 'id';
@@ -117,13 +119,21 @@ function VoidedTable({ table, entity }: { table: SoftDeletableTable; entity: str
           <TableBody>
             {rows.map((r) => {
               const ref = r[labelKey];
+              const display = isQueueEntries
+                ? formatQueueNo(
+                    (r as { created_at?: string | null }).created_at ?? null,
+                    (r as { queue_sequence?: number | null }).queue_sequence ?? null,
+                  )
+                : typeof ref === 'string' || typeof ref === 'number'
+                  ? String(ref)
+                  : '—';
               return (
                 <TableRow
                   key={r.id}
                   className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60"
                 >
                   <TableCell className="max-w-xs truncate text-slate-800">
-                    {typeof ref === 'string' || typeof ref === 'number' ? String(ref) : '—'}
+                    {display}
                   </TableCell>
                   <TableCell className="text-slate-600">
                     {r.deleted_at ? (

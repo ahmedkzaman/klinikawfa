@@ -33,7 +33,7 @@ export interface PatientVisitConsultation {
 export interface PatientVisitHistoryRow {
   id: string;
   created_at: string;
-  queue_number: number | null;
+  queue_sequence: number | null;
   clinic_status: ClinicStatus;
   visit_notes: string | null;
   consultations:
@@ -59,7 +59,7 @@ export function usePatientVisitHistory(patientId: string | null) {
         .from('queue_entries')
         .select(
           `
-          id, created_at, queue_number, clinic_status, visit_notes,
+          id, created_at, queue_sequence, clinic_status, visit_notes,
           consultations:consultations!consultations_queue_entry_id_fkey (
             id, doctor_id, diagnosis_text, case_note, dispense_note,
             doctors:doctor_id ( id, name ),
