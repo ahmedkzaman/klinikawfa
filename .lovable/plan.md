@@ -1,40 +1,36 @@
-# Reorganize Settings Page into Sections
+## Goal
 
-Refactor `src/pages/clinic/settings/SettingsPage.tsx` so the existing 12 cards are split into three labelled groups, each preceded by a section heading and separated by a horizontal divider. No card is added, removed, or renamed — only the layout changes.
+The patient profile sheet currently shows visits as `#1017`, `#1015`, `#1014` — the old raw `queue_number` integer. The project standard (already used on QueueBoard) is `formatQueueNo(created_at, queue_sequence)` which renders `260516-01`. Make every screen use the new format and remove all remaining references to the legacy `queue_number` integer in the UI.
 
-## Proposed grouping
+## Files to change
 
-Mapping the user's intended sections to the actual cards in the project:
+**1. Fix the screen in the screenshot**
+- `src/components/patients/PatientProfileSheet.tsx` — replace `#{row.queue_number ?? '—'}` with `formatQueueNo(row.created_at, row.queue_sequence)`.
+- `src/hooks/patients/usePatientVisitHistory.ts` — extend the select list and TypeScript row type to include `queue_sequence`.
 
-**General & Access**
-- Clinic Profile
-- General Preferences
-- User Management
+**2. Other UI surfaces using the old format**
+- `src/pages/clinic/ConsultationDetail.tsx` (`Q{entry.queue_number}`) → `formatQueueNo(entry.created_at, entry.queue_sequence)`
+- `src/pages/clinic/DispenseCheckout.tsx` (`Queue #{entry.queue_number}`) → same
+- `src/pages/clinic/VisitDetail.tsx` (`Queue #{entry.queue_number}`) → same
+- `src/pages/clinic/Consultation.tsx` line 309 (`{entry.queue_number ?? i + 1}`) → same
+- `src/pages/clinic/Billings.tsx` line 139 (passes `queueNumber` into row) → swap to formatted string; verify downstream column rendering.
+- `src/pages/clinic/VoidedRecords.tsx` line 94-95 (uses `queue_number` for display sort) → switch to formatted string built from `created_at + queue_sequence`.
+- `src/components/clinic/CancelQueueEntryDialog.tsx` line 82 → same.
 
-**Clinical & Operations**
-- Inventory & Services
-- Diagnosis Sweeper
-- Panels & Insurance
-- Drug Label
-- Queue & TV
+**3. Hooks supplying the data**
+- `src/hooks/clinic/usePayments.ts` — already selects `created_at`; add `queue_sequence` to select and type so `Billings.tsx` can format.
+- Any other consumer that reads `queue_number` for display must also pull `queue_sequence` + `created_at`.
 
-**System & Billing**
-- Other Charges
-- Document & Print
-- Document Templates
-- Voided Records
+**4. Cleanup**
+- After the swap, the `queue_number` column itself is no longer used in the UI. Leave the DB column intact (legacy data / audit), but remove `queue_number` fields from the TypeScript row interfaces of the hooks above so future code can't accidentally use it for display. (No DB migration.)
 
-## Implementation
+## Out of scope
 
-- Extend `SettingsCard` with a `group: 'access' | 'clinical' | 'system'` field.
-- Define an ordered `SECTIONS` array: `[{ key, title, description }]` for the three groups.
-- After filtering visible cards, render each section as:
-  - A heading row (`h2` + small muted description)
-  - The existing 3-column responsive grid scoped to that section's cards
-  - A `<Separator />` (from `@/components/ui/separator`) between sections (not after the last)
-- Skip an entire section if it has zero visible cards (so RBAC-hidden cards don't leave empty headings).
-- Keep all existing styling tokens (`pageShell`, `pageInner`, `bento`, hover transitions, icon colors).
+- The DB `queue_number` column and the `get_next_queue_number` RPC remain (they back `queue_sequence` generation and historical records).
+- Printed slips / receipts are not in this change unless they currently render `queue_number`; will verify during implementation and include if found.
 
-## Open question
+## Verification
 
-The user named three sections but the project has 12 cards — I've placed each card in the section that best matches its function. If they want a different mapping (e.g. Drug Label under "System & Billing", or Voided Records under "Clinical"), confirm before I implement.
+- Reopen the patient sheet — visits should read like `260516-01` instead of `#1017`.
+- Spot-check Consultation, Dispense Checkout, Visit Detail, Billings, Voided Records, and Cancel dialog: all show the new format.
+- `rg "queue_number" src` should return only hook/DB-layer references, not JSX.
