@@ -874,6 +874,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "clinic_package_items_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_inventory_movement_stats"
+            referencedColumns: ["item_id"]
+          },
+          {
             foreignKeyName: "clinic_package_items_package_id_fkey"
             columns: ["package_id"]
             isOneToOne: false
@@ -1254,6 +1261,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "inventory_items_safe"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultation_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "v_inventory_movement_stats"
+            referencedColumns: ["item_id"]
           },
           {
             foreignKeyName: "consultation_items_package_id_fkey"
@@ -1975,6 +1989,13 @@ export type Database = {
             referencedRelation: "inventory_items_safe"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "inventory_adjustments_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_inventory_movement_stats"
+            referencedColumns: ["item_id"]
+          },
         ]
       }
       inventory_item_batches: {
@@ -2039,6 +2060,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "inventory_item_batches_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_inventory_movement_stats"
+            referencedColumns: ["item_id"]
+          },
+          {
             foreignKeyName: "inventory_item_batches_po_id_fkey"
             columns: ["po_id"]
             isOneToOne: false
@@ -2083,6 +2111,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "inventory_items_safe"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_item_prices_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "v_inventory_movement_stats"
+            referencedColumns: ["item_id"]
           },
         ]
       }
@@ -2338,6 +2373,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "inventory_transactions_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_inventory_movement_stats"
+            referencedColumns: ["item_id"]
+          },
+          {
             foreignKeyName: "inventory_transactions_patient_id_fkey"
             columns: ["patient_id"]
             isOneToOne: false
@@ -2508,6 +2550,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "inventory_items_safe"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_items_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_inventory_movement_stats"
+            referencedColumns: ["item_id"]
           },
           {
             foreignKeyName: "package_items_package_id_fkey"
@@ -2752,6 +2801,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "inventory_items_safe"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_price_overrides_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "v_inventory_movement_stats"
+            referencedColumns: ["item_id"]
           },
           {
             foreignKeyName: "panel_price_overrides_package_id_fkey"
@@ -3116,6 +3172,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "pharmacy_owe_slips_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_inventory_movement_stats"
+            referencedColumns: ["item_id"]
+          },
+          {
             foreignKeyName: "pharmacy_owe_slips_patient_id_fkey"
             columns: ["patient_id"]
             isOneToOne: false
@@ -3322,6 +3385,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "inventory_items_safe"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_order_items_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_inventory_movement_stats"
+            referencedColumns: ["item_id"]
           },
           {
             foreignKeyName: "purchase_order_items_po_id_fkey"
@@ -3557,6 +3627,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "inventory_items_safe"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "restock_requests_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_inventory_movement_stats"
+            referencedColumns: ["item_id"]
           },
         ]
       }
@@ -4241,6 +4318,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "inventory_items_safe"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_take_counts_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "v_inventory_movement_stats"
+            referencedColumns: ["item_id"]
           },
           {
             foreignKeyName: "stock_take_counts_stock_take_id_fkey"
@@ -5036,6 +5120,21 @@ export type Database = {
           price_to_patient?: number | null
           status?: string | null
           type?: string | null
+        }
+        Relationships: []
+      }
+      v_inventory_movement_stats: {
+        Row: {
+          avg_daily_usage: number | null
+          current_stock: number | null
+          days_cover: number | null
+          item_id: string | null
+          last_dispensed_at: string | null
+          movement_status: string | null
+          name: string | null
+          reorder_level: number | null
+          used_30d: number | null
+          used_90d: number | null
         }
         Relationships: []
       }
