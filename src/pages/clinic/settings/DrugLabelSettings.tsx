@@ -1,4 +1,4 @@
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Pencil } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -11,13 +11,14 @@ import {
   useUpdateDrugLabelSettings,
   type DrugLabelSettings,
 } from '@/hooks/clinic/useDrugLabelSettings';
+import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { cn } from '@/lib/utils';
 import { bento, bentoHeader, pageInner, pageShell } from '@/lib/clinic/bentoTokens';
 
-const PREVIEW = {
-  clinic: 'Klinik Awfa',
-  tel: '+60 18-252 3531',
-  address: 'B2 & B4, Jalan IM 16/1, Kota SAS, 25200 Kuantan, Pahang',
+// Dummy patient / medication data — clinic identity is pulled live from
+// `clinic_settings` (Settings → Clinic Profile) so the preview always
+// matches what will actually print.
+const PREVIEW_FILLER = {
   patient: 'Ali Bin Abu',
   ageGender: '34 / M',
   med: 'PARACETAMOL 500MG TABLET',
