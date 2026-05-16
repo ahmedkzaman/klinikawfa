@@ -323,7 +323,7 @@ function CorrelationTab() {
               <AlertTitle>Ungrouped diagnoses detected</AlertTitle>
               <AlertDescription className="flex items-center justify-between gap-2">
                 <span>{uncategorized} row(s) fall under "Uncategorized". Curate them in the Diagnosis Sweeper for sharper insights.</span>
-                <Button asChild size="sm" variant="link"><Link to="/clinic/settings/diagnosis-sweeper">Open Sweeper</Link></Button>
+                <Button asChild size="sm" variant="link"><Link to="/clinic/settings/diagnoses">Open Sweeper</Link></Button>
               </AlertDescription>
             </Alert>
           )}
