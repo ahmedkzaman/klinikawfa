@@ -1,71 +1,76 @@
-## Procurement Dashboard — Stage 1 & 2
+# Procurement Intelligence — Stage 3 & 4
 
-### Key architectural decision
+Builds the diagnosis↔stock correlation engine and rule-based purchase planning UI on top of the Stage 1 movement view.
 
-The project **already has a complete movement ledger**: `public.inventory_transactions`, with all required movement types (`restock`, `dispense`, `adjustment`, `return`, `write-off`, `expire`, `owe_slip_fulfilled`), batch linkage, consultation/patient linkage, performed_by, and an index on `(inventory_item_id, created_at DESC)`. It is already wired into dispensing via `commit_inventory_fefo()` and `trg_consultations_inventory`, so every dispense, batch adjustment, restock and expiry already writes a row.
+## Architectural guardrails
 
-**We will NOT create a parallel `stock_movements` table.** Doing so would duplicate state, break the existing FEFO/owe-slip flow, and require re-wiring Dispensary, RestockReview, and batch adjustment hooks. Instead we treat `inventory_transactions` as the canonical ledger and build the dashboard + classification on top of it. This is the single biggest deviation from the brief, and it's the safe one.
+- **Unlinked leakage** — all aggregations use `LEFT JOIN consultations → diagnoses`. Rows with no consultation, no diagnosis, or a soft-deleted consultation fall into a synthetic `__UNLINKED__` bucket so totals always reconcile with physical stock.
+- **No live lift math** — confidence/lift live in a materialized view refreshed nightly (and on-demand). React only reads.
+- **Diagnosis grouping** — reuse existing `diagnoses.group_category` column (no new table). Raw `Uncategorized` rows surface a callout linking to the Diagnosis Sweeper.
 
-The brief's `balance_after` column is also omitted — it's derivable from `inventory_items.stock` + a running sum, and storing it would create drift risk with the existing FEFO trigger. If needed later, we'll expose it as a SQL view.
+## 1. Database migration
 
-### Stage 1 — Server-side aggregation (SQL view)
+### Materialized view `public.mv_diagnosis_stock_correlation`
 
-Stage 4 will need lift/correlation math; we set the pattern now by computing classification in Postgres, not React. A single read-only view does the heavy lifting and the React hook just selects from it.
+Columns: `diagnosis_group`, `inventory_item_id`, `item_name`, `case_count_current_month`, `case_count_prior_month`, `case_trend_pct`, `item_usage_count`, `co_occurrence_cases`, `total_cases_for_group_90d`, `total_cases_with_item_90d`, `total_cases_90d`, `confidence_pct`, `lift_score`, `last_refreshed_at`.
 
-Migration creates `public.v_inventory_movement_stats`:
-- One row per active `inventory_items` row
-- Columns: `item_id`, `name`, `current_stock`, `reorder_level`, `used_30d`, `used_90d`, `avg_daily_usage` (= used_90d / 90), `days_cover` (NULL when avg=0, meaning "infinite"), `movement_status` ('fast' | 'normal' | 'slow' | 'dead'), `last_dispensed_at`
-- Source: aggregate `inventory_transactions` where `transaction_type = 'dispense'` and `qty_change < 0` over the windows
-- `security_invoker = on` so existing RLS on `inventory_transactions` and `inventory_items` applies
+- Source: `inventory_transactions` filtered to `transaction_type='dispense'` over last 90 days, `LEFT JOIN consultations LEFT JOIN diagnoses`, grouped by `COALESCE(diagnoses.group_category, '__UNLINKED__')`.
+- Bucket totals computed in CTEs (not recalculated per row).
+- Indexes: `(diagnosis_group)`, `(inventory_item_id)`, UNIQUE `(diagnosis_group, inventory_item_id)` to enable `REFRESH … CONCURRENTLY`.
 
-Classification rules (per brief, plus a "dead" tier for zero-usage so the Slow bucket isn't overloaded):
-- **fast**: `days_cover < 30 AND used_30d > 0`
-- **dead**: `used_90d = 0`
-- **slow**: `days_cover > 90` (and not dead)
-- **normal**: everything else
+### RPC `public.refresh_diagnosis_correlation()`
+SECURITY DEFINER, gated by `is_ops_or_admin`. Runs `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_diagnosis_stock_correlation`.
 
-### Stage 2 — UI
+### Wrapper view `public.v_diagnosis_stock_correlation`
+Standard view with `security_invoker = on` selecting from the MV, filtered by `is_ops_or_admin(auth.uid())`. Only the wrapper is granted to `authenticated` (MVs cannot enforce RLS).
 
-**Route:** `/clinic/procurement-dashboard` (the existing `/clinic/procurement` is the PO/supplier screen — keep both, don't collide). Gated by `is_ops_or_admin` via `ClinicProtectedRoute`.
+### Parity check
+Migration logs a `NOTICE` comparing `SUM(item_usage_count)` in the MV vs raw dispense ledger over 90d so we can confirm the LEFT JOIN reconciles.
 
-**New files:**
-- `src/hooks/clinic/useProcurementStats.ts` — `useProcurementStats()` selects from the view; `useStockMovements({ limit, itemId? })` selects from `inventory_transactions` joined to `inventory_items(name)`.
-- `src/pages/clinic/ProcurementDashboard.tsx` — Tabs UI matching existing `Procurement.tsx` style.
+`pg_cron` schedule is deferred — manual "Refresh Now" button validated first, then set up the 02:00 MYT cron afterwards.
 
-**Tab 1 — Overview**
-- 4 KPI cards: Total Active Items, Fast Moving, Slow/Dead, Critical Low Stock (current_stock ≤ reorder_level).
-- Table: Item, Current Stock, Used 30d, Used 90d, Avg/day, Days Cover (`∞` when null), Status badge. Sortable, search by name, filter by status.
+## 2. Hooks — `src/hooks/clinic/useProcurementStats.ts` (additive)
 
-**Tab 2 — Movement Ledger**
-- Table from `inventory_transactions` desc by `created_at`: Date/time, Item, Type (badge color by type), Qty Change (green +/red −), Reason/notes, Performed by.
-- Filters: date range, item, type. Pagination 50/page.
+- `useDiagnosisCorrelation({ minLift = 0, includeUnlinked = false })` — selects from `v_diagnosis_stock_correlation`, sorted `lift_score DESC NULLS LAST`.
+- `useRefreshCorrelation()` — mutation calling the RPC; invalidates correlation + recommendations.
+- `useProcurementRecommendations()` — client-side join of `useProcurementStats()` + `useDiagnosisCorrelation()` returning:
+  - `urgent`: `days_cover < 7 && movement_status === 'fast'`
+  - `surge`: `case_trend_pct > 20 && lift_score > 1.5 && days_cover < 30`
+  - `overstock`: `movement_status === 'dead' && current_stock > 0`
 
-**Sidebar:** add "Procurement Dashboard" link under the existing Procurement section.
+## 3. UI — two new tabs in `ProcurementDashboard.tsx`
 
-### Stage "wire dispensary"
+### Tab 3 — Diagnosis Correlation
+- Header: last-refreshed timestamp + "Refresh Now" (admin only).
+- Alert (when any `Uncategorized` rows exist): "X diagnoses need grouping" → links to Diagnosis Sweeper.
+- Filters: "Hide low-lift (< 1.2)" (default ON), "Include unlinked usage" (default OFF).
+- Table: Diagnosis Group · Cases (current with ↑/↓ %) · Top Item · Confidence % · Lift Score badge (≥2 red, ≥1.5 amber, <1 muted).
 
-No code change needed. The existing `commit_inventory_fefo()` trigger already inserts a `dispense` row with negative `qty_change` for every dispensed item, including consultation_item_id, consultation_id, patient_id, batch_id, and performed_by. Manual adjustments (`adjust_inventory_batch`), restocks (`add_inventory_batch`), and expiries (`expire_inventory_batches`) likewise already log. Verification step only.
+### Tab 4 — Purchase Planning
+Three stacked sections rendering recommendation cards:
+- **Urgent** 🚨 `{Item} — {days_cover}d cover. Reorder ~{ceil(avg_daily_usage*30) − current_stock} units.` + "Create PO" → `/clinic/procurement?prefillItem={id}&qty={n}`.
+- **Surge** 📈 `{Group} up {X}%. High correlation to {Item} (Lift {L}). Recommend increasing par level.` + "Create PO".
+- **Overstock** 🧊 `{Item} is Dead (0 usage 90d) but has {stock} left. Monitor expiry {nearest_expiry_date}.`
 
-### Files touched
+Empty states per section. No edits to Stage 1 view, ledger tab, or dispensing flow.
 
-```text
-supabase migration         # create view v_inventory_movement_stats
-src/App.tsx                # add route /clinic/procurement-dashboard
-src/components/clinic/ClinicLayout.tsx   # add sidebar link (verify file)
-src/hooks/clinic/useProcurementStats.ts  # NEW
-src/pages/clinic/ProcurementDashboard.tsx # NEW
-```
+## 4. Verification
 
-### Out of scope (deferred to later stages)
+- `SUM(item_usage_count)` in MV ≈ `SUM(|qty_change|)` in raw dispense ledger (90d).
+- Items never linked to a consultation still appear under `__UNLINKED__` when the toggle is on.
+- Deleting recent URTI consultations + refresh → group drops out of Surge.
+- Refresh latency <2s on current data volume; Tab 3 query <300ms.
 
-- Lift/correlation between diagnoses and dispensed items (Stage 3/4).
-- Auto-PO suggestions from days-cover (Stage 3).
-- Predictive forecasting / seasonality (Stage 4).
-- `balance_after` column — derivable, not stored.
+## Files
 
-### Verification
+- New migration (MV + wrapper view + RPC + indexes + parity NOTICE).
+- Edit `src/hooks/clinic/useProcurementStats.ts` (additive only).
+- Edit `src/pages/clinic/ProcurementDashboard.tsx` (two new tabs).
+- Procurement page reads `?prefillItem=&qty=` on mount — minimal change to surface the deep-link; full PO prefill polish deferred to Stage 5 if more is needed.
 
-1. Open `/clinic/procurement-dashboard` as ops → see KPIs and table populated from real data.
-2. Dispense an item in checkout → refresh Movement Ledger → new `dispense` row with negative qty appears immediately.
-3. Item with heavy recent dispensing flips to red "Fast" badge; item with no 90-day usage shows "Dead".
-4. Item with `avg_daily_usage = 0` shows `∞` days cover, no crash.
+## Out of scope
+
+- `pg_cron` schedule registration (do manually after MV validated).
+- Statistical significance gating beyond raw lift threshold.
+- Forecasting / seasonality (Stage 5).
+- Per-doctor prescribing variance.
