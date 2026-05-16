@@ -1,15 +1,27 @@
 import { useMemo, useState } from 'react';
-import { format } from 'date-fns';
-import { Activity, AlertTriangle, Package, TrendingUp, TrendingDown } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { format, formatDistanceToNow } from 'date-fns';
+import {
+  Activity, AlertTriangle, ArrowDown, ArrowUp, Minus, Package, RefreshCw,
+  Snowflake, TrendingUp, TrendingDown, Zap,
+} from 'lucide-react';
+import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   useProcurementStats,
   useStockMovements,
+  useDiagnosisCorrelation,
+  useRefreshCorrelation,
+  useProcurementRecommendations,
   type MovementStatus,
   type InventoryTxType,
 } from '@/hooks/clinic/useProcurementStats';
