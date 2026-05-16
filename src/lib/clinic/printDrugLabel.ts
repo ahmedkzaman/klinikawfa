@@ -1,6 +1,19 @@
 import jsPDF from 'jspdf';
 import { format } from 'date-fns';
-import { CLINIC_INFO } from '@/lib/constants';
+import type { DrugLabelSettings } from '@/hooks/clinic/useDrugLabelSettings';
+
+/**
+ * Clinic identity printed at the top of every label. Values come from
+ * `clinic_settings` (Settings → Clinic Profile) and are passed in by the
+ * caller, so the marketing-site `CLINIC_INFO` constant never sneaks onto a
+ * physical label.
+ */
+export interface ClinicLabelInfo {
+  name: string;
+  addressFull: string;
+  phone: string;
+}
+
 import type { DrugLabelSettings } from '@/hooks/clinic/useDrugLabelSettings';
 
 /**
