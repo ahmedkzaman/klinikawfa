@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Upload, Save, Loader2, Trash2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Upload, Save, Loader2, Trash2, Info, Building2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,11 +16,6 @@ export default function DocumentSettings() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
-    clinic_name: settings.clinic_name,
-    address_line_1: settings.address_line_1,
-    address_line_2: settings.address_line_2,
-    phone: settings.phone,
-    email: settings.email,
     logo_url: settings.logo_url,
     logo_height_px: settings.logo_height_px,
     letterhead_text_px: settings.letterhead_text_px,
@@ -33,11 +29,6 @@ export default function DocumentSettings() {
   // sync when settings load
   useEffect(() => {
     setForm({
-      clinic_name: settings.clinic_name,
-      address_line_1: settings.address_line_1,
-      address_line_2: settings.address_line_2,
-      phone: settings.phone,
-      email: settings.email,
       logo_url: settings.logo_url,
       logo_height_px: settings.logo_height_px,
       letterhead_text_px: settings.letterhead_text_px,
@@ -165,52 +156,20 @@ export default function DocumentSettings() {
 
             <Separator />
 
-            {/* Text fields */}
-            <div className="grid gap-3">
-              <div className="grid gap-1.5">
-                <Label htmlFor="clinic_name">Clinic Name</Label>
-                <Input
-                  id="clinic_name"
-                  value={form.clinic_name}
-                  onChange={(e) => setForm({ ...form, clinic_name: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="addr1">Address Line 1</Label>
-                <Input
-                  id="addr1"
-                  value={form.address_line_1}
-                  onChange={(e) => setForm({ ...form, address_line_1: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="addr2">Address Line 2</Label>
-                <Input
-                  id="addr2"
-                  value={form.address_line_2}
-                  onChange={(e) => setForm({ ...form, address_line_2: e.target.value })}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-1.5">
-                  <Label htmlFor="phone">Phone</Label>
-                  <Input
-                    id="phone"
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  />
-                </div>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  />
+            {/* Clinic identity now lives in Clinic Profile — single source of truth */}
+            <Link
+              to="/clinic/settings/clinic-profile"
+              className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors p-3 text-sm"
+            >
+              <Building2 className="h-4 w-4 text-slate-500 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-slate-900">Clinic name, address, phone &amp; email</div>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  These are set in <span className="underline">Clinic Profile</span> and are used here, on drug labels, and on every printed document.
                 </div>
               </div>
-            </div>
+              <Info className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
+            </Link>
 
             <Separator />
 
@@ -370,12 +329,12 @@ export default function DocumentSettings() {
                     )}
                     <div style={{ fontSize: `${form.letterhead_text_px}px`, lineHeight: 1.25 }}>
                       <div className="font-bold" style={{ fontSize: `${Math.round(form.letterhead_text_px * 1.4)}px` }}>
-                        {form.clinic_name || 'Clinic Name'}
+                        {settings.clinic_name || 'Clinic Name'}
                       </div>
-                      <div className="text-slate-600">{form.address_line_1 || 'Address line 1'}</div>
-                      <div className="text-slate-600">{form.address_line_2 || 'Address line 2'}</div>
+                      <div className="text-slate-600">{settings.address_line_1 || 'Address line 1'}</div>
+                      <div className="text-slate-600">{settings.address_line_2 || 'Address line 2'}</div>
                       <div className="text-slate-600">
-                        {form.phone || 'Phone'} · {form.email || 'Email'}
+                        {settings.phone || 'Phone'} · {settings.email || 'Email'}
                       </div>
                     </div>
                   </div>

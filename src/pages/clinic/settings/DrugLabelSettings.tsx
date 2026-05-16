@@ -1,4 +1,4 @@
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Pencil } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -11,13 +11,14 @@ import {
   useUpdateDrugLabelSettings,
   type DrugLabelSettings,
 } from '@/hooks/clinic/useDrugLabelSettings';
+import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { cn } from '@/lib/utils';
 import { bento, bentoHeader, pageInner, pageShell } from '@/lib/clinic/bentoTokens';
 
-const PREVIEW = {
-  clinic: 'Klinik Awfa',
-  tel: '+60 18-252 3531',
-  address: 'B2 & B4, Jalan IM 16/1, Kota SAS, 25200 Kuantan, Pahang',
+// Dummy patient / medication data — clinic identity is pulled live from
+// `clinic_settings` (Settings → Clinic Profile) so the preview always
+// matches what will actually print.
+const PREVIEW_FILLER = {
   patient: 'Ali Bin Abu',
   ageGender: '34 / M',
   med: 'PARACETAMOL 500MG TABLET',
@@ -51,6 +52,15 @@ const TOGGLES: Array<{ key: keyof Omit<DrugLabelSettings, 'id' | 'updated_at'>; 
 export default function DrugLabelSettingsPage() {
   const { data: settings, isLoading } = useDrugLabelSettings();
   const update = useUpdateDrugLabelSettings();
+  const { settings: clinic } = useClinicSettings();
+  const clinicHeader = {
+    name: clinic.clinic_name || 'Klinik Awfa',
+    tel: clinic.phone || '',
+    address: [clinic.address_line_1, clinic.address_line_2]
+      .map((s) => (s ?? '').trim())
+      .filter(Boolean)
+      .join(', '),
+  };
 
   return (
     <div className={pageShell}>
@@ -116,10 +126,23 @@ export default function DrugLabelSettingsPage() {
           <div className="lg:sticky lg:top-4 self-start">
             <Card className={cn(bento, 'bg-slate-50')}>
               <CardContent className="p-6">
-                <h3 className={bentoHeader}>Drug Label Preview</h3>
-                <LabelPreview settings={settings} />
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className={bentoHeader}>Drug Label Preview</h3>
+                  <Button asChild variant="ghost" size="sm" className="h-7 text-xs text-slate-500 hover:text-slate-900">
+                    <Link to="/clinic/settings/clinic-profile">
+                      <Pencil className="h-3 w-3 mr-1" />
+                      Edit clinic details
+                    </Link>
+                  </Button>
+                </div>
+                <LabelPreview settings={settings} clinic={clinicHeader} />
                 <p className="mt-3 text-xs text-slate-400 text-center">
-                  Approximate 60 × 50 mm thermal label preview.
+                  Approximate 60 × 50 mm thermal label preview. Clinic name,
+                  address and phone come from{' '}
+                  <Link to="/clinic/settings/clinic-profile" className="underline hover:text-slate-600">
+                    Clinic Profile
+                  </Link>
+                  .
                 </p>
               </CardContent>
             </Card>
@@ -165,7 +188,13 @@ function PropertyRow({
   );
 }
 
-function LabelPreview({ settings }: { settings: DrugLabelSettings | null | undefined }) {
+function LabelPreview({
+  settings,
+  clinic,
+}: {
+  settings: DrugLabelSettings | null | undefined;
+  clinic: { name: string; tel: string; address: string };
+}) {
   const s = settings ?? {
     show_address: true,
     show_tel_number: true,
@@ -185,29 +214,31 @@ function LabelPreview({ settings }: { settings: DrugLabelSettings | null | undef
       >
         <div className="h-full w-full flex flex-col p-3 text-[10px] leading-tight">
           <div className="text-center">
-            <div className="font-bold text-[12px] uppercase tracking-wide">{PREVIEW.clinic}</div>
-            {s.show_tel_number && <div className="text-[9px] text-slate-500">Tel: {PREVIEW.tel}</div>}
-            {s.show_address && (
-              <div className="text-[9px] text-slate-500 leading-snug mt-0.5">{PREVIEW.address}</div>
+            <div className="font-bold text-[12px] uppercase tracking-wide">{clinic.name}</div>
+            {s.show_tel_number && clinic.tel && (
+              <div className="text-[9px] text-slate-500">Tel: {clinic.tel}</div>
+            )}
+            {s.show_address && clinic.address && (
+              <div className="text-[9px] text-slate-500 leading-snug mt-0.5">{clinic.address}</div>
             )}
           </div>
 
           <div className="border-t border-slate-200 my-2" />
 
           <div className="flex items-start justify-between gap-2">
-            <div className="font-bold text-[11px] uppercase flex-1 leading-tight">{PREVIEW.med}</div>
+            <div className="font-bold text-[11px] uppercase flex-1 leading-tight">{PREVIEW_FILLER.med}</div>
             <div className="text-right text-[9px] tabular-nums whitespace-nowrap">
-              {s.show_quantity && <div>QTY: {PREVIEW.qty}</div>}
-              {s.show_expiry_date && <div>EXP: {PREVIEW.expiry}</div>}
+              {s.show_quantity && <div>QTY: {PREVIEW_FILLER.qty}</div>}
+              {s.show_expiry_date && <div>EXP: {PREVIEW_FILLER.expiry}</div>}
             </div>
           </div>
 
-          <div className="text-center text-[10px] font-medium uppercase mt-2">{PREVIEW.instruction}</div>
+          <div className="text-center text-[10px] font-medium uppercase mt-2">{PREVIEW_FILLER.instruction}</div>
           {s.show_indication && (
-            <div className="text-center text-[9px] text-slate-500 mt-0.5">For: {PREVIEW.indication}</div>
+            <div className="text-center text-[9px] text-slate-500 mt-0.5">For: {PREVIEW_FILLER.indication}</div>
           )}
           {s.show_precaution && (
-            <div className="text-center text-[9px] italic text-slate-500 mt-0.5">{PREVIEW.precaution}</div>
+            <div className="text-center text-[9px] italic text-slate-500 mt-0.5">{PREVIEW_FILLER.precaution}</div>
           )}
 
           <div className="flex-1" />
@@ -215,14 +246,14 @@ function LabelPreview({ settings }: { settings: DrugLabelSettings | null | undef
 
           <div className="flex items-end justify-between gap-2">
             <div className="text-[9px]">
-              <div className="font-semibold text-[10px]">{PREVIEW.patient}</div>
-              <div className="text-slate-500">{PREVIEW.ageGender}</div>
+              <div className="font-semibold text-[10px]">{PREVIEW_FILLER.patient}</div>
+              <div className="text-slate-500">{PREVIEW_FILLER.ageGender}</div>
               {s.show_duration && (
-                <div className="text-slate-500 mt-0.5">Duration: {PREVIEW.duration}</div>
+                <div className="text-slate-500 mt-0.5">Duration: {PREVIEW_FILLER.duration}</div>
               )}
             </div>
             {s.show_date && (
-              <div className="text-[9px] text-slate-500 tabular-nums">Date: {PREVIEW.date}</div>
+              <div className="text-[9px] text-slate-500 tabular-nums">Date: {PREVIEW_FILLER.date}</div>
             )}
           </div>
         </div>
