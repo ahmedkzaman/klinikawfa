@@ -74,6 +74,7 @@ import Receivables from "./pages/clinic/Receivables";
 import VoidedRecords from "./pages/clinic/VoidedRecords";
 import Insight from "./pages/clinic/Insight";
 import SettingsPage from "./pages/clinic/settings/SettingsPage";
+import ClinicProfile from "./pages/clinic/settings/ClinicProfile";
 import InClinicSettings from "./pages/clinic/settings/InClinicSettings";
 import UserManagementSettings from "./pages/clinic/settings/UserManagementSettings";
 import InventorySettings from "./pages/clinic/settings/InventorySettings";
@@ -295,6 +296,14 @@ const App = () => (
                   element={
                     <ClinicProtectedRoute requiredRole="ops_or_admin">
                       <SettingsPage />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
+                  path="settings/clinic-profile"
+                  element={
+                    <ClinicProtectedRoute requiredRole="admin">
+                      <ClinicProfile />
                     </ClinicProtectedRoute>
                   }
                 />
