@@ -92,6 +92,8 @@ export default function ProcurementDashboard() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="ledger">Movement Ledger</TabsTrigger>
+          <TabsTrigger value="correlation">Diagnosis Correlation</TabsTrigger>
+          <TabsTrigger value="planning">Purchase Planning</TabsTrigger>
         </TabsList>
 
         {/* OVERVIEW */}
