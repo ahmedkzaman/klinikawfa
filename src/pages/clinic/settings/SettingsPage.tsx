@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Sliders, Users, Archive, Package, ChevronRight, Stethoscope, Shield, Tag, FileText, FileEdit, Tv, Coins } from 'lucide-react';
+import { Sliders, Users, Archive, Package, ChevronRight, Stethoscope, Shield, Tag, FileText, FileEdit, Tv, Coins, Building2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -18,6 +18,13 @@ export default function SettingsPage() {
   const adminAccess = isAdmin || isSpecialAdmin;
 
   const cards: SettingsCard[] = [
+    {
+      href: '/clinic/settings/clinic-profile',
+      title: 'Clinic Profile',
+      description: 'Clinic name, address, phone and email used on all printed documents and labels.',
+      icon: Building2,
+      visible: adminAccess,
+    },
     {
       href: '/clinic/settings/preferences',
       title: 'General Preferences',
