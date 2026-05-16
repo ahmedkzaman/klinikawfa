@@ -31,6 +31,7 @@ import { ConsultationLockBanner } from '@/components/clinic/consultation/Consult
 import { useConsultationItems, useAddConsultationItem } from '@/hooks/clinic/useConsultationItems';
 import { usePayments } from '@/hooks/clinic/usePayments';
 import { cn } from '@/lib/utils';
+import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import {
   bento,
   bentoHeader,

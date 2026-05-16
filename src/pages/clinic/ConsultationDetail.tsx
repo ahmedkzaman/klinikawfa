@@ -92,6 +92,7 @@ import { DiagnosisCombobox } from '@/components/clinic/consultation/DiagnosisCom
 import { useDiagnoses } from '@/hooks/clinic/useDiagnoses';
 import { SessionAttachmentsStrip } from '@/components/clinic/consultation/SessionAttachmentsStrip';
 import { useAuth } from '@/contexts/AuthContext';
+import { formatQueueNo } from '@/lib/clinic/queueNumber';
 
 const PRICE_TIERS = ['SELF PAY', 'PANEL'];
 
