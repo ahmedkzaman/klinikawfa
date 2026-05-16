@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Upload, Save, Loader2, Trash2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Upload, Save, Loader2, Trash2, Info, Building2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,11 +16,6 @@ export default function DocumentSettings() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
-    clinic_name: settings.clinic_name,
-    address_line_1: settings.address_line_1,
-    address_line_2: settings.address_line_2,
-    phone: settings.phone,
-    email: settings.email,
     logo_url: settings.logo_url,
     logo_height_px: settings.logo_height_px,
     letterhead_text_px: settings.letterhead_text_px,
@@ -33,11 +29,6 @@ export default function DocumentSettings() {
   // sync when settings load
   useEffect(() => {
     setForm({
-      clinic_name: settings.clinic_name,
-      address_line_1: settings.address_line_1,
-      address_line_2: settings.address_line_2,
-      phone: settings.phone,
-      email: settings.email,
       logo_url: settings.logo_url,
       logo_height_px: settings.logo_height_px,
       letterhead_text_px: settings.letterhead_text_px,
