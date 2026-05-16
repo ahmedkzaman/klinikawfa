@@ -253,3 +253,221 @@ function KpiCard({ icon, label, value, tone }: { icon: React.ReactNode; label: s
     </Card>
   );
 }
+
+/* ─────────────────────────── Tab 3: Diagnosis Correlation ─────────────────────────── */
+
+const liftBadge = (lift: number | null) => {
+  if (lift == null) return 'bg-muted text-muted-foreground';
+  if (lift >= 2)   return 'bg-destructive/15 text-destructive';
+  if (lift >= 1.5) return 'bg-amber-500/15 text-amber-700 dark:text-amber-400';
+  if (lift >= 1)   return 'bg-blue-500/15 text-blue-700 dark:text-blue-400';
+  return 'bg-muted text-muted-foreground';
+};
+
+function TrendArrow({ pct }: { pct: number | null }) {
+  if (pct == null) return <Minus className="h-3 w-3 inline text-muted-foreground" />;
+  if (pct > 0) return <ArrowUp className="h-3 w-3 inline text-destructive" />;
+  if (pct < 0) return <ArrowDown className="h-3 w-3 inline text-emerald-600" />;
+  return <Minus className="h-3 w-3 inline text-muted-foreground" />;
+}
+
+function CorrelationTab() {
+  const [hideLowLift, setHideLowLift] = useState(true);
+  const [includeUnlinked, setIncludeUnlinked] = useState(false);
+  const { data: rows = [], isLoading, dataUpdatedAt } = useDiagnosisCorrelation({
+    minLift: hideLowLift ? 1.2 : 0,
+    includeUnlinked,
+  });
+  const refresh = useRefreshCorrelation();
+
+  const uncategorized = rows.filter((r) => r.diagnosis_group === 'Uncategorized').length;
+  const lastRefreshed = rows[0]?.last_refreshed_at
+    ? formatDistanceToNow(new Date(rows[0].last_refreshed_at), { addSuffix: true })
+    : dataUpdatedAt ? formatDistanceToNow(new Date(dataUpdatedAt), { addSuffix: true }) : '—';
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <CardTitle>Diagnosis ↔ Inventory Correlation</CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">Last refreshed {lastRefreshed} · 90-day window</p>
+          </div>
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Switch id="lowlift" checked={hideLowLift} onCheckedChange={setHideLowLift} />
+              <Label htmlFor="lowlift" className="text-sm">Hide low-lift (&lt;1.2)</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch id="unlinked" checked={includeUnlinked} onCheckedChange={setIncludeUnlinked} />
+              <Label htmlFor="unlinked" className="text-sm">Include unlinked usage</Label>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => refresh.mutate(undefined, {
+                onSuccess: () => toast.success('Correlation refreshed'),
+                onError: (e: any) => toast.error(e?.message ?? 'Refresh failed'),
+              })}
+              disabled={refresh.isPending}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${refresh.isPending ? 'animate-spin' : ''}`} />
+              Refresh Now
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {uncategorized > 0 && (
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Ungrouped diagnoses detected</AlertTitle>
+              <AlertDescription className="flex items-center justify-between gap-2">
+                <span>{uncategorized} row(s) fall under "Uncategorized". Curate them in the Diagnosis Sweeper for sharper insights.</span>
+                <Button asChild size="sm" variant="link"><Link to="/clinic/settings/diagnosis-sweeper">Open Sweeper</Link></Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Diagnosis Group</TableHead>
+                  <TableHead className="text-right">Cases (Curr · Prev)</TableHead>
+                  <TableHead className="text-right">Trend</TableHead>
+                  <TableHead>Item</TableHead>
+                  <TableHead className="text-right">Confidence</TableHead>
+                  <TableHead className="text-right">Lift</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Loading…</TableCell></TableRow>
+                ) : rows.length === 0 ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">No correlations available. Try unchecking "Hide low-lift" or click Refresh Now.</TableCell></TableRow>
+                ) : rows.map((r) => {
+                  const isUnlinked = r.diagnosis_group === '__UNLINKED__';
+                  return (
+                    <TableRow key={`${r.diagnosis_group}:${r.inventory_item_id}`} className={isUnlinked ? 'bg-muted/40' : ''}>
+                      <TableCell className="font-medium">
+                        {isUnlinked ? <span className="text-muted-foreground italic">Non-clinical / Unlinked</span> : r.diagnosis_group}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {r.case_count_current_month} · {r.case_count_prior_month}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        <TrendArrow pct={r.case_trend_pct} />{' '}
+                        {r.case_trend_pct == null ? '—' : `${r.case_trend_pct > 0 ? '+' : ''}${r.case_trend_pct}%`}
+                      </TableCell>
+                      <TableCell>{r.item_name ?? '—'}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {r.confidence_pct == null ? '—' : `${r.confidence_pct}%`}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge className={liftBadge(r.lift_score)}>
+                          {r.lift_score == null ? '—' : Number(r.lift_score).toFixed(2)}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ─────────────────────────── Tab 4: Purchase Planning ─────────────────────────── */
+
+function PlanningTab() {
+  const { data, isLoading } = useProcurementRecommendations();
+  const navigate = useNavigate();
+
+  const draftPO = (itemId: string, qty: number) =>
+    navigate(`/clinic/procurement?prefillItem=${itemId}&qty=${qty}`);
+
+  if (isLoading) {
+    return <Card><CardContent className="py-10 text-center text-muted-foreground">Crunching recommendations…</CardContent></Card>;
+  }
+
+  const { urgent, surge, overstock } = data;
+  const empty = urgent.length === 0 && surge.length === 0 && overstock.length === 0;
+
+  if (empty) {
+    return <Card><CardContent className="py-10 text-center text-muted-foreground">No actionable recommendations right now. Stock looks healthy.</CardContent></Card>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <Section title="Urgent Reorder" icon={<Zap className="h-5 w-5 text-destructive" />} count={urgent.length}>
+        {urgent.length === 0 ? (
+          <EmptyHint>No urgent reorders.</EmptyHint>
+        ) : urgent.map((r) => (
+          <RecCard key={r.item_id} tone="destructive"
+            title={`🚨 ${r.item_name}`}
+            body={`${r.days_cover.toFixed(1)}d cover at ${r.avg_daily_usage.toFixed(2)}/day · ${r.current_stock} in stock. Reorder ~${r.suggested_qty} units.`}
+            action={<Button size="sm" onClick={() => draftPO(r.item_id, r.suggested_qty)}>Create PO</Button>}
+          />
+        ))}
+      </Section>
+
+      <Section title="Seasonal Demand Surge" icon={<TrendingUp className="h-5 w-5 text-amber-600" />} count={surge.length}>
+        {surge.length === 0 ? (
+          <EmptyHint>No surge signals detected.</EmptyHint>
+        ) : surge.map((r) => (
+          <RecCard key={`${r.diagnosis_group}:${r.item_id}`} tone="amber"
+            title={`📈 ${r.diagnosis_group} up ${r.trend_pct}%`}
+            body={`High correlation to ${r.item_name} (Lift ${r.lift_score.toFixed(2)}). Cover ${r.days_cover}d — increase par level by ~${r.suggested_qty} units.`}
+            action={<Button size="sm" variant="secondary" onClick={() => draftPO(r.item_id, r.suggested_qty)}>Create PO</Button>}
+          />
+        ))}
+      </Section>
+
+      <Section title="Overstock / Dead" icon={<Snowflake className="h-5 w-5 text-muted-foreground" />} count={overstock.length}>
+        {overstock.length === 0 ? (
+          <EmptyHint>No dead stock — clean shelves.</EmptyHint>
+        ) : overstock.map((r) => (
+          <RecCard key={r.item_id} tone="muted"
+            title={`🧊 ${r.item_name}`}
+            body={`Dead (0 usage in 90 days) but ${r.current_stock} units on hand. Halt reordering and monitor expiry.`}
+          />
+        ))}
+      </Section>
+    </div>
+  );
+}
+
+function Section({ title, icon, count, children }: { title: string; icon: React.ReactNode; count: number; children: React.ReactNode }) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+        <CardTitle className="text-base flex items-center gap-2">{icon}{title}</CardTitle>
+        <Badge variant="secondary">{count}</Badge>
+      </CardHeader>
+      <CardContent className="space-y-2">{children}</CardContent>
+    </Card>
+  );
+}
+
+function RecCard({ tone, title, body, action }: { tone: 'destructive' | 'amber' | 'muted'; title: string; body: string; action?: React.ReactNode }) {
+  const border =
+    tone === 'destructive' ? 'border-destructive/30 bg-destructive/5'
+    : tone === 'amber'     ? 'border-amber-500/30 bg-amber-500/5'
+    : 'border-muted bg-muted/30';
+  return (
+    <div className={`rounded-md border p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2 ${border}`}>
+      <div>
+        <div className="font-semibold">{title}</div>
+        <div className="text-sm text-muted-foreground mt-1">{body}</div>
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function EmptyHint({ children }: { children: React.ReactNode }) {
+  return <div className="text-sm text-muted-foreground py-2">{children}</div>;
+}
