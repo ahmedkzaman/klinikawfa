@@ -329,7 +329,13 @@ function TrendArrow({ pct }: { pct: number | null }) {
   return <Minus className="h-3 w-3 inline text-muted-foreground" />;
 }
 
-function CorrelationTab() {
+function CorrelationTab({
+  thresholds: _thresholds,
+  onOpenLogic,
+}: {
+  thresholds: RecommendationThresholds;
+  onOpenLogic: () => void;
+}) {
   const [hideLowLift, setHideLowLift] = useState(true);
   const [includeUnlinked, setIncludeUnlinked] = useState(false);
   const { data: rows = [], isLoading, dataUpdatedAt } = useDiagnosisCorrelation({
