@@ -110,7 +110,16 @@ export default function SeasonalForecast() {
             projecting what the clinic will need next.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setLogicOpen(true)}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <Info className="h-4 w-4 mr-1.5" />
+            How is this calculated?
+          </Button>
           {maxYears > 0 && (
             <Badge variant="secondary">
               {maxYears} year{maxYears === 1 ? '' : 's'} of history
