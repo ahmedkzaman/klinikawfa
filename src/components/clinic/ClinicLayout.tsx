@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
+import { InternalMessenger } from '@/components/clinic/chat/InternalMessenger';
 
 type ClinicNavItem = {
   href: string;
