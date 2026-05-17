@@ -1,76 +1,45 @@
 ## Goal
+Lock the locum role down to exactly three clinic pages: **Appointments**, **Queue Board**, **Consultation**. Everything else in `/clinic/*` — including Patients, Dispensary, Billings, Inventory, Procurement, Procurement Dashboard, Settings, etc. — must be hidden from the sidebar and blocked at the route level.
 
-Two related UX upgrades for the Procurement Dashboard:
-1. A slide-out **Logic Guide** explaining how Diagnosis Correlation and Purchase Planning are calculated.
-2. **Adjustable thresholds** so staff can tune Urgent / Surge / Overstock rules live without code changes.
+## Current state (audit)
+- `procurement-dashboard` route is already gated by `ops_or_admin`, which excludes locum. ✓ (no route change needed.)
+- `patients` and `consultation*` routes are gated by `clinical`, which **includes locum** — locums can currently reach Patients. ✗
+- Sidebar `clinicNavItems` in `src/components/clinic/ClinicLayout.tsx` currently flags **Patients** and **Queue Board** as `locumAllowed`, but not Appointments or Consultation. Wrong set. ✗
 
-Both are frontend-only — no schema changes, no migrations.
+## Changes
 
----
+### 1. `src/components/clinic/ClinicLayout.tsx` — fix `locumAllowed` flags
+Update the three relevant rows in `clinicNavItems` so locum sees exactly Appointments, Queue Board, Consultation:
+- Remove `locumAllowed: true` from the **Patients** row.
+- Add `locumAllowed: true` to the **Appointments** row.
+- Add `locumAllowed: true` to the **Consultation** row.
+- Keep `locumAllowed: true` on **Queue Board**.
 
-## 1. ProcurementLogicSheet (new component)
+The existing `if (isLocum) return !!item.locumAllowed;` filter then yields exactly the three allowed items in both desktop sidebar and mobile drawer.
 
-**File:** `src/components/clinic/procurement/ProcurementLogicSheet.tsx`
-
-- Built on shadcn `Sheet` (side=right, wide on desktop).
-- Props: `open: boolean`, `onOpenChange: (v: boolean) => void`, `defaultSection: 'correlation' | 'planning'`.
-- Internally uses `Tabs` with two sections so users can switch without closing.
-- **Correlation section** content: plain-English explanation of Association Rule Mining, Confidence (worked Asthma/Salbutamol example), Lift score scale (1.0 = baseline, >1.5 highly correlated, >2 very strong), and what `__UNLINKED__` means.
-- **Planning section** content: explains the three rules
-  - Urgent Reorder — fast item + days_cover < threshold, suggested qty restores 30-day buffer from 90-day avg burn.
-  - Surge Warning — trend >threshold% MoM AND lift >threshold AND days_cover <30.
-  - Overstock — 0 usage in 90 days but stock on shelf.
-- Uses semantic Tailwind tokens (no hardcoded colors), `prose`-style typography, small worked-example callouts in `Card`-like blocks.
-
-## 2. Adjustable thresholds
-
-**Hook change — `src/hooks/clinic/useProcurementStats.ts`:**
-- Add `RecommendationThresholds` type: `{ urgentDays: number; surgeTrendPct: number; surgeLift: number; surgeDaysCover: number; deadStockDays: number }`.
-- Add `DEFAULT_THRESHOLDS` constant matching today's hardcoded values (7 / 20 / 1.5 / 30 / 90).
-- `useDiagnosisCorrelation` minLift already param-driven — keep as is.
-- `useProcurementRecommendations(thresholds?: Partial<RecommendationThresholds>)` — merge with defaults, replace hardcoded `7`, `20`, `1.5`, `30` literals with threshold variables. Overstock list stays driven by `movement_status === 'dead'` (90-day rule is enforced upstream in the view); we still expose `deadStockDays` in the settings UI as informational so the label stays accurate.
-
-**Dashboard — `src/pages/clinic/ProcurementDashboard.tsx`:**
-- New local state `thresholds` (defaults from `DEFAULT_THRESHOLDS`), persisted to `localStorage` under `procurement.thresholds.v1` so each user's preference survives reloads.
-- Pass `thresholds` into `useProcurementRecommendations` and into the Surge filter in `useDiagnosisCorrelation` (`minLift: thresholds.surgeLift`).
-- Header buttons:
-  - On Correlation tab header: ghost `Info` button → opens sheet to `'correlation'`.
-  - On Planning tab header: ghost `Info` button → opens `'planning'`; gear `Settings` button → opens the new settings dialog.
-- Banner on Planning tab when any threshold differs from defaults: "Custom rules active · Reset".
-
-## 3. RecommendationRulesDialog (new component)
-
-**File:** `src/components/clinic/procurement/RecommendationRulesDialog.tsx`
-
-- shadcn `Dialog`.
-- Form fields (sliders + number input pair, using shadcn `Slider` + `Input`):
-  - Urgent Reorder Buffer (Days) — 1–30, default 7
-  - Surge Trend Threshold (%) — 5–100, default 20
-  - Surge Lift Threshold — 1.0–5.0 step 0.1, default 1.5
-  - Surge Days-Cover Limit — 7–90, default 30
-  - Dead-Stock Window (Days) — 30–180, default 90 (informational; tooltip notes it's enforced in the database view)
-- Each field has a short helper line so it's self-explanatory.
-- Footer: `Reset to defaults` (ghost) · `Cancel` · `Save` (applies + closes + toast).
-- Saving writes to parent state + `localStorage`. Dashboard re-renders → recommendations recompute instantly.
-
-## 4. Files touched
-
-```text
-NEW  src/components/clinic/procurement/ProcurementLogicSheet.tsx
-NEW  src/components/clinic/procurement/RecommendationRulesDialog.tsx
-EDIT src/hooks/clinic/useProcurementStats.ts        (thresholds param + defaults)
-EDIT src/pages/clinic/ProcurementDashboard.tsx      (state, buttons, wire-up)
+### 2. `src/components/ClinicProtectedRoute.tsx` — add a `clinical_staff` tier
+Introduce a new `requiredRole` value `'clinical_staff'` that means "clinical, but not locum":
+```ts
+if (requiredRole === 'clinical_staff') {
+  if (isLocum) return <Navigate to="/clinic/queue" replace />;
+  if (!isClinical) return <Navigate to="/clinic/queue" replace />;
+  return <>{children}</>;
+}
 ```
+Add `'clinical_staff'` to the `requiredRole` union type.
 
-## Out of scope (deferred)
+### 3. `src/App.tsx` — block Patients for locum
+Change the `patients` route guard from `requiredRole="clinical"` to `requiredRole="clinical_staff"`. Leave `consultation` and `consultation/:queueEntryId` on `clinical` (locum must keep consulting). Leave every other route unchanged — they already default to `ops_or_admin`, which excludes locum.
 
-- Persisting thresholds to `clinic_settings` table (per-user `localStorage` for now — matches the user's "local React state" preference; can be promoted later).
-- Per-role permissions on who can change rules.
-- A/B comparison of "Recommendations under default vs custom rules".
+### 4. Defensive redirect on direct URL hits
+A locum typing `/clinic/procurement-dashboard`, `/clinic/inventory`, etc. is already bounced by `ClinicProtectedRoute`'s `if (isLocum) return <Navigate to="/clinic/queue" replace />;` fallback. No additional work needed.
+
+## Out of scope
+- No DB / RLS changes.
+- No changes to the staff portal or to non-locum roles.
+- No changes to the Procurement Dashboard Settings RBAC (already shipped).
 
 ## Verification
-
-- Open Correlation tab → click Info → sheet opens on Correlation section. Switch tabs inside sheet → Planning section renders.
-- Open Planning tab → click Settings gear → change Urgent buffer from 7 → 14 → Save → more items immediately appear in Urgent list.
-- Reload page → custom thresholds persist; "Custom rules active" banner shows; Reset restores defaults.
-- No TypeScript/lint errors; all colors via semantic tokens.
+- Sign in as `locum`: sidebar shows only Appointments, Queue Board, Consultation. Manually visiting `/clinic/patients`, `/clinic/procurement-dashboard`, `/clinic/inventory`, `/clinic/billings`, `/clinic/settings` all redirect to `/clinic/queue`.
+- Sign in as `doctor_admin` / `admin` / `operations` / `resident_doctor`: nav unchanged from today; Patients still reachable for clinical roles.
+- TypeScript clean (new union member added in both the type and the guard).

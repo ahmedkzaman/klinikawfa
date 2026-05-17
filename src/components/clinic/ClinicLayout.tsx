@@ -37,10 +37,10 @@ type ClinicNavItem = {
 };
 
 const clinicNavItems: ClinicNavItem[] = [
-  { href: '/clinic/patients', label: 'Patients', icon: Users, locumAllowed: true },
-  { href: '/clinic/appointments', label: 'Appointments', icon: CalendarDays },
+  { href: '/clinic/patients', label: 'Patients', icon: Users },
+  { href: '/clinic/appointments', label: 'Appointments', icon: CalendarDays, locumAllowed: true },
   { href: '/clinic/queue', label: 'Queue Board', icon: LayoutDashboard, locumAllowed: true },
-  { href: '/clinic/consultation', label: 'Consultation', icon: Stethoscope },
+  { href: '/clinic/consultation', label: 'Consultation', icon: Stethoscope, locumAllowed: true },
   { href: '/clinic/dispensary', label: 'Dispensary', icon: Pill },
   { href: '/clinic/billings', label: 'Billings', icon: Receipt },
   { href: '/clinic/inventory', label: 'Inventory', icon: PackageSearch },
