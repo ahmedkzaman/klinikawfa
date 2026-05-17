@@ -156,15 +156,34 @@ export type OverstockRec = {
 };
 export type Recommendations = { urgent: UrgentRec[]; surge: SurgeRec[]; overstock: OverstockRec[] };
 
-export function useProcurementRecommendations(): {
+export type RecommendationThresholds = {
+  urgentDays: number;
+  surgeTrendPct: number;
+  surgeLift: number;
+  surgeDaysCover: number;
+  deadStockDays: number;
+};
+
+export const DEFAULT_THRESHOLDS: RecommendationThresholds = {
+  urgentDays: 7,
+  surgeTrendPct: 20,
+  surgeLift: 1.5,
+  surgeDaysCover: 30,
+  deadStockDays: 90,
+};
+
+export function useProcurementRecommendations(
+  thresholds: Partial<RecommendationThresholds> = {},
+): {
   data: Recommendations;
   isLoading: boolean;
 } {
+  const t: RecommendationThresholds = { ...DEFAULT_THRESHOLDS, ...thresholds };
   const { data: stats = [], isLoading: a } = useProcurementStats();
-  const { data: corr = [], isLoading: b } = useDiagnosisCorrelation({ minLift: 1.5 });
+  const { data: corr = [], isLoading: b } = useDiagnosisCorrelation({ minLift: t.surgeLift });
 
   const urgent: UrgentRec[] = stats
-    .filter((s) => s.movement_status === 'fast' && s.days_cover != null && Number(s.days_cover) < 7)
+    .filter((s) => s.movement_status === 'fast' && s.days_cover != null && Number(s.days_cover) < t.urgentDays)
     .map((s) => ({
       kind: 'urgent',
       item_id: s.item_id,
@@ -180,11 +199,11 @@ export function useProcurementRecommendations(): {
 
   const statsById = new Map(stats.map((s) => [s.item_id, s]));
   const surge: SurgeRec[] = corr
-    .filter((c) => (c.case_trend_pct ?? 0) > 20 && (c.lift_score ?? 0) > 1.5)
+    .filter((c) => (c.case_trend_pct ?? 0) > t.surgeTrendPct && (c.lift_score ?? 0) > t.surgeLift)
     .map((c) => {
       const s = statsById.get(c.inventory_item_id);
       const dc = s?.days_cover == null ? null : Number(s.days_cover);
-      if (dc == null || dc >= 30) return null;
+      if (dc == null || dc >= t.surgeDaysCover) return null;
       return {
         kind: 'surge' as const,
         item_id: c.inventory_item_id,
