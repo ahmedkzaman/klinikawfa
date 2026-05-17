@@ -190,7 +190,7 @@ const App = () => (
                 <Route
                   path="patients"
                   element={
-                    <ClinicProtectedRoute requiredRole="clinical">
+                    <ClinicProtectedRoute requiredRole="clinical_staff">
                       <PatientsList />
                     </ClinicProtectedRoute>
                   }
