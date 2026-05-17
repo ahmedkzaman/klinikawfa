@@ -158,10 +158,12 @@ export function useInternalChat() {
         },
         (payload) => {
           const row = payload.new as InternalMessage;
+          if (row.receiver_id !== myId || row.sender_id === myId) return;
           setUnreadBySender((prev) => ({
             ...prev,
             [row.sender_id]: (prev[row.sender_id] ?? 0) + 1,
           }));
+          playNotificationSound();
         }
       )
       .subscribe();
