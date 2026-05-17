@@ -235,6 +235,7 @@ export function ClinicLayout() {
           <Outlet />
         </main>
       </div>
+      <InternalMessenger />
     </div>
   );
 }
