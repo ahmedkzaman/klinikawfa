@@ -450,26 +450,77 @@ function CorrelationTab({
 
 /* ─────────────────────────── Tab 4: Purchase Planning ─────────────────────────── */
 
-function PlanningTab() {
-  const { data, isLoading } = useProcurementRecommendations();
+function PlanningTab({
+  thresholds,
+  onOpenLogic,
+  onOpenRules,
+  onResetThresholds,
+}: {
+  thresholds: RecommendationThresholds;
+  onOpenLogic: () => void;
+  onOpenRules: () => void;
+  onResetThresholds: () => void;
+}) {
+  const { data, isLoading } = useProcurementRecommendations(thresholds);
   const navigate = useNavigate();
 
   const draftPO = (itemId: string, qty: number) =>
     navigate(`/clinic/procurement?prefillItem=${itemId}&qty=${qty}`);
 
+  const isCustom = (Object.keys(DEFAULT_THRESHOLDS) as (keyof RecommendationThresholds)[])
+    .some((k) => thresholds[k] !== DEFAULT_THRESHOLDS[k]);
+
+  const header = (
+    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div>
+        <h2 className="text-lg font-semibold">Purchase Planning</h2>
+        <p className="text-xs text-muted-foreground">
+          Deterministic rules · {isCustom ? 'Custom thresholds active' : 'Default thresholds'}
+        </p>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button size="sm" variant="ghost" onClick={onOpenLogic}>
+          <Info className="h-4 w-4 mr-2" /> How is this calculated?
+        </Button>
+        <Button size="sm" variant="outline" onClick={onOpenRules}>
+          <Settings className="h-4 w-4 mr-2" /> Rules
+        </Button>
+      </div>
+    </div>
+  );
+
   if (isLoading) {
-    return <Card><CardContent className="py-10 text-center text-muted-foreground">Crunching recommendations…</CardContent></Card>;
+    return (
+      <div className="space-y-4">
+        {header}
+        <Card><CardContent className="py-10 text-center text-muted-foreground">Crunching recommendations…</CardContent></Card>
+      </div>
+    );
   }
 
   const { urgent, surge, overstock } = data;
   const empty = urgent.length === 0 && surge.length === 0 && overstock.length === 0;
 
-  if (empty) {
-    return <Card><CardContent className="py-10 text-center text-muted-foreground">No actionable recommendations right now. Stock looks healthy.</CardContent></Card>;
-  }
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {header}
+      {isCustom && (
+        <Alert>
+          <Settings className="h-4 w-4" />
+          <AlertTitle>Custom rules active</AlertTitle>
+          <AlertDescription className="flex items-center justify-between gap-2">
+            <span>
+              Urgent &lt;{thresholds.urgentDays}d · Surge &gt;{thresholds.surgeTrendPct}% &amp; Lift &gt;{thresholds.surgeLift.toFixed(1)} · Cover &lt;{thresholds.surgeDaysCover}d
+            </span>
+            <Button size="sm" variant="link" onClick={onResetThresholds}>Reset</Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {empty ? (
+        <Card><CardContent className="py-10 text-center text-muted-foreground">No actionable recommendations right now. Stock looks healthy.</CardContent></Card>
+      ) : (
+        <div className="space-y-6">
       <Section title="Urgent Reorder" icon={<Zap className="h-5 w-5 text-destructive" />} count={urgent.length}>
         {urgent.length === 0 ? (
           <EmptyHint>No urgent reorders.</EmptyHint>
