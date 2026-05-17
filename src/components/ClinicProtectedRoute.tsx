@@ -7,6 +7,7 @@ interface ClinicProtectedRouteProps {
   requiredRole?:
     | 'any_staff'
     | 'clinical'
+    | 'clinical_staff'
     | 'ops_or_admin'
     | 'special_admin'
     | 'admin'
@@ -63,6 +64,13 @@ export function ClinicProtectedRoute({
   // Clinical-only routes: bounce non-clinical staff back to the queue (in-portal),
   // never out of /clinic — they still belong here for other tasks.
   if (requiredRole === 'clinical') {
+    if (!isClinical) return <Navigate to="/clinic/queue" replace />;
+    return <>{children}</>;
+  }
+
+  // Clinical-but-not-locum routes (e.g. Patients): in-portal bounce for locums.
+  if (requiredRole === 'clinical_staff') {
+    if (isLocum) return <Navigate to="/clinic/queue" replace />;
     if (!isClinical) return <Navigate to="/clinic/queue" replace />;
     return <>{children}</>;
   }
