@@ -366,6 +366,10 @@ function CorrelationTab({
               <Switch id="unlinked" checked={includeUnlinked} onCheckedChange={setIncludeUnlinked} />
               <Label htmlFor="unlinked" className="text-sm">Include unlinked usage</Label>
             </div>
+            <Button size="sm" variant="ghost" onClick={onOpenLogic}>
+              <Info className="h-4 w-4 mr-2" />
+              How is this calculated?
+            </Button>
             <Button
               size="sm"
               variant="outline"
