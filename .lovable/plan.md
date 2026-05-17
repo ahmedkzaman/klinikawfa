@@ -1,76 +1,76 @@
-# Procurement Intelligence — Stage 3 & 4
+## Goal
 
-Builds the diagnosis↔stock correlation engine and rule-based purchase planning UI on top of the Stage 1 movement view.
+Two related UX upgrades for the Procurement Dashboard:
+1. A slide-out **Logic Guide** explaining how Diagnosis Correlation and Purchase Planning are calculated.
+2. **Adjustable thresholds** so staff can tune Urgent / Surge / Overstock rules live without code changes.
 
-## Architectural guardrails
+Both are frontend-only — no schema changes, no migrations.
 
-- **Unlinked leakage** — all aggregations use `LEFT JOIN consultations → diagnoses`. Rows with no consultation, no diagnosis, or a soft-deleted consultation fall into a synthetic `__UNLINKED__` bucket so totals always reconcile with physical stock.
-- **No live lift math** — confidence/lift live in a materialized view refreshed nightly (and on-demand). React only reads.
-- **Diagnosis grouping** — reuse existing `diagnoses.group_category` column (no new table). Raw `Uncategorized` rows surface a callout linking to the Diagnosis Sweeper.
+---
 
-## 1. Database migration
+## 1. ProcurementLogicSheet (new component)
 
-### Materialized view `public.mv_diagnosis_stock_correlation`
+**File:** `src/components/clinic/procurement/ProcurementLogicSheet.tsx`
 
-Columns: `diagnosis_group`, `inventory_item_id`, `item_name`, `case_count_current_month`, `case_count_prior_month`, `case_trend_pct`, `item_usage_count`, `co_occurrence_cases`, `total_cases_for_group_90d`, `total_cases_with_item_90d`, `total_cases_90d`, `confidence_pct`, `lift_score`, `last_refreshed_at`.
+- Built on shadcn `Sheet` (side=right, wide on desktop).
+- Props: `open: boolean`, `onOpenChange: (v: boolean) => void`, `defaultSection: 'correlation' | 'planning'`.
+- Internally uses `Tabs` with two sections so users can switch without closing.
+- **Correlation section** content: plain-English explanation of Association Rule Mining, Confidence (worked Asthma/Salbutamol example), Lift score scale (1.0 = baseline, >1.5 highly correlated, >2 very strong), and what `__UNLINKED__` means.
+- **Planning section** content: explains the three rules
+  - Urgent Reorder — fast item + days_cover < threshold, suggested qty restores 30-day buffer from 90-day avg burn.
+  - Surge Warning — trend >threshold% MoM AND lift >threshold AND days_cover <30.
+  - Overstock — 0 usage in 90 days but stock on shelf.
+- Uses semantic Tailwind tokens (no hardcoded colors), `prose`-style typography, small worked-example callouts in `Card`-like blocks.
 
-- Source: `inventory_transactions` filtered to `transaction_type='dispense'` over last 90 days, `LEFT JOIN consultations LEFT JOIN diagnoses`, grouped by `COALESCE(diagnoses.group_category, '__UNLINKED__')`.
-- Bucket totals computed in CTEs (not recalculated per row).
-- Indexes: `(diagnosis_group)`, `(inventory_item_id)`, UNIQUE `(diagnosis_group, inventory_item_id)` to enable `REFRESH … CONCURRENTLY`.
+## 2. Adjustable thresholds
 
-### RPC `public.refresh_diagnosis_correlation()`
-SECURITY DEFINER, gated by `is_ops_or_admin`. Runs `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_diagnosis_stock_correlation`.
+**Hook change — `src/hooks/clinic/useProcurementStats.ts`:**
+- Add `RecommendationThresholds` type: `{ urgentDays: number; surgeTrendPct: number; surgeLift: number; surgeDaysCover: number; deadStockDays: number }`.
+- Add `DEFAULT_THRESHOLDS` constant matching today's hardcoded values (7 / 20 / 1.5 / 30 / 90).
+- `useDiagnosisCorrelation` minLift already param-driven — keep as is.
+- `useProcurementRecommendations(thresholds?: Partial<RecommendationThresholds>)` — merge with defaults, replace hardcoded `7`, `20`, `1.5`, `30` literals with threshold variables. Overstock list stays driven by `movement_status === 'dead'` (90-day rule is enforced upstream in the view); we still expose `deadStockDays` in the settings UI as informational so the label stays accurate.
 
-### Wrapper view `public.v_diagnosis_stock_correlation`
-Standard view with `security_invoker = on` selecting from the MV, filtered by `is_ops_or_admin(auth.uid())`. Only the wrapper is granted to `authenticated` (MVs cannot enforce RLS).
+**Dashboard — `src/pages/clinic/ProcurementDashboard.tsx`:**
+- New local state `thresholds` (defaults from `DEFAULT_THRESHOLDS`), persisted to `localStorage` under `procurement.thresholds.v1` so each user's preference survives reloads.
+- Pass `thresholds` into `useProcurementRecommendations` and into the Surge filter in `useDiagnosisCorrelation` (`minLift: thresholds.surgeLift`).
+- Header buttons:
+  - On Correlation tab header: ghost `Info` button → opens sheet to `'correlation'`.
+  - On Planning tab header: ghost `Info` button → opens `'planning'`; gear `Settings` button → opens the new settings dialog.
+- Banner on Planning tab when any threshold differs from defaults: "Custom rules active · Reset".
 
-### Parity check
-Migration logs a `NOTICE` comparing `SUM(item_usage_count)` in the MV vs raw dispense ledger over 90d so we can confirm the LEFT JOIN reconciles.
+## 3. RecommendationRulesDialog (new component)
 
-`pg_cron` schedule is deferred — manual "Refresh Now" button validated first, then set up the 02:00 MYT cron afterwards.
+**File:** `src/components/clinic/procurement/RecommendationRulesDialog.tsx`
 
-## 2. Hooks — `src/hooks/clinic/useProcurementStats.ts` (additive)
+- shadcn `Dialog`.
+- Form fields (sliders + number input pair, using shadcn `Slider` + `Input`):
+  - Urgent Reorder Buffer (Days) — 1–30, default 7
+  - Surge Trend Threshold (%) — 5–100, default 20
+  - Surge Lift Threshold — 1.0–5.0 step 0.1, default 1.5
+  - Surge Days-Cover Limit — 7–90, default 30
+  - Dead-Stock Window (Days) — 30–180, default 90 (informational; tooltip notes it's enforced in the database view)
+- Each field has a short helper line so it's self-explanatory.
+- Footer: `Reset to defaults` (ghost) · `Cancel` · `Save` (applies + closes + toast).
+- Saving writes to parent state + `localStorage`. Dashboard re-renders → recommendations recompute instantly.
 
-- `useDiagnosisCorrelation({ minLift = 0, includeUnlinked = false })` — selects from `v_diagnosis_stock_correlation`, sorted `lift_score DESC NULLS LAST`.
-- `useRefreshCorrelation()` — mutation calling the RPC; invalidates correlation + recommendations.
-- `useProcurementRecommendations()` — client-side join of `useProcurementStats()` + `useDiagnosisCorrelation()` returning:
-  - `urgent`: `days_cover < 7 && movement_status === 'fast'`
-  - `surge`: `case_trend_pct > 20 && lift_score > 1.5 && days_cover < 30`
-  - `overstock`: `movement_status === 'dead' && current_stock > 0`
+## 4. Files touched
 
-## 3. UI — two new tabs in `ProcurementDashboard.tsx`
+```text
+NEW  src/components/clinic/procurement/ProcurementLogicSheet.tsx
+NEW  src/components/clinic/procurement/RecommendationRulesDialog.tsx
+EDIT src/hooks/clinic/useProcurementStats.ts        (thresholds param + defaults)
+EDIT src/pages/clinic/ProcurementDashboard.tsx      (state, buttons, wire-up)
+```
 
-### Tab 3 — Diagnosis Correlation
-- Header: last-refreshed timestamp + "Refresh Now" (admin only).
-- Alert (when any `Uncategorized` rows exist): "X diagnoses need grouping" → links to Diagnosis Sweeper.
-- Filters: "Hide low-lift (< 1.2)" (default ON), "Include unlinked usage" (default OFF).
-- Table: Diagnosis Group · Cases (current with ↑/↓ %) · Top Item · Confidence % · Lift Score badge (≥2 red, ≥1.5 amber, <1 muted).
+## Out of scope (deferred)
 
-### Tab 4 — Purchase Planning
-Three stacked sections rendering recommendation cards:
-- **Urgent** 🚨 `{Item} — {days_cover}d cover. Reorder ~{ceil(avg_daily_usage*30) − current_stock} units.` + "Create PO" → `/clinic/procurement?prefillItem={id}&qty={n}`.
-- **Surge** 📈 `{Group} up {X}%. High correlation to {Item} (Lift {L}). Recommend increasing par level.` + "Create PO".
-- **Overstock** 🧊 `{Item} is Dead (0 usage 90d) but has {stock} left. Monitor expiry {nearest_expiry_date}.`
+- Persisting thresholds to `clinic_settings` table (per-user `localStorage` for now — matches the user's "local React state" preference; can be promoted later).
+- Per-role permissions on who can change rules.
+- A/B comparison of "Recommendations under default vs custom rules".
 
-Empty states per section. No edits to Stage 1 view, ledger tab, or dispensing flow.
+## Verification
 
-## 4. Verification
-
-- `SUM(item_usage_count)` in MV ≈ `SUM(|qty_change|)` in raw dispense ledger (90d).
-- Items never linked to a consultation still appear under `__UNLINKED__` when the toggle is on.
-- Deleting recent URTI consultations + refresh → group drops out of Surge.
-- Refresh latency <2s on current data volume; Tab 3 query <300ms.
-
-## Files
-
-- New migration (MV + wrapper view + RPC + indexes + parity NOTICE).
-- Edit `src/hooks/clinic/useProcurementStats.ts` (additive only).
-- Edit `src/pages/clinic/ProcurementDashboard.tsx` (two new tabs).
-- Procurement page reads `?prefillItem=&qty=` on mount — minimal change to surface the deep-link; full PO prefill polish deferred to Stage 5 if more is needed.
-
-## Out of scope
-
-- `pg_cron` schedule registration (do manually after MV validated).
-- Statistical significance gating beyond raw lift threshold.
-- Forecasting / seasonality (Stage 5).
-- Per-doctor prescribing variance.
+- Open Correlation tab → click Info → sheet opens on Correlation section. Switch tabs inside sheet → Planning section renders.
+- Open Planning tab → click Settings gear → change Urgent buffer from 7 → 14 → Save → more items immediately appear in Urgent list.
+- Reload page → custom thresholds persist; "Custom rules active" banner shows; Reset restores defaults.
+- No TypeScript/lint errors; all colors via semantic tokens.
