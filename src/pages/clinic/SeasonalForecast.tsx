@@ -27,7 +27,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, TrendingUp } from 'lucide-react';
+import { Loader2, TrendingUp, Info } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { ForecastLogicSheet } from '@/components/clinic/procurement/ForecastLogicSheet';
 import {
   useSeasonalTrends,
   topDiagnosesForMonth,
