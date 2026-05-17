@@ -555,6 +555,8 @@ function PlanningTab({
           />
         ))}
       </Section>
+        </div>
+      )}
     </div>
   );
 }
