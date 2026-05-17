@@ -65,6 +65,7 @@ function topItemsForGroup(
 
 export default function SeasonalForecast() {
   const [targetMonth, setTargetMonth] = useState<number>(nextMonth());
+  const [logicOpen, setLogicOpen] = useState(false);
   const { data: trends = [], isLoading: trendsLoading } = useSeasonalTrends();
   const { data: corr = [], isLoading: corrLoading } = useDiagnosisCorrelation({
     minLift: 0,
