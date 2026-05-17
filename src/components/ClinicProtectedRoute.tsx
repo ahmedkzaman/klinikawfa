@@ -68,6 +68,13 @@ export function ClinicProtectedRoute({
     return <>{children}</>;
   }
 
+  // Clinical-but-not-locum routes (e.g. Patients): in-portal bounce for locums.
+  if (requiredRole === 'clinical_staff') {
+    if (isLocum) return <Navigate to="/clinic/queue" replace />;
+    if (!isClinical) return <Navigate to="/clinic/queue" replace />;
+    return <>{children}</>;
+  }
+
   // Locums are excluded from `isStaffOrAdmin` (HR-staff flag) but still
   // need to enter the /clinic portal for their consultation work. Treat
   // `any_staff` as "anyone with a clinic keycard", which includes locums.
