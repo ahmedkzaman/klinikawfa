@@ -291,6 +291,8 @@ export default function SeasonalForecast() {
           </div>
         )}
       </div>
+
+      <ForecastLogicSheet open={logicOpen} onOpenChange={setLogicOpen} />
     </div>
   );
 }
