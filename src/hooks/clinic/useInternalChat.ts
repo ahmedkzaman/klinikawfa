@@ -22,6 +22,37 @@ export type InternalMessage = {
 const PRESENCE_CHANNEL = 'clinic-presence';
 
 /**
+ * Synthesize a soft "ding" via Web Audio API. No assets required.
+ * Silently no-ops if the browser blocks audio (autoplay policy, etc.).
+ */
+export function playNotificationSound() {
+  try {
+    const Ctx =
+      (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext })
+        .AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(800, now);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.55);
+    osc.onended = () => {
+      ctx.close().catch(() => {});
+    };
+  } catch {
+    // Browser blocked audio (no user interaction yet) — fail silently.
+  }
+}
+
+/**
  * Realtime presence (who is online) + per-user unread counts.
  * Mount once at the layout level via <InternalMessenger />.
  */
@@ -127,10 +158,12 @@ export function useInternalChat() {
         },
         (payload) => {
           const row = payload.new as InternalMessage;
+          if (row.receiver_id !== myId || row.sender_id === myId) return;
           setUnreadBySender((prev) => ({
             ...prev,
             [row.sender_id]: (prev[row.sender_id] ?? 0) + 1,
           }));
+          playNotificationSound();
         }
       )
       .subscribe();
