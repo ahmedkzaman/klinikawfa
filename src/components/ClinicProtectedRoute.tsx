@@ -7,6 +7,7 @@ interface ClinicProtectedRouteProps {
   requiredRole?:
     | 'any_staff'
     | 'clinical'
+    | 'clinical_staff'
     | 'ops_or_admin'
     | 'special_admin'
     | 'admin'
