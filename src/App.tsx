@@ -63,6 +63,7 @@ import Consultation from "./pages/clinic/Consultation";
 import ConsultationDetail from "./pages/clinic/ConsultationDetail";
 import Procurement from "./pages/clinic/Procurement";
 import ProcurementDashboard from "./pages/clinic/ProcurementDashboard";
+import SeasonalForecast from "./pages/clinic/SeasonalForecast";
 import Dispensary from "./pages/clinic/Dispensary";
 import DispenseCheckout from "./pages/clinic/DispenseCheckout";
 import VisitDetail from "./pages/clinic/VisitDetail";
@@ -232,6 +233,14 @@ const App = () => (
                   element={
                     <ClinicProtectedRoute requiredRole="ops_or_admin">
                       <ProcurementDashboard />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
+                  path="seasonal-forecast"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <SeasonalForecast />
                     </ClinicProtectedRoute>
                   }
                 />

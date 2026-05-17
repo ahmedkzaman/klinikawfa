@@ -5265,6 +5265,16 @@ export type Database = {
         }
         Relationships: []
       }
+      v_seasonal_diagnosis_trends: {
+        Row: {
+          avg_expected_cases: number | null
+          calendar_month: number | null
+          diagnosis_group: string | null
+          total_cases: number | null
+          years_active: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       _resolve_inventory_item_id: {

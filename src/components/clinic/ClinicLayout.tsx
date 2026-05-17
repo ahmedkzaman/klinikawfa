@@ -22,6 +22,7 @@ import {
   PackageX,
   ClipboardList,
   Activity,
+  TrendingUp,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -51,6 +52,7 @@ const clinicNavItems: ClinicNavItem[] = [
   { href: '/clinic/receivables', label: 'Receivables', icon: Briefcase },
   { href: '/clinic/procurement', label: 'Procurement', icon: ShoppingCart },
   { href: '/clinic/procurement-dashboard', label: 'Procurement Dashboard', icon: Activity },
+  { href: '/clinic/seasonal-forecast', label: 'Seasonal Forecast', icon: TrendingUp, adminOnly: true },
   { href: '/clinic/voided', label: 'Voided Records', icon: Trash2, specialAdminOnly: true },
   { href: '/clinic/insight', label: 'Insight', icon: LineChart, adminOnly: true },
   { href: '/clinic/settings', label: 'Settings', icon: Settings },
