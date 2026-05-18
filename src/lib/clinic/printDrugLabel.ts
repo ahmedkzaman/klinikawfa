@@ -114,11 +114,19 @@ function drawLabel(
 ): void {
   let y = 3; // mm — top edge tolerance
 
+  // pt → mm line-height heuristic (~0.42 mm per pt) so dynamic font sizes
+  // expand the y-cursor automatically and never overlap the next row.
+  const lh = (pt: number) => pt * 0.42;
+
+  const fsClinic = toggles.font_size_clinic ?? 8;
+  const fsMed = toggles.font_size_medicine ?? 8;
+  const fsInstr = toggles.font_size_instruction ?? 6.5;
+
   // ── Header: clinic name (always) ─────────────────────────────────────────
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(fsClinic);
   doc.text((clinic.name || 'Clinic').toUpperCase(), MARGIN_X, y);
-  y += 3;
+  y += lh(fsClinic);
 
   // ── Address (toggle) ─────────────────────────────────────────────────────
   if (toggles.show_address && clinic.addressFull) {
@@ -162,15 +170,14 @@ function drawLabel(
 
   // ── Medication name (always, bold) ───────────────────────────────────────
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(fsMed);
   const medLines = doc.splitTextToSize(
     item.item_name.toUpperCase(),
     SAFE_W,
   ) as string[];
-  // Cap at 2 lines so footer rows can never be pushed off the label.
   medLines.slice(0, 2).forEach((line) => {
     doc.text(line, MARGIN_X, y);
-    y += 3;
+    y += lh(fsMed);
   });
 
   // ── Indication (toggle) ──────────────────────────────────────────────────
@@ -181,31 +188,44 @@ function drawLabel(
     y += 2.4;
   }
 
-  // ── Line 1 — Core dose (bold, larger, centred) ───────────────────────────
-  const doseLine = buildDoseLine(item);
-  if (doseLine) {
+  // ── Line 1 — Dosage (bold, centred) ──────────────────────────────────────
+  const dosageLine = buildDosageLine(item);
+  if (dosageLine) {
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    const doseLines = doc.splitTextToSize(doseLine, SAFE_W) as string[];
-    doseLines.slice(0, 2).forEach((line) => {
+    doc.setFontSize(fsInstr);
+    const w = doc.getTextWidth(dosageLine);
+    doc.text(dosageLine, (PAGE_W - w) / 2, y);
+    y += lh(fsInstr);
+  }
+
+  // ── Line 2 — Frequency (bilingual, centred, wraps to max 2) ──────────────
+  const freqLine = formatFrequency(item.frequency);
+  if (freqLine) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(fsInstr);
+    const freqLines = doc.splitTextToSize(
+      freqLine.toUpperCase(),
+      SAFE_W,
+    ) as string[];
+    freqLines.slice(0, 2).forEach((line) => {
       const w = doc.getTextWidth(line);
       doc.text(line, (PAGE_W - w) / 2, y);
-      y += 3;
+      y += lh(fsInstr);
     });
   }
 
-  // ── Line 2 — Instructions + Precaution (smaller, wraps up to 3 lines) ────
-  const instrLine = buildInstructionLine(
+  // ── Line 3 — Custom instructions + Precaution (left, wraps to max 2) ─────
+  const extraLine = buildExtraInstructionLine(
     item,
     Boolean(toggles.show_precaution),
   );
-  if (instrLine) {
+  if (extraLine) {
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6);
-    const instrLines = doc.splitTextToSize(instrLine, SAFE_W) as string[];
-    instrLines.slice(0, 3).forEach((line) => {
+    doc.setFontSize(fsInstr);
+    const extraLines = doc.splitTextToSize(extraLine, SAFE_W) as string[];
+    extraLines.slice(0, 2).forEach((line) => {
       doc.text(line, MARGIN_X, y);
-      y += 2.4;
+      y += lh(fsInstr);
     });
   }
 
