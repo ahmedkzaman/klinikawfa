@@ -1000,11 +1000,17 @@ export type Database = {
           clinic_name: string
           content_margin_top: number
           email: string
+          forecast_top_diagnoses: number
+          forecast_top_items: number
           id: string
           letterhead_text_px: number
           logo_height_px: number
           logo_url: string
           phone: string
+          procurement_surge_days_cover: number
+          procurement_surge_lift: number
+          procurement_surge_trend: number
+          procurement_urgent_days: number
           queue_call_by: string
           singleton: boolean
           sst_number: string | null
@@ -1022,11 +1028,17 @@ export type Database = {
           clinic_name?: string
           content_margin_top?: number
           email?: string
+          forecast_top_diagnoses?: number
+          forecast_top_items?: number
           id?: string
           letterhead_text_px?: number
           logo_height_px?: number
           logo_url?: string
           phone?: string
+          procurement_surge_days_cover?: number
+          procurement_surge_lift?: number
+          procurement_surge_trend?: number
+          procurement_urgent_days?: number
           queue_call_by?: string
           singleton?: boolean
           sst_number?: string | null
@@ -1044,11 +1056,17 @@ export type Database = {
           clinic_name?: string
           content_margin_top?: number
           email?: string
+          forecast_top_diagnoses?: number
+          forecast_top_items?: number
           id?: string
           letterhead_text_px?: number
           logo_height_px?: number
           logo_url?: string
           phone?: string
+          procurement_surge_days_cover?: number
+          procurement_surge_lift?: number
+          procurement_surge_trend?: number
+          procurement_urgent_days?: number
           queue_call_by?: string
           singleton?: boolean
           sst_number?: string | null
