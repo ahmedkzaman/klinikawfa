@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 
 export type MovementStatus = 'fast' | 'normal' | 'slow' | 'dead';
 
