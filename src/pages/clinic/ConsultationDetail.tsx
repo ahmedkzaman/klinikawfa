@@ -1086,10 +1086,10 @@ export default function ConsultationDetail() {
                     </Button>
                     <Button
                       onClick={handleSendToDispensary}
-                      disabled={updateQueue.isPending}
+                      disabled={updateQueue.isPending || pendingSaveCount > 0}
                       className="px-8 py-6 rounded-xl text-base font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-md"
                     >
-                      Send to Dispensary
+                      {pendingSaveCount > 0 ? 'Saving…' : 'Send to Dispensary'}
                     </Button>
                   </>
                 )}
