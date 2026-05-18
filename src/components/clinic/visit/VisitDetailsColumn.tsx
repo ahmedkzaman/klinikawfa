@@ -5,6 +5,7 @@ import {
   Image as ImageIcon,
   Minus,
   Package as PackageIcon,
+  Pencil,
   Pill,
   Plus,
   Stethoscope,
@@ -12,6 +13,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { EditInstructionsDialog } from './EditInstructionsDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
