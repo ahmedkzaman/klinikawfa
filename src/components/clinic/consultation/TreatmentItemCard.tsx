@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Loader2, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -52,13 +53,24 @@ type ItemUpdate = {
 interface Props {
   item: TreatmentItemCardItem;
   onRemove: () => void;
-  onSave: (updates: ItemUpdate) => void;
+  onSave: (updates: ItemUpdate) => Promise<void> | void;
+  onSavingChange?: (itemId: string, isSaving: boolean) => void;
   priceTiers: string[];
   isPanel?: boolean;
   disabled?: boolean;
 }
 
-export function TreatmentItemCard({ item, onRemove, onSave, priceTiers, isPanel = false, disabled = false }: Props) {
+const AUTOSAVE_DEBOUNCE_MS = 700;
+
+export function TreatmentItemCard({
+  item,
+  onRemove,
+  onSave,
+  onSavingChange,
+  priceTiers,
+  isPanel = false,
+  disabled = false,
+}: Props) {
   const [qty, setQty] = useState(item.quantity);
   const [rate, setRate] = useState(Number(item.price));
   const [tier, setTier] = useState(item.price_tier ?? (isPanel ? 'PANEL' : 'SELF PAY'));
@@ -73,8 +85,108 @@ export function TreatmentItemCard({ item, onRemove, onSave, priceTiers, isPanel 
   const [precaution, setPrecaution] = useState(item.precaution ?? '');
   const [isActive, setIsActive] = useState(true);
   const [expanded, setExpanded] = useState(false);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   const amount = qty * rate;
+
+  // Auto-save infrastructure
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedFadeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipFirstRef = useRef(true);
+  const lastSnapshotRef = useRef<string>('');
+
+  const buildUpdates = (): ItemUpdate => ({
+    quantity: qty,
+    price: rate,
+    price_tier: tier || null,
+    indication: indication || null,
+    dosage_qty: dosageQty ? Number(dosageQty) : null,
+    dosage_unit: dosageUnit || null,
+    frequency: frequency || null,
+    instruction: instruction || null,
+    duration: duration || null,
+    precaution: precaution || null,
+  });
+
+  const runSave = async () => {
+    const updates = buildUpdates();
+    const snap = JSON.stringify(updates);
+    if (snap === lastSnapshotRef.current) return;
+    lastSnapshotRef.current = snap;
+    setSaveState('saving');
+    onSavingChange?.(item.id, true);
+    try {
+      await onSave(updates);
+      setSaveState('saved');
+      if (savedFadeRef.current) clearTimeout(savedFadeRef.current);
+      savedFadeRef.current = setTimeout(() => setSaveState('idle'), 1500);
+    } catch {
+      setSaveState('error');
+    } finally {
+      onSavingChange?.(item.id, false);
+    }
+  };
+
+  const flushSave = () => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    void runSave();
+  };
+
+  // Initialize snapshot once
+  useEffect(() => {
+    lastSnapshotRef.current = JSON.stringify(buildUpdates());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Debounced auto-save when any field changes
+  useEffect(() => {
+    if (skipFirstRef.current) {
+      skipFirstRef.current = false;
+      return;
+    }
+    if (disabled) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      void runSave();
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qty, rate, tier, indication, dosageQty, dosageUnit, frequency, instruction, duration, precaution]);
+
+  // Flush on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        void runSave();
+      }
+      if (savedFadeRef.current) clearTimeout(savedFadeRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const SaveIndicator = () => {
+    if (saveState === 'saving')
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" /> Saving…
+        </span>
+      );
+    if (saveState === 'saved')
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 transition-opacity">
+          <Check className="h-3 w-3" /> Saved
+        </span>
+      );
+    if (saveState === 'error')
+      return <span className="text-[11px] text-destructive">Save failed — retry</span>;
+    return null;
+  };
 
   if (!expanded) {
     return (
@@ -89,23 +201,30 @@ export function TreatmentItemCard({ item, onRemove, onSave, priceTiers, isPanel 
               {tier || 'No tier'}, RM {rate.toFixed(2)}
             </p>
           </div>
-          <p className="text-sm font-semibold">RM {amount.toFixed(2)}</p>
+          <div className="flex items-center gap-3">
+            <SaveIndicator />
+            <p className="text-sm font-semibold">RM {amount.toFixed(2)}</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg border bg-card">
+    <div className="rounded-lg border bg-card" onBlur={flushSave}>
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b flex-wrap gap-2">
         <p
           className="text-sm font-bold uppercase cursor-pointer hover:text-primary"
-          onClick={() => setExpanded(false)}
+          onClick={() => {
+            flushSave();
+            setExpanded(false);
+          }}
         >
           {item.item_name}
         </p>
         <div className="flex items-center gap-3 flex-wrap">
+          <SaveIndicator />
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
             <input
               type="checkbox"
@@ -126,25 +245,14 @@ export function TreatmentItemCard({ item, onRemove, onSave, priceTiers, isPanel 
           </Button>
           <Button
             size="sm"
+            variant="outline"
             className="h-7 text-xs"
-            disabled={disabled}
             onClick={() => {
-              onSave({
-                quantity: qty,
-                price: rate,
-                price_tier: tier || null,
-                indication: indication || null,
-                dosage_qty: dosageQty ? Number(dosageQty) : null,
-                dosage_unit: dosageUnit || null,
-                frequency: frequency || null,
-                instruction: instruction || null,
-                duration: duration || null,
-                precaution: precaution || null,
-              });
+              flushSave();
               setExpanded(false);
             }}
           >
-            Save
+            Done
           </Button>
         </div>
       </div>
@@ -158,6 +266,7 @@ export function TreatmentItemCard({ item, onRemove, onSave, priceTiers, isPanel 
             min={1}
             value={qty}
             onChange={(e) => setQty(Number(e.target.value) || 1)}
+            onBlur={flushSave}
             className="h-8 text-sm mt-1"
           />
         </div>
@@ -184,6 +293,7 @@ export function TreatmentItemCard({ item, onRemove, onSave, priceTiers, isPanel 
             step={0.01}
             value={rate}
             onChange={(e) => setRate(Number(e.target.value) || 0)}
+            onBlur={flushSave}
             className="h-8 text-sm mt-1"
           />
         </div>
@@ -212,6 +322,7 @@ export function TreatmentItemCard({ item, onRemove, onSave, priceTiers, isPanel 
               min={0}
               value={dosageQty}
               onChange={(e) => setDosageQty(e.target.value)}
+              onBlur={flushSave}
               className="h-8 text-sm w-16"
               placeholder="Qty"
             />
