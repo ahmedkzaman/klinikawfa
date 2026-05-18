@@ -52,6 +52,9 @@ type ToggleablePatch = Partial<
     | 'show_expiry_date'
     | 'show_duration'
     | 'show_indication'
+    | 'font_size_clinic'
+    | 'font_size_medicine'
+    | 'font_size_instruction'
   >
 >;
 
