@@ -12,6 +12,9 @@ export interface DrugLabelSettings {
   show_expiry_date: boolean;
   show_duration: boolean;
   show_indication: boolean;
+  font_size_clinic: number;
+  font_size_medicine: number;
+  font_size_instruction: number;
   updated_at: string;
 }
 
