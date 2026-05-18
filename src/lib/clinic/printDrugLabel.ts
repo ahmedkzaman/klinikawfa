@@ -42,6 +42,9 @@ export type LabelToggles = Pick<
   | 'show_expiry_date'
   | 'show_duration'
   | 'show_indication'
+  | 'font_size_clinic'
+  | 'font_size_medicine'
+  | 'font_size_instruction'
 >;
 
 const DEFAULT_TOGGLES: LabelToggles = {
@@ -53,6 +56,9 @@ const DEFAULT_TOGGLES: LabelToggles = {
   show_expiry_date: true,
   show_duration: true,
   show_indication: true,
+  font_size_clinic: 8,
+  font_size_medicine: 8,
+  font_size_instruction: 6.5,
 };
 
 // Physical thermal-label dimensions in millimetres.
