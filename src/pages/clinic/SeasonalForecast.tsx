@@ -38,6 +38,7 @@ import {
   type SeasonalTrendRow,
 } from '@/hooks/clinic/useForecasting';
 import { useDiagnosisCorrelation, type DiagnosisCorrelationRow } from '@/hooks/clinic/useProcurementStats';
+import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 
 const LINE_COLORS = [
   'hsl(var(--primary))',
