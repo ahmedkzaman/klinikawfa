@@ -413,6 +413,7 @@ export function VisitDetailsColumn({
             />
           </TabsContent>
         </Tabs>
+      </div>
       <EditInstructionsDialog
         item={editingItem}
         open={editingItem !== null}
