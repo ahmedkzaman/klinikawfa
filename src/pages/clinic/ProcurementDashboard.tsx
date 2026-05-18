@@ -80,17 +80,9 @@ export default function ProcurementDashboard() {
     type: typeFilter === 'all' ? null : typeFilter,
   });
 
-  // Logic sheet + adjustable thresholds
-  const [thresholds, setThresholds] = useState<RecommendationThresholds>(() => loadThresholds());
+  // Logic sheet
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetSection, setSheetSection] = useState<LogicSection>('correlation');
-  const [rulesOpen, setRulesOpen] = useState(false);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(THRESHOLDS_STORAGE_KEY, JSON.stringify(thresholds));
-    } catch {}
-  }, [thresholds]);
 
   const openSheet = (section: LogicSection) => {
     setSheetSection(section);
