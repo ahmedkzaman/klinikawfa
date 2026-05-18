@@ -264,6 +264,7 @@ export default function DispenseCheckout() {
             <VisitDetailsColumn
               consultationId={consultation?.id}
               canEdit={canEdit}
+              canEditInstructions
               patientName={patient?.name ?? null}
             />
 
