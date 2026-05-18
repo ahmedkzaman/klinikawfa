@@ -649,6 +649,10 @@ export default function ConsultationDetail() {
     if (!entry) return;
 
     try {
+      if (pendingSavesRef.current.size > 0) {
+        toast.message('Saving your edits…');
+        await waitForPendingSaves();
+      }
       if (consultationId) {
         await updateConsultation.mutateAsync({
           id: consultationId,
