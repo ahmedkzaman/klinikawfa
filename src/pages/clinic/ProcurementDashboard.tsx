@@ -298,10 +298,8 @@ function TrendArrow({ pct }: { pct: number | null }) {
 }
 
 function CorrelationTab({
-  thresholds: _thresholds,
   onOpenLogic,
 }: {
-  thresholds: RecommendationThresholds;
   onOpenLogic: () => void;
 }) {
   const [hideLowLift, setHideLowLift] = useState(true);
