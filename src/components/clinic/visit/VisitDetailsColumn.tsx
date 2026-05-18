@@ -445,6 +445,7 @@ export function VisitDetailsColumn({
 interface ItemListProps {
   rows: ConsultationItemRow[];
   canEdit: boolean;
+  canEditInstructions: boolean;
   onQty: (id: string, currentQty: number, delta: number) => void;
   onRemove: (id: string) => void;
   onPrintLabel: (item: ConsultationItemRow) => void;
@@ -457,6 +458,7 @@ interface ItemListProps {
 function ItemList({
   rows,
   canEdit,
+  canEditInstructions,
   onQty,
   onRemove,
   onPrintLabel,
