@@ -131,6 +131,7 @@ export function VisitDetailsColumn({
   const [activeTab, setActiveTab] = useState<
     'all' | 'items' | 'services' | 'packages' | 'documents'
   >('all');
+  const [editingItem, setEditingItem] = useState<ConsultationItemRow | null>(null);
 
   // Print orchestration: build a real 60×50mm PDF with jsPDF and open it in
   // a new tab. The PDF carries its physical page dimensions in its metadata,
