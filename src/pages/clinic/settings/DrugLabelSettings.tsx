@@ -39,7 +39,11 @@ const REQUIRED_FIELDS = [
   { label: 'Instruction' },
 ] as const;
 
-const TOGGLES: Array<{ key: keyof Omit<DrugLabelSettings, 'id' | 'updated_at'>; label: string }> = [
+type BooleanKeys = {
+  [K in keyof DrugLabelSettings]: DrugLabelSettings[K] extends boolean ? K : never;
+}[keyof DrugLabelSettings];
+
+const TOGGLES: Array<{ key: BooleanKeys; label: string }> = [
   { key: 'show_address', label: 'Address' },
   { key: 'show_tel_number', label: 'Tel Number' },
   { key: 'show_precaution', label: 'Precaution' },
