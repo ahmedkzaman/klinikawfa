@@ -666,7 +666,8 @@ export function InventoryItemDialog({ open, onOpenChange, item, defaultCategory 
                     <SelectContent>
                       {FREQUENCY_OPTIONS.map((o) => (
                         <SelectItem key={o} value={o}>
-                          {o}
+                          <span className="font-medium">{o}</span>
+                          <span className="text-muted-foreground ml-2">{FREQUENCY_LABELS[o] || ''}</span>
                         </SelectItem>
                       ))}
                     </SelectContent>
