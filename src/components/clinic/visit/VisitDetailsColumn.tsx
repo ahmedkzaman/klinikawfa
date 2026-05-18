@@ -32,6 +32,13 @@ interface Props {
   consultationId: string | undefined;
   canEdit?: boolean;
   /**
+   * Allows the dispensary nurse to fix prescribing fields (dosage / unit /
+   * frequency / instruction / duration) even when the consultation lock
+   * blocks broader edits. Defaults to `canEdit` so the doctor's screen is
+   * unchanged.
+   */
+  canEditInstructions?: boolean;
+  /**
    * Optional patient display name forwarded to the printed label so the
    * dispensary can stick it on the bag immediately. Falls back gracefully
    * when not provided.
@@ -114,8 +121,10 @@ function EmptyState({
 export function VisitDetailsColumn({
   consultationId,
   canEdit = true,
+  canEditInstructions,
   patientName,
 }: Props) {
+  const canEditInstr = canEditInstructions ?? canEdit;
   const { data: rawItems = [], isLoading } = useConsultationItems(consultationId);
   const items = rawItems as unknown as ConsultationItemRow[];
 
@@ -342,6 +351,7 @@ export function VisitDetailsColumn({
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
+              canEditInstructions={canEditInstr}
               updatingId={updateItem.isPending}
               removingId={removeItem.isPending}
               emptyState={
@@ -361,6 +371,7 @@ export function VisitDetailsColumn({
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
+              canEditInstructions={canEditInstr}
               updatingId={updateItem.isPending}
               removingId={removeItem.isPending}
               emptyState={
@@ -380,6 +391,7 @@ export function VisitDetailsColumn({
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
+              canEditInstructions={canEditInstr}
               updatingId={updateItem.isPending}
               removingId={removeItem.isPending}
               emptyState={
@@ -399,6 +411,7 @@ export function VisitDetailsColumn({
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
+              canEditInstructions={canEditInstr}
               updatingId={updateItem.isPending}
               removingId={removeItem.isPending}
               emptyState={
@@ -432,6 +445,7 @@ export function VisitDetailsColumn({
 interface ItemListProps {
   rows: ConsultationItemRow[];
   canEdit: boolean;
+  canEditInstructions: boolean;
   onQty: (id: string, currentQty: number, delta: number) => void;
   onRemove: (id: string) => void;
   onPrintLabel: (item: ConsultationItemRow) => void;
@@ -444,6 +458,7 @@ interface ItemListProps {
 function ItemList({
   rows,
   canEdit,
+  canEditInstructions,
   onQty,
   onRemove,
   onPrintLabel,
@@ -565,19 +580,21 @@ function ItemList({
                   </Badge>
                 );
               })()}
-              {item.item_id && canEdit && (
+              {item.item_id && (
                 <div className="flex items-center gap-1.5">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-7 w-7 rounded-full"
-                    onClick={() => onEdit(item)}
-                    aria-label="Edit instructions"
-                    title="Edit instructions"
-                  >
-                    <Pencil className="h-3 w-3 text-slate-600" />
-                  </Button>
+                  {canEditInstructions && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7 rounded-full"
+                      onClick={() => onEdit(item)}
+                      aria-label="Edit instructions"
+                      title="Edit instructions"
+                    >
+                      <Pencil className="h-3 w-3 text-slate-600" />
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant="outline"
