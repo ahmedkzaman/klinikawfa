@@ -22,7 +22,6 @@ import {
   useDiagnosisCorrelation,
   useRefreshCorrelation,
   useProcurementRecommendations,
-  type RecommendationThresholds,
   type MovementStatus,
   type InventoryTxType,
 } from '@/hooks/clinic/useProcurementStats';
