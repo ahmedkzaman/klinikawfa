@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format, formatDistanceToNow } from 'date-fns';
 import {
@@ -22,26 +22,12 @@ import {
   useDiagnosisCorrelation,
   useRefreshCorrelation,
   useProcurementRecommendations,
-  DEFAULT_THRESHOLDS,
   type RecommendationThresholds,
   type MovementStatus,
   type InventoryTxType,
 } from '@/hooks/clinic/useProcurementStats';
 import { ProcurementLogicSheet, type LogicSection } from '@/components/clinic/procurement/ProcurementLogicSheet';
-import { RecommendationRulesDialog } from '@/components/clinic/procurement/RecommendationRulesDialog';
 
-const THRESHOLDS_STORAGE_KEY = 'procurement.thresholds.v1';
-
-function loadThresholds(): RecommendationThresholds {
-  try {
-    const raw = localStorage.getItem(THRESHOLDS_STORAGE_KEY);
-    if (!raw) return DEFAULT_THRESHOLDS;
-    const parsed = JSON.parse(raw);
-    return { ...DEFAULT_THRESHOLDS, ...parsed };
-  } catch {
-    return DEFAULT_THRESHOLDS;
-  }
-}
 
 const statusBadge: Record<MovementStatus, string> = {
   fast:   'bg-destructive/15 text-destructive',
