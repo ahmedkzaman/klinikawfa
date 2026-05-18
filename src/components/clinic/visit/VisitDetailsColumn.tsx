@@ -121,8 +121,10 @@ function EmptyState({
 export function VisitDetailsColumn({
   consultationId,
   canEdit = true,
+  canEditInstructions,
   patientName,
 }: Props) {
+  const canEditInstr = canEditInstructions ?? canEdit;
   const { data: rawItems = [], isLoading } = useConsultationItems(consultationId);
   const items = rawItems as unknown as ConsultationItemRow[];
 
