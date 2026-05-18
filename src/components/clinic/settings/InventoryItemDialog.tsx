@@ -27,6 +27,7 @@ import {
   INDICATION_OPTIONS,
   DOSAGE_UNIT_OPTIONS,
   FREQUENCY_OPTIONS,
+  FREQUENCY_LABELS,
   INSTRUCTION_OPTIONS,
   DURATION_UNIT_OPTIONS,
   PRECAUTION_OPTIONS,
@@ -665,7 +666,8 @@ export function InventoryItemDialog({ open, onOpenChange, item, defaultCategory 
                     <SelectContent>
                       {FREQUENCY_OPTIONS.map((o) => (
                         <SelectItem key={o} value={o}>
-                          {o}
+                          <span className="font-medium">{o}</span>
+                          <span className="text-muted-foreground ml-2">{FREQUENCY_LABELS[o] || ''}</span>
                         </SelectItem>
                       ))}
                     </SelectContent>

@@ -38,11 +38,34 @@ export const FREQUENCY_OPTIONS = [
   'STAT',
   'ON',
   'OM',
+  'EOD',
   'Q4H',
   'Q6H',
   'Q8H',
   'Q12H',
 ];
+
+/**
+ * Bilingual (EN / BM) human-readable label for each frequency short code.
+ * The DB stores the short code (e.g. "OD"); UI dropdowns and the drug-label
+ * printer translate via this map so reports stay clean while patients get
+ * fully translated sticker instructions.
+ */
+export const FREQUENCY_LABELS: Record<string, string> = {
+  OD:   'Once a day / 1 kali sehari',
+  BD:   'Twice a day / 2 kali sehari',
+  TDS:  '3 times a day / 3 kali sehari',
+  QID:  '4 times a day / 4 kali sehari',
+  PRN:  'When necessary / Jika perlu',
+  STAT: 'Immediately / Segera',
+  ON:   'At night / Pada waktu malam',
+  OM:   'In the morning / Pada waktu pagi',
+  EOD:  'Every other day / Selang sehari',
+  Q4H:  'Every 4 hours / Setiap 4 jam',
+  Q6H:  'Every 6 hours / Setiap 6 jam',
+  Q8H:  'Every 8 hours / Setiap 8 jam',
+  Q12H: 'Every 12 hours / Setiap 12 jam',
+};
 
 export const INSTRUCTION_OPTIONS = [
   'Before meal',

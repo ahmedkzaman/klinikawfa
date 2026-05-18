@@ -23,6 +23,7 @@ import { useUpdateConsultationItem } from '@/hooks/clinic/useConsultationItems';
 import {
   DOSAGE_UNIT_OPTIONS,
   FREQUENCY_OPTIONS,
+  FREQUENCY_LABELS,
   INSTRUCTION_OPTIONS,
   DURATION_OPTIONS,
 } from '@/lib/clinic/prescribingOptions';
@@ -142,7 +143,8 @@ export function EditInstructionsDialog({ item, open, onOpenChange }: Props) {
                 <SelectContent>
                   {FREQUENCY_OPTIONS.map((f) => (
                     <SelectItem key={f} value={f}>
-                      {f}
+                      <span className="font-medium">{f}</span>
+                      <span className="text-muted-foreground ml-2">{FREQUENCY_LABELS[f] || ''}</span>
                     </SelectItem>
                   ))}
                 </SelectContent>
