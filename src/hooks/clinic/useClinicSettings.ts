@@ -20,6 +20,12 @@ export interface ClinicSettings {
   tv_youtube_id: string | null;
   tv_ticker_text: string | null;
   tts_language: 'ms-MY' | 'en-US';
+  procurement_urgent_days: number;
+  procurement_surge_trend: number;
+  procurement_surge_lift: number;
+  procurement_surge_days_cover: number;
+  forecast_top_diagnoses: number;
+  forecast_top_items: number;
   updated_at: string;
 }
 
@@ -42,6 +48,12 @@ const DEFAULTS: ClinicSettings = {
   tv_youtube_id: null,
   tv_ticker_text: null,
   tts_language: 'ms-MY',
+  procurement_urgent_days: 7,
+  procurement_surge_trend: 20,
+  procurement_surge_lift: 1.5,
+  procurement_surge_days_cover: 30,
+  forecast_top_diagnoses: 5,
+  forecast_top_items: 3,
   updated_at: new Date().toISOString(),
 };
 
