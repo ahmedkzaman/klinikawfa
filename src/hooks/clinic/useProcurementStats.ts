@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 
 export type MovementStatus = 'fast' | 'normal' | 'slow' | 'dead';
 
@@ -178,7 +179,15 @@ export function useProcurementRecommendations(
   data: Recommendations;
   isLoading: boolean;
 } {
-  const t: RecommendationThresholds = { ...DEFAULT_THRESHOLDS, ...thresholds };
+  const { settings } = useClinicSettings();
+  const t: RecommendationThresholds = {
+    urgentDays: settings.procurement_urgent_days ?? DEFAULT_THRESHOLDS.urgentDays,
+    surgeTrendPct: Number(settings.procurement_surge_trend ?? DEFAULT_THRESHOLDS.surgeTrendPct),
+    surgeLift: Number(settings.procurement_surge_lift ?? DEFAULT_THRESHOLDS.surgeLift),
+    surgeDaysCover: settings.procurement_surge_days_cover ?? DEFAULT_THRESHOLDS.surgeDaysCover,
+    deadStockDays: DEFAULT_THRESHOLDS.deadStockDays,
+    ...thresholds,
+  };
   const { data: stats = [], isLoading: a } = useProcurementStats();
   const { data: corr = [], isLoading: b } = useDiagnosisCorrelation({ minLift: t.surgeLift });
 

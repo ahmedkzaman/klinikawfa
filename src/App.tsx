@@ -87,6 +87,7 @@ import ChargesSettings from "./pages/clinic/settings/ChargesSettings";
 import DocumentSettings from "./pages/clinic/settings/DocumentSettings";
 import DocumentTemplates from "./pages/clinic/settings/DocumentTemplates";
 import QueueSettings from "./pages/clinic/settings/QueueSettings";
+import ProcurementSettings from "./pages/clinic/settings/ProcurementSettings";
 import Appointments from "./pages/clinic/Appointments";
 import QueueTV from "./pages/tv/QueueTV";
 
@@ -402,6 +403,14 @@ const App = () => (
                   element={
                     <ClinicProtectedRoute requiredRole="ops_or_admin">
                       <QueueSettings />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
+                  path="settings/procurement-rules"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <ProcurementSettings />
                     </ClinicProtectedRoute>
                   }
                 />

@@ -38,6 +38,7 @@ import {
   type SeasonalTrendRow,
 } from '@/hooks/clinic/useForecasting';
 import { useDiagnosisCorrelation, type DiagnosisCorrelationRow } from '@/hooks/clinic/useProcurementStats';
+import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 
 const LINE_COLORS = [
   'hsl(var(--primary))',
@@ -66,6 +67,9 @@ function topItemsForGroup(
 export default function SeasonalForecast() {
   const [targetMonth, setTargetMonth] = useState<number>(nextMonth());
   const [logicOpen, setLogicOpen] = useState(false);
+  const { settings } = useClinicSettings();
+  const topDxLimit = settings.forecast_top_diagnoses ?? 5;
+  const topItemLimit = settings.forecast_top_items ?? 3;
   const { data: trends = [], isLoading: trendsLoading } = useSeasonalTrends();
   const { data: corr = [], isLoading: corrLoading } = useDiagnosisCorrelation({
     minLift: 0,
@@ -73,8 +77,8 @@ export default function SeasonalForecast() {
   });
 
   const topDx = useMemo<SeasonalTrendRow[]>(
-    () => topDiagnosesForMonth(trends, targetMonth, 5),
-    [trends, targetMonth],
+    () => topDiagnosesForMonth(trends, targetMonth, topDxLimit),
+    [trends, targetMonth, topDxLimit],
   );
 
   const chartGroups = useMemo(() => topDx.map((d) => d.diagnosis_group), [topDx]);
@@ -148,7 +152,7 @@ export default function SeasonalForecast() {
       {/* Chart */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">12-Month Trend — Top 5 Diagnoses for {MONTH_LABELS[targetMonth - 1]}</CardTitle>
+          <CardTitle className="text-lg">12-Month Trend — Top {topDxLimit} Diagnoses for {MONTH_LABELS[targetMonth - 1]}</CardTitle>
         </CardHeader>
         <CardContent>
           {chartGroups.length === 0 ? (
@@ -228,7 +232,7 @@ export default function SeasonalForecast() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {topDx.map((dx) => {
-              const items = topItemsForGroup(corr, dx.diagnosis_group, 3);
+              const items = topItemsForGroup(corr, dx.diagnosis_group, topItemLimit);
               return (
                 <Card key={dx.diagnosis_group} className="flex flex-col">
                   <CardHeader className="pb-3">

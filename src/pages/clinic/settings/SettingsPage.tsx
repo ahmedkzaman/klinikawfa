@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Sliders, Users, Archive, Package, ChevronRight, Stethoscope, Shield, Tag, FileText, FileEdit, Tv, Coins, Building2 } from 'lucide-react';
+import { Sliders, Users, Archive, Package, ChevronRight, Stethoscope, Shield, Tag, FileText, FileEdit, Tv, Coins, Building2, Boxes } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -101,6 +101,14 @@ export default function SettingsPage() {
       title: 'Queue & TV',
       description: 'Manage clinic rooms and the waiting-room TV display.',
       icon: Tv,
+      visible: isOpsOrAdmin,
+      group: 'clinical',
+    },
+    {
+      href: '/clinic/settings/procurement-rules',
+      title: 'Procurement & Forecasting',
+      description: 'Configure global thresholds for automated purchase recommendations and seasonal readiness.',
+      icon: Boxes,
       visible: isOpsOrAdmin,
       group: 'clinical',
     },

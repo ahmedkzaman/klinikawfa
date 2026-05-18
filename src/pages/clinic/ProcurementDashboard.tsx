@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format, formatDistanceToNow } from 'date-fns';
 import {
@@ -22,26 +22,11 @@ import {
   useDiagnosisCorrelation,
   useRefreshCorrelation,
   useProcurementRecommendations,
-  DEFAULT_THRESHOLDS,
-  type RecommendationThresholds,
   type MovementStatus,
   type InventoryTxType,
 } from '@/hooks/clinic/useProcurementStats';
 import { ProcurementLogicSheet, type LogicSection } from '@/components/clinic/procurement/ProcurementLogicSheet';
-import { RecommendationRulesDialog } from '@/components/clinic/procurement/RecommendationRulesDialog';
 
-const THRESHOLDS_STORAGE_KEY = 'procurement.thresholds.v1';
-
-function loadThresholds(): RecommendationThresholds {
-  try {
-    const raw = localStorage.getItem(THRESHOLDS_STORAGE_KEY);
-    if (!raw) return DEFAULT_THRESHOLDS;
-    const parsed = JSON.parse(raw);
-    return { ...DEFAULT_THRESHOLDS, ...parsed };
-  } catch {
-    return DEFAULT_THRESHOLDS;
-  }
-}
 
 const statusBadge: Record<MovementStatus, string> = {
   fast:   'bg-destructive/15 text-destructive',
@@ -94,17 +79,9 @@ export default function ProcurementDashboard() {
     type: typeFilter === 'all' ? null : typeFilter,
   });
 
-  // Logic sheet + adjustable thresholds
-  const [thresholds, setThresholds] = useState<RecommendationThresholds>(() => loadThresholds());
+  // Logic sheet
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetSection, setSheetSection] = useState<LogicSection>('correlation');
-  const [rulesOpen, setRulesOpen] = useState(false);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(THRESHOLDS_STORAGE_KEY, JSON.stringify(thresholds));
-    } catch {}
-  }, [thresholds]);
 
   const openSheet = (section: LogicSection) => {
     setSheetSection(section);
@@ -266,7 +243,6 @@ export default function ProcurementDashboard() {
         {/* CORRELATION */}
         <TabsContent value="correlation">
           <CorrelationTab
-            thresholds={thresholds}
             onOpenLogic={() => openSheet('correlation')}
           />
         </TabsContent>
@@ -274,10 +250,7 @@ export default function ProcurementDashboard() {
         {/* PLANNING */}
         <TabsContent value="planning">
           <PlanningTab
-            thresholds={thresholds}
             onOpenLogic={() => openSheet('planning')}
-            onOpenRules={() => setRulesOpen(true)}
-            onResetThresholds={() => setThresholds(DEFAULT_THRESHOLDS)}
           />
         </TabsContent>
       </Tabs>
@@ -286,12 +259,6 @@ export default function ProcurementDashboard() {
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         defaultSection={sheetSection}
-      />
-      <RecommendationRulesDialog
-        open={rulesOpen}
-        onOpenChange={setRulesOpen}
-        value={thresholds}
-        onSave={setThresholds}
       />
     </div>
   );
@@ -330,10 +297,8 @@ function TrendArrow({ pct }: { pct: number | null }) {
 }
 
 function CorrelationTab({
-  thresholds: _thresholds,
   onOpenLogic,
 }: {
-  thresholds: RecommendationThresholds;
   onOpenLogic: () => void;
 }) {
   const [hideLowLift, setHideLowLift] = useState(true);
@@ -451,39 +416,30 @@ function CorrelationTab({
 /* ─────────────────────────── Tab 4: Purchase Planning ─────────────────────────── */
 
 function PlanningTab({
-  thresholds,
   onOpenLogic,
-  onOpenRules,
-  onResetThresholds,
 }: {
-  thresholds: RecommendationThresholds;
   onOpenLogic: () => void;
-  onOpenRules: () => void;
-  onResetThresholds: () => void;
 }) {
-  const { data, isLoading } = useProcurementRecommendations(thresholds);
+  const { data, isLoading } = useProcurementRecommendations();
   const navigate = useNavigate();
 
   const draftPO = (itemId: string, qty: number) =>
     navigate(`/clinic/procurement?prefillItem=${itemId}&qty=${qty}`);
-
-  const isCustom = (Object.keys(DEFAULT_THRESHOLDS) as (keyof RecommendationThresholds)[])
-    .some((k) => thresholds[k] !== DEFAULT_THRESHOLDS[k]);
 
   const header = (
     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
       <div>
         <h2 className="text-lg font-semibold">Purchase Planning</h2>
         <p className="text-xs text-muted-foreground">
-          Deterministic rules · {isCustom ? 'Custom thresholds active' : 'Default thresholds'}
+          Deterministic rules driven by global clinic settings.
         </p>
       </div>
       <div className="flex items-center gap-2 flex-wrap">
         <Button size="sm" variant="ghost" onClick={onOpenLogic}>
           <Info className="h-4 w-4 mr-2" /> How is this calculated?
         </Button>
-        <Button size="sm" variant="outline" onClick={onOpenRules}>
-          <Settings className="h-4 w-4 mr-2" /> Rules
+        <Button size="sm" variant="outline" onClick={() => navigate('/clinic/settings/procurement-rules')}>
+          <Settings className="h-4 w-4 mr-2" /> Configure Rules
         </Button>
       </div>
     </div>
@@ -504,18 +460,6 @@ function PlanningTab({
   return (
     <div className="space-y-4">
       {header}
-      {isCustom && (
-        <Alert>
-          <Settings className="h-4 w-4" />
-          <AlertTitle>Custom rules active</AlertTitle>
-          <AlertDescription className="flex items-center justify-between gap-2">
-            <span>
-              Urgent &lt;{thresholds.urgentDays}d · Surge &gt;{thresholds.surgeTrendPct}% &amp; Lift &gt;{thresholds.surgeLift.toFixed(1)} · Cover &lt;{thresholds.surgeDaysCover}d
-            </span>
-            <Button size="sm" variant="link" onClick={onResetThresholds}>Reset</Button>
-          </AlertDescription>
-        </Alert>
-      )}
 
       {empty ? (
         <Card><CardContent className="py-10 text-center text-muted-foreground">No actionable recommendations right now. Stock looks healthy.</CardContent></Card>
