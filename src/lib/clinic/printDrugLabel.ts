@@ -84,15 +84,28 @@ function formatFrequency(rawFreq?: string | null): string {
   return frequencyMap[cleanFreq] ?? rawFreq;
 }
 
-function buildDosageBits(item: DrugLabelItem): string[] {
+/** Bold "core dose" line: e.g. "1 TABLET · TDS". */
+function buildDoseLine(item: DrugLabelItem): string {
   const qtyUnit =
     item.dosage_qty != null && item.dosage_unit
       ? `${item.dosage_qty} ${item.dosage_unit}`
-      : (item.dosage ?? null);
+      : item.dosage ?? null;
   const freq = formatFrequency(item.frequency);
-  return [item.indication, qtyUnit, freq || null, item.instruction]
+  return [qtyUnit, freq || null]
+    .filter((s): s is string => Boolean(s && String(s).trim()))
+    .map((s) => String(s).toUpperCase())
+    .join(' · ');
+}
+
+/** Plain "instructions" line: e.g. "AFTER MEAL - AVOID ALCOHOL". */
+function buildInstructionLine(
+  item: DrugLabelItem,
+  includePrecaution: boolean,
+): string {
+  const parts = [item.instruction, includePrecaution ? item.precaution : null]
     .filter((s): s is string => Boolean(s && String(s).trim()))
     .map((s) => String(s).toUpperCase());
+  return parts.join(' - ');
 }
 
 /**
