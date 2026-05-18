@@ -232,6 +232,35 @@ function PropertyRow({
   );
 }
 
+function FontSizeRow({
+  label,
+  value,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  onCommit: (value: number) => void;
+}) {
+  const [local, setLocal] = React.useState(value);
+  React.useEffect(() => setLocal(value), [value]);
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-slate-700">{label}</span>
+        <span className="tabular-nums text-slate-500">{local.toFixed(1)} pt</span>
+      </div>
+      <Slider
+        value={[local]}
+        min={5}
+        max={10}
+        step={0.5}
+        onValueChange={(v) => setLocal(v[0])}
+        onValueCommit={(v) => onCommit(v[0])}
+      />
+    </div>
+  );
+}
+
 function LabelPreview({
   settings,
   clinic,
