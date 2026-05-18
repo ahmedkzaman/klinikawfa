@@ -622,6 +622,10 @@ export default function ConsultationDetail() {
       toast.error('Doctor profile missing or consultation not created — contact admin');
       return;
     }
+    if (pendingSavesRef.current.size > 0) {
+      toast.message('Saving your edits…');
+      await waitForPendingSaves();
+    }
     await updateConsultation.mutateAsync({
       id: consultationId,
       case_note: caseNote,
