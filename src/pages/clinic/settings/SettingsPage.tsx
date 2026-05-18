@@ -105,6 +105,14 @@ export default function SettingsPage() {
       group: 'clinical',
     },
     {
+      href: '/clinic/settings/procurement-rules',
+      title: 'Procurement & Forecasting',
+      description: 'Configure global thresholds for automated purchase recommendations and seasonal readiness.',
+      icon: Boxes,
+      visible: isOpsOrAdmin,
+      group: 'clinical',
+    },
+    {
       href: '/clinic/settings/charges',
       title: 'Other Charges',
       description: 'Manage optional billing charges shown at checkout.',
