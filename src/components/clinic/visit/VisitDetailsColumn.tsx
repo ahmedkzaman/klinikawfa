@@ -351,6 +351,7 @@ export function VisitDetailsColumn({
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
+              canEditInstructions={canEditInstr}
               updatingId={updateItem.isPending}
               removingId={removeItem.isPending}
               emptyState={
@@ -370,6 +371,7 @@ export function VisitDetailsColumn({
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
+              canEditInstructions={canEditInstr}
               updatingId={updateItem.isPending}
               removingId={removeItem.isPending}
               emptyState={
@@ -389,6 +391,7 @@ export function VisitDetailsColumn({
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
+              canEditInstructions={canEditInstr}
               updatingId={updateItem.isPending}
               removingId={removeItem.isPending}
               emptyState={
@@ -408,6 +411,7 @@ export function VisitDetailsColumn({
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
+              canEditInstructions={canEditInstr}
               updatingId={updateItem.isPending}
               removingId={removeItem.isPending}
               emptyState={
