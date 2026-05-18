@@ -232,7 +232,7 @@ export default function SeasonalForecast() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {topDx.map((dx) => {
-              const items = topItemsForGroup(corr, dx.diagnosis_group, 3);
+              const items = topItemsForGroup(corr, dx.diagnosis_group, topItemLimit);
               return (
                 <Card key={dx.diagnosis_group} className="flex flex-col">
                   <CardHeader className="pb-3">
