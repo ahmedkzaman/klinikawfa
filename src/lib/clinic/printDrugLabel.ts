@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import type { DrugLabelSettings } from '@/hooks/clinic/useDrugLabelSettings';
+import { FREQUENCY_LABELS } from './prescribingOptions';
 
 /**
  * Clinic identity printed at the top of every label. Values come from
