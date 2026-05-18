@@ -12,6 +12,9 @@ export interface DrugLabelSettings {
   show_expiry_date: boolean;
   show_duration: boolean;
   show_indication: boolean;
+  font_size_clinic: number;
+  font_size_medicine: number;
+  font_size_instruction: number;
   updated_at: string;
 }
 
@@ -49,6 +52,9 @@ type ToggleablePatch = Partial<
     | 'show_expiry_date'
     | 'show_duration'
     | 'show_indication'
+    | 'font_size_clinic'
+    | 'font_size_medicine'
+    | 'font_size_instruction'
   >
 >;
 

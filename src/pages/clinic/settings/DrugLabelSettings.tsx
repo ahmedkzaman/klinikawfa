@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { ArrowLeft, Pencil } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
@@ -6,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
 import {
   useDrugLabelSettings,
   useUpdateDrugLabelSettings,
@@ -38,7 +40,11 @@ const REQUIRED_FIELDS = [
   { label: 'Instruction' },
 ] as const;
 
-const TOGGLES: Array<{ key: keyof Omit<DrugLabelSettings, 'id' | 'updated_at'>; label: string }> = [
+type BooleanKeys = {
+  [K in keyof DrugLabelSettings]: DrugLabelSettings[K] extends boolean ? K : never;
+}[keyof DrugLabelSettings];
+
+const TOGGLES: Array<{ key: BooleanKeys; label: string }> = [
   { key: 'show_address', label: 'Address' },
   { key: 'show_tel_number', label: 'Tel Number' },
   { key: 'show_precaution', label: 'Precaution' },
@@ -81,47 +87,86 @@ export default function DrugLabelSettingsPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card className={bento}>
-            <CardContent className="p-6">
-              <h3 className={bentoHeader}>Label Properties</h3>
-              {isLoading || !settings ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 12 }).map((_, i) => (
-                    <Skeleton key={i} className="h-9 w-full" />
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  {REQUIRED_FIELDS.map((f) => (
-                    <PropertyRow
-                      key={f.label}
-                      label={f.label}
-                      checked
-                      disabled
-                      badge={
-                        <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-100 border-none text-[10px] h-5 px-1.5">
-                          Required
-                        </Badge>
-                      }
-                    />
-                  ))}
+          <div className="space-y-4">
+            <Card className={bento}>
+              <CardContent className="p-6">
+                <h3 className={bentoHeader}>Label Properties</h3>
+                {isLoading || !settings ? (
+                  <div className="space-y-2">
+                    {Array.from({ length: 12 }).map((_, i) => (
+                      <Skeleton key={i} className="h-9 w-full" />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {REQUIRED_FIELDS.map((f) => (
+                      <PropertyRow
+                        key={f.label}
+                        label={f.label}
+                        checked
+                        disabled
+                        badge={
+                          <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-100 border-none text-[10px] h-5 px-1.5">
+                            Required
+                          </Badge>
+                        }
+                      />
+                    ))}
 
-                  <div className="my-2 border-t border-slate-100" />
+                    <div className="my-2 border-t border-slate-100" />
 
-                  {TOGGLES.map(({ key, label }) => (
-                    <PropertyRow
-                      key={key}
-                      label={label}
-                      checked={settings[key]}
-                      onCheckedChange={(checked) =>
-                        update.mutate({ [key]: !!checked } as ToggleablePatchAlias)
-                      }
+                    {TOGGLES.map(({ key, label }) => (
+                      <PropertyRow
+                        key={key}
+                        label={label}
+                        checked={settings[key]}
+                        onCheckedChange={(checked) =>
+                          update.mutate({ [key]: !!checked } as ToggleablePatchAlias)
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className={bento}>
+              <CardContent className="p-6">
+                <h3 className={bentoHeader}>Typography Scale (pt)</h3>
+                {isLoading || !settings ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Skeleton key={i} className="h-9 w-full" />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-5 pt-1">
+                    <FontSizeRow
+                      label="Clinic Name"
+                      value={settings.font_size_clinic}
+                      onCommit={(v) => update.mutate({ font_size_clinic: v })}
                     />
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    <FontSizeRow
+                      label="Medicine Name"
+                      value={settings.font_size_medicine}
+                      onCommit={(v) => update.mutate({ font_size_medicine: v })}
+                    />
+                    <FontSizeRow
+                      label="Instructions"
+                      value={settings.font_size_instruction}
+                      onCommit={(v) => update.mutate({ font_size_instruction: v })}
+                    />
+                    <p className="text-xs text-slate-400">
+                      Adjust between 5–10pt in 0.5pt steps. Footer & address
+                      text stay at their fixed sizes to protect the sticker
+                      boundaries.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
 
           <div className="lg:sticky lg:top-4 self-start">
             <Card className={cn(bento, 'bg-slate-50')}>
@@ -185,6 +230,35 @@ function PropertyRow({
       </span>
       {badge}
     </label>
+  );
+}
+
+function FontSizeRow({
+  label,
+  value,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  onCommit: (value: number) => void;
+}) {
+  const [local, setLocal] = React.useState(value);
+  React.useEffect(() => setLocal(value), [value]);
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-slate-700">{label}</span>
+        <span className="tabular-nums text-slate-500">{local.toFixed(1)} pt</span>
+      </div>
+      <Slider
+        value={[local]}
+        min={5}
+        max={10}
+        step={0.5}
+        onValueChange={(v) => setLocal(v[0])}
+        onValueCommit={(v) => onCommit(v[0])}
+      />
+    </div>
   );
 }
 

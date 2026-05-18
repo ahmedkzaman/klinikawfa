@@ -1662,6 +1662,9 @@ export type Database = {
       }
       drug_label_settings: {
         Row: {
+          font_size_clinic: number
+          font_size_instruction: number
+          font_size_medicine: number
           id: string
           show_address: boolean
           show_date: boolean
@@ -1675,6 +1678,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          font_size_clinic?: number
+          font_size_instruction?: number
+          font_size_medicine?: number
           id?: string
           show_address?: boolean
           show_date?: boolean
@@ -1688,6 +1694,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          font_size_clinic?: number
+          font_size_instruction?: number
+          font_size_medicine?: number
           id?: string
           show_address?: boolean
           show_date?: boolean
