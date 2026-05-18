@@ -63,26 +63,16 @@ const MARGIN_X = 2;
 const SAFE_W = PAGE_W - MARGIN_X * 2;
 
 /**
- * Map common medical frequency abbreviations to bilingual (EN/BM) strings.
- * Falls back to the raw text verbatim if it isn't a recognised abbreviation,
- * so free-form tapering doses ("2 tabs today, 1 tab tomorrow") still print
- * exactly as the doctor typed them.
+ * Map common medical frequency abbreviations to bilingual (EN/BM) strings
+ * via the shared {@link FREQUENCY_LABELS} dictionary. Falls back to the raw
+ * text verbatim if it isn't a recognised abbreviation, so free-form tapering
+ * doses ("2 tabs today, 1 tab tomorrow") still print exactly as the doctor
+ * typed them.
  */
 function formatFrequency(rawFreq?: string | null): string {
   if (!rawFreq) return '';
-  const cleanFreq = rawFreq.toLowerCase().trim();
-  const frequencyMap: Record<string, string> = {
-    od: 'Once a day / 1 kali sehari',
-    bd: 'Twice a day / 2 kali sehari',
-    tds: '3 times a day / 3 kali sehari',
-    qid: '4 times a day / 4 kali sehari',
-    prn: 'When necessary / Jika perlu',
-    stat: 'Immediately / Segera',
-    on: 'At night / Pada waktu malam',
-    om: 'In the morning / Pada waktu pagi',
-    eod: 'Every other day / Selang sehari',
-  };
-  return frequencyMap[cleanFreq] ?? rawFreq;
+  const key = rawFreq.trim().toUpperCase();
+  return FREQUENCY_LABELS[key] ?? rawFreq;
 }
 
 /** Bold "core dose" line: e.g. "1 TABLET · TDS". */
