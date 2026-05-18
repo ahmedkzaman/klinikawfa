@@ -152,7 +152,7 @@ export default function SeasonalForecast() {
       {/* Chart */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">12-Month Trend — Top 5 Diagnoses for {MONTH_LABELS[targetMonth - 1]}</CardTitle>
+          <CardTitle className="text-lg">12-Month Trend — Top {topDxLimit} Diagnoses for {MONTH_LABELS[targetMonth - 1]}</CardTitle>
         </CardHeader>
         <CardContent>
           {chartGroups.length === 0 ? (
