@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { ArrowLeft, Pencil } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
