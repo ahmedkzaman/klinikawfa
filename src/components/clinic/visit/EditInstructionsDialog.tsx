@@ -23,6 +23,7 @@ import { useUpdateConsultationItem } from '@/hooks/clinic/useConsultationItems';
 import {
   DOSAGE_UNIT_OPTIONS,
   FREQUENCY_OPTIONS,
+  FREQUENCY_LABELS,
   INSTRUCTION_OPTIONS,
   DURATION_OPTIONS,
 } from '@/lib/clinic/prescribingOptions';
