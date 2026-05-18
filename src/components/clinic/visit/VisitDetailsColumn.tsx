@@ -32,6 +32,13 @@ interface Props {
   consultationId: string | undefined;
   canEdit?: boolean;
   /**
+   * Allows the dispensary nurse to fix prescribing fields (dosage / unit /
+   * frequency / instruction / duration) even when the consultation lock
+   * blocks broader edits. Defaults to `canEdit` so the doctor's screen is
+   * unchanged.
+   */
+  canEditInstructions?: boolean;
+  /**
    * Optional patient display name forwarded to the printed label so the
    * dispensary can stick it on the bag immediately. Falls back gracefully
    * when not provided.
