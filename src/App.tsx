@@ -407,6 +407,14 @@ const App = () => (
                   }
                 />
                 <Route
+                  path="settings/procurement-rules"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <ProcurementSettings />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
                   path="voided"
                   element={
                     <ClinicProtectedRoute requiredRole="special_admin">
