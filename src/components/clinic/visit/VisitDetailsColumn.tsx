@@ -435,6 +435,7 @@ interface ItemListProps {
   onQty: (id: string, currentQty: number, delta: number) => void;
   onRemove: (id: string) => void;
   onPrintLabel: (item: ConsultationItemRow) => void;
+  onEdit: (item: ConsultationItemRow) => void;
   updatingId: boolean;
   removingId: boolean;
   emptyState: React.ReactNode;
@@ -446,6 +447,7 @@ function ItemList({
   onQty,
   onRemove,
   onPrintLabel,
+  onEdit,
   updatingId,
   removingId,
   emptyState,
