@@ -566,16 +566,29 @@ function ItemList({
                 );
               })()}
               {item.item_id && canEdit && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 rounded-full text-xs px-3"
-                  onClick={() => onPrintLabel(item)}
-                >
-                  <Tag className="h-3 w-3 mr-1.5 text-amber-600" />
-                  Print label
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-7 w-7 rounded-full"
+                    onClick={() => onEdit(item)}
+                    aria-label="Edit instructions"
+                    title="Edit instructions"
+                  >
+                    <Pencil className="h-3 w-3 text-slate-600" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 rounded-full text-xs px-3"
+                    onClick={() => onPrintLabel(item)}
+                  >
+                    <Tag className="h-3 w-3 mr-1.5 text-amber-600" />
+                    Print label
+                  </Button>
+                </div>
               )}
             </div>
           </div>
