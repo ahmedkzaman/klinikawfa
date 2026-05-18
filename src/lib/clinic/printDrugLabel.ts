@@ -81,21 +81,17 @@ function formatFrequency(rawFreq?: string | null): string {
   return FREQUENCY_LABELS[key] ?? rawFreq;
 }
 
-/** Bold "core dose" line: e.g. "1 TABLET · TDS". */
-function buildDoseLine(item: DrugLabelItem): string {
+/** Dosage chunk: e.g. "2 TABLET". */
+function buildDosageLine(item: DrugLabelItem): string {
   const qtyUnit =
     item.dosage_qty != null && item.dosage_unit
       ? `${item.dosage_qty} ${item.dosage_unit}`
       : item.dosage ?? null;
-  const freq = formatFrequency(item.frequency);
-  return [qtyUnit, freq || null]
-    .filter((s): s is string => Boolean(s && String(s).trim()))
-    .map((s) => String(s).toUpperCase())
-    .join(' · ');
+  return (qtyUnit ?? '').toString().trim().toUpperCase();
 }
 
-/** Plain "instructions" line: e.g. "AFTER MEAL - AVOID ALCOHOL". */
-function buildInstructionLine(
+/** Custom instructions (+ optional precaution). */
+function buildExtraInstructionLine(
   item: DrugLabelItem,
   includePrecaution: boolean,
 ): string {
