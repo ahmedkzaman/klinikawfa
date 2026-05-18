@@ -61,12 +61,36 @@ const PAGE_H = 50;
 const MARGIN_X = 2;
 const SAFE_W = PAGE_W - MARGIN_X * 2;
 
+/**
+ * Map common medical frequency abbreviations to bilingual (EN/BM) strings.
+ * Falls back to the raw text verbatim if it isn't a recognised abbreviation,
+ * so free-form tapering doses ("2 tabs today, 1 tab tomorrow") still print
+ * exactly as the doctor typed them.
+ */
+function formatFrequency(rawFreq?: string | null): string {
+  if (!rawFreq) return '';
+  const cleanFreq = rawFreq.toLowerCase().trim();
+  const frequencyMap: Record<string, string> = {
+    od: 'Once a day / 1 kali sehari',
+    bd: 'Twice a day / 2 kali sehari',
+    tds: '3 times a day / 3 kali sehari',
+    qid: '4 times a day / 4 kali sehari',
+    prn: 'When necessary / Jika perlu',
+    stat: 'Immediately / Segera',
+    on: 'At night / Pada waktu malam',
+    om: 'In the morning / Pada waktu pagi',
+    eod: 'Every other day / Selang sehari',
+  };
+  return frequencyMap[cleanFreq] ?? rawFreq;
+}
+
 function buildDosageBits(item: DrugLabelItem): string[] {
   const qtyUnit =
     item.dosage_qty != null && item.dosage_unit
       ? `${item.dosage_qty} ${item.dosage_unit}`
       : (item.dosage ?? null);
-  return [item.indication, qtyUnit, item.frequency, item.instruction]
+  const freq = formatFrequency(item.frequency);
+  return [item.indication, qtyUnit, freq || null, item.instruction]
     .filter((s): s is string => Boolean(s && String(s).trim()))
     .map((s) => String(s).toUpperCase());
 }
