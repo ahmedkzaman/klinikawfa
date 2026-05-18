@@ -962,6 +962,7 @@ export default function ConsultationDetail() {
                           consultationId &&
                           removeItem.mutate({ id: item.id, consultationId })
                         }
+                        onSavingChange={handleItemSavingChange}
                         onSave={async (updates) => {
                           if (!consultationId) return;
                           await updateItem.mutateAsync({
@@ -969,7 +970,6 @@ export default function ConsultationDetail() {
                             consultationId,
                             ...updates,
                           });
-                          toast.success('Treatment item updated');
                         }}
                       />
                     ))}
