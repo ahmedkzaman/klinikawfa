@@ -67,6 +67,9 @@ function topItemsForGroup(
 export default function SeasonalForecast() {
   const [targetMonth, setTargetMonth] = useState<number>(nextMonth());
   const [logicOpen, setLogicOpen] = useState(false);
+  const { settings } = useClinicSettings();
+  const topDxLimit = settings.forecast_top_diagnoses ?? 5;
+  const topItemLimit = settings.forecast_top_items ?? 3;
   const { data: trends = [], isLoading: trendsLoading } = useSeasonalTrends();
   const { data: corr = [], isLoading: corrLoading } = useDiagnosisCorrelation({
     minLift: 0,
@@ -74,8 +77,8 @@ export default function SeasonalForecast() {
   });
 
   const topDx = useMemo<SeasonalTrendRow[]>(
-    () => topDiagnosesForMonth(trends, targetMonth, 5),
-    [trends, targetMonth],
+    () => topDiagnosesForMonth(trends, targetMonth, topDxLimit),
+    [trends, targetMonth, topDxLimit],
   );
 
   const chartGroups = useMemo(() => topDx.map((d) => d.diagnosis_group), [topDx]);
