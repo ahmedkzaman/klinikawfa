@@ -244,7 +244,6 @@ export default function ProcurementDashboard() {
         {/* CORRELATION */}
         <TabsContent value="correlation">
           <CorrelationTab
-            thresholds={thresholds}
             onOpenLogic={() => openSheet('correlation')}
           />
         </TabsContent>
@@ -252,10 +251,7 @@ export default function ProcurementDashboard() {
         {/* PLANNING */}
         <TabsContent value="planning">
           <PlanningTab
-            thresholds={thresholds}
             onOpenLogic={() => openSheet('planning')}
-            onOpenRules={() => setRulesOpen(true)}
-            onResetThresholds={() => setThresholds(DEFAULT_THRESHOLDS)}
           />
         </TabsContent>
       </Tabs>
@@ -264,12 +260,6 @@ export default function ProcurementDashboard() {
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         defaultSection={sheetSection}
-      />
-      <RecommendationRulesDialog
-        open={rulesOpen}
-        onOpenChange={setRulesOpen}
-        value={thresholds}
-        onSave={setThresholds}
       />
     </div>
   );
