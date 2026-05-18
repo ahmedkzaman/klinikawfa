@@ -384,7 +384,10 @@ export function ItemEditSheet({ open, onOpenChange, item }: Props) {
                       </SelectTrigger>
                       <SelectContent>
                         {FREQUENCY_OPTIONS.map((f) => (
-                          <SelectItem key={f} value={f}>{f}</SelectItem>
+                          <SelectItem key={f} value={f}>
+                            <span className="font-medium">{f}</span>
+                            <span className="text-muted-foreground ml-2">{FREQUENCY_LABELS[f] || ''}</span>
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
