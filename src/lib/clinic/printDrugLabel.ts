@@ -84,15 +84,28 @@ function formatFrequency(rawFreq?: string | null): string {
   return frequencyMap[cleanFreq] ?? rawFreq;
 }
 
-function buildDosageBits(item: DrugLabelItem): string[] {
+/** Bold "core dose" line: e.g. "1 TABLET · TDS". */
+function buildDoseLine(item: DrugLabelItem): string {
   const qtyUnit =
     item.dosage_qty != null && item.dosage_unit
       ? `${item.dosage_qty} ${item.dosage_unit}`
-      : (item.dosage ?? null);
+      : item.dosage ?? null;
   const freq = formatFrequency(item.frequency);
-  return [item.indication, qtyUnit, freq || null, item.instruction]
+  return [qtyUnit, freq || null]
+    .filter((s): s is string => Boolean(s && String(s).trim()))
+    .map((s) => String(s).toUpperCase())
+    .join(' · ');
+}
+
+/** Plain "instructions" line: e.g. "AFTER MEAL - AVOID ALCOHOL". */
+function buildInstructionLine(
+  item: DrugLabelItem,
+  includePrecaution: boolean,
+): string {
+  const parts = [item.instruction, includePrecaution ? item.precaution : null]
     .filter((s): s is string => Boolean(s && String(s).trim()))
     .map((s) => String(s).toUpperCase());
+  return parts.join(' - ');
 }
 
 /**
@@ -175,27 +188,32 @@ function drawLabel(
     y += 2.4;
   }
 
-  // ── Instruction (centred, bold) ──────────────────────────────────────────
-  const dosageBits = buildDosageBits(item);
-  if (dosageBits.length > 0) {
+  // ── Line 1 — Core dose (bold, larger, centred) ───────────────────────────
+  const doseLine = buildDoseLine(item);
+  if (doseLine) {
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7);
-    const instr = dosageBits.join(' · ');
-    const instrLines = doc.splitTextToSize(instr, SAFE_W) as string[];
-    instrLines.slice(0, 2).forEach((line) => {
+    doc.setFontSize(8);
+    const doseLines = doc.splitTextToSize(doseLine, SAFE_W) as string[];
+    doseLines.slice(0, 2).forEach((line) => {
       const w = doc.getTextWidth(line);
       doc.text(line, (PAGE_W - w) / 2, y);
-      y += 2.6;
+      y += 3;
     });
   }
 
-  // ── Precaution (toggle) ──────────────────────────────────────────────────
-  if (toggles.show_precaution && item.precaution?.trim()) {
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(5);
-    const precLines = doc.splitTextToSize(item.precaution, SAFE_W) as string[];
-    doc.text(precLines[0], MARGIN_X, y);
-    y += 2;
+  // ── Line 2 — Instructions + Precaution (smaller, wraps up to 3 lines) ────
+  const instrLine = buildInstructionLine(
+    item,
+    Boolean(toggles.show_precaution),
+  );
+  if (instrLine) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6);
+    const instrLines = doc.splitTextToSize(instrLine, SAFE_W) as string[];
+    instrLines.slice(0, 3).forEach((line) => {
+      doc.text(line, MARGIN_X, y);
+      y += 2.4;
+    });
   }
 
   // ── Duration (toggle) ────────────────────────────────────────────────────

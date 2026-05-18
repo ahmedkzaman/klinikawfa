@@ -5,6 +5,7 @@ import {
   Image as ImageIcon,
   Minus,
   Package as PackageIcon,
+  Pencil,
   Pill,
   Plus,
   Stethoscope,
@@ -12,6 +13,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { EditInstructionsDialog } from './EditInstructionsDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -129,6 +131,7 @@ export function VisitDetailsColumn({
   const [activeTab, setActiveTab] = useState<
     'all' | 'items' | 'services' | 'packages' | 'documents'
   >('all');
+  const [editingItem, setEditingItem] = useState<ConsultationItemRow | null>(null);
 
   // Print orchestration: build a real 60×50mm PDF with jsPDF and open it in
   // a new tab. The PDF carries its physical page dimensions in its metadata,
@@ -338,6 +341,7 @@ export function VisitDetailsColumn({
               onQty={handleQty}
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
+              onEdit={setEditingItem}
               updatingId={updateItem.isPending}
               removingId={removeItem.isPending}
               emptyState={
@@ -356,6 +360,7 @@ export function VisitDetailsColumn({
               onQty={handleQty}
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
+              onEdit={setEditingItem}
               updatingId={updateItem.isPending}
               removingId={removeItem.isPending}
               emptyState={
@@ -374,6 +379,7 @@ export function VisitDetailsColumn({
               onQty={handleQty}
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
+              onEdit={setEditingItem}
               updatingId={updateItem.isPending}
               removingId={removeItem.isPending}
               emptyState={
@@ -392,6 +398,7 @@ export function VisitDetailsColumn({
               onQty={handleQty}
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
+              onEdit={setEditingItem}
               updatingId={updateItem.isPending}
               removingId={removeItem.isPending}
               emptyState={
@@ -411,7 +418,11 @@ export function VisitDetailsColumn({
           </TabsContent>
         </Tabs>
       </div>
-
+      <EditInstructionsDialog
+        item={editingItem}
+        open={editingItem !== null}
+        onOpenChange={(o) => !o && setEditingItem(null)}
+      />
     </>
   );
 }
@@ -424,6 +435,7 @@ interface ItemListProps {
   onQty: (id: string, currentQty: number, delta: number) => void;
   onRemove: (id: string) => void;
   onPrintLabel: (item: ConsultationItemRow) => void;
+  onEdit: (item: ConsultationItemRow) => void;
   updatingId: boolean;
   removingId: boolean;
   emptyState: React.ReactNode;
@@ -435,6 +447,7 @@ function ItemList({
   onQty,
   onRemove,
   onPrintLabel,
+  onEdit,
   updatingId,
   removingId,
   emptyState,
@@ -553,16 +566,29 @@ function ItemList({
                 );
               })()}
               {item.item_id && canEdit && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 rounded-full text-xs px-3"
-                  onClick={() => onPrintLabel(item)}
-                >
-                  <Tag className="h-3 w-3 mr-1.5 text-amber-600" />
-                  Print label
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-7 w-7 rounded-full"
+                    onClick={() => onEdit(item)}
+                    aria-label="Edit instructions"
+                    title="Edit instructions"
+                  >
+                    <Pencil className="h-3 w-3 text-slate-600" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 rounded-full text-xs px-3"
+                    onClick={() => onPrintLabel(item)}
+                  >
+                    <Tag className="h-3 w-3 mr-1.5 text-amber-600" />
+                    Print label
+                  </Button>
+                </div>
               )}
             </div>
           </div>
