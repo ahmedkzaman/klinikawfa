@@ -417,39 +417,30 @@ function CorrelationTab({
 /* ─────────────────────────── Tab 4: Purchase Planning ─────────────────────────── */
 
 function PlanningTab({
-  thresholds,
   onOpenLogic,
-  onOpenRules,
-  onResetThresholds,
 }: {
-  thresholds: RecommendationThresholds;
   onOpenLogic: () => void;
-  onOpenRules: () => void;
-  onResetThresholds: () => void;
 }) {
-  const { data, isLoading } = useProcurementRecommendations(thresholds);
+  const { data, isLoading } = useProcurementRecommendations();
   const navigate = useNavigate();
 
   const draftPO = (itemId: string, qty: number) =>
     navigate(`/clinic/procurement?prefillItem=${itemId}&qty=${qty}`);
-
-  const isCustom = (Object.keys(DEFAULT_THRESHOLDS) as (keyof RecommendationThresholds)[])
-    .some((k) => thresholds[k] !== DEFAULT_THRESHOLDS[k]);
 
   const header = (
     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
       <div>
         <h2 className="text-lg font-semibold">Purchase Planning</h2>
         <p className="text-xs text-muted-foreground">
-          Deterministic rules · {isCustom ? 'Custom thresholds active' : 'Default thresholds'}
+          Deterministic rules driven by global clinic settings.
         </p>
       </div>
       <div className="flex items-center gap-2 flex-wrap">
         <Button size="sm" variant="ghost" onClick={onOpenLogic}>
           <Info className="h-4 w-4 mr-2" /> How is this calculated?
         </Button>
-        <Button size="sm" variant="outline" onClick={onOpenRules}>
-          <Settings className="h-4 w-4 mr-2" /> Rules
+        <Button size="sm" variant="outline" onClick={() => navigate('/clinic/settings/procurement-rules')}>
+          <Settings className="h-4 w-4 mr-2" /> Configure Rules
         </Button>
       </div>
     </div>
@@ -470,18 +461,6 @@ function PlanningTab({
   return (
     <div className="space-y-4">
       {header}
-      {isCustom && (
-        <Alert>
-          <Settings className="h-4 w-4" />
-          <AlertTitle>Custom rules active</AlertTitle>
-          <AlertDescription className="flex items-center justify-between gap-2">
-            <span>
-              Urgent &lt;{thresholds.urgentDays}d · Surge &gt;{thresholds.surgeTrendPct}% &amp; Lift &gt;{thresholds.surgeLift.toFixed(1)} · Cover &lt;{thresholds.surgeDaysCover}d
-            </span>
-            <Button size="sm" variant="link" onClick={onResetThresholds}>Reset</Button>
-          </AlertDescription>
-        </Alert>
-      )}
 
       {empty ? (
         <Card><CardContent className="py-10 text-center text-muted-foreground">No actionable recommendations right now. Stock looks healthy.</CardContent></Card>
