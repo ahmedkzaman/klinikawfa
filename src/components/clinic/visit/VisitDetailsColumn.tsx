@@ -580,19 +580,21 @@ function ItemList({
                   </Badge>
                 );
               })()}
-              {item.item_id && canEdit && (
+              {item.item_id && (
                 <div className="flex items-center gap-1.5">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-7 w-7 rounded-full"
-                    onClick={() => onEdit(item)}
-                    aria-label="Edit instructions"
-                    title="Edit instructions"
-                  >
-                    <Pencil className="h-3 w-3 text-slate-600" />
-                  </Button>
+                  {canEditInstructions && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7 rounded-full"
+                      onClick={() => onEdit(item)}
+                      aria-label="Edit instructions"
+                      title="Edit instructions"
+                    >
+                      <Pencil className="h-3 w-3 text-slate-600" />
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant="outline"
