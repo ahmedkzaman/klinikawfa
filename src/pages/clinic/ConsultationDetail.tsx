@@ -296,6 +296,22 @@ export default function ConsultationDetail() {
     consultation?.status === 'completed' ||
     entry?.clinic_status === 'completed';
 
+  // Tracks which treatment-item cards have unflushed auto-saves in flight.
+  const pendingSavesRef = useRef<Set<string>>(new Set());
+  const [pendingSaveCount, setPendingSaveCount] = useState(0);
+  const handleItemSavingChange = (itemId: string, isSaving: boolean) => {
+    if (isSaving) pendingSavesRef.current.add(itemId);
+    else pendingSavesRef.current.delete(itemId);
+    setPendingSaveCount(pendingSavesRef.current.size);
+  };
+  const waitForPendingSaves = async (timeoutMs = 5000) => {
+    if (pendingSavesRef.current.size === 0) return;
+    const start = Date.now();
+    while (pendingSavesRef.current.size > 0 && Date.now() - start < timeoutMs) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  };
+
   const { data: vitals } = useVitalSigns(queueEntryId);
   const recordVitals = useRecordVitalSigns();
   const [showVitalForm, setShowVitalForm] = useState(false);
@@ -606,6 +622,10 @@ export default function ConsultationDetail() {
       toast.error('Doctor profile missing or consultation not created — contact admin');
       return;
     }
+    if (pendingSavesRef.current.size > 0) {
+      toast.message('Saving your edits…');
+      await waitForPendingSaves();
+    }
     await updateConsultation.mutateAsync({
       id: consultationId,
       case_note: caseNote,
@@ -629,6 +649,10 @@ export default function ConsultationDetail() {
     if (!entry) return;
 
     try {
+      if (pendingSavesRef.current.size > 0) {
+        toast.message('Saving your edits…');
+        await waitForPendingSaves();
+      }
       if (consultationId) {
         await updateConsultation.mutateAsync({
           id: consultationId,
@@ -938,6 +962,7 @@ export default function ConsultationDetail() {
                           consultationId &&
                           removeItem.mutate({ id: item.id, consultationId })
                         }
+                        onSavingChange={handleItemSavingChange}
                         onSave={async (updates) => {
                           if (!consultationId) return;
                           await updateItem.mutateAsync({
@@ -945,7 +970,6 @@ export default function ConsultationDetail() {
                             consultationId,
                             ...updates,
                           });
-                          toast.success('Treatment item updated');
                         }}
                       />
                     ))}
@@ -1062,10 +1086,10 @@ export default function ConsultationDetail() {
                     </Button>
                     <Button
                       onClick={handleSendToDispensary}
-                      disabled={updateQueue.isPending}
+                      disabled={updateQueue.isPending || pendingSaveCount > 0}
                       className="px-8 py-6 rounded-xl text-base font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-md"
                     >
-                      Send to Dispensary
+                      {pendingSaveCount > 0 ? 'Saving…' : 'Send to Dispensary'}
                     </Button>
                   </>
                 )}
