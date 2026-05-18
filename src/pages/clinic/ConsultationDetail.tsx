@@ -296,6 +296,22 @@ export default function ConsultationDetail() {
     consultation?.status === 'completed' ||
     entry?.clinic_status === 'completed';
 
+  // Tracks which treatment-item cards have unflushed auto-saves in flight.
+  const pendingSavesRef = useRef<Set<string>>(new Set());
+  const [pendingSaveCount, setPendingSaveCount] = useState(0);
+  const handleItemSavingChange = (itemId: string, isSaving: boolean) => {
+    if (isSaving) pendingSavesRef.current.add(itemId);
+    else pendingSavesRef.current.delete(itemId);
+    setPendingSaveCount(pendingSavesRef.current.size);
+  };
+  const waitForPendingSaves = async (timeoutMs = 5000) => {
+    if (pendingSavesRef.current.size === 0) return;
+    const start = Date.now();
+    while (pendingSavesRef.current.size > 0 && Date.now() - start < timeoutMs) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  };
+
   const { data: vitals } = useVitalSigns(queueEntryId);
   const recordVitals = useRecordVitalSigns();
   const [showVitalForm, setShowVitalForm] = useState(false);
