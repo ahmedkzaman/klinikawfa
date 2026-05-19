@@ -269,89 +269,45 @@ function LabelPreview({
   clinic,
 }: {
   settings: DrugLabelSettings | null | undefined;
-  clinic: { name: string; tel: string; address: string };
+  clinic: { name: string; phone: string; addressFull: string };
 }) {
-  const s = settings ?? {
-    show_address: true,
-    show_tel_number: true,
-    show_precaution: true,
-    show_quantity: true,
-    show_date: true,
-    show_expiry_date: true,
-    show_duration: true,
-    show_indication: true,
-    font_size_clinic: 8,
-    font_size_medicine: 8,
-    font_size_instruction: 6.5,
-  };
+  const [url, setUrl] = React.useState<string | null>(null);
 
-  const fsClinic = `${s.font_size_clinic ?? 8}pt`;
-  const fsMed = `${s.font_size_medicine ?? 8}pt`;
-  const fsInstr = `${s.font_size_instruction ?? 6.5}pt`;
-  const freqText = FREQUENCY_LABELS[PREVIEW_FILLER.frequencyCode] ?? '';
+  React.useEffect(() => {
+    if (!settings) return;
+    const blobUrl = generateDrugLabelPdf(
+      [PREVIEW_ITEM],
+      PREVIEW_PATIENT,
+      settings,
+      clinic,
+    );
+    setUrl(blobUrl);
+    return () => {
+      URL.revokeObjectURL(blobUrl);
+    };
+  }, [
+    settings,
+    clinic.name,
+    clinic.phone,
+    clinic.addressFull,
+  ]);
 
   return (
     <div className="mx-auto w-full max-w-[360px]">
       <div
-        className="bg-white rounded-xl shadow-sm overflow-hidden text-slate-900"
-        style={{ aspectRatio: '60 / 50', fontFamily: 'ui-sans-serif, system-ui' }}
+        className="bg-white rounded-xl shadow-sm overflow-hidden"
+        style={{ aspectRatio: '60 / 50' }}
       >
-        <div className="h-full w-full flex flex-col p-3 text-[10px] leading-tight">
-          <div className="text-center">
-            <div className="font-bold uppercase tracking-wide" style={{ fontSize: fsClinic }}>
-              {clinic.name}
-            </div>
-            {s.show_tel_number && clinic.tel && (
-              <div className="text-[9px] text-slate-500">Tel: {clinic.tel}</div>
-            )}
-            {s.show_address && clinic.address && (
-              <div className="text-[9px] text-slate-500 leading-snug mt-0.5">{clinic.address}</div>
-            )}
-          </div>
-
-          <div className="border-t border-slate-200 my-2" />
-
-          <div className="flex items-start justify-between gap-2">
-            <div className="font-bold uppercase flex-1 leading-tight" style={{ fontSize: fsMed }}>
-              {PREVIEW_FILLER.med}
-            </div>
-            <div className="text-right text-[9px] tabular-nums whitespace-nowrap">
-              {s.show_quantity && <div>QTY: {PREVIEW_FILLER.qty}</div>}
-              {s.show_expiry_date && <div>EXP: {PREVIEW_FILLER.expiry}</div>}
-            </div>
-          </div>
-
-          <div className="text-center font-medium uppercase mt-2" style={{ fontSize: fsInstr }}>
-            {PREVIEW_FILLER.instruction}
-          </div>
-          {freqText && (
-            <div className="text-center uppercase mt-0.5" style={{ fontSize: fsInstr }}>
-              {freqText}
-            </div>
-          )}
-          {s.show_indication && (
-            <div className="text-center text-[9px] text-slate-500 mt-0.5">For: {PREVIEW_FILLER.indication}</div>
-          )}
-          {s.show_precaution && (
-            <div className="text-center text-[9px] italic text-slate-500 mt-0.5">{PREVIEW_FILLER.precaution}</div>
-          )}
-
-          <div className="flex-1" />
-          <div className="border-t border-slate-200 my-2" />
-
-          <div className="flex items-end justify-between gap-2">
-            <div className="text-[9px]">
-              <div className="font-semibold text-[10px]">{PREVIEW_FILLER.patient}</div>
-              <div className="text-slate-500">{PREVIEW_FILLER.ageGender}</div>
-              {s.show_duration && (
-                <div className="text-slate-500 mt-0.5">Duration: {PREVIEW_FILLER.duration}</div>
-              )}
-            </div>
-            {s.show_date && (
-              <div className="text-[9px] text-slate-500 tabular-nums">Date: {PREVIEW_FILLER.date}</div>
-            )}
-          </div>
-        </div>
+        {url ? (
+          <iframe
+            key={url}
+            src={`${url}#toolbar=0&navpanes=0&scrollbar=0&view=Fit`}
+            title="Drug label preview"
+            className="w-full h-full border-0"
+          />
+        ) : (
+          <Skeleton className="w-full h-full" />
+        )}
       </div>
     </div>
   );
