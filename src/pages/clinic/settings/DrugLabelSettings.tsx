@@ -61,10 +61,10 @@ export default function DrugLabelSettingsPage() {
   const { data: settings, isLoading } = useDrugLabelSettings();
   const update = useUpdateDrugLabelSettings();
   const { settings: clinic } = useClinicSettings();
-  const clinicHeader = {
+  const clinicInfo = {
     name: clinic.clinic_name || 'Klinik Awfa',
-    tel: clinic.phone || '',
-    address: [clinic.address_line_1, clinic.address_line_2]
+    phone: clinic.phone || '',
+    addressFull: [clinic.address_line_1, clinic.address_line_2]
       .map((s) => (s ?? '').trim())
       .filter(Boolean)
       .join(', '),
