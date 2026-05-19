@@ -16,23 +16,23 @@ import {
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { cn } from '@/lib/utils';
 import { bento, bentoHeader, pageInner, pageShell } from '@/lib/clinic/bentoTokens';
-import { FREQUENCY_LABELS } from '@/lib/clinic/prescribingOptions';
+import {
+  generateDrugLabelPdf,
+  type DrugLabelItem,
+} from '@/lib/clinic/printDrugLabel';
 
-// Dummy patient / medication data — clinic identity is pulled live from
-// `clinic_settings` (Settings → Clinic Profile) so the preview always
-// matches what will actually print.
-const PREVIEW_FILLER = {
-  patient: 'Ali Bin Abu',
-  ageGender: '34 / M',
-  med: 'PARACETAMOL 500MG TABLET',
-  qty: '10 Tab/s',
-  expiry: '12/2027',
-  duration: '5 Days',
-  indication: 'FEVER',
-  precaution: 'TAKE AFTER MEALS',
+const PREVIEW_PATIENT = 'Ali Bin Abu';
+const PREVIEW_ITEM: DrugLabelItem = {
+  item_name: 'Paracetamol 500mg Tablet',
+  quantity: 10,
+  indication: 'Fever',
+  dosage_qty: 1,
+  dosage_unit: 'TABLET',
+  frequency: 'TDS',
   instruction: '1 TABLET, 3X DAILY',
-  frequencyCode: 'TDS',
-  date: '26/4/2026',
+  duration: '5 Days',
+  precaution: 'Take after meals',
+  age_gender: '34 / M',
 };
 
 const REQUIRED_FIELDS = [
