@@ -16,6 +16,7 @@ import {
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { cn } from '@/lib/utils';
 import { bento, bentoHeader, pageInner, pageShell } from '@/lib/clinic/bentoTokens';
+import { FREQUENCY_LABELS } from '@/lib/clinic/prescribingOptions';
 
 // Dummy patient / medication data — clinic identity is pulled live from
 // `clinic_settings` (Settings → Clinic Profile) so the preview always
