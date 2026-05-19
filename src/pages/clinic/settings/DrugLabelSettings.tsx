@@ -31,6 +31,7 @@ const PREVIEW_FILLER = {
   indication: 'FEVER',
   precaution: 'TAKE AFTER MEALS',
   instruction: '1 TABLET, 3X DAILY',
+  frequencyCode: 'TDS',
   date: '26/4/2026',
 };
 
