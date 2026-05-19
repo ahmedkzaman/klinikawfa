@@ -16,6 +16,7 @@ import {
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { cn } from '@/lib/utils';
 import { bento, bentoHeader, pageInner, pageShell } from '@/lib/clinic/bentoTokens';
+import { FREQUENCY_LABELS } from '@/lib/clinic/prescribingOptions';
 
 // Dummy patient / medication data — clinic identity is pulled live from
 // `clinic_settings` (Settings → Clinic Profile) so the preview always
@@ -30,6 +31,7 @@ const PREVIEW_FILLER = {
   indication: 'FEVER',
   precaution: 'TAKE AFTER MEALS',
   instruction: '1 TABLET, 3X DAILY',
+  frequencyCode: 'TDS',
   date: '26/4/2026',
 };
 
@@ -278,7 +280,15 @@ function LabelPreview({
     show_expiry_date: true,
     show_duration: true,
     show_indication: true,
+    font_size_clinic: 8,
+    font_size_medicine: 8,
+    font_size_instruction: 6.5,
   };
+
+  const fsClinic = `${s.font_size_clinic ?? 8}pt`;
+  const fsMed = `${s.font_size_medicine ?? 8}pt`;
+  const fsInstr = `${s.font_size_instruction ?? 6.5}pt`;
+  const freqText = FREQUENCY_LABELS[PREVIEW_FILLER.frequencyCode] ?? '';
 
   return (
     <div className="mx-auto w-full max-w-[360px]">
@@ -288,7 +298,9 @@ function LabelPreview({
       >
         <div className="h-full w-full flex flex-col p-3 text-[10px] leading-tight">
           <div className="text-center">
-            <div className="font-bold text-[12px] uppercase tracking-wide">{clinic.name}</div>
+            <div className="font-bold uppercase tracking-wide" style={{ fontSize: fsClinic }}>
+              {clinic.name}
+            </div>
             {s.show_tel_number && clinic.tel && (
               <div className="text-[9px] text-slate-500">Tel: {clinic.tel}</div>
             )}
@@ -300,14 +312,23 @@ function LabelPreview({
           <div className="border-t border-slate-200 my-2" />
 
           <div className="flex items-start justify-between gap-2">
-            <div className="font-bold text-[11px] uppercase flex-1 leading-tight">{PREVIEW_FILLER.med}</div>
+            <div className="font-bold uppercase flex-1 leading-tight" style={{ fontSize: fsMed }}>
+              {PREVIEW_FILLER.med}
+            </div>
             <div className="text-right text-[9px] tabular-nums whitespace-nowrap">
               {s.show_quantity && <div>QTY: {PREVIEW_FILLER.qty}</div>}
               {s.show_expiry_date && <div>EXP: {PREVIEW_FILLER.expiry}</div>}
             </div>
           </div>
 
-          <div className="text-center text-[10px] font-medium uppercase mt-2">{PREVIEW_FILLER.instruction}</div>
+          <div className="text-center font-medium uppercase mt-2" style={{ fontSize: fsInstr }}>
+            {PREVIEW_FILLER.instruction}
+          </div>
+          {freqText && (
+            <div className="text-center uppercase mt-0.5" style={{ fontSize: fsInstr }}>
+              {freqText}
+            </div>
+          )}
           {s.show_indication && (
             <div className="text-center text-[9px] text-slate-500 mt-0.5">For: {PREVIEW_FILLER.indication}</div>
           )}
