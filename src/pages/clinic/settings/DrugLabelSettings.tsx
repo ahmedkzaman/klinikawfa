@@ -182,9 +182,9 @@ export default function DrugLabelSettingsPage() {
                     </Link>
                   </Button>
                 </div>
-                <LabelPreview settings={settings} clinic={clinicHeader} />
+                <LabelPreview settings={settings} clinic={clinicInfo} />
                 <p className="mt-3 text-xs text-slate-400 text-center">
-                  Approximate 60 × 50 mm thermal label preview. Clinic name,
+                  Live 60 × 50 mm PDF preview using the same layout as printed labels. Clinic name,
                   address and phone come from{' '}
                   <Link to="/clinic/settings/clinic-profile" className="underline hover:text-slate-600">
                     Clinic Profile
