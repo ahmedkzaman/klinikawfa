@@ -5,9 +5,7 @@ import { FREQUENCY_LABELS } from './prescribingOptions';
 
 /**
  * Clinic identity printed at the top of every label. Values come from
- * `clinic_settings` (Settings → Clinic Profile) and are passed in by the
- * caller, so the marketing-site `CLINIC_INFO` constant never sneaks onto a
- * physical label.
+ * `clinic_settings` (Settings → Clinic Profile).
  */
 export interface ClinicLabelInfo {
   name: string;
@@ -15,10 +13,6 @@ export interface ClinicLabelInfo {
   phone: string;
 }
 
-/**
- * Subset of the consultation-item row that the label needs. Kept loose so
- * the helper doesn't depend on the page component's full row type.
- */
 export interface DrugLabelItem {
   item_name: string;
   quantity?: number | null;
@@ -30,6 +24,7 @@ export interface DrugLabelItem {
   instruction?: string | null;
   duration?: string | null;
   precaution?: string | null;
+  age_gender?: string | null;
 }
 
 export type LabelToggles = Pick<
@@ -64,24 +59,18 @@ const DEFAULT_TOGGLES: LabelToggles = {
 // Physical thermal-label dimensions in millimetres.
 const PAGE_W = 60;
 const PAGE_H = 50;
-// Inner safe-area margins so the printer's edge tolerance never clips text.
 const MARGIN_X = 2;
 const SAFE_W = PAGE_W - MARGIN_X * 2;
 
-/**
- * Map common medical frequency abbreviations to bilingual (EN/BM) strings
- * via the shared {@link FREQUENCY_LABELS} dictionary. Falls back to the raw
- * text verbatim if it isn't a recognised abbreviation, so free-form tapering
- * doses ("2 tabs today, 1 tab tomorrow") still print exactly as the doctor
- * typed them.
- */
+/** pt → mm line-height heuristic so dynamic font sizes never overlap. */
+const lh = (pt: number) => pt * 0.42;
+
 function formatFrequency(rawFreq?: string | null): string {
   if (!rawFreq) return '';
   const key = rawFreq.trim().toUpperCase();
   return FREQUENCY_LABELS[key] ?? rawFreq;
 }
 
-/** Dosage chunk: e.g. "2 TABLET". */
 function buildDosageLine(item: DrugLabelItem): string {
   const qtyUnit =
     item.dosage_qty != null && item.dosage_unit
@@ -90,20 +79,27 @@ function buildDosageLine(item: DrugLabelItem): string {
   return (qtyUnit ?? '').toString().trim().toUpperCase();
 }
 
-/** Custom instructions (+ optional precaution). */
-function buildExtraInstructionLine(
-  item: DrugLabelItem,
-  includePrecaution: boolean,
-): string {
-  const parts = [item.instruction, includePrecaution ? item.precaution : null]
-    .filter((s): s is string => Boolean(s && String(s).trim()))
-    .map((s) => String(s).toUpperCase());
-  return parts.join(' - ');
+/** Draw text centred within the page width. */
+function drawCentered(doc: jsPDF, text: string, y: number) {
+  const w = doc.getTextWidth(text);
+  doc.text(text, (PAGE_W - w) / 2, y);
+}
+
+/** Draw text right-aligned within `SAFE_W` (offset by MARGIN_X). */
+function drawRight(doc: jsPDF, text: string, y: number) {
+  const w = doc.getTextWidth(text);
+  doc.text(text, PAGE_W - MARGIN_X - w, y);
 }
 
 /**
- * Draws a single 60×50mm label onto the supplied jsPDF doc. Returns the
- * y-cursor position after drawing (unused but useful for debugging).
+ * Draws a single 60×50mm label that mirrors the on-screen `LabelPreview`
+ * component in Settings → Drug Label. Layout order:
+ *   1. Centered header (clinic, tel, address)
+ *   2. Divider
+ *   3. Medicine name (left) + QTY/EXP (right column, stacked)
+ *   4. Centered body — dosage, bilingual frequency, indication, precaution
+ *   5. Footer divider
+ *   6. Patient block (bottom-left) + Date (bottom-right)
  */
 function drawLabel(
   doc: jsPDF,
@@ -112,168 +108,179 @@ function drawLabel(
   toggles: LabelToggles,
   clinic: ClinicLabelInfo,
 ): void {
-  let y = 3; // mm — top edge tolerance
-
-  // pt → mm line-height heuristic (~0.42 mm per pt) so dynamic font sizes
-  // expand the y-cursor automatically and never overlap the next row.
-  const lh = (pt: number) => pt * 0.42;
-
   const fsClinic = toggles.font_size_clinic ?? 8;
   const fsMed = toggles.font_size_medicine ?? 8;
   const fsInstr = toggles.font_size_instruction ?? 6.5;
 
-  // ── Header: clinic name (always) ─────────────────────────────────────────
+  let y = 3;
+
+  // ── 1. Header (centered) ─────────────────────────────────────────────────
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(fsClinic);
-  doc.text((clinic.name || 'Clinic').toUpperCase(), MARGIN_X, y);
+  drawCentered(doc, (clinic.name || 'Clinic').toUpperCase(), y);
   y += lh(fsClinic);
 
-  // ── Address (toggle) ─────────────────────────────────────────────────────
+  if (toggles.show_tel_number && clinic.phone) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(5);
+    drawCentered(doc, `Tel: ${clinic.phone}`, y);
+    y += 2;
+  }
+
   if (toggles.show_address && clinic.addressFull) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(5);
-    const addrLines = doc.splitTextToSize(
-      clinic.addressFull,
-      SAFE_W,
-    ) as string[];
+    const addrLines = doc.splitTextToSize(clinic.addressFull, SAFE_W) as string[];
     addrLines.slice(0, 2).forEach((line) => {
-      doc.text(line, MARGIN_X, y);
+      drawCentered(doc, line, y);
       y += 2;
     });
   }
 
-  // ── Tel (toggle) ─────────────────────────────────────────────────────────
-  if (toggles.show_tel_number && clinic.phone) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(5);
-    doc.text(`Tel: ${clinic.phone}`, MARGIN_X, y);
-    y += 2;
-  }
-
-  // ── Hairline divider ─────────────────────────────────────────────────────
-  y += 0.4;
+  // ── 2. Divider ───────────────────────────────────────────────────────────
+  y += 0.6;
   doc.setLineWidth(0.15);
   doc.line(MARGIN_X, y, PAGE_W - MARGIN_X, y);
-  y += 2.5;
+  y += 2.6;
 
-  // ── Patient (always when supplied) ───────────────────────────────────────
-  if (patientName?.trim()) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6);
-    const nameLines = doc.splitTextToSize(
-      patientName.toUpperCase(),
-      SAFE_W,
-    ) as string[];
-    doc.text(nameLines[0], MARGIN_X, y);
-    y += 2.5;
-  }
+  // ── 3. Medicine name (left) + QTY / EXP (right) ──────────────────────────
+  const qtyText =
+    toggles.show_quantity && item.quantity != null
+      ? `QTY: ${item.quantity} Tab/s`
+      : '';
+  const expText = toggles.show_expiry_date
+    ? `EXP: ${format(
+        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        'MM/yyyy',
+      )}`
+    : '';
 
-  // ── Medication name (always, bold) ───────────────────────────────────────
+  // Right column width — measure both strings at 5pt.
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(5);
+  const rightW = Math.max(
+    qtyText ? doc.getTextWidth(qtyText) : 0,
+    expText ? doc.getTextWidth(expText) : 0,
+  );
+  const leftW = SAFE_W - rightW - (rightW > 0 ? 2 : 0);
+
+  // Medicine name (left, bold)
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(fsMed);
-  const medLines = doc.splitTextToSize(
+  const medLines = (doc.splitTextToSize(
     item.item_name.toUpperCase(),
-    SAFE_W,
-  ) as string[];
-  medLines.slice(0, 2).forEach((line) => {
-    doc.text(line, MARGIN_X, y);
-    y += lh(fsMed);
-  });
+    leftW,
+  ) as string[]).slice(0, 2);
 
-  // ── Indication (toggle) ──────────────────────────────────────────────────
-  if (toggles.show_indication && item.indication?.trim()) {
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(6);
-    doc.text(`For: ${item.indication}`, MARGIN_X, y);
-    y += 2.4;
+  const medTop = y;
+  medLines.forEach((line, i) => {
+    doc.text(line, MARGIN_X, medTop + lh(fsMed) * (i + 1) - lh(fsMed) * 0.15);
+  });
+  const medBlockH = lh(fsMed) * medLines.length;
+
+  // QTY/EXP (right column, stacked, top-aligned with med name)
+  if (qtyText || expText) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(5);
+    let ry = medTop + 1.6;
+    if (qtyText) {
+      drawRight(doc, qtyText, ry);
+      ry += 2;
+    }
+    if (expText) {
+      drawRight(doc, expText, ry);
+    }
   }
 
-  // ── Line 1 — Dosage (bold, centred) ──────────────────────────────────────
+  y = medTop + Math.max(medBlockH, 4.4) + 1;
+
+  // ── 4. Centered body ─────────────────────────────────────────────────────
   const dosageLine = buildDosageLine(item);
+  const freqLine = formatFrequency(item.frequency);
+
+  // Combine dosage + a short freq summary on a single bold line when both
+  // exist & freq is a recognised short abbreviation (e.g. "1 TABLET, 3X DAILY").
+  // Otherwise render them on separate lines for clarity.
   if (dosageLine) {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(fsInstr);
-    const w = doc.getTextWidth(dosageLine);
-    doc.text(dosageLine, (PAGE_W - w) / 2, y);
-    y += lh(fsInstr);
+    drawCentered(doc, dosageLine, y);
+    y += lh(fsInstr) + 0.4;
   }
 
-  // ── Line 2 — Frequency (bilingual, centred, wraps to max 2) ──────────────
-  const freqLine = formatFrequency(item.frequency);
   if (freqLine) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(fsInstr);
-    const freqLines = doc.splitTextToSize(
+    const freqLines = (doc.splitTextToSize(
       freqLine.toUpperCase(),
       SAFE_W,
-    ) as string[];
-    freqLines.slice(0, 2).forEach((line) => {
-      const w = doc.getTextWidth(line);
-      doc.text(line, (PAGE_W - w) / 2, y);
+    ) as string[]).slice(0, 2);
+    freqLines.forEach((line) => {
+      drawCentered(doc, line, y);
       y += lh(fsInstr);
     });
   }
 
-  // ── Line 3 — Custom instructions + Precaution (left, wraps to max 2) ─────
-  const extraLine = buildExtraInstructionLine(
-    item,
-    Boolean(toggles.show_precaution),
-  );
-  if (extraLine) {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(fsInstr);
-    const extraLines = doc.splitTextToSize(extraLine, SAFE_W) as string[];
-    extraLines.slice(0, 2).forEach((line) => {
-      doc.text(line, MARGIN_X, y);
-      y += lh(fsInstr);
-    });
-  }
-
-  // ── Duration (toggle) ────────────────────────────────────────────────────
-  if (toggles.show_duration && item.duration?.trim()) {
+  if (toggles.show_indication && item.indication?.trim()) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(5);
-    doc.text(`Duration: ${item.duration}`, MARGIN_X, y);
-    y += 2;
+    drawCentered(doc, `For: ${item.indication}`, y);
+    y += 2.2;
   }
 
-  // ── Footer row (QTY · Date · EXP) ────────────────────────────────────────
-  const footerY = PAGE_H - 4;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(5);
-
-  if (toggles.show_quantity) {
-    doc.text(`QTY: ${item.quantity ?? 1}`, MARGIN_X, footerY);
+  if (toggles.show_precaution && item.precaution?.trim()) {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(5);
+    const precLines = (doc.splitTextToSize(
+      item.precaution.toUpperCase(),
+      SAFE_W,
+    ) as string[]).slice(0, 2);
+    precLines.forEach((line) => {
+      drawCentered(doc, line, y);
+      y += 2.2;
+    });
   }
+
+  // ── 5. Footer divider + 6. Patient (left) + Date (right) ─────────────────
+  // Reserve room for up to 3 lines on the left.
+  const footerLines: string[] = [];
+  if (patientName?.trim()) footerLines.push(patientName.trim());
+  if (item.age_gender?.trim()) footerLines.push(item.age_gender.trim());
+  if (toggles.show_duration && item.duration?.trim()) {
+    footerLines.push(`Duration: ${item.duration}`);
+  }
+
+  const footerBlockH = Math.max(footerLines.length, 1) * 2.4;
+  const dividerY = PAGE_H - footerBlockH - 2.2;
+  doc.setLineWidth(0.15);
+  doc.line(MARGIN_X, dividerY, PAGE_W - MARGIN_X, dividerY);
+
+  let fy = dividerY + 2.4;
+
+  // Patient name (first line, bold)
+  footerLines.forEach((line, i) => {
+    if (i === 0 && patientName?.trim()) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6);
+    } else {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(5);
+    }
+    doc.text(line, MARGIN_X, fy);
+    fy += 2.4;
+  });
+
+  // Date (bottom-right, aligned with the first footer line)
   if (toggles.show_date) {
-    const today = format(new Date(), 'dd/MM/yyyy');
-    const w = doc.getTextWidth(today);
-    doc.text(today, (PAGE_W - w) / 2, footerY);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(5);
+    drawRight(doc, `Date: ${format(new Date(), 'd/M/yyyy')}`, dividerY + 2.4);
   }
-  if (toggles.show_expiry_date) {
-    // No expiry column on consultation_items yet — placeholder of today + 30d.
-    const exp = format(
-      new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      'dd/MM/yyyy',
-    );
-    const text = `EXP: ${exp}`;
-    const w = doc.getTextWidth(text);
-    doc.text(text, PAGE_W - MARGIN_X - w, footerY);
-  }
-
-  // ── Bottom regulatory strip (always) ─────────────────────────────────────
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(4.5);
-  const reg = 'Ubat Terkawal / Controlled Medicine';
-  const regW = doc.getTextWidth(reg);
-  doc.text(reg, (PAGE_W - regW) / 2, PAGE_H - 1.2);
 }
 
 /**
  * Build a multi-page PDF where each page is a 60×50mm thermal label, and
- * return a `blob:` URL ready to open in a new tab. Callers should `URL.
- * revokeObjectURL(url)` once the new tab has loaded if memory matters,
- * though for one-off prints it's negligible.
+ * return a `blob:` URL ready to open in a new tab.
  */
 export function generateDrugLabelPdf(
   items: DrugLabelItem[],
