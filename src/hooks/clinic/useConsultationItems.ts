@@ -72,7 +72,11 @@ export function useAddConsultationItem() {
       duration?: string | null;
       precaution?: string | null;
     }) => {
-      const { error } = await supabase.from('consultation_items').insert(item);
+      const { data, error } = await supabase
+        .from('consultation_items')
+        .insert(item)
+        .select('*')
+        .single();
       if (error) {
         if (isInsufficientStock(error)) {
           toast.error(STOCK_MSG);
@@ -80,6 +84,7 @@ export function useAddConsultationItem() {
         }
         throw error;
       }
+      return data;
     },
     onSuccess: (_, vars) =>
       qc.invalidateQueries({ queryKey: ['consultation_items', vars.consultation_id] }),

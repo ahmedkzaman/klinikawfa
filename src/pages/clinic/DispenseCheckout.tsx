@@ -31,7 +31,9 @@ import { useConsultationLock } from '@/hooks/clinic/useConsultationLock';
 import { ConsultationLockBanner } from '@/components/clinic/consultation/ConsultationLockBanner';
 import { useConsultationItems, useAddConsultationItem } from '@/hooks/clinic/useConsultationItems';
 import { usePayments } from '@/hooks/clinic/usePayments';
-import { DirectSaleItemPicker } from '@/components/clinic/visit/DirectSaleItemPicker';
+import { InventoryItemPicker } from '@/components/clinic/visit/InventoryItemPicker';
+import { EditInstructionsDialog } from '@/components/clinic/visit/EditInstructionsDialog';
+import type { ConsultationItemRow } from '@/types/clinic';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
@@ -56,6 +58,7 @@ export default function DispenseCheckout() {
   const addConsultationItem = useAddConsultationItem();
 
   const [selectedCharges, setSelectedCharges] = useState<SelectedCharge[]>([]);
+  const [editingItem, setEditingItem] = useState<ConsultationItemRow | null>(null);
   const handleChargesChange = useCallback((c: SelectedCharge[]) => {
     setSelectedCharges(c);
   }, []);
@@ -347,12 +350,13 @@ export default function DispenseCheckout() {
 
           {/* Items */}
           <div className="space-y-4">
-            {isDirectSale && (
-              <DirectSaleItemPicker
-                consultationId={consultation?.id ?? null}
-                disabled={!canEdit}
-              />
-            )}
+            <InventoryItemPicker
+              consultationId={consultation?.id ?? null}
+              disabled={!canEdit}
+              mode={isDirectSale ? 'direct_sale' : 'consultation'}
+              onItemAdded={(row) => setEditingItem(row)}
+            />
+
 
             {!isDirectSale && consultation?.dispense_note?.trim() && (
               <Alert className="bg-amber-50 border-none rounded-2xl">
@@ -448,6 +452,11 @@ export default function DispenseCheckout() {
           </TooltipProvider>
         </div>
       </div>
+      <EditInstructionsDialog
+        item={editingItem}
+        open={editingItem !== null}
+        onOpenChange={(o) => !o && setEditingItem(null)}
+      />
     </div>
   );
 }
