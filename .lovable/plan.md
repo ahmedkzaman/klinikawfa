@@ -1,40 +1,63 @@
 ## Goal
-Make the dispensary/checkout cart render service and package rows alongside inventory items, with the correct icons and no medicine-only controls leaking onto them.
-
-## Findings
-- `useConsultationItems` currently selects `*, inventory_items(unit)` — services and packages are not joined, so `item.services?.name` / `item.packages?.name` are unavailable.
-- `useAddConsultationItem` already invalidates `['consultation_items', consultationId]`, so no mutation wiring change is needed.
-- `VisitDetailsColumn.ItemList` already conditionally hides dosage chips, Edit Instructions, and Print Label behind `item.item_id`. Services and packages would render cleanly today — they just have no leading icon, and we want the displayed name to prefer the joined catalog name when present.
-- `DispenseCheckout.tsx` has two `item_id` checks (lines 174, 188) — both are correctly scoped (dispensed_qty / partial reason are medicine-only). **Not** strict filters on the visible list. Leave them.
-- No strict `.filter(row => row.item_id)` hides services/packages from the UI.
+Eliminate silent failures when adding services/packages/inventory to the consultation cart: defensive payload, RLS-safe insert return, and a tight error path with no double toasts.
 
 ## Changes
 
-### 1. `src/hooks/clinic/useConsultationItems.ts`
-- Change select string to:
-  `'*, inventory_items(unit), services(name), packages(name)'`
-- No change to mutations (invalidation already correct).
+### 1. `src/hooks/clinic/useConsultationItems.ts` — `useAddConsultationItem`
+- Replace insert chain:
+  - From: `.insert(item).select('*').single()`
+  - To:   `.insert(item).select().maybeSingle()`
+- Keep error handling and `onSuccess`/`onError` blocks unchanged. `onSuccess` already invalidates `['consultation_items', vars.consultation_id]`.
 
-### 2. `src/components/clinic/visit/VisitDetailsColumn.tsx`
-- Extend `ConsultationItemRow` type with:
-  - `services?: { name: string | null } | null`
-  - `packages?: { name: string | null } | null`
-- Import `Stethoscope` and `Package as PackageIcon` (already imported for empty states — reuse).
-- In `ItemList`, before the bold name:
-  - If `item.service_id`: render `<Stethoscope className="h-4 w-4 text-sky-600 shrink-0" />`
-  - Else if `item.package_id`: render `<PackageIcon className="h-4 w-4 text-violet-600 shrink-0" />`
-  - Else: no icon (inventory rows stay as-is).
-- Display name: prefer `item.services?.name` / `item.packages?.name` when set, else fall back to `item.item_name` (so legacy rows still render).
-- Wrap the icon + name+meta block in a small `flex items-start gap-2` so the icon sits next to the title without affecting the existing right-rail layout.
-- All existing `item.item_id` gates (dosage chips, Edit Instructions, Print Label, owe-slip badge) remain — services/packages naturally skip them.
+### 2. `src/components/clinic/visit/CatalogItemPicker.tsx` — `handleAdd`
+- Replace the soft "Preparing session…" guard with a hard block:
+  ```ts
+  if (!consultationId) {
+    toast.error('Error: No consultation ID found for this visit.');
+    return;
+  }
+  ```
+- Compute fallback price safely across catalog shapes (cast to `any` to keep TS happy — inventory rows have `price_to_patient_max`, services have `price_to_patient`, packages have `price`):
+  ```ts
+  const fallbackPrice = Number(
+    (p as any).price_to_patient_max ??
+    (p as any).price_to_patient ??
+    (p as any).price ??
+    0
+  );
+  ```
+- Build payload with `price: fallbackPrice` so NOT NULL never trips before `trg_resolve_selling_price` overwrites it for catalog rows:
+  ```ts
+  const payload: Parameters<typeof addItem.mutateAsync>[0] = {
+    consultation_id: consultationId,
+    item_name: p.name,
+    quantity: Math.max(1, Math.floor(qty || 1)),
+    price: fallbackPrice,
+  };
+  if (catalog === 'inventory') payload.item_id = p.id;
+  else if (catalog === 'service') payload.service_id = p.id;
+  else payload.package_id = p.id;
+  ```
+- Try/catch:
+  - **Try (after await)**: success toast `Added ${p.name}`, run the existing auto-open-instructions branch (only when `inserted` is truthy and has `item_id`), then `resetPick()`.
+  - **Catch**:
+    ```ts
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!msg.includes('Not enough stock')) {
+      toast.error('Failed to add: ' + msg);
+    }
+    ```
+    The stock sentinel is already toasted by the hook → no double toast. All other errors surface clearly. No success logic in catch.
 
 ### 3. No changes
-- `DispenseCheckout.tsx`: subtotal & partial-reason checks stay (correctly medicine-scoped).
-- No new mutations or query keys.
+- Cache invalidation (already correct in the hook).
+- DB / RLS / migrations.
+- Other call sites of `useAddConsultationItem` (none affected by the `maybeSingle` change — they already null-check `inserted`).
 
 ## Acceptance
-- Adding a service via `CatalogItemPicker` immediately renders a row with a Stethoscope icon, service name, qty, tier price — no dosage chips, no Edit/Print buttons.
-- Same for packages with the Package icon.
-- Inventory rows are pixel-identical to today (icon-less, full medicine controls).
-- Subtotal includes services/packages (already does — quantity × price).
-- No regression to drug-label printing or dispensed_qty logic.
+- Service or package add → row appears instantly, green "Added X" toast, no console error.
+- Inventory add with stock → row appears, green toast.
+- Inventory add with no stock → single red "Not enough stock available for this item." toast.
+- Missing `consultationId` → red "Error: No consultation ID found for this visit.", no mutation.
+- Any other DB/RLS/constraint error → red "Failed to add: <message>" toast.
+- RLS hides the inserted row (`maybeSingle` returns `null`) → no crash, cart refreshes via invalidation, success toast still shows.
