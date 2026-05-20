@@ -58,6 +58,7 @@ export default function DispenseCheckout() {
   const addConsultationItem = useAddConsultationItem();
 
   const [selectedCharges, setSelectedCharges] = useState<SelectedCharge[]>([]);
+  const [editingItem, setEditingItem] = useState<ConsultationItemRow | null>(null);
   const handleChargesChange = useCallback((c: SelectedCharge[]) => {
     setSelectedCharges(c);
   }, []);
@@ -451,6 +452,11 @@ export default function DispenseCheckout() {
           </TooltipProvider>
         </div>
       </div>
+      <EditInstructionsDialog
+        item={editingItem}
+        open={editingItem !== null}
+        onOpenChange={(o) => !o && setEditingItem(null)}
+      />
     </div>
   );
 }
