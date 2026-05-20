@@ -145,6 +145,18 @@ function drawLabel(
   doc.line(MARGIN_X, y, PAGE_W - MARGIN_X, y);
   y += 2.6;
 
+  // ── Pre-compute footer geometry so the body has a hard "floor" to respect.
+  const footerLines: string[] = [];
+  if (patientName?.trim()) footerLines.push(patientName.trim());
+  if (item.age_gender?.trim()) footerLines.push(item.age_gender.trim());
+  if (toggles.show_duration && item.duration?.trim()) {
+    footerLines.push(`Duration: ${item.duration}`);
+  }
+  const footerBlockH = Math.max(footerLines.length, 1) * 2.4;
+  const dividerY = PAGE_H - footerBlockH - 2.2;
+  const bodyBottom = dividerY - 0.6;
+  const fits = (blockH: number) => y + blockH <= bodyBottom;
+
   // ── 3. Medicine name (left) + QTY / EXP (right) ──────────────────────────
   const unitLabel = (item.unit ?? '').trim();
   const qtyText =
@@ -158,7 +170,6 @@ function drawLabel(
       )}`
     : '';
 
-  // Right column width — measure both strings at 5pt.
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(5);
   const rightW = Math.max(
@@ -167,20 +178,23 @@ function drawLabel(
   );
   const leftW = SAFE_W - rightW - (rightW > 0 ? 2 : 0);
 
-  // Medicine name (left, bold). Wrap to all required lines first, then cap
-  // the drawn count at 2 — but use the *drawn* count for height math so the
-  // following content is pushed down honestly.
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(fsMed);
   const allMedLines = doc.splitTextToSize(
     item.item_name.toUpperCase(),
     leftW,
   ) as string[];
-  const medLines = allMedLines.slice(0, 2);
-
-  // Honest line-height for the bold medicine block, proportional to the
-  // typography scale from drug_label_settings.
   const medLineH = fsMed * 0.5;
+  // Reserve room for the dosage line so it never gets pushed off the label.
+  const dosageReserve = lh(fsInstr) + 0.4;
+  let medLines = allMedLines.slice(0, 2);
+  if (
+    medLines.length === 2 &&
+    y + medLineH * 2 + 1.2 + dosageReserve > bodyBottom
+  ) {
+    medLines = allMedLines.slice(0, 1);
+  }
+
   const medTop = y;
   medLines.forEach((line, i) => {
     doc.text(line, MARGIN_X, medTop + medLineH * (i + 1) - medLineH * 0.2);
@@ -203,70 +217,85 @@ function drawLabel(
 
   y = medTop + Math.max(medBlockH, 4.4) + 1.2;
 
-  // ── 4. Centered body ─────────────────────────────────────────────────────
+  // ── 4. Centered body (with graceful degradation) ─────────────────────────
   const dosageLine = buildDosageLine(item);
   const freqLine = formatFrequency(item.frequency);
 
-  // Combine dosage + a short freq summary on a single bold line when both
-  // exist & freq is a recognised short abbreviation (e.g. "1 TABLET, 3X DAILY").
-  // Otherwise render them on separate lines for clarity.
+  // Dosage — never drop; shrink up to 1.5pt to make it fit.
   if (dosageLine) {
+    let dosagePt = fsInstr;
+    while (!fits(lh(dosagePt) + 0.4) && dosagePt > fsInstr - 1.5) {
+      dosagePt -= 0.5;
+    }
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(fsInstr);
+    doc.setFontSize(dosagePt);
     drawCentered(doc, dosageLine, y);
-    y += lh(fsInstr) + 0.4;
+    y += lh(dosagePt) + 0.4;
   }
 
+  // Frequency — shrink → cap to 1 line → drop.
   if (freqLine) {
+    let freqPt = fsInstr;
+    while (!fits(lh(freqPt)) && freqPt > fsInstr - 1.5) freqPt -= 0.5;
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(fsInstr);
-    const freqLines = (doc.splitTextToSize(
+    doc.setFontSize(freqPt);
+    let freqLines = (doc.splitTextToSize(
       freqLine.toUpperCase(),
       SAFE_W,
     ) as string[]).slice(0, 2);
-    freqLines.forEach((line) => {
-      drawCentered(doc, line, y);
-      y += lh(fsInstr);
-    });
+    if (!fits(lh(freqPt) * freqLines.length)) {
+      freqLines = freqLines.slice(0, 1);
+    }
+    if (fits(lh(freqPt) * freqLines.length)) {
+      freqLines.forEach((line) => {
+        drawCentered(doc, line, y);
+        y += lh(freqPt);
+      });
+    }
   }
 
+  // Indication — shrink → truncate with "…" → drop.
   if (toggles.show_indication && item.indication?.trim()) {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(5);
-    drawCentered(doc, `For: ${item.indication}`, y);
-    y += 2.2;
+    let indPt = 5;
+    while (!fits(2.2) && indPt > 4) indPt -= 0.5;
+    if (fits(2.2)) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(indPt);
+      let text = `For: ${item.indication}`;
+      while (doc.getTextWidth(text) > SAFE_W && text.length > 6) {
+        text = text.slice(0, -2) + '…';
+      }
+      drawCentered(doc, text, y);
+      y += 2.2;
+    }
   }
 
+  // Precaution — same ladder; dropped first when space is tight.
   if (toggles.show_precaution && item.precaution?.trim()) {
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(5);
-    const precLines = (doc.splitTextToSize(
-      item.precaution.toUpperCase(),
-      SAFE_W,
-    ) as string[]).slice(0, 2);
-    precLines.forEach((line) => {
-      drawCentered(doc, line, y);
-      y += 2.2;
-    });
+    let prePt = 5;
+    while (!fits(2.2) && prePt > 4) prePt -= 0.5;
+    if (fits(2.2)) {
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(prePt);
+      let precLines = (doc.splitTextToSize(
+        item.precaution.toUpperCase(),
+        SAFE_W,
+      ) as string[]).slice(0, 2);
+      if (!fits(2.2 * precLines.length)) precLines = precLines.slice(0, 1);
+      if (fits(2.2 * precLines.length)) {
+        precLines.forEach((line) => {
+          drawCentered(doc, line, y);
+          y += 2.2;
+        });
+      }
+    }
   }
 
   // ── 5. Footer divider + 6. Patient (left) + Date (right) ─────────────────
-  // Reserve room for up to 3 lines on the left.
-  const footerLines: string[] = [];
-  if (patientName?.trim()) footerLines.push(patientName.trim());
-  if (item.age_gender?.trim()) footerLines.push(item.age_gender.trim());
-  if (toggles.show_duration && item.duration?.trim()) {
-    footerLines.push(`Duration: ${item.duration}`);
-  }
-
-  const footerBlockH = Math.max(footerLines.length, 1) * 2.4;
-  const dividerY = PAGE_H - footerBlockH - 2.2;
   doc.setLineWidth(0.15);
   doc.line(MARGIN_X, dividerY, PAGE_W - MARGIN_X, dividerY);
 
   let fy = dividerY + 2.4;
-
-  // Patient name (first line, bold)
   footerLines.forEach((line, i) => {
     if (i === 0 && patientName?.trim()) {
       doc.setFont('helvetica', 'bold');
@@ -279,13 +308,13 @@ function drawLabel(
     fy += 2.4;
   });
 
-  // Date (bottom-right, aligned with the first footer line)
   if (toggles.show_date) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(5);
     drawRight(doc, `Date: ${format(new Date(), 'd/M/yyyy')}`, dividerY + 2.4);
   }
 }
+
 
 /**
  * Build a multi-page PDF where each page is a 60×50mm thermal label, and
