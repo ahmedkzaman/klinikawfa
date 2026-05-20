@@ -16,6 +16,8 @@ export interface ClinicLabelInfo {
 export interface DrugLabelItem {
   item_name: string;
   quantity?: number | null;
+  /** Dispensing unit pulled from `inventory_items.unit` (e.g. "Btl", "Tab"). */
+  unit?: string | null;
   indication?: string | null;
   dosage?: string | null;
   dosage_qty?: number | null;
