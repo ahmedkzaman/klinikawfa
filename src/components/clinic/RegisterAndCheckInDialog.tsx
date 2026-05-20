@@ -289,20 +289,48 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
     setValue('principal_id', null, { shouldValidate: true });
   };
 
+  const handleLoadExisting = () => {
+    if (!existingPatient) return;
+    const ep = existingPatient as PatientRow & {
+      default_panel_id?: string | null;
+      email?: string | null;
+    };
+    reset({
+      ...EMPTY,
+      national_id: ep.national_id ?? '',
+      name: ep.name ?? '',
+      phone: ep.phone ?? '',
+      gender: (ep.gender as FormData['gender']) ?? '',
+      date_of_birth: ep.date_of_birth ?? '',
+      email: ep.email ?? '',
+      visit_type: 'consultation',
+      visit_purpose: 'consultation',
+      payment_method: ep.default_panel_id ? 'panel' : 'cash',
+      panel_id: ep.default_panel_id ?? null,
+    });
+    setLoadedPatientId(ep.id);
+    setLoadedIc(ep.national_id ?? '');
+    toast.success(`Loaded existing patient: ${ep.name}`);
+  };
+
   const onSubmit = async (data: FormData) => {
     setSubmitting(true);
     try {
-      // 1. Upsert patient (permanent demographics + linkage)
-      const patient = await createPatient.mutateAsync({
-        name: data.name,
-        phone: data.phone || null,
-        national_id: data.national_id || null,
-        date_of_birth: data.date_of_birth || null,
-        gender: data.gender || null,
-        email: data.email || null,
-        principal_id: data.is_dependent ? data.principal_id : null,
-        relationship: data.is_dependent ? data.relationship || null : null,
-      });
+      // 1. Upsert patient — skip insert if user loaded an existing record
+      const usingExisting =
+        loadedPatientId && existingPatient && existingPatient.id === loadedPatientId;
+      const patient = usingExisting
+        ? { id: loadedPatientId! }
+        : await createPatient.mutateAsync({
+            name: data.name,
+            phone: data.phone || null,
+            national_id: data.national_id || null,
+            date_of_birth: data.date_of_birth || null,
+            gender: data.gender || null,
+            email: data.email || null,
+            principal_id: data.is_dependent ? data.principal_id : null,
+            relationship: data.is_dependent ? data.relationship || null : null,
+          });
 
       // 2. Insert queue entry (today's ephemeral visit) with atomic daily sequence
       const { data: seq, error: seqError } = await supabase.rpc('get_next_queue_number');
