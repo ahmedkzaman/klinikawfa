@@ -121,7 +121,7 @@ export function CatalogItemPicker({
 
   const handleAdd = async () => {
     if (!consultationId) {
-      toast.error('Preparing session… please try again in a moment.');
+      toast.error('Error: No consultation ID found for this visit.');
       return;
     }
     if (!picked) {
@@ -134,16 +134,28 @@ export function CatalogItemPicker({
       toast.error('Only OTC items can be sold via Direct Sale');
       return;
     }
-    try {
-      const payload: Parameters<typeof addItem.mutateAsync>[0] = {
-        consultation_id: consultationId,
-        item_name: p.name,
-        quantity: Math.max(1, Math.floor(qty || 1)),
-      };
-      if (catalog === 'inventory') payload.item_id = p.id;
-      else if (catalog === 'service') payload.service_id = p.id;
-      else payload.package_id = p.id;
+    // Defensive fallback so the NOT NULL `price` column never trips before
+    // `trg_resolve_selling_price` overwrites it for catalog-linked rows.
+    const fallbackPrice = Number(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (p as any).price_to_patient_max ??
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (p as any).price_to_patient ??
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (p as any).price ??
+      0,
+    );
+    const payload: Parameters<typeof addItem.mutateAsync>[0] = {
+      consultation_id: consultationId,
+      item_name: p.name,
+      quantity: Math.max(1, Math.floor(qty || 1)),
+      price: fallbackPrice,
+    };
+    if (catalog === 'inventory') payload.item_id = p.id;
+    else if (catalog === 'service') payload.service_id = p.id;
+    else payload.package_id = p.id;
 
+    try {
       const inserted = await addItem.mutateAsync(payload);
       toast.success(`Added ${p.name}`);
 
@@ -162,8 +174,11 @@ export function CatalogItemPicker({
 
       resetPick();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to add item';
-      if (!msg.toLowerCase().includes('stock')) toast.error(msg);
+      const msg = err instanceof Error ? err.message : String(err);
+      // Hook already toasts the stock sentinel — avoid double toast.
+      if (!msg.includes('Not enough stock')) {
+        toast.error('Failed to add: ' + msg);
+      }
     }
   };
 
