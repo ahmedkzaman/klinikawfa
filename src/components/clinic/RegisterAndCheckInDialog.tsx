@@ -253,6 +253,14 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingPatient?.id]);
 
+  // Clear "loaded existing" state when IC is edited away from loaded value
+  useEffect(() => {
+    if (loadedIc && (nationalId ?? '') !== loadedIc) {
+      setLoadedPatientId(null);
+      setLoadedIc(null);
+    }
+  }, [nationalId, loadedIc]);
+
   // Reset on close
   useEffect(() => {
     if (!open) {
@@ -260,6 +268,8 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
       setPrincipalQuery('');
       setSelectedPrincipal(null);
       setSubmitting(false);
+      setLoadedPatientId(null);
+      setLoadedIc(null);
     }
   }, [open, reset]);
 
