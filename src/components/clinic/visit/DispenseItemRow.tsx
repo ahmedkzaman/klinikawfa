@@ -136,8 +136,15 @@ export function DispenseItemRow({ item, consultationId, panelDiscountPct = 0 }: 
 
       {/* Line total + owe badge */}
       <div className="col-span-3 text-right space-y-1">
-        <div className="text-sm font-semibold text-foreground tabular-nums">
-          RM {lineTotal.toFixed(2)}
+        <div className="text-sm tabular-nums flex items-baseline justify-end gap-1.5">
+          {retailLineTotal != null && retailLineTotal > lineTotal && (
+            <span className="text-[11px] text-muted-foreground line-through">
+              RM {retailLineTotal.toFixed(2)}
+            </span>
+          )}
+          <span className="font-semibold text-foreground">
+            RM {lineTotal.toFixed(2)}
+          </span>
         </div>
         {oweQty > 0 && (
           <Badge className="text-[10px] py-0 px-2 h-5 bg-amber-100 text-amber-800 hover:bg-amber-100">
