@@ -159,7 +159,7 @@ export function VisitDetailsColumn({
         .filter(Boolean)
         .join(', ');
       const url = generateDrugLabelPdf(
-        rows,
+        rows.map((r) => ({ ...r, unit: r.inventory_items?.unit ?? null })),
         patientName ?? null,
         labelSettings ?? null,
         {
