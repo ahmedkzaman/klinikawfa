@@ -1391,7 +1391,7 @@ export type Database = {
           diagnosis_id: string | null
           diagnosis_text: string
           dispense_note: string
-          doctor_id: string
+          doctor_id: string | null
           id: string
           locked_at: string | null
           locked_by: string | null
@@ -1408,7 +1408,7 @@ export type Database = {
           diagnosis_id?: string | null
           diagnosis_text?: string
           dispense_note?: string
-          doctor_id: string
+          doctor_id?: string | null
           id?: string
           locked_at?: string | null
           locked_by?: string | null
@@ -1425,7 +1425,7 @@ export type Database = {
           diagnosis_id?: string | null
           diagnosis_text?: string
           dispense_note?: string
-          doctor_id?: string
+          doctor_id?: string | null
           id?: string
           locked_at?: string | null
           locked_by?: string | null
@@ -3556,6 +3556,7 @@ export type Database = {
           updated_at: string
           visit_notes: string | null
           visit_purpose: string
+          visit_type: string
         }
         Insert: {
           assigned_doctor_id?: string | null
@@ -3582,6 +3583,7 @@ export type Database = {
           updated_at?: string
           visit_notes?: string | null
           visit_purpose?: string
+          visit_type?: string
         }
         Update: {
           assigned_doctor_id?: string | null
@@ -3608,6 +3610,7 @@ export type Database = {
           updated_at?: string
           visit_notes?: string | null
           visit_purpose?: string
+          visit_type?: string
         }
         Relationships: [
           {

@@ -30,6 +30,9 @@ import { useConsultationLock } from '@/hooks/clinic/useConsultationLock';
 import { ConsultationLockBanner } from '@/components/clinic/consultation/ConsultationLockBanner';
 import { useConsultationItems, useAddConsultationItem } from '@/hooks/clinic/useConsultationItems';
 import { usePayments } from '@/hooks/clinic/usePayments';
+import { DirectSaleItemPicker } from '@/components/clinic/visit/DirectSaleItemPicker';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import {
@@ -61,7 +64,7 @@ export default function DispenseCheckout() {
     [entries, queueEntryId],
   );
 
-  const { data: consultation } = useConsultation(queueEntryId);
+  const { data: consultation, refetch: refetchConsultation } = useConsultation(queueEntryId);
   const { data: items = [] } = useConsultationItems(consultation?.id);
   const { data: payments = [] } = usePayments(queueEntryId);
   const { isLockedByOther, canEdit, forceUnlock } = useConsultationLock(
@@ -70,6 +73,39 @@ export default function DispenseCheckout() {
       | null
       | undefined,
   );
+  const qc = useQueryClient();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isDirectSale = (entry as any)?.visit_type === 'direct_sale';
+
+  // For Direct Sale visits, auto-create a placeholder consultation row so the
+  // existing pricing / dispensing pipeline can record items without a doctor.
+  const directSaleConsultRef = useRef(false);
+  useEffect(() => {
+    if (!isDirectSale) return;
+    if (!entry || !queueEntryId) return;
+    if (consultation?.id) return;
+    if (directSaleConsultRef.current) return;
+    directSaleConsultRef.current = true;
+    (async () => {
+      const { error } = await supabase.from('consultations').insert({
+        queue_entry_id: queueEntryId,
+        patient_id: entry.patient_id,
+        doctor_id: null,
+        status: 'in_progress',
+        case_note: 'Direct Sale (OTC counter sale)',
+        diagnosis_text: '',
+        dispense_note: '',
+      });
+      if (error) {
+        directSaleConsultRef.current = false;
+        toast.error(`Failed to start direct sale: ${error.message}`);
+        return;
+      }
+      qc.invalidateQueries({ queryKey: ['consultation', queueEntryId] });
+      refetchConsultation();
+    })();
+  }, [isDirectSale, entry, queueEntryId, consultation?.id, qc, refetchConsultation]);
 
   const advancedRef = useRef(false);
   useEffect(() => {
@@ -250,7 +286,14 @@ export default function DispenseCheckout() {
 
           {/* Items */}
           <div className="space-y-4">
-            {consultation?.dispense_note?.trim() && (
+            {isDirectSale && (
+              <DirectSaleItemPicker
+                consultationId={consultation?.id ?? null}
+                disabled={!canEdit}
+              />
+            )}
+
+            {!isDirectSale && consultation?.dispense_note?.trim() && (
               <Alert className="bg-amber-50 border-none rounded-2xl">
                 <Info className="h-4 w-4 text-amber-700" />
                 <AlertTitle className="text-amber-900 font-semibold">
@@ -268,11 +311,13 @@ export default function DispenseCheckout() {
               patientName={patient?.name ?? null}
             />
 
-            <DispensePanel items={items} consultationId={consultation?.id ?? null} />
+            {!isDirectSale && (
+              <DispensePanel items={items} consultationId={consultation?.id ?? null} />
+            )}
 
-            <AttachmentsCard consultationId={consultation?.id} />
+            {!isDirectSale && <AttachmentsCard consultationId={consultation?.id} />}
 
-            {(consultation?.patient_id || entry.patient_id) && (
+            {!isDirectSale && (consultation?.patient_id || entry.patient_id) && (
               <FollowUpScheduler
                 patientId={(consultation?.patient_id ?? entry.patient_id) as string}
                 defaultDoctorId={consultation?.doctor_id ?? null}
