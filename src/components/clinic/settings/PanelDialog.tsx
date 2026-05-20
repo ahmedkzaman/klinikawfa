@@ -43,6 +43,15 @@ const makeOptionalString = (max: number) =>
 
 const optionalString = makeOptionalString(255);
 
+const optionalNumber = z
+  .union([z.string(), z.number(), z.null()])
+  .optional()
+  .transform((v) => {
+    if (v === null || v === undefined || v === '') return null;
+    const n = typeof v === 'number' ? v : parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  });
+
 const schema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(120),
   panel_type: z.enum(['tpa', 'corporate', 'insurance', 'government', 'other']),
@@ -55,6 +64,15 @@ const schema = z.object({
   verification_link: optionalString,
   claim_due_date_type: optionalString,
   tin_number: optionalString,
+  consultation_fee_override: optionalNumber,
+  medication_discount_pct: z
+    .union([z.string(), z.number()])
+    .transform((v) => {
+      if (v === '' || v === null || v === undefined) return 0;
+      const n = typeof v === 'number' ? v : parseFloat(v);
+      return Number.isFinite(n) ? n : 0;
+    })
+    .pipe(z.number().min(0).max(100)),
   company_name: optionalString,
   company_reg_number: optionalString,
   person_in_charge: optionalString,
@@ -67,6 +85,7 @@ const schema = z.object({
   state: optionalString,
   country: optionalString,
 });
+
 
 type FormValues = z.input<typeof schema>;
 
@@ -82,6 +101,8 @@ const DEFAULTS: FormValues = {
   verification_link: '',
   claim_due_date_type: '',
   tin_number: '',
+  consultation_fee_override: '' as unknown as number | null,
+  medication_discount_pct: 0,
   company_name: '',
   company_reg_number: '',
   person_in_charge: '',
@@ -94,6 +115,7 @@ const DEFAULTS: FormValues = {
   state: '',
   country: '',
 };
+
 
 export function PanelDialog({ open, onOpenChange, panel }: Props) {
   const isEdit = !!panel;
@@ -125,6 +147,11 @@ export function PanelDialog({ open, onOpenChange, panel }: Props) {
         verification_link: panel.verification_link ?? '',
         claim_due_date_type: panel.claim_due_date_type ?? '',
         tin_number: panel.tin_number ?? '',
+        consultation_fee_override:
+          ((panel as { consultation_fee_override?: number | null })
+            .consultation_fee_override ?? '') as unknown as number | null,
+        medication_discount_pct:
+          (panel as { medication_discount_pct?: number }).medication_discount_pct ?? 0,
         company_name: panel.company_name ?? '',
         company_reg_number: panel.company_reg_number ?? '',
         person_in_charge: panel.person_in_charge ?? '',
@@ -294,6 +321,37 @@ export function PanelDialog({ open, onOpenChange, panel }: Props) {
                   {...form.register('verification_link')}
                   placeholder="https://..."
                 />
+              </Field>
+              <Field
+                label="Consultation Fee Override (RM)"
+                error={form.formState.errors.consultation_fee_override?.message as string | undefined}
+              >
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  {...form.register('consultation_fee_override')}
+                  placeholder="Leave blank to use clinic default"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Fixed RM amount charged for the consultation fee row on panel visits.
+                </p>
+              </Field>
+              <Field
+                label="Medication Discount (%)"
+                error={form.formState.errors.medication_discount_pct?.message as string | undefined}
+              >
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  {...form.register('medication_discount_pct')}
+                  placeholder="0"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Applied to inventory medicines only. Bespoke item overrides take priority.
+                </p>
               </Field>
             </div>
           </section>

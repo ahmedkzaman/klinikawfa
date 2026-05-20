@@ -6,6 +6,7 @@ import type { ConsultationItemRow } from '@/types/clinic';
 interface Props {
   items: ConsultationItemRow[];
   consultationId: string | null;
+  panelDiscountPct?: number;
 }
 
 /**
@@ -15,7 +16,7 @@ interface Props {
  * partial dispense — `out_of_stock` automatically triggers an owe-slip on
  * visit completion via the DB trigger.
  */
-export function DispensePanel({ items, consultationId }: Props) {
+export function DispensePanel({ items, consultationId, panelDiscountPct = 0 }: Props) {
   if (!consultationId) return null;
 
   const meds = items.filter((it) => it.item_id);
@@ -60,7 +61,12 @@ export function DispensePanel({ items, consultationId }: Props) {
 
       <div>
         {meds.map((it) => (
-          <DispenseItemRow key={it.id} item={it} consultationId={consultationId} />
+          <DispenseItemRow
+            key={it.id}
+            item={it}
+            consultationId={consultationId}
+            panelDiscountPct={panelDiscountPct}
+          />
         ))}
       </div>
     </div>

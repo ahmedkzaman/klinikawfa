@@ -17,6 +17,9 @@ type Reason = 'patient_request' | 'out_of_stock';
 interface Props {
   item: ConsultationItemRow;
   consultationId: string;
+  /** When > 0 and the row is an inventory medicine, show the retail
+   *  price struck through next to the discounted line total. */
+  panelDiscountPct?: number;
 }
 
 /**
@@ -25,7 +28,7 @@ interface Props {
  * 500ms debounce. When dispensed < prescribed, a reason picker is required —
  * `out_of_stock` will spawn a pharmacy_owe_slip on visit completion.
  */
-export function DispenseItemRow({ item, consultationId }: Props) {
+export function DispenseItemRow({ item, consultationId, panelDiscountPct = 0 }: Props) {
   const prescribed = Number(item.quantity ?? 0);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const initialDispensed = (item as any).dispensed_qty as number | null;
@@ -61,7 +64,14 @@ export function DispenseItemRow({ item, consultationId }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qty, reason]);
 
-  const lineTotal = qty * Number(item.price ?? 0);
+  const unitPrice = Number(item.price ?? 0);
+  const lineTotal = qty * unitPrice;
+  // Back-compute the retail unit price using the panel discount formula:
+  //   discounted = retail * (1 - pct/100)  =>  retail = discounted / (1 - pct/100)
+  const hasDiscount =
+    !!item.item_id && panelDiscountPct > 0 && panelDiscountPct < 100 && unitPrice > 0;
+  const retailUnit = hasDiscount ? unitPrice / (1 - panelDiscountPct / 100) : null;
+  const retailLineTotal = retailUnit != null ? qty * retailUnit : null;
   const oweQty = isPartial && reason === 'out_of_stock' ? prescribed - qty : 0;
 
   return (
@@ -126,8 +136,15 @@ export function DispenseItemRow({ item, consultationId }: Props) {
 
       {/* Line total + owe badge */}
       <div className="col-span-3 text-right space-y-1">
-        <div className="text-sm font-semibold text-foreground tabular-nums">
-          RM {lineTotal.toFixed(2)}
+        <div className="text-sm tabular-nums flex items-baseline justify-end gap-1.5">
+          {retailLineTotal != null && retailLineTotal > lineTotal && (
+            <span className="text-[11px] text-muted-foreground line-through">
+              RM {retailLineTotal.toFixed(2)}
+            </span>
+          )}
+          <span className="font-semibold text-foreground">
+            RM {lineTotal.toFixed(2)}
+          </span>
         </div>
         {oweQty > 0 && (
           <Badge className="text-[10px] py-0 px-2 h-5 bg-amber-100 text-amber-800 hover:bg-amber-100">
