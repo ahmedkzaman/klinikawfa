@@ -1,53 +1,40 @@
-# Drug Label Y-Axis Overflow Guard
+## Goal
+Make the dispensary/checkout cart render service and package rows alongside inventory items, with the correct icons and no medicine-only controls leaking onto them.
 
-Add a bottom-up overflow guard to `drawLabel` in `src/lib/clinic/printDrugLabel.ts`. Footer geometry is computed first; the body then degrades gracefully (shrink → truncate → drop) so nothing crosses the footer divider.
+## Findings
+- `useConsultationItems` currently selects `*, inventory_items(unit)` — services and packages are not joined, so `item.services?.name` / `item.packages?.name` are unavailable.
+- `useAddConsultationItem` already invalidates `['consultation_items', consultationId]`, so no mutation wiring change is needed.
+- `VisitDetailsColumn.ItemList` already conditionally hides dosage chips, Edit Instructions, and Print Label behind `item.item_id`. Services and packages would render cleanly today — they just have no leading icon, and we want the displayed name to prefer the joined catalog name when present.
+- `DispenseCheckout.tsx` has two `item_id` checks (lines 174, 188) — both are correctly scoped (dispensed_qty / partial reason are medicine-only). **Not** strict filters on the visible list. Leave them.
+- No strict `.filter(row => row.item_id)` hides services/packages from the UI.
 
-## Steps (all inside `drawLabel`)
+## Changes
 
-1. **Move footer math to before the body block.** Compute `footerLines`, `footerBlockH`, `dividerY` right after the header divider. Define:
-   ```ts
-   const bodyBottom = dividerY - 0.6;
-   const fits = (h: number) => y + h <= bodyBottom;
-   ```
-   The footer is *drawn* in its existing position at the end of the function — only the *computation* moves up.
+### 1. `src/hooks/clinic/useConsultationItems.ts`
+- Change select string to:
+  `'*, inventory_items(unit), services(name), packages(name)'`
+- No change to mutations (invalidation already correct).
 
-2. **Medicine block guard.** Wrap with `splitTextToSize` (already done). Reserve dosage room:
-   ```ts
-   const dosageReserve = lh(fsInstr) + 0.4;
-   let medLines = allMedLines.slice(0, 2);
-   if (medLines.length === 2 &&
-       medTop + medLineH * 2 + 1.2 + dosageReserve > bodyBottom) {
-     medLines = allMedLines.slice(0, 1);
-   }
-   ```
+### 2. `src/components/clinic/visit/VisitDetailsColumn.tsx`
+- Extend `ConsultationItemRow` type with:
+  - `services?: { name: string | null } | null`
+  - `packages?: { name: string | null } | null`
+- Import `Stethoscope` and `Package as PackageIcon` (already imported for empty states — reuse).
+- In `ItemList`, before the bold name:
+  - If `item.service_id`: render `<Stethoscope className="h-4 w-4 text-sky-600 shrink-0" />`
+  - Else if `item.package_id`: render `<PackageIcon className="h-4 w-4 text-violet-600 shrink-0" />`
+  - Else: no icon (inventory rows stay as-is).
+- Display name: prefer `item.services?.name` / `item.packages?.name` when set, else fall back to `item.item_name` (so legacy rows still render).
+- Wrap the icon + name+meta block in a small `flex items-start gap-2` so the icon sits next to the title without affecting the existing right-rail layout.
+- All existing `item.item_id` gates (dosage chips, Edit Instructions, Print Label, owe-slip badge) remain — services/packages naturally skip them.
 
-3. **Dosage block — never drop, only shrink.**
-   ```ts
-   let dosagePt = fsInstr;
-   while (!fits(lh(dosagePt) + 0.4) && dosagePt > fsInstr - 1.5) dosagePt -= 0.5;
-   ```
-   Use `dosagePt` for the bold dosage line.
-
-4. **Frequency — shrink → cap to 1 line → drop.**
-   - Shrink font by 0.5pt steps (floor `fsInstr - 1.5`) until one line fits.
-   - If still failing with 2 lines, cap `freqLines` to 1.
-   - If even 1 line at floor font doesn't fit, skip the block.
-
-5. **Indication — shrink → truncate with "…" → drop.**
-   - Shrink from 5pt floor 4pt.
-   - If `For: <indication>` overflows `SAFE_W` at floor font, truncate the indication string and append `…` until it fits one line.
-   - If even truncated single line doesn't fit vertically, drop.
-
-6. **Precaution — same ladder, dropped first** (lower clinical priority than indication).
-
-7. **Footer drawing block stays put** at the end of the function, using the already-computed `dividerY`.
-
-## Notes
-- `lh(pt) = pt * 0.42` is the existing mm/pt helper — unchanged.
-- No DB or settings changes; on-screen Drug Label preview unaffected.
-- The `unit`-from-`inventory_items` work shipped previously is untouched.
+### 3. No changes
+- `DispenseCheckout.tsx`: subtotal & partial-reason checks stay (correctly medicine-scoped).
+- No new mutations or query keys.
 
 ## Acceptance
-- 3-line generic drug name + long instruction: body auto-shrinks/truncates; footer pixel-stable; no crossover.
-- Short content: visually identical to current output.
-- Dosage line is always present (clinical guarantee); precaution drops before indication.
+- Adding a service via `CatalogItemPicker` immediately renders a row with a Stethoscope icon, service name, qty, tier price — no dosage chips, no Edit/Print buttons.
+- Same for packages with the Package icon.
+- Inventory rows are pixel-identical to today (icon-less, full medicine controls).
+- Subtotal includes services/packages (already does — quantity × price).
+- No regression to drug-label printing or dispensed_qty logic.
