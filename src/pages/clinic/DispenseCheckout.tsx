@@ -286,7 +286,14 @@ export default function DispenseCheckout() {
 
           {/* Items */}
           <div className="space-y-4">
-            {consultation?.dispense_note?.trim() && (
+            {isDirectSale && (
+              <DirectSaleItemPicker
+                consultationId={consultation?.id ?? null}
+                disabled={!canEdit}
+              />
+            )}
+
+            {!isDirectSale && consultation?.dispense_note?.trim() && (
               <Alert className="bg-amber-50 border-none rounded-2xl">
                 <Info className="h-4 w-4 text-amber-700" />
                 <AlertTitle className="text-amber-900 font-semibold">
@@ -304,11 +311,13 @@ export default function DispenseCheckout() {
               patientName={patient?.name ?? null}
             />
 
-            <DispensePanel items={items} consultationId={consultation?.id ?? null} />
+            {!isDirectSale && (
+              <DispensePanel items={items} consultationId={consultation?.id ?? null} />
+            )}
 
-            <AttachmentsCard consultationId={consultation?.id} />
+            {!isDirectSale && <AttachmentsCard consultationId={consultation?.id} />}
 
-            {(consultation?.patient_id || entry.patient_id) && (
+            {!isDirectSale && (consultation?.patient_id || entry.patient_id) && (
               <FollowUpScheduler
                 patientId={(consultation?.patient_id ?? entry.patient_id) as string}
                 defaultDoctorId={consultation?.doctor_id ?? null}
