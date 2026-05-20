@@ -1,90 +1,72 @@
 ## Goal
+Universal dispensary item picker that works for both Direct Sale and standard consultations, with a clinical-safety auto-open of the dosage/instructions dialog whenever a non-OTC medicine is added during a consultation.
 
-Allow the clinic to create "Direct Sale" (counter-only) visits where the dispensary can ONLY add inventory items flagged as OTC (`inventory_items.is_otc = true`). Enforce this both visually and at the data-fetch layer.
+## 1. File rename + refactor
 
-## What already exists
+- Rename `src/components/clinic/visit/DirectSaleItemPicker.tsx` → `src/components/clinic/visit/InventoryItemPicker.tsx`.
+- Update the single existing import in `src/pages/clinic/DispenseCheckout.tsx`.
+- New props:
+  ```ts
+  interface Props {
+    consultationId: string | null;
+    disabled?: boolean;
+    mode?: 'direct_sale' | 'consultation'; // default 'direct_sale'
+  }
+  ```
+- Internals:
+  - `const onlyOtc = mode === 'direct_sale'` → `useInventoryItemsSafe({ onlyOtc })`.
+  - Remove the runtime `if (!p.is_otc) ...` guard when `mode === 'consultation'`.
+  - Dynamic copy:
+    - Header: `direct_sale` → `"Direct Sale — Add OTC Items"` with `ShoppingBag`; `consultation` → `"Add Item to Consultation"` with `Pill`.
+    - Trigger button placeholder + `CommandInput` placeholder:
+      - `direct_sale` → `"Search OTC items only…"`
+      - `consultation` → `"Search full inventory (verbal order / add-on)…"`
+    - Empty state: `"No OTC items match."` vs `"No items match."`
+    - Banner:
+      - `direct_sale` → keep the amber `Alert` OTC-only banner.
+      - `consultation` → render a muted single line (no amber): `"Note: Adding items to a doctor's consultation. Stock will be reserved immediately."`
 
-- `public.inventory_items.is_otc boolean` already exists in the DB.
-- `InventoryItemDialog.tsx` already references `is_otc` in its form. (We'll verify it renders as a toggle; if not, surface it as a Switch.)
-- `useInventoryItems` / `useInventoryItemsSafe` hooks exist.
-- `queue_entries.visit_purpose` enum is `consultation | follow_up | vaccination | medical_check | procedure | other`. **There is no `visit_type` column and no `direct_sale` concept yet.**
-- `DispenseCheckout.tsx` today only renders items the doctor already prescribed (via `VisitDetailsColumn` / `DispensePanel`); it has no item search bar. The actual inventory picker lives in `ConsultationDetail.tsx`.
+## 2. DispenseCheckout.tsx wiring
 
-## Plan
+- Remove the `{isDirectSale && (...)}` wrapper around the picker (around line 350) so it always renders.
+- Pass `mode={isDirectSale ? 'direct_sale' : 'consultation'}`.
+- Leave every other `!isDirectSale` gate untouched (dispense note, attachments, follow-up, etc.).
+- Also pass a new `onItemAdded(itemId, picked)` callback (see §3) so DispenseCheckout can own the dialog state — keeps the picker free of routing knowledge.
 
-### 1. Database migration — add `visit_type` to `queue_entries`
+## 3. Clinical-safety auto-open
 
-```sql
-ALTER TABLE public.queue_entries
-  ADD COLUMN visit_type text NOT NULL DEFAULT 'consultation'
-    CHECK (visit_type IN ('consultation','direct_sale'));
+Reuse the existing `EditInstructionsDialog` (`src/components/clinic/visit/EditInstructionsDialog.tsx`), which already takes `{ item, open, onOpenChange }` where `item` is a `ConsultationItemRow`-shaped object.
 
-CREATE INDEX idx_queue_entries_visit_type ON public.queue_entries(visit_type);
-```
+Implementation:
 
-No RLS changes — existing policies still apply.
+a. **Return the inserted row** from `useAddConsultationItem` (`src/hooks/clinic/useConsultationItems.ts`):
+   - Change `.insert(item)` → `.insert(item).select('*').single()`.
+   - Return `data` from `mutationFn`.
+   - Update `onSuccess` signature accordingly. No other callers need to change because they currently ignore the return value.
 
-### 2. Registration flow — let staff create a Direct Sale visit
+b. **In `InventoryItemPicker.tsx`**: after `await addItem.mutateAsync(...)` resolves with the inserted row:
+   - If `mode === 'consultation'` AND `picked.is_otc === false` AND inserted row has `item_id`, call `props.onItemAdded?.(insertedRow)`.
 
-In `src/components/clinic/RegisterAndCheckInDialog.tsx`:
-- Add a top-level radio (or segmented control): **Consultation** vs **Direct Sale (OTC only)**.
-- When "Direct Sale" is chosen:
-  - Hide `visit_purpose`, panel, and doctor-routing fields.
-  - On submit, pass `visit_type: 'direct_sale'` to the queue entry insert and set `visit_purpose: 'other'` (or skip).
-  - Skip the consultation step and route the new queue entry straight to `sent_to_dispensary` (so it lands in DispenseCheckout immediately).
-- Update `useIntakeAppointment` / queue-entry insert helper(s) to forward `visit_type`.
+c. **In `DispenseCheckout.tsx`**: hold `const [editingItem, setEditingItem] = useState<ConsultationItemRow | null>(null)`. Pass `onItemAdded={setEditingItem}` to the picker. Render below the picker:
+   ```tsx
+   <EditInstructionsDialog
+     item={editingItem}
+     open={editingItem !== null}
+     onOpenChange={(o) => !o && setEditingItem(null)}
+   />
+   ```
+   The dialog auto-focuses dosage/frequency, forcing the nurse to confirm prescribing details before the bill is finalized.
 
-### 3. Inventory hook — accept an `onlyOtc` filter
+## 4. RLS
 
-In `src/hooks/clinic/useInventoryItems.ts`:
-```ts
-export function useInventoryItemsSafe(opts?: { onlyOtc?: boolean }) {
-  const onlyOtc = !!opts?.onlyOtc;
-  return useQuery({
-    queryKey: ['inventory_items_safe', { onlyOtc }],
-    queryFn: async () => {
-      let q = supabase.from('inventory_items_safe').select('*').order('name');
-      if (onlyOtc) q = q.eq('is_otc', true);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-}
-```
-
-Apply the same `onlyOtc` option to `useInventoryItems()` for parity.
-
-### 4. DispenseCheckout — add an OTC-locked item picker for Direct Sale
-
-In `src/pages/clinic/DispenseCheckout.tsx` (and a small new `DirectSaleItemPicker` sub-component, or extend `DispensePanel`):
-
-- Read `entry.visit_type`.
-- If `visit_type === 'direct_sale'`:
-  - Render an inventory search bar (Combobox) above the cart, calling `useInventoryItemsSafe({ onlyOtc: true })`.
-  - Placeholder text: **"Search OTC items only…"** (instead of "Search inventory…").
-  - On select → call `addConsultationItem.mutateAsync({ consultation_id, item_name, quantity, price })` (auto-create a lightweight consultation row on first add if one does not exist for this queue entry, so the existing checkout pipeline still works).
-  - Show a small info banner: *"Direct Sale: only Over-The-Counter items can be added."*
-- If `visit_type === 'consultation'` (default), behaviour is unchanged.
-
-Also enforce server-trust on the client: even if a non-OTC item somehow appears, block `add` with a toast `"Only OTC items can be sold via Direct Sale"`.
-
-### 5. Inventory admin UI — confirm the OTC toggle is visible
-
-In `src/components/clinic/settings/InventoryItemDialog.tsx` and `ItemEditSheet.tsx`:
-- Verify the existing `is_otc` field is rendered as a `<Switch>` labelled **"OTC Approved (sellable as Direct Sale)"** with a short help text.
-- If currently hidden, expose it in the form. Mapped via `useAddInventoryItem` / `useUpdateInventoryItem` (already supported by `mapItemPayload`).
-
-### 6. Optional UI polish (out of scope unless asked)
-
-- Queue board badge: render a small "Direct Sale" pill next to direct-sale entries.
-- Filter Consultation page to exclude `visit_type='direct_sale'` (so doctors don't see them in their queue).
+No DB changes. Verified — `consultation_items_ops_insert` already allows `is_ops_or_admin(auth.uid()) OR has_role(auth.uid(), 'locum')`, which covers `operations`, `admin`, `special_admin`, `doctor_admin`, `resident_doctor`, and locums.
 
 ## Acceptance criteria
 
-- A staff member can register a "Direct Sale" queue entry from RegisterAndCheckInDialog.
-- That entry lands directly on DispenseCheckout with an OTC-only search bar (placeholder = "Search OTC items only…").
-- The search bar's network call carries `is_otc=eq.true`; non-OTC items are never returned.
-- Consultation visits behave exactly as before.
-- Admins can toggle `is_otc` on any inventory item from the inventory settings dialog, and the change is reflected in the Direct Sale picker immediately.
-- TypeScript build passes.
+- File `DirectSaleItemPicker.tsx` no longer exists; `InventoryItemPicker.tsx` exists and is imported from DispenseCheckout. No dangling imports. Build passes.
+- Standard consultation visit in DispenseCheckout: picker visible, searches full inventory, consultation-mode placeholder + muted banner.
+- Direct Sale visit: picker behavior unchanged — OTC-only filter, OTC placeholder, amber banner.
+- Adding a non-OTC inventory item during a consultation immediately opens `EditInstructionsDialog` pre-loaded with that row.
+- Adding an OTC item (either mode) does **not** open the dialog.
+- `consultation_items` insert succeeds for ops/nurse users; existing pricing trigger (`trg_resolve_selling_price`) and reservation trigger (`trg_consultation_items_inventory`) continue to run.
+- Operational warning surfaced in chat: unlocking the full catalog lets ops staff add prescription items to a doctor's bill. Auto-opening the dosage dialog mitigates blank-label risk but does not gate POM items — say the word if you also want a hard role-based block on prescription-only items.
