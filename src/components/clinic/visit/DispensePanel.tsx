@@ -6,6 +6,7 @@ import type { ConsultationItemRow } from '@/types/clinic';
 interface Props {
   items: ConsultationItemRow[];
   consultationId: string | null;
+  panelDiscountPct?: number;
 }
 
 /**
