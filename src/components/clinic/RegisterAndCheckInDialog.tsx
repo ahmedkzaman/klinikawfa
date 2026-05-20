@@ -470,6 +470,24 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                         collect this payment before proceeding.
                       </div>
                     )}
+                    <div className="pt-1">
+                      {loadedPatientId === existingPatient.id ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium">
+                          <Check className="h-3.5 w-3.5" /> Using existing record — submit will
+                          only create the queue entry.
+                        </span>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={handleLoadExisting}
+                        >
+                          <UserCheck className="h-4 w-4" />
+                          Load Existing Record
+                        </Button>
+                      )}
+                    </div>
                   </AlertDescription>
                 </Alert>
               )}
