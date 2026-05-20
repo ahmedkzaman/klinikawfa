@@ -323,9 +323,13 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
 
       qc.invalidateQueries({ queryKey: ['clinic', 'patients'] });
       qc.invalidateQueries({ queryKey: ['clinic', 'queue-entries'] });
-      toast.success('Patient registered and added to queue');
+      toast.success(
+        isDirectSaleSubmit
+          ? 'Direct sale visit created — routing to dispensary'
+          : 'Patient registered and added to queue',
+      );
       onOpenChange(false);
-      navigate('/clinic/queue');
+      navigate(isDirectSaleSubmit ? '/clinic/dispensary' : '/clinic/queue');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to register patient';
       toast.error(msg);
