@@ -300,10 +300,12 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
         return;
       }
 
+      const isDirectSaleSubmit = data.visit_type === 'direct_sale';
       const { error: queueError } = await supabase.from('queue_entries').insert({
         patient_id: patient.id,
-        clinic_status: 'registered',
-        visit_purpose: data.visit_purpose,
+        clinic_status: isDirectSaleSubmit ? 'sent_to_dispensary' : 'registered',
+        visit_type: data.visit_type,
+        visit_purpose: isDirectSaleSubmit ? 'other' : data.visit_purpose,
         visit_notes: data.visit_notes || null,
         payment_method: data.payment_method,
         panel_id: data.payment_method === 'panel' ? data.panel_id : null,
