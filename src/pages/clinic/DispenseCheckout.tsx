@@ -31,7 +31,7 @@ import { useConsultationLock } from '@/hooks/clinic/useConsultationLock';
 import { ConsultationLockBanner } from '@/components/clinic/consultation/ConsultationLockBanner';
 import { useConsultationItems, useAddConsultationItem } from '@/hooks/clinic/useConsultationItems';
 import { usePayments } from '@/hooks/clinic/usePayments';
-import { InventoryItemPicker } from '@/components/clinic/visit/InventoryItemPicker';
+import { CatalogItemPicker } from '@/components/clinic/visit/CatalogItemPicker';
 import { EditInstructionsDialog } from '@/components/clinic/visit/EditInstructionsDialog';
 import type { ConsultationItemRow } from '@/types/clinic';
 import { supabase } from '@/integrations/supabase/client';
@@ -350,7 +350,7 @@ export default function DispenseCheckout() {
 
           {/* Items */}
           <div className="space-y-4">
-            <InventoryItemPicker
+            <CatalogItemPicker
               consultationId={consultation?.id ?? null}
               disabled={!canEdit}
               mode={isDirectSale ? 'direct_sale' : 'consultation'}
