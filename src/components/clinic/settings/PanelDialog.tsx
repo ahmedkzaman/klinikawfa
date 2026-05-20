@@ -43,6 +43,15 @@ const makeOptionalString = (max: number) =>
 
 const optionalString = makeOptionalString(255);
 
+const optionalNumber = z
+  .union([z.string(), z.number(), z.null()])
+  .optional()
+  .transform((v) => {
+    if (v === null || v === undefined || v === '') return null;
+    const n = typeof v === 'number' ? v : parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  });
+
 const schema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(120),
   panel_type: z.enum(['tpa', 'corporate', 'insurance', 'government', 'other']),
@@ -55,6 +64,15 @@ const schema = z.object({
   verification_link: optionalString,
   claim_due_date_type: optionalString,
   tin_number: optionalString,
+  consultation_fee_override: optionalNumber,
+  medication_discount_pct: z
+    .union([z.string(), z.number()])
+    .transform((v) => {
+      if (v === '' || v === null || v === undefined) return 0;
+      const n = typeof v === 'number' ? v : parseFloat(v);
+      return Number.isFinite(n) ? n : 0;
+    })
+    .pipe(z.number().min(0).max(100)),
   company_name: optionalString,
   company_reg_number: optionalString,
   person_in_charge: optionalString,
@@ -67,6 +85,7 @@ const schema = z.object({
   state: optionalString,
   country: optionalString,
 });
+
 
 type FormValues = z.input<typeof schema>;
 
