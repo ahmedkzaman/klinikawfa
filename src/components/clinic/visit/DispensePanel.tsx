@@ -16,7 +16,7 @@ interface Props {
  * partial dispense — `out_of_stock` automatically triggers an owe-slip on
  * visit completion via the DB trigger.
  */
-export function DispensePanel({ items, consultationId }: Props) {
+export function DispensePanel({ items, consultationId, panelDiscountPct = 0 }: Props) {
   if (!consultationId) return null;
 
   const meds = items.filter((it) => it.item_id);
