@@ -1,72 +1,81 @@
-## Goal
-Universal dispensary item picker that works for both Direct Sale and standard consultations, with a clinical-safety auto-open of the dosage/instructions dialog whenever a non-OTC medicine is added during a consultation.
+# Plan: "Load Existing Record" action on duplicate-MyKad warning
 
-## 1. File rename + refactor
+## File
+`src/components/clinic/RegisterAndCheckInDialog.tsx` (single component)
 
-- Rename `src/components/clinic/visit/DirectSaleItemPicker.tsx` → `src/components/clinic/visit/InventoryItemPicker.tsx`.
-- Update the single existing import in `src/pages/clinic/DispenseCheckout.tsx`.
-- New props:
-  ```ts
-  interface Props {
-    consultationId: string | null;
-    disabled?: boolean;
-    mode?: 'direct_sale' | 'consultation'; // default 'direct_sale'
-  }
-  ```
-- Internals:
-  - `const onlyOtc = mode === 'direct_sale'` → `useInventoryItemsSafe({ onlyOtc })`.
-  - Remove the runtime `if (!p.is_otc) ...` guard when `mode === 'consultation'`.
-  - Dynamic copy:
-    - Header: `direct_sale` → `"Direct Sale — Add OTC Items"` with `ShoppingBag`; `consultation` → `"Add Item to Consultation"` with `Pill`.
-    - Trigger button placeholder + `CommandInput` placeholder:
-      - `direct_sale` → `"Search OTC items only…"`
-      - `consultation` → `"Search full inventory (verbal order / add-on)…"`
-    - Empty state: `"No OTC items match."` vs `"No items match."`
-    - Banner:
-      - `direct_sale` → keep the amber `Alert` OTC-only banner.
-      - `consultation` → render a muted single line (no amber): `"Note: Adding items to a doctor's consultation. Stock will be reserved immediately."`
+## Changes
 
-## 2. DispenseCheckout.tsx wiring
+### 1. New state — track loaded existing patient
+Add:
+```ts
+const [loadedPatientId, setLoadedPatientId] = useState<string | null>(null);
+```
+Clear it inside the existing `useEffect` that resets the dialog on close, and clear it whenever the IC field is edited away from the loaded patient's IC (watch `nationalId`).
 
-- Remove the `{isDirectSale && (...)}` wrapper around the picker (around line 350) so it always renders.
-- Pass `mode={isDirectSale ? 'direct_sale' : 'consultation'}`.
-- Leave every other `!isDirectSale` gate untouched (dispense note, attachments, follow-up, etc.).
-- Also pass a new `onItemAdded(itemId, picked)` callback (see §3) so DispenseCheckout can own the dialog state — keeps the picker free of routing knowledge.
+### 2. Handler — load existing record into the form
+```ts
+const handleLoadExisting = () => {
+  if (!existingPatient) return;
+  setLoadedPatientId(existingPatient.id);
+  reset({
+    ...EMPTY,
+    national_id: existingPatient.national_id ?? '',
+    name: existingPatient.name ?? '',
+    phone: existingPatient.phone ?? '',
+    gender: (existingPatient.gender as FormData['gender']) ?? '',
+    date_of_birth: existingPatient.date_of_birth ?? '',
+    email: existingPatient.email ?? '',
+    // preserve today's-visit defaults
+    visit_type: 'consultation',
+    visit_purpose: 'consultation',
+    payment_method: existingPatient.default_panel_id ? 'panel' : 'cash',
+    panel_id: existingPatient.default_panel_id ?? null,
+  });
+  // reset() clears RHF errors automatically
+  toast.success(`Loaded existing patient: ${existingPatient.name}`);
+};
+```
+`reset()` wipes the red validation messages — satisfies the "clear errors" requirement.
 
-## 3. Clinical-safety auto-open
+### 3. UI — add Button inside the duplicate Alert (around line 419)
+Inside the existing `<Alert variant="destructive">` block, after the warning text add:
+```tsx
+<Button
+  type="button"
+  size="sm"
+  variant="secondary"
+  onClick={handleLoadExisting}
+  className="mt-1"
+>
+  <UserCheck className="h-4 w-4" />
+  Load Existing Record
+</Button>
+```
+Import `UserCheck` from `lucide-react`. Hide the button (or disable it) when `loadedPatientId === existingPatient.id` and show a small "Loaded ✓" hint instead.
 
-Reuse the existing `EditInstructionsDialog` (`src/components/clinic/visit/EditInstructionsDialog.tsx`), which already takes `{ item, open, onOpenChange }` where `item` is a `ConsultationItemRow`-shaped object.
+### 4. Bypass create on submit
+In `onSubmit`, replace the unconditional `createPatient.mutateAsync(...)` with:
+```ts
+let patient: { id: string };
+if (loadedPatientId && loadedPatientId === existingPatient?.id) {
+  patient = { id: loadedPatientId };
+} else {
+  patient = await createPatient.mutateAsync({ ...existing payload... });
+}
+```
+Everything downstream (queue_entries insert, navigation) uses `patient.id` as today, so no other changes are needed.
 
-Implementation:
+### 5. Visual cue (small)
+When `loadedPatientId` is set, render a muted badge under the IC field: "Using existing record — submit will only create the queue entry." This signals the workflow change to the nurse.
 
-a. **Return the inserted row** from `useAddConsultationItem` (`src/hooks/clinic/useConsultationItems.ts`):
-   - Change `.insert(item)` → `.insert(item).select('*').single()`.
-   - Return `data` from `mutationFn`.
-   - Update `onSuccess` signature accordingly. No other callers need to change because they currently ignore the return value.
-
-b. **In `InventoryItemPicker.tsx`**: after `await addItem.mutateAsync(...)` resolves with the inserted row:
-   - If `mode === 'consultation'` AND `picked.is_otc === false` AND inserted row has `item_id`, call `props.onItemAdded?.(insertedRow)`.
-
-c. **In `DispenseCheckout.tsx`**: hold `const [editingItem, setEditingItem] = useState<ConsultationItemRow | null>(null)`. Pass `onItemAdded={setEditingItem}` to the picker. Render below the picker:
-   ```tsx
-   <EditInstructionsDialog
-     item={editingItem}
-     open={editingItem !== null}
-     onOpenChange={(o) => !o && setEditingItem(null)}
-   />
-   ```
-   The dialog auto-focuses dosage/frequency, forcing the nurse to confirm prescribing details before the bill is finalized.
-
-## 4. RLS
-
-No DB changes. Verified — `consultation_items_ops_insert` already allows `is_ops_or_admin(auth.uid()) OR has_role(auth.uid(), 'locum')`, which covers `operations`, `admin`, `special_admin`, `doctor_admin`, `resident_doctor`, and locums.
+## Out of scope
+- No DB / RLS / schema changes.
+- No changes to `usePatientByIc`, `useCreatePatient`, or queue logic.
+- Dependant-linkage and panel sections untouched.
 
 ## Acceptance criteria
-
-- File `DirectSaleItemPicker.tsx` no longer exists; `InventoryItemPicker.tsx` exists and is imported from DispenseCheckout. No dangling imports. Build passes.
-- Standard consultation visit in DispenseCheckout: picker visible, searches full inventory, consultation-mode placeholder + muted banner.
-- Direct Sale visit: picker behavior unchanged — OTC-only filter, OTC placeholder, amber banner.
-- Adding a non-OTC inventory item during a consultation immediately opens `EditInstructionsDialog` pre-loaded with that row.
-- Adding an OTC item (either mode) does **not** open the dialog.
-- `consultation_items` insert succeeds for ops/nurse users; existing pricing trigger (`trg_resolve_selling_price`) and reservation trigger (`trg_consultation_items_inventory`) continue to run.
-- Operational warning surfaced in chat: unlocking the full catalog lets ops staff add prescription items to a doctor's bill. Auto-opening the dosage dialog mitigates blank-label risk but does not gate POM items — say the word if you also want a hard role-based block on prescription-only items.
+- Typing a duplicate 12-digit IC shows the red alert with a "Load Existing Record" button.
+- Clicking it auto-fills Name / Phone / Gender / DOB / Email, clears all red field errors, and prefills the default panel if any.
+- Submitting then skips the patient insert and only creates the `queue_entries` row, routing to /clinic/queue (or /clinic/dispensary for direct sale).
+- Editing the IC after loading clears the loaded state so a fresh create can happen.
+- Closing the dialog resets everything including `loadedPatientId`.
