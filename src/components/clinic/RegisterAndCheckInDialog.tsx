@@ -4,7 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Check, ChevronsUpDown, Search, X } from 'lucide-react';
+import { Check, ChevronsUpDown, Search, UserCheck, X } from 'lucide-react';
 import { toMalayTitleCase } from '@/lib/textCase';
 import {
   Dialog,
@@ -192,6 +192,8 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
   const { data: panels = [] } = useInsuranceProviders({ activeOnly: true });
 
   const [submitting, setSubmitting] = useState(false);
+  const [loadedPatientId, setLoadedPatientId] = useState<string | null>(null);
+  const [loadedIc, setLoadedIc] = useState<string | null>(null);
   const [principalQuery, setPrincipalQuery] = useState('');
   const [principalPickerOpen, setPrincipalPickerOpen] = useState(false);
   const [selectedPrincipal, setSelectedPrincipal] = useState<PatientRow | null>(null);
@@ -251,6 +253,14 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingPatient?.id]);
 
+  // Clear "loaded existing" state when IC is edited away from loaded value
+  useEffect(() => {
+    if (loadedIc && (nationalId ?? '') !== loadedIc) {
+      setLoadedPatientId(null);
+      setLoadedIc(null);
+    }
+  }, [nationalId, loadedIc]);
+
   // Reset on close
   useEffect(() => {
     if (!open) {
@@ -258,6 +268,8 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
       setPrincipalQuery('');
       setSelectedPrincipal(null);
       setSubmitting(false);
+      setLoadedPatientId(null);
+      setLoadedIc(null);
     }
   }, [open, reset]);
 
@@ -277,20 +289,48 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
     setValue('principal_id', null, { shouldValidate: true });
   };
 
+  const handleLoadExisting = () => {
+    if (!existingPatient) return;
+    const ep = existingPatient as PatientRow & {
+      default_panel_id?: string | null;
+      email?: string | null;
+    };
+    reset({
+      ...EMPTY,
+      national_id: ep.national_id ?? '',
+      name: ep.name ?? '',
+      phone: ep.phone ?? '',
+      gender: (ep.gender as FormData['gender']) ?? '',
+      date_of_birth: ep.date_of_birth ?? '',
+      email: ep.email ?? '',
+      visit_type: 'consultation',
+      visit_purpose: 'consultation',
+      payment_method: ep.default_panel_id ? 'panel' : 'cash',
+      panel_id: ep.default_panel_id ?? null,
+    });
+    setLoadedPatientId(ep.id);
+    setLoadedIc(ep.national_id ?? '');
+    toast.success(`Loaded existing patient: ${ep.name}`);
+  };
+
   const onSubmit = async (data: FormData) => {
     setSubmitting(true);
     try {
-      // 1. Upsert patient (permanent demographics + linkage)
-      const patient = await createPatient.mutateAsync({
-        name: data.name,
-        phone: data.phone || null,
-        national_id: data.national_id || null,
-        date_of_birth: data.date_of_birth || null,
-        gender: data.gender || null,
-        email: data.email || null,
-        principal_id: data.is_dependent ? data.principal_id : null,
-        relationship: data.is_dependent ? data.relationship || null : null,
-      });
+      // 1. Upsert patient — skip insert if user loaded an existing record
+      const usingExisting =
+        loadedPatientId && existingPatient && existingPatient.id === loadedPatientId;
+      const patient = usingExisting
+        ? { id: loadedPatientId! }
+        : await createPatient.mutateAsync({
+            name: data.name,
+            phone: data.phone || null,
+            national_id: data.national_id || null,
+            date_of_birth: data.date_of_birth || null,
+            gender: data.gender || null,
+            email: data.email || null,
+            principal_id: data.is_dependent ? data.principal_id : null,
+            relationship: data.is_dependent ? data.relationship || null : null,
+          });
 
       // 2. Insert queue entry (today's ephemeral visit) with atomic daily sequence
       const { data: seq, error: seqError } = await supabase.rpc('get_next_queue_number');
@@ -430,6 +470,24 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                         collect this payment before proceeding.
                       </div>
                     )}
+                    <div className="pt-1">
+                      {loadedPatientId === existingPatient.id ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium">
+                          <Check className="h-3.5 w-3.5" /> Using existing record — submit will
+                          only create the queue entry.
+                        </span>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={handleLoadExisting}
+                        >
+                          <UserCheck className="h-4 w-4" />
+                          Load Existing Record
+                        </Button>
+                      )}
+                    </div>
                   </AlertDescription>
                 </Alert>
               )}
