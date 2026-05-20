@@ -609,28 +609,79 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
               <CardTitle className="text-base">Today's Visit</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="reg-purpose">Purpose of Visit *</Label>
-                  <Controller
-                    control={control}
-                    name="visit_purpose"
-                    render={({ field }) => (
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <SelectTrigger id="reg-purpose">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {VISIT_PURPOSES.map((p) => (
-                            <SelectItem key={p.value} value={p.value}>
-                              {p.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
+              <div className="space-y-1.5">
+                <Label>Visit Type *</Label>
+                <Controller
+                  control={control}
+                  name="visit_type"
+                  render={({ field }) => (
+                    <RadioGroup
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      className="grid grid-cols-1 sm:grid-cols-2 gap-2"
+                    >
+                      <label
+                        htmlFor="vt-consult"
+                        className={cn(
+                          'flex items-start gap-2 rounded-md border px-3 py-2 cursor-pointer',
+                          field.value === 'consultation' && 'border-primary bg-primary/5',
+                        )}
+                      >
+                        <RadioGroupItem value="consultation" id="vt-consult" className="mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium">Consultation</p>
+                          <p className="text-xs text-muted-foreground">
+                            Patient sees a doctor first.
+                          </p>
+                        </div>
+                      </label>
+                      <label
+                        htmlFor="vt-direct"
+                        className={cn(
+                          'flex items-start gap-2 rounded-md border px-3 py-2 cursor-pointer',
+                          field.value === 'direct_sale' && 'border-primary bg-primary/5',
+                        )}
+                      >
+                        <RadioGroupItem value="direct_sale" id="vt-direct" className="mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium">Direct Sale (OTC only)</p>
+                          <p className="text-xs text-muted-foreground">
+                            Counter sale. Skips doctor; OTC items only.
+                          </p>
+                        </div>
+                      </label>
+                    </RadioGroup>
+                  )}
+                />
+              </div>
+
+              {!isDirectSale && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="reg-purpose">Purpose of Visit *</Label>
+                    <Controller
+                      control={control}
+                      name="visit_purpose"
+                      render={({ field }) => (
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <SelectTrigger id="reg-purpose">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {VISIT_PURPOSES.map((p) => (
+                              <SelectItem key={p.value} value={p.value}>
+                                {p.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                  </div>
                 </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Payment Method *</Label>
                   <Controller
