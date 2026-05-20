@@ -354,7 +354,11 @@ export default function DispenseCheckout() {
             />
 
             {!isDirectSale && (
-              <DispensePanel items={items} consultationId={consultation?.id ?? null} />
+              <DispensePanel
+                items={items}
+                consultationId={consultation?.id ?? null}
+                panelDiscountPct={panelInfo?.medication_discount_pct ?? 0}
+              />
             )}
 
             {!isDirectSale && <AttachmentsCard consultationId={consultation?.id} />}
