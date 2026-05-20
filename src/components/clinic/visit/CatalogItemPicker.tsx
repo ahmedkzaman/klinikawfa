@@ -54,9 +54,8 @@ export function CatalogItemPicker({
   onItemAdded,
 }: Props) {
   const [catalog, setCatalog] = useState<CatalogKind>('inventory');
-  const onlyOtc = mode === 'direct_sale' && catalog === 'inventory';
 
-  const { data: inventoryItems = [], isLoading: invLoading } = useInventoryItemsSafe({ onlyOtc });
+  const { data: inventoryItems = [], isLoading: invLoading } = useInventoryItemsSafe();
   const { data: servicesRaw = [], isLoading: svcLoading } = useServicesSafe();
   const { data: packagesRaw = [], isLoading: pkgLoading } = usePackagesSafe();
 
@@ -86,13 +85,13 @@ export function CatalogItemPicker({
   const placeholderByCatalog: Record<CatalogKind, string> = {
     inventory:
       mode === 'direct_sale'
-        ? 'Search OTC items only…'
+        ? 'Search full inventory…'
         : 'Search full inventory (verbal order / add-on)…',
     service: 'Search services (procedures, lab, other)…',
     package: 'Search packages…',
   };
   const emptyByCatalog: Record<CatalogKind, string> = {
-    inventory: mode === 'direct_sale' ? 'No OTC items match.' : 'No items match.',
+    inventory: 'No items match.',
     service: 'No services match.',
     package: 'No packages match.',
   };
@@ -130,10 +129,6 @@ export function CatalogItemPicker({
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const p = picked as any;
-    if (mode === 'direct_sale' && catalog === 'inventory' && !p.is_otc) {
-      toast.error('Only OTC items can be sold via Direct Sale');
-      return;
-    }
     // Defensive fallback so the NOT NULL `price` column never trips before
     // `trg_resolve_selling_price` overwrites it for catalog-linked rows.
     const fallbackPrice = Number(
@@ -221,18 +216,7 @@ export function CatalogItemPicker({
         </TabsList>
       </Tabs>
 
-      {mode === 'direct_sale' && catalog === 'inventory' ? (
-        <Alert className="bg-amber-50 border-amber-200">
-          <AlertTitle className="text-amber-900 font-semibold text-sm">
-            OTC-only catalog
-          </AlertTitle>
-          <AlertDescription className="text-amber-900/90 text-xs">
-            Only items marked <span className="font-semibold">OTC Approved</span> in Inventory
-            Settings appear on this tab. Prescription-only items are hidden. Services and
-            packages are unrestricted.
-          </AlertDescription>
-        </Alert>
-      ) : mode === 'consultation' && catalog === 'inventory' ? (
+      {mode === 'consultation' && catalog === 'inventory' ? (
         <p className="text-xs text-muted-foreground">
           Note: Adding items to a doctor's consultation. Stock will be reserved immediately.
         </p>
