@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Search, Plus, ShoppingBag } from 'lucide-react';
+import { Search, Plus, ShoppingBag, Pill } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Command,
@@ -17,18 +17,38 @@ import { useInventoryItemsSafe } from '@/hooks/clinic/useInventoryItems';
 import { useAddConsultationItem } from '@/hooks/clinic/useConsultationItems';
 import { bento, bentoHeader } from '@/lib/clinic/bentoTokens';
 import { cn } from '@/lib/utils';
+import type { ConsultationItemRow } from '@/types/clinic';
 
 interface Props {
   consultationId: string | null;
   disabled?: boolean;
+  /**
+   * `direct_sale` — counter sales: hard OTC-only filter, amber warning banner.
+   * `consultation` — nurse/ops add-on during a doctor's visit: full inventory.
+   * Defaults to `direct_sale` for safety.
+   */
+  mode?: 'direct_sale' | 'consultation';
+  /**
+   * Fired after a row is inserted. DispenseCheckout uses this to auto-open the
+   * EditInstructionsDialog when a non-OTC medicine is added during a
+   * consultation, forcing dosage/frequency entry before label print.
+   */
+  onItemAdded?: (row: ConsultationItemRow) => void;
 }
 
 /**
- * OTC-only inventory picker shown on Direct Sale visits in DispenseCheckout.
- * Filters strictly by `is_otc = true` server-side via useInventoryItemsSafe({ onlyOtc: true }).
+ * Inventory picker used by the Dispensary checkout for both Direct Sale visits
+ * (OTC-only, hard-locked) and standard consultations (full catalog, with
+ * clinical-safety auto-open of the instructions dialog).
  */
-export function DirectSaleItemPicker({ consultationId, disabled }: Props) {
-  const { data: items = [], isLoading } = useInventoryItemsSafe({ onlyOtc: true });
+export function InventoryItemPicker({
+  consultationId,
+  disabled,
+  mode = 'direct_sale',
+  onItemAdded,
+}: Props) {
+  const onlyOtc = mode === 'direct_sale';
+  const { data: items = [], isLoading } = useInventoryItemsSafe({ onlyOtc });
   const addItem = useAddConsultationItem();
 
   const [open, setOpen] = useState(false);
@@ -36,6 +56,15 @@ export function DirectSaleItemPicker({ consultationId, disabled }: Props) {
   const [qty, setQty] = useState<number>(1);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [picked, setPicked] = useState<any | null>(null);
+
+  const placeholder =
+    mode === 'direct_sale'
+      ? 'Search OTC items only…'
+      : 'Search full inventory (verbal order / add-on)…';
+  const emptyText = mode === 'direct_sale' ? 'No OTC items match.' : 'No items match.';
+  const headerText =
+    mode === 'direct_sale' ? 'Direct Sale — Add OTC Items' : 'Add Item to Consultation';
+  const HeaderIcon = mode === 'direct_sale' ? ShoppingBag : Pill;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -46,32 +75,45 @@ export function DirectSaleItemPicker({ consultationId, disabled }: Props) {
 
   const handleAdd = async () => {
     if (!consultationId) {
-      toast.error('Preparing direct-sale session… please try again in a moment.');
+      toast.error('Preparing session… please try again in a moment.');
       return;
     }
     if (!picked) {
-      toast.error('Select an OTC item first');
+      toast.error('Select an item first');
       return;
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const p = picked as any;
-    if (!p.is_otc) {
+    if (mode === 'direct_sale' && !p.is_otc) {
       toast.error('Only OTC items can be sold via Direct Sale');
       return;
     }
     try {
-      await addItem.mutateAsync({
+      const inserted = await addItem.mutateAsync({
         consultation_id: consultationId,
         item_name: p.name,
         quantity: Math.max(1, Math.floor(qty || 1)),
         item_id: p.id,
       });
       toast.success(`Added ${p.name}`);
+
+      // Clinical-safety: when adding a prescription medicine during a
+      // consultation, force the dosage/instructions modal open immediately so
+      // the patient never walks out with a blank drug label.
+      if (
+        mode === 'consultation' &&
+        p.is_otc === false &&
+        inserted &&
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (inserted as any).item_id
+      ) {
+        onItemAdded?.(inserted as ConsultationItemRow);
+      }
+
       setPicked(null);
       setQty(1);
       setQuery('');
     } catch (err) {
-      // toast already shown by hook in most cases
       const msg = err instanceof Error ? err.message : 'Failed to add item';
       if (!msg.toLowerCase().includes('stock')) toast.error(msg);
     }
@@ -80,19 +122,25 @@ export function DirectSaleItemPicker({ consultationId, disabled }: Props) {
   return (
     <div className={cn(bento, 'p-4 space-y-3')}>
       <div className="flex items-center gap-2">
-        <ShoppingBag className="h-4 w-4 text-primary" />
-        <h2 className={bentoHeader}>Direct Sale — Add OTC Items</h2>
+        <HeaderIcon className="h-4 w-4 text-primary" />
+        <h2 className={bentoHeader}>{headerText}</h2>
       </div>
 
-      <Alert className="bg-amber-50 border-amber-200">
-        <AlertTitle className="text-amber-900 font-semibold text-sm">
-          OTC-only catalog
-        </AlertTitle>
-        <AlertDescription className="text-amber-900/90 text-xs">
-          Only items marked <span className="font-semibold">OTC Approved</span> in Inventory
-          Settings appear here. Prescription-only items are hidden.
-        </AlertDescription>
-      </Alert>
+      {mode === 'direct_sale' ? (
+        <Alert className="bg-amber-50 border-amber-200">
+          <AlertTitle className="text-amber-900 font-semibold text-sm">
+            OTC-only catalog
+          </AlertTitle>
+          <AlertDescription className="text-amber-900/90 text-xs">
+            Only items marked <span className="font-semibold">OTC Approved</span> in Inventory
+            Settings appear here. Prescription-only items are hidden.
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Note: Adding items to a doctor's consultation. Stock will be reserved immediately.
+        </p>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_100px_auto] gap-2 items-end">
         <div className="space-y-1">
@@ -112,7 +160,7 @@ export function DirectSaleItemPicker({ consultationId, disabled }: Props) {
                     {picked
                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       ? (picked as any).name
-                      : 'Search OTC items only…'}
+                      : placeholder}
                   </span>
                 </span>
               </Button>
@@ -120,7 +168,7 @@ export function DirectSaleItemPicker({ consultationId, disabled }: Props) {
             <PopoverContent className="p-0 w-[--radix-popover-trigger-width]" align="start">
               <Command shouldFilter={false}>
                 <CommandInput
-                  placeholder="Search OTC items only…"
+                  placeholder={placeholder}
                   value={query}
                   onValueChange={setQuery}
                 />
@@ -128,7 +176,7 @@ export function DirectSaleItemPicker({ consultationId, disabled }: Props) {
                   {isLoading ? (
                     <CommandEmpty>Loading…</CommandEmpty>
                   ) : filtered.length === 0 ? (
-                    <CommandEmpty>No OTC items match.</CommandEmpty>
+                    <CommandEmpty>{emptyText}</CommandEmpty>
                   ) : (
                     <CommandGroup>
                       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
