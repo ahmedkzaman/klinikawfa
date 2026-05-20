@@ -144,6 +144,7 @@ const EMPTY: FormData = {
   is_dependent: false,
   principal_id: null,
   relationship: '',
+  visit_type: 'consultation',
   visit_purpose: 'consultation',
   visit_notes: '',
   payment_method: 'cash',
