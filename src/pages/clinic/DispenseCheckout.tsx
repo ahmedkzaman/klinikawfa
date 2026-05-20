@@ -350,7 +350,7 @@ export default function DispenseCheckout() {
 
           {/* Items */}
           <div className="space-y-4">
-            <InventoryItemPicker
+            <CatalogItemPicker
               consultationId={consultation?.id ?? null}
               disabled={!canEdit}
               mode={isDirectSale ? 'direct_sale' : 'consultation'}
