@@ -216,18 +216,7 @@ export function CatalogItemPicker({
         </TabsList>
       </Tabs>
 
-      {mode === 'direct_sale' && catalog === 'inventory' ? (
-        <Alert className="bg-amber-50 border-amber-200">
-          <AlertTitle className="text-amber-900 font-semibold text-sm">
-            OTC-only catalog
-          </AlertTitle>
-          <AlertDescription className="text-amber-900/90 text-xs">
-            Only items marked <span className="font-semibold">OTC Approved</span> in Inventory
-            Settings appear on this tab. Prescription-only items are hidden. Services and
-            packages are unrestricted.
-          </AlertDescription>
-        </Alert>
-      ) : mode === 'consultation' && catalog === 'inventory' ? (
+      {mode === 'consultation' && catalog === 'inventory' ? (
         <p className="text-xs text-muted-foreground">
           Note: Adding items to a doctor's consultation. Stock will be reserved immediately.
         </p>
