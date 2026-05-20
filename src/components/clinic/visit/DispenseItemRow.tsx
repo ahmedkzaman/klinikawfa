@@ -28,7 +28,7 @@ interface Props {
  * 500ms debounce. When dispensed < prescribed, a reason picker is required —
  * `out_of_stock` will spawn a pharmacy_owe_slip on visit completion.
  */
-export function DispenseItemRow({ item, consultationId }: Props) {
+export function DispenseItemRow({ item, consultationId, panelDiscountPct = 0 }: Props) {
   const prescribed = Number(item.quantity ?? 0);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const initialDispensed = (item as any).dispensed_qty as number | null;
