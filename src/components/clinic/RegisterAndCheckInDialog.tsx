@@ -95,6 +95,7 @@ const schema = z
     relationship: z.string().optional(),
 
     // Today's visit
+    visit_type: z.enum(['consultation', 'direct_sale']),
     visit_purpose: z.enum([
       'consultation',
       'follow_up',
