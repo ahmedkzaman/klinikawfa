@@ -214,6 +214,8 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
 
   const isDependent = watch('is_dependent');
   const paymentMethod = watch('payment_method');
+  const visitType = watch('visit_type');
+  const isDirectSale = visitType === 'direct_sale';
   const nationalId = watch('national_id');
   const dobValue = watch('date_of_birth');
   const genderValue = watch('gender');
