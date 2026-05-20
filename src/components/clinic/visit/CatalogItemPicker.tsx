@@ -54,9 +54,8 @@ export function CatalogItemPicker({
   onItemAdded,
 }: Props) {
   const [catalog, setCatalog] = useState<CatalogKind>('inventory');
-  const onlyOtc = mode === 'direct_sale' && catalog === 'inventory';
 
-  const { data: inventoryItems = [], isLoading: invLoading } = useInventoryItemsSafe({ onlyOtc });
+  const { data: inventoryItems = [], isLoading: invLoading } = useInventoryItemsSafe();
   const { data: servicesRaw = [], isLoading: svcLoading } = useServicesSafe();
   const { data: packagesRaw = [], isLoading: pkgLoading } = usePackagesSafe();
 
