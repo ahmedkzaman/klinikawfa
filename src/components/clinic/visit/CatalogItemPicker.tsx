@@ -129,10 +129,6 @@ export function CatalogItemPicker({
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const p = picked as any;
-    if (mode === 'direct_sale' && catalog === 'inventory' && !p.is_otc) {
-      toast.error('Only OTC items can be sold via Direct Sale');
-      return;
-    }
     // Defensive fallback so the NOT NULL `price` column never trips before
     // `trg_resolve_selling_price` overwrites it for catalog-linked rows.
     const fallbackPrice = Number(
