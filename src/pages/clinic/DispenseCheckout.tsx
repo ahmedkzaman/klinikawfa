@@ -78,6 +78,47 @@ export default function DispenseCheckout() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const isDirectSale = (entry as any)?.visit_type === 'direct_sale';
 
+  // Panel billing context: name + medication discount % drive the
+  // "Panel Billing Applied" badge and the per-row strikethrough pricing.
+  const panelId =
+    (entry as unknown as { panel_id?: string | null } | undefined)?.panel_id ?? null;
+  const [panelInfo, setPanelInfo] = useState<{
+    name: string;
+    medication_discount_pct: number;
+    consultation_fee_override: number | null;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!panelId) {
+      setPanelInfo(null);
+      return;
+    }
+    (async () => {
+      const { data, error } = await supabase
+        .from('insurance_providers')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .select('name, medication_discount_pct, consultation_fee_override' as any)
+        .eq('id', panelId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error || !data) {
+        setPanelInfo(null);
+        return;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const d = data as any;
+      setPanelInfo({
+        name: d.name ?? 'Panel',
+        medication_discount_pct: Number(d.medication_discount_pct ?? 0),
+        consultation_fee_override:
+          d.consultation_fee_override == null ? null : Number(d.consultation_fee_override),
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [panelId]);
+
   // For Direct Sale visits, auto-create a placeholder consultation row so the
   // existing pricing / dispensing pipeline can record items without a doctor.
   const directSaleConsultRef = useRef(false);
