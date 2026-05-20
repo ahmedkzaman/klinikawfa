@@ -61,7 +61,12 @@ export function DispensePanel({ items, consultationId, panelDiscountPct = 0 }: P
 
       <div>
         {meds.map((it) => (
-          <DispenseItemRow key={it.id} item={it} consultationId={consultationId} />
+          <DispenseItemRow
+            key={it.id}
+            item={it}
+            consultationId={consultationId}
+            panelDiscountPct={panelDiscountPct}
+          />
         ))}
       </div>
     </div>
