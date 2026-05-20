@@ -322,6 +322,37 @@ export function PanelDialog({ open, onOpenChange, panel }: Props) {
                   placeholder="https://..."
                 />
               </Field>
+              <Field
+                label="Consultation Fee Override (RM)"
+                error={form.formState.errors.consultation_fee_override?.message as string | undefined}
+              >
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  {...form.register('consultation_fee_override')}
+                  placeholder="Leave blank to use clinic default"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Fixed RM amount charged for the consultation fee row on panel visits.
+                </p>
+              </Field>
+              <Field
+                label="Medication Discount (%)"
+                error={form.formState.errors.medication_discount_pct?.message as string | undefined}
+              >
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  {...form.register('medication_discount_pct')}
+                  placeholder="0"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Applied to inventory medicines only. Bespoke item overrides take priority.
+                </p>
+              </Field>
             </div>
           </section>
 
