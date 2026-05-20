@@ -75,8 +75,8 @@ export function useAddConsultationItem() {
       const { data, error } = await supabase
         .from('consultation_items')
         .insert(item)
-        .select('*')
-        .single();
+        .select()
+        .maybeSingle();
       if (error) {
         if (isInsufficientStock(error)) {
           toast.error(STOCK_MSG);
