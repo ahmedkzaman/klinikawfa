@@ -1897,11 +1897,13 @@ export type Database = {
           claim_due_date_type: string | null
           company_name: string | null
           company_reg_number: string | null
+          consultation_fee_override: number | null
           country: string | null
           created_at: string
           default_price_tier: string
           email: string | null
           id: string
+          medication_discount_pct: number
           name: string
           panel_code: string | null
           panel_type: string
@@ -1923,11 +1925,13 @@ export type Database = {
           claim_due_date_type?: string | null
           company_name?: string | null
           company_reg_number?: string | null
+          consultation_fee_override?: number | null
           country?: string | null
           created_at?: string
           default_price_tier?: string
           email?: string | null
           id?: string
+          medication_discount_pct?: number
           name: string
           panel_code?: string | null
           panel_type?: string
@@ -1949,11 +1953,13 @@ export type Database = {
           claim_due_date_type?: string | null
           company_name?: string | null
           company_reg_number?: string | null
+          consultation_fee_override?: number | null
           country?: string | null
           created_at?: string
           default_price_tier?: string
           email?: string | null
           id?: string
+          medication_discount_pct?: number
           name?: string
           panel_code?: string | null
           panel_type?: string
