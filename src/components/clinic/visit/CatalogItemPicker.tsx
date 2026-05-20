@@ -85,13 +85,13 @@ export function CatalogItemPicker({
   const placeholderByCatalog: Record<CatalogKind, string> = {
     inventory:
       mode === 'direct_sale'
-        ? 'Search OTC items only…'
+        ? 'Search full inventory…'
         : 'Search full inventory (verbal order / add-on)…',
     service: 'Search services (procedures, lab, other)…',
     package: 'Search packages…',
   };
   const emptyByCatalog: Record<CatalogKind, string> = {
-    inventory: mode === 'direct_sale' ? 'No OTC items match.' : 'No items match.',
+    inventory: 'No items match.',
     service: 'No services match.',
     package: 'No packages match.',
   };
