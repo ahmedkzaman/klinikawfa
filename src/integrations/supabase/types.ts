@@ -3556,6 +3556,7 @@ export type Database = {
           updated_at: string
           visit_notes: string | null
           visit_purpose: string
+          visit_type: string
         }
         Insert: {
           assigned_doctor_id?: string | null
@@ -3582,6 +3583,7 @@ export type Database = {
           updated_at?: string
           visit_notes?: string | null
           visit_purpose?: string
+          visit_type?: string
         }
         Update: {
           assigned_doctor_id?: string | null
@@ -3608,6 +3610,7 @@ export type Database = {
           updated_at?: string
           visit_notes?: string | null
           visit_purpose?: string
+          visit_type?: string
         }
         Relationships: [
           {
