@@ -67,6 +67,8 @@ type ConsultationItemRow = {
   dispensed_qty?: number | null;
   partial_reason?: string | null;
   inventory_items?: { unit: string | null } | null;
+  services?: { name: string | null } | null;
+  packages?: { name: string | null } | null;
 };
 
 /**
@@ -482,9 +484,20 @@ function ItemList({
             className="px-4 py-3 flex items-start gap-3 hover:bg-muted/30"
           >
             <div className="flex-1 min-w-0">
-              {/* Bold uppercase name — Yezza style */}
-              <div className="text-sm font-bold uppercase tracking-tight text-foreground">
-                {item.item_name}
+              {/* Bold uppercase name — Yezza style, with type icon for services/packages */}
+              <div className="flex items-start gap-2">
+                {item.service_id ? (
+                  <Stethoscope className="h-4 w-4 text-sky-600 shrink-0 mt-0.5" aria-hidden />
+                ) : item.package_id ? (
+                  <PackageIcon className="h-4 w-4 text-violet-600 shrink-0 mt-0.5" aria-hidden />
+                ) : null}
+                <div className="text-sm font-bold uppercase tracking-tight text-foreground min-w-0">
+                  {item.service_id
+                    ? item.services?.name ?? item.item_name
+                    : item.package_id
+                      ? item.packages?.name ?? item.item_name
+                      : item.item_name}
+                </div>
               </div>
 
               {/* Pricing tier sub-line */}
