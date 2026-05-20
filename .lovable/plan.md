@@ -1,81 +1,58 @@
-# Plan: "Load Existing Record" action on duplicate-MyKad warning
+# Fix Drug Label: Dynamic Unit + Y-Axis Overlap
 
-## File
-`src/components/clinic/RegisterAndCheckInDialog.tsx` (single component)
+## 1. Surface the inventory `unit` on consultation items
 
-## Changes
+**`src/hooks/clinic/useConsultationItems.ts`** — `useConsultationItems()` query:
+- Replace `.select('*')` with an explicit select that joins the inventory row:
+  ```ts
+  .select('*, inventory_items(unit)')
+  ```
+- Manual rows (free-text) and service/package rows have `item_id = null`, so the join is `null` for them — already handled by the optional chaining downstream.
 
-### 1. New state — track loaded existing patient
-Add:
-```ts
-const [loadedPatientId, setLoadedPatientId] = useState<string | null>(null);
-```
-Clear it inside the existing `useEffect` that resets the dialog on close, and clear it whenever the IC field is edited away from the loaded patient's IC (watch `nationalId`).
+**`src/components/clinic/visit/VisitDetailsColumn.tsx`**:
+- Extend `ConsultationItemRow` with `inventory_items: { unit: string | null } | null`.
+- No other code paths use `unit`, so nothing else changes here.
 
-### 2. Handler — load existing record into the form
-```ts
-const handleLoadExisting = () => {
-  if (!existingPatient) return;
-  setLoadedPatientId(existingPatient.id);
-  reset({
-    ...EMPTY,
-    national_id: existingPatient.national_id ?? '',
-    name: existingPatient.name ?? '',
-    phone: existingPatient.phone ?? '',
-    gender: (existingPatient.gender as FormData['gender']) ?? '',
-    date_of_birth: existingPatient.date_of_birth ?? '',
-    email: existingPatient.email ?? '',
-    // preserve today's-visit defaults
-    visit_type: 'consultation',
-    visit_purpose: 'consultation',
-    payment_method: existingPatient.default_panel_id ? 'panel' : 'cash',
-    panel_id: existingPatient.default_panel_id ?? null,
-  });
-  // reset() clears RHF errors automatically
-  toast.success(`Loaded existing patient: ${existingPatient.name}`);
-};
-```
-`reset()` wipes the red validation messages — satisfies the "clear errors" requirement.
+## 2. Pipe `unit` into the label PDF
 
-### 3. UI — add Button inside the duplicate Alert (around line 419)
-Inside the existing `<Alert variant="destructive">` block, after the warning text add:
-```tsx
-<Button
-  type="button"
-  size="sm"
-  variant="secondary"
-  onClick={handleLoadExisting}
-  className="mt-1"
->
-  <UserCheck className="h-4 w-4" />
-  Load Existing Record
-</Button>
-```
-Import `UserCheck` from `lucide-react`. Hide the button (or disable it) when `loadedPatientId === existingPatient.id` and show a small "Loaded ✓" hint instead.
+**`src/lib/clinic/printDrugLabel.ts`**:
+- Add `unit?: string | null` to `DrugLabelItem`.
+- In `drawLabel`, build `qtyText` as:
+  ```ts
+  const unitLabel = (item.unit ?? '').trim();
+  const qtyText = toggles.show_quantity && item.quantity != null
+    ? `QTY: ${item.quantity}${unitLabel ? ' ' + unitLabel : ''}`
+    : '';
+  ```
+- Rationale: if the admin leaves the inventory `unit` blank, label prints `QTY: 1` (matches user's documented expectation) instead of a misleading "Tab/s".
 
-### 4. Bypass create on submit
-In `onSubmit`, replace the unconditional `createPatient.mutateAsync(...)` with:
-```ts
-let patient: { id: string };
-if (loadedPatientId && loadedPatientId === existingPatient?.id) {
-  patient = { id: loadedPatientId };
-} else {
-  patient = await createPatient.mutateAsync({ ...existing payload... });
-}
-```
-Everything downstream (queue_entries insert, navigation) uses `patient.id` as today, so no other changes are needed.
+## 3. True dynamic Y stacking below the medicine name
 
-### 5. Visual cue (small)
-When `loadedPatientId` is set, render a muted badge under the IC field: "Using existing record — submit will only create the queue entry." This signals the workflow change to the nurse.
+Current bug: `medLines` is hard-capped at 2, but `medBlockH` uses that same capped count with a tight `lh(pt) = pt * 0.42`. With longer names + bold weight, baselines compress and the next block ("15 ML" dosage row) starts before the second medicine line has finished rendering.
+
+Fix in `drawLabel`:
+- Compute `medLines` from `splitTextToSize(...)` first **without** the `.slice(0, 2)` cap, then cap it for drawing only.
+- Use a slightly more honest line-height factor for the bold medicine block (`lh(pt) * 1.15` or constant `medLineH = fsMed * 0.5` mm) — still proportional to the typography scale from `drug_label_settings`, so the Settings → Drug Label preview stays in sync.
+- Recompute:
+  ```ts
+  const medLineH = fsMed * 0.5;            // mm, honors typography scale
+  const drawnLines = medLines.slice(0, 2);
+  const medBlockH = medLineH * drawnLines.length;
+  ```
+  Draw each line at `medTop + medLineH * (i + 1) - medLineH * 0.2`.
+- Then advance:
+  ```ts
+  y = medTop + Math.max(medBlockH, 4.4) + 1.2;   // guaranteed gap below name
+  ```
+- Apply the same `lh(pt)` review to the dosage/frequency block so the downstream Y cursor stays correct (already additive, just needs the new constant).
+- QTY/EXP right column stays anchored to `medTop` (top-aligned with first med line) — unchanged, but since `leftW` already reserves room for it horizontally, there's no horizontal collision either.
 
 ## Out of scope
-- No DB / RLS / schema changes.
-- No changes to `usePatientByIc`, `useCreatePatient`, or queue logic.
-- Dependant-linkage and panel sections untouched.
+- No DB migration. `inventory_items.unit` already exists.
+- No changes to `DrugLabelSettings` schema or the on-screen preview component (it reads the same toggles + font sizes).
+- Services / packages: `item_id` is null → `inventory_items` join is null → `unit` blank → label simply prints `QTY: n` without a unit, which is correct for non-dispensed line items.
 
-## Acceptance criteria
-- Typing a duplicate 12-digit IC shows the red alert with a "Load Existing Record" button.
-- Clicking it auto-fills Name / Phone / Gender / DOB / Email, clears all red field errors, and prefills the default panel if any.
-- Submitting then skips the patient insert and only creates the `queue_entries` row, routing to /clinic/queue (or /clinic/dispensary for direct sale).
-- Editing the IC after loading clears the loaded state so a fresh create can happen.
-- Closing the dialog resets everything including `loadedPatientId`.
+## Acceptance
+- Printing a label for "SYP. PARACETAMOL" (with `unit = 'Btl'`) shows `QTY: 1 Btl`.
+- Long medicine names that wrap to 2 lines no longer overlap the dosage row.
+- The Settings → Drug Label live preview is unaffected (no toggle / setting changes).

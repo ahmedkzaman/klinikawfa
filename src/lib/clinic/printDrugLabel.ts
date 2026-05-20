@@ -16,6 +16,8 @@ export interface ClinicLabelInfo {
 export interface DrugLabelItem {
   item_name: string;
   quantity?: number | null;
+  /** Dispensing unit pulled from `inventory_items.unit` (e.g. "Btl", "Tab"). */
+  unit?: string | null;
   indication?: string | null;
   dosage?: string | null;
   dosage_qty?: number | null;
@@ -144,9 +146,10 @@ function drawLabel(
   y += 2.6;
 
   // ── 3. Medicine name (left) + QTY / EXP (right) ──────────────────────────
+  const unitLabel = (item.unit ?? '').trim();
   const qtyText =
     toggles.show_quantity && item.quantity != null
-      ? `QTY: ${item.quantity} Tab/s`
+      ? `QTY: ${item.quantity}${unitLabel ? ' ' + unitLabel : ''}`
       : '';
   const expText = toggles.show_expiry_date
     ? `EXP: ${format(
@@ -164,19 +167,25 @@ function drawLabel(
   );
   const leftW = SAFE_W - rightW - (rightW > 0 ? 2 : 0);
 
-  // Medicine name (left, bold)
+  // Medicine name (left, bold). Wrap to all required lines first, then cap
+  // the drawn count at 2 — but use the *drawn* count for height math so the
+  // following content is pushed down honestly.
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(fsMed);
-  const medLines = (doc.splitTextToSize(
+  const allMedLines = doc.splitTextToSize(
     item.item_name.toUpperCase(),
     leftW,
-  ) as string[]).slice(0, 2);
+  ) as string[];
+  const medLines = allMedLines.slice(0, 2);
 
+  // Honest line-height for the bold medicine block, proportional to the
+  // typography scale from drug_label_settings.
+  const medLineH = fsMed * 0.5;
   const medTop = y;
   medLines.forEach((line, i) => {
-    doc.text(line, MARGIN_X, medTop + lh(fsMed) * (i + 1) - lh(fsMed) * 0.15);
+    doc.text(line, MARGIN_X, medTop + medLineH * (i + 1) - medLineH * 0.2);
   });
-  const medBlockH = lh(fsMed) * medLines.length;
+  const medBlockH = medLineH * medLines.length;
 
   // QTY/EXP (right column, stacked, top-aligned with med name)
   if (qtyText || expText) {
@@ -192,7 +201,7 @@ function drawLabel(
     }
   }
 
-  y = medTop + Math.max(medBlockH, 4.4) + 1;
+  y = medTop + Math.max(medBlockH, 4.4) + 1.2;
 
   // ── 4. Centered body ─────────────────────────────────────────────────────
   const dosageLine = buildDosageLine(item);

@@ -66,6 +66,7 @@ type ConsultationItemRow = {
   precaution: string | null;
   dispensed_qty?: number | null;
   partial_reason?: string | null;
+  inventory_items?: { unit: string | null } | null;
 };
 
 /**
@@ -158,7 +159,7 @@ export function VisitDetailsColumn({
         .filter(Boolean)
         .join(', ');
       const url = generateDrugLabelPdf(
-        rows,
+        rows.map((r) => ({ ...r, unit: r.inventory_items?.unit ?? null })),
         patientName ?? null,
         labelSettings ?? null,
         {
