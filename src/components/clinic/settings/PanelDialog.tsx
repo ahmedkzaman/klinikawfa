@@ -147,6 +147,11 @@ export function PanelDialog({ open, onOpenChange, panel }: Props) {
         verification_link: panel.verification_link ?? '',
         claim_due_date_type: panel.claim_due_date_type ?? '',
         tin_number: panel.tin_number ?? '',
+        consultation_fee_override:
+          ((panel as { consultation_fee_override?: number | null })
+            .consultation_fee_override ?? '') as unknown as number | null,
+        medication_discount_pct:
+          (panel as { medication_discount_pct?: number }).medication_discount_pct ?? 0,
         company_name: panel.company_name ?? '',
         company_reg_number: panel.company_reg_number ?? '',
         person_in_charge: panel.person_in_charge ?? '',
