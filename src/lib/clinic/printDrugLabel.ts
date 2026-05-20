@@ -201,7 +201,7 @@ function drawLabel(
     }
   }
 
-  y = medTop + Math.max(medBlockH, 4.4) + 1;
+  y = medTop + Math.max(medBlockH, 4.4) + 1.2;
 
   // ── 4. Centered body ─────────────────────────────────────────────────────
   const dosageLine = buildDosageLine(item);
