@@ -287,9 +287,28 @@ export default function DispenseCheckout() {
           <StatusBadge status={entry.clinic_status} />
         </div>
 
+        {panelInfo && (
+          <div className={cn(bento, 'p-3 flex items-center gap-2 flex-wrap')}>
+            <Badge className="bg-primary text-primary-foreground hover:bg-primary">
+              Panel Billing Applied: {panelInfo.name}
+            </Badge>
+            {panelInfo.consultation_fee_override != null && (
+              <span className="text-xs text-muted-foreground">
+                Consultation fee fixed at RM {panelInfo.consultation_fee_override.toFixed(2)}
+              </span>
+            )}
+            {panelInfo.medication_discount_pct > 0 && (
+              <span className="text-xs text-muted-foreground">
+                Medication discount: {panelInfo.medication_discount_pct}%
+              </span>
+            )}
+          </div>
+        )}
+
         {isLockedByOther && (
           <ConsultationLockBanner onForceUnlock={forceUnlock} />
         )}
+
 
         {/* 3-column workspace */}
         <div className="grid lg:grid-cols-[280px_1fr_360px] gap-4 items-start">
