@@ -9,14 +9,14 @@ const SAFE_QUERY_KEY = ['inventory_items_safe'];
  * cost_price / tier prices (e.g. locums). Backed by the
  * `inventory_items_safe` definer view.
  */
-export function useInventoryItemsSafe() {
+export function useInventoryItemsSafe(opts?: { onlyOtc?: boolean }) {
+  const onlyOtc = !!opts?.onlyOtc;
   return useQuery({
-    queryKey: SAFE_QUERY_KEY,
+    queryKey: [...SAFE_QUERY_KEY, { onlyOtc }],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('inventory_items_safe')
-        .select('*')
-        .order('name');
+      let q = supabase.from('inventory_items_safe').select('*').order('name');
+      if (onlyOtc) q = q.eq('is_otc', true);
+      const { data, error } = await q;
       if (error) throw error;
       return data ?? [];
     },
