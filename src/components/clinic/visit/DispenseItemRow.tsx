@@ -64,7 +64,14 @@ export function DispenseItemRow({ item, consultationId, panelDiscountPct = 0 }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qty, reason]);
 
-  const lineTotal = qty * Number(item.price ?? 0);
+  const unitPrice = Number(item.price ?? 0);
+  const lineTotal = qty * unitPrice;
+  // Back-compute the retail unit price using the panel discount formula:
+  //   discounted = retail * (1 - pct/100)  =>  retail = discounted / (1 - pct/100)
+  const hasDiscount =
+    !!item.item_id && panelDiscountPct > 0 && panelDiscountPct < 100 && unitPrice > 0;
+  const retailUnit = hasDiscount ? unitPrice / (1 - panelDiscountPct / 100) : null;
+  const retailLineTotal = retailUnit != null ? qty * retailUnit : null;
   const oweQty = isPartial && reason === 'out_of_stock' ? prescribed - qty : 0;
 
   return (
