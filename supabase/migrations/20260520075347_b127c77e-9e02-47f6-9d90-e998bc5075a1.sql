@@ -1,0 +1,1 @@
+ALTER TABLE public.consultations ALTER COLUMN doctor_id DROP NOT NULL;

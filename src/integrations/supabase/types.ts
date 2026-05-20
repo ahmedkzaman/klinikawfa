@@ -1391,7 +1391,7 @@ export type Database = {
           diagnosis_id: string | null
           diagnosis_text: string
           dispense_note: string
-          doctor_id: string
+          doctor_id: string | null
           id: string
           locked_at: string | null
           locked_by: string | null
@@ -1408,7 +1408,7 @@ export type Database = {
           diagnosis_id?: string | null
           diagnosis_text?: string
           dispense_note?: string
-          doctor_id: string
+          doctor_id?: string | null
           id?: string
           locked_at?: string | null
           locked_by?: string | null
@@ -1425,7 +1425,7 @@ export type Database = {
           diagnosis_id?: string | null
           diagnosis_text?: string
           dispense_note?: string
-          doctor_id?: string
+          doctor_id?: string | null
           id?: string
           locked_at?: string | null
           locked_by?: string | null
