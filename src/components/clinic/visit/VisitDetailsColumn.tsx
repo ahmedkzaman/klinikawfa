@@ -67,6 +67,8 @@ type ConsultationItemRow = {
   dispensed_qty?: number | null;
   partial_reason?: string | null;
   inventory_items?: { unit: string | null } | null;
+  services?: { name: string | null } | null;
+  packages?: { name: string | null } | null;
 };
 
 /**
