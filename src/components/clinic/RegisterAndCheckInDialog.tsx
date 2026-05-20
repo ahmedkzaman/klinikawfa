@@ -192,6 +192,8 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
   const { data: panels = [] } = useInsuranceProviders({ activeOnly: true });
 
   const [submitting, setSubmitting] = useState(false);
+  const [loadedPatientId, setLoadedPatientId] = useState<string | null>(null);
+  const [loadedIc, setLoadedIc] = useState<string | null>(null);
   const [principalQuery, setPrincipalQuery] = useState('');
   const [principalPickerOpen, setPrincipalPickerOpen] = useState(false);
   const [selectedPrincipal, setSelectedPrincipal] = useState<PatientRow | null>(null);
