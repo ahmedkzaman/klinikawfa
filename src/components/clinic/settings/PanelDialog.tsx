@@ -101,6 +101,8 @@ const DEFAULTS: FormValues = {
   verification_link: '',
   claim_due_date_type: '',
   tin_number: '',
+  consultation_fee_override: '' as unknown as number | null,
+  medication_discount_pct: 0,
   company_name: '',
   company_reg_number: '',
   person_in_charge: '',
@@ -113,6 +115,7 @@ const DEFAULTS: FormValues = {
   state: '',
   country: '',
 };
+
 
 export function PanelDialog({ open, onOpenChange, panel }: Props) {
   const isEdit = !!panel;
