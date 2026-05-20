@@ -85,7 +85,7 @@ export function CatalogItemPicker({
   const placeholderByCatalog: Record<CatalogKind, string> = {
     inventory:
       mode === 'direct_sale'
-        ? 'Search full inventory…'
+        ? 'Search inventory (OTC only can be sold)…'
         : 'Search full inventory (verbal order / add-on)…',
     service: 'Search services (procedures, lab, other)…',
     package: 'Search packages…',
