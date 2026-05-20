@@ -64,7 +64,7 @@ export default function DispenseCheckout() {
     [entries, queueEntryId],
   );
 
-  const { data: consultation } = useConsultation(queueEntryId);
+  const { data: consultation, refetch: refetchConsultation } = useConsultation(queueEntryId);
   const { data: items = [] } = useConsultationItems(consultation?.id);
   const { data: payments = [] } = usePayments(queueEntryId);
   const { isLockedByOther, canEdit, forceUnlock } = useConsultationLock(
@@ -73,6 +73,39 @@ export default function DispenseCheckout() {
       | null
       | undefined,
   );
+  const qc = useQueryClient();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isDirectSale = (entry as any)?.visit_type === 'direct_sale';
+
+  // For Direct Sale visits, auto-create a placeholder consultation row so the
+  // existing pricing / dispensing pipeline can record items without a doctor.
+  const directSaleConsultRef = useRef(false);
+  useEffect(() => {
+    if (!isDirectSale) return;
+    if (!entry || !queueEntryId) return;
+    if (consultation?.id) return;
+    if (directSaleConsultRef.current) return;
+    directSaleConsultRef.current = true;
+    (async () => {
+      const { error } = await supabase.from('consultations').insert({
+        queue_entry_id: queueEntryId,
+        patient_id: entry.patient_id,
+        doctor_id: null,
+        status: 'in_progress',
+        case_note: 'Direct Sale (OTC counter sale)',
+        diagnosis_text: '',
+        dispense_note: '',
+      });
+      if (error) {
+        directSaleConsultRef.current = false;
+        toast.error(`Failed to start direct sale: ${error.message}`);
+        return;
+      }
+      qc.invalidateQueries({ queryKey: ['consultation', queueEntryId] });
+      refetchConsultation();
+    })();
+  }, [isDirectSale, entry, queueEntryId, consultation?.id, qc, refetchConsultation]);
 
   const advancedRef = useRef(false);
   useEffect(() => {
