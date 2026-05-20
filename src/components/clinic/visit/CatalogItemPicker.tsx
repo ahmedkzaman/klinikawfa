@@ -220,7 +220,16 @@ export function CatalogItemPicker({
         </TabsList>
       </Tabs>
 
-      {mode === 'consultation' && catalog === 'inventory' ? (
+      {mode === 'direct_sale' && catalog === 'inventory' ? (
+        <Alert className="bg-amber-50 border-amber-200">
+          <AlertTitle className="text-amber-900 font-semibold text-sm">
+            OTC-only for Direct Sale
+          </AlertTitle>
+          <AlertDescription className="text-amber-900/90 text-xs">
+            Direct Sale is OTC-only. Prescription items appear in search for visibility but cannot be added here — dispense them inside a doctor's consultation.
+          </AlertDescription>
+        </Alert>
+      ) : mode === 'consultation' && catalog === 'inventory' ? (
         <p className="text-xs text-muted-foreground">
           Note: Adding items to a doctor's consultation. Stock will be reserved immediately.
         </p>
