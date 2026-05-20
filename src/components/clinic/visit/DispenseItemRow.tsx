@@ -17,6 +17,9 @@ type Reason = 'patient_request' | 'out_of_stock';
 interface Props {
   item: ConsultationItemRow;
   consultationId: string;
+  /** When > 0 and the row is an inventory medicine, show the retail
+   *  price struck through next to the discounted line total. */
+  panelDiscountPct?: number;
 }
 
 /**
