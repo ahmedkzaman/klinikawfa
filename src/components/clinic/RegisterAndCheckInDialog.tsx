@@ -831,6 +831,22 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
               )}
 
               <div className="space-y-1.5">
+                <Label htmlFor="reg-panel-remarks">
+                  Patient's Panel Balance / Remarks
+                </Label>
+                <Textarea
+                  id="reg-panel-remarks"
+                  rows={2}
+                  placeholder="e.g. Balance RM 21 as of 2/2/26"
+                  {...register('panel_remarks')}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Record remaining balance or limits (e.g. "Balance RM 21"). Shown to
+                  doctors and dispensary on every visit, even when paying cash.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
                 <Label htmlFor="reg-notes">Visit Notes</Label>
                 <Textarea
                   id="reg-notes"
