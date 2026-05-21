@@ -20,6 +20,7 @@ import { AttachmentsCard } from '@/components/clinic/visit/AttachmentsCard';
 import { BillingDetailsColumn, type SelectedCharge } from '@/components/clinic/visit/BillingDetailsColumn';
 import { DispensePanel } from '@/components/clinic/visit/DispensePanel';
 import { PatientAlertBanner } from '@/components/clinic/PatientAlertBanner';
+import { VisitRemarksBanner } from '@/components/clinic/VisitRemarksBanner';
 import {
   useConsultationQueueEntries,
   useUpdateQueueEntry,
@@ -295,6 +296,8 @@ export default function DispenseCheckout() {
           patientName={patient?.name ?? 'Patient'}
           remarks={(patient as { panel_remarks?: string | null } | null)?.panel_remarks}
         />
+
+        <VisitRemarksBanner remarks={(entry as { visit_remarks?: string | null } | undefined)?.visit_remarks} />
 
         {panelInfo && (
           <div className={cn(bento, 'p-3 flex items-center gap-2 flex-wrap')}>

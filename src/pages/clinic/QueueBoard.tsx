@@ -12,6 +12,7 @@ import {
   UserX,
   ChevronDown,
   RefreshCcw,
+  MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SEOHead } from "@/components/seo/SEOHead";
@@ -81,6 +82,12 @@ function QueueCard({ entry, onClick }: { entry: QueueEntryWithJoins; onClick: ()
       <p className="font-medium text-sm text-slate-800 truncate">
         {entry.patients?.name ? toMalayTitleCase(entry.patients.name) : "Unknown patient"}
       </p>
+      {entry.visit_remarks && (
+        <p className="mt-0.5 flex items-center gap-1 text-xs italic text-muted-foreground truncate">
+          <MessageSquare className="h-3 w-3 shrink-0" />
+          <span className="truncate">{entry.visit_remarks}</span>
+        </p>
+      )}
       {entry.assigned_doctor_id ? (
         <p className="text-[11px] text-slate-600 truncate mt-0.5">
           Attending: Dr. {entry.doctors?.name ?? "—"}

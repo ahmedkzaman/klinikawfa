@@ -92,6 +92,7 @@ import { DiagnosisCombobox } from '@/components/clinic/consultation/DiagnosisCom
 import { useDiagnoses } from '@/hooks/clinic/useDiagnoses';
 import { SessionAttachmentsStrip } from '@/components/clinic/consultation/SessionAttachmentsStrip';
 import { PatientAlertBanner } from '@/components/clinic/PatientAlertBanner';
+import { VisitRemarksBanner } from '@/components/clinic/VisitRemarksBanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 
@@ -837,6 +838,8 @@ export default function ConsultationDetail() {
           patientName={patient?.name ?? 'Patient'}
           remarks={(patient as { panel_remarks?: string | null } | null | undefined)?.panel_remarks}
         />
+
+        <VisitRemarksBanner remarks={(entry as { visit_remarks?: string | null } | undefined)?.visit_remarks} />
 
         {/* Split-pane: workspace first in DOM (mobile), context second; visual order flipped on lg */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">

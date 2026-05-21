@@ -290,6 +290,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
 
   // Optional doctor assignment at check-in
   const [assignedDoctorId, setAssignedDoctorId] = useState<string | null>(null);
+  const [visitRemarks, setVisitRemarks] = useState('');
   const { data: allDoctors } = useDoctors();
   const activeDoctors = useMemo(
     () => (allDoctors ?? []).filter((d) => d.status === 'active'),
@@ -347,6 +348,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
       setLoadedPatientId(null);
       setLoadedIc(null);
       setAssignedDoctorId(null);
+      setVisitRemarks('');
     }
   }, [open, reset]);
 
@@ -450,6 +452,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
         created_by: user?.id ?? null,
         queue_sequence: seq as number,
         assigned_doctor_id: isDirectSaleSubmit ? null : assignedDoctorId,
+        visit_remarks: visitRemarks.trim() || null,
       });
 
       if (queueError) {
@@ -853,6 +856,19 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                       </label>
                     </RadioGroup>
                   )}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="reg-visit-remarks">
+                  Visit Purpose / Remarks (e.g., Typhoid Vaccine, Medical Checkup)
+                </Label>
+                <Textarea
+                  id="reg-visit-remarks"
+                  rows={2}
+                  placeholder="Short note visible to doctor & dispensary…"
+                  value={visitRemarks}
+                  onChange={(e) => setVisitRemarks(e.target.value)}
                 />
               </div>
 
