@@ -84,7 +84,8 @@ export function RegisterPatientDialog({
         allergies: data.allergies || null,
         underlying_conditions: data.underlying_conditions || null,
         address: data.address ? toUpperSafe(data.address) : null,
-      });
+        panel_remarks: (data.panel_remarks ?? '').trim() || null,
+      } as never);
       toast.success(`Patient registered: ${created.name}`);
       reset();
       setMykadConsent(false);
