@@ -346,6 +346,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
       setSubmitting(false);
       setLoadedPatientId(null);
       setLoadedIc(null);
+      setAssignedDoctorId(null);
     }
   }, [open, reset]);
 
