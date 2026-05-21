@@ -7,6 +7,12 @@ import { toast } from 'sonner';
 import { Check, ChevronsUpDown, Search, UserCheck, X } from 'lucide-react';
 import { toMalayTitleCase } from '@/lib/textCase';
 import {
+  ReadMyKadButton,
+  cleanIC,
+  mapGender,
+  mapDOB,
+} from '@/components/clinic/ReadMyKadButton';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -497,7 +503,33 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="reg-ic">{ID_LABELS[idType]}{isMykadType ? '' : ' *'}</Label>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="reg-ic">{ID_LABELS[idType]}{isMykadType ? '' : ' *'}</Label>
+                    {isMykadType && (
+                      <ReadMyKadButton
+                        onRead={(data) => {
+                          // Hard reset: physical card read must not inherit a
+                          // previously-loaded existing-patient binding.
+                          setLoadedPatientId(null);
+                          setLoadedIc(null);
+
+                          setValue('id_type', 'mykad', { shouldValidate: true, shouldDirty: true });
+                          if (data.name)
+                            setValue('name', toMalayTitleCase(data.name), { shouldValidate: true, shouldDirty: true });
+                          const ic = cleanIC(data.ic_no);
+                          if (ic)
+                            setValue('national_id', ic, { shouldValidate: true, shouldDirty: true });
+                          const dob = mapDOB(data.dob);
+                          if (dob)
+                            setValue('date_of_birth', dob, { shouldValidate: true, shouldDirty: true });
+                          const g = mapGender(data.gender);
+                          if (g)
+                            setValue('gender', g, { shouldValidate: true, shouldDirty: true });
+                          toast.success('MyKad read successfully');
+                        }}
+                      />
+                    )}
+                  </div>
                   <Input
                     id="reg-ic"
                     placeholder={ID_PLACEHOLDERS[idType]}
