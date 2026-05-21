@@ -57,6 +57,7 @@ import {
 import { usePatientOutstanding, formatRm } from '@/hooks/clinic/usePatientFinancials';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
+import { useDoctors } from '@/hooks/clinic/useDoctors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
