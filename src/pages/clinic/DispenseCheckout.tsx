@@ -368,7 +368,7 @@ export default function DispenseCheckout() {
           <div className="space-y-4">
             <CatalogItemPicker
               consultationId={consultation?.id ?? null}
-              disabled={!canEdit}
+              disabled={!dispensaryCanEdit}
               mode={isDirectSale ? 'direct_sale' : 'consultation'}
               onItemAdded={(row) => setEditingItem(row)}
             />
@@ -387,10 +387,11 @@ export default function DispenseCheckout() {
             )}
             <VisitDetailsColumn
               consultationId={consultation?.id}
-              canEdit={canEdit}
+              canEdit={dispensaryCanEdit}
               canEditInstructions
               patientName={patient?.name ?? null}
             />
+
 
             {!isDirectSale && (
               <DispensePanel
