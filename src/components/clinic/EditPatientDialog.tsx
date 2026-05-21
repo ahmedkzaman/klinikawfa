@@ -123,7 +123,8 @@ export function EditPatientDialog({
           allergies: data.allergies || null,
           underlying_conditions: data.underlying_conditions || null,
           address: data.address ? toUpperSafe(data.address) : null,
-        },
+          panel_remarks: (data.panel_remarks ?? '').trim() || null,
+        } as never,
       });
       toast.success(`Patient updated: ${updated.name}`);
       onOpenChange(false);
