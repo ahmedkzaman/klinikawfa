@@ -322,21 +322,37 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
   const onSubmit = async (data: FormData) => {
     setSubmitting(true);
     try {
-      // 1. Upsert patient — skip insert if user loaded an existing record
+      const normalizedRemarks = (data.panel_remarks ?? '').trim() || null;
+
+      // 1. Upsert patient — skip demographic mutations if user loaded an
+      // existing record, but ALWAYS sync panel_remarks when it changed so
+      // the nurse's RM-balance edit doesn't evaporate.
       const usingExisting =
         loadedPatientId && existingPatient && existingPatient.id === loadedPatientId;
-      const patient = usingExisting
-        ? { id: loadedPatientId! }
-        : await createPatient.mutateAsync({
-            name: data.name,
-            phone: data.phone || null,
-            national_id: data.national_id || null,
-            date_of_birth: data.date_of_birth || null,
-            gender: data.gender || null,
-            email: data.email || null,
-            principal_id: data.is_dependent ? data.principal_id : null,
-            relationship: data.is_dependent ? data.relationship || null : null,
+      let patient: { id: string };
+      if (usingExisting) {
+        const existingRemarks =
+          ((existingPatient as { panel_remarks?: string | null }).panel_remarks ?? null) || null;
+        if (existingRemarks !== normalizedRemarks) {
+          await updatePatient.mutateAsync({
+            id: loadedPatientId!,
+            patch: { panel_remarks: normalizedRemarks } as never,
           });
+        }
+        patient = { id: loadedPatientId! };
+      } else {
+        patient = await createPatient.mutateAsync({
+          name: data.name,
+          phone: data.phone || null,
+          national_id: data.national_id || null,
+          date_of_birth: data.date_of_birth || null,
+          gender: data.gender || null,
+          email: data.email || null,
+          principal_id: data.is_dependent ? data.principal_id : null,
+          relationship: data.is_dependent ? data.relationship || null : null,
+          panel_remarks: normalizedRemarks,
+        } as never);
+      }
 
       // 2. Insert queue entry (today's ephemeral visit) with atomic daily sequence
       const { data: seq, error: seqError } = await supabase.rpc('get_next_queue_number');
