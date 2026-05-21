@@ -191,6 +191,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const createPatient = useCreatePatient();
+  const updatePatient = useUpdatePatient();
   const { data: panels = [] } = useInsuranceProviders({ activeOnly: true });
 
   const [submitting, setSubmitting] = useState(false);
