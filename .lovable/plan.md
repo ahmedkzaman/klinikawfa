@@ -1,76 +1,73 @@
-## Fix Silent Failures on Consultation Item Edits
+## Support Non-MyKad Patient Registration (Police, Army, Passport)
 
-### Root cause
-The current RLS policies on `consultation_items` (UPDATE/INSERT) only allow `is_ops_or_admin(...) OR locum` — which excludes the `staff` role (nurses/front desk/dispensary). When a nurse edits a doctor-added row, PostgREST returns `0 rows updated` with **no error**, and our hook silently treats it as success.
-
-Current policies:
-```
-INSERT  WITH CHECK (is_ops_or_admin OR locum)
-UPDATE  USING/CHECK  (is_ops_or_admin OR locum)  + deleted_at IS NULL
-SELECT  (deleted_at IS NULL)
-DELETE  — no explicit policy (soft-delete via UPDATE)
-```
-
-The `is_staff_or_admin` helper already covers the right set: `admin, staff, special_admin, doctor_admin, operations, locum, resident_doctor`.
+Today the form forces every Malaysian patient to enter a 12-digit MyKad. Walk-ins with Police ID, Army (Tentera) ID, or passport-only foreigners fail validation. This plan adds a single `id_type` selector that drives both the label and the validation rules.
 
 ---
 
-### 1. Database migration — widen RLS to clinical staff
+### 1. Database — add `id_type` column
 
-Drop and recreate INSERT + UPDATE policies on `public.consultation_items` to use `is_staff_or_admin(auth.uid())` instead of `is_ops_or_admin OR locum`. This lets nurses/dispensary edit rows created by doctors while keeping the clinic-only boundary (only roles in our user_roles table).
+Migration on `public.patients`:
 
 ```sql
-DROP POLICY IF EXISTS consultation_items_ops_insert        ON public.consultation_items;
-DROP POLICY IF EXISTS consultation_items_update_active     ON public.consultation_items;
+ALTER TABLE public.patients
+  ADD COLUMN IF NOT EXISTS id_type text NOT NULL DEFAULT 'mykad';
 
-CREATE POLICY consultation_items_staff_insert
-  ON public.consultation_items FOR INSERT TO authenticated
-  WITH CHECK (public.is_staff_or_admin(auth.uid()));
-
-CREATE POLICY consultation_items_staff_update_active
-  ON public.consultation_items FOR UPDATE TO authenticated
-  USING (deleted_at IS NULL AND public.is_staff_or_admin(auth.uid()))
-  WITH CHECK (public.is_staff_or_admin(auth.uid()));
+ALTER TABLE public.patients
+  ADD CONSTRAINT patients_id_type_check
+  CHECK (id_type IN ('mykad','passport','police','army'));
 ```
 
-Notes:
-- SELECT policies untouched (active rows visible to all authenticated; voided rows restricted to `special_admin`).
-- No DELETE policy needed — soft-delete already runs through UPDATE and will be covered.
+No RLS changes. `src/integrations/supabase/types.ts` regenerates automatically.
 
 ---
 
-### 2. Harden `useConsultationItems.ts` — no more silent zero-row writes
+### 2. Validation — `src/components/clinic/patientFormSchema.ts`
 
-For both `useUpdateConsultationItem` and `useUpdateDispensedQty`, replace the bare `.update(...).eq('id', id)` chain with `.update(...).eq('id', id).select('id').maybeSingle()` and throw when the result is `null`.
+- Add `id_type: z.enum(['mykad','passport','police','army']).default('mykad')`.
+- Loosen `national_id` to `z.string().trim().max(30).optional()` (drop the strict 12-digit refine on the field itself).
+- Keep `passport_no` as today.
+- Rewrite the `superRefine`:
+  - If `id_type === 'mykad'`: require `national_id` and enforce `/^\d{12}$/` after stripping `-` / spaces. Passport still allowed as alternate (existing "MyKad OR Passport" rule preserved).
+  - If `id_type === 'passport'`: require `passport_no` (alphanumeric, ≤20).
+  - If `id_type === 'police'` or `'army'`: require `national_id` with `min(5)`, alphanumeric, no digit-count check.
 
-```ts
-const { data, error } = await supabase
-  .from('consultation_items')
-  .update(updates)
-  .eq('id', id)
-  .select('id')
-  .maybeSingle();
-if (error) { /* existing stock-error handling */ throw error; }
-if (!data) throw new Error('Permission denied or item not found.');
-```
-
-Also apply the same `.select('id').maybeSingle()` + null-throw guard to `useRemoveConsultationItem` (the soft-delete UPDATE) so deletes can't fail silently either.
-
-`onSuccess` already invalidates `['consultation_items', consultationId]` — keep as-is.
+This keeps a single source of truth so all three dialogs inherit the rules.
 
 ---
 
-### 3. Stop error-swallowing in callers
+### 3. Register dialogs — `RegisterPatientDialog.tsx` and `RegisterAndCheckInDialog.tsx`
 
-- **`EditInstructionsDialog.tsx`** — already has try/catch and only closes on success; no change needed beyond the hook now throwing a real error.
-- **`VisitDetailsColumn.tsx` `handleQty` / `handleRemove`** — already wrapped in try/catch with `toast.error`. Add a `toast.success('Quantity updated')` on the qty path so successful edits give visible confirmation (currently silent on success too).
-- **`ConsultationDetail.tsx` line ~974** — verify the `updateItem.mutateAsync` call there is also wrapped in try/catch; add one if missing so RLS/validation errors surface as a toast.
+In the demographic section, immediately above the `national_id` input:
 
-No UI/layout changes beyond the toast additions above.
+- Add a `<Select>` bound to `id_type` (shadcn Select, controlled via `Controller`).
+  - Options: MyKad / MyKid, Police ID, Army ID (Tentera), Passport.
+- Dynamic label on the ID input driven by `id_type`:
+  - `mykad` → "MyKad / IC *", placeholder "12 digits"
+  - `police` → "Police ID Number *", placeholder e.g. "RF123456"
+  - `army` → "Army ID (Tentera) *", placeholder e.g. "T1234567"
+  - `passport` → hide the `national_id` input and show only the existing Passport No. input (or swap the active field).
+- `ReadMyKadButton` is only rendered when `id_type === 'mykad'`.
+- The MyKad auto-parse effect (DOB/gender from IC) runs only when `id_type === 'mykad'`.
+- `usePatientByIc` duplicate-check stays as-is: it self-disables unless the value matches `^\d{12}$`, so non-MyKad IDs simply skip the lookup (acceptable — duplicates for police/army/passport are rare and not in scope).
+- `onSubmit` payload includes `id_type: data.id_type`.
+
+`RegisterAndCheckInDialog.tsx` additionally:
+- Local zod schema in that file currently duplicates the MyKad regex (line ~74-80) — replace with the shared `patientSchema` import, or mirror the same `id_type` conditional so the two stay in lockstep.
+- `handleLoadExisting` already prefills from an existing patient; extend to also set `id_type` from `ep.id_type`.
+
+---
+
+### 4. Edit dialog — `EditPatientDialog.tsx`
+
+- Same `<Select>` for `id_type`, defaulting from `p.id_type ?? 'mykad'`.
+- Same dynamic label + conditional render rules.
+- `onSubmit` patch includes `id_type`.
 
 ---
 
 ### Out of scope
-- No changes to SELECT/DELETE policies, to `consultations`, or to inventory triggers.
-- No changes to add-item flow (already raises errors correctly).
-- No role model changes — we reuse the existing `is_staff_or_admin` helper.
+
+- No changes to `PatientProfileSheet`, queue board, consultation, or dispensary display (they read `national_id` / `passport_no` as plain text, which still works).
+- No backfill of historic rows — they remain `mykad` by default, matching reality.
+- No new duplicate-check lookup for non-MyKad IDs (can be added later if needed).
+- No changes to `usePatients` search; it already does `ilike` on `national_id` so police/army IDs are searchable.

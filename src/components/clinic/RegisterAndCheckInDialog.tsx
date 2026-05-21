@@ -68,17 +68,35 @@ const VISIT_PURPOSES = [
 
 const RELATIONSHIPS = ['Spouse', 'Child', 'Parent', 'Sibling', 'Other'] as const;
 
+const ID_TYPES = ['mykad', 'passport', 'police', 'army'] as const;
+type LocalIdType = (typeof ID_TYPES)[number];
+
+const ID_TYPE_OPTIONS_LOCAL: Array<{ value: LocalIdType; label: string }> = [
+  { value: 'mykad', label: 'MyKad / MyKid' },
+  { value: 'police', label: 'Police ID' },
+  { value: 'army', label: 'Army ID (Tentera)' },
+  { value: 'passport', label: 'Passport' },
+];
+
+const ID_LABELS: Record<LocalIdType, string> = {
+  mykad: 'MyKad / IC',
+  police: 'Police ID Number',
+  army: 'Army ID (Tentera)',
+  passport: 'Passport No.',
+};
+
+const ID_PLACEHOLDERS: Record<LocalIdType, string> = {
+  mykad: '12 digits — auto-fills DOB & gender',
+  police: 'e.g. RF123456',
+  army: 'e.g. T1234567',
+  passport: 'e.g. A12345678',
+};
+
 const schema = z
   .object({
     // Demographics
-    national_id: z
-      .string()
-      .trim()
-      .optional()
-      .refine(
-        (v) => !v || /^\d{12}$/.test(v.replace(/[-\s]/g, '')),
-        'MyKad must be 12 digits',
-      ),
+    id_type: z.enum(ID_TYPES).default('mykad'),
+    national_id: z.string().trim().max(30).optional(),
     name: z.string().trim().min(2, 'Name must be at least 2 characters').max(120),
     phone: z
       .string()
@@ -111,6 +129,40 @@ const schema = z
     panel_remarks: z.string().max(500).optional(),
   })
   .superRefine((data, ctx) => {
+    const idType = data.id_type ?? 'mykad';
+    const idVal = (data.national_id ?? '').trim();
+    if (idType === 'mykad') {
+      if (idVal && !/^\d{12}$/.test(idVal.replace(/[-\s]/g, ''))) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['national_id'],
+          message: 'MyKad must be 12 digits',
+        });
+      }
+    } else if (idType === 'passport') {
+      if (idVal.length < 5) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['national_id'],
+          message: 'Passport number is required (min 5 chars)',
+        });
+      }
+    } else {
+      if (idVal.length < 5) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['national_id'],
+          message: `${ID_LABELS[idType]} is required (min 5 chars)`,
+        });
+      } else if (!/^[A-Za-z0-9-]+$/.test(idVal)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['national_id'],
+          message: 'Only letters, numbers and dashes allowed',
+        });
+      }
+    }
+
     if (data.is_dependent && !data.principal_id) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -137,6 +189,7 @@ const schema = z
 type FormData = z.infer<typeof schema>;
 
 const EMPTY: FormData = {
+  id_type: 'mykad',
   national_id: '',
   name: '',
   phone: '',
@@ -225,10 +278,13 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
   const nationalId = watch('national_id');
   const dobValue = watch('date_of_birth');
   const genderValue = watch('gender');
+  const idType = (watch('id_type') ?? 'mykad') as LocalIdType;
+  const isMykadType = idType === 'mykad';
 
   // Fast-path duplicate detection: once the user types a full 12-digit IC,
   // look up an existing patient and surface their outstanding ledgers.
-  const debouncedIc = useDebouncedValue(nationalId ?? '', 300);
+  // Only run for MyKad — usePatientByIc self-disables on non-12-digit input.
+  const debouncedIc = useDebouncedValue(isMykadType ? (nationalId ?? '') : '', 300);
   const { data: existingPatient } = usePatientByIc(debouncedIc);
   const {
     patientOutstanding: existingPatientOutstanding,
@@ -239,12 +295,12 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
 
   // MyKad auto-parse — only fills empty fields, never overrides manual input.
   useEffect(() => {
-    if (!nationalId) return;
+    if (!nationalId || !isMykadType) return;
     const { dob, gender } = parseMyKad(nationalId);
     if (dob && !dobValue) setValue('date_of_birth', dob, { shouldDirty: false });
     if (gender && !genderValue) setValue('gender', gender, { shouldDirty: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nationalId]);
+  }, [nationalId, isMykadType]);
 
   // If the IC matches an existing patient with a default panel, prefill payer.
   useEffect(() => {
@@ -299,9 +355,11 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
       default_panel_id?: string | null;
       email?: string | null;
       panel_remarks?: string | null;
+      id_type?: string | null;
     };
     reset({
       ...EMPTY,
+      id_type: ((ep.id_type ?? 'mykad') as LocalIdType),
       national_id: ep.national_id ?? '',
       name: ep.name ?? '',
       phone: ep.phone ?? '',
@@ -344,6 +402,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
         patient = await createPatient.mutateAsync({
           name: data.name,
           phone: data.phone || null,
+          id_type: data.id_type,
           national_id: data.national_id || null,
           date_of_birth: data.date_of_birth || null,
           gender: data.gender || null,
@@ -420,10 +479,28 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="reg-ic">MyKad / IC</Label>
+                  <Label htmlFor="reg-id-type">ID Type *</Label>
+                  <Select
+                    value={idType}
+                    onValueChange={(v) =>
+                      setValue('id_type', v as LocalIdType, { shouldValidate: true, shouldDirty: true })
+                    }
+                  >
+                    <SelectTrigger id="reg-id-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ID_TYPE_OPTIONS_LOCAL.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="reg-ic">{ID_LABELS[idType]}{isMykadType ? '' : ' *'}</Label>
                   <Input
                     id="reg-ic"
-                    placeholder="12 digits — auto-fills DOB & gender"
+                    placeholder={ID_PLACEHOLDERS[idType]}
                     {...register('national_id')}
                   />
                   {errors.national_id && (

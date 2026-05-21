@@ -15,7 +15,11 @@ import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
 import {
   patientSchema,
   RELIGIONS,
+  ID_TYPE_OPTIONS,
+  ID_TYPE_FIELD_LABEL,
+  ID_TYPE_PLACEHOLDER,
   type PatientFormData,
+  type IdType,
 } from '@/components/clinic/patientFormSchema';
 import {
   ReadMyKadButton,
@@ -55,6 +59,7 @@ export function RegisterPatientDialog({
   } = useForm<FormData>({
     resolver: zodResolver(patientSchema),
     defaultValues: {
+      id_type: 'mykad',
       name: '',
       phone: '',
       religion: '',
@@ -66,12 +71,17 @@ export function RegisterPatientDialog({
     },
   });
 
+  const idType = (watch('id_type') ?? 'mykad') as IdType;
+  const isMykad = idType === 'mykad';
+  const isPassportType = idType === 'passport';
+
   const onSubmit = async (data: FormData) => {
     setSubmitting(true);
     try {
       const created = await create.mutateAsync({
         name: toUpperSafe(data.name),
         phone: data.phone || null,
+        id_type: data.id_type,
         national_id: data.national_id?.trim() || null,
         passport_no: data.passport_no?.trim() || null,
         date_of_birth: data.date_of_birth || null,
@@ -143,42 +153,65 @@ export function RegisterPatientDialog({
             {errors.name && <p className="text-sm text-destructive mt-1">{errors.name.message}</p>}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="national_id">MyKad / IC *</Label>
-                <ReadMyKadButton
-                  disabled={!mykadConsent}
-                  onRead={(data) => {
-                    if (data.name) setValue('name', toMalayTitleCase(data.name), { shouldValidate: true, shouldDirty: true });
-                    const ic = cleanIC(data.ic_no);
-                    if (ic) setValue('national_id', ic, { shouldValidate: true, shouldDirty: true });
-                    const dob = mapDOB(data.dob);
-                    if (dob) setValue('date_of_birth', dob, { shouldValidate: true, shouldDirty: true });
-                    const g = mapGender(data.gender);
-                    if (g) setValue('gender', g, { shouldValidate: true, shouldDirty: true });
-                    if (data.address) setValue('address', toUpperSafe(data.address), { shouldValidate: true, shouldDirty: true });
-                    setJustRead(true);
-                    toast.success('MyKad read successfully');
-                  }}
-                />
-              </div>
-              <Input id="national_id" placeholder="12 digits" {...register('national_id')} />
-              {errors.national_id && (
-                <p className="text-sm text-destructive mt-1">{errors.national_id.message}</p>
-              )}
+              <Label htmlFor="id_type">ID Type *</Label>
+              <Select
+                value={idType}
+                onValueChange={(v) => setValue('id_type', v as IdType, { shouldValidate: true, shouldDirty: true })}
+              >
+                <SelectTrigger id="id_type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ID_TYPE_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+            {!isPassportType && (
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="national_id">{ID_TYPE_FIELD_LABEL[idType]} *</Label>
+                  {isMykad && (
+                    <ReadMyKadButton
+                      disabled={!mykadConsent}
+                      onRead={(data) => {
+                        if (data.name) setValue('name', toMalayTitleCase(data.name), { shouldValidate: true, shouldDirty: true });
+                        const ic = cleanIC(data.ic_no);
+                        if (ic) setValue('national_id', ic, { shouldValidate: true, shouldDirty: true });
+                        const dob = mapDOB(data.dob);
+                        if (dob) setValue('date_of_birth', dob, { shouldValidate: true, shouldDirty: true });
+                        const g = mapGender(data.gender);
+                        if (g) setValue('gender', g, { shouldValidate: true, shouldDirty: true });
+                        if (data.address) setValue('address', toUpperSafe(data.address), { shouldValidate: true, shouldDirty: true });
+                        setJustRead(true);
+                        toast.success('MyKad read successfully');
+                      }}
+                    />
+                  )}
+                </div>
+                <Input id="national_id" placeholder={ID_TYPE_PLACEHOLDER[idType]} {...register('national_id')} />
+                {errors.national_id && (
+                  <p className="text-sm text-destructive mt-1">{errors.national_id.message}</p>
+                )}
+              </div>
+            )}
             <div>
-              <Label htmlFor="passport_no">Passport No. *</Label>
-              <Input id="passport_no" placeholder="For foreign patients" {...register('passport_no')} />
+              <Label htmlFor="passport_no">Passport No. {isPassportType ? '*' : ''}</Label>
+              <Input id="passport_no" placeholder={isPassportType ? 'e.g. A12345678' : 'For foreign patients'} {...register('passport_no')} />
               {errors.passport_no && (
                 <p className="text-sm text-destructive mt-1">{errors.passport_no.message}</p>
               )}
             </div>
-            <p className="text-xs text-muted-foreground md:col-span-2 -mt-2">
-              Provide MyKad for Malaysians or Passport No. for foreigners (one is required).
-            </p>
+            {isMykad && (
+              <p className="text-xs text-muted-foreground md:col-span-3 -mt-2">
+                Provide MyKad for Malaysians or Passport No. for foreigners (one is required).
+              </p>
+            )}
           </div>
+
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>

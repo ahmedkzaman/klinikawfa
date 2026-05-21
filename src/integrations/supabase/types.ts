@@ -2936,6 +2936,7 @@ export type Database = {
           emergency_contact_phone: string | null
           gender: string | null
           id: string
+          id_type: string
           name: string
           national_id: string | null
           notes: string | null
@@ -2962,6 +2963,7 @@ export type Database = {
           emergency_contact_phone?: string | null
           gender?: string | null
           id?: string
+          id_type?: string
           name: string
           national_id?: string | null
           notes?: string | null
@@ -2988,6 +2990,7 @@ export type Database = {
           emergency_contact_phone?: string | null
           gender?: string | null
           id?: string
+          id_type?: string
           name?: string
           national_id?: string | null
           notes?: string | null
