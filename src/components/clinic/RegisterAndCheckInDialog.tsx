@@ -57,6 +57,7 @@ import {
 import { usePatientOutstanding, formatRm } from '@/hooks/clinic/usePatientFinancials';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
+import { useDoctors } from '@/hooks/clinic/useDoctors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -287,6 +288,15 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
   const idType = (watch('id_type') ?? 'mykad') as LocalIdType;
   const isMykadType = idType === 'mykad';
 
+  // Optional doctor assignment at check-in
+  const [assignedDoctorId, setAssignedDoctorId] = useState<string | null>(null);
+  const { data: allDoctors } = useDoctors();
+  const activeDoctors = useMemo(
+    () => (allDoctors ?? []).filter((d) => d.status === 'active'),
+    [allDoctors],
+  );
+  const ANY_DOCTOR = '__any__';
+
   // Fast-path duplicate detection: once the user types a full 12-digit IC,
   // look up an existing patient and surface their outstanding ledgers.
   // Only run for MyKad — usePatientByIc self-disables on non-12-digit input.
@@ -336,6 +346,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
       setSubmitting(false);
       setLoadedPatientId(null);
       setLoadedIc(null);
+      setAssignedDoctorId(null);
     }
   }, [open, reset]);
 
@@ -438,6 +449,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
         panel_id: data.payment_method === 'panel' ? data.panel_id : null,
         created_by: user?.id ?? null,
         queue_sequence: seq as number,
+        assigned_doctor_id: isDirectSaleSubmit ? null : assignedDoctorId,
       });
 
       if (queueError) {
@@ -866,6 +878,25 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                         </Select>
                       )}
                     />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="reg-assigned-doctor">Assign Doctor (Optional)</Label>
+                    <Select
+                      value={assignedDoctorId ?? ANY_DOCTOR}
+                      onValueChange={(v) => setAssignedDoctorId(v === ANY_DOCTOR ? null : v)}
+                    >
+                      <SelectTrigger id="reg-assigned-doctor">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ANY_DOCTOR}>Any Available Doctor</SelectItem>
+                        {activeDoctors.map((d) => (
+                          <SelectItem key={d.id} value={d.id}>
+                            {d.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               )}
