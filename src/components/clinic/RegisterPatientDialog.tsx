@@ -81,6 +81,7 @@ export function RegisterPatientDialog({
       const created = await create.mutateAsync({
         name: toUpperSafe(data.name),
         phone: data.phone || null,
+        id_type: data.id_type,
         national_id: data.national_id?.trim() || null,
         passport_no: data.passport_no?.trim() || null,
         date_of_birth: data.date_of_birth || null,
