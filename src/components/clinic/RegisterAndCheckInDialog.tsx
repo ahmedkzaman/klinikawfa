@@ -278,10 +278,13 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
   const nationalId = watch('national_id');
   const dobValue = watch('date_of_birth');
   const genderValue = watch('gender');
+  const idType = (watch('id_type') ?? 'mykad') as LocalIdType;
+  const isMykadType = idType === 'mykad';
 
   // Fast-path duplicate detection: once the user types a full 12-digit IC,
   // look up an existing patient and surface their outstanding ledgers.
-  const debouncedIc = useDebouncedValue(nationalId ?? '', 300);
+  // Only run for MyKad — usePatientByIc self-disables on non-12-digit input.
+  const debouncedIc = useDebouncedValue(isMykadType ? (nationalId ?? '') : '', 300);
   const { data: existingPatient } = usePatientByIc(debouncedIc);
   const {
     patientOutstanding: existingPatientOutstanding,
@@ -292,12 +295,12 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
 
   // MyKad auto-parse — only fills empty fields, never overrides manual input.
   useEffect(() => {
-    if (!nationalId) return;
+    if (!nationalId || !isMykadType) return;
     const { dob, gender } = parseMyKad(nationalId);
     if (dob && !dobValue) setValue('date_of_birth', dob, { shouldDirty: false });
     if (gender && !genderValue) setValue('gender', gender, { shouldDirty: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nationalId]);
+  }, [nationalId, isMykadType]);
 
   // If the IC matches an existing patient with a default panel, prefill payer.
   useEffect(() => {
