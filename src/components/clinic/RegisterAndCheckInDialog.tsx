@@ -288,6 +288,15 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
   const idType = (watch('id_type') ?? 'mykad') as LocalIdType;
   const isMykadType = idType === 'mykad';
 
+  // Optional doctor assignment at check-in
+  const [assignedDoctorId, setAssignedDoctorId] = useState<string | null>(null);
+  const { data: allDoctors } = useDoctors();
+  const activeDoctors = useMemo(
+    () => (allDoctors ?? []).filter((d) => d.status === 'active'),
+    [allDoctors],
+  );
+  const ANY_DOCTOR = '__any__';
+
   // Fast-path duplicate detection: once the user types a full 12-digit IC,
   // look up an existing patient and surface their outstanding ledgers.
   // Only run for MyKad — usePatientByIc self-disables on non-12-digit input.
