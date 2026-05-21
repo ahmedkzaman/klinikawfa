@@ -1,63 +1,48 @@
 ## Goal
-Eliminate silent failures when adding services/packages/inventory to the consultation cart: defensive payload, RLS-safe insert return, and a tight error path with no double toasts.
+Per-patient panel balance/remarks note that persists on the `patients` record, is editable during check-in, and is always shown to doctors/dispensary regardless of today's payment method.
 
-## Changes
+## 1. Database
+Migration:
+```sql
+ALTER TABLE public.patients
+  ADD COLUMN IF NOT EXISTS panel_remarks text;
+```
+`types.ts` regenerates automatically.
 
-### 1. `src/hooks/clinic/useConsultationItems.ts` — `useAddConsultationItem`
-- Replace insert chain:
-  - From: `.insert(item).select('*').single()`
-  - To:   `.insert(item).select().maybeSingle()`
-- Keep error handling and `onSuccess`/`onError` blocks unchanged. `onSuccess` already invalidates `['consultation_items', vars.consultation_id]`.
+## 2. Shared schema — `src/components/clinic/patientFormSchema.ts`
+- Add `panel_remarks: z.string().optional().nullable()` to the zod schema and TS type.
 
-### 2. `src/components/clinic/visit/CatalogItemPicker.tsx` — `handleAdd`
-- Replace the soft "Preparing session…" guard with a hard block:
-  ```ts
-  if (!consultationId) {
-    toast.error('Error: No consultation ID found for this visit.');
-    return;
-  }
-  ```
-- Compute fallback price safely across catalog shapes (cast to `any` to keep TS happy — inventory rows have `price_to_patient_max`, services have `price_to_patient`, packages have `price`):
-  ```ts
-  const fallbackPrice = Number(
-    (p as any).price_to_patient_max ??
-    (p as any).price_to_patient ??
-    (p as any).price ??
-    0
-  );
-  ```
-- Build payload with `price: fallbackPrice` so NOT NULL never trips before `trg_resolve_selling_price` overwrites it for catalog rows:
-  ```ts
-  const payload: Parameters<typeof addItem.mutateAsync>[0] = {
-    consultation_id: consultationId,
-    item_name: p.name,
-    quantity: Math.max(1, Math.floor(qty || 1)),
-    price: fallbackPrice,
-  };
-  if (catalog === 'inventory') payload.item_id = p.id;
-  else if (catalog === 'service') payload.service_id = p.id;
-  else payload.package_id = p.id;
-  ```
-- Try/catch:
-  - **Try (after await)**: success toast `Added ${p.name}`, run the existing auto-open-instructions branch (only when `inserted` is truthy and has `item_id`), then `resetPick()`.
-  - **Catch**:
-    ```ts
-    const msg = err instanceof Error ? err.message : String(err);
-    if (!msg.includes('Not enough stock')) {
-      toast.error('Failed to add: ' + msg);
-    }
-    ```
-    The stock sentinel is already toasted by the hook → no double toast. All other errors surface clearly. No success logic in catch.
+## 3. Registration check-in — `src/components/clinic/RegisterAndCheckInDialog.tsx`
+- Add a `<Textarea>` **"Patient's Panel Balance / Remarks"** in the panel section. Helper: *"Record remaining balance or limits (e.g., 'Balance RM 21')."*
+- Default form value: `''`.
+- **Prefill**: `handleLoadExisting` must set `panel_remarks: existingPatient.panel_remarks ?? ''`.
+- **Critical update fix**: today the "Load Existing" branch skips all patient mutations to protect demographics. Patch `onSubmit` so that when `loadedPatientId` is set:
+  - Compare submitted `panel_remarks` (trim → null if empty) against `existingPatient.panel_remarks ?? null`.
+  - If different, fire `updatePatient({ id: loadedPatientId, patch: { panel_remarks: <new value> } })` and `await` it **before** creating the queue entry. Surface the error if it fails (do not silently proceed).
+  - All other demographic fields remain untouched.
+- For the new-patient branch, include `panel_remarks` in the initial insert payload.
 
-### 3. No changes
-- Cache invalidation (already correct in the hook).
-- DB / RLS / migrations.
-- Other call sites of `useAddConsultationItem` (none affected by the `maybeSingle` change — they already null-check `inserted`).
+## 4. Other patient forms
+Apply the same field + prefill + save (regular update mutation, no special branching) to:
+- `src/components/clinic/RegisterPatientDialog.tsx`
+- `src/components/clinic/EditPatientDialog.tsx`
 
-## Acceptance
-- Service or package add → row appears instantly, green "Added X" toast, no console error.
-- Inventory add with stock → row appears, green toast.
-- Inventory add with no stock → single red "Not enough stock available for this item." toast.
-- Missing `consultationId` → red "Error: No consultation ID found for this visit.", no mutation.
-- Any other DB/RLS/constraint error → red "Failed to add: <message>" toast.
-- RLS hides the inserted row (`maybeSingle` returns `null`) → no crash, cart refreshes via invalidation, success toast still shows.
+## 5. New component — `src/components/clinic/PatientAlertBanner.tsx`
+- Props: `patientName: string`, `remarks?: string | null`.
+- Returns `null` if remarks is null/empty after trim.
+- `<Alert>` styled `bg-blue-50 border-blue-500 text-blue-900`, `Info` icon (lucide-react), title `Patient Panel Note: {patientName}`, description = remarks with `whitespace-pre-wrap`.
+
+## 6. Doctor & dispensary screens
+`src/pages/clinic/ConsultationDetail.tsx` and `src/pages/clinic/DispenseCheckout.tsx`:
+- Ensure the visit query selects `patients(name, panel_remarks)` (add to existing select or a small follow-up fetch).
+- Render `<PatientAlertBanner>` directly **below** the amber `<PanelAlertBanner>` at the top of the content area.
+- **Visibility rule**: show whenever `patient.panel_remarks` is non-empty — **independent of `entry.panel_id`**. A previously panel-covered patient now paying cash still needs the doctor to see the note (e.g., "Limit exhausted — cash only").
+
+## 7. Out of scope
+- No changes to `queue_entries`, RLS, triage notes, billing logic.
+- Free-text only; no balance parsing/validation.
+
+## Technical notes
+- Banner order: amber (global panel rule) → blue (patient-level note) → existing content.
+- The check-in update mutation only touches `panel_remarks` to preserve the existing "load existing record never overwrites demographics" guarantee.
+- `types.ts` is auto-regenerated; do not hand-edit.

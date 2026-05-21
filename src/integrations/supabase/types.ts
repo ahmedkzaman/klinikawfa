@@ -2939,6 +2939,7 @@ export type Database = {
           name: string
           national_id: string | null
           notes: string | null
+          panel_remarks: string | null
           passport_no: string | null
           phone: string | null
           principal_id: string | null
@@ -2964,6 +2965,7 @@ export type Database = {
           name: string
           national_id?: string | null
           notes?: string | null
+          panel_remarks?: string | null
           passport_no?: string | null
           phone?: string | null
           principal_id?: string | null
@@ -2989,6 +2991,7 @@ export type Database = {
           name?: string
           national_id?: string | null
           notes?: string | null
+          panel_remarks?: string | null
           passport_no?: string | null
           phone?: string | null
           principal_id?: string | null
