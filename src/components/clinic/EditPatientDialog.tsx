@@ -96,6 +96,10 @@ export function EditPatientDialog({
     defaultValues: buildDefaults(patient),
   });
 
+  const idType = (watch('id_type') ?? 'mykad') as IdType;
+  const isMykad = idType === 'mykad';
+  const isPassportType = idType === 'passport';
+
   // Re-sync form whenever a different patient is loaded into the dialog.
   useEffect(() => {
     if (open) {
@@ -116,6 +120,7 @@ export function EditPatientDialog({
         patch: {
           name: toUpperSafe(data.name),
           phone: data.phone || null,
+          id_type: data.id_type,
           national_id: data.national_id?.trim() || null,
           passport_no: data.passport_no?.trim() || null,
           date_of_birth: data.date_of_birth || null,
