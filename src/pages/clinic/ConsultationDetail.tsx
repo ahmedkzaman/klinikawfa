@@ -833,6 +833,11 @@ export default function ConsultationDetail() {
           <StatusBadge status={entry.clinic_status} />
         </div>
 
+        <PatientAlertBanner
+          patientName={patient?.name ?? 'Patient'}
+          remarks={(patient as { panel_remarks?: string | null } | null | undefined)?.panel_remarks}
+        />
+
         {/* Split-pane: workspace first in DOM (mobile), context second; visual order flipped on lg */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* MAIN — Workspace (right on desktop, first on mobile) */}
