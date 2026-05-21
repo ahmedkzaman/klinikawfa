@@ -349,6 +349,19 @@ export function EditPatientDialog({
             <Textarea id="edit_address" rows={2} placeholder="Auto-filled from MyKad" {...register('address')} />
           </div>
           <div>
+            <Label htmlFor="edit_panel_remarks">Patient's Panel Balance / Remarks</Label>
+            <Textarea
+              id="edit_panel_remarks"
+              rows={2}
+              placeholder="e.g. Balance RM 21 as of 2/2/26"
+              {...register('panel_remarks')}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Record remaining balance or limits. Shown to doctors and dispensary on
+              every visit, even when paying cash.
+            </p>
+          </div>
+          <div>
             <Label htmlFor="edit_allergies">Allergies</Label>
             <Textarea id="edit_allergies" rows={2} {...register('allergies')} />
           </div>
