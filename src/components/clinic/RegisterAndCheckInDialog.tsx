@@ -449,6 +449,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
         panel_id: data.payment_method === 'panel' ? data.panel_id : null,
         created_by: user?.id ?? null,
         queue_sequence: seq as number,
+        assigned_doctor_id: isDirectSaleSubmit ? null : assignedDoctorId,
       });
 
       if (queueError) {
