@@ -1,14 +1,26 @@
 import { useRef, useState } from 'react';
 import { format } from 'date-fns';
-import { FileText, Image as ImageIcon, Paperclip, Upload } from 'lucide-react';
+import { FileText, Image as ImageIcon, Paperclip, Upload, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   useConsultationAttachments,
   useUploadAttachment,
+  useDeleteAttachment,
 } from '@/hooks/clinic/useAttachments';
+
 
 interface AttachmentsCardProps {
   consultationId: string | null | undefined;
@@ -26,6 +38,12 @@ export function AttachmentsCard({ consultationId }: AttachmentsCardProps) {
   const { data: attachments = [], isLoading } =
     useConsultationAttachments(consultationId);
   const upload = useUploadAttachment(consultationId);
+  const remove = useDeleteAttachment();
+  const [confirmDelete, setConfirmDelete] = useState<{
+    id: string;
+    file_path: string;
+    file_name: string;
+  } | null>(null);
 
   const disabled = !consultationId;
 
@@ -40,6 +58,22 @@ export function AttachmentsCard({ consultationId }: AttachmentsCardProps) {
       toast.error((err as Error).message || 'Upload failed');
     }
   };
+
+  const handleConfirmDelete = async () => {
+    if (!confirmDelete || !consultationId) return;
+    try {
+      await remove.mutateAsync({
+        id: confirmDelete.id,
+        file_path: confirmDelete.file_path,
+        consultation_id: consultationId,
+      });
+      toast.success('Attachment deleted');
+      setConfirmDelete(null);
+    } catch (err) {
+      toast.error((err as Error).message || 'Delete failed');
+    }
+  };
+
 
   return (
     <Card>
@@ -102,20 +136,40 @@ export function AttachmentsCard({ consultationId }: AttachmentsCardProps) {
                         </p>
                       </div>
                     </div>
-                    {a.signedUrl ? (
-                      <a
-                        href={a.signedUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs font-medium text-primary hover:underline shrink-0"
+                    <div className="flex items-center gap-2 shrink-0">
+                      {a.signedUrl ? (
+                        <a
+                          href={a.signedUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-medium text-primary hover:underline"
+                        >
+                          View
+                        </a>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          Unavailable
+                        </span>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        disabled={remove.isPending}
+                        onClick={() =>
+                          setConfirmDelete({
+                            id: a.id,
+                            file_path: a.file_path,
+                            file_name: a.file_name,
+                          })
+                        }
+                        aria-label={`Delete ${a.file_name}`}
                       >
-                        View
-                      </a>
-                    ) : (
-                      <span className="text-xs text-muted-foreground shrink-0">
-                        Unavailable
-                      </span>
-                    )}
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+
                   </li>
                 );
               })}
@@ -123,8 +177,37 @@ export function AttachmentsCard({ consultationId }: AttachmentsCardProps) {
           )}
         </div>
       </CardContent>
+
+      <AlertDialog
+        open={!!confirmDelete}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this attachment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDelete?.file_name
+                ? `"${confirmDelete.file_name}" will be permanently removed from storage. This cannot be undone.`
+                : 'This attachment will be permanently removed from storage. This cannot be undone.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              disabled={remove.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {remove.isPending ? 'Deleting…' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
+
 
 export default AttachmentsCard;
