@@ -150,6 +150,7 @@ const EMPTY: FormData = {
   visit_notes: '',
   payment_method: 'cash',
   panel_id: null,
+  panel_remarks: '',
 };
 
 interface Props {
