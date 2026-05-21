@@ -130,6 +130,13 @@ export default function QueueBoard() {
   const [vitalsOpen, setVitalsOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [activeEntry, setActiveEntry] = useState<QueueEntryWithJoins | null>(null);
+  const ANY_DOCTOR = "__any__";
+  const [skipTriageDoctorId, setSkipTriageDoctorId] = useState<string | null>(null);
+  const { data: allDoctors = [] } = useDoctors();
+  const activeDoctors = useMemo(
+    () => allDoctors.filter((d) => d.status === "active"),
+    [allDoctors],
+  );
 
   const ACTIVE_STATUSES: ClinicStatus[] = [
     "registered",
