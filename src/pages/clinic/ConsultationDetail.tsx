@@ -838,6 +838,8 @@ export default function ConsultationDetail() {
           remarks={(patient as { panel_remarks?: string | null } | null | undefined)?.panel_remarks}
         />
 
+        <VisitRemarksBanner remarks={(entry as { visit_remarks?: string | null } | undefined)?.visit_remarks} />
+
         {/* Split-pane: workspace first in DOM (mobile), context second; visual order flipped on lg */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* MAIN — Workspace (right on desktop, first on mobile) */}
