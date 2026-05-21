@@ -62,6 +62,7 @@ export function RegisterPatientDialog({
       emergency_contact_phone: '',
       default_panel_id: null,
       address: '',
+      panel_remarks: '',
     },
   });
 
