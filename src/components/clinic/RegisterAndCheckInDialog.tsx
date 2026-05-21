@@ -859,6 +859,19 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                 />
               </div>
 
+              <div className="space-y-1.5">
+                <Label htmlFor="reg-visit-remarks">
+                  Visit Purpose / Remarks (e.g., Typhoid Vaccine, Medical Checkup)
+                </Label>
+                <Textarea
+                  id="reg-visit-remarks"
+                  rows={2}
+                  placeholder="Short note visible to doctor & dispensary…"
+                  value={visitRemarks}
+                  onChange={(e) => setVisitRemarks(e.target.value)}
+                />
+              </div>
+
               {!isDirectSale && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
