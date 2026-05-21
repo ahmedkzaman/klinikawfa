@@ -19,6 +19,7 @@ import { VisitDetailsColumn } from '@/components/clinic/visit/VisitDetailsColumn
 import { AttachmentsCard } from '@/components/clinic/visit/AttachmentsCard';
 import { BillingDetailsColumn, type SelectedCharge } from '@/components/clinic/visit/BillingDetailsColumn';
 import { DispensePanel } from '@/components/clinic/visit/DispensePanel';
+import { PatientAlertBanner } from '@/components/clinic/PatientAlertBanner';
 import {
   useConsultationQueueEntries,
   useUpdateQueueEntry,
@@ -289,6 +290,11 @@ export default function DispenseCheckout() {
           </div>
           <StatusBadge status={entry.clinic_status} />
         </div>
+
+        <PatientAlertBanner
+          patientName={patient?.name ?? 'Patient'}
+          remarks={(patient as { panel_remarks?: string | null } | null)?.panel_remarks}
+        />
 
         {panelInfo && (
           <div className={cn(bento, 'p-3 flex items-center gap-2 flex-wrap')}>

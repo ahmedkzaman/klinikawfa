@@ -63,6 +63,7 @@ function buildDefaults(p: PatientRow): FormData {
     allergies: p.allergies ?? '',
     underlying_conditions: p.underlying_conditions ?? '',
     address: (p as PatientRow & { address?: string | null }).address ?? '',
+    panel_remarks: (p as PatientRow & { panel_remarks?: string | null }).panel_remarks ?? '',
   };
 }
 
@@ -122,7 +123,8 @@ export function EditPatientDialog({
           allergies: data.allergies || null,
           underlying_conditions: data.underlying_conditions || null,
           address: data.address ? toUpperSafe(data.address) : null,
-        },
+          panel_remarks: (data.panel_remarks ?? '').trim() || null,
+        } as never,
       });
       toast.success(`Patient updated: ${updated.name}`);
       onOpenChange(false);
@@ -345,6 +347,19 @@ export function EditPatientDialog({
           <div>
             <Label htmlFor="edit_address">Address</Label>
             <Textarea id="edit_address" rows={2} placeholder="Auto-filled from MyKad" {...register('address')} />
+          </div>
+          <div>
+            <Label htmlFor="edit_panel_remarks">Patient's Panel Balance / Remarks</Label>
+            <Textarea
+              id="edit_panel_remarks"
+              rows={2}
+              placeholder="e.g. Balance RM 21 as of 2/2/26"
+              {...register('panel_remarks')}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Record remaining balance or limits. Shown to doctors and dispensary on
+              every visit, even when paying cash.
+            </p>
           </div>
           <div>
             <Label htmlFor="edit_allergies">Allergies</Label>

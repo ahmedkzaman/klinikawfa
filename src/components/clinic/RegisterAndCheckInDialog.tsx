@@ -46,6 +46,7 @@ import {
   useDebouncedValue,
   usePatientByIc,
   useSearchPatients,
+  useUpdatePatient,
 } from '@/hooks/clinic/usePatients';
 import { usePatientOutstanding, formatRm } from '@/hooks/clinic/usePatientFinancials';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -107,6 +108,7 @@ const schema = z
     visit_notes: z.string().max(1000).optional(),
     payment_method: z.enum(['cash', 'panel']),
     panel_id: z.string().nullable(),
+    panel_remarks: z.string().max(500).optional(),
   })
   .superRefine((data, ctx) => {
     if (data.is_dependent && !data.principal_id) {
@@ -149,6 +151,7 @@ const EMPTY: FormData = {
   visit_notes: '',
   payment_method: 'cash',
   panel_id: null,
+  panel_remarks: '',
 };
 
 interface Props {
@@ -189,6 +192,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const createPatient = useCreatePatient();
+  const updatePatient = useUpdatePatient();
   const { data: panels = [] } = useInsuranceProviders({ activeOnly: true });
 
   const [submitting, setSubmitting] = useState(false);
@@ -294,6 +298,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
     const ep = existingPatient as PatientRow & {
       default_panel_id?: string | null;
       email?: string | null;
+      panel_remarks?: string | null;
     };
     reset({
       ...EMPTY,
@@ -307,6 +312,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
       visit_purpose: 'consultation',
       payment_method: ep.default_panel_id ? 'panel' : 'cash',
       panel_id: ep.default_panel_id ?? null,
+      panel_remarks: ep.panel_remarks ?? '',
     });
     setLoadedPatientId(ep.id);
     setLoadedIc(ep.national_id ?? '');
@@ -316,21 +322,37 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
   const onSubmit = async (data: FormData) => {
     setSubmitting(true);
     try {
-      // 1. Upsert patient — skip insert if user loaded an existing record
+      const normalizedRemarks = (data.panel_remarks ?? '').trim() || null;
+
+      // 1. Upsert patient — skip demographic mutations if user loaded an
+      // existing record, but ALWAYS sync panel_remarks when it changed so
+      // the nurse's RM-balance edit doesn't evaporate.
       const usingExisting =
         loadedPatientId && existingPatient && existingPatient.id === loadedPatientId;
-      const patient = usingExisting
-        ? { id: loadedPatientId! }
-        : await createPatient.mutateAsync({
-            name: data.name,
-            phone: data.phone || null,
-            national_id: data.national_id || null,
-            date_of_birth: data.date_of_birth || null,
-            gender: data.gender || null,
-            email: data.email || null,
-            principal_id: data.is_dependent ? data.principal_id : null,
-            relationship: data.is_dependent ? data.relationship || null : null,
+      let patient: { id: string };
+      if (usingExisting) {
+        const existingRemarks =
+          ((existingPatient as { panel_remarks?: string | null }).panel_remarks ?? null) || null;
+        if (existingRemarks !== normalizedRemarks) {
+          await updatePatient.mutateAsync({
+            id: loadedPatientId!,
+            patch: { panel_remarks: normalizedRemarks } as never,
           });
+        }
+        patient = { id: loadedPatientId! };
+      } else {
+        patient = await createPatient.mutateAsync({
+          name: data.name,
+          phone: data.phone || null,
+          national_id: data.national_id || null,
+          date_of_birth: data.date_of_birth || null,
+          gender: data.gender || null,
+          email: data.email || null,
+          principal_id: data.is_dependent ? data.principal_id : null,
+          relationship: data.is_dependent ? data.relationship || null : null,
+          panel_remarks: normalizedRemarks,
+        } as never);
+      }
 
       // 2. Insert queue entry (today's ephemeral visit) with atomic daily sequence
       const { data: seq, error: seqError } = await supabase.rpc('get_next_queue_number');
@@ -807,6 +829,22 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                   )}
                 </div>
               )}
+
+              <div className="space-y-1.5">
+                <Label htmlFor="reg-panel-remarks">
+                  Patient's Panel Balance / Remarks
+                </Label>
+                <Textarea
+                  id="reg-panel-remarks"
+                  rows={2}
+                  placeholder="e.g. Balance RM 21 as of 2/2/26"
+                  {...register('panel_remarks')}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Record remaining balance or limits (e.g. "Balance RM 21"). Shown to
+                  doctors and dispensary on every visit, even when paying cash.
+                </p>
+              </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="reg-notes">Visit Notes</Label>

@@ -62,6 +62,7 @@ export function RegisterPatientDialog({
       emergency_contact_phone: '',
       default_panel_id: null,
       address: '',
+      panel_remarks: '',
     },
   });
 
@@ -83,7 +84,8 @@ export function RegisterPatientDialog({
         allergies: data.allergies || null,
         underlying_conditions: data.underlying_conditions || null,
         address: data.address ? toUpperSafe(data.address) : null,
-      });
+        panel_remarks: (data.panel_remarks ?? '').trim() || null,
+      } as never);
       toast.success(`Patient registered: ${created.name}`);
       reset();
       setMykadConsent(false);
@@ -287,6 +289,19 @@ export function RegisterPatientDialog({
           <div>
             <Label htmlFor="address">Address</Label>
             <Textarea id="address" rows={2} placeholder="Auto-filled from MyKad" {...register('address')} />
+          </div>
+          <div>
+            <Label htmlFor="panel_remarks">Patient's Panel Balance / Remarks</Label>
+            <Textarea
+              id="panel_remarks"
+              rows={2}
+              placeholder="e.g. Balance RM 21 as of 2/2/26"
+              {...register('panel_remarks')}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Record remaining balance or limits. Shown to doctors and dispensary on
+              every visit, even when paying cash.
+            </p>
           </div>
           <div>
             <Label htmlFor="allergies">Allergies</Label>

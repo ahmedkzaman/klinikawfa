@@ -91,6 +91,7 @@ import {
 import { DiagnosisCombobox } from '@/components/clinic/consultation/DiagnosisCombobox';
 import { useDiagnoses } from '@/hooks/clinic/useDiagnoses';
 import { SessionAttachmentsStrip } from '@/components/clinic/consultation/SessionAttachmentsStrip';
+import { PatientAlertBanner } from '@/components/clinic/PatientAlertBanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 
@@ -831,6 +832,11 @@ export default function ConsultationDetail() {
           </div>
           <StatusBadge status={entry.clinic_status} />
         </div>
+
+        <PatientAlertBanner
+          patientName={patient?.name ?? 'Patient'}
+          remarks={(patient as { panel_remarks?: string | null } | null | undefined)?.panel_remarks}
+        />
 
         {/* Split-pane: workspace first in DOM (mobile), context second; visual order flipped on lg */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
