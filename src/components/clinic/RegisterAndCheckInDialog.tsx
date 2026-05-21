@@ -189,6 +189,7 @@ const schema = z
 type FormData = z.infer<typeof schema>;
 
 const EMPTY: FormData = {
+  id_type: 'mykad',
   national_id: '',
   name: '',
   phone: '',
