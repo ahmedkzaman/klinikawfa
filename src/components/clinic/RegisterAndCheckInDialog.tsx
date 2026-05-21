@@ -452,6 +452,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
         created_by: user?.id ?? null,
         queue_sequence: seq as number,
         assigned_doctor_id: isDirectSaleSubmit ? null : assignedDoctorId,
+        visit_remarks: visitRemarks.trim() || null,
       });
 
       if (queueError) {
