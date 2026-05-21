@@ -83,6 +83,13 @@ export default function DispenseCheckout() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const isDirectSale = (entry as any)?.visit_type === 'direct_sale';
+  // Dispensary override: once the visit reaches dispensing/payment the doctor's
+  // pessimistic lock no longer applies — pharmacy/cashier must be able to add,
+  // edit, and remove items even if the doctor never released the lock.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isDispensingStage = (entry as any)?.clinic_status === 'dispensing_payment';
+  const dispensaryCanEdit = isDispensingStage ? true : canEdit;
+
 
   // Panel billing context: name + medication discount % drive the
   // "Panel Billing Applied" badge and the per-row strikethrough pricing.
