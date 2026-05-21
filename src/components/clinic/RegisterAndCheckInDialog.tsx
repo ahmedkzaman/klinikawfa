@@ -879,6 +879,25 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                       )}
                     />
                   </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="reg-assigned-doctor">Assign Doctor (Optional)</Label>
+                    <Select
+                      value={assignedDoctorId ?? ANY_DOCTOR}
+                      onValueChange={(v) => setAssignedDoctorId(v === ANY_DOCTOR ? null : v)}
+                    >
+                      <SelectTrigger id="reg-assigned-doctor">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ANY_DOCTOR}>Any Available Doctor</SelectItem>
+                        {activeDoctors.map((d) => (
+                          <SelectItem key={d.id} value={d.id}>
+                            {d.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               )}
 
