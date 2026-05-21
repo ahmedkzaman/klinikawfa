@@ -402,6 +402,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
         patient = await createPatient.mutateAsync({
           name: data.name,
           phone: data.phone || null,
+          id_type: data.id_type,
           national_id: data.national_id || null,
           date_of_birth: data.date_of_birth || null,
           gender: data.gender || null,
