@@ -105,14 +105,17 @@ export function useRemoveConsultationItem() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('consultation_items')
         .update({
           deleted_at: new Date().toISOString(),
           deleted_by: user?.id ?? null,
         })
-        .eq('id', id);
+        .eq('id', id)
+        .select('id')
+        .maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error('Permission denied or item not found.');
       return consultationId;
     },
     onSuccess: (consultationId) =>
@@ -129,15 +132,18 @@ export function useUpdateDispensedQty() {
       dispensed_qty: number | null;
       partial_reason: 'patient_request' | 'out_of_stock' | null;
     }) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('consultation_items')
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .update({
           dispensed_qty: input.dispensed_qty,
           partial_reason: input.partial_reason,
         } as any)
-        .eq('id', input.id);
+        .eq('id', input.id)
+        .select('id')
+        .maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error('Permission denied or item not found.');
       return input.consultationId;
     },
     onSuccess: (consultationId) =>
@@ -167,10 +173,12 @@ export function useUpdateConsultationItem() {
       duration?: string | null;
       precaution?: string | null;
     }) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('consultation_items')
         .update(updates)
-        .eq('id', id);
+        .eq('id', id)
+        .select('id')
+        .maybeSingle();
       if (error) {
         if (isInsufficientStock(error)) {
           toast.error(STOCK_MSG);
@@ -178,9 +186,11 @@ export function useUpdateConsultationItem() {
         }
         throw error;
       }
+      if (!data) throw new Error('Permission denied or item not found.');
       return consultationId;
     },
     onSuccess: (consultationId) =>
       qc.invalidateQueries({ queryKey: ['consultation_items', consultationId] }),
   });
 }
+

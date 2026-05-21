@@ -1,48 +1,76 @@
-## Goal
-Per-patient panel balance/remarks note that persists on the `patients` record, is editable during check-in, and is always shown to doctors/dispensary regardless of today's payment method.
+## Fix Silent Failures on Consultation Item Edits
 
-## 1. Database
-Migration:
-```sql
-ALTER TABLE public.patients
-  ADD COLUMN IF NOT EXISTS panel_remarks text;
+### Root cause
+The current RLS policies on `consultation_items` (UPDATE/INSERT) only allow `is_ops_or_admin(...) OR locum` — which excludes the `staff` role (nurses/front desk/dispensary). When a nurse edits a doctor-added row, PostgREST returns `0 rows updated` with **no error**, and our hook silently treats it as success.
+
+Current policies:
 ```
-`types.ts` regenerates automatically.
+INSERT  WITH CHECK (is_ops_or_admin OR locum)
+UPDATE  USING/CHECK  (is_ops_or_admin OR locum)  + deleted_at IS NULL
+SELECT  (deleted_at IS NULL)
+DELETE  — no explicit policy (soft-delete via UPDATE)
+```
 
-## 2. Shared schema — `src/components/clinic/patientFormSchema.ts`
-- Add `panel_remarks: z.string().optional().nullable()` to the zod schema and TS type.
+The `is_staff_or_admin` helper already covers the right set: `admin, staff, special_admin, doctor_admin, operations, locum, resident_doctor`.
 
-## 3. Registration check-in — `src/components/clinic/RegisterAndCheckInDialog.tsx`
-- Add a `<Textarea>` **"Patient's Panel Balance / Remarks"** in the panel section. Helper: *"Record remaining balance or limits (e.g., 'Balance RM 21')."*
-- Default form value: `''`.
-- **Prefill**: `handleLoadExisting` must set `panel_remarks: existingPatient.panel_remarks ?? ''`.
-- **Critical update fix**: today the "Load Existing" branch skips all patient mutations to protect demographics. Patch `onSubmit` so that when `loadedPatientId` is set:
-  - Compare submitted `panel_remarks` (trim → null if empty) against `existingPatient.panel_remarks ?? null`.
-  - If different, fire `updatePatient({ id: loadedPatientId, patch: { panel_remarks: <new value> } })` and `await` it **before** creating the queue entry. Surface the error if it fails (do not silently proceed).
-  - All other demographic fields remain untouched.
-- For the new-patient branch, include `panel_remarks` in the initial insert payload.
+---
 
-## 4. Other patient forms
-Apply the same field + prefill + save (regular update mutation, no special branching) to:
-- `src/components/clinic/RegisterPatientDialog.tsx`
-- `src/components/clinic/EditPatientDialog.tsx`
+### 1. Database migration — widen RLS to clinical staff
 
-## 5. New component — `src/components/clinic/PatientAlertBanner.tsx`
-- Props: `patientName: string`, `remarks?: string | null`.
-- Returns `null` if remarks is null/empty after trim.
-- `<Alert>` styled `bg-blue-50 border-blue-500 text-blue-900`, `Info` icon (lucide-react), title `Patient Panel Note: {patientName}`, description = remarks with `whitespace-pre-wrap`.
+Drop and recreate INSERT + UPDATE policies on `public.consultation_items` to use `is_staff_or_admin(auth.uid())` instead of `is_ops_or_admin OR locum`. This lets nurses/dispensary edit rows created by doctors while keeping the clinic-only boundary (only roles in our user_roles table).
 
-## 6. Doctor & dispensary screens
-`src/pages/clinic/ConsultationDetail.tsx` and `src/pages/clinic/DispenseCheckout.tsx`:
-- Ensure the visit query selects `patients(name, panel_remarks)` (add to existing select or a small follow-up fetch).
-- Render `<PatientAlertBanner>` directly **below** the amber `<PanelAlertBanner>` at the top of the content area.
-- **Visibility rule**: show whenever `patient.panel_remarks` is non-empty — **independent of `entry.panel_id`**. A previously panel-covered patient now paying cash still needs the doctor to see the note (e.g., "Limit exhausted — cash only").
+```sql
+DROP POLICY IF EXISTS consultation_items_ops_insert        ON public.consultation_items;
+DROP POLICY IF EXISTS consultation_items_update_active     ON public.consultation_items;
 
-## 7. Out of scope
-- No changes to `queue_entries`, RLS, triage notes, billing logic.
-- Free-text only; no balance parsing/validation.
+CREATE POLICY consultation_items_staff_insert
+  ON public.consultation_items FOR INSERT TO authenticated
+  WITH CHECK (public.is_staff_or_admin(auth.uid()));
 
-## Technical notes
-- Banner order: amber (global panel rule) → blue (patient-level note) → existing content.
-- The check-in update mutation only touches `panel_remarks` to preserve the existing "load existing record never overwrites demographics" guarantee.
-- `types.ts` is auto-regenerated; do not hand-edit.
+CREATE POLICY consultation_items_staff_update_active
+  ON public.consultation_items FOR UPDATE TO authenticated
+  USING (deleted_at IS NULL AND public.is_staff_or_admin(auth.uid()))
+  WITH CHECK (public.is_staff_or_admin(auth.uid()));
+```
+
+Notes:
+- SELECT policies untouched (active rows visible to all authenticated; voided rows restricted to `special_admin`).
+- No DELETE policy needed — soft-delete already runs through UPDATE and will be covered.
+
+---
+
+### 2. Harden `useConsultationItems.ts` — no more silent zero-row writes
+
+For both `useUpdateConsultationItem` and `useUpdateDispensedQty`, replace the bare `.update(...).eq('id', id)` chain with `.update(...).eq('id', id).select('id').maybeSingle()` and throw when the result is `null`.
+
+```ts
+const { data, error } = await supabase
+  .from('consultation_items')
+  .update(updates)
+  .eq('id', id)
+  .select('id')
+  .maybeSingle();
+if (error) { /* existing stock-error handling */ throw error; }
+if (!data) throw new Error('Permission denied or item not found.');
+```
+
+Also apply the same `.select('id').maybeSingle()` + null-throw guard to `useRemoveConsultationItem` (the soft-delete UPDATE) so deletes can't fail silently either.
+
+`onSuccess` already invalidates `['consultation_items', consultationId]` — keep as-is.
+
+---
+
+### 3. Stop error-swallowing in callers
+
+- **`EditInstructionsDialog.tsx`** — already has try/catch and only closes on success; no change needed beyond the hook now throwing a real error.
+- **`VisitDetailsColumn.tsx` `handleQty` / `handleRemove`** — already wrapped in try/catch with `toast.error`. Add a `toast.success('Quantity updated')` on the qty path so successful edits give visible confirmation (currently silent on success too).
+- **`ConsultationDetail.tsx` line ~974** — verify the `updateItem.mutateAsync` call there is also wrapped in try/catch; add one if missing so RLS/validation errors surface as a toast.
+
+No UI/layout changes beyond the toast additions above.
+
+---
+
+### Out of scope
+- No changes to SELECT/DELETE policies, to `consultations`, or to inventory triggers.
+- No changes to add-item flow (already raises errors correctly).
+- No role model changes — we reuse the existing `is_staff_or_admin` helper.

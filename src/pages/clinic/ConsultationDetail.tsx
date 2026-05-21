@@ -964,19 +964,31 @@ export default function ConsultationDetail() {
                         priceTiers={PRICE_TIERS}
                         isPanel={isPanel}
                         disabled={!canEdit}
-                        onRemove={() =>
-                          consultationId &&
-                          removeItem.mutate({ id: item.id, consultationId })
-                        }
+                        onRemove={async () => {
+                          if (!consultationId) return;
+                          try {
+                            await removeItem.mutateAsync({ id: item.id, consultationId });
+                            toast.success('Item removed');
+                          } catch (err) {
+                            toast.error('Failed to remove: ' + (err as Error).message);
+                          }
+                        }}
                         onSavingChange={handleItemSavingChange}
                         onSave={async (updates) => {
                           if (!consultationId) return;
-                          await updateItem.mutateAsync({
-                            id: item.id,
-                            consultationId,
-                            ...updates,
-                          });
+                          try {
+                            await updateItem.mutateAsync({
+                              id: item.id,
+                              consultationId,
+                              ...updates,
+                            });
+                            toast.success('Item updated');
+                          } catch (err) {
+                            toast.error('Failed to update: ' + (err as Error).message);
+                            throw err;
+                          }
                         }}
+
                       />
                     ))}
                   </div>
