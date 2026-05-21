@@ -38,6 +38,12 @@ export function AttachmentsCard({ consultationId }: AttachmentsCardProps) {
   const { data: attachments = [], isLoading } =
     useConsultationAttachments(consultationId);
   const upload = useUploadAttachment(consultationId);
+  const remove = useDeleteAttachment();
+  const [confirmDelete, setConfirmDelete] = useState<{
+    id: string;
+    file_path: string;
+    file_name: string;
+  } | null>(null);
 
   const disabled = !consultationId;
 
@@ -52,6 +58,22 @@ export function AttachmentsCard({ consultationId }: AttachmentsCardProps) {
       toast.error((err as Error).message || 'Upload failed');
     }
   };
+
+  const handleConfirmDelete = async () => {
+    if (!confirmDelete || !consultationId) return;
+    try {
+      await remove.mutateAsync({
+        id: confirmDelete.id,
+        file_path: confirmDelete.file_path,
+        consultation_id: consultationId,
+      });
+      toast.success('Attachment deleted');
+      setConfirmDelete(null);
+    } catch (err) {
+      toast.error((err as Error).message || 'Delete failed');
+    }
+  };
+
 
   return (
     <Card>
