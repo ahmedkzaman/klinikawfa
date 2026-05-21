@@ -217,10 +217,12 @@ export function VisitDetailsColumn({
     if (next < 1) return;
     try {
       await updateItem.mutateAsync({ id, consultationId, quantity: next });
+      toast.success('Quantity updated');
     } catch (err) {
-      toast.error((err as Error).message);
+      toast.error('Failed to update: ' + (err as Error).message);
     }
   };
+
 
   const handleRemove = async (id: string) => {
     if (!consultationId) return;
