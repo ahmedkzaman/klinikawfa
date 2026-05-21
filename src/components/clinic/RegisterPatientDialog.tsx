@@ -15,7 +15,11 @@ import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
 import {
   patientSchema,
   RELIGIONS,
+  ID_TYPE_OPTIONS,
+  ID_TYPE_FIELD_LABEL,
+  ID_TYPE_PLACEHOLDER,
   type PatientFormData,
+  type IdType,
 } from '@/components/clinic/patientFormSchema';
 import {
   ReadMyKadButton,
