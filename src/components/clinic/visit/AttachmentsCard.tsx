@@ -136,20 +136,40 @@ export function AttachmentsCard({ consultationId }: AttachmentsCardProps) {
                         </p>
                       </div>
                     </div>
-                    {a.signedUrl ? (
-                      <a
-                        href={a.signedUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs font-medium text-primary hover:underline shrink-0"
+                    <div className="flex items-center gap-2 shrink-0">
+                      {a.signedUrl ? (
+                        <a
+                          href={a.signedUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-medium text-primary hover:underline"
+                        >
+                          View
+                        </a>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          Unavailable
+                        </span>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        disabled={remove.isPending}
+                        onClick={() =>
+                          setConfirmDelete({
+                            id: a.id,
+                            file_path: a.file_path,
+                            file_name: a.file_name,
+                          })
+                        }
+                        aria-label={`Delete ${a.file_name}`}
                       >
-                        View
-                      </a>
-                    ) : (
-                      <span className="text-xs text-muted-foreground shrink-0">
-                        Unavailable
-                      </span>
-                    )}
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+
                   </li>
                 );
               })}
