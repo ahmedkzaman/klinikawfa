@@ -290,6 +290,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
 
   // Optional doctor assignment at check-in
   const [assignedDoctorId, setAssignedDoctorId] = useState<string | null>(null);
+  const [visitRemarks, setVisitRemarks] = useState('');
   const { data: allDoctors } = useDoctors();
   const activeDoctors = useMemo(
     () => (allDoctors ?? []).filter((d) => d.status === 'active'),
