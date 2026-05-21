@@ -138,6 +138,10 @@ export default function QueueBoard() {
     [allDoctors],
   );
 
+  useEffect(() => {
+    setSkipTriageDoctorId(activeEntry?.assigned_doctor_id ?? null);
+  }, [activeEntry?.id, activeEntry?.assigned_doctor_id]);
+
   const ACTIVE_STATUSES: ClinicStatus[] = [
     "registered",
     "ready_for_doctor",
