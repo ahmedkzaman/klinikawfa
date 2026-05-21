@@ -107,6 +107,7 @@ const schema = z
     visit_notes: z.string().max(1000).optional(),
     payment_method: z.enum(['cash', 'panel']),
     panel_id: z.string().nullable(),
+    panel_remarks: z.string().max(500).optional(),
   })
   .superRefine((data, ctx) => {
     if (data.is_dependent && !data.principal_id) {
