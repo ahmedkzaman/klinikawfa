@@ -1,14 +1,26 @@
 import { useRef, useState } from 'react';
 import { format } from 'date-fns';
-import { FileText, Image as ImageIcon, Paperclip, Upload } from 'lucide-react';
+import { FileText, Image as ImageIcon, Paperclip, Upload, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   useConsultationAttachments,
   useUploadAttachment,
+  useDeleteAttachment,
 } from '@/hooks/clinic/useAttachments';
+
 
 interface AttachmentsCardProps {
   consultationId: string | null | undefined;
