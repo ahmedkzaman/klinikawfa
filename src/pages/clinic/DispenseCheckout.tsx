@@ -297,6 +297,8 @@ export default function DispenseCheckout() {
           remarks={(patient as { panel_remarks?: string | null } | null)?.panel_remarks}
         />
 
+        <VisitRemarksBanner remarks={(entry as { visit_remarks?: string | null } | undefined)?.visit_remarks} />
+
         {panelInfo && (
           <div className={cn(bento, 'p-3 flex items-center gap-2 flex-wrap')}>
             <Badge className="bg-primary text-primary-foreground hover:bg-primary">
