@@ -7,6 +7,12 @@ import { toast } from 'sonner';
 import { Check, ChevronsUpDown, Search, UserCheck, X } from 'lucide-react';
 import { toMalayTitleCase } from '@/lib/textCase';
 import {
+  ReadMyKadButton,
+  cleanIC,
+  mapGender,
+  mapDOB,
+} from '@/components/clinic/ReadMyKadButton';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
