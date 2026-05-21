@@ -53,6 +53,7 @@ interface EditPatientDialogProps {
 
 function buildDefaults(p: PatientRow): FormData {
   return {
+    id_type: (((p as PatientRow & { id_type?: string | null }).id_type ?? 'mykad') as IdType),
     name: p.name ?? '',
     phone: p.phone ?? '',
     national_id: p.national_id ?? '',
