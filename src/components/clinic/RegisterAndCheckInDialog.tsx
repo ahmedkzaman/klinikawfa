@@ -355,9 +355,11 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
       default_panel_id?: string | null;
       email?: string | null;
       panel_remarks?: string | null;
+      id_type?: string | null;
     };
     reset({
       ...EMPTY,
+      id_type: ((ep.id_type ?? 'mykad') as LocalIdType),
       national_id: ep.national_id ?? '',
       name: ep.name ?? '',
       phone: ep.phone ?? '',
