@@ -20,6 +20,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { useDoctors } from "@/hooks/clinic/useDoctors";
 import {
   useQueueEntries,
   useUpdateQueueEntry,
@@ -127,6 +130,17 @@ export default function QueueBoard() {
   const [vitalsOpen, setVitalsOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [activeEntry, setActiveEntry] = useState<QueueEntryWithJoins | null>(null);
+  const ANY_DOCTOR = "__any__";
+  const [skipTriageDoctorId, setSkipTriageDoctorId] = useState<string | null>(null);
+  const { data: allDoctors = [] } = useDoctors();
+  const activeDoctors = useMemo(
+    () => allDoctors.filter((d) => d.status === "active"),
+    [allDoctors],
+  );
+
+  useEffect(() => {
+    setSkipTriageDoctorId(activeEntry?.assigned_doctor_id ?? null);
+  }, [activeEntry?.id, activeEntry?.assigned_doctor_id]);
 
   const ACTIVE_STATUSES: ClinicStatus[] = [
     "registered",
@@ -336,17 +350,48 @@ export default function QueueBoard() {
                     >
                       <Activity className="h-4 w-4 mr-2" /> Take Vitals / Triage
                     </Button>
+
+                    <div className="space-y-1.5 pt-1">
+                      <Label htmlFor="skip-triage-doctor" className="text-xs text-slate-500">
+                        Assign Doctor (Optional)
+                      </Label>
+                      <Select
+                        value={skipTriageDoctorId ?? ANY_DOCTOR}
+                        onValueChange={(v) => setSkipTriageDoctorId(v === ANY_DOCTOR ? null : v)}
+                      >
+                        <SelectTrigger id="skip-triage-doctor" className="h-9 bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={ANY_DOCTOR}>Any Available Doctor</SelectItem>
+                          {activeDoctors.map((d) => (
+                            <SelectItem key={d.id} value={d.id}>
+                              {d.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
                     <Button
                       variant="ghost"
                       className="w-full text-slate-400 text-xs hover:text-slate-600"
                       disabled={updateQueue.isPending}
                       onClick={() => {
                         updateQueue.mutate(
-                          { id: activeEntry.id, clinic_status: "ready_for_doctor" },
+                          {
+                            id: activeEntry.id,
+                            clinic_status: "ready_for_doctor",
+                            assigned_doctor_id: skipTriageDoctorId,
+                          },
                           {
                             onSuccess: () => {
                               setActiveEntry(null);
-                              toast.success("Sent to Doctor (Triage Skipped)");
+                              toast.success(
+                                skipTriageDoctorId
+                                  ? "Sent to assigned doctor (Triage Skipped)"
+                                  : "Sent to Doctor (Triage Skipped)",
+                              );
                             },
                           },
                         );
@@ -354,6 +399,7 @@ export default function QueueBoard() {
                     >
                       Skip Triage → Send to Doctor
                     </Button>
+
                   </div>
                 )}
 
