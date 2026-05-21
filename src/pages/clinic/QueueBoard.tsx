@@ -12,6 +12,7 @@ import {
   UserX,
   ChevronDown,
   RefreshCcw,
+  MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SEOHead } from "@/components/seo/SEOHead";
