@@ -298,6 +298,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
     const ep = existingPatient as PatientRow & {
       default_panel_id?: string | null;
       email?: string | null;
+      panel_remarks?: string | null;
     };
     reset({
       ...EMPTY,
@@ -311,6 +312,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
       visit_purpose: 'consultation',
       payment_method: ep.default_panel_id ? 'panel' : 'cash',
       panel_id: ep.default_panel_id ?? null,
+      panel_remarks: ep.panel_remarks ?? '',
     });
     setLoadedPatientId(ep.id);
     setLoadedIc(ep.national_id ?? '');
