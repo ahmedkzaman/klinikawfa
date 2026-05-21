@@ -59,6 +59,7 @@ export function RegisterPatientDialog({
   } = useForm<FormData>({
     resolver: zodResolver(patientSchema),
     defaultValues: {
+      id_type: 'mykad',
       name: '',
       phone: '',
       religion: '',
@@ -69,6 +70,10 @@ export function RegisterPatientDialog({
       panel_remarks: '',
     },
   });
+
+  const idType = (watch('id_type') ?? 'mykad') as IdType;
+  const isMykad = idType === 'mykad';
+  const isPassportType = idType === 'passport';
 
   const onSubmit = async (data: FormData) => {
     setSubmitting(true);
