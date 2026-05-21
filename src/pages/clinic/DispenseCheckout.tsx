@@ -19,6 +19,7 @@ import { VisitDetailsColumn } from '@/components/clinic/visit/VisitDetailsColumn
 import { AttachmentsCard } from '@/components/clinic/visit/AttachmentsCard';
 import { BillingDetailsColumn, type SelectedCharge } from '@/components/clinic/visit/BillingDetailsColumn';
 import { DispensePanel } from '@/components/clinic/visit/DispensePanel';
+import { PatientAlertBanner } from '@/components/clinic/PatientAlertBanner';
 import {
   useConsultationQueueEntries,
   useUpdateQueueEntry,
