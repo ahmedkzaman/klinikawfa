@@ -479,10 +479,28 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="reg-ic">MyKad / IC</Label>
+                  <Label htmlFor="reg-id-type">ID Type *</Label>
+                  <Select
+                    value={idType}
+                    onValueChange={(v) =>
+                      setValue('id_type', v as LocalIdType, { shouldValidate: true, shouldDirty: true })
+                    }
+                  >
+                    <SelectTrigger id="reg-id-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ID_TYPE_OPTIONS_LOCAL.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="reg-ic">{ID_LABELS[idType]}{isMykadType ? '' : ' *'}</Label>
                   <Input
                     id="reg-ic"
-                    placeholder="12 digits — auto-fills DOB & gender"
+                    placeholder={ID_PLACEHOLDERS[idType]}
                     {...register('national_id')}
                   />
                   {errors.national_id && (
