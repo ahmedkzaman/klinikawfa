@@ -46,6 +46,7 @@ import {
   useDebouncedValue,
   usePatientByIc,
   useSearchPatients,
+  useUpdatePatient,
 } from '@/hooks/clinic/usePatients';
 import { usePatientOutstanding, formatRm } from '@/hooks/clinic/usePatientFinancials';
 import { Alert, AlertDescription } from '@/components/ui/alert';
