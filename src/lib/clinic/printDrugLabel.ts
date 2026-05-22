@@ -154,7 +154,7 @@ function drawLabel(
   // ── 2. Divider ───────────────────────────────────────────────────────────
   y += 0.6;
   doc.setLineWidth(0.15);
-  doc.line(MARGIN_X, y, PAGE_W - MARGIN_X, y);
+  doc.line(MARGIN_X, y, RIGHT_ANCHOR, y);
   y += 2.6;
 
   // ── 3. Patient block (NAME left bold, DATE right) ────────────────────────
