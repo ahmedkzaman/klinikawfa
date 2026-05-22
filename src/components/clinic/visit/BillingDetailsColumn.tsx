@@ -298,9 +298,16 @@ export function BillingDetailsColumn({
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-5">
-                        {p.payment_method}
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'text-[10px] py-0 px-1.5 h-5',
+                          paymentMethodBadgeClass(p.payment_method),
+                        )}
+                      >
+                        {formatPaymentMethod(p.payment_method, Number(p.amount ?? 0))}
                       </Badge>
+
                       <span className="text-[11px] text-muted-foreground capitalize">
                         {(p.payment_type ?? '').replace('_', '-')}
                       </span>
