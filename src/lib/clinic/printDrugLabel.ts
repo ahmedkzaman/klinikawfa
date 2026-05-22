@@ -243,13 +243,14 @@ function drawLabel(
     doc.setFontSize(5);
     let ry = medTop + 1.6;
     if (qtyText) {
-      drawRight(doc, qtyText, ry);
+      drawRight(doc, qtyText, ry, MARGIN_X);
       ry += 2;
     }
     if (expText) {
-      drawRight(doc, expText, ry);
+      drawRight(doc, expText, ry, MARGIN_X);
     }
   }
+
 
   y = medTop + Math.max(medBlockH, 4.4) + 1.2;
 
