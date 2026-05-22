@@ -63,7 +63,6 @@ const DEFAULT_TOGGLES: LabelToggles = {
 // Physical thermal-label dimensions in millimetres.
 const PAGE_W = 60;
 const PAGE_H = 50;
-const BASE_MARGIN_X = 1;
 const BASE_START_Y = 2;
 
 
@@ -84,16 +83,16 @@ function buildDosageLine(item: DrugLabelItem): string {
   return (qtyUnit ?? '').toString().trim().toUpperCase();
 }
 
-/** Draw text centred within the page width. */
-function drawCentered(doc: jsPDF, text: string, y: number) {
+/** Draw text centred within the page width (or an explicit centre). */
+function drawCentered(doc: jsPDF, text: string, y: number, centerX = PAGE_W / 2) {
   const w = doc.getTextWidth(text);
-  doc.text(text, (PAGE_W - w) / 2, y);
+  doc.text(text, centerX - w / 2, y);
 }
 
-/** Draw text right-aligned within the safe area (offset by `marginX`). */
-function drawRight(doc: jsPDF, text: string, y: number, marginX: number) {
+/** Draw text right-aligned against an explicit anchor. */
+function drawRight(doc: jsPDF, text: string, y: number, rightAnchor: number) {
   const w = doc.getTextWidth(text);
-  doc.text(text, PAGE_W - marginX - w, y);
+  doc.text(text, rightAnchor - w, y);
 }
 
 
@@ -119,8 +118,12 @@ function drawLabel(
   const fsInstr = toggles.font_size_instruction ?? 6.5;
 
   const { offsetX, offsetY } = getPrinterOffsets();
-  const MARGIN_X = Math.max(0, BASE_MARGIN_X + offsetX);
-  const SAFE_W = PAGE_W - MARGIN_X * 2;
+  const BASE_MARGIN_L = 1;
+  const BASE_MARGIN_R = 3; // thicker right buffer for hardware dead zone
+  const MARGIN_X = Math.max(0, BASE_MARGIN_L + offsetX);
+  const RIGHT_ANCHOR = Math.min(PAGE_W - 1, PAGE_W - BASE_MARGIN_R + offsetX);
+  const SAFE_W = RIGHT_ANCHOR - MARGIN_X;
+  const CENTER_X = MARGIN_X + SAFE_W / 2;
 
   let y = BASE_START_Y + offsetY;
 
@@ -128,13 +131,13 @@ function drawLabel(
   // ── 1. Header (centered) ─────────────────────────────────────────────────
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(fsClinic);
-  drawCentered(doc, (clinic.name || 'Clinic').toUpperCase(), y);
+  drawCentered(doc, (clinic.name || 'Clinic').toUpperCase(), y, CENTER_X);
   y += lh(fsClinic);
 
   if (toggles.show_tel_number && clinic.phone) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(5);
-    drawCentered(doc, `Tel: ${clinic.phone}`, y);
+    drawCentered(doc, `Tel: ${clinic.phone}`, y, CENTER_X);
     y += 2;
   }
 
@@ -143,7 +146,7 @@ function drawLabel(
     doc.setFontSize(5);
     const addrLines = doc.splitTextToSize(clinic.addressFull, SAFE_W) as string[];
     addrLines.slice(0, 2).forEach((line) => {
-      drawCentered(doc, line, y);
+      drawCentered(doc, line, y, CENTER_X);
       y += 2;
     });
   }
@@ -151,7 +154,7 @@ function drawLabel(
   // ── 2. Divider ───────────────────────────────────────────────────────────
   y += 0.6;
   doc.setLineWidth(0.15);
-  doc.line(MARGIN_X, y, PAGE_W - MARGIN_X, y);
+  doc.line(MARGIN_X, y, RIGHT_ANCHOR, y);
   y += 2.6;
 
   // ── 3. Patient block (NAME left bold, DATE right) ────────────────────────
@@ -173,13 +176,13 @@ function drawLabel(
     if (dateText) {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(5);
-      drawRight(doc, dateText, y, MARGIN_X);
+      drawRight(doc, dateText, y, RIGHT_ANCHOR);
     }
     y += 1.6;
 
     // Second divider beneath patient row
     doc.setLineWidth(0.15);
-    doc.line(MARGIN_X, y, PAGE_W - MARGIN_X, y);
+    doc.line(MARGIN_X, y, RIGHT_ANCHOR, y);
     y += 2.6;
   }
 
@@ -243,11 +246,11 @@ function drawLabel(
     doc.setFontSize(5);
     let ry = medTop + 1.6;
     if (qtyText) {
-      drawRight(doc, qtyText, ry, MARGIN_X);
+      drawRight(doc, qtyText, ry, RIGHT_ANCHOR);
       ry += 2;
     }
     if (expText) {
-      drawRight(doc, expText, ry, MARGIN_X);
+      drawRight(doc, expText, ry, RIGHT_ANCHOR);
     }
   }
 
@@ -265,7 +268,7 @@ function drawLabel(
     }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(dosagePt);
-    drawCentered(doc, dosageLine, y);
+    drawCentered(doc, dosageLine, y, CENTER_X);
     y += lh(dosagePt) + 0.4;
   }
 
@@ -283,7 +286,7 @@ function drawLabel(
     }
     if (fits(lh(freqPt) * freqLines.length)) {
       freqLines.forEach((line) => {
-        drawCentered(doc, line, y);
+        drawCentered(doc, line, y, CENTER_X);
         y += lh(freqPt);
       });
     }
@@ -299,7 +302,7 @@ function drawLabel(
       while (doc.getTextWidth(text) > SAFE_W && text.length > 6) {
         text = text.slice(0, -2) + '…';
       }
-      drawCentered(doc, text, y);
+      drawCentered(doc, text, y, CENTER_X);
       y += 2.2;
     }
   }
@@ -317,7 +320,7 @@ function drawLabel(
       if (!fits(2.2 * precLines.length)) precLines = precLines.slice(0, 1);
       if (fits(2.2 * precLines.length)) {
         precLines.forEach((line) => {
-          drawCentered(doc, line, y);
+          drawCentered(doc, line, y, CENTER_X);
           y += 2.2;
         });
       }
@@ -327,7 +330,7 @@ function drawLabel(
   // ── 6. Footer: divider + (age/gender, duration) only ─────────────────────
   if (footerLines.length > 0) {
     doc.setLineWidth(0.15);
-    doc.line(MARGIN_X, dividerY, PAGE_W - MARGIN_X, dividerY);
+    doc.line(MARGIN_X, dividerY, RIGHT_ANCHOR, dividerY);
 
     let fy = dividerY + 2.4;
     footerLines.forEach((line) => {

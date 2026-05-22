@@ -1,48 +1,54 @@
-## Printer Calibration + Patient-Name Crash Fix
+## Fix Right-Edge Clipping on Drug Labels (with safety clamps)
 
-Add per-computer printer offset calibration for the 60×50 mm thermal drug label, and harden the label generator against missing patient names.
+### Problem
+Right-aligned text (Date, QTY, EXP) anchors to `PAGE_W - MARGIN_X`. A positive `offsetX` pushes that anchor past the thermal printer's right-side dead zone and the text gets silently clipped. The fix uses asymmetric base margins and a hard-clamped right anchor so no calibration value can punch outside the printable area.
 
-### 1. New hook — `src/hooks/clinic/usePrinterSettings.ts`
-- localStorage keys: `printer_offset_x`, `printer_offset_y` (mm, decimals OK, default `0`).
-- Exports:
-  - `getPrinterOffsets(): { offsetX: number; offsetY: number }` — pure reader (used inside the PDF generator, no React).
-  - `setPrinterOffsets(o)` — writer, dispatches a `storage`-like event so subscribers refresh.
-  - `usePrinterOffsets()` — React hook returning `{ offsetX, offsetY, setOffsets }`, kept in sync via `useState` + `useEffect` listener.
+### Fix (single file: `src/lib/clinic/printDrugLabel.ts`)
 
-### 2. Patch `src/lib/clinic/printDrugLabel.ts`
-- At top of `drawLabel` (called per page), read offsets via `getPrinterOffsets()`:
-  ```
-  const { offsetX, offsetY } = getPrinterOffsets();
-  const MARGIN_X = 1 + offsetX;
-  const SAFE_W   = PAGE_W - MARGIN_X * 2;
-  let y = 2 + offsetY;
-  ```
-  Convert current module-level `MARGIN_X` / `SAFE_W` consts into per-call locals; update `drawCentered`/`drawRight` to take `marginX` (or close over locals) so right-alignment honors the new margin. `PAGE_W` / `PAGE_H` stay constant.
-- `dividerY = PAGE_H - footerBlockH - … + offsetY` so the footer shifts with vertical offset too (bounded so it never leaves the page).
-- **Crash fix**: replace `(patientName ?? '').trim().toUpperCase()` with:
-  ```
-  const safePatientName = (patientName || 'WALK-IN').toUpperCase();
-  ```
-  and always render it (drop the "only if rawName" branch) so the top patient row + divider always appear.
+**1. Clamped coordinate math at the top of `drawLabel`** (replaces current `BASE_MARGIN_X` / `SAFE_W` block):
 
-### 3. New component — `src/components/clinic/settings/PrinterCalibration.tsx`
-Card with:
-- Two `Input type="number" step="0.5"` fields bound to `usePrinterOffsets()`: **Horizontal Offset (mm)** and **Vertical Offset (mm)**, with helper text ("Positive → right/down, negative → left/up").
-- **Save Calibration** → `setPrinterOffsets({ offsetX, offsetY })` + toast.
-- **Print Test Label** → calls `generateDrugLabelPdf` with a dummy item (`TEST DRUG 500MG`, qty 1) and patient `TEST ALIGNMENT`, pulling `clinic` info from `useClinicSettings()`, then `window.open(url, '_blank')`.
-- **Reset to 0** secondary button.
+```ts
+const { offsetX, offsetY } = getPrinterOffsets();
 
-### 4. Integration
-- Add a new row in `src/pages/clinic/settings/DrugLabelSettings.tsx` (right under the existing label preview card) embedding `<PrinterCalibration />` — it's the natural home next to the label preview and shares clinic settings already loaded there.
-- No route changes needed; this page is already registered under Clinic Settings.
+const BASE_MARGIN_L = 1;
+const BASE_MARGIN_R = 3; // thicker right buffer for hardware dead zone
 
-### Technical notes
-- Offsets live in `localStorage` only (per-computer, intentionally not synced).
-- The generator stays a pure function — it just reads localStorage at draw time, so every label (incl. real dispensing prints from `DispenseCheckout`) automatically picks up calibration with zero call-site changes.
-- Font sizes, clinic header logic, toggles, and the existing top patient/date layout from the previous task are untouched.
+const MARGIN_X     = Math.max(0, BASE_MARGIN_L + offsetX);
+const RIGHT_ANCHOR = Math.min(PAGE_W - 1, PAGE_W - BASE_MARGIN_R + offsetX);
+const SAFE_W       = RIGHT_ANCHOR - MARGIN_X;
+const CENTER_X     = MARGIN_X + SAFE_W / 2;
+
+let y = BASE_START_Y + offsetY;
+```
+
+Both edges are clamped so extreme offsets (e.g. +4mm or −5mm) can never escape the 60mm page.
+
+**2. `drawRight` takes an explicit anchor:**
+```ts
+function drawRight(doc: jsPDF, text: string, y: number, rightAnchor: number) {
+  const w = doc.getTextWidth(text);
+  doc.text(text, rightAnchor - w, y);
+}
+```
+Update the three call sites (patient-row Date, QTY, EXP) to pass `RIGHT_ANCHOR`.
+
+**3. `drawCentered` accepts a center override:**
+```ts
+function drawCentered(doc: jsPDF, text: string, y: number, centerX = PAGE_W / 2) {
+  const w = doc.getTextWidth(text);
+  doc.text(text, centerX - w / 2, y);
+}
+```
+Pass `CENTER_X` from inside `drawLabel` for: clinic name, Tel line, address lines, dosage, frequency, indication (`For: …`), and precaution. Default keeps any future external caller safe.
+
+**4. Dividers use the new anchors:**
+Every `doc.line(MARGIN_X, …, PAGE_W - MARGIN_X, …)` becomes `doc.line(MARGIN_X, …, RIGHT_ANCHOR, …)` (header divider, patient-row divider, footer divider).
+
+**5. Wrap widths auto-update:**
+`splitTextToSize(…, SAFE_W)`, the patient-name truncation `nameMax`, and the medicine `leftW` calculation already read `SAFE_W` — they pick up the narrower safe area with no further edits.
+
+### Out of scope
+- Font sizes, toggle logic, footer content/order, calibration UI/hook, `generateDrugLabelPdf` signature — all untouched.
 
 ### Files
-- **add** `src/hooks/clinic/usePrinterSettings.ts`
-- **add** `src/components/clinic/settings/PrinterCalibration.tsx`
-- **edit** `src/lib/clinic/printDrugLabel.ts` (offsets + WALK-IN fallback)
-- **edit** `src/pages/clinic/settings/DrugLabelSettings.tsx` (mount component)
+- **edit** `src/lib/clinic/printDrugLabel.ts`
