@@ -38,6 +38,7 @@ interface LedgerEntry {
   outstanding: number;
   latestPaymentType: 'self_pay' | 'panel' | 'insurance';
   latestMethod: string | null;
+  latestPaymentId: string | null;
 }
 
 const tabs: Array<{ key: TabKey; label: string }> = [
@@ -141,6 +142,7 @@ export default function Billings() {
         existing.paid += amt;
         existing.latestPaymentType = pType;
         existing.latestMethod = p.payment_method ?? existing.latestMethod;
+        existing.latestPaymentId = p.id;
       } else {
         byQueue.set(qe.id, {
           queueEntryId: qe.id,
@@ -153,6 +155,7 @@ export default function Billings() {
           outstanding: 0,
           latestPaymentType: pType,
           latestMethod: p.payment_method ?? null,
+          latestPaymentId: p.id,
         });
       }
 
