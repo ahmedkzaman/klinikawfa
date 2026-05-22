@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Info } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Info, Printer } from 'lucide-react';
+import { PrintReceiptDialog } from '@/components/clinic/billing/PrintReceiptDialog';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -190,6 +191,16 @@ export default function DispenseCheckout() {
     [payments],
   );
   const outstanding = Math.max(subtotal - paid, 0);
+  const [printPaymentId, setPrintPaymentId] = useState<string | null>(null);
+  const latestPaymentId = useMemo(() => {
+    if (!payments.length) return null;
+    const sorted = [...payments].sort(
+      (a, b) =>
+        new Date(b.created_at ?? 0).getTime() -
+        new Date(a.created_at ?? 0).getTime(),
+    );
+    return sorted[0]?.id ?? null;
+  }, [payments]);
 
   const anyPartialMissingReason = useMemo(
     () =>
@@ -430,6 +441,16 @@ export default function DispenseCheckout() {
               RM {outstanding.toFixed(2)}
             </span>
           </div>
+          {latestPaymentId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPrintPaymentId(latestPaymentId)}
+            >
+              <Printer className="h-4 w-4 mr-2" />
+              Print Receipt
+            </Button>
+          )}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -473,6 +494,11 @@ export default function DispenseCheckout() {
         item={editingItem}
         open={editingItem !== null}
         onOpenChange={(o) => !o && setEditingItem(null)}
+      />
+      <PrintReceiptDialog
+        open={!!printPaymentId}
+        onOpenChange={(o) => !o && setPrintPaymentId(null)}
+        paymentId={printPaymentId}
       />
     </div>
   );
