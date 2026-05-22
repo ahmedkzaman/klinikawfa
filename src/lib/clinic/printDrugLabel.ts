@@ -63,8 +63,9 @@ const DEFAULT_TOGGLES: LabelToggles = {
 // Physical thermal-label dimensions in millimetres.
 const PAGE_W = 60;
 const PAGE_H = 50;
-const MARGIN_X = 1;
-const SAFE_W = PAGE_W - MARGIN_X * 2;
+const BASE_MARGIN_X = 1;
+const BASE_START_Y = 2;
+
 
 /** pt → mm line-height heuristic so dynamic font sizes never overlap. */
 const lh = (pt: number) => pt * 0.42;
