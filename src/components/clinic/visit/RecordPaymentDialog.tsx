@@ -96,19 +96,19 @@ export function RecordPaymentDialog({
   useEffect(() => {
     if (open) {
       setPaymentType('self_pay');
-      setSelfPayMethod('');
+      setSelfPayMethod(defaultPaymentMethod ?? 'cash');
       setProviderId('');
       setProviderOpen(false);
       setAmount(Math.max(defaultAmount, 0).toFixed(2));
       setNotes('');
     }
-  }, [open, defaultAmount]);
+  }, [open, defaultAmount, defaultPaymentMethod]);
 
   // When the user toggles between self-pay and panel, clear sub-selections
   // and reset the default amount: panel visits are billed to the panel
   // (RM 0.00 patient-facing) while self-pay defaults to outstanding.
   useEffect(() => {
-    setSelfPayMethod('');
+    setSelfPayMethod(paymentType === 'self_pay' ? (defaultPaymentMethod ?? 'cash') : '');
     setProviderId('');
     setProviderOpen(false);
     setAmount(
@@ -116,7 +116,8 @@ export function RecordPaymentDialog({
         ? '0.00'
         : Math.max(defaultAmount, 0).toFixed(2),
     );
-  }, [paymentType, defaultAmount]);
+  }, [paymentType, defaultAmount, defaultPaymentMethod]);
+
 
   const selectedProvider = useMemo(
     () => providers.find((p) => p.id === providerId) ?? null,
