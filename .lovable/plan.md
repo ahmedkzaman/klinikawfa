@@ -1,54 +1,43 @@
-## Fix Right-Edge Clipping on Drug Labels (with safety clamps)
+# Track patient payment method at checkout
 
-### Problem
-Right-aligned text (Date, QTY, EXP) anchors to `PAGE_W - MARGIN_X`. A positive `offsetX` pushes that anchor past the thermal printer's right-side dead zone and the text gets silently clipped. The fix uses asymmetric base margins and a hard-clamped right anchor so no calibration value can punch outside the printable area.
+## Context
 
-### Fix (single file: `src/lib/clinic/printDrugLabel.ts`)
+The `payments` table already has a required `payment_method` column, and `RecordPaymentDialog` already writes it (currently with three labels: `Cash`, `TNG / DuitNow QR`, `Credit/Debit Card`). What's missing:
 
-**1. Clamped coordinate math at the top of `drawLabel`** (replaces current `BASE_MARGIN_X` / `SAFE_W` block):
+1. The four canonical options the user wants (`cash`, `qr_pay`, `card`, `transfer`).
+2. An at-a-glance picker on the billing column itself — visible only when the patient actually owes money — so staff can choose the method before opening the payment dialog.
 
-```ts
-const { offsetX, offsetY } = getPrinterOffsets();
+No database migration is required.
 
-const BASE_MARGIN_L = 1;
-const BASE_MARGIN_R = 3; // thicker right buffer for hardware dead zone
+## Changes
 
-const MARGIN_X     = Math.max(0, BASE_MARGIN_L + offsetX);
-const RIGHT_ANCHOR = Math.min(PAGE_W - 1, PAGE_W - BASE_MARGIN_R + offsetX);
-const SAFE_W       = RIGHT_ANCHOR - MARGIN_X;
-const CENTER_X     = MARGIN_X + SAFE_W / 2;
+### 1. `src/components/clinic/visit/BillingDetailsColumn.tsx`
+- Add `const [paymentMethod, setPaymentMethod] = useState<string>('cash')`.
+- Render a `<Select>` labeled **Payment Method** directly above the "Record Payment" button, **only when `outstanding > 0`**. Options:
+  - `cash` → "Cash"
+  - `qr_pay` → "QR Pay / E-Wallet"
+  - `card` → "Credit / Debit Card"
+  - `transfer` → "Online Transfer"
+- Pass `defaultPaymentMethod={paymentMethod}` into `<RecordPaymentDialog />`.
 
-let y = BASE_START_Y + offsetY;
-```
+### 2. `src/components/clinic/visit/RecordPaymentDialog.tsx`
+- Accept new optional prop `defaultPaymentMethod?: string`.
+- Replace the current `SELF_PAY_METHODS` constant with the canonical list:
+  ```ts
+  const SELF_PAY_METHODS = [
+    { value: 'cash',     label: 'Cash' },
+    { value: 'qr_pay',   label: 'QR Pay / E-Wallet' },
+    { value: 'card',     label: 'Credit / Debit Card' },
+    { value: 'transfer', label: 'Online Transfer' },
+  ] as const;
+  ```
+- Initialize `selfPayMethod` from `defaultPaymentMethod` (falling back to `'cash'`) whenever the dialog opens for a self-pay flow.
+- When submitting, send the canonical code as `payment_method` for self-pay (panel branch unchanged — still `Panel: {name}`).
 
-Both edges are clamped so extreme offsets (e.g. +4mm or −5mm) can never escape the 60mm page.
+### 3. Payload
+- `useRecordPayment` already serializes `payment_method` into the insert, so no hook changes. For panel-covered visits where the patient owes nothing, the dropdown stays hidden and the existing panel flow continues writing `payment_method = "Panel: {name}"` untouched.
 
-**2. `drawRight` takes an explicit anchor:**
-```ts
-function drawRight(doc: jsPDF, text: string, y: number, rightAnchor: number) {
-  const w = doc.getTextWidth(text);
-  doc.text(text, rightAnchor - w, y);
-}
-```
-Update the three call sites (patient-row Date, QTY, EXP) to pass `RIGHT_ANCHOR`.
-
-**3. `drawCentered` accepts a center override:**
-```ts
-function drawCentered(doc: jsPDF, text: string, y: number, centerX = PAGE_W / 2) {
-  const w = doc.getTextWidth(text);
-  doc.text(text, centerX - w / 2, y);
-}
-```
-Pass `CENTER_X` from inside `drawLabel` for: clinic name, Tel line, address lines, dosage, frequency, indication (`For: …`), and precaution. Default keeps any future external caller safe.
-
-**4. Dividers use the new anchors:**
-Every `doc.line(MARGIN_X, …, PAGE_W - MARGIN_X, …)` becomes `doc.line(MARGIN_X, …, RIGHT_ANCHOR, …)` (header divider, patient-row divider, footer divider).
-
-**5. Wrap widths auto-update:**
-`splitTextToSize(…, SAFE_W)`, the patient-name truncation `nameMax`, and the medicine `leftW` calculation already read `SAFE_W` — they pick up the narrower safe area with no further edits.
-
-### Out of scope
-- Font sizes, toggle logic, footer content/order, calibration UI/hook, `generateDrugLabelPdf` signature — all untouched.
-
-### Files
-- **edit** `src/lib/clinic/printDrugLabel.ts`
+## Out of scope
+- Panel billing logic and panel selection UI.
+- Reporting / shift-report screens (they already read `payment_method` from `payments`).
+- Schema changes — `payments.payment_method` already exists and is NOT NULL.
