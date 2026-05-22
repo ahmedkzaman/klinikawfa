@@ -361,6 +361,12 @@ export function BillingDetailsColumn({
         defaultPaymentMethod={paymentMethod}
 
       />
+
+      <PrintReceiptDialog
+        open={!!printPaymentId}
+        onOpenChange={(o) => !o && setPrintPaymentId(null)}
+        paymentId={printPaymentId}
+      />
     </>
   );
 }
