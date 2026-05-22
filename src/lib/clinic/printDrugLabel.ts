@@ -302,7 +302,7 @@ function drawLabel(
       while (doc.getTextWidth(text) > SAFE_W && text.length > 6) {
         text = text.slice(0, -2) + '…';
       }
-      drawCentered(doc, text, y);
+      drawCentered(doc, text, y, CENTER_X);
       y += 2.2;
     }
   }
