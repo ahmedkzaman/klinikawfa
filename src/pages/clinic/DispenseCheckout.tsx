@@ -495,6 +495,11 @@ export default function DispenseCheckout() {
         open={editingItem !== null}
         onOpenChange={(o) => !o && setEditingItem(null)}
       />
+      <PrintReceiptDialog
+        open={!!printPaymentId}
+        onOpenChange={(o) => !o && setPrintPaymentId(null)}
+        paymentId={printPaymentId}
+      />
     </div>
   );
 }
