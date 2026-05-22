@@ -82,7 +82,7 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId }: Props) {
         amountPaid: Number(pay.amount ?? 0),
         createdAt: pay.created_at,
         queueLabel: qe?.queue_sequence
-          ? formatQueueNo(qe.queue_sequence)
+          ? formatQueueNo(qe.created_at ?? pay.created_at, qe.queue_sequence)
           : null,
         patientName: patient?.name ?? 'Walk-in',
         patientIc: patient?.ic_number ?? null,
