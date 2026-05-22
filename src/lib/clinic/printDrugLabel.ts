@@ -131,7 +131,7 @@ function drawLabel(
   // ── 1. Header (centered) ─────────────────────────────────────────────────
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(fsClinic);
-  drawCentered(doc, (clinic.name || 'Clinic').toUpperCase(), y);
+  drawCentered(doc, (clinic.name || 'Clinic').toUpperCase(), y, CENTER_X);
   y += lh(fsClinic);
 
   if (toggles.show_tel_number && clinic.phone) {
