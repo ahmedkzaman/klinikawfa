@@ -172,7 +172,8 @@ export default function DrugLabelSettingsPage() {
           </div>
 
 
-          <div className="lg:sticky lg:top-4 self-start">
+          <div className="lg:sticky lg:top-4 self-start space-y-4">
+
             <Card className={cn(bento, 'bg-slate-50')}>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-2">
