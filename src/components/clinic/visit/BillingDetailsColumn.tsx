@@ -9,6 +9,19 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/AuthContext';
 import { useVoidPayment } from '@/hooks/clinic/usePayments';
 import { useClinicChargeTypes } from '@/hooks/clinic/useClinicChargeTypes';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { cn } from '@/lib/utils';
+import {
+  PAYMENT_METHOD_OPTIONS,
+  formatPaymentMethod,
+  paymentMethodBadgeClass,
+} from '@/lib/clinic/paymentMethod';
 import { RecordPaymentDialog } from './RecordPaymentDialog';
 import type { ConsultationItemRow, PaymentRow } from '@/types/clinic';
 
