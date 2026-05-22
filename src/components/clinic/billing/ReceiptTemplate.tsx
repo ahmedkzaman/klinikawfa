@@ -164,30 +164,41 @@ export function ReceiptTemplate({ data, settings }: Props) {
                 </td>
               </tr>
             )}
-            {discount > 0 && (
-              <tr>
-                <td
-                  colSpan={4}
-                  className="border border-black px-2 py-1 text-right"
-                >
-                  Discount / Adjustment (RM)
-                </td>
-                <td className="border border-black px-2 py-1 text-right tabular-nums">
-                  -{discount.toFixed(2)}
-                </td>
-              </tr>
-            )}
+            <tr>
+              <td
+                colSpan={4}
+                className="border border-black px-2 py-1 text-right font-semibold"
+              >
+                Invoice Total (RM)
+              </td>
+              <td className="border border-black px-2 py-1 text-right font-semibold tabular-nums">
+                {data.invoiceTotal.toFixed(2)}
+              </td>
+            </tr>
             <tr>
               <td
                 colSpan={4}
                 className="border border-black px-2 py-1 text-right font-bold"
               >
-                GRAND TOTAL (RM)
+                THIS RECEIPT AMOUNT (RM)
               </td>
               <td className="border border-black px-2 py-1 text-right font-bold tabular-nums">
                 {data.amountPaid.toFixed(2)}
               </td>
             </tr>
+            {balance > 0 && (
+              <tr>
+                <td
+                  colSpan={4}
+                  className="border border-black px-2 py-1 text-right text-red-700 font-semibold"
+                >
+                  Balance Remaining (RM)
+                </td>
+                <td className="border border-black px-2 py-1 text-right text-red-700 font-semibold tabular-nums">
+                  {balance.toFixed(2)}
+                </td>
+              </tr>
+            )}
           </tfoot>
         </table>
 
