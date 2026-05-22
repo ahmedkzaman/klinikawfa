@@ -255,10 +255,11 @@ export function RecordPaymentDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {SELF_PAY_METHODS.map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {m}
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
                     </SelectItem>
                   ))}
+
                 </SelectContent>
               </Select>
             </div>
