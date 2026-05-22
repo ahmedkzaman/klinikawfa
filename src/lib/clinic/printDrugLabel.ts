@@ -268,7 +268,7 @@ function drawLabel(
     }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(dosagePt);
-    drawCentered(doc, dosageLine, y);
+    drawCentered(doc, dosageLine, y, CENTER_X);
     y += lh(dosagePt) + 0.4;
   }
 
