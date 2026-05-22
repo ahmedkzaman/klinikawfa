@@ -35,7 +35,7 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId }: Props) {
           queue_entry_id, consultation_id,
           queue_entries (
             queue_sequence, created_at,
-            patients ( name, ic_number )
+            patients ( name, national_id )
           )
         `,
         )
@@ -85,7 +85,7 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId }: Props) {
           ? formatQueueNo(qe.created_at ?? pay.created_at, qe.queue_sequence)
           : null,
         patientName: patient?.name ?? 'Walk-in',
-        patientIc: patient?.ic_number ?? null,
+        patientIc: patient?.national_id ?? null,
         items,
         subtotal,
         grandTotal: subtotal > 0 ? subtotal : Number(pay.amount ?? 0),
