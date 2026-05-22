@@ -63,6 +63,8 @@ export function BillingDetailsColumn({
   const [taxPct, setTaxPct] = useState<number>(0);
   const [discountRm, setDiscountRm] = useState<number>(0);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<string>('cash');
+
 
   // Local-only Other Charges state (committed to DB on Complete Checkout)
   const [selectedCharges, setSelectedCharges] = useState<
