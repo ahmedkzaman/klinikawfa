@@ -1,47 +1,48 @@
-# Fix Drug Label Layout — Move Patient/Date to Top, Tighten Margins
+## Printer Calibration + Patient-Name Crash Fix
 
-**Target:** `src/lib/clinic/printDrugLabel.ts` (jsPDF-based; no HTML template exists).
+Add per-computer printer offset calibration for the 60×50 mm thermal drug label, and harden the label generator against missing patient names.
 
-## 1. Tighten margins
+### 1. New hook — `src/hooks/clinic/usePrinterSettings.ts`
+- localStorage keys: `printer_offset_x`, `printer_offset_y` (mm, decimals OK, default `0`).
+- Exports:
+  - `getPrinterOffsets(): { offsetX: number; offsetY: number }` — pure reader (used inside the PDF generator, no React).
+  - `setPrinterOffsets(o)` — writer, dispatches a `storage`-like event so subscribers refresh.
+  - `usePrinterOffsets()` — React hook returning `{ offsetX, offsetY, setOffsets }`, kept in sync via `useState` + `useEffect` listener.
 
-- `MARGIN_X`: `2` → `1` mm (≈ 2mm narrower content cutoff overall, matches "reduce by 2mm" intent).
-- Top start `y`: `3` → `2` mm.
-- This brings clinic header, medicine name, and footer date closer to the physical sticker edges without changing fonts.
+### 2. Patch `src/lib/clinic/printDrugLabel.ts`
+- At top of `drawLabel` (called per page), read offsets via `getPrinterOffsets()`:
+  ```
+  const { offsetX, offsetY } = getPrinterOffsets();
+  const MARGIN_X = 1 + offsetX;
+  const SAFE_W   = PAGE_W - MARGIN_X * 2;
+  let y = 2 + offsetY;
+  ```
+  Convert current module-level `MARGIN_X` / `SAFE_W` consts into per-call locals; update `drawCentered`/`drawRight` to take `marginX` (or close over locals) so right-alignment honors the new margin. `PAGE_W` / `PAGE_H` stay constant.
+- `dividerY = PAGE_H - footerBlockH - … + offsetY` so the footer shifts with vertical offset too (bounded so it never leaves the page).
+- **Crash fix**: replace `(patientName ?? '').trim().toUpperCase()` with:
+  ```
+  const safePatientName = (patientName || 'WALK-IN').toUpperCase();
+  ```
+  and always render it (drop the "only if rawName" branch) so the top patient row + divider always appear.
 
-## 2. Move Patient Name + Date to the TOP
+### 3. New component — `src/components/clinic/settings/PrinterCalibration.tsx`
+Card with:
+- Two `Input type="number" step="0.5"` fields bound to `usePrinterOffsets()`: **Horizontal Offset (mm)** and **Vertical Offset (mm)**, with helper text ("Positive → right/down, negative → left/up").
+- **Save Calibration** → `setPrinterOffsets({ offsetX, offsetY })` + toast.
+- **Print Test Label** → calls `generateDrugLabelPdf` with a dummy item (`TEST DRUG 500MG`, qty 1) and patient `TEST ALIGNMENT`, pulling `clinic` info from `useClinicSettings()`, then `window.open(url, '_blank')`.
+- **Reset to 0** secondary button.
 
-Restructure `drawLabel` so the order becomes:
+### 4. Integration
+- Add a new row in `src/pages/clinic/settings/DrugLabelSettings.tsx` (right under the existing label preview card) embedding `<PrinterCalibration />` — it's the natural home next to the label preview and shares clinic settings already loaded there.
+- No route changes needed; this page is already registered under Clinic Settings.
 
-```text
-1. Clinic header (name, tel, address)        ← unchanged
-2. Divider
-3. Patient block: NAME (left, bold)  |  DATE (right)   ← NEW position
-4. Divider
-5. Medicine name (left) + QTY/EXP (right)
-6. Centered body (dosage, frequency, indication, precaution)
-7. Footer area: only Duration (if shown) + age/gender
-```
+### Technical notes
+- Offsets live in `localStorage` only (per-computer, intentionally not synced).
+- The generator stays a pure function — it just reads localStorage at draw time, so every label (incl. real dispensing prints from `DispenseCheckout`) automatically picks up calibration with zero call-site changes.
+- Font sizes, clinic header logic, toggles, and the existing top patient/date layout from the previous task are untouched.
 
-Implementation details:
-- After the first divider, draw `patientName.toUpperCase()` bold-left at `MARGIN_X` and `Date: d/M/yyyy` right-aligned on the same baseline (Flexbox-equivalent via `drawRight`).
-- Add a second thin divider beneath that row before the medicine name.
-- Patient name truncates with `…` if it would overlap the date's left edge (compute `dateWidth` first, clip name to `SAFE_W - dateWidth - 2mm`).
-
-## 3. Clean up the bottom
-
-- Remove patient name and `Date:` from the footer block entirely.
-- Footer now only holds (when present): age/gender line and `Duration: …` line, followed by the existing closing divider.
-- Recompute `footerBlockH` / `dividerY` from the reduced footer (often 0–2 lines), giving the body more vertical room — this also fixes the long-name collision permanently since name and date no longer share the footer row.
-
-## Constraints respected
-
-- Font sizes for medicine name (`fsMed`) and instructions (`fsInstr`) untouched.
-- Clinic header logic (name/tel/address toggles, centering) untouched.
-- `show_date` toggle still controls whether the date prints (now in the top block instead of bottom-right).
-- `generateDrugLabelPdf` signature and all exported types unchanged.
-
-## Verification
-
-- Print a label for a patient with a long name (e.g., "MUHAMMAD ABDUL RAHMAN BIN ZULKIFLI") → name appears top-left uppercased, date top-right, no overlap.
-- Short-name patient → layout unchanged visually except name/date relocated.
-- Confirm 60×50mm sticker prints without edge clipping after `MARGIN_X` reduction.
+### Files
+- **add** `src/hooks/clinic/usePrinterSettings.ts`
+- **add** `src/components/clinic/settings/PrinterCalibration.tsx`
+- **edit** `src/lib/clinic/printDrugLabel.ts` (offsets + WALK-IN fallback)
+- **edit** `src/pages/clinic/settings/DrugLabelSettings.tsx` (mount component)
