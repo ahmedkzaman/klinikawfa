@@ -483,12 +483,27 @@
     display: block !important;
   }
   .print-container {
-    position: fixed;
-    left: 0;
-    top: 0;
-    width: 100%;
-    margin: 0;
-    padding: 0;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  /* Defeat Radix Dialog centering transforms during print */
+  div[role="dialog"],
+  .fixed[data-state="open"],
+  [data-radix-dialog-content] {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    transform: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
   .no-print { display: none !important; }
   [data-radix-popper-content-wrapper],

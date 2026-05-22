@@ -88,7 +88,8 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId }: Props) {
         patientIc: patient?.national_id ?? null,
         items,
         subtotal,
-        grandTotal: subtotal > 0 ? subtotal : Number(pay.amount ?? 0),
+        invoiceTotal: subtotal,
+        balanceRemaining: Math.max(0, subtotal - Number(pay.amount ?? 0)),
       } satisfies ReceiptData;
     },
   });

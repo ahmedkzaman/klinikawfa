@@ -20,7 +20,10 @@ export interface ReceiptData {
   patientIc: string | null;
   items: ReceiptItem[];
   subtotal: number;
-  grandTotal: number;
+  invoiceTotal: number;
+  balanceRemaining: number;
+  /** @deprecated kept for back-compat; not rendered */
+  grandTotal?: number;
 }
 
 interface Props {
@@ -34,11 +37,11 @@ export function ReceiptTemplate({ data, settings }: Props) {
   const sst = settings.sst_number?.trim() || '';
   const baseTextPx = settings.letterhead_text_px ?? 12;
   const titlePx = Math.round(baseTextPx * 1.4);
-  const discount = Math.max(0, data.subtotal - data.amountPaid);
+  const balance = data.balanceRemaining;
 
   return (
     <div
-      className="print-container max-w-2xl mx-auto bg-white text-black p-8"
+      className="print-container max-w-2xl mx-auto bg-white text-black p-8 min-h-[1056px]"
       style={{ colorScheme: 'light' }}
     >
       {/* Letterhead */}
@@ -161,30 +164,41 @@ export function ReceiptTemplate({ data, settings }: Props) {
                 </td>
               </tr>
             )}
-            {discount > 0 && (
-              <tr>
-                <td
-                  colSpan={4}
-                  className="border border-black px-2 py-1 text-right"
-                >
-                  Discount / Adjustment (RM)
-                </td>
-                <td className="border border-black px-2 py-1 text-right tabular-nums">
-                  -{discount.toFixed(2)}
-                </td>
-              </tr>
-            )}
+            <tr>
+              <td
+                colSpan={4}
+                className="border border-black px-2 py-1 text-right font-semibold"
+              >
+                Invoice Total (RM)
+              </td>
+              <td className="border border-black px-2 py-1 text-right font-semibold tabular-nums">
+                {data.invoiceTotal.toFixed(2)}
+              </td>
+            </tr>
             <tr>
               <td
                 colSpan={4}
                 className="border border-black px-2 py-1 text-right font-bold"
               >
-                GRAND TOTAL (RM)
+                THIS RECEIPT AMOUNT (RM)
               </td>
               <td className="border border-black px-2 py-1 text-right font-bold tabular-nums">
                 {data.amountPaid.toFixed(2)}
               </td>
             </tr>
+            {balance > 0 && (
+              <tr>
+                <td
+                  colSpan={4}
+                  className="border border-black px-2 py-1 text-right text-red-700 font-semibold"
+                >
+                  Balance Remaining (RM)
+                </td>
+                <td className="border border-black px-2 py-1 text-right text-red-700 font-semibold tabular-nums">
+                  {balance.toFixed(2)}
+                </td>
+              </tr>
+            )}
           </tfoot>
         </table>
 
