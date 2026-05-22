@@ -320,7 +320,7 @@ function drawLabel(
       if (!fits(2.2 * precLines.length)) precLines = precLines.slice(0, 1);
       if (fits(2.2 * precLines.length)) {
         precLines.forEach((line) => {
-          drawCentered(doc, line, y);
+          drawCentered(doc, line, y, CENTER_X);
           y += 2.2;
         });
       }
