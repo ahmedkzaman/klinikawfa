@@ -146,7 +146,7 @@ function drawLabel(
     doc.setFontSize(5);
     const addrLines = doc.splitTextToSize(clinic.addressFull, SAFE_W) as string[];
     addrLines.slice(0, 2).forEach((line) => {
-      drawCentered(doc, line, y);
+      drawCentered(doc, line, y, CENTER_X);
       y += 2;
     });
   }
