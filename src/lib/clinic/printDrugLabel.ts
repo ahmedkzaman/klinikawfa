@@ -119,8 +119,12 @@ function drawLabel(
   const fsInstr = toggles.font_size_instruction ?? 6.5;
 
   const { offsetX, offsetY } = getPrinterOffsets();
-  const MARGIN_X = Math.max(0, BASE_MARGIN_X + offsetX);
-  const SAFE_W = PAGE_W - MARGIN_X * 2;
+  const BASE_MARGIN_L = 1;
+  const BASE_MARGIN_R = 3; // thicker right buffer for hardware dead zone
+  const MARGIN_X = Math.max(0, BASE_MARGIN_L + offsetX);
+  const RIGHT_ANCHOR = Math.min(PAGE_W - 1, PAGE_W - BASE_MARGIN_R + offsetX);
+  const SAFE_W = RIGHT_ANCHOR - MARGIN_X;
+  const CENTER_X = MARGIN_X + SAFE_W / 2;
 
   let y = BASE_START_Y + offsetY;
 
