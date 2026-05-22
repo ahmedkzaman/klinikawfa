@@ -1,38 +1,47 @@
-## Allow dispensary staff to edit/delete items during checkout
+# Fix Drug Label Layout — Move Patient/Date to Top, Tighten Margins
 
-### Root cause
-`DispenseCheckout` uses `useConsultationLock(consultation)` to derive `canEdit`. The doctor's pessimistic lock (`consultations.locked_by`) is still set after they finish — so when patient reaches `clinic_status = 'dispensing_payment'`, the dispensary user sees **VIEW ONLY** and every Edit/Remove/Print/Add control is disabled, even though RLS (`consultation_items_staff_update_active`) would happily accept the soft-delete.
+**Target:** `src/lib/clinic/printDrugLabel.ts` (jsPDF-based; no HTML template exists).
 
-DB confirms it for the current visit:
-- `queue_entries.clinic_status = 'dispensing_payment'`
-- `consultations.locked_by = a7dcaa1c-…` (the doctor, not the current user)
+## 1. Tighten margins
 
-### Fix (frontend-only, no migration)
-At the dispensary checkout step, the doctor's consultation lock is no longer relevant — pharmacy/cashier always wins. In **`src/pages/clinic/DispenseCheckout.tsx`**:
+- `MARGIN_X`: `2` → `1` mm (≈ 2mm narrower content cutoff overall, matches "reduce by 2mm" intent).
+- Top start `y`: `3` → `2` mm.
+- This brings clinic header, medicine name, and footer date closer to the physical sticker edges without changing fonts.
 
-1. Compute a dispensary-aware override right after `useConsultationLock`:
-   ```ts
-   const isDispensingStage = entry?.clinic_status === 'dispensing_payment';
-   const dispensaryCanEdit = isDispensingStage ? true : canEdit;
-   ```
-2. Replace every `canEdit` passed into child components with `dispensaryCanEdit`:
-   - `CatalogItemPicker` `disabled={!dispensaryCanEdit}`
-   - `VisitDetailsColumn` `canEdit={dispensaryCanEdit}` (this is what controls the "VIEW ONLY" badge **and** the Remove / Edit / Qty buttons on every Items / Services / Packages / Documents tab)
-   - Keep `canEditInstructions` as-is.
-3. Leave `isLockedByOther` / `forceUnlock` banner logic untouched — it stays accurate for non-dispensing stages.
+## 2. Move Patient Name + Date to the TOP
 
-### Why this is safe
-- RLS already restricts writes to `is_staff_or_admin(auth.uid())`, so non-staff visitors still cannot delete.
-- The lock is only meaningful during the doctor's consultation phase; once the entry advances to `dispensing_payment`, the doctor's session is over.
-- Soft-delete (`deleted_at`) means deletions remain auditable; nothing is hard-removed.
+Restructure `drawLabel` so the order becomes:
 
-### Verification
-1. Reload `/clinic/queue/checkout/d14ba08f-…`.
-2. "VIEW ONLY" badge disappears; trash/edit icons appear on each row across All / Items / Services / Packages / Documents tabs.
-3. Removing a row makes it vanish from the tab and from the billing totals; DB row gets `deleted_at` stamped.
-4. Open the same consultation from the doctor view while it is still `in_progress` — lock behavior there is unchanged (still respects the lock).
+```text
+1. Clinic header (name, tel, address)        ← unchanged
+2. Divider
+3. Patient block: NAME (left, bold)  |  DATE (right)   ← NEW position
+4. Divider
+5. Medicine name (left) + QTY/EXP (right)
+6. Centered body (dosage, frequency, indication, precaution)
+7. Footer area: only Duration (if shown) + age/gender
+```
 
-### Out of scope
-- No RLS / migration changes.
-- No changes to doctor-side `ConsultationDetail` lock behavior.
-- Not auto-clearing `consultations.locked_by` when the visit advances — separate cleanup.
+Implementation details:
+- After the first divider, draw `patientName.toUpperCase()` bold-left at `MARGIN_X` and `Date: d/M/yyyy` right-aligned on the same baseline (Flexbox-equivalent via `drawRight`).
+- Add a second thin divider beneath that row before the medicine name.
+- Patient name truncates with `…` if it would overlap the date's left edge (compute `dateWidth` first, clip name to `SAFE_W - dateWidth - 2mm`).
+
+## 3. Clean up the bottom
+
+- Remove patient name and `Date:` from the footer block entirely.
+- Footer now only holds (when present): age/gender line and `Duration: …` line, followed by the existing closing divider.
+- Recompute `footerBlockH` / `dividerY` from the reduced footer (often 0–2 lines), giving the body more vertical room — this also fixes the long-name collision permanently since name and date no longer share the footer row.
+
+## Constraints respected
+
+- Font sizes for medicine name (`fsMed`) and instructions (`fsInstr`) untouched.
+- Clinic header logic (name/tel/address toggles, centering) untouched.
+- `show_date` toggle still controls whether the date prints (now in the top block instead of bottom-right).
+- `generateDrugLabelPdf` signature and all exported types unchanged.
+
+## Verification
+
+- Print a label for a patient with a long name (e.g., "MUHAMMAD ABDUL RAHMAN BIN ZULKIFLI") → name appears top-left uppercased, date top-right, no overlap.
+- Short-name patient → layout unchanged visually except name/date relocated.
+- Confirm 60×50mm sticker prints without edge clipping after `MARGIN_X` reduction.
