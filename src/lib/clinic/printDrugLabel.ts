@@ -118,7 +118,12 @@ function drawLabel(
   const fsMed = toggles.font_size_medicine ?? 8;
   const fsInstr = toggles.font_size_instruction ?? 6.5;
 
-  let y = 2;
+  const { offsetX, offsetY } = getPrinterOffsets();
+  const MARGIN_X = Math.max(0, BASE_MARGIN_X + offsetX);
+  const SAFE_W = PAGE_W - MARGIN_X * 2;
+
+  let y = BASE_START_Y + offsetY;
+
 
   // ── 1. Header (centered) ─────────────────────────────────────────────────
   doc.setFont('helvetica', 'bold');
