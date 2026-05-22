@@ -114,7 +114,7 @@ function drawLabel(
   const fsMed = toggles.font_size_medicine ?? 8;
   const fsInstr = toggles.font_size_instruction ?? 6.5;
 
-  let y = 3;
+  let y = 2;
 
   // ── 1. Header (centered) ─────────────────────────────────────────────────
   doc.setFont('helvetica', 'bold');
@@ -145,19 +145,47 @@ function drawLabel(
   doc.line(MARGIN_X, y, PAGE_W - MARGIN_X, y);
   y += 2.6;
 
-  // ── Pre-compute footer geometry so the body has a hard "floor" to respect.
+  // ── 3. Patient block (NAME left bold, DATE right) ────────────────────────
+  const dateText = toggles.show_date ? `Date: ${format(new Date(), 'd/M/yyyy')}` : '';
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(5);
+  const dateW = dateText ? doc.getTextWidth(dateText) : 0;
+
+  const rawName = (patientName ?? '').trim().toUpperCase();
+  if (rawName || dateText) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6);
+    let name = rawName;
+    const nameMax = SAFE_W - (dateW > 0 ? dateW + 2 : 0);
+    while (name && doc.getTextWidth(name) > nameMax && name.length > 3) {
+      name = name.slice(0, -2) + '…';
+    }
+    if (name) doc.text(name, MARGIN_X, y);
+    if (dateText) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(5);
+      drawRight(doc, dateText, y);
+    }
+    y += 1.6;
+
+    // Second divider beneath patient row
+    doc.setLineWidth(0.15);
+    doc.line(MARGIN_X, y, PAGE_W - MARGIN_X, y);
+    y += 2.6;
+  }
+
+  // ── Pre-compute footer geometry (now only duration + age/gender). ────────
   const footerLines: string[] = [];
-  if (patientName?.trim()) footerLines.push(patientName.trim());
   if (item.age_gender?.trim()) footerLines.push(item.age_gender.trim());
   if (toggles.show_duration && item.duration?.trim()) {
     footerLines.push(`Duration: ${item.duration}`);
   }
-  const footerBlockH = Math.max(footerLines.length, 1) * 2.4;
-  const dividerY = PAGE_H - footerBlockH - 2.2;
+  const footerBlockH = footerLines.length * 2.4;
+  const dividerY = PAGE_H - footerBlockH - (footerLines.length ? 2.2 : 1.2);
   const bodyBottom = dividerY - 0.6;
   const fits = (blockH: number) => y + blockH <= bodyBottom;
 
-  // ── 3. Medicine name (left) + QTY / EXP (right) ──────────────────────────
+  // ── 4. Medicine name (left) + QTY / EXP (right) ──────────────────────────
   const unitLabel = (item.unit ?? '').trim();
   const qtyText =
     toggles.show_quantity && item.quantity != null
@@ -185,7 +213,6 @@ function drawLabel(
     leftW,
   ) as string[];
   const medLineH = fsMed * 0.5;
-  // Reserve room for the dosage line so it never gets pushed off the label.
   const dosageReserve = lh(fsInstr) + 0.4;
   let medLines = allMedLines.slice(0, 2);
   if (
@@ -201,7 +228,6 @@ function drawLabel(
   });
   const medBlockH = medLineH * medLines.length;
 
-  // QTY/EXP (right column, stacked, top-aligned with med name)
   if (qtyText || expText) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(5);
@@ -217,11 +243,10 @@ function drawLabel(
 
   y = medTop + Math.max(medBlockH, 4.4) + 1.2;
 
-  // ── 4. Centered body (with graceful degradation) ─────────────────────────
+  // ── 5. Centered body ─────────────────────────────────────────────────────
   const dosageLine = buildDosageLine(item);
   const freqLine = formatFrequency(item.frequency);
 
-  // Dosage — never drop; shrink up to 1.5pt to make it fit.
   if (dosageLine) {
     let dosagePt = fsInstr;
     while (!fits(lh(dosagePt) + 0.4) && dosagePt > fsInstr - 1.5) {
@@ -233,7 +258,6 @@ function drawLabel(
     y += lh(dosagePt) + 0.4;
   }
 
-  // Frequency — shrink → cap to 1 line → drop.
   if (freqLine) {
     let freqPt = fsInstr;
     while (!fits(lh(freqPt)) && freqPt > fsInstr - 1.5) freqPt -= 0.5;
@@ -254,7 +278,6 @@ function drawLabel(
     }
   }
 
-  // Indication — shrink → truncate with "…" → drop.
   if (toggles.show_indication && item.indication?.trim()) {
     let indPt = 5;
     while (!fits(2.2) && indPt > 4) indPt -= 0.5;
@@ -270,7 +293,6 @@ function drawLabel(
     }
   }
 
-  // Precaution — same ladder; dropped first when space is tight.
   if (toggles.show_precaution && item.precaution?.trim()) {
     let prePt = 5;
     while (!fits(2.2) && prePt > 4) prePt -= 0.5;
@@ -291,27 +313,18 @@ function drawLabel(
     }
   }
 
-  // ── 5. Footer divider + 6. Patient (left) + Date (right) ─────────────────
-  doc.setLineWidth(0.15);
-  doc.line(MARGIN_X, dividerY, PAGE_W - MARGIN_X, dividerY);
+  // ── 6. Footer: divider + (age/gender, duration) only ─────────────────────
+  if (footerLines.length > 0) {
+    doc.setLineWidth(0.15);
+    doc.line(MARGIN_X, dividerY, PAGE_W - MARGIN_X, dividerY);
 
-  let fy = dividerY + 2.4;
-  footerLines.forEach((line, i) => {
-    if (i === 0 && patientName?.trim()) {
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(6);
-    } else {
+    let fy = dividerY + 2.4;
+    footerLines.forEach((line) => {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(5);
-    }
-    doc.text(line, MARGIN_X, fy);
-    fy += 2.4;
-  });
-
-  if (toggles.show_date) {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(5);
-    drawRight(doc, `Date: ${format(new Date(), 'd/M/yyyy')}`, dividerY + 2.4);
+      doc.text(line, MARGIN_X, fy);
+      fy += 2.4;
+    });
   }
 }
 
