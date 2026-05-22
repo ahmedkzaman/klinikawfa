@@ -286,7 +286,7 @@ function drawLabel(
     }
     if (fits(lh(freqPt) * freqLines.length)) {
       freqLines.forEach((line) => {
-        drawCentered(doc, line, y);
+        drawCentered(doc, line, y, CENTER_X);
         y += lh(freqPt);
       });
     }
