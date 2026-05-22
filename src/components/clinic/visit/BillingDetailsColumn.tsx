@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
-import { Plus, Trash2, Receipt } from 'lucide-react';
+import { Plus, Trash2, Receipt, Printer } from 'lucide-react';
+import { PrintReceiptDialog } from '@/components/clinic/billing/PrintReceiptDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -64,6 +65,8 @@ export function BillingDetailsColumn({
   const [discountRm, setDiscountRm] = useState<number>(0);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<string>('cash');
+  const [printPaymentId, setPrintPaymentId] = useState<string | null>(null);
+
 
 
   // Local-only Other Charges state (committed to DB on Complete Checkout)
@@ -319,6 +322,17 @@ export function BillingDetailsColumn({
                   <div className="text-sm font-medium tabular-nums">
                     RM {Number(p.amount ?? 0).toFixed(2)}
                   </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    onClick={() => setPrintPaymentId(p.id)}
+                    aria-label="Print receipt"
+                    title="Print receipt"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                  </Button>
                   {isSpecialAdmin && (
                     <Button
                       type="button"
@@ -346,6 +360,12 @@ export function BillingDetailsColumn({
         defaultAmount={outstanding}
         defaultPaymentMethod={paymentMethod}
 
+      />
+
+      <PrintReceiptDialog
+        open={!!printPaymentId}
+        onOpenChange={(o) => !o && setPrintPaymentId(null)}
+        paymentId={printPaymentId}
       />
     </>
   );

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { format, subDays } from 'date-fns';
-import { ExternalLink, Receipt } from 'lucide-react';
+import { ExternalLink, Receipt, Printer } from 'lucide-react';
+import { PrintReceiptDialog } from '@/components/clinic/billing/PrintReceiptDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,6 +39,7 @@ interface LedgerEntry {
   outstanding: number;
   latestPaymentType: 'self_pay' | 'panel' | 'insurance';
   latestMethod: string | null;
+  latestPaymentId: string | null;
 }
 
 const tabs: Array<{ key: TabKey; label: string }> = [
@@ -53,6 +55,7 @@ export default function Billings() {
   );
   const [to, setTo] = useState<string>(format(today, 'yyyy-MM-dd'));
   const [activeTab, setActiveTab] = useState<TabKey>('paid');
+  const [printPaymentId, setPrintPaymentId] = useState<string | null>(null);
 
   const fromISO = useMemo(() => new Date(`${from}T00:00:00`).toISOString(), [from]);
   const toISO = useMemo(() => new Date(`${to}T23:59:59`).toISOString(), [to]);
@@ -141,6 +144,7 @@ export default function Billings() {
         existing.paid += amt;
         existing.latestPaymentType = pType;
         existing.latestMethod = p.payment_method ?? existing.latestMethod;
+        existing.latestPaymentId = p.id;
       } else {
         byQueue.set(qe.id, {
           queueEntryId: qe.id,
@@ -153,6 +157,7 @@ export default function Billings() {
           outstanding: 0,
           latestPaymentType: pType,
           latestMethod: p.payment_method ?? null,
+          latestPaymentId: p.id,
         });
       }
 
@@ -328,7 +333,7 @@ export default function Billings() {
         )}
 
         <div className={cn(bento, 'overflow-hidden')}>
-          <div className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_120px_80px] gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
+          <div className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_120px_140px] gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
             {['QUEUE', 'PATIENT', 'DATE', 'SUBTOTAL', 'PAID', 'OUTSTANDING', 'METHOD', ''].map((col) => (
               <span
                 key={col}
@@ -358,7 +363,7 @@ export default function Billings() {
             filtered.map((e) => (
               <div
                 key={e.queueEntryId}
-                className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_120px_80px] gap-2 px-4 py-3 border-b border-slate-100 last:border-0 items-center hover:bg-slate-50/60 transition-colors"
+                className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_120px_140px] gap-2 px-4 py-3 border-b border-slate-100 last:border-0 items-center hover:bg-slate-50/60 transition-colors"
               >
                 <span className="text-sm tabular-nums text-slate-600">
                   {e.queueLabel}
@@ -399,22 +404,42 @@ export default function Billings() {
                   )}
                 </span>
 
-                <Button
-                  asChild
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs rounded-lg text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                >
-                  <Link to={`/clinic/visits/${e.queueEntryId}`}>
-                    <ExternalLink className="h-3 w-3 mr-1" />
-                    Open
-                  </Link>
-                </Button>
+                <div className="flex items-center gap-1">
+                  {e.latestPaymentId && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                      onClick={() => setPrintPaymentId(e.latestPaymentId)}
+                      title="Print receipt"
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs rounded-lg text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                  >
+                    <Link to={`/clinic/visits/${e.queueEntryId}`}>
+                      <ExternalLink className="h-3 w-3 mr-1" />
+                      Open
+                    </Link>
+                  </Button>
+                </div>
               </div>
             ))
           )}
         </div>
       </div>
+
+      <PrintReceiptDialog
+        open={!!printPaymentId}
+        onOpenChange={(o) => !o && setPrintPaymentId(null)}
+        paymentId={printPaymentId}
+      />
     </div>
   );
 }

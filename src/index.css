@@ -473,13 +473,24 @@
   html, body { background: #fff !important; }
   body * { visibility: hidden !important; }
   .po-print-root, .po-print-root *,
-  .client-invoice-print-root, .client-invoice-print-root * { visibility: visible !important; }
+  .client-invoice-print-root, .client-invoice-print-root *,
+  .print-container, .print-container * { visibility: visible !important; }
   .po-print-root,
-  .client-invoice-print-root {
+  .client-invoice-print-root,
+  .print-container {
     position: absolute;
     inset: 0;
     display: block !important;
   }
+  .print-container {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+  .no-print { display: none !important; }
   [data-radix-popper-content-wrapper],
   [data-sonner-toaster] { display: none !important; }
 }

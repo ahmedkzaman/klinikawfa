@@ -166,8 +166,8 @@ export function RecordPaymentDialog({
     // Panel string is recorded ONLY when the panel covers 100% of the bill.
     // Any out-of-pocket amount (even RM 0.50) records the physical method.
     const resolvedMethodLabel =
-      paymentType === 'panel' && numericAmount === 0
-        ? `Panel: ${selectedProvider!.name}`
+      paymentType === 'panel' && numericAmount === 0 && selectedProvider
+        ? `Panel: ${selectedProvider.name}`
         : selfPayMethod;
 
     let finalNotes = notes.trim();
