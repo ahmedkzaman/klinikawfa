@@ -42,11 +42,9 @@ import { useUpdateQueueEntry } from '@/hooks/clinic/useQueueEntries';
 
 type PaymentType = 'self_pay' | 'panel';
 
-const SELF_PAY_METHODS = [
-  'Cash',
-  'TNG / DuitNow QR',
-  'Credit/Debit Card',
-] as const;
+import { PAYMENT_METHOD_OPTIONS } from '@/lib/clinic/paymentMethod';
+
+const SELF_PAY_METHODS = PAYMENT_METHOD_OPTIONS;
 
 interface Props {
   open: boolean;
@@ -54,7 +52,10 @@ interface Props {
   queueEntryId: string;
   consultationId: string | null;
   defaultAmount: number;
+  /** Canonical method code (cash | qr_pay | card | transfer) to pre-select for self-pay. */
+  defaultPaymentMethod?: string;
 }
+
 
 /**
  * Atomic checkout dialog.
@@ -75,7 +76,9 @@ export function RecordPaymentDialog({
   queueEntryId,
   consultationId,
   defaultAmount,
+  defaultPaymentMethod,
 }: Props) {
+
   const navigate = useNavigate();
   const { data: providers = [] } = useInsuranceProviders({ activeOnly: true });
   const recordPayment = useRecordPayment();
@@ -93,19 +96,19 @@ export function RecordPaymentDialog({
   useEffect(() => {
     if (open) {
       setPaymentType('self_pay');
-      setSelfPayMethod('');
+      setSelfPayMethod(defaultPaymentMethod ?? 'cash');
       setProviderId('');
       setProviderOpen(false);
       setAmount(Math.max(defaultAmount, 0).toFixed(2));
       setNotes('');
     }
-  }, [open, defaultAmount]);
+  }, [open, defaultAmount, defaultPaymentMethod]);
 
   // When the user toggles between self-pay and panel, clear sub-selections
   // and reset the default amount: panel visits are billed to the panel
   // (RM 0.00 patient-facing) while self-pay defaults to outstanding.
   useEffect(() => {
-    setSelfPayMethod('');
+    setSelfPayMethod(paymentType === 'self_pay' ? (defaultPaymentMethod ?? 'cash') : '');
     setProviderId('');
     setProviderOpen(false);
     setAmount(
@@ -113,7 +116,8 @@ export function RecordPaymentDialog({
         ? '0.00'
         : Math.max(defaultAmount, 0).toFixed(2),
     );
-  }, [paymentType, defaultAmount]);
+  }, [paymentType, defaultAmount, defaultPaymentMethod]);
+
 
   const selectedProvider = useMemo(
     () => providers.find((p) => p.id === providerId) ?? null,
@@ -252,10 +256,11 @@ export function RecordPaymentDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {SELF_PAY_METHODS.map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {m}
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
                     </SelectItem>
                   ))}
+
                 </SelectContent>
               </Select>
             </div>

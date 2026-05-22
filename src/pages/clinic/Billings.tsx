@@ -18,6 +18,11 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { usePaymentsLedger } from '@/hooks/clinic/usePayments';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
+import {
+  formatPaymentMethod,
+  paymentMethodBadgeClass,
+} from '@/lib/clinic/paymentMethod';
+import { Badge } from '@/components/ui/badge';
 import type { ConsultationRow, ConsultationItemRow } from '@/types/clinic';
 
 type TabKey = 'paid' | 'panel' | 'self_pay';
@@ -32,6 +37,7 @@ interface LedgerEntry {
   paid: number;
   outstanding: number;
   latestPaymentType: 'self_pay' | 'panel' | 'insurance';
+  latestMethod: string | null;
 }
 
 const tabs: Array<{ key: TabKey; label: string }> = [
@@ -134,6 +140,7 @@ export default function Billings() {
       if (existing) {
         existing.paid += amt;
         existing.latestPaymentType = pType;
+        existing.latestMethod = p.payment_method ?? existing.latestMethod;
       } else {
         byQueue.set(qe.id, {
           queueEntryId: qe.id,
@@ -145,8 +152,10 @@ export default function Billings() {
           paid: amt,
           outstanding: 0,
           latestPaymentType: pType,
+          latestMethod: p.payment_method ?? null,
         });
       }
+
     }
 
     const list = Array.from(byQueue.values());
@@ -194,6 +203,27 @@ export default function Billings() {
   );
 
   const isLoading = ledgerLoading || itemsLoading;
+
+  // Daily breakdown by payment_method, computed from raw ledger so every
+  // payment row lands in its actual bucket (not just the latest per visit).
+  const methodTotals = useMemo(() => {
+    const totals: Record<string, number> = {
+      cash: 0,
+      qr_pay: 0,
+      card: 0,
+      transfer: 0,
+      other: 0,
+    };
+    for (const p of ledger) {
+      const amt = Number(p.amount ?? 0);
+      const key = p.payment_method && totals[p.payment_method] !== undefined
+        ? p.payment_method
+        : 'other';
+      totals[key] += amt;
+    }
+    return totals;
+  }, [ledger]);
+
 
   return (
     <div className={pageShell}>
@@ -263,9 +293,43 @@ export default function Billings() {
           })}
         </div>
 
+        {/* Daily method totals — only on Paid tab, computed from raw ledger */}
+        {activeTab === 'paid' && (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {[
+              { key: 'cash', label: 'Cash' },
+              { key: 'qr_pay', label: 'QR Pay' },
+              { key: 'card', label: 'Card' },
+              { key: 'transfer', label: 'Transfer' },
+              { key: 'other', label: 'Legacy / Other' },
+            ].map((t) => (
+              <div key={t.key} className={cn(bento, 'p-3')}>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      'inline-block h-2 w-2 rounded-full',
+                      t.key === 'cash' && 'bg-emerald-500',
+                      t.key === 'qr_pay' && 'bg-sky-500',
+                      t.key === 'card' && 'bg-violet-500',
+                      t.key === 'transfer' && 'bg-amber-500',
+                      t.key === 'other' && 'bg-slate-400',
+                    )}
+                  />
+                  <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                    {t.label}
+                  </span>
+                </div>
+                <div className="mt-1 text-lg font-semibold text-slate-800 tabular-nums">
+                  RM {(methodTotals[t.key] ?? 0).toFixed(2)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className={cn(bento, 'overflow-hidden')}>
-          <div className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_80px] gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
-            {['QUEUE', 'PATIENT', 'DATE', 'SUBTOTAL', 'PAID', 'OUTSTANDING', ''].map((col) => (
+          <div className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_120px_80px] gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
+            {['QUEUE', 'PATIENT', 'DATE', 'SUBTOTAL', 'PAID', 'OUTSTANDING', 'METHOD', ''].map((col) => (
               <span
                 key={col}
                 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider"
@@ -274,6 +338,7 @@ export default function Billings() {
               </span>
             ))}
           </div>
+
 
           {isLoading ? (
             <div className="p-4 space-y-3">
@@ -293,7 +358,7 @@ export default function Billings() {
             filtered.map((e) => (
               <div
                 key={e.queueEntryId}
-                className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_80px] gap-2 px-4 py-3 border-b border-slate-100 last:border-0 items-center hover:bg-slate-50/60 transition-colors"
+                className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_120px_80px] gap-2 px-4 py-3 border-b border-slate-100 last:border-0 items-center hover:bg-slate-50/60 transition-colors"
               >
                 <span className="text-sm tabular-nums text-slate-600">
                   {e.queueLabel}
@@ -318,6 +383,22 @@ export default function Billings() {
                 >
                   RM {e.outstanding.toFixed(2)}
                 </span>
+                <span>
+                  {e.paid > 0 || e.latestMethod ? (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        'text-[10px] py-0 px-1.5 h-5',
+                        paymentMethodBadgeClass(e.latestMethod),
+                      )}
+                    >
+                      {formatPaymentMethod(e.latestMethod, e.paid)}
+                    </Badge>
+                  ) : (
+                    <span className="text-xs text-slate-400">—</span>
+                  )}
+                </span>
+
                 <Button
                   asChild
                   variant="ghost"

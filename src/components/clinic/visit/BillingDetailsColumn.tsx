@@ -9,6 +9,19 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/AuthContext';
 import { useVoidPayment } from '@/hooks/clinic/usePayments';
 import { useClinicChargeTypes } from '@/hooks/clinic/useClinicChargeTypes';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { cn } from '@/lib/utils';
+import {
+  PAYMENT_METHOD_OPTIONS,
+  formatPaymentMethod,
+  paymentMethodBadgeClass,
+} from '@/lib/clinic/paymentMethod';
 import { RecordPaymentDialog } from './RecordPaymentDialog';
 import type { ConsultationItemRow, PaymentRow } from '@/types/clinic';
 
@@ -50,6 +63,8 @@ export function BillingDetailsColumn({
   const [taxPct, setTaxPct] = useState<number>(0);
   const [discountRm, setDiscountRm] = useState<number>(0);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<string>('cash');
+
 
   // Local-only Other Charges state (committed to DB on Complete Checkout)
   const [selectedCharges, setSelectedCharges] = useState<
@@ -233,7 +248,26 @@ export function BillingDetailsColumn({
           />
         </div>
 
-        <div className="px-4 pb-3">
+        <div className="px-4 pb-3 space-y-2">
+          {outstanding > 0 && (
+            <div className="space-y-1">
+              <Label htmlFor="pay-method-inline" className="text-xs text-muted-foreground">
+                Payment Method
+              </Label>
+              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                <SelectTrigger id="pay-method-inline" className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAYMENT_METHOD_OPTIONS.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <Button
             type="button"
             className="w-full"
@@ -244,6 +278,7 @@ export function BillingDetailsColumn({
             Record Payment
           </Button>
         </div>
+
 
         <div className="border-t border-border">
           <div className="px-4 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
@@ -263,9 +298,16 @@ export function BillingDetailsColumn({
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-5">
-                        {p.payment_method}
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'text-[10px] py-0 px-1.5 h-5',
+                          paymentMethodBadgeClass(p.payment_method),
+                        )}
+                      >
+                        {formatPaymentMethod(p.payment_method, Number(p.amount ?? 0))}
                       </Badge>
+
                       <span className="text-[11px] text-muted-foreground capitalize">
                         {(p.payment_type ?? '').replace('_', '-')}
                       </span>
@@ -302,6 +344,8 @@ export function BillingDetailsColumn({
         queueEntryId={queueEntryId}
         consultationId={consultationId}
         defaultAmount={outstanding}
+        defaultPaymentMethod={paymentMethod}
+
       />
     </>
   );
