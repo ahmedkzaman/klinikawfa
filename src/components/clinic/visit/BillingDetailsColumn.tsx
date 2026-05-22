@@ -248,7 +248,26 @@ export function BillingDetailsColumn({
           />
         </div>
 
-        <div className="px-4 pb-3">
+        <div className="px-4 pb-3 space-y-2">
+          {outstanding > 0 && (
+            <div className="space-y-1">
+              <Label htmlFor="pay-method-inline" className="text-xs text-muted-foreground">
+                Payment Method
+              </Label>
+              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                <SelectTrigger id="pay-method-inline" className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAYMENT_METHOD_OPTIONS.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <Button
             type="button"
             className="w-full"
@@ -259,6 +278,7 @@ export function BillingDetailsColumn({
             Record Payment
           </Button>
         </div>
+
 
         <div className="border-t border-border">
           <div className="px-4 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
