@@ -20,7 +20,10 @@ export interface ReceiptData {
   patientIc: string | null;
   items: ReceiptItem[];
   subtotal: number;
-  grandTotal: number;
+  invoiceTotal: number;
+  balanceRemaining: number;
+  /** @deprecated kept for back-compat; not rendered */
+  grandTotal?: number;
 }
 
 interface Props {
