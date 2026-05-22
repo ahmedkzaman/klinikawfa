@@ -76,7 +76,9 @@ export function RecordPaymentDialog({
   queueEntryId,
   consultationId,
   defaultAmount,
+  defaultPaymentMethod,
 }: Props) {
+
   const navigate = useNavigate();
   const { data: providers = [] } = useInsuranceProviders({ activeOnly: true });
   const recordPayment = useRecordPayment();
