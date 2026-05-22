@@ -330,7 +330,7 @@ function drawLabel(
   // ── 6. Footer: divider + (age/gender, duration) only ─────────────────────
   if (footerLines.length > 0) {
     doc.setLineWidth(0.15);
-    doc.line(MARGIN_X, dividerY, PAGE_W - MARGIN_X, dividerY);
+    doc.line(MARGIN_X, dividerY, RIGHT_ANCHOR, dividerY);
 
     let fy = dividerY + 2.4;
     footerLines.forEach((line) => {
