@@ -246,11 +246,11 @@ function drawLabel(
     doc.setFontSize(5);
     let ry = medTop + 1.6;
     if (qtyText) {
-      drawRight(doc, qtyText, ry, MARGIN_X);
+      drawRight(doc, qtyText, ry, RIGHT_ANCHOR);
       ry += 2;
     }
     if (expText) {
-      drawRight(doc, expText, ry, MARGIN_X);
+      drawRight(doc, expText, ry, RIGHT_ANCHOR);
     }
   }
 
