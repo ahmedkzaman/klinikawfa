@@ -344,6 +344,8 @@ export function BillingDetailsColumn({
         queueEntryId={queueEntryId}
         consultationId={consultationId}
         defaultAmount={outstanding}
+        defaultPaymentMethod={paymentMethod}
+
       />
     </>
   );
