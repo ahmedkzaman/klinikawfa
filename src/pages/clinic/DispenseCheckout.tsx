@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Info } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Info, Printer } from 'lucide-react';
+import { PrintReceiptDialog } from '@/components/clinic/billing/PrintReceiptDialog';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
