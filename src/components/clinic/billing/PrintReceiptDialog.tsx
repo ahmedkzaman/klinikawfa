@@ -99,8 +99,8 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg p-0 gap-0 no-print">
-        <DialogHeader className="px-4 py-3 border-b">
+      <DialogContent className="max-w-lg p-0 gap-0">
+        <DialogHeader className="px-4 py-3 border-b no-print">
           <DialogTitle>Receipt Preview</DialogTitle>
         </DialogHeader>
 
