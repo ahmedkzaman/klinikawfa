@@ -104,11 +104,11 @@ export function RecordPaymentDialog({
     }
   }, [open, defaultAmount, defaultPaymentMethod]);
 
-  // When the user toggles between self-pay and panel, clear sub-selections
-  // and reset the default amount: panel visits are billed to the panel
-  // (RM 0.00 patient-facing) while self-pay defaults to outstanding.
+  // When the user toggles between self-pay and panel, reset the default amount
+  // (panel defaults to RM 0.00; self-pay defaults to outstanding). The selected
+  // payment method is preserved across tabs so a panel copayment keeps the
+  // physical method (cash / QR / card / transfer) the front desk picked.
   useEffect(() => {
-    setSelfPayMethod(paymentType === 'self_pay' ? (defaultPaymentMethod ?? 'cash') : '');
     setProviderId('');
     setProviderOpen(false);
     setAmount(
@@ -116,7 +116,7 @@ export function RecordPaymentDialog({
         ? '0.00'
         : Math.max(defaultAmount, 0).toFixed(2),
     );
-  }, [paymentType, defaultAmount, defaultPaymentMethod]);
+  }, [paymentType, defaultAmount]);
 
 
   const selectedProvider = useMemo(
@@ -129,9 +129,10 @@ export function RecordPaymentDialog({
     updateConsultation.isPending ||
     updateQueueEntry.isPending;
 
+  const numericAmountPreview = parseFloat(amount);
   const submitDisabled =
     isSubmitting ||
-    (paymentType === 'self_pay' && !selfPayMethod) ||
+    (Number.isFinite(numericAmountPreview) && numericAmountPreview > 0 && !selfPayMethod) ||
     (paymentType === 'panel' && !providerId);
 
   const submittingLabel = recordPayment.isPending
@@ -149,25 +150,25 @@ export function RecordPaymentDialog({
       toast.error('Amount must be a number ≥ 0');
       return;
     }
-    if (paymentType === 'self_pay') {
-      if (numericAmount <= 0) {
-        toast.error('Self-pay amount must be greater than 0');
-        return;
-      }
-      if (!selfPayMethod) {
-        toast.error('Please select a payment method');
-        return;
-      }
+    if (paymentType === 'self_pay' && numericAmount <= 0) {
+      toast.error('Self-pay amount must be greater than 0');
+      return;
+    }
+    if (numericAmount > 0 && !selfPayMethod) {
+      toast.error('Please select a payment method');
+      return;
     }
     if (paymentType === 'panel' && !selectedProvider) {
       toast.error('Please select a panel');
       return;
     }
 
+    // Panel string is recorded ONLY when the panel covers 100% of the bill.
+    // Any out-of-pocket amount (even RM 0.50) records the physical method.
     const resolvedMethodLabel =
-      paymentType === 'self_pay'
-        ? selfPayMethod
-        : `Panel: ${selectedProvider!.name}`;
+      paymentType === 'panel' && numericAmount === 0
+        ? `Panel: ${selectedProvider!.name}`
+        : selfPayMethod;
 
     let finalNotes = notes.trim();
     if (paymentType === 'panel' && selectedProvider) {
@@ -246,25 +247,27 @@ export function RecordPaymentDialog({
             </RadioGroup>
           </div>
 
-          {/* Payment method — branches on payment type */}
-          {paymentType === 'self_pay' ? (
-            <div className="space-y-2">
-              <Label htmlFor="pay-method">Payment Method</Label>
-              <Select value={selfPayMethod} onValueChange={setSelfPayMethod}>
-                <SelectTrigger id="pay-method">
-                  <SelectValue placeholder="Select method" />
-                </SelectTrigger>
-                <SelectContent>
-                  {SELF_PAY_METHODS.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
+          {/* Payment method — shown for both self-pay and panel (copayment) */}
+          <div className="space-y-2">
+            <Label htmlFor="pay-method">
+              {paymentType === 'panel' ? 'Copayment Method' : 'Payment Method'}
+            </Label>
+            <Select value={selfPayMethod} onValueChange={setSelfPayMethod}>
+              <SelectTrigger id="pay-method">
+                <SelectValue placeholder="Select method" />
+              </SelectTrigger>
+              <SelectContent>
+                {SELF_PAY_METHODS.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-                </SelectContent>
-              </Select>
-            </div>
-          ) : (
+          {/* Panel provider picker — panel tab only */}
+          {paymentType === 'panel' && (
             <div className="space-y-2">
               <Label>Panel</Label>
               <Popover open={providerOpen} onOpenChange={setProviderOpen}>
