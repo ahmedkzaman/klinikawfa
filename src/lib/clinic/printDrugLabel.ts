@@ -137,7 +137,7 @@ function drawLabel(
   if (toggles.show_tel_number && clinic.phone) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(5);
-    drawCentered(doc, `Tel: ${clinic.phone}`, y);
+    drawCentered(doc, `Tel: ${clinic.phone}`, y, CENTER_X);
     y += 2;
   }
 
