@@ -191,6 +191,16 @@ export default function DispenseCheckout() {
     [payments],
   );
   const outstanding = Math.max(subtotal - paid, 0);
+  const [printPaymentId, setPrintPaymentId] = useState<string | null>(null);
+  const latestPaymentId = useMemo(() => {
+    if (!payments.length) return null;
+    const sorted = [...payments].sort(
+      (a, b) =>
+        new Date(b.created_at ?? 0).getTime() -
+        new Date(a.created_at ?? 0).getTime(),
+    );
+    return sorted[0]?.id ?? null;
+  }, [payments]);
 
   const anyPartialMissingReason = useMemo(
     () =>
