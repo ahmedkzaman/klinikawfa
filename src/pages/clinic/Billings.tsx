@@ -434,6 +434,12 @@ export default function Billings() {
           )}
         </div>
       </div>
+
+      <PrintReceiptDialog
+        open={!!printPaymentId}
+        onOpenChange={(o) => !o && setPrintPaymentId(null)}
+        paymentId={printPaymentId}
+      />
     </div>
   );
 }
