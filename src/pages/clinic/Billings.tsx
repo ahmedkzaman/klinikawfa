@@ -140,6 +140,7 @@ export default function Billings() {
       if (existing) {
         existing.paid += amt;
         existing.latestPaymentType = pType;
+        existing.latestMethod = p.payment_method ?? existing.latestMethod;
       } else {
         byQueue.set(qe.id, {
           queueEntryId: qe.id,
@@ -151,8 +152,10 @@ export default function Billings() {
           paid: amt,
           outstanding: 0,
           latestPaymentType: pType,
+          latestMethod: p.payment_method ?? null,
         });
       }
+
     }
 
     const list = Array.from(byQueue.values());
