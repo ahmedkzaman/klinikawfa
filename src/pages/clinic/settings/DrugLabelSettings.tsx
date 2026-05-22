@@ -20,6 +20,8 @@ import {
   generateDrugLabelPdf,
   type DrugLabelItem,
 } from '@/lib/clinic/printDrugLabel';
+import { PrinterCalibration } from '@/components/clinic/settings/PrinterCalibration';
+
 
 const PREVIEW_PATIENT = 'Ali Bin Abu';
 const PREVIEW_ITEM: DrugLabelItem = {
