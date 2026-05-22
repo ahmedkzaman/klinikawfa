@@ -20,6 +20,8 @@ import {
   generateDrugLabelPdf,
   type DrugLabelItem,
 } from '@/lib/clinic/printDrugLabel';
+import { PrinterCalibration } from '@/components/clinic/settings/PrinterCalibration';
+
 
 const PREVIEW_PATIENT = 'Ali Bin Abu';
 const PREVIEW_ITEM: DrugLabelItem = {
@@ -170,7 +172,8 @@ export default function DrugLabelSettingsPage() {
           </div>
 
 
-          <div className="lg:sticky lg:top-4 self-start">
+          <div className="lg:sticky lg:top-4 self-start space-y-4">
+
             <Card className={cn(bento, 'bg-slate-50')}>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-2">
@@ -193,7 +196,9 @@ export default function DrugLabelSettingsPage() {
                 </p>
               </CardContent>
             </Card>
+            <PrinterCalibration />
           </div>
+
         </div>
       </div>
     </div>

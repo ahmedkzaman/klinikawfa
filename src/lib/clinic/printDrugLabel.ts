@@ -1,7 +1,9 @@
 import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import type { DrugLabelSettings } from '@/hooks/clinic/useDrugLabelSettings';
+import { getPrinterOffsets } from '@/hooks/clinic/usePrinterSettings';
 import { FREQUENCY_LABELS } from './prescribingOptions';
+
 
 /**
  * Clinic identity printed at the top of every label. Values come from
@@ -61,8 +63,9 @@ const DEFAULT_TOGGLES: LabelToggles = {
 // Physical thermal-label dimensions in millimetres.
 const PAGE_W = 60;
 const PAGE_H = 50;
-const MARGIN_X = 1;
-const SAFE_W = PAGE_W - MARGIN_X * 2;
+const BASE_MARGIN_X = 1;
+const BASE_START_Y = 2;
+
 
 /** pt → mm line-height heuristic so dynamic font sizes never overlap. */
 const lh = (pt: number) => pt * 0.42;
@@ -87,11 +90,12 @@ function drawCentered(doc: jsPDF, text: string, y: number) {
   doc.text(text, (PAGE_W - w) / 2, y);
 }
 
-/** Draw text right-aligned within `SAFE_W` (offset by MARGIN_X). */
-function drawRight(doc: jsPDF, text: string, y: number) {
+/** Draw text right-aligned within the safe area (offset by `marginX`). */
+function drawRight(doc: jsPDF, text: string, y: number, marginX: number) {
   const w = doc.getTextWidth(text);
-  doc.text(text, PAGE_W - MARGIN_X - w, y);
+  doc.text(text, PAGE_W - marginX - w, y);
 }
+
 
 /**
  * Draws a single 60×50mm label that mirrors the on-screen `LabelPreview`
@@ -114,7 +118,12 @@ function drawLabel(
   const fsMed = toggles.font_size_medicine ?? 8;
   const fsInstr = toggles.font_size_instruction ?? 6.5;
 
-  let y = 2;
+  const { offsetX, offsetY } = getPrinterOffsets();
+  const MARGIN_X = Math.max(0, BASE_MARGIN_X + offsetX);
+  const SAFE_W = PAGE_W - MARGIN_X * 2;
+
+  let y = BASE_START_Y + offsetY;
+
 
   // ── 1. Header (centered) ─────────────────────────────────────────────────
   doc.setFont('helvetica', 'bold');
@@ -151,11 +160,11 @@ function drawLabel(
   doc.setFontSize(5);
   const dateW = dateText ? doc.getTextWidth(dateText) : 0;
 
-  const rawName = (patientName ?? '').trim().toUpperCase();
-  if (rawName || dateText) {
+  const safePatientName = (patientName || 'WALK-IN').toUpperCase();
+  {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(6);
-    let name = rawName;
+    let name = safePatientName;
     const nameMax = SAFE_W - (dateW > 0 ? dateW + 2 : 0);
     while (name && doc.getTextWidth(name) > nameMax && name.length > 3) {
       name = name.slice(0, -2) + '…';
@@ -164,7 +173,7 @@ function drawLabel(
     if (dateText) {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(5);
-      drawRight(doc, dateText, y);
+      drawRight(doc, dateText, y, MARGIN_X);
     }
     y += 1.6;
 
@@ -173,6 +182,7 @@ function drawLabel(
     doc.line(MARGIN_X, y, PAGE_W - MARGIN_X, y);
     y += 2.6;
   }
+
 
   // ── Pre-compute footer geometry (now only duration + age/gender). ────────
   const footerLines: string[] = [];
@@ -233,13 +243,14 @@ function drawLabel(
     doc.setFontSize(5);
     let ry = medTop + 1.6;
     if (qtyText) {
-      drawRight(doc, qtyText, ry);
+      drawRight(doc, qtyText, ry, MARGIN_X);
       ry += 2;
     }
     if (expText) {
-      drawRight(doc, expText, ry);
+      drawRight(doc, expText, ry, MARGIN_X);
     }
   }
+
 
   y = medTop + Math.max(medBlockH, 4.4) + 1.2;
 
