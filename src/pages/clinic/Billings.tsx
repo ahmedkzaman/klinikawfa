@@ -333,7 +333,7 @@ export default function Billings() {
         )}
 
         <div className={cn(bento, 'overflow-hidden')}>
-          <div className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_120px_80px] gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
+          <div className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_120px_140px] gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
             {['QUEUE', 'PATIENT', 'DATE', 'SUBTOTAL', 'PAID', 'OUTSTANDING', 'METHOD', ''].map((col) => (
               <span
                 key={col}
@@ -363,7 +363,7 @@ export default function Billings() {
             filtered.map((e) => (
               <div
                 key={e.queueEntryId}
-                className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_120px_80px] gap-2 px-4 py-3 border-b border-slate-100 last:border-0 items-center hover:bg-slate-50/60 transition-colors"
+                className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_120px_140px] gap-2 px-4 py-3 border-b border-slate-100 last:border-0 items-center hover:bg-slate-50/60 transition-colors"
               >
                 <span className="text-sm tabular-nums text-slate-600">
                   {e.queueLabel}
@@ -404,17 +404,31 @@ export default function Billings() {
                   )}
                 </span>
 
-                <Button
-                  asChild
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs rounded-lg text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                >
-                  <Link to={`/clinic/visits/${e.queueEntryId}`}>
-                    <ExternalLink className="h-3 w-3 mr-1" />
-                    Open
-                  </Link>
-                </Button>
+                <div className="flex items-center gap-1">
+                  {e.latestPaymentId && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                      onClick={() => setPrintPaymentId(e.latestPaymentId)}
+                      title="Print receipt"
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs rounded-lg text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                  >
+                    <Link to={`/clinic/visits/${e.queueEntryId}`}>
+                      <ExternalLink className="h-3 w-3 mr-1" />
+                      Open
+                    </Link>
+                  </Button>
+                </div>
               </div>
             ))
           )}
