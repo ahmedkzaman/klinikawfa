@@ -84,16 +84,16 @@ function buildDosageLine(item: DrugLabelItem): string {
   return (qtyUnit ?? '').toString().trim().toUpperCase();
 }
 
-/** Draw text centred within the page width. */
-function drawCentered(doc: jsPDF, text: string, y: number) {
+/** Draw text centred within the page width (or an explicit centre). */
+function drawCentered(doc: jsPDF, text: string, y: number, centerX = PAGE_W / 2) {
   const w = doc.getTextWidth(text);
-  doc.text(text, (PAGE_W - w) / 2, y);
+  doc.text(text, centerX - w / 2, y);
 }
 
-/** Draw text right-aligned within the safe area (offset by `marginX`). */
-function drawRight(doc: jsPDF, text: string, y: number, marginX: number) {
+/** Draw text right-aligned against an explicit anchor. */
+function drawRight(doc: jsPDF, text: string, y: number, rightAnchor: number) {
   const w = doc.getTextWidth(text);
-  doc.text(text, PAGE_W - marginX - w, y);
+  doc.text(text, rightAnchor - w, y);
 }
 
 
