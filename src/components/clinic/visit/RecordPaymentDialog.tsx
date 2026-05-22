@@ -42,11 +42,9 @@ import { useUpdateQueueEntry } from '@/hooks/clinic/useQueueEntries';
 
 type PaymentType = 'self_pay' | 'panel';
 
-const SELF_PAY_METHODS = [
-  'Cash',
-  'TNG / DuitNow QR',
-  'Credit/Debit Card',
-] as const;
+import { PAYMENT_METHOD_OPTIONS } from '@/lib/clinic/paymentMethod';
+
+const SELF_PAY_METHODS = PAYMENT_METHOD_OPTIONS;
 
 interface Props {
   open: boolean;
@@ -54,7 +52,10 @@ interface Props {
   queueEntryId: string;
   consultationId: string | null;
   defaultAmount: number;
+  /** Canonical method code (cash | qr_pay | card | transfer) to pre-select for self-pay. */
+  defaultPaymentMethod?: string;
 }
+
 
 /**
  * Atomic checkout dialog.
