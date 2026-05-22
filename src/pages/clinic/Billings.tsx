@@ -37,6 +37,7 @@ interface LedgerEntry {
   paid: number;
   outstanding: number;
   latestPaymentType: 'self_pay' | 'panel' | 'insurance';
+  latestMethod: string | null;
 }
 
 const tabs: Array<{ key: TabKey; label: string }> = [
