@@ -176,7 +176,7 @@ function drawLabel(
     if (dateText) {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(5);
-      drawRight(doc, dateText, y, MARGIN_X);
+      drawRight(doc, dateText, y, RIGHT_ANCHOR);
     }
     y += 1.6;
 
