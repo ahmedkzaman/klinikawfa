@@ -293,9 +293,43 @@ export default function Billings() {
           })}
         </div>
 
+        {/* Daily method totals — only on Paid tab, computed from raw ledger */}
+        {activeTab === 'paid' && (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {[
+              { key: 'cash', label: 'Cash' },
+              { key: 'qr_pay', label: 'QR Pay' },
+              { key: 'card', label: 'Card' },
+              { key: 'transfer', label: 'Transfer' },
+              { key: 'other', label: 'Legacy / Other' },
+            ].map((t) => (
+              <div key={t.key} className={cn(bento, 'p-3')}>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      'inline-block h-2 w-2 rounded-full',
+                      t.key === 'cash' && 'bg-emerald-500',
+                      t.key === 'qr_pay' && 'bg-sky-500',
+                      t.key === 'card' && 'bg-violet-500',
+                      t.key === 'transfer' && 'bg-amber-500',
+                      t.key === 'other' && 'bg-slate-400',
+                    )}
+                  />
+                  <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                    {t.label}
+                  </span>
+                </div>
+                <div className="mt-1 text-lg font-semibold text-slate-800 tabular-nums">
+                  RM {(methodTotals[t.key] ?? 0).toFixed(2)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className={cn(bento, 'overflow-hidden')}>
-          <div className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_80px] gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
-            {['QUEUE', 'PATIENT', 'DATE', 'SUBTOTAL', 'PAID', 'OUTSTANDING', ''].map((col) => (
+          <div className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_120px_80px] gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
+            {['QUEUE', 'PATIENT', 'DATE', 'SUBTOTAL', 'PAID', 'OUTSTANDING', 'METHOD', ''].map((col) => (
               <span
                 key={col}
                 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider"
@@ -304,6 +338,7 @@ export default function Billings() {
               </span>
             ))}
           </div>
+
 
           {isLoading ? (
             <div className="p-4 space-y-3">
