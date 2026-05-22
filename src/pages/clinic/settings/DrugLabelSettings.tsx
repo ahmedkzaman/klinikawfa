@@ -196,7 +196,9 @@ export default function DrugLabelSettingsPage() {
                 </p>
               </CardContent>
             </Card>
+            <PrinterCalibration />
           </div>
+
         </div>
       </div>
     </div>
