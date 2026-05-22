@@ -204,6 +204,27 @@ export default function Billings() {
 
   const isLoading = ledgerLoading || itemsLoading;
 
+  // Daily breakdown by payment_method, computed from raw ledger so every
+  // payment row lands in its actual bucket (not just the latest per visit).
+  const methodTotals = useMemo(() => {
+    const totals: Record<string, number> = {
+      cash: 0,
+      qr_pay: 0,
+      card: 0,
+      transfer: 0,
+      other: 0,
+    };
+    for (const p of ledger) {
+      const amt = Number(p.amount ?? 0);
+      const key = p.payment_method && totals[p.payment_method] !== undefined
+        ? p.payment_method
+        : 'other';
+      totals[key] += amt;
+    }
+    return totals;
+  }, [ledger]);
+
+
   return (
     <div className={pageShell}>
       <div className={pageInner}>
