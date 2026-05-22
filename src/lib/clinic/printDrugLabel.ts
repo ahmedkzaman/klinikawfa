@@ -90,11 +90,12 @@ function drawCentered(doc: jsPDF, text: string, y: number) {
   doc.text(text, (PAGE_W - w) / 2, y);
 }
 
-/** Draw text right-aligned within `SAFE_W` (offset by MARGIN_X). */
-function drawRight(doc: jsPDF, text: string, y: number) {
+/** Draw text right-aligned within the safe area (offset by `marginX`). */
+function drawRight(doc: jsPDF, text: string, y: number, marginX: number) {
   const w = doc.getTextWidth(text);
-  doc.text(text, PAGE_W - MARGIN_X - w, y);
+  doc.text(text, PAGE_W - marginX - w, y);
 }
+
 
 /**
  * Draws a single 60×50mm label that mirrors the on-screen `LabelPreview`
