@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { format, subDays } from 'date-fns';
-import { ExternalLink, Receipt } from 'lucide-react';
+import { ExternalLink, Receipt, Printer } from 'lucide-react';
+import { PrintReceiptDialog } from '@/components/clinic/billing/PrintReceiptDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -54,6 +55,7 @@ export default function Billings() {
   );
   const [to, setTo] = useState<string>(format(today, 'yyyy-MM-dd'));
   const [activeTab, setActiveTab] = useState<TabKey>('paid');
+  const [printPaymentId, setPrintPaymentId] = useState<string | null>(null);
 
   const fromISO = useMemo(() => new Date(`${from}T00:00:00`).toISOString(), [from]);
   const toISO = useMemo(() => new Date(`${to}T23:59:59`).toISOString(), [to]);
