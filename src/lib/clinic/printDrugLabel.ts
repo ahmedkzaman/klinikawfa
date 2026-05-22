@@ -160,11 +160,11 @@ function drawLabel(
   doc.setFontSize(5);
   const dateW = dateText ? doc.getTextWidth(dateText) : 0;
 
-  const rawName = (patientName ?? '').trim().toUpperCase();
-  if (rawName || dateText) {
+  const safePatientName = (patientName || 'WALK-IN').toUpperCase();
+  {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(6);
-    let name = rawName;
+    let name = safePatientName;
     const nameMax = SAFE_W - (dateW > 0 ? dateW + 2 : 0);
     while (name && doc.getTextWidth(name) > nameMax && name.length > 3) {
       name = name.slice(0, -2) + '…';
@@ -173,7 +173,7 @@ function drawLabel(
     if (dateText) {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(5);
-      drawRight(doc, dateText, y);
+      drawRight(doc, dateText, y, MARGIN_X);
     }
     y += 1.6;
 
@@ -182,6 +182,7 @@ function drawLabel(
     doc.line(MARGIN_X, y, PAGE_W - MARGIN_X, y);
     y += 2.6;
   }
+
 
   // ── Pre-compute footer geometry (now only duration + age/gender). ────────
   const footerLines: string[] = [];
