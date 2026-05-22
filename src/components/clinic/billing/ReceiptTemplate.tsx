@@ -37,11 +37,11 @@ export function ReceiptTemplate({ data, settings }: Props) {
   const sst = settings.sst_number?.trim() || '';
   const baseTextPx = settings.letterhead_text_px ?? 12;
   const titlePx = Math.round(baseTextPx * 1.4);
-  const discount = Math.max(0, data.subtotal - data.amountPaid);
+  const balance = data.balanceRemaining;
 
   return (
     <div
-      className="print-container max-w-2xl mx-auto bg-white text-black p-8"
+      className="print-container max-w-2xl mx-auto bg-white text-black p-8 min-h-[1056px]"
       style={{ colorScheme: 'light' }}
     >
       {/* Letterhead */}
