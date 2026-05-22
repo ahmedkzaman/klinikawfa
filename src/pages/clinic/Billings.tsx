@@ -358,7 +358,7 @@ export default function Billings() {
             filtered.map((e) => (
               <div
                 key={e.queueEntryId}
-                className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_80px] gap-2 px-4 py-3 border-b border-slate-100 last:border-0 items-center hover:bg-slate-50/60 transition-colors"
+                className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_120px_80px] gap-2 px-4 py-3 border-b border-slate-100 last:border-0 items-center hover:bg-slate-50/60 transition-colors"
               >
                 <span className="text-sm tabular-nums text-slate-600">
                   {e.queueLabel}
@@ -383,6 +383,22 @@ export default function Billings() {
                 >
                   RM {e.outstanding.toFixed(2)}
                 </span>
+                <span>
+                  {e.paid > 0 || e.latestMethod ? (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        'text-[10px] py-0 px-1.5 h-5',
+                        paymentMethodBadgeClass(e.latestMethod),
+                      )}
+                    >
+                      {formatPaymentMethod(e.latestMethod, e.paid)}
+                    </Badge>
+                  ) : (
+                    <span className="text-xs text-slate-400">—</span>
+                  )}
+                </span>
+
                 <Button
                   asChild
                   variant="ghost"
