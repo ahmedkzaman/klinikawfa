@@ -441,6 +441,16 @@ export default function DispenseCheckout() {
               RM {outstanding.toFixed(2)}
             </span>
           </div>
+          {latestPaymentId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPrintPaymentId(latestPaymentId)}
+            >
+              <Printer className="h-4 w-4 mr-2" />
+              Print Receipt
+            </Button>
+          )}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
