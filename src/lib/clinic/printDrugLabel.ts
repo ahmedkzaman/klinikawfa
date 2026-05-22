@@ -63,7 +63,6 @@ const DEFAULT_TOGGLES: LabelToggles = {
 // Physical thermal-label dimensions in millimetres.
 const PAGE_W = 60;
 const PAGE_H = 50;
-const BASE_MARGIN_X = 1;
 const BASE_START_Y = 2;
 
 
