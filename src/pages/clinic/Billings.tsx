@@ -18,6 +18,11 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { usePaymentsLedger } from '@/hooks/clinic/usePayments';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
+import {
+  formatPaymentMethod,
+  paymentMethodBadgeClass,
+} from '@/lib/clinic/paymentMethod';
+import { Badge } from '@/components/ui/badge';
 import type { ConsultationRow, ConsultationItemRow } from '@/types/clinic';
 
 type TabKey = 'paid' | 'panel' | 'self_pay';
