@@ -1,40 +1,19 @@
-# Official Letterhead Receipts
+# Fix Print Centering on Receipt Dialog
 
-Replace the existing POS-style receipt with an A4 receipt that mirrors the clinic's official letterhead — same header treatment used by Tax Invoices, MCs, and Referral Letters.
+Receipts print halfway down the page because Radix `DialogContent` uses `position: fixed; top: 50%; transform: translate(-50%, -50%)`, which the print renderer honours.
 
-## Scope
+## Change
 
-1. **`src/index.css`** — keep the `@media print` block added previously (`.print-container` / `.no-print`). No new CSS required; it already matches the spec.
+**`src/index.css`** — replace the existing `@media print` block (lines ~471–494) that scopes `.print-container` / `.no-print` with a hardened version that ALSO neutralises Radix dialog centering:
 
-2. **`src/components/clinic/billing/ReceiptTemplate.tsx`** — rewrite to an official A4 layout:
-   - Outer wrapper: `print-container max-w-2xl mx-auto bg-white text-black p-8` with `colorScheme: light`.
-   - **Letterhead** (identical pattern to `ClientInvoicePrintTemplate`):
-     - Logo on the left at `settings.logo_height_px`.
-     - Clinic name, address lines, phone, email, SST no. at `settings.letterhead_text_px`.
-     - Right column: bold "OFFICIAL RECEIPT" title, plus receipt no (short payment id), date/time, queue label.
-     - Separator: `border-b-2 border-black`.
-   - **Content** offset by `settings.content_margin_top`.
-   - **Patient block**: name + IC/national_id + visit date.
-   - **Itemized table** (`border-collapse`, black borders) — columns: No, Item, Qty, Unit Price (RM), Total (RM). Pulled from existing `consultation_items` query (uses `dispensed_qty` when applicable, same logic as today).
-   - **Totals**: Subtotal row; if `amountPaid < subtotal`, show a Discount/Adjustment row for the delta; bold Grand Total = `amountPaid`.
-   - **Payment**: "Paid via: {formatPaymentMethod(...)}" + amount in words-free RM line.
-   - **Footer**: "Generated on …" timestamp + thank-you line.
+- Keep the existing visibility hiding (`body *` hidden, `.print-container *` visible).
+- Force `.print-container` to `position: absolute; top:0; left:0; width:100%; margin:0; padding:0` with `!important`.
+- Strip `position`, `transform`, `top`, `left`, `max-width`, `border`, `box-shadow`, `margin`, `padding` on dialog containers: `div[role="dialog"]`, `.fixed[data-state="open"]`, `[data-radix-dialog-content]`.
+- Keep `.no-print { display: none !important }`.
 
-3. **`src/components/clinic/billing/PrintReceiptDialog.tsx`** — no behavioural change. Continues to fetch via existing query, pass data + settings to the new template, expose Close + Print Receipt (which calls `window.print()`). Footer stays `no-print`. Already wired correctly.
-
-4. **Triggers** — already wired in this codebase:
-   - `Billings.tsx`: Printer icon button in the ledger row (uses `latestPaymentId`).
-   - `BillingDetailsColumn.tsx`: Print button per recorded payment.
-   - `DispenseCheckout`: add a "Print Receipt" button visible after a payment row exists for the visit (opens `PrintReceiptDialog` with that payment id). If multiple payments exist, use the most recent.
+Other `@media print` blocks in `index.css` (Client Invoice, PO templates) are untouched.
 
 ## Out of scope
 
-- No DB migrations, no edge functions.
-- No changes to payment recording, panel logic, or claims.
-- No changes to `ClientInvoicePrintTemplate`, `POPrintTemplate`, or any document template settings.
-
-## Technical notes
-
-- Letterhead settings come from `useClinicSettings()` (`logo_url`, `logo_height_px`, `letterhead_text_px`, `content_margin_top`, `sst_number`, `clinic_name`, `address_line_*`, `phone`, `email`) — identical to existing official documents, so the receipt visually matches MCs and invoices.
-- `ReceiptData` interface kept stable; only the rendering changes.
-- `print-container` makes `body *` invisible during print so only the receipt prints — sidebar, dialog chrome, and buttons are stripped automatically.
+- No React/component changes — `ReceiptTemplate.tsx` and `PrintReceiptDialog.tsx` stay as-is.
+- No DB / business logic changes.
