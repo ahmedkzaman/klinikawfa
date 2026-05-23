@@ -140,10 +140,22 @@ export default function DispenseCheckout() {
   useEffect(() => {
     if (!isDirectSale) return;
     if (!entry || !queueEntryId) return;
+    if (!consultationFetched) return; // wait until query has confirmed presence/absence
     if (consultation?.id) return;
     if (directSaleConsultRef.current) return;
     directSaleConsultRef.current = true;
     (async () => {
+      // Defence-in-depth: re-check right before insert in case of a race
+      const { data: existing } = await supabase
+        .from('consultations')
+        .select('id')
+        .eq('queue_entry_id', queueEntryId)
+        .is('deleted_at', null)
+        .maybeSingle();
+      if (existing?.id) {
+        refetchConsultation();
+        return;
+      }
       const { error } = await supabase.from('consultations').insert({
         queue_entry_id: queueEntryId,
         patient_id: entry.patient_id,
@@ -154,6 +166,12 @@ export default function DispenseCheckout() {
         dispense_note: '',
       });
       if (error) {
+        // 23505 = unique violation → row already exists, just refetch silently
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((error as any).code === '23505') {
+          refetchConsultation();
+          return;
+        }
         directSaleConsultRef.current = false;
         toast.error(`Failed to start direct sale: ${error.message}`);
         return;
@@ -161,7 +179,7 @@ export default function DispenseCheckout() {
       qc.invalidateQueries({ queryKey: ['consultation', queueEntryId] });
       refetchConsultation();
     })();
-  }, [isDirectSale, entry, queueEntryId, consultation?.id, qc, refetchConsultation]);
+  }, [isDirectSale, entry, queueEntryId, consultation?.id, consultationFetched, qc, refetchConsultation]);
 
   const advancedRef = useRef(false);
   useEffect(() => {
