@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { addDays, format, parse, startOfWeek } from 'date-fns';
-import { ChevronLeft, ChevronRight, Plus, CalendarDays, Calendar as CalIcon, MessageCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, CalendarDays, Calendar as CalIcon, MessageCircle, CalendarClock } from 'lucide-react';
 import { generateAppointmentReminderLink } from '@/lib/clinic/whatsappUtils';
 import { toast } from 'sonner';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { toMalayTitleCase } from '@/lib/textCase';
 import { Card } from '@/components/ui/card';
