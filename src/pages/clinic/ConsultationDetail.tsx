@@ -95,6 +95,7 @@ import { PatientAlertBanner } from '@/components/clinic/PatientAlertBanner';
 import { VisitRemarksBanner } from '@/components/clinic/VisitRemarksBanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
+import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 
 const PRICE_TIERS = ['SELF PAY', 'PANEL'];
 
