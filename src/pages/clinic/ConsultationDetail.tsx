@@ -68,6 +68,7 @@ import { IssueDocumentModal } from '@/components/clinic/consultation/IssueDocume
 import {
   useConsultationDocuments,
   useDeleteConsultationDocument,
+  useDocumentTemplates,
   type DocumentTemplate,
   type ConsultationDocument,
 } from '@/hooks/clinic/useClinicDocuments';
