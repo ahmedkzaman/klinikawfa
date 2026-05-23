@@ -56,8 +56,23 @@ export function IssueDocumentModal({
   const addDoc = useAddConsultationDocument();
   const updateDoc = useUpdateConsultationDocument();
   const [content, setContent] = useState('');
+  const [timeIn, setTimeIn] = useState('');
+  const [timeOut, setTimeOut] = useState('');
 
   const isEdit = !!existingDoc;
+  const docType = existingDoc?.type ?? template?.type ?? null;
+  const isTimeslip = docType === 'timeslip';
+
+  const formatTime12h = (hhmm: string): string => {
+    if (!hhmm) return '______';
+    const [hStr, mStr] = hhmm.split(':');
+    const h = parseInt(hStr, 10);
+    const m = parseInt(mStr, 10);
+    if (isNaN(h) || isNaN(m)) return '______';
+    const period = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${m.toString().padStart(2, '0')} ${period}`;
+  };
 
   const substitutions = useMemo<Record<string, string>>(
     () => ({
@@ -66,15 +81,34 @@ export function IssueDocumentModal({
       '{{patient_phone}}': patient?.phone ?? '',
       '{{patient_age}}': calculateClinicalAge(patient?.date_of_birth),
       '{{current_date}}': new Date().toLocaleDateString('en-MY'),
+      '{{date}}': new Date().toLocaleDateString('en-MY'),
       '{{clinic_name}}': settings?.clinic_name ?? 'Klinik Awfa',
       '{{doctor_name}}': doctor?.name ?? '',
       '{{diagnosis}}': '',
       '{{mc_days}}': '',
       '{{mc_start}}': '',
       '{{mc_end}}': '',
+      '{{time_in}}': formatTime12h(timeIn),
+      '{{time_out}}': formatTime12h(timeOut),
     }),
-    [patient, settings, doctor],
+    [patient, settings, doctor, timeIn, timeOut],
   );
+
+  // Reset time fields and auto-populate on open
+  useEffect(() => {
+    if (!isOpen) {
+      setTimeIn('');
+      setTimeOut('');
+      return;
+    }
+    if (!existingDoc) {
+      const now = new Date();
+      const hh = now.getHours().toString().padStart(2, '0');
+      const mm = now.getMinutes().toString().padStart(2, '0');
+      setTimeOut(`${hh}:${mm}`);
+      setTimeIn('');
+    }
+  }, [isOpen, existingDoc]);
 
   useEffect(() => {
     if (!isOpen) return;
