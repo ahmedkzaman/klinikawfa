@@ -34,6 +34,7 @@ interface AttachmentsCardProps {
 export function AttachmentsCard({ consultationId }: AttachmentsCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [remark, setRemark] = useState('');
 
   const { data: attachments = [], isLoading } =
     useConsultationAttachments(consultationId);
@@ -50,14 +51,16 @@ export function AttachmentsCard({ consultationId }: AttachmentsCardProps) {
   const handleUpload = async () => {
     if (!selectedFile || disabled) return;
     try {
-      await upload.mutateAsync(selectedFile);
+      await upload.mutateAsync({ file: selectedFile, remark });
       toast.success('Attachment uploaded');
       setSelectedFile(null);
+      setRemark('');
       if (inputRef.current) inputRef.current.value = '';
     } catch (err) {
       toast.error((err as Error).message || 'Upload failed');
     }
   };
+
 
   const handleConfirmDelete = async () => {
     if (!confirmDelete || !consultationId) return;
