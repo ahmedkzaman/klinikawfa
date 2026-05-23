@@ -111,7 +111,7 @@ export function useConsultationAttachments(
     queryFn: async () => {
       const { data, error } = await supabase
         .from('consultation_attachments')
-        .select('id, consultation_id, file_path, file_name, content_type, created_at')
+        .select('id, consultation_id, file_path, file_name, content_type, created_at, remark')
         .eq('consultation_id', consultationId as string)
         .order('created_at', { ascending: false });
       if (error) throw error;
