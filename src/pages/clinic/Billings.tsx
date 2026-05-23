@@ -208,42 +208,47 @@ export default function Billings() {
     return list;
   }, [ledger, itemsByQueue]);
 
-  const filtered = useMemo(() => {
+  const filtered = useMemo<LedgerEntry[] | GroupedEntry[]>(() => {
     if (activeTab === 'paid') {
       return entries.filter(
         (e) => e.outstanding <= 0 && e.clinicStatus === 'completed',
       );
     }
     if (activeTab === 'panel') {
-      return entries.filter(
-        (e) =>
-          e.outstanding > 0 &&
-          (e.latestPaymentType === 'panel' ||
-            e.latestPaymentType === 'insurance'),
+      return groupOutstandingByPatient(
+        entries.filter(
+          (e) =>
+            e.outstanding > 0 &&
+            (e.latestPaymentType === 'panel' ||
+              e.latestPaymentType === 'insurance'),
+        ),
       );
     }
-    return entries.filter(
-      (e) => e.outstanding > 0 && e.latestPaymentType === 'self_pay',
+    return groupOutstandingByPatient(
+      entries.filter(
+        (e) => e.outstanding > 0 && e.latestPaymentType === 'self_pay',
+      ),
     );
   }, [entries, activeTab]);
 
-  const counts = useMemo(
-    () => ({
+  const counts = useMemo(() => {
+    const panelRows = entries.filter(
+      (e) =>
+        e.outstanding > 0 &&
+        (e.latestPaymentType === 'panel' ||
+          e.latestPaymentType === 'insurance'),
+    );
+    const selfPayRows = entries.filter(
+      (e) => e.outstanding > 0 && e.latestPaymentType === 'self_pay',
+    );
+    return {
       paid: entries.filter(
         (e) => e.outstanding <= 0 && e.clinicStatus === 'completed',
       ).length,
-      panel: entries.filter(
-        (e) =>
-          e.outstanding > 0 &&
-          (e.latestPaymentType === 'panel' ||
-            e.latestPaymentType === 'insurance'),
-      ).length,
-      self_pay: entries.filter(
-        (e) => e.outstanding > 0 && e.latestPaymentType === 'self_pay',
-      ).length,
-    }),
-    [entries],
-  );
+      panel: new Set(panelRows.map((e) => e.patientId)).size,
+      self_pay: new Set(selfPayRows.map((e) => e.patientId)).size,
+    };
+  }, [entries]);
 
   const isLoading = ledgerLoading || itemsLoading;
 
