@@ -44,6 +44,8 @@ interface Props {
    * when not provided.
    */
   patientName?: string | null;
+  /** Optional DOB so the printed label can include the clinical age. */
+  patientDob?: string | null;
 }
 
 type ConsultationItemRow = {
@@ -126,6 +128,7 @@ export function VisitDetailsColumn({
   canEdit = true,
   canEditInstructions,
   patientName,
+  patientDob,
 }: Props) {
   const canEditInstr = canEditInstructions ?? canEdit;
   const { data: rawItems = [], isLoading } = useConsultationItems(consultationId);
@@ -169,6 +172,7 @@ export function VisitDetailsColumn({
           addressFull,
           phone: clinicSettings.phone,
         },
+        patientDob ?? null,
       );
       const win = window.open(url, '_blank', 'noopener,noreferrer');
       if (!win) {
