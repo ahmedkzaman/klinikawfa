@@ -1,0 +1,1 @@
+ALTER TABLE public.consultation_attachments ADD COLUMN IF NOT EXISTS remark text;
