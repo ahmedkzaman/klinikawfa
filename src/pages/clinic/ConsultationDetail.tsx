@@ -15,7 +15,15 @@ import {
   Check,
   Pencil,
   Trash2,
+  FileText,
+  FilePlus2,
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
