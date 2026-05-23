@@ -403,7 +403,13 @@ export default function Billings() {
               </p>
             </div>
           ) : (
-            filtered.map((e) => (
+            filtered.map((e) => {
+              const grouped = 'visitCount' in e ? (e as GroupedEntry) : null;
+              const subtotal = grouped ? grouped.accumulatedSubtotal : e.subtotal;
+              const paid = grouped ? grouped.accumulatedPaid : e.paid;
+              const outstanding = grouped ? grouped.accumulatedOutstanding : e.outstanding;
+              const visitCount = grouped?.visitCount ?? 1;
+              return (
               <div
                 key={e.queueEntryId}
                 className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_120px_140px] gap-2 px-4 py-3 border-b border-slate-100 last:border-0 items-center hover:bg-slate-50/60 transition-colors"
@@ -411,25 +417,38 @@ export default function Billings() {
                 <span className="text-sm tabular-nums text-slate-600">
                   {e.queueLabel}
                 </span>
-                <span className="text-sm font-medium text-slate-800 truncate">
-                  {e.patientName}
+                <span className="text-sm font-medium text-slate-800 truncate flex items-center gap-2 min-w-0">
+                  <span className="truncate">{e.patientName}</span>
+                  {visitCount > 1 && (
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] py-0 px-1.5 h-5 shrink-0"
+                    >
+                      {visitCount} Visits
+                    </Badge>
+                  )}
                 </span>
                 <span className="text-xs text-slate-500">
                   {format(new Date(e.createdAt), 'd MMM, h:mm a')}
+                  {visitCount > 1 && (
+                    <span className="block text-[10px] text-slate-400">
+                      +{visitCount - 1} earlier
+                    </span>
+                  )}
                 </span>
                 <span className="text-sm tabular-nums text-slate-600">
-                  RM {e.subtotal.toFixed(2)}
+                  RM {subtotal.toFixed(2)}
                 </span>
                 <span className="text-sm tabular-nums text-slate-600">
-                  RM {e.paid.toFixed(2)}
+                  RM {paid.toFixed(2)}
                 </span>
                 <span
                   className={cn(
                     'text-sm tabular-nums',
-                    e.outstanding > 0 ? 'text-rose-600 font-semibold' : 'text-slate-600',
+                    outstanding > 0 ? 'text-rose-600 font-semibold' : 'text-slate-600',
                   )}
                 >
-                  RM {e.outstanding.toFixed(2)}
+                  RM {outstanding.toFixed(2)}
                 </span>
                 <span>
                   {e.paid > 0 || e.latestMethod ? (
@@ -448,7 +467,7 @@ export default function Billings() {
                 </span>
 
                 <div className="flex items-center gap-1">
-                  {e.latestPaymentId && (
+                  {e.latestPaymentId && visitCount === 1 && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -473,7 +492,8 @@ export default function Billings() {
                   </Button>
                 </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
