@@ -1026,7 +1026,19 @@ export default function ConsultationDetail() {
             {/* Attached Documents */}
             <Card className={bento}>
               <CardContent className="p-5 space-y-3">
-                <h2 className={`${bentoHeader} mb-0`}>ATTACHED DOCUMENTS</h2>
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className={`${bentoHeader} mb-0`}>ATTACHED DOCUMENTS</h2>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPickerOpen(true)}
+                    disabled={!consultationId || !patient?.id}
+                    className="gap-1.5"
+                  >
+                    <FilePlus2 className="h-4 w-4" />
+                    Issue New Document
+                  </Button>
+                </div>
                 {attachedDocs.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     No documents attached. Use the "Documents" tab in Add in bulk to issue one.
