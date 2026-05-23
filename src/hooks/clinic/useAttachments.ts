@@ -11,8 +11,10 @@ export interface ConsultationAttachment {
   file_name: string;
   content_type: string | null;
   created_at: string;
+  remark: string | null;
   signedUrl: string | null;
 }
+
 
 /**
  * Strip path separators and collapse runs of whitespace so storage keys stay
