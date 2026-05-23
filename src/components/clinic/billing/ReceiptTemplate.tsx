@@ -18,6 +18,7 @@ export interface ReceiptData {
   queueLabel: string | null;
   patientName: string;
   patientIc: string | null;
+  patientAge?: string;
   items: ReceiptItem[];
   subtotal: number;
   invoiceTotal: number;
@@ -96,7 +97,12 @@ export function ReceiptTemplate({ data, settings }: Props) {
             Received From:
           </div>
           <div className="mt-1 text-sm">
-            <div className="font-semibold">{data.patientName}</div>
+            <div className="font-semibold">
+              {data.patientName}
+              {data.patientAge && (
+                <span className="font-normal text-gray-700"> (Age: {data.patientAge})</span>
+              )}
+            </div>
             {data.patientIc && (
               <div className="text-xs">IC/ID: {data.patientIc}</div>
             )}
