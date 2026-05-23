@@ -490,6 +490,12 @@ function AppointmentDetailsSheet({
   const update = useUpdateClinicAppointment();
   const { data: patients = [] } = usePatients(appt.patients?.name ?? '');
   const [checkInOpen, setCheckInOpen] = useState(false);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [newDate, setNewDate] = useState<Date | undefined>(
+    parse(appt.appointment_date, 'yyyy-MM-dd', new Date()),
+  );
+  const [newTime, setNewTime] = useState<string>(appt.appointment_time.slice(0, 5));
+  const [datePopoverOpen, setDatePopoverOpen] = useState(false);
 
   // Find the full patient row for the check-in dialog (it needs PatientRow shape)
   const fullPatient =
@@ -515,6 +521,26 @@ function AppointmentDetailsSheet({
     }
   };
 
+  const submitReschedule = async () => {
+    if (!newDate || !newTime) {
+      toast.error('Pick a date and time');
+      return;
+    }
+    try {
+      await update.mutateAsync({
+        id: appt.id,
+        appointment_date: format(newDate, 'yyyy-MM-dd'),
+        appointment_time: `${newTime}:00`,
+      });
+      toast.success('Appointment rescheduled');
+      setRescheduleOpen(false);
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed');
+    }
+  };
+
+  const canReschedule = !['completed', 'cancelled'].includes(appt.status);
   const date = parse(appt.appointment_date, 'yyyy-MM-dd', new Date());
 
   return (
