@@ -11,8 +11,10 @@ export interface ConsultationAttachment {
   file_name: string;
   content_type: string | null;
   created_at: string;
+  remark: string | null;
   signedUrl: string | null;
 }
+
 
 /**
  * Strip path separators and collapse runs of whitespace so storage keys stay
@@ -32,7 +34,9 @@ function sanitizeFileName(name: string): string {
 export function useUploadAttachment(consultationId: string | null | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async (args: File | { file: File; remark?: string | null }) => {
+      const file = args instanceof File ? args : args.file;
+      const remark = args instanceof File ? null : (args.remark?.trim() || null);
       if (!consultationId) {
         throw new Error('Missing consultation context');
       }
@@ -66,9 +70,11 @@ export function useUploadAttachment(consultationId: string | null | undefined) {
           file_name: file.name,
           content_type: file.type || null,
           uploaded_by: user?.id ?? null,
+          remark,
         })
         .select()
         .single();
+
 
       if (error) {
         // Best-effort cleanup so we don't leave orphan storage objects.
@@ -105,7 +111,7 @@ export function useConsultationAttachments(
     queryFn: async () => {
       const { data, error } = await supabase
         .from('consultation_attachments')
-        .select('id, consultation_id, file_path, file_name, content_type, created_at')
+        .select('id, consultation_id, file_path, file_name, content_type, created_at, remark')
         .eq('consultation_id', consultationId as string)
         .order('created_at', { ascending: false });
       if (error) throw error;

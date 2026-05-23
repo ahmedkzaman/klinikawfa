@@ -67,10 +67,19 @@ export function SessionAttachmentsStrip({
             <Icon className="h-3.5 w-3.5 text-slate-500 shrink-0" />
             <span
               className="truncate max-w-[180px] font-medium text-slate-700"
-              title={a.file_name}
+              title={a.remark ? `${a.file_name} — ${a.remark}` : a.file_name}
             >
               {a.file_name}
             </span>
+            {a.remark && (
+              <span
+                className="truncate max-w-[160px] text-slate-500 italic"
+                title={a.remark}
+              >
+                · {a.remark}
+              </span>
+            )}
+
             {a.signedUrl ? (
               <a
                 href={a.signedUrl}

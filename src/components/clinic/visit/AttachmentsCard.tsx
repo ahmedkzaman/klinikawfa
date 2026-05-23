@@ -34,6 +34,7 @@ interface AttachmentsCardProps {
 export function AttachmentsCard({ consultationId }: AttachmentsCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [remark, setRemark] = useState('');
 
   const { data: attachments = [], isLoading } =
     useConsultationAttachments(consultationId);
@@ -50,14 +51,16 @@ export function AttachmentsCard({ consultationId }: AttachmentsCardProps) {
   const handleUpload = async () => {
     if (!selectedFile || disabled) return;
     try {
-      await upload.mutateAsync(selectedFile);
+      await upload.mutateAsync({ file: selectedFile, remark });
       toast.success('Attachment uploaded');
       setSelectedFile(null);
+      setRemark('');
       if (inputRef.current) inputRef.current.value = '';
     } catch (err) {
       toast.error((err as Error).message || 'Upload failed');
     }
   };
+
 
   const handleConfirmDelete = async () => {
     if (!confirmDelete || !consultationId) return;
@@ -102,11 +105,18 @@ export function AttachmentsCard({ consultationId }: AttachmentsCardProps) {
             {upload.isPending ? 'Uploading…' : 'Upload'}
           </Button>
         </div>
+        <Input
+          placeholder="Add a description or remark (optional)..."
+          value={remark}
+          onChange={(e) => setRemark(e.target.value)}
+          disabled={disabled || upload.isPending}
+        />
         <p className="text-xs text-muted-foreground">
           Max 5MB. Images or PDFs.
         </p>
 
         <div className="border-t pt-3">
+
           {isLoading ? (
             <p className="text-xs text-muted-foreground">Loading attachments…</p>
           ) : attachments.length === 0 ? (
@@ -125,6 +135,11 @@ export function AttachmentsCard({ consultationId }: AttachmentsCardProps) {
                       <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
                       <div className="min-w-0">
                         <p className="truncate font-medium">{a.file_name}</p>
+                        {a.remark && (
+                          <p className="text-xs text-muted-foreground italic truncate">
+                            {a.remark}
+                          </p>
+                        )}
                         <p className="text-[10px] text-muted-foreground">
                           {(() => {
                             try {
@@ -135,6 +150,7 @@ export function AttachmentsCard({ consultationId }: AttachmentsCardProps) {
                           })()}
                         </p>
                       </div>
+
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {a.signedUrl ? (
