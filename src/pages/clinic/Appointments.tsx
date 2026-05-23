@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { addDays, format, parse, startOfWeek } from 'date-fns';
-import { ChevronLeft, ChevronRight, Plus, CalendarDays, Calendar as CalIcon, MessageCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, CalendarDays, Calendar as CalIcon, MessageCircle, CalendarClock } from 'lucide-react';
 import { generateAppointmentReminderLink } from '@/lib/clinic/whatsappUtils';
 import { toast } from 'sonner';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { toMalayTitleCase } from '@/lib/textCase';
 import { Card } from '@/components/ui/card';
@@ -488,6 +490,12 @@ function AppointmentDetailsSheet({
   const update = useUpdateClinicAppointment();
   const { data: patients = [] } = usePatients(appt.patients?.name ?? '');
   const [checkInOpen, setCheckInOpen] = useState(false);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [newDate, setNewDate] = useState<Date | undefined>(
+    parse(appt.appointment_date, 'yyyy-MM-dd', new Date()),
+  );
+  const [newTime, setNewTime] = useState<string>(appt.appointment_time.slice(0, 5));
+  const [datePopoverOpen, setDatePopoverOpen] = useState(false);
 
   // Find the full patient row for the check-in dialog (it needs PatientRow shape)
   const fullPatient =
@@ -513,6 +521,26 @@ function AppointmentDetailsSheet({
     }
   };
 
+  const submitReschedule = async () => {
+    if (!newDate || !newTime) {
+      toast.error('Pick a date and time');
+      return;
+    }
+    try {
+      await update.mutateAsync({
+        id: appt.id,
+        appointment_date: format(newDate, 'yyyy-MM-dd'),
+        appointment_time: `${newTime}:00`,
+      });
+      toast.success('Appointment rescheduled');
+      setRescheduleOpen(false);
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed');
+    }
+  };
+
+  const canReschedule = !['completed', 'cancelled'].includes(appt.status);
   const date = parse(appt.appointment_date, 'yyyy-MM-dd', new Date());
 
   return (
@@ -612,6 +640,17 @@ function AppointmentDetailsSheet({
                   Mark Arrived &amp; Check-In
                 </Button>
               )}
+              {canReschedule && (
+                <Button
+                  variant="outline"
+                  className={cn(secondaryBtn, 'w-full')}
+                  onClick={() => setRescheduleOpen(true)}
+                  disabled={update.isPending}
+                >
+                  <CalendarClock className="h-4 w-4 mr-1" />
+                  Reschedule
+                </Button>
+              )}
               {appt.status !== 'cancelled' && (
                 <Button
                   variant="outline"
@@ -636,6 +675,61 @@ function AppointmentDetailsSheet({
           </div>
         </SheetContent>
       </Sheet>
+
+      <Dialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Reschedule appointment</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>New date</Label>
+              <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      'w-full justify-start text-left font-normal',
+                      !newDate && 'text-muted-foreground',
+                    )}
+                  >
+                    <CalendarDays className="mr-2 h-4 w-4" />
+                    {newDate ? format(newDate, 'EEE, d MMM yyyy') : 'Pick a date'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={newDate}
+                    onSelect={(d) => {
+                      setNewDate(d);
+                      setDatePopoverOpen(false);
+                    }}
+                    initialFocus
+                    className={cn('p-3 pointer-events-auto')}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="space-y-1.5">
+              <Label>New time</Label>
+              <Input
+                type="time"
+                value={newTime}
+                onChange={(e) => setNewTime(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRescheduleOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={submitReschedule} disabled={update.isPending}>
+              {update.isPending ? 'Saving…' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <CheckInWalkInDialog
         open={checkInOpen}

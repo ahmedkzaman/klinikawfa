@@ -15,7 +15,15 @@ import {
   Check,
   Pencil,
   Trash2,
+  FileText,
+  FilePlus2,
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
@@ -68,6 +76,7 @@ import { IssueDocumentModal } from '@/components/clinic/consultation/IssueDocume
 import {
   useConsultationDocuments,
   useDeleteConsultationDocument,
+  useDocumentTemplates,
   type DocumentTemplate,
   type ConsultationDocument,
 } from '@/hooks/clinic/useClinicDocuments';
@@ -348,6 +357,8 @@ export default function ConsultationDetail() {
   const [editingDoc, setEditingDoc] = useState<ConsultationDocument | null>(null);
   const [voidingDoc, setVoidingDoc] = useState<ConsultationDocument | null>(null);
   const [viewingDoc, setViewingDoc] = useState<ConsultationDocument | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const { data: docTemplates = [] } = useDocumentTemplates();
   const deleteDoc = useDeleteConsultationDocument();
   const addItem = useAddConsultationItem();
   const removeItem = useRemoveConsultationItem();
@@ -1015,7 +1026,19 @@ export default function ConsultationDetail() {
             {/* Attached Documents */}
             <Card className={bento}>
               <CardContent className="p-5 space-y-3">
-                <h2 className={`${bentoHeader} mb-0`}>ATTACHED DOCUMENTS</h2>
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className={`${bentoHeader} mb-0`}>ATTACHED DOCUMENTS</h2>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPickerOpen(true)}
+                    disabled={!consultationId || !patient?.id}
+                    className="gap-1.5"
+                  >
+                    <FilePlus2 className="h-4 w-4" />
+                    Issue New Document
+                  </Button>
+                </div>
                 {attachedDocs.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     No documents attached. Use the "Documents" tab in Add in bulk to issue one.
@@ -1400,6 +1423,44 @@ export default function ConsultationDetail() {
           patient={patient?.id ? (patient as { id: string; name?: string | null; national_id?: string | null; phone?: string | null; date_of_birth?: string | null }) : null}
           consultationId={consultationId ?? null}
         />
+
+        <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Choose a document template</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+              {docTemplates.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">
+                  No active templates. Add one in Settings → Document Templates.
+                </p>
+              ) : (
+                docTemplates.map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    onClick={() => {
+                      setPickerOpen(false);
+                      setIssuingTemplate(tpl);
+                    }}
+                    className="w-full text-left rounded-lg border border-slate-100 hover:border-slate-300 hover:bg-slate-50 px-3 py-2.5 flex items-center gap-3 transition-colors"
+                  >
+                    <FileText className="h-4 w-4 text-slate-500 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-slate-800 truncate">
+                        {tpl.name}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {tpl.type} · {tpl.paper_size} {tpl.orientation}
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
 
         <AlertDialog open={!!voidingDoc} onOpenChange={(v) => !v && setVoidingDoc(null)}>
           <AlertDialogContent>
