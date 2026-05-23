@@ -47,6 +47,7 @@ import { cn } from "@/lib/utils";
 import { toMalayTitleCase } from "@/lib/textCase";
 import { formatQueueNo } from "@/lib/clinic/queueNumber";
 import { bento, pageInner, pageShell, primaryBtn, secondaryBtn, softBadge } from "@/lib/clinic/bentoTokens";
+import { calculateClinicalAge } from "@/lib/clinic/clinicalAge";
 
 function useTickEveryMinute() {
   const [, setTick] = useState(0);
@@ -84,6 +85,11 @@ function QueueCard({ entry, onClick }: { entry: QueueEntryWithJoins; onClick: ()
       </div>
       <p className="font-medium text-sm text-slate-800 truncate">
         {entry.patients?.name ? toMalayTitleCase(entry.patients.name) : "Unknown patient"}
+        {entry.patients?.date_of_birth && (
+          <span className="ml-1 text-xs text-slate-500 font-normal">
+            ({calculateClinicalAge(entry.patients.date_of_birth)})
+          </span>
+        )}
       </p>
       {entry.visit_remarks && (
         <p className="mt-0.5 flex items-center gap-1 text-xs italic text-muted-foreground truncate">
@@ -301,6 +307,9 @@ export default function QueueBoard() {
             </SheetTitle>
             <SheetDescription className="text-slate-500">
               {activeEntry?.patients?.name ? toMalayTitleCase(activeEntry.patients.name) : "Unknown patient"}
+              {activeEntry?.patients?.date_of_birth && (
+                <span className="ml-1">({calculateClinicalAge(activeEntry.patients.date_of_birth)})</span>
+              )}
             </SheetDescription>
           </SheetHeader>
 

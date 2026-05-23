@@ -41,6 +41,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
+import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 import {
   bento,
   bentoHeader,
