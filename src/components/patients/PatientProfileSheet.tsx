@@ -335,7 +335,10 @@ export function PatientProfileSheet({
               <div>
                 <dt className="text-muted-foreground text-xs">Date of birth</dt>
                 <dd className="font-medium">
-                  {safeFormat(currentPatient?.date_of_birth, 'd MMM yyyy')}
+                  {safeFormat(currentPatient?.date_of_birth, 'd MMM yyyy')}{' '}
+                  <span className="text-muted-foreground">
+                    (Age: {calculateClinicalAge(currentPatient?.date_of_birth)})
+                  </span>
                 </dd>
               </div>
               <div>
