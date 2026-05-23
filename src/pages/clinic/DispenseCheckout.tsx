@@ -41,6 +41,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
+import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 import {
   bento,
   bentoHeader,
@@ -283,7 +284,7 @@ export default function DispenseCheckout() {
 
   const patient = entry.patients;
   const dob = patient?.date_of_birth
-    ? format(new Date(patient.date_of_birth), 'd MMM yyyy')
+    ? `${format(new Date(patient.date_of_birth), 'd MMM yyyy')} (Age: ${calculateClinicalAge(patient.date_of_birth)})`
     : '—';
 
   return (
@@ -401,6 +402,7 @@ export default function DispenseCheckout() {
               canEdit={dispensaryCanEdit}
               canEditInstructions
               patientName={patient?.name ?? null}
+              patientDob={patient?.date_of_birth ?? null}
             />
 
 

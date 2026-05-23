@@ -18,6 +18,7 @@ const PREVIEW_DICTIONARY: Record<string, string> = {
   '{{patient_name}}': 'Ahmad bin Ali',
   '{{patient_ic}}': '890101-06-5555',
   '{{patient_phone}}': '+60 12-345 6789',
+  '{{patient_age}}': '36y',
   '{{current_date}}': new Date().toLocaleDateString('en-MY'),
   '{{clinic_name}}': 'Klinik Dr. Ahmed',
   '{{doctor_name}}': 'Dr. Ahmed bin Kamarulzaman',
@@ -31,7 +32,7 @@ const TAG_GROUPS: { label: string; icon: JSX.Element; tags: string[] }[] = [
   {
     label: 'Patient',
     icon: <User className="h-3.5 w-3.5" />,
-    tags: ['{{patient_name}}', '{{patient_ic}}', '{{patient_phone}}'],
+    tags: ['{{patient_name}}', '{{patient_ic}}', '{{patient_phone}}', '{{patient_age}}'],
   },
   {
     label: 'Clinical',

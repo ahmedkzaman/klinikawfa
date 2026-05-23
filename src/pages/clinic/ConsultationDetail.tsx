@@ -95,6 +95,7 @@ import { PatientAlertBanner } from '@/components/clinic/PatientAlertBanner';
 import { VisitRemarksBanner } from '@/components/clinic/VisitRemarksBanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
+import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 
 const PRICE_TIERS = ['SELF PAY', 'PANEL'];
 
@@ -1173,6 +1174,10 @@ export default function ConsultationDetail() {
                         {patient.date_of_birth
                           ? format(new Date(patient.date_of_birth), 'dd MMM yyyy')
                           : '—'}
+                        {' '}
+                        <span className="text-slate-400">
+                          (Age: {calculateClinicalAge(patient.date_of_birth)})
+                        </span>
                       </p>
                     </div>
                   </div>
@@ -1392,7 +1397,7 @@ export default function ConsultationDetail() {
           }}
           template={issuingTemplate}
           existingDoc={editingDoc}
-          patient={patient?.id ? (patient as { id: string; name?: string | null; national_id?: string | null; phone?: string | null }) : null}
+          patient={patient?.id ? (patient as { id: string; name?: string | null; national_id?: string | null; phone?: string | null; date_of_birth?: string | null }) : null}
           consultationId={consultationId ?? null}
         />
 

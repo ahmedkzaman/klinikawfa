@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import type { DrugLabelSettings } from '@/hooks/clinic/useDrugLabelSettings';
 import { getPrinterOffsets } from '@/hooks/clinic/usePrinterSettings';
 import { FREQUENCY_LABELS } from './prescribingOptions';
+import { calculateClinicalAge } from './clinicalAge';
 
 
 /**
@@ -352,6 +353,7 @@ export function generateDrugLabelPdf(
   patientName: string | null,
   toggles: LabelToggles | null | undefined,
   clinic: ClinicLabelInfo,
+  patientDob?: string | null,
 ): string {
   const doc = new jsPDF({
     unit: 'mm',
@@ -361,9 +363,15 @@ export function generateDrugLabelPdf(
 
   const t = toggles ?? DEFAULT_TOGGLES;
 
+  // Append clinical age to patient name when DOB is available, e.g.
+  // "AHMAD BIN ABU (45y)". Skipped silently for legacy patients with no DOB.
+  const labelName = patientDob
+    ? `${patientName ?? 'WALK-IN'} (${calculateClinicalAge(patientDob)})`
+    : patientName;
+
   items.forEach((item, idx) => {
     if (idx > 0) doc.addPage([PAGE_W, PAGE_H], 'landscape');
-    drawLabel(doc, item, patientName, t, clinic);
+    drawLabel(doc, item, labelName, t, clinic);
   });
 
   return doc.output('bloburl').toString();

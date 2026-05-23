@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Stethoscope, Search, Phone, AlertCircle } from 'lucide-react';
-import { format, differenceInYears, differenceInMonths, differenceInDays } from 'date-fns';
+import { format } from 'date-fns';
 import { RoomPickerDialog } from '@/components/clinic/consultation/RoomPickerDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +40,7 @@ import {
   secondaryBtn,
   softInput,
 } from '@/lib/clinic/bentoTokens';
+import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 
 const TAB_KEYS = ['waiting', 'serving', 'on_hold', 'dispensary', 'completed', 'all'] as const;
 
@@ -52,18 +53,6 @@ const TAB_STATUSES: Record<string, ClinicStatus[]> = {
   all: [],
 };
 
-function formatAge(dob: string | null | undefined) {
-  if (!dob) return '—';
-  const d = new Date(dob);
-  const now = new Date();
-  const y = differenceInYears(now, d);
-  const m = differenceInMonths(now, d) % 12;
-  const dayDate = new Date(d);
-  dayDate.setFullYear(dayDate.getFullYear() + y);
-  dayDate.setMonth(dayDate.getMonth() + m);
-  const dy = differenceInDays(now, dayDate);
-  return `${y} yr ${m} mo ${dy} d`;
-}
 
 export default function Consultation() {
   const navigate = useNavigate();
@@ -303,7 +292,7 @@ export default function Consultation() {
                     <TableCell>
                       <div className="font-medium text-slate-800">{entry.patients?.name ? toMalayTitleCase(entry.patients.name) : '—'}</div>
                       <div className="text-xs text-slate-500">
-                        {formatAge(entry.patients?.date_of_birth)}
+                        {calculateClinicalAge(entry.patients?.date_of_birth)}
                       </div>
                     </TableCell>
                     <TableCell className="font-mono text-sm text-slate-600">

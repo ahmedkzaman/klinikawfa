@@ -15,6 +15,7 @@ import { usePayments } from '@/hooks/clinic/usePayments';
 import { cn } from '@/lib/utils';
 import { toMalayTitleCase } from '@/lib/textCase';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
+import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 import {
   bento,
   bentoHeader,
@@ -88,7 +89,7 @@ export default function VisitDetail() {
 
   const patient = entry.patients;
   const dob = patient?.date_of_birth
-    ? format(new Date(patient.date_of_birth), 'd MMM yyyy')
+    ? `${format(new Date(patient.date_of_birth), 'd MMM yyyy')} (Age: ${calculateClinicalAge(patient.date_of_birth)})`
     : '—';
 
   return (
@@ -158,6 +159,7 @@ export default function VisitDetail() {
               consultationId={consultation?.id}
               canEdit={false}
               patientName={patient?.name ?? null}
+              patientDob={patient?.date_of_birth ?? null}
             />
             <AttachmentsCard consultationId={consultation?.id} />
           </div>

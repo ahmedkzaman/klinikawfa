@@ -22,12 +22,14 @@ import {
 } from '@/hooks/clinic/useClinicDocuments';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { useCurrentDoctor } from '@/hooks/clinic/useCurrentDoctor';
+import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 
 interface PatientLite {
   id: string;
   name?: string | null;
   national_id?: string | null;
   phone?: string | null;
+  date_of_birth?: string | null;
 }
 
 interface Props {
@@ -60,6 +62,7 @@ export function IssueDocumentModal({
       '{{patient_name}}': patient?.name ?? '',
       '{{patient_ic}}': patient?.national_id ?? '',
       '{{patient_phone}}': patient?.phone ?? '',
+      '{{patient_age}}': calculateClinicalAge(patient?.date_of_birth),
       '{{current_date}}': new Date().toLocaleDateString('en-MY'),
       '{{clinic_name}}': settings?.clinic_name ?? 'Klinik Awfa',
       '{{doctor_name}}': doctor?.name ?? '',

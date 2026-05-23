@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
+import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 import { ReceiptTemplate, type ReceiptData } from './ReceiptTemplate';
 
 interface Props {
@@ -35,7 +36,7 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId }: Props) {
           queue_entry_id, consultation_id,
           queue_entries (
             queue_sequence, created_at,
-            patients ( name, national_id )
+            patients ( name, national_id, date_of_birth )
           )
         `,
         )
@@ -86,6 +87,7 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId }: Props) {
           : null,
         patientName: patient?.name ?? 'Walk-in',
         patientIc: patient?.national_id ?? null,
+        patientAge: calculateClinicalAge(patient?.date_of_birth),
         items,
         subtotal,
         invoiceTotal: subtotal,
