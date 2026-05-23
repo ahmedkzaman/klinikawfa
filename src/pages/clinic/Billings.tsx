@@ -31,6 +31,7 @@ type TabKey = 'paid' | 'panel' | 'self_pay';
 interface LedgerEntry {
   queueEntryId: string;
   queueLabel: string;
+  patientId: string;
   patientName: string;
   createdAt: string;
   clinicStatus: string;
@@ -40,6 +41,42 @@ interface LedgerEntry {
   latestPaymentType: 'self_pay' | 'panel' | 'insurance';
   latestMethod: string | null;
   latestPaymentId: string | null;
+}
+
+interface GroupedEntry extends LedgerEntry {
+  accumulatedSubtotal: number;
+  accumulatedPaid: number;
+  accumulatedOutstanding: number;
+  visitCount: number;
+  groupedQueueIds: string[];
+}
+
+function groupOutstandingByPatient(rows: LedgerEntry[]): GroupedEntry[] {
+  const map = new Map<string, GroupedEntry>();
+  const sorted = [...rows].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+  for (const e of sorted) {
+    const key = e.patientId;
+    const g = map.get(key);
+    if (!g) {
+      map.set(key, {
+        ...e,
+        accumulatedSubtotal: e.subtotal,
+        accumulatedPaid: e.paid,
+        accumulatedOutstanding: e.outstanding,
+        visitCount: 1,
+        groupedQueueIds: [e.queueEntryId],
+      });
+    } else {
+      g.accumulatedSubtotal += e.subtotal;
+      g.accumulatedPaid += e.paid;
+      g.accumulatedOutstanding += e.outstanding;
+      g.visitCount += 1;
+      g.groupedQueueIds.push(e.queueEntryId);
+    }
+  }
+  return Array.from(map.values());
 }
 
 const tabs: Array<{ key: TabKey; label: string }> = [
