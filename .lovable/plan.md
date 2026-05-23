@@ -1,32 +1,25 @@
-## Add Timeslip document type with print support
+## WhatsApp Appointment Reminders
 
-### 1. Settings — `DocumentTemplateBuilder.tsx`
-- Extend `DocType` union to include `'timeslip'`.
-- Add `{ value: 'timeslip', label: 'Timeslip (Attendance Slip)' }` to `DOC_TYPES`.
-- Add a new TAG_GROUPS row "Time" with tags `{{time_in}}`, `{{time_out}}`.
-- Add preview values to `PREVIEW_DICTIONARY`: `'{{time_in}}': '9:00 AM'`, `'{{time_out}}': '10:30 AM'`.
-- (No new page/route needed — the builder already supports any type via the dropdown. The Settings > Document Templates page lists all templates of any type.)
+### Overview
+Add a one-click WhatsApp reminder feature for clinic appointments. Staff click a button in the appointment detail sheet, which opens WhatsApp Web in a new tab with a pre-filled reminder message.
 
-### 2. Issue modal — `src/components/clinic/consultation/IssueDocumentModal.tsx`
-- Add state `const [timeIn, setTimeIn] = useState('')` and `const [timeOut, setTimeOut] = useState('')`.
-- On open (when not editing) auto-fill `timeOut` with current `HH:MM` (24h). Leave `timeIn` blank for the staff to fill.
-- Add `formatTime12h(hhmm)` helper that converts `"14:00"` → `"2:00 PM"`; returns `'______'` for empty.
-- Extend `substitutions` map with `'{{time_in}}'` and `'{{time_out}}'` using the formatter.
-- Re-run substitution whenever `timeIn`/`timeOut` change (add them to the `useEffect` deps), but only for new docs — never overwrite an existing doc the user is editing.
-- Conditionally render a 2-column "Time In / Time Out" row of `<Input type="time">` above the editor when `template?.type === 'timeslip'` (hidden when editing an existing non-timeslip doc).
-- Reset both states on close.
+### Files to Create
 
-### 3. Print pipeline — `src/lib/clinic/printDocument.ts`
-- Already generic (renders raw text on chosen paper with margins). No branching required; timeslips flow through the same pipeline as MC.
-- No `@media print` shell-hiding work needed — printing happens via `pdf.autoPrint()` in a new tab, so the app shell is never in the print frame.
+1. **`src/lib/clinic/whatsappUtils.ts`**
+   - `formatWhatsAppNumber(phone: string): string` — strip non-numeric chars, replace leading `0` with `60`, leave `6`-prefixed numbers untouched.
+   - `generateAppointmentReminderLink(patientName: string, phone: string, appointmentDate: Date, appointmentTime: string): string` — format datetime as `"d MMM yyyy 'at' h:mm a"`, build reminder message, encodeURIComponent, return `https://wa.me/${phone}?text=${msg}`.
 
-### 4. Re-print from history — `src/pages/clinic/ConsultationDetail.tsx`
-- The existing documents list already renders one Print button per `ConsultationDocument` (line ~1035) that calls `printDocument(d)`. Timeslips inherit this automatically — no change needed beyond verifying the row renders for `type === 'timeslip'` (it does; no type filter exists).
+### Files to Edit
 
-### 5. Out of scope
-- No DB migration. `consultation_documents.type` is `text` and accepts `'timeslip'` as-is.
-- No new print template component; reuse `printDocument.ts`.
-- `PatientProfileSheet.tsx` does not list past documents today — not adding one here.
+2. **`src/pages/clinic/Appointments.tsx`**
+   - Import `MessageCircle` from `lucide-react` and the two utility functions.
+   - In `AppointmentDetailsSheet`, add a "Send Reminder" button below the patient phone display (within the existing patient info card or just above the action buttons).
+   - Button disabled if `!appt.patients?.phone`.
+   - On click: `window.open(generateAppointmentReminderLink(...), '_blank')`.
+   - Use the existing green/emerald style tokens for the button to match the "arrived" action pattern (e.g., `bg-emerald-600 text-white`).
 
-### How to use after deploy
-Settings → Document Templates → New → Type "Timeslip", paste the boilerplate from the brief.
+### Notes
+- No backend changes — pure frontend wa.me URL generation.
+- `date-fns` is already used in the file for formatting.
+- Patient phone is already fetched via `patients:patient_id(id, name, phone)` in the range query.
+- Appointment time string is `HH:MM` format; combine with `appointment_date` into a Date before formatting.

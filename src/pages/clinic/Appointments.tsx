@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { addDays, format, parse, startOfWeek } from 'date-fns';
-import { ChevronLeft, ChevronRight, Plus, CalendarDays, Calendar as CalIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, CalendarDays, Calendar as CalIcon, MessageCircle } from 'lucide-react';
+import { generateAppointmentReminderLink } from '@/lib/clinic/whatsappUtils';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { toMalayTitleCase } from '@/lib/textCase';
