@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { FileText, User, Calendar, Stethoscope, Save } from 'lucide-react';
+import { FileText, User, Calendar, Stethoscope, Save, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useUpsertDocumentTemplate } from '@/hooks/clinic/useClinicDocuments';
@@ -26,6 +26,8 @@ const PREVIEW_DICTIONARY: Record<string, string> = {
   '{{mc_days}}': '2',
   '{{mc_start}}': new Date().toLocaleDateString('en-MY'),
   '{{mc_end}}': new Date(Date.now() + 86400000).toLocaleDateString('en-MY'),
+  '{{time_in}}': '9:00 AM',
+  '{{time_out}}': '10:30 AM',
 };
 
 const TAG_GROUPS: { label: string; icon: JSX.Element; tags: string[] }[] = [
@@ -40,6 +42,11 @@ const TAG_GROUPS: { label: string; icon: JSX.Element; tags: string[] }[] = [
     tags: ['{{diagnosis}}', '{{mc_days}}', '{{mc_start}}', '{{mc_end}}'],
   },
   {
+    label: 'Time',
+    icon: <Clock className="h-3.5 w-3.5" />,
+    tags: ['{{time_in}}', '{{time_out}}'],
+  },
+  {
     label: 'Admin',
     icon: <Calendar className="h-3.5 w-3.5" />,
     tags: ['{{current_date}}', '{{clinic_name}}', '{{doctor_name}}'],
@@ -48,7 +55,7 @@ const TAG_GROUPS: { label: string; icon: JSX.Element; tags: string[] }[] = [
 
 type PaperSize = 'A4' | 'A5' | 'A6';
 type Orientation = 'portrait' | 'landscape';
-type DocType = 'memo' | 'referral' | 'prescription' | 'mc' | 'quarantine';
+type DocType = 'memo' | 'referral' | 'prescription' | 'mc' | 'quarantine' | 'timeslip';
 
 interface TemplateSettings {
   name: string;
@@ -69,6 +76,7 @@ const DOC_TYPES: { value: DocType; label: string }[] = [
   { value: 'prescription', label: 'Prescription Slip' },
   { value: 'mc', label: 'Medical Certificate' },
   { value: 'quarantine', label: 'Quarantine Notice' },
+  { value: 'timeslip', label: 'Timeslip (Attendance Slip)' },
 ];
 
 const escapeHtml = (str: string) =>
