@@ -31,6 +31,7 @@ type TabKey = 'paid' | 'panel' | 'self_pay';
 interface LedgerEntry {
   queueEntryId: string;
   queueLabel: string;
+  patientId: string;
   patientName: string;
   createdAt: string;
   clinicStatus: string;
@@ -40,6 +41,42 @@ interface LedgerEntry {
   latestPaymentType: 'self_pay' | 'panel' | 'insurance';
   latestMethod: string | null;
   latestPaymentId: string | null;
+}
+
+interface GroupedEntry extends LedgerEntry {
+  accumulatedSubtotal: number;
+  accumulatedPaid: number;
+  accumulatedOutstanding: number;
+  visitCount: number;
+  groupedQueueIds: string[];
+}
+
+function groupOutstandingByPatient(rows: LedgerEntry[]): GroupedEntry[] {
+  const map = new Map<string, GroupedEntry>();
+  const sorted = [...rows].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+  for (const e of sorted) {
+    const key = e.patientId;
+    const g = map.get(key);
+    if (!g) {
+      map.set(key, {
+        ...e,
+        accumulatedSubtotal: e.subtotal,
+        accumulatedPaid: e.paid,
+        accumulatedOutstanding: e.outstanding,
+        visitCount: 1,
+        groupedQueueIds: [e.queueEntryId],
+      });
+    } else {
+      g.accumulatedSubtotal += e.subtotal;
+      g.accumulatedPaid += e.paid;
+      g.accumulatedOutstanding += e.outstanding;
+      g.visitCount += 1;
+      g.groupedQueueIds.push(e.queueEntryId);
+    }
+  }
+  return Array.from(map.values());
 }
 
 const tabs: Array<{ key: TabKey; label: string }> = [
@@ -149,6 +186,7 @@ export default function Billings() {
         byQueue.set(qe.id, {
           queueEntryId: qe.id,
           queueLabel: formatQueueNo(qe.created_at, qe.queue_sequence),
+          patientId: qe.patient_id,
           patientName: qe.patients?.name ? toMalayTitleCase(qe.patients.name) : '—',
           createdAt: qe.created_at,
           clinicStatus: qe.clinic_status,
@@ -170,42 +208,47 @@ export default function Billings() {
     return list;
   }, [ledger, itemsByQueue]);
 
-  const filtered = useMemo(() => {
+  const filtered = useMemo<LedgerEntry[] | GroupedEntry[]>(() => {
     if (activeTab === 'paid') {
       return entries.filter(
         (e) => e.outstanding <= 0 && e.clinicStatus === 'completed',
       );
     }
     if (activeTab === 'panel') {
-      return entries.filter(
-        (e) =>
-          e.outstanding > 0 &&
-          (e.latestPaymentType === 'panel' ||
-            e.latestPaymentType === 'insurance'),
+      return groupOutstandingByPatient(
+        entries.filter(
+          (e) =>
+            e.outstanding > 0 &&
+            (e.latestPaymentType === 'panel' ||
+              e.latestPaymentType === 'insurance'),
+        ),
       );
     }
-    return entries.filter(
-      (e) => e.outstanding > 0 && e.latestPaymentType === 'self_pay',
+    return groupOutstandingByPatient(
+      entries.filter(
+        (e) => e.outstanding > 0 && e.latestPaymentType === 'self_pay',
+      ),
     );
   }, [entries, activeTab]);
 
-  const counts = useMemo(
-    () => ({
+  const counts = useMemo(() => {
+    const panelRows = entries.filter(
+      (e) =>
+        e.outstanding > 0 &&
+        (e.latestPaymentType === 'panel' ||
+          e.latestPaymentType === 'insurance'),
+    );
+    const selfPayRows = entries.filter(
+      (e) => e.outstanding > 0 && e.latestPaymentType === 'self_pay',
+    );
+    return {
       paid: entries.filter(
         (e) => e.outstanding <= 0 && e.clinicStatus === 'completed',
       ).length,
-      panel: entries.filter(
-        (e) =>
-          e.outstanding > 0 &&
-          (e.latestPaymentType === 'panel' ||
-            e.latestPaymentType === 'insurance'),
-      ).length,
-      self_pay: entries.filter(
-        (e) => e.outstanding > 0 && e.latestPaymentType === 'self_pay',
-      ).length,
-    }),
-    [entries],
-  );
+      panel: new Set(panelRows.map((e) => e.patientId)).size,
+      self_pay: new Set(selfPayRows.map((e) => e.patientId)).size,
+    };
+  }, [entries]);
 
   const isLoading = ledgerLoading || itemsLoading;
 
@@ -360,7 +403,13 @@ export default function Billings() {
               </p>
             </div>
           ) : (
-            filtered.map((e) => (
+            filtered.map((e) => {
+              const grouped = 'visitCount' in e ? (e as GroupedEntry) : null;
+              const subtotal = grouped ? grouped.accumulatedSubtotal : e.subtotal;
+              const paid = grouped ? grouped.accumulatedPaid : e.paid;
+              const outstanding = grouped ? grouped.accumulatedOutstanding : e.outstanding;
+              const visitCount = grouped?.visitCount ?? 1;
+              return (
               <div
                 key={e.queueEntryId}
                 className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_120px_140px] gap-2 px-4 py-3 border-b border-slate-100 last:border-0 items-center hover:bg-slate-50/60 transition-colors"
@@ -368,25 +417,38 @@ export default function Billings() {
                 <span className="text-sm tabular-nums text-slate-600">
                   {e.queueLabel}
                 </span>
-                <span className="text-sm font-medium text-slate-800 truncate">
-                  {e.patientName}
+                <span className="text-sm font-medium text-slate-800 truncate flex items-center gap-2 min-w-0">
+                  <span className="truncate">{e.patientName}</span>
+                  {visitCount > 1 && (
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] py-0 px-1.5 h-5 shrink-0"
+                    >
+                      {visitCount} Visits
+                    </Badge>
+                  )}
                 </span>
                 <span className="text-xs text-slate-500">
                   {format(new Date(e.createdAt), 'd MMM, h:mm a')}
+                  {visitCount > 1 && (
+                    <span className="block text-[10px] text-slate-400">
+                      +{visitCount - 1} earlier
+                    </span>
+                  )}
                 </span>
                 <span className="text-sm tabular-nums text-slate-600">
-                  RM {e.subtotal.toFixed(2)}
+                  RM {subtotal.toFixed(2)}
                 </span>
                 <span className="text-sm tabular-nums text-slate-600">
-                  RM {e.paid.toFixed(2)}
+                  RM {paid.toFixed(2)}
                 </span>
                 <span
                   className={cn(
                     'text-sm tabular-nums',
-                    e.outstanding > 0 ? 'text-rose-600 font-semibold' : 'text-slate-600',
+                    outstanding > 0 ? 'text-rose-600 font-semibold' : 'text-slate-600',
                   )}
                 >
-                  RM {e.outstanding.toFixed(2)}
+                  RM {outstanding.toFixed(2)}
                 </span>
                 <span>
                   {e.paid > 0 || e.latestMethod ? (
@@ -405,7 +467,7 @@ export default function Billings() {
                 </span>
 
                 <div className="flex items-center gap-1">
-                  {e.latestPaymentId && (
+                  {e.latestPaymentId && visitCount === 1 && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -430,7 +492,8 @@ export default function Billings() {
                   </Button>
                 </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
