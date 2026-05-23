@@ -34,7 +34,9 @@ function sanitizeFileName(name: string): string {
 export function useUploadAttachment(consultationId: string | null | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async (args: File | { file: File; remark?: string | null }) => {
+      const file = args instanceof File ? args : args.file;
+      const remark = args instanceof File ? null : (args.remark?.trim() || null);
       if (!consultationId) {
         throw new Error('Missing consultation context');
       }
@@ -68,9 +70,11 @@ export function useUploadAttachment(consultationId: string | null | undefined) {
           file_name: file.name,
           content_type: file.type || null,
           uploaded_by: user?.id ?? null,
+          remark,
         })
         .select()
         .single();
+
 
       if (error) {
         // Best-effort cleanup so we don't leave orphan storage objects.
