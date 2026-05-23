@@ -1173,6 +1173,10 @@ export default function ConsultationDetail() {
                         {patient.date_of_birth
                           ? format(new Date(patient.date_of_birth), 'dd MMM yyyy')
                           : '—'}
+                        {' '}
+                        <span className="text-slate-400">
+                          (Age: {calculateClinicalAge(patient.date_of_birth)})
+                        </span>
                       </p>
                     </div>
                   </div>

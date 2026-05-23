@@ -31,6 +31,7 @@ import {
 } from '@/hooks/patients/usePatientVisitHistory';
 import { useConsultationAttachments } from '@/hooks/clinic/useAttachments';
 import type { PatientRow, ClinicStatus } from '@/types/clinic';
+import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 
 /**
  * Lazy attachment list — calls `useConsultationAttachments` only when
