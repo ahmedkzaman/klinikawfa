@@ -640,6 +640,17 @@ function AppointmentDetailsSheet({
                   Mark Arrived &amp; Check-In
                 </Button>
               )}
+              {canReschedule && (
+                <Button
+                  variant="outline"
+                  className={cn(secondaryBtn, 'w-full')}
+                  onClick={() => setRescheduleOpen(true)}
+                  disabled={update.isPending}
+                >
+                  <CalendarClock className="h-4 w-4 mr-1" />
+                  Reschedule
+                </Button>
+              )}
               {appt.status !== 'cancelled' && (
                 <Button
                   variant="outline"
@@ -664,6 +675,61 @@ function AppointmentDetailsSheet({
           </div>
         </SheetContent>
       </Sheet>
+
+      <Dialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Reschedule appointment</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>New date</Label>
+              <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      'w-full justify-start text-left font-normal',
+                      !newDate && 'text-muted-foreground',
+                    )}
+                  >
+                    <CalendarDays className="mr-2 h-4 w-4" />
+                    {newDate ? format(newDate, 'EEE, d MMM yyyy') : 'Pick a date'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={newDate}
+                    onSelect={(d) => {
+                      setNewDate(d);
+                      setDatePopoverOpen(false);
+                    }}
+                    initialFocus
+                    className={cn('p-3 pointer-events-auto')}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="space-y-1.5">
+              <Label>New time</Label>
+              <Input
+                type="time"
+                value={newTime}
+                onChange={(e) => setNewTime(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRescheduleOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={submitReschedule} disabled={update.isPending}>
+              {update.isPending ? 'Saving…' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <CheckInWalkInDialog
         open={checkInOpen}
