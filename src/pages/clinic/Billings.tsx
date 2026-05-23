@@ -186,6 +186,7 @@ export default function Billings() {
         byQueue.set(qe.id, {
           queueEntryId: qe.id,
           queueLabel: formatQueueNo(qe.created_at, qe.queue_sequence),
+          patientId: qe.patient_id,
           patientName: qe.patients?.name ? toMalayTitleCase(qe.patients.name) : '—',
           createdAt: qe.created_at,
           clinicStatus: qe.clinic_status,
