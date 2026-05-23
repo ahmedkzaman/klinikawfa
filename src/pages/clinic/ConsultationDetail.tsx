@@ -357,6 +357,8 @@ export default function ConsultationDetail() {
   const [editingDoc, setEditingDoc] = useState<ConsultationDocument | null>(null);
   const [voidingDoc, setVoidingDoc] = useState<ConsultationDocument | null>(null);
   const [viewingDoc, setViewingDoc] = useState<ConsultationDocument | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const { data: docTemplates = [] } = useDocumentTemplates();
   const deleteDoc = useDeleteConsultationDocument();
   const addItem = useAddConsultationItem();
   const removeItem = useRemoveConsultationItem();
