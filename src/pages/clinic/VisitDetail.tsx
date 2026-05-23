@@ -159,6 +159,7 @@ export default function VisitDetail() {
               consultationId={consultation?.id}
               canEdit={false}
               patientName={patient?.name ?? null}
+              patientDob={patient?.date_of_birth ?? null}
             />
             <AttachmentsCard consultationId={consultation?.id} />
           </div>
