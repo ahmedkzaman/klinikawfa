@@ -1397,7 +1397,7 @@ export default function ConsultationDetail() {
           }}
           template={issuingTemplate}
           existingDoc={editingDoc}
-          patient={patient?.id ? (patient as { id: string; name?: string | null; national_id?: string | null; phone?: string | null }) : null}
+          patient={patient?.id ? (patient as { id: string; name?: string | null; national_id?: string | null; phone?: string | null; date_of_birth?: string | null }) : null}
           consultationId={consultationId ?? null}
         />
 
