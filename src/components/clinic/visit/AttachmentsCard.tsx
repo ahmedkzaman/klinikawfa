@@ -105,11 +105,18 @@ export function AttachmentsCard({ consultationId }: AttachmentsCardProps) {
             {upload.isPending ? 'Uploading…' : 'Upload'}
           </Button>
         </div>
+        <Input
+          placeholder="Add a description or remark (optional)..."
+          value={remark}
+          onChange={(e) => setRemark(e.target.value)}
+          disabled={disabled || upload.isPending}
+        />
         <p className="text-xs text-muted-foreground">
           Max 5MB. Images or PDFs.
         </p>
 
         <div className="border-t pt-3">
+
           {isLoading ? (
             <p className="text-xs text-muted-foreground">Loading attachments…</p>
           ) : attachments.length === 0 ? (
