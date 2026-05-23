@@ -178,9 +178,36 @@ export function IssueDocumentModal({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0 p-4">
           {/* Editor */}
           <div className="flex flex-col bg-white border border-slate-200 rounded-lg overflow-hidden min-h-0">
-            <div className="px-3 py-2 border-b bg-slate-50 text-xs font-semibold text-slate-600 uppercase tracking-wide">
-              Edit Content
+            <div className="px-3 py-2 border-b bg-slate-50 text-xs font-semibold text-slate-600 uppercase tracking-wide flex items-center justify-between">
+              <span>Edit Content</span>
+              {isTimeslip && (
+                <span className="flex items-center gap-1 text-slate-500 normal-case tracking-normal font-normal">
+                  <Clock className="h-3 w-3" /> Timeslip
+                </span>
+              )}
             </div>
+            {isTimeslip && (
+              <div className="grid grid-cols-2 gap-3 px-3 py-2 border-b bg-slate-50/60">
+                <div className="space-y-1">
+                  <Label className="text-xs">Time In</Label>
+                  <Input
+                    type="time"
+                    value={timeIn}
+                    onChange={(e) => setTimeIn(e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Time Out</Label>
+                  <Input
+                    type="time"
+                    value={timeOut}
+                    onChange={(e) => setTimeOut(e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                </div>
+              </div>
+            )}
             <Textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
@@ -188,6 +215,7 @@ export function IssueDocumentModal({
               placeholder="Document content…"
             />
           </div>
+
 
           {/* Preview */}
           <div className="bg-slate-200 rounded-lg p-4 flex justify-center items-start overflow-y-auto min-h-0">
