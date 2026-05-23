@@ -135,6 +135,11 @@ export function AttachmentsCard({ consultationId }: AttachmentsCardProps) {
                       <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
                       <div className="min-w-0">
                         <p className="truncate font-medium">{a.file_name}</p>
+                        {a.remark && (
+                          <p className="text-xs text-muted-foreground italic truncate">
+                            {a.remark}
+                          </p>
+                        )}
                         <p className="text-[10px] text-muted-foreground">
                           {(() => {
                             try {
@@ -145,6 +150,7 @@ export function AttachmentsCard({ consultationId }: AttachmentsCardProps) {
                           })()}
                         </p>
                       </div>
+
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {a.signedUrl ? (
