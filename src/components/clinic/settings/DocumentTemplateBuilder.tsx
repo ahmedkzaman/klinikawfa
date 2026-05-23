@@ -55,7 +55,7 @@ const TAG_GROUPS: { label: string; icon: JSX.Element; tags: string[] }[] = [
 
 type PaperSize = 'A4' | 'A5' | 'A6';
 type Orientation = 'portrait' | 'landscape';
-type DocType = 'memo' | 'referral' | 'prescription' | 'mc' | 'quarantine' | 'timeslip';
+type DocType = 'mc' | 'timeslip' | 'referral' | 'memo' | 'prescription' | 'quarantine' | 'consent' | 'lab_request' | 'other';
 
 interface TemplateSettings {
   name: string;
@@ -71,12 +71,15 @@ const PAPER_DIMS: Record<PaperSize, { w: number; h: number }> = {
 };
 
 const DOC_TYPES: { value: DocType; label: string }[] = [
-  { value: 'memo', label: 'Memo' },
-  { value: 'referral', label: 'Referral Letter' },
-  { value: 'prescription', label: 'Prescription Slip' },
   { value: 'mc', label: 'Medical Certificate' },
-  { value: 'quarantine', label: 'Quarantine Notice' },
   { value: 'timeslip', label: 'Timeslip (Attendance Slip)' },
+  { value: 'referral', label: 'Referral Letter' },
+  { value: 'memo', label: 'Memo / Cover Letter' },
+  { value: 'prescription', label: 'Prescription Slip' },
+  { value: 'quarantine', label: 'Quarantine Order' },
+  { value: 'consent', label: 'Consent Form' },
+  { value: 'lab_request', label: 'Lab / Imaging Request' },
+  { value: 'other', label: 'Other Document' }
 ];
 
 const escapeHtml = (str: string) =>
