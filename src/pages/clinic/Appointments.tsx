@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { addDays, format, parse, startOfWeek } from 'date-fns';
-import { ChevronLeft, ChevronRight, Plus, CalendarDays, Calendar as CalIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, CalendarDays, Calendar as CalIcon, MessageCircle } from 'lucide-react';
+import { generateAppointmentReminderLink } from '@/lib/clinic/whatsappUtils';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { toMalayTitleCase } from '@/lib/textCase';
@@ -573,6 +574,35 @@ function AppointmentDetailsSheet({
             )}
 
             <div className="space-y-2 pt-2 border-t border-slate-100">
+              {appt.patients?.phone && !['completed', 'cancelled', 'no_show'].includes(appt.status) && (
+                <Button
+                  variant="outline"
+                  className="w-full bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white border-emerald-600"
+                  onClick={() => {
+                    const dt = parse(
+                      `${appt.appointment_date} ${appt.appointment_time}`,
+                      'yyyy-MM-dd HH:mm:ss',
+                      new Date(),
+                    );
+                    const safeDt = isNaN(dt.getTime())
+                      ? parse(
+                          `${appt.appointment_date} ${appt.appointment_time.slice(0, 5)}`,
+                          'yyyy-MM-dd HH:mm',
+                          new Date(),
+                        )
+                      : dt;
+                    const link = generateAppointmentReminderLink(
+                      appt.patients?.name ? toMalayTitleCase(appt.patients.name) : 'Patient',
+                      appt.patients!.phone!,
+                      safeDt,
+                    );
+                    window.open(link, '_blank');
+                  }}
+                >
+                  <MessageCircle className="h-4 w-4 mr-1" />
+                  Send WhatsApp Reminder
+                </Button>
+              )}
               {!['arrived', 'completed', 'cancelled', 'in_progress'].includes(appt.status) && (
                 <Button
                   className={cn(primaryBtn, 'w-full')}
