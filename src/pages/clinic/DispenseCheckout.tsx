@@ -402,6 +402,7 @@ export default function DispenseCheckout() {
               canEdit={dispensaryCanEdit}
               canEditInstructions
               patientName={patient?.name ?? null}
+              patientDob={patient?.date_of_birth ?? null}
             />
 
 
