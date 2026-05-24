@@ -143,14 +143,11 @@ export function useUpsertDocumentTemplate() {
       orientation: string;
       is_active?: boolean;
     }) => {
-      const payload: Record<string, unknown> = {
+      const payload = {
         ...input,
         is_active: input.is_active ?? true,
+        ...(input.id ? {} : { created_by: user?.id ?? null }),
       };
-      if (!input.id) {
-        // Only stamp creator on new rows so updates don't overwrite original author
-        payload.created_by = user?.id ?? null;
-      }
       const { data, error } = await supabase
         .from('clinic_document_templates')
         .upsert(payload)
