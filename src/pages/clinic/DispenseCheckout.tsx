@@ -1,6 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Info, Printer } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Info, Printer, FileText, FilePlus2, Pencil, Trash2 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { IssueDocumentModal } from '@/components/clinic/consultation/IssueDocumentModal';
+import { ViewDocumentModal } from '@/components/clinic/consultation/ViewDocumentModal';
+import {
+  useConsultationDocuments,
+  useDeleteConsultationDocument,
+  useDocumentTemplates,
+  type DocumentTemplate,
+  type ConsultationDocument,
+} from '@/hooks/clinic/useClinicDocuments';
+import { printDocument } from '@/lib/clinic/printDocument';
+
 import { PrintReceiptDialog } from '@/components/clinic/billing/PrintReceiptDialog';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -63,6 +91,11 @@ export default function DispenseCheckout() {
 
   const [selectedCharges, setSelectedCharges] = useState<SelectedCharge[]>([]);
   const [editingItem, setEditingItem] = useState<ConsultationItemRow | null>(null);
+  const [issuingTemplate, setIssuingTemplate] = useState<DocumentTemplate | null>(null);
+  const [editingDoc, setEditingDoc] = useState<ConsultationDocument | null>(null);
+  const [voidingDoc, setVoidingDoc] = useState<ConsultationDocument | null>(null);
+  const [viewingDoc, setViewingDoc] = useState<ConsultationDocument | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const handleChargesChange = useCallback((c: SelectedCharge[]) => {
     setSelectedCharges(c);
   }, []);
@@ -75,6 +108,9 @@ export default function DispenseCheckout() {
   const { data: consultation, isFetched: consultationFetched, refetch: refetchConsultation } = useConsultation(queueEntryId);
   const { data: items = [] } = useConsultationItems(consultation?.id);
   const { data: payments = [] } = usePayments(queueEntryId);
+  const { data: attachedDocs = [] } = useConsultationDocuments(consultation?.id);
+  const { data: docTemplates = [] } = useDocumentTemplates();
+  const deleteDoc = useDeleteConsultationDocument();
   const { isLockedByOther, canEdit, forceUnlock } = useConsultationLock(
     consultation as
       | { id?: string; locked_by?: string | null; status?: string }
@@ -434,6 +470,82 @@ export default function DispenseCheckout() {
 
             {!isDirectSale && <AttachmentsCard consultationId={consultation?.id} />}
 
+            {/* Attached Documents (MC, Time Slip, Referral, etc.) */}
+            <Card className={bento}>
+              <CardContent className="p-5 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className={`${bentoHeader} mb-0`}>ATTACHED DOCUMENTS</h2>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPickerOpen(true)}
+                    disabled={!consultation?.id || !entry.patient_id}
+                    className="gap-1.5"
+                  >
+                    <FilePlus2 className="h-4 w-4" />
+                    Issue New Document
+                  </Button>
+                </div>
+                {attachedDocs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No documents attached. Click "Issue New Document" to create an MC, time slip, referral, or other document.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {attachedDocs.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-slate-800 truncate">
+                            {doc.template_name}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {doc.type ?? 'document'} ·{' '}
+                            {new Date(doc.created_at).toLocaleString('en-MY')} · {doc.paper_size}{' '}
+                            {doc.orientation}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setViewingDoc(doc)}
+                          >
+                            View / Print
+                          </Button>
+                          {dispensaryCanEdit && (
+                            <>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8"
+                                onClick={() => setEditingDoc(doc)}
+                                aria-label="Edit document"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => setVoidingDoc(doc)}
+                                aria-label="Void document"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+
             {!isDirectSale && (consultation?.patient_id || entry.patient_id) && (
               <FollowUpScheduler
                 patientId={(consultation?.patient_id ?? entry.patient_id) as string}
@@ -520,7 +632,103 @@ export default function DispenseCheckout() {
         onOpenChange={(o) => !o && setPrintPaymentId(null)}
         paymentId={printPaymentId}
       />
+
+      <IssueDocumentModal
+        isOpen={!!issuingTemplate || !!editingDoc}
+        onClose={() => {
+          setIssuingTemplate(null);
+          setEditingDoc(null);
+        }}
+        template={issuingTemplate}
+        existingDoc={editingDoc}
+        patient={
+          entry?.patient_id
+            ? {
+                id: entry.patient_id,
+                name: patient?.name ?? null,
+                national_id: patient?.national_id ?? null,
+                phone: patient?.phone ?? null,
+                date_of_birth: patient?.date_of_birth ?? null,
+              }
+            : null
+        }
+        consultationId={consultation?.id ?? null}
+      />
+
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Choose a document template</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+            {docTemplates.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                No active templates. Add one in Settings → Document Templates.
+              </p>
+            ) : (
+              docTemplates.map((tpl) => (
+                <button
+                  key={tpl.id}
+                  type="button"
+                  onClick={() => {
+                    setPickerOpen(false);
+                    setIssuingTemplate(tpl);
+                  }}
+                  className="w-full text-left rounded-lg border border-slate-100 hover:border-slate-300 hover:bg-slate-50 px-3 py-2.5 flex items-center gap-3 transition-colors"
+                >
+                  <FileText className="h-4 w-4 text-slate-500 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-slate-800 truncate">
+                      {tpl.name}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {tpl.type} · {tpl.paper_size} {tpl.orientation}
+                    </div>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!voidingDoc} onOpenChange={(v) => !v && setVoidingDoc(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Void this document?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. The document will be permanently removed from this consultation.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                if (!voidingDoc) return;
+                await deleteDoc.mutateAsync({
+                  id: voidingDoc.id,
+                  consultation_id: voidingDoc.consultation_id,
+                });
+                setVoidingDoc(null);
+              }}
+            >
+              Void Document
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <ViewDocumentModal
+        doc={viewingDoc}
+        onClose={() => setViewingDoc(null)}
+        onPrint={(d) => {
+          setViewingDoc(null);
+          printDocument(d);
+        }}
+      />
     </div>
+
   );
 }
 
