@@ -632,7 +632,103 @@ export default function DispenseCheckout() {
         onOpenChange={(o) => !o && setPrintPaymentId(null)}
         paymentId={printPaymentId}
       />
+
+      <IssueDocumentModal
+        isOpen={!!issuingTemplate || !!editingDoc}
+        onClose={() => {
+          setIssuingTemplate(null);
+          setEditingDoc(null);
+        }}
+        template={issuingTemplate}
+        existingDoc={editingDoc}
+        patient={
+          entry?.patient_id
+            ? {
+                id: entry.patient_id,
+                name: patient?.name ?? null,
+                national_id: patient?.national_id ?? null,
+                phone: patient?.phone ?? null,
+                date_of_birth: patient?.date_of_birth ?? null,
+              }
+            : null
+        }
+        consultationId={consultation?.id ?? null}
+      />
+
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Choose a document template</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+            {docTemplates.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                No active templates. Add one in Settings → Document Templates.
+              </p>
+            ) : (
+              docTemplates.map((tpl) => (
+                <button
+                  key={tpl.id}
+                  type="button"
+                  onClick={() => {
+                    setPickerOpen(false);
+                    setIssuingTemplate(tpl);
+                  }}
+                  className="w-full text-left rounded-lg border border-slate-100 hover:border-slate-300 hover:bg-slate-50 px-3 py-2.5 flex items-center gap-3 transition-colors"
+                >
+                  <FileText className="h-4 w-4 text-slate-500 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-slate-800 truncate">
+                      {tpl.name}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {tpl.type} · {tpl.paper_size} {tpl.orientation}
+                    </div>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!voidingDoc} onOpenChange={(v) => !v && setVoidingDoc(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Void this document?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. The document will be permanently removed from this consultation.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                if (!voidingDoc) return;
+                await deleteDoc.mutateAsync({
+                  id: voidingDoc.id,
+                  consultation_id: voidingDoc.consultation_id,
+                });
+                setVoidingDoc(null);
+              }}
+            >
+              Void Document
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <ViewDocumentModal
+        doc={viewingDoc}
+        onClose={() => setViewingDoc(null)}
+        onPrint={(d) => {
+          setViewingDoc(null);
+          printDocument(d);
+        }}
+      />
     </div>
+
   );
 }
 
