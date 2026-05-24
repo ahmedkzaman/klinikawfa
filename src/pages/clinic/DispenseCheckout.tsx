@@ -19,6 +19,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { IssueDocumentModal } from '@/components/clinic/consultation/IssueDocumentModal';
+import { DocumentAuditLine } from '@/components/clinic/consultation/DocumentAuditLine';
 import { ViewDocumentModal } from '@/components/clinic/consultation/ViewDocumentModal';
 import {
   useConsultationDocuments,
