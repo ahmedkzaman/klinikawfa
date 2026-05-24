@@ -28,7 +28,7 @@ import {
   type ConsultationDocument,
 } from '@/hooks/clinic/useClinicDocuments';
 import { printDocument } from '@/lib/clinic/printDocument';
-import { bentoHeader as bentoHeaderToken } from '@/lib/clinic/bentoTokens';
+
 import { PrintReceiptDialog } from '@/components/clinic/billing/PrintReceiptDialog';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
