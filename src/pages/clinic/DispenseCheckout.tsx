@@ -108,6 +108,9 @@ export default function DispenseCheckout() {
   const { data: consultation, isFetched: consultationFetched, refetch: refetchConsultation } = useConsultation(queueEntryId);
   const { data: items = [] } = useConsultationItems(consultation?.id);
   const { data: payments = [] } = usePayments(queueEntryId);
+  const { data: attachedDocs = [] } = useConsultationDocuments(consultation?.id);
+  const { data: docTemplates = [] } = useDocumentTemplates();
+  const deleteDoc = useDeleteConsultationDocument();
   const { isLockedByOther, canEdit, forceUnlock } = useConsultationLock(
     consultation as
       | { id?: string; locked_by?: string | null; status?: string }
