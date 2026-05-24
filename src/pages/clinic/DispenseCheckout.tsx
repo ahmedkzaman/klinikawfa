@@ -470,6 +470,82 @@ export default function DispenseCheckout() {
 
             {!isDirectSale && <AttachmentsCard consultationId={consultation?.id} />}
 
+            {/* Attached Documents (MC, Time Slip, Referral, etc.) */}
+            <Card className={bento}>
+              <CardContent className="p-5 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className={`${bentoHeader} mb-0`}>ATTACHED DOCUMENTS</h2>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPickerOpen(true)}
+                    disabled={!consultation?.id || !entry.patient_id}
+                    className="gap-1.5"
+                  >
+                    <FilePlus2 className="h-4 w-4" />
+                    Issue New Document
+                  </Button>
+                </div>
+                {attachedDocs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No documents attached. Click "Issue New Document" to create an MC, time slip, referral, or other document.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {attachedDocs.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-slate-800 truncate">
+                            {doc.template_name}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {doc.type ?? 'document'} ·{' '}
+                            {new Date(doc.created_at).toLocaleString('en-MY')} · {doc.paper_size}{' '}
+                            {doc.orientation}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setViewingDoc(doc)}
+                          >
+                            View / Print
+                          </Button>
+                          {dispensaryCanEdit && (
+                            <>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8"
+                                onClick={() => setEditingDoc(doc)}
+                                aria-label="Edit document"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => setVoidingDoc(doc)}
+                                aria-label="Void document"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+
             {!isDirectSale && (consultation?.patient_id || entry.patient_id) && (
               <FollowUpScheduler
                 patientId={(consultation?.patient_id ?? entry.patient_id) as string}
