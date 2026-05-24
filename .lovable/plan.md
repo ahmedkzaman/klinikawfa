@@ -1,39 +1,36 @@
-## Appointment Rescheduling & Retroactive Documents
+## Problem
 
-### Part 1 — Reschedule appointments
+`DocumentTemplates` only renders the **builder** (a blank-slate creator). There is no list of saved templates, no way to load one into the editor, and no delete. So once a template is saved, you can never reopen it — only create new ones.
 
-**`src/pages/clinic/Appointments.tsx`** (only file touched for Part 1)
+## Fix
 
-In `AppointmentDetailsSheet`, add a "Reschedule" action that opens a small inline `Dialog`:
+Turn `DocumentTemplateBuilder` into a two-pane manager: a list of saved templates on the left, the existing editor on the right.
 
-- Trigger: `<Button variant="outline">` with `<CalendarDays />` icon, placed in the action-button group above "Cancel Appointment".
-- Visibility: hidden if `appt.status` is `completed` or `cancelled`.
-- Dialog body:
-  - Shadcn `<Calendar mode="single">` inside a `Popover` (per project datepicker convention with `pointer-events-auto`) — pre-selected to `appt.appointment_date`.
-  - `<Input type="time">` pre-filled with `appt.appointment_time.slice(0,5)`.
-  - "Save" and "Cancel" buttons in the dialog footer.
-- Submit handler reuses the existing `useUpdateClinicAppointment()` mutation (already supports `appointment_date` + `appointment_time` and invalidates the `['clinic','clinic_appointments']` query family). On success: toast "Appointment rescheduled", close the dialog, and close the sheet (so the calendar re-renders with the new slot).
+### 1. Load saved templates
+- Use existing `useDocumentTemplates()` hook to fetch all active templates.
+- Show them as a vertical list (name + type badge + paper size). Highlight the active one.
+- Add a "+ New Template" button at the top of the list that resets the editor to a blank draft.
 
-No hook changes are needed — `useUpdateClinicAppointment` in `src/hooks/clinic/useClinicAppointmentsRange.ts` already accepts these fields and invalidates correctly.
+### 2. Make the editor edit-aware
+- Track `editingId: string | null` in state.
+- Clicking a template loads its `name`, `type`, `content`, `paper_size`, `orientation` into the editor state and sets `editingId`.
+- `handleSave` passes `id: editingId ?? undefined` to `useUpsertDocumentTemplate` so it updates instead of inserting a duplicate. After a successful insert, capture the returned `id` and set it as `editingId` so subsequent saves update the same row.
+- Header title shows "Editing: {name}" vs "New Template" based on `editingId`.
 
-### Part 2 — Retroactive document issuance
+### 3. Delete + duplicate
+- Add a new `useDeleteDocumentTemplate` hook (soft delete via `is_active=false`, since the table already has that flag — keeps historical `consultation_documents.template_id` links intact).
+- Row actions on hover: **Duplicate** (loads values but clears `editingId` so Save creates a new row with " (copy)" appended) and **Delete** (confirm dialog → soft delete → toast).
 
-**`src/pages/clinic/ConsultationDetail.tsx`** (only file touched for Part 2)
+### 4. Layout
+- Three columns on large screens: `[templates list 280px] [editor] [paper preview]`. Stack vertically below `lg`.
+- List uses the same slate/white styling as the rest of the builder.
 
-The Attached Documents card lives at lines ~1015–1076. Currently when `isLocked === true` only "View / Print" is shown.
+## Files touched
 
-Changes:
-1. Header row of the card: add an **"Issue New Document"** primary button next to the `ATTACHED DOCUMENTS` title. Always visible (this is the retroactive entry point).
-2. Add a small **template-picker `Dialog`** opened by that button:
-   - Lists active templates from existing `useDocumentTemplates()` hook (already in `useClinicDocuments.ts`).
-   - Each row is a button showing template name + type + paper size; clicking it closes the picker and sets `setIssuingTemplate(tpl)`.
-3. Reuse the **same `IssueDocumentModal`** that's already mounted at line 1392 — no new modal, no prop changes. It already receives:
-   - `consultationId={consultationId ?? null}` → the historical consultation id
-   - `patient={...}` → the patient object
-   - `template={issuingTemplate}` → the chosen template
-   The existing `useAddConsultationDocument` mutation writes against this `consultation_id` and invalidates `['consultation-documents', consultationId]`, so the new document appears in the list instantly without extra refetch wiring.
+- `src/components/clinic/settings/DocumentTemplateBuilder.tsx` — add list pane, load/duplicate/delete handlers, edit-aware save.
+- `src/hooks/clinic/useClinicDocuments.ts` — add `useDeleteDocumentTemplate` (soft delete) and make `useUpsertDocumentTemplate.onSuccess` return the saved row so the caller can pick up the new `id`.
 
-### Out of scope
-- No DB schema changes.
-- No new modal component for retroactive documents.
-- The `appointments` (public lead-form) table is untouched; rescheduling targets `clinic_appointments`, which is what the calendar reads.
+## Out of scope
+
+- No DB migration. `clinic_document_templates` already has `id`, `is_active`, and the upsert path; existing RLS for staff/admin already covers update + soft-delete.
+- No change to `IssueDocumentModal` or the dispensary/consultation document panels.

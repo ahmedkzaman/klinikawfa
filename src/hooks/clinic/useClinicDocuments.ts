@@ -146,7 +146,7 @@ export function useUpsertDocumentTemplate() {
       const payload = {
         ...input,
         is_active: input.is_active ?? true,
-        created_by: user?.id ?? null,
+        ...(input.id ? {} : { created_by: user?.id ?? null }),
       };
       const { data, error } = await supabase
         .from('clinic_document_templates')
@@ -163,3 +163,23 @@ export function useUpsertDocumentTemplate() {
     onError: (e: Error) => toast.error(e.message || 'Failed to save template'),
   });
 }
+
+export function useDeleteDocumentTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('clinic_document_templates')
+        .update({ is_active: false })
+        .eq('id', id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['document-templates'] });
+      toast.success('Template deleted');
+    },
+    onError: (e: Error) => toast.error(e.message || 'Failed to delete template'),
+  });
+}
+
