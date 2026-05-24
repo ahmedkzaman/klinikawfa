@@ -143,11 +143,14 @@ export function useUpsertDocumentTemplate() {
       orientation: string;
       is_active?: boolean;
     }) => {
-      const payload = {
+      const payload: Record<string, unknown> = {
         ...input,
         is_active: input.is_active ?? true,
-        created_by: user?.id ?? null,
       };
+      if (!input.id) {
+        // Only stamp creator on new rows so updates don't overwrite original author
+        payload.created_by = user?.id ?? null;
+      }
       const { data, error } = await supabase
         .from('clinic_document_templates')
         .upsert(payload)
@@ -163,3 +166,23 @@ export function useUpsertDocumentTemplate() {
     onError: (e: Error) => toast.error(e.message || 'Failed to save template'),
   });
 }
+
+export function useDeleteDocumentTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('clinic_document_templates')
+        .update({ is_active: false })
+        .eq('id', id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['document-templates'] });
+      toast.success('Template deleted');
+    },
+    onError: (e: Error) => toast.error(e.message || 'Failed to delete template'),
+  });
+}
+
