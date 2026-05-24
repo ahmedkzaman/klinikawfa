@@ -19,6 +19,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { IssueDocumentModal } from '@/components/clinic/consultation/IssueDocumentModal';
+import { DocumentAuditLine } from '@/components/clinic/consultation/DocumentAuditLine';
 import { ViewDocumentModal } from '@/components/clinic/consultation/ViewDocumentModal';
 import {
   useConsultationDocuments,
@@ -501,11 +502,7 @@ export default function DispenseCheckout() {
                           <div className="text-sm font-medium text-slate-800 truncate">
                             {doc.template_name}
                           </div>
-                          <div className="text-[11px] text-muted-foreground">
-                            {doc.type ?? 'document'} ·{' '}
-                            {new Date(doc.created_at).toLocaleString('en-MY')} · {doc.paper_size}{' '}
-                            {doc.orientation}
-                          </div>
+                          <DocumentAuditLine doc={doc} />
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <Button
