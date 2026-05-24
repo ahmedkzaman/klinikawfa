@@ -1,6 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Info, Printer } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Info, Printer, FileText, FilePlus2, Pencil, Trash2 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { IssueDocumentModal } from '@/components/clinic/consultation/IssueDocumentModal';
+import { ViewDocumentModal } from '@/components/clinic/consultation/ViewDocumentModal';
+import {
+  useConsultationDocuments,
+  useDeleteConsultationDocument,
+  useDocumentTemplates,
+  type DocumentTemplate,
+  type ConsultationDocument,
+} from '@/hooks/clinic/useClinicDocuments';
+import { printDocument } from '@/lib/clinic/printDocument';
+import { bentoHeader as bentoHeaderToken } from '@/lib/clinic/bentoTokens';
 import { PrintReceiptDialog } from '@/components/clinic/billing/PrintReceiptDialog';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
