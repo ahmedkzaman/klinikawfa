@@ -73,6 +73,7 @@ import { usePackagesSafe } from '@/hooks/clinic/usePackages';
 import { useRooms } from '@/hooks/clinic/useRooms';
 import { AddTreatmentBulkDialog } from '@/components/clinic/consultation/AddTreatmentBulkDialog';
 import { IssueDocumentModal } from '@/components/clinic/consultation/IssueDocumentModal';
+import { DocumentAuditLine } from '@/components/clinic/consultation/DocumentAuditLine';
 import {
   useConsultationDocuments,
   useDeleteConsultationDocument,
