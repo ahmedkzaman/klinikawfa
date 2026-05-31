@@ -1,17 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Check, ChevronsUpDown, Search, UserCheck, X } from 'lucide-react';
+import { Check, ChevronsUpDown, CreditCard, Loader2, Search, UserCheck, X } from 'lucide-react';
 import { toMalayTitleCase } from '@/lib/textCase';
 import {
-  ReadMyKadButton,
   cleanIC,
   mapGender,
   mapDOB,
 } from '@/components/clinic/ReadMyKadButton';
+import { useMyKadReader, type MyKadPayload } from '@/hooks/clinic/useMyKadReader';
+import { useMyKadBridge, type MyKadBridgeStatus } from '@/hooks/useMyKadBridge';
 import {
   Dialog,
   DialogContent,
