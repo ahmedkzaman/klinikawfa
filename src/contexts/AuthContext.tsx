@@ -212,6 +212,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isGuest,
         isSpecialAdmin,
         isOperations,
+        isOpsStaff,
         isOpsOrAdmin,
         isDoctorAdmin,
         isLocum,
