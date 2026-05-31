@@ -136,18 +136,7 @@ export function useConsultationQueueEntries() {
     staleTime: 15_000,
   });
 
-  useEffect(() => {
-    const channel = supabase
-      .channel("clinic-consultation-queue")
-      .on("postgres_changes", { event: "*", schema: "public", table: "queue_entries" }, () => {
-        qc.invalidateQueries({ queryKey: CONSULT_QUEUE_QUERY_KEY });
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [qc]);
+  useQueueEntriesRealtimeSync();
 
   return query;
 }
