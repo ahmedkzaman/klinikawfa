@@ -834,7 +834,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                     <RadioGroup
                       value={field.value}
                       onValueChange={field.onChange}
-                      className="grid grid-cols-1 sm:grid-cols-2 gap-2"
+                      className="grid grid-cols-1 sm:grid-cols-3 gap-2"
                     >
                       <label
                         htmlFor="vt-consult"
@@ -866,23 +866,40 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                           </p>
                         </div>
                       </label>
+                      <label
+                        htmlFor="vt-payment"
+                        className={cn(
+                          'flex items-start gap-2 rounded-md border px-3 py-2 cursor-pointer',
+                          field.value === 'payment_only' && 'border-primary bg-primary/5',
+                        )}
+                      >
+                        <RadioGroupItem value="payment_only" id="vt-payment" className="mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium">Payment Only</p>
+                          <p className="text-xs text-muted-foreground">
+                            Settle past debt. No clinical record.
+                          </p>
+                        </div>
+                      </label>
                     </RadioGroup>
                   )}
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="reg-visit-remarks">
-                  Visit Purpose / Remarks (e.g., Typhoid Vaccine, Medical Checkup)
-                </Label>
-                <Textarea
-                  id="reg-visit-remarks"
-                  rows={2}
-                  placeholder="Short note visible to doctor & dispensary…"
-                  value={visitRemarks}
-                  onChange={(e) => setVisitRemarks(e.target.value)}
-                />
-              </div>
+              {!isPaymentOnly && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="reg-visit-remarks">
+                    Visit Purpose / Remarks (e.g., Typhoid Vaccine, Medical Checkup)
+                  </Label>
+                  <Textarea
+                    id="reg-visit-remarks"
+                    rows={2}
+                    placeholder="Short note visible to doctor & dispensary…"
+                    value={visitRemarks}
+                    onChange={(e) => setVisitRemarks(e.target.value)}
+                  />
+                </div>
+              )}
 
               {!isDirectSale && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
