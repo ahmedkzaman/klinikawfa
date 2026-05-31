@@ -332,7 +332,6 @@ export function useRestoreQueueEntry() {
 }
 
 export function useCancelledTodayEntries() {
-  const qc = useQueryClient();
   const query = useQuery<QueueEntryWithJoins[]>({
     queryKey: CANCELLED_TODAY_QUERY_KEY,
     queryFn: async () => {
@@ -352,17 +351,7 @@ export function useCancelledTodayEntries() {
     staleTime: 30_000,
   });
 
-  useEffect(() => {
-    const channel = supabase
-      .channel("clinic-queue-cancelled-today")
-      .on("postgres_changes", { event: "*", schema: "public", table: "queue_entries" }, () => {
-        qc.invalidateQueries({ queryKey: CANCELLED_TODAY_QUERY_KEY });
-      })
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [qc]);
+  useQueueEntriesRealtimeSync();
 
   return query;
 }
