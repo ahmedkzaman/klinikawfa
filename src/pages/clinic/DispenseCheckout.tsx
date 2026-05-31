@@ -302,6 +302,30 @@ export default function DispenseCheckout() {
   const balanceDue = Math.max(totalDue - safeAmountPaid, 0);
   const isOverpay = safeAmountPaid > totalDue + 0.01;
 
+  /**
+   * Single source of truth for whether the Checkout button is allowed to fire.
+   * Memoized so the 6-clause boolean only re-evaluates when an input flips,
+   * not on every parent re-render (typing, tooltip hover, etc).
+   */
+  const canSubmitCheckout = useMemo(() => {
+    if (anyPartialMissingReason) return false;
+    if (!consultation?.id) return false;
+    if (checkoutPending) return false;
+    if (isOverpay) return false;
+    if (totalDue > 0 && safeAmountPaid <= 0) return false;
+    if (totalDue > 0 && !paymentMethod) return false;
+    return true;
+  }, [
+    anyPartialMissingReason,
+    consultation?.id,
+    checkoutPending,
+    isOverpay,
+    totalDue,
+    safeAmountPaid,
+    paymentMethod,
+  ]);
+
+
   const handleComplete = async () => {
     if (!queueEntryId || !consultation?.id) return;
     if (totalDue > 0 && !paymentMethod) {
