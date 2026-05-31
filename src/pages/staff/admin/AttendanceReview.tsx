@@ -11,7 +11,7 @@ import { PieChart, Pie, Cell } from 'recharts';
 import { CalendarCheck, CalendarOff, AlertTriangle, Clock, Download, ChevronLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { bento, bentoHeader, pageInner, pageShell, secondaryBtn, softInput, chartColors } from '@/lib/clinic/bentoTokens';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isWeekend } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isWeekend, differenceInMinutes } from 'date-fns';
 import {
   getAllShiftsForMonth,
   calculateLatenessMinutes,
