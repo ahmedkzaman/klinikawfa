@@ -164,7 +164,30 @@ export function VisitDetailsColumn({
         .filter(Boolean)
         .join(', ');
       const url = generateDrugLabelPdf(
-        rows.map((r) => ({ ...r, unit: r.inventory_items?.unit ?? null })),
+        rows.map((r) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const inv = (r as any).inventory_items ?? {};
+          const dqRaw = inv.default_dosage_qty;
+          const dqNum = dqRaw != null && dqRaw !== '' ? Number(dqRaw) : NaN;
+          const fallbackDuration =
+            inv.default_duration
+              ? inv.default_duration_unit
+                ? `${inv.default_duration} ${inv.default_duration_unit}`
+                : inv.default_duration
+              : null;
+          return {
+            ...r,
+            unit: inv.unit ?? null,
+            indication: r.indication ?? inv.default_indication ?? null,
+            dosage_qty:
+              r.dosage_qty ?? (Number.isFinite(dqNum) ? dqNum : null),
+            dosage_unit: r.dosage_unit ?? inv.default_dosage_unit ?? null,
+            frequency: r.frequency ?? inv.default_frequency ?? null,
+            instruction: r.instruction ?? inv.default_instruction ?? null,
+            duration: r.duration ?? fallbackDuration,
+            precaution: r.precaution ?? inv.default_precaution ?? null,
+          };
+        }),
         patientName ?? null,
         labelSettings ?? null,
         {
