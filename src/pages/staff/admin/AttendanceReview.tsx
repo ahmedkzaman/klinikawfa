@@ -192,6 +192,8 @@ export default function AdminAttendanceReview() {
         perUser[profile.id].push(full);
       };
 
+      const todayStr = format(now, 'yyyy-MM-dd');
+
       workingDays.forEach(day => {
         const dayStr = format(day, 'yyyy-MM-dd');
         const isOnLeave = userLeaves.some(l => l.start_date <= dayStr && l.end_date >= dayStr);
@@ -199,6 +201,7 @@ export default function AdminAttendanceReview() {
         const punchIn = dayRecords.find((a: any) => a.punch_type === 'in');
         const punchOut = dayRecords.find((a: any) => a.punch_type === 'out');
         const shiftStart = userShifts[dayStr]?.start || DEFAULT_SHIFT_START;
+        const shiftEnd = userShifts[dayStr]?.end || '17:00';
 
         let workHoursStr = '-';
         if (punchIn && punchOut) {
@@ -206,9 +209,30 @@ export default function AdminAttendanceReview() {
           workHoursStr = formatWorkHours(wh);
         }
 
+        // Compute clock-out fields
+        let expectedClockOut = '-';
+        let actualClockOut = '-';
+        let clockOutStatus: ClockOutStatus = 'na';
+        if (punchIn) {
+          expectedClockOut = shiftEnd;
+          if (punchOut) {
+            const outDate = new Date(punchOut.punch_time);
+            actualClockOut = format(outDate, 'HH:mm');
+            const [endH, endM] = shiftEnd.split(':').map(Number);
+            const expectedOutDate = new Date(`${dayStr}T00:00:00`);
+            expectedOutDate.setHours(endH, endM, 0, 0);
+            const diff = differenceInMinutes(outDate, expectedOutDate);
+            if (diff < -15) clockOutStatus = 'early';
+            else if (diff > 15) clockOutStatus = 'late';
+            else clockOutStatus = 'on_time';
+          } else {
+            clockOutStatus = dayStr < todayStr ? 'missing' : 'na';
+          }
+        }
+
         if (isOnLeave) {
           totalLeave++; summary.leave++;
-          pushRecord(details.leave, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: '-', latenessDuration: '-', status: 'Leave', severity: 'on_time', workHours: '-' });
+          pushRecord(details.leave, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: '-', latenessDuration: '-', status: 'Leave', severity: 'on_time', workHours: '-', expectedClockOut: '-', actualClockOut: '-', clockOutStatus: 'na' });
         } else if (punchIn) {
           const punchTime = new Date(punchIn.punch_time);
           const lateMin = calculateLatenessMinutes(punchTime, shiftStart, day);
@@ -216,17 +240,17 @@ export default function AdminAttendanceReview() {
 
           if (severity === 'late') {
             totalLate++; summary.late++;
-            pushRecord(details.late, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: `${Math.round(lateMin)} min`, status: 'Late (≥15 min)', severity, workHours: workHoursStr });
+            pushRecord(details.late, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: `${Math.round(lateMin)} min`, status: 'Late (≥15 min)', severity, workHours: workHoursStr, expectedClockOut, actualClockOut, clockOutStatus });
           } else if (severity === 'minor_late') {
             totalLate++; summary.late++;
-            pushRecord(details.late, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: `${Math.round(lateMin)} min`, status: 'Minor Late (1-14 min)', severity, workHours: workHoursStr });
+            pushRecord(details.late, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: `${Math.round(lateMin)} min`, status: 'Minor Late (1-14 min)', severity, workHours: workHoursStr, expectedClockOut, actualClockOut, clockOutStatus });
           } else {
             totalPresent++; summary.present++;
-            pushRecord(details.working, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: '-', status: 'On Time', severity, workHours: workHoursStr });
+            pushRecord(details.working, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: '-', status: 'On Time', severity, workHours: workHoursStr, expectedClockOut, actualClockOut, clockOutStatus });
           }
         } else {
           totalAbsent++; summary.absent++;
-          pushRecord(details.absent, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: '-', latenessDuration: '-', status: 'Absent', severity: 'on_time', workHours: '-' });
+          pushRecord(details.absent, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: '-', latenessDuration: '-', status: 'Absent', severity: 'on_time', workHours: '-', expectedClockOut: '-', actualClockOut: '-', clockOutStatus: 'na' });
         }
       });
 
