@@ -36,7 +36,7 @@ const SECTIONS: { key: SectionKey; title: string; description: string }[] = [
 ];
 
 export default function SettingsPage() {
-  const { isAdmin, isSpecialAdmin, isOpsOrAdmin } = useAuth();
+  const { isAdmin, isSpecialAdmin, isOpsOrAdmin, isOpsStaff } = useAuth();
   const adminAccess = isAdmin || isSpecialAdmin;
 
   const cards: SettingsCard[] = [
