@@ -5414,9 +5414,11 @@ export type Database = {
         Returns: string
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_clinical: { Args: { _user_id: string }; Returns: boolean }
       is_ops_or_admin: { Args: { _user_id: string }; Returns: boolean }
       is_special_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff_or_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_staff_or_clinical: { Args: { _user_id: string }; Returns: boolean }
       recalc_client_invoice_total: {
         Args: { _invoice_id: string }
         Returns: undefined
