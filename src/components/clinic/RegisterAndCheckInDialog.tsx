@@ -443,17 +443,19 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
       }
 
       const isDirectSaleSubmit = data.visit_type === 'direct_sale';
+      const isPaymentOnlySubmit = data.visit_type === 'payment_only';
+      const skipClinical = isDirectSaleSubmit || isPaymentOnlySubmit;
       const { error: queueError } = await supabase.from('queue_entries').insert({
         patient_id: patient.id,
-        clinic_status: isDirectSaleSubmit ? 'sent_to_dispensary' : 'registered',
+        clinic_status: skipClinical ? 'sent_to_dispensary' : 'registered',
         visit_type: data.visit_type,
-        visit_purpose: isDirectSaleSubmit ? 'other' : data.visit_purpose,
+        visit_purpose: skipClinical ? 'other' : data.visit_purpose,
         visit_notes: data.visit_notes || null,
         payment_method: data.payment_method,
         panel_id: data.payment_method === 'panel' ? data.panel_id : null,
         created_by: user?.id ?? null,
         queue_sequence: seq as number,
-        assigned_doctor_id: isDirectSaleSubmit ? null : assignedDoctorId,
+        assigned_doctor_id: skipClinical ? null : assignedDoctorId,
         visit_remarks: visitRemarks.trim() || null,
       });
 
@@ -468,12 +470,20 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
       qc.invalidateQueries({ queryKey: ['clinic', 'patients'] });
       qc.invalidateQueries({ queryKey: ['clinic', 'queue-entries'] });
       toast.success(
-        isDirectSaleSubmit
-          ? 'Direct sale visit created — routing to dispensary'
-          : 'Patient registered and added to queue',
+        isPaymentOnlySubmit
+          ? 'Payment-only ticket created — open from the Queue Board to settle'
+          : isDirectSaleSubmit
+            ? 'Direct sale visit created — routing to dispensary'
+            : 'Patient registered and added to queue',
       );
       onOpenChange(false);
-      navigate(isDirectSaleSubmit ? '/clinic/dispensary' : '/clinic/queue');
+      navigate(
+        isPaymentOnlySubmit
+          ? '/clinic/queue'
+          : isDirectSaleSubmit
+            ? '/clinic/dispensary'
+            : '/clinic/queue',
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to register patient';
       toast.error(msg);
