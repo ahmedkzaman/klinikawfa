@@ -65,6 +65,14 @@ export default function SettingsPage() {
       group: 'access',
     },
     {
+      href: '/clinic/settings/locum-registration',
+      title: 'Register Locum',
+      description: 'Create a locum doctor account for today\u2019s clinic session.',
+      icon: UserPlus,
+      visible: isOpsStaff && !adminAccess,
+      group: 'access',
+    },
+    {
       href: '/clinic/settings/inventory',
       title: 'Inventory & Services',
       description: 'Manage practice items, services, packages, and pricing.',
