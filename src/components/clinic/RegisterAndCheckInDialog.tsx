@@ -248,6 +248,23 @@ function parseMyKad(ic: string): { dob: string | null; gender: 'male' | 'female'
   return { dob, gender };
 }
 
+function BridgeStatusDot({ status }: { status: MyKadBridgeStatus }) {
+  const map: Record<MyKadBridgeStatus, { cls: string; label: string }> = {
+    connected_card_ready: { cls: 'bg-emerald-500', label: 'MyKad reader ready' },
+    connected_no_card: { cls: 'bg-amber-500', label: 'Reader connected — no card inserted' },
+    disconnected: { cls: 'bg-red-500', label: 'Reader offline — type IC manually' },
+  };
+  const { cls, label } = map[status];
+  return (
+    <span
+      role="status"
+      aria-label={label}
+      title={label}
+      className={cn('inline-block h-2 w-2 rounded-full', cls)}
+    />
+  );
+}
+
 export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
   const navigate = useNavigate();
   const { user } = useAuth();
