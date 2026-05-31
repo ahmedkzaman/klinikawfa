@@ -5360,6 +5360,20 @@ export type Database = {
       available_quantity: { Args: { _item_id: string }; Returns: number }
       can_view_insights: { Args: { _user_id: string }; Returns: boolean }
       can_view_inventory_costs: { Args: { _user_id: string }; Returns: boolean }
+      checkout_visit: {
+        Args: {
+          p_amount_paid: number
+          p_consultation_id: string
+          p_notes?: string
+          p_other_charges?: Json
+          p_panel_provider_id?: string
+          p_payment_method: string
+          p_payment_type?: string
+          p_queue_entry_id: string
+          p_total_amount: number
+        }
+        Returns: Json
+      }
       cleanup_appointment_submission_log: { Args: never; Returns: undefined }
       commit_inventory: {
         Args: { _item_id: string; _qty: number }
