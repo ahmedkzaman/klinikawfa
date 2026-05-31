@@ -40,6 +40,28 @@ const chartConfig = {
   late: { label: 'Late', color: COLORS.late },
 };
 
+type ClockOutStatus = 'on_time' | 'early' | 'late' | 'missing' | 'na';
+
+const getClockOutSeverityClasses = (status: ClockOutStatus): string => {
+  switch (status) {
+    case 'on_time': return 'bg-emerald-50 text-emerald-700';
+    case 'early': return 'bg-amber-50 text-amber-700';
+    case 'late': return 'bg-amber-50 text-amber-700';
+    case 'missing': return 'bg-rose-50 text-rose-700';
+    default: return 'bg-slate-50 text-slate-600';
+  }
+};
+
+const getClockOutStatusLabel = (status: ClockOutStatus): string => {
+  switch (status) {
+    case 'on_time': return 'On Time (Out)';
+    case 'early': return 'Early Clock-Out';
+    case 'late': return 'Late Clock-Out';
+    case 'missing': return 'No Clock-Out';
+    default: return '-';
+  }
+};
+
 type DetailRecord = {
   userId: string;
   fullName: string;
@@ -50,6 +72,9 @@ type DetailRecord = {
   status: string;
   severity: LatenessSeverity;
   workHours: string;
+  expectedClockOut: string;
+  actualClockOut: string;
+  clockOutStatus: ClockOutStatus;
 };
 
 type StaffSummary = {
