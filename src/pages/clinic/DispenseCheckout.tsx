@@ -57,11 +57,10 @@ import {
 } from '@/hooks/clinic/useQueueEntries';
 import {
   useConsultation,
-  useUpdateConsultation,
 } from '@/hooks/clinic/useConsultations';
 import { useConsultationLock } from '@/hooks/clinic/useConsultationLock';
 import { ConsultationLockBanner } from '@/components/clinic/consultation/ConsultationLockBanner';
-import { useConsultationItems, useAddConsultationItem } from '@/hooks/clinic/useConsultationItems';
+import { useConsultationItems } from '@/hooks/clinic/useConsultationItems';
 import { usePayments } from '@/hooks/clinic/usePayments';
 import { CatalogItemPicker } from '@/components/clinic/visit/CatalogItemPicker';
 import { EditInstructionsDialog } from '@/components/clinic/visit/EditInstructionsDialog';
@@ -71,6 +70,16 @@ import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
+import { PAYMENT_METHOD_OPTIONS } from '@/lib/clinic/paymentMethod';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   bento,
   bentoHeader,
@@ -87,8 +96,6 @@ export default function DispenseCheckout() {
   const { data: entries = [], isLoading: entriesLoading } =
     useConsultationQueueEntries();
   const updateQueue = useUpdateQueueEntry();
-  const updateConsultation = useUpdateConsultation();
-  const addConsultationItem = useAddConsultationItem();
 
   const [selectedCharges, setSelectedCharges] = useState<SelectedCharge[]>([]);
   const [editingItem, setEditingItem] = useState<ConsultationItemRow | null>(null);
@@ -97,6 +104,9 @@ export default function DispenseCheckout() {
   const [voidingDoc, setVoidingDoc] = useState<ConsultationDocument | null>(null);
   const [viewingDoc, setViewingDoc] = useState<ConsultationDocument | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [amountPaidInput, setAmountPaidInput] = useState<string>('');
+  const [paymentMethod, setPaymentMethod] = useState<string>('cash');
+  const [checkoutPending, setCheckoutPending] = useState(false);
   const handleChargesChange = useCallback((c: SelectedCharge[]) => {
     setSelectedCharges(c);
   }, []);
@@ -246,7 +256,12 @@ export default function DispenseCheckout() {
     () => payments.reduce((acc, p) => acc + Number(p.amount ?? 0), 0),
     [payments],
   );
+  const otherChargesTotal = useMemo(
+    () => selectedCharges.reduce((acc, c) => acc + Number(c.amount ?? 0), 0),
+    [selectedCharges],
+  );
   const outstanding = Math.max(subtotal - paid, 0);
+  const totalDue = Math.max(outstanding + otherChargesTotal, 0);
   const [printPaymentId, setPrintPaymentId] = useState<string | null>(null);
   const latestPaymentId = useMemo(() => {
     if (!payments.length) return null;
@@ -272,36 +287,76 @@ export default function DispenseCheckout() {
     [items],
   );
 
+  // Keep amount-paid input in sync with the current total due, unless the
+  // cashier has manually typed a partial amount this session.
+  const userEditedAmountRef = useRef(false);
+  useEffect(() => {
+    if (userEditedAmountRef.current) return;
+    setAmountPaidInput(totalDue.toFixed(2));
+  }, [totalDue]);
+
+  const amountPaidNum = parseFloat(amountPaidInput);
+  const safeAmountPaid = Number.isFinite(amountPaidNum) ? Math.max(amountPaidNum, 0) : 0;
+  const balanceDue = Math.max(totalDue - safeAmountPaid, 0);
+  const isOverpay = safeAmountPaid > totalDue + 0.01;
+
   const handleComplete = async () => {
     if (!queueEntryId || !consultation?.id) return;
+    if (totalDue > 0 && !paymentMethod) {
+      toast.error('Select a payment method');
+      return;
+    }
+    if (isOverpay) {
+      toast.error('Amount paid exceeds total due');
+      return;
+    }
+    setCheckoutPending(true);
     try {
-      // Batch-commit Other Charges as consultation_items first.
-      if (selectedCharges.length > 0) {
-        await Promise.all(
-          selectedCharges.map((c) =>
-            addConsultationItem.mutateAsync({
-              consultation_id: consultation.id,
-              item_name: c.name,
-              quantity: 1,
-              price: c.amount,
-            }),
-          ),
+      const { data, error } = await supabase.rpc('checkout_visit', {
+        p_queue_entry_id: queueEntryId,
+        p_consultation_id: consultation.id,
+        p_total_amount: totalDue,
+        p_amount_paid: safeAmountPaid,
+        p_payment_method: paymentMethod,
+        p_payment_type: panelId ? 'panel' : 'self_pay',
+        p_panel_provider_id: panelId ?? null,
+        p_other_charges: selectedCharges.map((c) => ({
+          name: c.name,
+          amount: c.amount,
+        })),
+        p_notes: null,
+      });
+      if (error) throw error;
+      const result = (data ?? {}) as {
+        status?: string;
+        balance_due?: number;
+        payment_id?: string | null;
+      };
+      // Refresh local caches so the freshly-recorded payment + completed
+      // consultation/queue show up immediately.
+      qc.invalidateQueries({ queryKey: ['payments', queueEntryId] });
+      qc.invalidateQueries({ queryKey: ['consultation', queueEntryId] });
+      qc.invalidateQueries({ queryKey: ['consultation_items', consultation.id] });
+      qc.invalidateQueries({ queryKey: ['queue_entries'] });
+
+      if (result.status === 'paid') {
+        toast.success('Payment recorded · Visit checked out');
+        navigate('/clinic/queue');
+      } else {
+        toast.success(
+          `Partial payment recorded · Balance RM ${Number(result.balance_due ?? balanceDue).toFixed(2)}`,
         );
+        // Stay on page; clear charges (now committed) and reset amount tracker.
+        setSelectedCharges([]);
+        userEditedAmountRef.current = false;
       }
-      await updateConsultation.mutateAsync({
-        id: consultation.id,
-        status: 'completed',
-      });
-      await updateQueue.mutateAsync({
-        id: queueEntryId,
-        clinic_status: 'completed',
-      });
-      toast.success('Checkout completed');
-      navigate('/clinic/dispensary');
     } catch (err) {
       toast.error((err as Error).message);
+    } finally {
+      setCheckoutPending(false);
     }
   };
+
 
   if (entriesLoading) {
     return (
@@ -563,13 +618,71 @@ export default function DispenseCheckout() {
         </div>
 
         {/* Footer action */}
-        <div className="fixed bottom-0 left-0 right-0 lg:left-60 z-30 bg-white/90 backdrop-blur-md border-t border-slate-100 px-4 md:px-6 py-3 flex items-center justify-end gap-3">
-          <div className="text-sm text-slate-500 hidden sm:block">
-            Outstanding:{' '}
-            <span className="font-semibold text-slate-900 tabular-nums">
-              RM {outstanding.toFixed(2)}
-            </span>
+        <div className="fixed bottom-0 left-0 right-0 lg:left-60 z-30 bg-white/90 backdrop-blur-md border-t border-slate-100 px-4 md:px-6 py-3 flex items-end justify-end gap-3 flex-wrap">
+          <div className="flex flex-col gap-0.5 text-xs text-slate-500 mr-auto">
+            <div className="tabular-nums">
+              Items due:{' '}
+              <span className="font-semibold text-slate-900">RM {outstanding.toFixed(2)}</span>
+              {otherChargesTotal > 0 && (
+                <>
+                  {' '}· Charges:{' '}
+                  <span className="font-semibold text-slate-900">
+                    RM {otherChargesTotal.toFixed(2)}
+                  </span>
+                </>
+              )}
+            </div>
+            <div className="tabular-nums text-sm text-slate-700">
+              Total due:{' '}
+              <span className="font-bold text-slate-900">RM {totalDue.toFixed(2)}</span>
+              {' '}· Balance:{' '}
+              <span
+                className={cn(
+                  'font-bold tabular-nums',
+                  balanceDue > 0 ? 'text-amber-600' : 'text-emerald-600',
+                )}
+              >
+                RM {balanceDue.toFixed(2)}
+              </span>
+            </div>
           </div>
+
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="pay-method" className="text-xs text-slate-500">
+              Method
+            </Label>
+            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+              <SelectTrigger id="pay-method" className="h-9 w-[160px]">
+                <SelectValue placeholder="Method" />
+              </SelectTrigger>
+              <SelectContent>
+                {PAYMENT_METHOD_OPTIONS.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="amount-paid" className="text-xs text-slate-500">
+              Amount Paid (RM)
+            </Label>
+            <Input
+              id="amount-paid"
+              type="number"
+              step="0.01"
+              min="0"
+              className="h-9 w-32 tabular-nums"
+              value={amountPaidInput}
+              onChange={(e) => {
+                userEditedAmountRef.current = true;
+                setAmountPaidInput(e.target.value);
+              }}
+            />
+          </div>
+
           {latestPaymentId && (
             <Button
               variant="outline"
@@ -588,22 +701,25 @@ export default function DispenseCheckout() {
                     className={primaryBtn}
                     onClick={handleComplete}
                     disabled={
-                      outstanding > 0 ||
                       anyPartialMissingReason ||
                       !consultation?.id ||
-                      updateQueue.isPending ||
-                      updateConsultation.isPending
+                      checkoutPending ||
+                      isOverpay ||
+                      (totalDue > 0 && safeAmountPaid <= 0) ||
+                      (totalDue > 0 && !paymentMethod)
                     }
                   >
                     <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Complete Checkout
+                    {checkoutPending
+                      ? 'Processing…'
+                      : balanceDue > 0
+                        ? 'Record Partial Payment'
+                        : 'Complete Checkout'}
                   </Button>
                 </span>
               </TooltipTrigger>
-              {outstanding > 0 && (
-                <TooltipContent>
-                  Settle outstanding balance before completing checkout.
-                </TooltipContent>
+              {isOverpay && (
+                <TooltipContent>Amount paid exceeds total due.</TooltipContent>
               )}
               {anyPartialMissingReason && (
                 <TooltipContent>
@@ -619,6 +735,7 @@ export default function DispenseCheckout() {
           </TooltipProvider>
         </div>
       </div>
+
       <EditInstructionsDialog
         item={editingItem}
         open={editingItem !== null}
