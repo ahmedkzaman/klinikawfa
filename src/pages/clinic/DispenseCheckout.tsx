@@ -57,11 +57,10 @@ import {
 } from '@/hooks/clinic/useQueueEntries';
 import {
   useConsultation,
-  useUpdateConsultation,
 } from '@/hooks/clinic/useConsultations';
 import { useConsultationLock } from '@/hooks/clinic/useConsultationLock';
 import { ConsultationLockBanner } from '@/components/clinic/consultation/ConsultationLockBanner';
-import { useConsultationItems, useAddConsultationItem } from '@/hooks/clinic/useConsultationItems';
+import { useConsultationItems } from '@/hooks/clinic/useConsultationItems';
 import { usePayments } from '@/hooks/clinic/usePayments';
 import { CatalogItemPicker } from '@/components/clinic/visit/CatalogItemPicker';
 import { EditInstructionsDialog } from '@/components/clinic/visit/EditInstructionsDialog';
