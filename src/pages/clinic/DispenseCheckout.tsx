@@ -734,14 +734,7 @@ export default function DispenseCheckout() {
                   <Button
                     className={primaryBtn}
                     onClick={handleComplete}
-                    disabled={
-                      anyPartialMissingReason ||
-                      !consultation?.id ||
-                      checkoutPending ||
-                      isOverpay ||
-                      (totalDue > 0 && safeAmountPaid <= 0) ||
-                      (totalDue > 0 && !paymentMethod)
-                    }
+                    disabled={!canSubmitCheckout}
                   >
                     <CheckCircle2 className="h-4 w-4 mr-2" />
                     {checkoutPending
