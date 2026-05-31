@@ -129,21 +129,177 @@ async function seedPatients() {
   }
 }
 
-// TODO: seedQueueEntries, seedConsultations, seedItems, seedPayments,
-// seedInventoryBatches, seedInventoryTransactions follow the same COPY pattern.
-// Stubbed for the first scaffolding pass.
+/**
+ * Queue entries + consultations. 1M + ~800k rows.
+ * Uses session_replication_role = replica to skip ALL triggers (including FK
+ * trigger fires) for this connection — much cheaper than per-table DISABLE TRIGGER
+ * and reversible by closing the connection.
+ *
+ * Inserts in 10k chunks with multi-row INSERT via postgres.js helpers.
+ * Memory stays flat because we never accumulate >10k rows in JS at once.
+ */
+async function seedQueueAndConsultations(patientIds: string[]) {
+  console.log(`→ Seeding ${VOLUMES.queue_entries.toLocaleString()} queue + ~${VOLUMES.consultations.toLocaleString()} consultations`);
+  await sql`SET session_replication_role = replica`;
+
+  const CHUNK = 10_000;
+  let totalQ = 0, totalC = 0;
+
+  for (let off = 0; off < VOLUMES.queue_entries; off += CHUNK) {
+    const queueBatch: any[] = [];
+    const consultBatch: any[] = [];
+
+    for (let j = 0; j < CHUNK && off + j < VOLUMES.queue_entries; j++) {
+      const patientId = faker.helpers.arrayElement(patientIds);
+      const queueId = crypto.randomUUID();
+      const visitType = faker.helpers.weightedArrayElement([
+        { weight: 85, value: "consultation" },
+        { weight: 10, value: "payment_only" },
+        { weight: 5,  value: "direct_sale" },
+      ]);
+      const status = faker.helpers.weightedArrayElement([
+        { weight: 80, value: "completed" },
+        { weight: 10, value: "sent_to_dispensary" },
+        { weight: 10, value: "registered" },
+      ]);
+      const createdAt = faker.date.past({ years: 2 });
+
+      queueBatch.push({
+        id: queueId,
+        patient_id: patientId,
+        visit_type: visitType,
+        clinic_status: status,
+        visit_purpose: faker.helpers.arrayElement(["fever", "cough", "follow-up", "other"]),
+        queue_sequence: (off + j) % 1000 + 1,
+        created_at: createdAt,
+        updated_at: createdAt,
+      });
+
+      if (visitType === "consultation") {
+        consultBatch.push({
+          id: crypto.randomUUID(),
+          patient_id: patientId,
+          queue_entry_id: queueId,
+          status: status === "completed" ? "completed" : "in_progress",
+          clinical_notes: faker.lorem.sentence(),
+          created_at: createdAt,
+          updated_at: createdAt,
+        });
+      }
+    }
+
+    await sql`INSERT INTO public.queue_entries ${sql(queueBatch)} ON CONFLICT DO NOTHING`;
+    if (consultBatch.length) {
+      await sql`INSERT INTO public.consultations ${sql(consultBatch)} ON CONFLICT DO NOTHING`;
+    }
+    totalQ += queueBatch.length;
+    totalC += consultBatch.length;
+    if (off % 100_000 === 0) console.log(`  ${totalQ.toLocaleString()} queue / ${totalC.toLocaleString()} consult`);
+  }
+
+  await sql`SET session_replication_role = DEFAULT`;
+}
+
+/**
+ * Consultation items (~500k). Each row references a random completed consultation.
+ * Realistic price/qty mix; 60% inventory item names so reservation triggers
+ * (when re-enabled in real ops) would have something to resolve.
+ */
+async function seedConsultationItems() {
+  console.log(`→ Seeding ${VOLUMES.consultation_items.toLocaleString()} consultation items`);
+  await sql`SET session_replication_role = replica`;
+  const consultIds = (await sql<{id: string}[]>`SELECT id FROM public.consultations ORDER BY random() LIMIT ${VOLUMES.consultation_items}`).map(r => r.id);
+  const invNames = (await sql<{name: string}[]>`SELECT name FROM public.inventory_items WHERE status='active' LIMIT 100`).map(r => r.name);
+  const fallbackNames = ["Consultation Fee", "Wound Dressing", "Nebulizer", "ECG", "Blood Pressure Check"];
+
+  const CHUNK = 10_000;
+  for (let off = 0; off < consultIds.length; off += CHUNK) {
+    const batch: any[] = [];
+    for (let j = 0; j < CHUNK && off + j < consultIds.length; j++) {
+      const useInv = invNames.length && Math.random() < 0.6;
+      batch.push({
+        consultation_id: consultIds[off + j],
+        item_name: useInv ? faker.helpers.arrayElement(invNames) : faker.helpers.arrayElement(fallbackNames),
+        quantity: faker.number.int({ min: 1, max: 10 }),
+        price: faker.number.float({ min: 5, max: 250, fractionDigits: 2 }),
+      });
+    }
+    await sql`INSERT INTO public.consultation_items ${sql(batch)}`;
+    if (off % 100_000 === 0) console.log(`  ${(off + CHUNK).toLocaleString()} / ${consultIds.length.toLocaleString()}`);
+  }
+  await sql`SET session_replication_role = DEFAULT`;
+}
+
+/**
+ * Payments (~100k). Mostly self_pay/cash against completed consultations.
+ */
+async function seedPayments() {
+  console.log(`→ Seeding ${VOLUMES.payments.toLocaleString()} payments`);
+  await sql`SET session_replication_role = replica`;
+  const rows = await sql<{id: string; queue_entry_id: string}[]>`
+    SELECT id, queue_entry_id FROM public.consultations
+    WHERE status='completed' AND queue_entry_id IS NOT NULL
+    ORDER BY random() LIMIT ${VOLUMES.payments}
+  `;
+  const CHUNK = 10_000;
+  for (let off = 0; off < rows.length; off += CHUNK) {
+    const batch = rows.slice(off, off + CHUNK).map(r => ({
+      queue_entry_id: r.queue_entry_id,
+      consultation_id: r.id,
+      payment_type: "self_pay",
+      payment_method: faker.helpers.arrayElement(["cash", "card", "duitnow"]),
+      amount: faker.number.float({ min: 10, max: 500, fractionDigits: 2 }),
+    }));
+    await sql`INSERT INTO public.payments ${sql(batch)}`;
+  }
+  await sql`SET session_replication_role = DEFAULT`;
+}
+
+/**
+ * Inventory batches + transactions. 50k tx, batches derived ~1:1.
+ */
+async function seedInventoryBatchesAndTx() {
+  console.log(`→ Seeding ${VOLUMES.inventory_transactions.toLocaleString()} inventory tx + batches`);
+  await sql`SET session_replication_role = replica`;
+  const items = (await sql<{id: string}[]>`SELECT id FROM public.inventory_items LIMIT 500`).map(r => r.id);
+  if (!items.length) { console.warn("  no inventory_items; skipping"); await sql`SET session_replication_role = DEFAULT`; return; }
+
+  const CHUNK = 5_000;
+  for (let off = 0; off < VOLUMES.inventory_transactions; off += CHUNK) {
+    const batches: any[] = [];
+    const txs: any[] = [];
+    for (let j = 0; j < CHUNK && off + j < VOLUMES.inventory_transactions; j++) {
+      const itemId = faker.helpers.arrayElement(items);
+      const qty = faker.number.int({ min: 10, max: 500 });
+      const batchId = crypto.randomUUID();
+      const expiry = faker.date.future({ years: 3 }).toISOString().slice(0, 10);
+      batches.push({
+        id: batchId, inventory_item_id: itemId,
+        batch_number: faker.string.alphanumeric(8).toUpperCase(),
+        expiry_date: expiry,
+        quantity_initial: qty, quantity_remaining: qty,
+      });
+      txs.push({
+        inventory_item_id: itemId, batch_id: batchId,
+        transaction_type: "restock", qty_change: qty, reason_code: "seed",
+      });
+    }
+    await sql`INSERT INTO public.inventory_item_batches ${sql(batches)}`;
+    await sql`INSERT INTO public.inventory_transactions ${sql(txs)}`;
+  }
+  await sql`SET session_replication_role = DEFAULT`;
+}
 
 async function main() {
   await disableTriggersAndIndexes();
   try {
     await truncate();
     await seedPatients();
-    // await seedQueueEntries();
-    // await seedConsultations();
-    // await seedConsultationItems();
-    // await seedPayments();
-    // await seedInventoryBatches();
-    // await seedInventoryTransactions();
+    const patientIds = (await sql<{id: string}[]>`SELECT id FROM public.patients`).map(r => r.id);
+    await seedQueueAndConsultations(patientIds);
+    await seedConsultationItems();
+    await seedPayments();
+    await seedInventoryBatchesAndTx();
   } finally {
     await rebuildIndexesAndAnalyze();
   }
@@ -152,3 +308,4 @@ async function main() {
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
+
