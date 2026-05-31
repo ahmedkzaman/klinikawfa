@@ -6,6 +6,7 @@ export type AppRole =
   | 'special_admin'
   | 'admin'
   | 'doctor_admin'
+  | 'ops_staff'
   | 'operations'
   | 'staff'
   | 'locum'
