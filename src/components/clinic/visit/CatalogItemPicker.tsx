@@ -150,8 +150,32 @@ export function CatalogItemPicker({
       quantity: Math.max(1, Math.floor(qty || 1)),
       price: fallbackPrice,
     };
-    if (catalog === 'inventory') payload.item_id = p.id;
-    else if (catalog === 'service') payload.service_id = p.id;
+    if (catalog === 'inventory') {
+      payload.item_id = p.id;
+      // Forward inventory prescribing defaults so the drug-label print and
+      // dispense audit show full dosage/frequency/indication/duration even
+      // when the doctor doesn't open the instructions modal. The dosage trio,
+      // frequency, indication, instruction, precaution and the duration
+      // ("3 days" = qty + unit) come straight from the master inventory row.
+      const dqRaw = (p as { default_dosage_qty?: string | null }).default_dosage_qty;
+      const dqNum = dqRaw != null && dqRaw !== '' ? Number(dqRaw) : NaN;
+      if (Number.isFinite(dqNum)) payload.dosage_qty = dqNum;
+      const du = (p as { default_dosage_unit?: string | null }).default_dosage_unit;
+      if (du) payload.dosage_unit = du;
+      const fq = (p as { default_frequency?: string | null }).default_frequency;
+      if (fq) payload.frequency = fq;
+      const ind = (p as { default_indication?: string | null }).default_indication;
+      if (ind) payload.indication = ind;
+      const instr = (p as { default_instruction?: string | null }).default_instruction;
+      if (instr) payload.instruction = instr;
+      const prec = (p as { default_precaution?: string | null }).default_precaution;
+      if (prec) payload.precaution = prec;
+      const durQty = (p as { default_duration?: string | null }).default_duration;
+      const durUnit = (p as { default_duration_unit?: string | null }).default_duration_unit;
+      if (durQty) {
+        payload.duration = durUnit ? `${durQty} ${durUnit}` : durQty;
+      }
+    } else if (catalog === 'service') payload.service_id = p.id;
     else payload.package_id = p.id;
 
     try {
