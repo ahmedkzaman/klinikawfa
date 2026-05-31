@@ -18,12 +18,16 @@ const BodySchema = z.object({
   email: z.string().email().max(255),
   fullName: z.string().min(1).max(255),
   phone: z.string().max(40).optional().nullable(),
+  password: z.string().min(8).max(72).optional(),
   role: z
-    .enum(['locum', 'resident_doctor', 'staff', 'operations'])
+    .enum(['locum', 'resident_doctor', 'ops_staff', 'staff', 'operations'])
     .default('locum'),
 });
 
-const EMPLOYEE_ROLES = new Set(['resident_doctor', 'staff', 'operations']);
+const EMPLOYEE_ROLES = new Set(['resident_doctor', 'ops_staff', 'staff', 'operations']);
+// Ops Staff tier callers (including legacy aliases) may only create locums.
+const OPS_TIER_CALLERS = new Set(['ops_staff', 'staff', 'operations']);
+const ADMIN_TIER_CALLERS = new Set(['admin', 'special_admin', 'doctor_admin']);
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
