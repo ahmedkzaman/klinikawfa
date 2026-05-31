@@ -271,8 +271,8 @@ export default function AdminAttendanceReview() {
   const exportCSV = () => {
     const allRecords = [...stats.details.working, ...stats.details.leave, ...stats.details.absent, ...stats.details.late];
     allRecords.sort((a, b) => a.date.localeCompare(b.date) || a.fullName.localeCompare(b.fullName));
-    const header = 'Full Name,Date,Expected Clock-In,Actual Clock-In,Lateness Duration,Work Hours,Status\n';
-    const rows = allRecords.map(r => `"${r.fullName}","${r.date}","${r.expectedClockIn}","${r.actualClockIn}","${r.latenessDuration}","${r.workHours}","${r.status}"`).join('\n');
+    const header = 'Full Name,Date,Expected Clock-In,Actual Clock-In,Expected Clock-Out,Actual Clock-Out,Lateness Duration,Work Hours,Clock-In Status,Clock-Out Status\n';
+    const rows = allRecords.map(r => `"${r.fullName}","${r.date}","${r.expectedClockIn}","${r.actualClockIn}","${r.expectedClockOut}","${r.actualClockOut}","${r.latenessDuration}","${r.workHours}","${r.status}","${getClockOutStatusLabel(r.clockOutStatus)}"`).join('\n');
     const blob = new Blob([header + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
