@@ -36,6 +36,7 @@ import { CheckInWalkInDialog } from "@/components/clinic/CheckInWalkInDialog";
 import { RegisterAndCheckInDialog } from "@/components/clinic/RegisterAndCheckInDialog";
 import { VitalsEntryDialog } from "@/components/clinic/VitalsEntryDialog";
 import { CancelQueueEntryDialog } from "@/components/clinic/CancelQueueEntryDialog";
+import { SettleDebtModal } from "@/components/clinic/billing/SettleDebtModal";
 import {
   QUEUE_COLUMNS,
   STATUS_COLORS,
@@ -135,7 +136,17 @@ export default function QueueBoard() {
   const [registerDialog, setRegisterDialog] = useState(false);
   const [vitalsOpen, setVitalsOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [settleDebtEntry, setSettleDebtEntry] = useState<QueueEntryWithJoins | null>(null);
   const [activeEntry, setActiveEntry] = useState<QueueEntryWithJoins | null>(null);
+
+  const handleCardClick = (entry: QueueEntryWithJoins) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((entry as any).visit_type === 'payment_only') {
+      setSettleDebtEntry(entry);
+    } else {
+      setActiveEntry(entry);
+    }
+  };
   const ANY_DOCTOR = "__any__";
   const [skipTriageDoctorId, setSkipTriageDoctorId] = useState<string | null>(null);
   const { data: allDoctors = [] } = useDoctors();
@@ -238,7 +249,7 @@ export default function QueueBoard() {
                           </motion.p>
                         ) : (
                           items.map((entry) => (
-                            <QueueCard key={entry.id} entry={entry} onClick={() => setActiveEntry(entry)} />
+                            <QueueCard key={entry.id} entry={entry} onClick={() => handleCardClick(entry)} />
                           ))
                         )}
                       </AnimatePresence>
@@ -498,6 +509,12 @@ export default function QueueBoard() {
       <CheckInAppointmentDialog open={appointmentDialog} onOpenChange={setAppointmentDialog} />
       <CheckInWalkInDialog open={walkInDialog} onOpenChange={setWalkInDialog} />
       <RegisterAndCheckInDialog open={registerDialog} onOpenChange={setRegisterDialog} />
+
+      <SettleDebtModal
+        entry={settleDebtEntry}
+        open={!!settleDebtEntry}
+        onOpenChange={(o) => !o && setSettleDebtEntry(null)}
+      />
     </>
   );
 }
