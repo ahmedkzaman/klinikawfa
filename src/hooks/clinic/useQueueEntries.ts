@@ -103,8 +103,6 @@ export function useQueueEntries() {
  * Restored to fix production build errors.
  */
 export function useConsultationQueueEntries() {
-  const qc = useQueryClient();
-
   const query = useQuery<QueueEntryWithJoins[]>({
     queryKey: CONSULT_QUEUE_QUERY_KEY,
     queryFn: async () => {
