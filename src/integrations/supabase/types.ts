@@ -5418,6 +5418,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      has_strict_role: {
+        Args: { _target_role: string; _user_id: string }
+        Returns: boolean
+      }
       intake_appointment_to_queue: {
         Args: {
           p_appointment_id: string
