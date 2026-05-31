@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Info, Printer, FileText, FilePlus2, Pencil, Trash2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Info, Printer, FileText, FilePlus2, Pencil, Trash2, Tags } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -31,6 +31,7 @@ import {
 import { printDocument } from '@/lib/clinic/printDocument';
 
 import { PrintReceiptDialog } from '@/components/clinic/billing/PrintReceiptDialog';
+import { DrugLabelPrintout } from '@/components/clinic/dispensary/DrugLabelPrintout';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
