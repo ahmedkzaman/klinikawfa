@@ -24,6 +24,7 @@ interface AuthContextType {
   isGuest: boolean;
   isSpecialAdmin: boolean;
   isOperations: boolean;
+  isOpsStaff: boolean;
   isOpsOrAdmin: boolean;
   isDoctorAdmin: boolean;
   isLocum: boolean;
