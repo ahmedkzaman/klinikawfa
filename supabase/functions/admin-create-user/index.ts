@@ -18,12 +18,16 @@ const BodySchema = z.object({
   email: z.string().email().max(255),
   fullName: z.string().min(1).max(255),
   phone: z.string().max(40).optional().nullable(),
+  password: z.string().min(8).max(72).optional(),
   role: z
-    .enum(['locum', 'resident_doctor', 'staff', 'operations'])
+    .enum(['locum', 'resident_doctor', 'ops_staff', 'staff', 'operations'])
     .default('locum'),
 });
 
-const EMPLOYEE_ROLES = new Set(['resident_doctor', 'staff', 'operations']);
+const EMPLOYEE_ROLES = new Set(['resident_doctor', 'ops_staff', 'staff', 'operations']);
+// Ops Staff tier callers (including legacy aliases) may only create locums.
+const OPS_TIER_CALLERS = new Set(['ops_staff', 'staff', 'operations']);
+const ADMIN_TIER_CALLERS = new Set(['admin', 'special_admin', 'doctor_admin']);
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -67,8 +71,10 @@ Deno.serve(async (req) => {
 
   if (roleErr) return json({ error: 'Role lookup failed' }, 500);
 
-  const allowed = ['admin', 'special_admin', 'doctor_admin', 'staff'];
-  if (!roleRow || !allowed.includes(roleRow.role)) {
+  const callerRole = roleRow?.role as string | undefined;
+  const isOpsTierCaller = !!callerRole && OPS_TIER_CALLERS.has(callerRole);
+  const isAdminTierCaller = !!callerRole && ADMIN_TIER_CALLERS.has(callerRole);
+  if (!callerRole || (!isOpsTierCaller && !isAdminTierCaller)) {
     return json({ error: 'Forbidden — staff or admin only' }, 403);
   }
 
@@ -83,17 +89,24 @@ Deno.serve(async (req) => {
   if (!parsed.success) {
     return json({ error: parsed.error.flatten().fieldErrors }, 400);
   }
-  const { email, fullName, phone, role } = parsed.data;
+  const { email, fullName, phone, password: bodyPassword } = parsed.data;
+  // SECURITY: Ops-tier callers (front desk) can ONLY ever create locums.
+  // We hardcode the role server-side and ignore whatever the client sent,
+  // so a tampered request cannot escalate to resident_doctor/ops_staff/etc.
+  const role = isOpsTierCaller ? 'locum' : parsed.data.role;
 
-  // Only special_admin can create elevated employee roles
-  if (EMPLOYEE_ROLES.has(role) && roleRow.role !== 'special_admin' && roleRow.role !== 'admin' && roleRow.role !== 'doctor_admin') {
+  // Only admin-tier callers can create elevated employee roles.
+  if (EMPLOYEE_ROLES.has(role) && !isAdminTierCaller) {
     return json({ error: 'Only admins can create employee accounts' }, 403);
   }
 
-  // 5. Create the user (auto-confirmed) with default password
+  // 5. Create the user. `email_confirm: true` is REQUIRED — locums and staff
+  // created here must be able to log in immediately at the front desk. Do not
+  // remove unless you also build an email-verification fallback flow.
+  const password = bodyPassword && bodyPassword.length >= 8 ? bodyPassword : 'test1234';
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
     email,
-    password: 'test1234',
+    password,
     email_confirm: true,
     user_metadata: {
       full_name: fullName,

@@ -28,7 +28,7 @@ type Row = {
   clock_out_late_min: number;
 };
 
-const ROLE_OPTIONS: AppRole[] = ['admin', 'staff', 'special_admin', 'doctor_admin', 'operations', 'locum', 'resident_doctor'];
+const ROLE_OPTIONS: AppRole[] = ['admin', 'ops_staff', 'special_admin', 'doctor_admin', 'locum', 'resident_doctor'];
 const SHIFT_OPTIONS: ShiftKey[] = ['S1', 'S2', 'S3', 'Hybrid', 'Night', 'DOC_S1', 'DOC_S2', 'DOC_S3'];
 
 const ROLE_LABEL: Record<AppRole, string> = {
@@ -38,6 +38,7 @@ const ROLE_LABEL: Record<AppRole, string> = {
   special_admin: 'Special Admin',
   doctor_admin: 'Doctor Admin',
   operations: 'Operations',
+  ops_staff: 'Ops Staff',
   locum: 'Locum',
   resident_doctor: 'Resident Doctor',
 };

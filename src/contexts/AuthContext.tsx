@@ -6,6 +6,7 @@ export type AppRole =
   | 'special_admin'
   | 'admin'
   | 'doctor_admin'
+  | 'ops_staff'
   | 'operations'
   | 'staff'
   | 'locum'
@@ -23,6 +24,7 @@ interface AuthContextType {
   isGuest: boolean;
   isSpecialAdmin: boolean;
   isOperations: boolean;
+  isOpsStaff: boolean;
   isOpsOrAdmin: boolean;
   isDoctorAdmin: boolean;
   isLocum: boolean;
@@ -168,15 +170,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isStaffOrAdmin =
     role === 'admin' ||
     role === 'staff' ||
+    role === 'ops_staff' ||
     role === 'special_admin' ||
     role === 'operations' ||
     role === 'doctor_admin' ||
     role === 'resident_doctor';
   const isGuest = role === 'guest' || role === null;
   const isSpecialAdmin = role === 'special_admin';
-  const isOperations = role === 'operations';
+  const isOperations = role === 'operations' || role === 'ops_staff';
+  const isOpsStaff =
+    role === 'ops_staff' || role === 'operations' || role === 'staff';
   const isOpsOrAdmin =
     role === 'operations' ||
+    role === 'ops_staff' ||
+    role === 'staff' ||
     role === 'admin' ||
     role === 'special_admin' ||
     role === 'doctor_admin' ||
@@ -205,6 +212,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isGuest,
         isSpecialAdmin,
         isOperations,
+        isOpsStaff,
         isOpsOrAdmin,
         isDoctorAdmin,
         isLocum,
