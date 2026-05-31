@@ -1,17 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Check, ChevronsUpDown, Search, UserCheck, X } from 'lucide-react';
+import { Check, ChevronsUpDown, CreditCard, Loader2, Search, UserCheck, X } from 'lucide-react';
 import { toMalayTitleCase } from '@/lib/textCase';
 import {
-  ReadMyKadButton,
   cleanIC,
   mapGender,
   mapDOB,
 } from '@/components/clinic/ReadMyKadButton';
+import { useMyKadReader, type MyKadPayload } from '@/hooks/clinic/useMyKadReader';
+import { useMyKadBridge, type MyKadBridgeStatus } from '@/hooks/useMyKadBridge';
 import {
   Dialog,
   DialogContent,
@@ -247,6 +248,23 @@ function parseMyKad(ic: string): { dob: string | null; gender: 'male' | 'female'
   return { dob, gender };
 }
 
+function BridgeStatusDot({ status }: { status: MyKadBridgeStatus }) {
+  const map: Record<MyKadBridgeStatus, { cls: string; label: string }> = {
+    connected_card_ready: { cls: 'bg-emerald-500', label: 'MyKad reader ready' },
+    connected_no_card: { cls: 'bg-amber-500', label: 'Reader connected — no card inserted' },
+    disconnected: { cls: 'bg-red-500', label: 'Reader offline — type IC manually' },
+  };
+  const { cls, label } = map[status];
+  return (
+    <span
+      role="status"
+      aria-label={label}
+      title={label}
+      className={cn('inline-block h-2 w-2 rounded-full', cls)}
+    />
+  );
+}
+
 export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -256,6 +274,10 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
   const { data: panels = [] } = useInsuranceProviders({ activeOnly: true });
 
   const [submitting, setSubmitting] = useState(false);
+  const [readingMyKad, setReadingMyKad] = useState(false);
+  const icInputRef = useRef<HTMLInputElement | null>(null);
+  const { readMyKad } = useMyKadReader();
+  const { status: bridgeStatus } = useMyKadBridge();
   const [loadedPatientId, setLoadedPatientId] = useState<string | null>(null);
   const [loadedIc, setLoadedIc] = useState<string | null>(null);
   const [principalQuery, setPrincipalQuery] = useState('');
@@ -531,15 +553,62 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                 </div>
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
-                    <Label htmlFor="reg-ic">{ID_LABELS[idType]}{isMykadType ? '' : ' *'}</Label>
+                    <Label htmlFor="reg-ic" className="flex items-center gap-2">
+                      {ID_LABELS[idType]}{isMykadType ? '' : ' *'}
+                      {isMykadType && <BridgeStatusDot status={bridgeStatus} />}
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const { ref: rhfRef, ...rest } = register('national_id');
+                      return (
+                        <Input
+                          id="reg-ic"
+                          placeholder={ID_PLACEHOLDERS[idType]}
+                          autoComplete="off"
+                          {...rest}
+                          ref={(el) => {
+                            rhfRef(el);
+                            icInputRef.current = el;
+                          }}
+                          className="flex-1"
+                        />
+                      );
+                    })()}
                     {isMykadType && (
-                      <ReadMyKadButton
-                        onRead={(data) => {
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={readingMyKad}
+                        onClick={async () => {
+                          setReadingMyKad(true);
+                          let data: MyKadPayload | null = null;
+                          try {
+                            data = await Promise.race<MyKadPayload | null>([
+                              readMyKad(),
+                              new Promise<MyKadPayload | null>((_, rej) =>
+                                setTimeout(() => rej(new Error('bridge_timeout')), 3000),
+                              ),
+                            ]);
+                          } catch {
+                            data = null;
+                          } finally {
+                            setReadingMyKad(false);
+                          }
+                          if (!data) {
+                            // Silent fallback — focus the manual field, no blocking modal.
+                            toast.message('MyKad reader unavailable — type IC manually.');
+                            requestAnimationFrame(() => {
+                              icInputRef.current?.focus();
+                              icInputRef.current?.select();
+                            });
+                            return;
+                          }
                           // Hard reset: physical card read must not inherit a
                           // previously-loaded existing-patient binding.
                           setLoadedPatientId(null);
                           setLoadedIc(null);
-
                           setValue('id_type', 'mykad', { shouldValidate: true, shouldDirty: true });
                           if (data.name)
                             setValue('name', toMalayTitleCase(data.name), { shouldValidate: true, shouldDirty: true });
@@ -554,14 +623,16 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                             setValue('gender', g, { shouldValidate: true, shouldDirty: true });
                           toast.success('MyKad read successfully');
                         }}
-                      />
+                      >
+                        {readingMyKad ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <CreditCard className="h-4 w-4" />
+                        )}
+                        Read MyKad
+                      </Button>
                     )}
                   </div>
-                  <Input
-                    id="reg-ic"
-                    placeholder={ID_PLACEHOLDERS[idType]}
-                    {...register('national_id')}
-                  />
                   {errors.national_id && (
                     <p className="text-sm text-destructive">{errors.national_id.message}</p>
                   )}

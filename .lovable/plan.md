@@ -1,101 +1,80 @@
-# Thermal Drug Label Printout (60×50mm)
+# MyKad Light Hardening + Fallback UI
 
-A pure HTML/CSS print path for the Gprinter GP-3150TN, sitting alongside the existing jsPDF-based `printDrugLabel.ts`. The browser's native `window.print()` flow gives staff a one-click "Print Drug Labels" button on the dispense checkout screen.
+Retain the existing localhost MyKad bridge but make the UI resilient when it's unreachable. No new reader implementation.
 
-## 1. New component — `src/components/clinic/dispensary/DrugLabelPrintout.tsx`
+## 1. New polling hook — `src/hooks/useMyKadBridge.ts`
 
-Props:
 ```ts
-{ consultationId: string; open: boolean; onClose: () => void }
+type BridgeStatus = 'connected_card_ready' | 'connected_no_card' | 'disconnected';
+export function useMyKadBridge(intervalMs = 10_000): { status: BridgeStatus }
 ```
 
 Behavior:
-- Renders into `document.body` via a React portal targeting a dedicated `<div id="print-root">` (created on mount, removed on unmount).
-- Fetches data in a `useQuery` (see §3). While loading, render nothing.
-- When `open` flips to `true` and data is ready, call `window.print()` once inside a `useEffect`, then call `onClose()` on the `afterprint` window event.
-- Listens for `afterprint` to clean up.
+- On mount, immediately ping bridge status URL, then `setInterval` every 10s. Clean up on unmount.
+- Endpoint: derive from `VITE_MYKAD_BRIDGE_URL` (replace trailing `/read-mykad` with `/status`); fallback to `http://127.0.0.1:8787/status`.
+- Use `fetch(url, { signal: AbortSignal.timeout(2000) })`. Wrap the whole call in `try/catch` and return `'disconnected'` on any throw — no `console.error`/`console.warn` (silent).
+- Parse JSON `{ card_present: boolean }` (or similar). Map:
+  - HTTP ok + `card_present === true` → `connected_card_ready`
+  - HTTP ok + `card_present === false` → `connected_no_card`
+  - Any network/timeout/non-ok → `disconnected`
+- Pause polling while `document.hidden` to avoid background spam; resume on `visibilitychange`.
 
-Print CSS (injected once via a `<style>` tag inside the portal):
-```css
-@media print {
-  @page { size: 60mm 50mm; margin: 0; }
-  html, body { margin: 0; padding: 0; background: #fff; }
-  #root > :not(#print-root) { display: none !important; }
-  #print-root { display: block !important; }
-}
-@media screen { #print-root { display: none; } }
+## 2. Fortify `src/components/clinic/RegisterAndCheckInDialog.tsx`
+
+- **Traffic-light dot** in the `DialogHeader` row (right of `DialogTitle`):
+  - 8px circle: green / amber / red based on hook status, with `title` tooltip ("MyKad reader ready" / "Reader connected, no card" / "Reader offline — type IC manually").
+- **IC input is always first-class**: keep the existing manual `Input` visible and labelled regardless of bridge state. Never hide it behind a tab or "Reader Failed" panel.
+- **Accelerator button** next to the IC input: replace/augment the existing `ReadMyKadButton` usage with an inline button that:
+  1. Calls `readMyKad()` from `useMyKadReader` wrapped in `Promise.race([readMyKad(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000))])`.
+  2. On success → autofill fields (existing logic preserved).
+  3. On timeout/error → **no modal popup, no blocking toast**. Use a single low-intrusion `toast.message()` (auto-dismiss) at most, and immediately call `icInputRef.current?.focus()` and `select()` so the cashier can type without an extra click.
+- Add `const icInputRef = useRef<HTMLInputElement>(null)` and wire it to the IC `<Input ref={icInputRef} id="ic-input" />`.
+- Disable the accelerator button only while a read is in flight; do **not** disable it when status is `disconnected` — clicking it will just trigger the 3s timeout + focus fallback, which is the desired graceful degradation.
+
+Internals only — no schema, backend, or RPC changes. Existing `useMyKadReader` and `ReadMyKadButton` helpers remain; this dialog stops relying on `ReadMyKadButton` for the in-dialog UX and uses an inline button so it can own the timeout + focus behavior. `ReadMyKadButton` stays for other call sites.
+
+## 3. Disaster recovery doc — `MYKAD_SETUP.md` (repo root)
+
+Structured template with placeholders:
+
 ```
+# MyKad Bridge — Front Desk Setup & Recovery
 
-Per-sticker container:
+## 1. Workstation Requirements
+- Expected Windows Version: <e.g. Windows 11 23H2 / Windows 10 LTSC 2021>
+- Reader hardware: <model, USB port>
+
+## 2. Silent Installer Dependencies
+- .NET Framework: <version>
+- Visual C++ Redistributable: <version>
+- Bridge service version: <x.y.z>
+- Install command: <silent flags>
+
+## 3. Browser Security Flags (Chrome / Edge)
+- chrome://flags/#allow-insecure-localhost → Enabled
+- chrome://flags/#block-insecure-private-network-requests → Disabled
+- Allowed origin for mixed content: https://klinikawfa.com
+
+## 4. Restart Protocol (Front Desk Staff)
+1. Confirm the dot indicator in the registration dialog is RED.
+2. Unplug the card reader USB cable, wait 5 seconds, plug back in.
+3. Open Services.msc → restart "Klinik Awfa MyKad Bridge".
+4. Reload the registration page (Ctrl+F5).
+5. If still RED after 60 seconds, fall back to manual IC entry and notify IT.
+
+## 5. Escalation
+- Tier 1: <name / phone>
+- Tier 2: <vendor support contact>
 ```
-<div class="w-[60mm] h-[50mm] overflow-hidden flex flex-col justify-between p-2
-            text-black bg-white leading-tight break-after-page">
-```
-One container per drug. `break-after-page` (Tailwind v3 utility for `page-break-after: always`) ensures one sticker per physical label.
-
-Layout (top → bottom inside each sticker):
-1. **Clinic name** — `text-[8pt] font-bold text-center truncate` (from `clinic_settings` via existing hook, e.g. `useClinicProfile`; if not trivially available, hard-fallback to "Klinik Awfa").
-2. **Patient row** — flex row: patient name (`text-[10pt] font-bold truncate flex-1`) + dispense date `dd/MM/yy` (`text-[8pt] text-right shrink-0 ml-1`).
-3. **Drug name** — `text-lg font-extrabold leading-tight line-clamp-2` (drug + strength if available, with quantity suffix like `× 20`).
-4. **Dosage instructions** — `text-sm font-bold leading-tight line-clamp-3`. Built from `consultation_items.instruction` if present; otherwise composed from `dosage_qty + dosage_unit + frequency + duration` using `FREQUENCY_LABELS` (reuse `src/lib/clinic/prescribingOptions.ts`).
-5. **Expiry row** — `text-xs text-right`: `EXP: MM/yyyy` from the earliest `inventory_batches.expiry_date` for that item.
-
-All sizes target a 203 dpi thermal printer at 60×50mm. Tight leading + `overflow-hidden` + `line-clamp-*` guarantee no overflow.
-
-## 2. Trigger — `src/pages/clinic/DispenseCheckout.tsx`
-
-Next to the existing "Print Receipt" button (around line 684–693):
-```tsx
-<Button variant="outline" size="sm" onClick={() => setPrintLabels(true)}>
-  <Tags className="h-4 w-4 mr-2" /> Print Drug Labels
-</Button>
-```
-- Add `const [printLabels, setPrintLabels] = useState(false)`.
-- Mount `<DrugLabelPrintout consultationId={consultation.id} open={printLabels} onClose={() => setPrintLabels(false)} />` at the same level as `PrintReceiptDialog`.
-- Button is disabled unless `consultation?.id` exists.
-- No auto-print on checkout completion — manual trigger only.
-
-## 3. Data fetching (single `useQuery`, key `['drug-labels', consultationId]`)
-
-Step A — pull medication line items:
-```ts
-supabase
-  .from('consultation_items')
-  .select(`
-    id, item_id, item_name, quantity,
-    dosage, dosage_qty, dosage_unit, frequency, duration, instruction, indication,
-    inventory_items!inner ( id, name, category, unit_of_measure, uom )
-  `)
-  .eq('consultation_id', consultationId)
-  .is('deleted_at', null)
-  .in('inventory_items.category', ['Medication', 'Vaccine']);
-```
-This excludes consultation fees, procedures, lab investigations, disposables — they live in `services` or have `category != 'Medication' | 'Vaccine'`.
-
-Step B — for each distinct `item_id`, fetch earliest non-expired batch:
-```ts
-supabase
-  .from('inventory_batches')
-  .select('item_id, expiry_date')
-  .in('item_id', itemIds)
-  .gte('expiry_date', today)
-  .order('expiry_date', { ascending: true });
-```
-Reduce to `Map<item_id, earliestExpiry>` (FEFO mirror — actual deduction stays backend-driven).
-
-Step C — pull patient + dispense date in parallel:
-- Patient name from `consultations` → `patients.name` (or pass via prop if already loaded — `DispenseCheckout` already has `patient`; accept optional `patientName` / `dispensedAt` props to avoid the extra fetch).
-- Dispense date = `new Date()` at print time (or `consultation.completed_at` if set).
-- Clinic name from existing `useClinicProfile` / `clinic_settings` hook used by `ClinicProfile.tsx`.
-
-## 4. Out of scope
-
-- No changes to existing `src/lib/clinic/printDrugLabel.ts` (jsPDF path remains).
-- No changes to Drug Label settings page or toggles — this is a fixed-layout thermal sticker; user can iterate on toggles later.
-- No printer-calibration offsets — `@page` + `margin: 0` is the contract; calibration is the printer driver's job.
-- No backend/RPC/migration changes.
 
 ## Files touched
 
-- **Create** `src/components/clinic/dispensary/DrugLabelPrintout.tsx`
-- **Edit** `src/pages/clinic/DispenseCheckout.tsx` (button + state + mount)
+- **Create** `src/hooks/useMyKadBridge.ts`
+- **Create** `MYKAD_SETUP.md`
+- **Edit** `src/components/clinic/RegisterAndCheckInDialog.tsx` (status dot, IC ref, inline Read button with 3s race + focus fallback)
+
+## Out of scope
+
+- No WebUSB / PC/SC implementation.
+- No changes to `useMyKadReader.ts`, `ReadMyKadButton.tsx`, or other call sites.
+- No bridge-side code, installers, or backend changes.
