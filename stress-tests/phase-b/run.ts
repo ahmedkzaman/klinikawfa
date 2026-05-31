@@ -21,23 +21,28 @@ const env = {
 
 const K6 = process.env.K6_BIN ?? "k6";
 
-const SCENARIOS = [
-  "checkout-race.k6.js",
-  "queue-status-race.k6.js",
-  "settle-debt-race.k6.js",
-  "owe-slip-race.k6.js",
-  "fefo-race.k6.js",
+const SCENARIOS: { script: string; envExtra: Record<string,string> }[] = [
+  { script: "checkout-race.k6.js",     envExtra: { QUEUE_ID: "q0000000-0000-0000-0000-000000000001", CONSULTATION_ID: "x0000000-0000-0000-0000-000000000001" } },
+  { script: "queue-status-race.k6.js", envExtra: { QUEUE_ID: "q0000000-0000-0000-0000-000000000003" } },
+  { script: "settle-debt-race.k6.js",  envExtra: { QUEUE_ID: "q0000000-0000-0000-0000-000000000002", CONSULTATION_IDS: '["x0000000-0000-0000-0000-000000000002"]', AMOUNT: "150" } },
+  { script: "owe-slip-race.k6.js",     envExtra: { SLIP_ID: "05100000-0000-0000-0000-000000000001" } },
+  { script: "fefo-race.k6.js",         envExtra: { ITEM_ID: "11110000-0000-0000-0000-000000000001" } },
 ];
 
-// NOTE: per-scenario seed/teardown SQL lives in phase-b/seed-*.sql.
-// Hook into seed/seed.ts to set QUEUE_ID, CONSULTATION_ID, ITEM_ID, SLIP_ID env vars.
+// Seed isolated targets via psql before running k6
+console.log("→ Seeding Phase B targets");
+spawnSync("psql", [process.env.STAGING_DB_URL!, "-f", path.join(import.meta.dir, "setup-targets.sql")], { stdio: "inherit" });
 
-for (const s of SCENARIOS) {
-  console.log(`→ k6: ${s}`);
-  const summary = path.join(outDir, s.replace(".k6.js", ".json"));
-  const r = spawnSync(K6, ["run", "--summary-export", summary, path.join(import.meta.dir, s)], {
+for (const { script, envExtra } of SCENARIOS) {
+  console.log(`→ k6: ${script}`);
+  const summary = path.join(outDir, script.replace(".k6.js", ".json"));
+  const r = spawnSync(K6, ["run", "--summary-export", summary, path.join(import.meta.dir, script)], {
     stdio: "inherit",
-    env: { ...process.env, ...env },
+    env: { ...process.env, ...env, ...envExtra },
   });
-  if (r.status !== 0) console.warn(`  ! ${s} exited ${r.status} (expected for race-loser scenarios)`);
+  if (r.status !== 0) console.warn(`  ! ${script} exited ${r.status} (race-loser exits are expected)`);
 }
+
+console.log("→ Tearing down Phase B targets");
+spawnSync("psql", [process.env.STAGING_DB_URL!, "-f", path.join(import.meta.dir, "teardown-targets.sql")], { stdio: "inherit" });
+
