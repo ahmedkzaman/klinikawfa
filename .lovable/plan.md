@@ -1,30 +1,63 @@
-# Why the two labels look different
+# Clinic Access Matrix + Secure Locum Registration (revised)
 
-The test print and the real dispensed label use the **exact same PDF renderer** (`generateDrugLabelPdf`). The difference is the data, not the settings.
+Adds `ops_staff` as a first-class role, migrates existing `operations` / `staff` users into it, gives ops_staff a dedicated minimal "Register Locum" page, and tightens the RLS helper boundary between administrative and clinical roles.
 
-- **Test label** (Settings → Printer Calibration) feeds a hard-coded `TEST_ITEM` that includes `dosage_qty`, `dosage_unit`, `frequency`, `indication`, `duration`. The renderer therefore draws the full body: `1 TABLET`, `3 TIMES A DAY / 3 KALI SEHARI`, `For: Alignment Test`, `Duration: 1 Day`.
-- **Real dispensed label** prints from a `consultation_items` row. When a medicine is added through the catalog picker, its inventory `default_dosage_qty / default_dosage_unit / default_frequency / default_instruction / default_duration / default_indication / default_precaution` are **never copied onto the consultation_items row**. Unless the doctor opens the instructions modal and types them in, those columns stay `NULL`. The renderer then prints only header + medicine name + QTY/EXP — which is exactly what your second screenshot shows.
+## 1. Database migration
 
-So the fix is to make every dispensed item carry the same fields the test item has.
+Two-statement migration (enum add must commit before reuse):
 
-## Plan
+1. `ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'ops_staff';`
+2. `UPDATE public.user_roles SET role = 'ops_staff' WHERE role IN ('operations','staff');`
+3. **Rewrite helpers with a strict administrative boundary** — clinical roles are NOT included:
+   - `is_staff_or_admin(_user_id)` → role IN (`admin`, `special_admin`, `doctor_admin`, `ops_staff`, `operations`, `staff`). Drops `locum` and `resident_doctor`.
+   - `is_ops_or_admin(_user_id)` → role IN (`admin`, `special_admin`, `doctor_admin`, `ops_staff`, `operations`, `staff`). Drops `resident_doctor`.
+   - New helper `is_clinical(_user_id)` → role IN (`resident_doctor`, `locum`) — to be used by any future policy that needs clinical access.
+4. **Audit pass before merging** — grep every RLS policy and SECURITY DEFINER body for direct calls to `is_staff_or_admin` / `is_ops_or_admin`. For any policy where dropping `resident_doctor` would break legitimate clinical workflows (e.g. consultations, prescribing, owe-slip fulfilment), replace the helper call with `(is_staff_or_admin(auth.uid()) OR is_clinical(auth.uid()))`. Document each touched policy in the migration comment.
+5. `'operations'` and `'staff'` remain in the enum as deprecated aliases (Postgres can't drop enum values cleanly). Nothing assigns them going forward; helpers still accept them so any unmigrated rows or in-flight sessions keep working.
 
-1. **`src/components/clinic/visit/CatalogItemPicker.tsx`** — when `catalog === 'inventory'`, forward the picked item's prescribing defaults onto the insert payload:
-   - `indication`      ← `default_indication`
-   - `dosage_qty`      ← `Number(default_dosage_qty)` (string → number, ignore NaN)
-   - `dosage_unit`     ← `default_dosage_unit`
-   - `frequency`       ← `default_frequency`
-   - `instruction`     ← `default_instruction`
-   - `duration`        ← `default_duration` joined with `default_duration_unit` if both present (e.g. `"3 days"`), to match what the label expects.
-   - `precaution`      ← `default_precaution`
-   Only set keys when the source value is non-empty so the doctor's manual edits in the instructions modal still win.
+## 2. Edge function — `admin-create-user`
 
-2. **`src/components/clinic/visit/VisitDetailsColumn.tsx`** — in `openLabelPdf`, when mapping `rows` to `DrugLabelItem`, fall back to the linked `inventory_items.default_*` columns if the row's own prescribing field is null. This rescues rows that were already dispensed before fix #1 lands, and matches the test-print behaviour for any item with sensible inventory defaults.
-   - Requires extending the select in `src/hooks/clinic/useConsultationItems.ts` from `inventory_items(unit:unit_of_measure)` to also pull `default_indication, default_dosage_qty, default_dosage_unit, default_frequency, default_instruction, default_duration, default_duration_unit, default_precaution`.
+- Add `'ops_staff'` to the allowed caller-role list. Keep `'staff'` and `'operations'` for backward compat during transition.
+- When the caller role is `ops_staff` / `staff` / `operations`, server-side force `parsed.data.role = 'locum'` before any DB write. Frontend cannot escalate.
+- Confirm the `createUser` payload includes `email_confirm: true` (already present at line ~93) so the locum can log in immediately — no email round-trip. Add a code comment marking this as a deliberate operational requirement so it isn't removed later.
+- Admins (`admin` / `special_admin` / `doctor_admin`) keep the existing behaviour of being able to create resident_doctor accounts.
 
-3. **No changes** to `printDrugLabel.ts`, `PrinterCalibration.tsx`, label settings, or the calibration offsets — header, divider, fonts, QTY/EXP layout are already identical between the two flows.
+No new RPC is added; the edge function already uses service role + caller JWT verification via `getClaims`, which satisfies the "SECURITY DEFINER" intent of the spec.
 
-## Out of scope
-- Backfilling historical `consultation_items` rows in the DB (the print-time fallback in step 2 covers them visually).
-- Changing the instructions modal UX.
-- Any change to the printer offset / paper size / toggles in `drug_label_settings`.
+## 3. Frontend changes
+
+### `src/contexts/AuthContext.tsx`
+- Add `'ops_staff'` to the `AppRole` union and expose `isOpsStaff`. Map any existing `isStaff` derived flag to `role === 'ops_staff' || role === 'staff' || role === 'operations'` for backward compatibility.
+
+### New `src/components/clinic/settings/LocumRegistrationForm.tsx`
+- Extract the form body of `AddUserDialog` into a reusable component.
+- Fields: Full Name, Email, Phone (optional), Password (default `test1234`, editable).
+- Password input includes a **stateful "Show Password" toggle** (eye / eye-off icon button) so front-desk staff can verify what they typed before submit.
+- Calls `supabase.functions.invoke('admin-create-user', { body: { role: 'locum', ... } })`.
+
+### `src/components/clinic/settings/AddUserDialog.tsx`
+- Refactored to render `LocumRegistrationForm` inside the dialog shell — same UX as today, no duplicate code.
+
+### New `src/pages/clinic/settings/LocumRegistration.tsx`
+- Minimal standalone page for ops_staff. Title "Register Locum Doctor", renders `LocumRegistrationForm` directly. No user list, no role editor.
+
+### `src/pages/clinic/settings/UserManagementSettings.tsx`
+- Add `'ops_staff'` (label "Ops Staff") to `ROLE_OPTIONS`. Remove `'staff'` and `'operations'` from selectable options; keep them in `ROLE_LABEL` so legacy rows still render.
+- Page remains admin-only (unchanged guard) — ops_staff never sees the role-edit dropdown.
+
+### Routing — `src/App.tsx`
+- New route `/clinic/settings/locum-registration` wrapped in `ClinicProtectedRoute` with allowed roles `['ops_staff','admin','special_admin','doctor_admin']`.
+
+### `src/pages/clinic/settings/SettingsPage.tsx`
+- Add a "Register Locum" entry visible when `isOpsStaff || isAdmin`. Ops_staff sees ONLY this entry from the user-management cluster — no link to full User Management.
+
+## 4. Out of scope (explicit)
+
+- No rename of `operations` / `staff` enum values (Postgres limitation).
+- No bulk edit of every RLS policy beyond the targeted audit in §1.4.
+
+## Technical details
+
+- Files touched: 1 migration, `supabase/functions/admin-create-user/index.ts`, `src/contexts/AuthContext.tsx`, `src/App.tsx`, `src/pages/clinic/settings/SettingsPage.tsx`, `src/pages/clinic/settings/UserManagementSettings.tsx`, `src/components/clinic/settings/AddUserDialog.tsx`, new `src/components/clinic/settings/LocumRegistrationForm.tsx`, new `src/pages/clinic/settings/LocumRegistration.tsx`.
+- Postgres requires `ALTER TYPE ... ADD VALUE` to commit before the new value is usable; the migration uses two separate statement blocks.
+- After migration, run `supabase--linter` and review every flagged policy that previously relied on the broadened `is_staff_or_admin` to confirm no clinical workflow regressed.
