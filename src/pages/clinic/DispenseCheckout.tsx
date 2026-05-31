@@ -756,6 +756,14 @@ export default function DispenseCheckout() {
         onOpenChange={(o) => !o && setPrintPaymentId(null)}
         paymentId={printPaymentId}
       />
+      {consultation?.id && (
+        <DrugLabelPrintout
+          consultationId={consultation.id}
+          patientName={patient?.name ?? null}
+          open={printLabels}
+          onClose={() => setPrintLabels(false)}
+        />
+      )}
 
       <IssueDocumentModal
         isOpen={!!issuingTemplate || !!editingDoc}
