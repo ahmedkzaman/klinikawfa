@@ -901,7 +901,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                 </div>
               )}
 
-              {!isDirectSale && (
+              {!skipClinicalUI && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="reg-purpose">Purpose of Visit *</Label>
