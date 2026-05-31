@@ -1,36 +1,30 @@
-## Problem
+# Why the two labels look different
 
-`DocumentTemplates` only renders the **builder** (a blank-slate creator). There is no list of saved templates, no way to load one into the editor, and no delete. So once a template is saved, you can never reopen it — only create new ones.
+The test print and the real dispensed label use the **exact same PDF renderer** (`generateDrugLabelPdf`). The difference is the data, not the settings.
 
-## Fix
+- **Test label** (Settings → Printer Calibration) feeds a hard-coded `TEST_ITEM` that includes `dosage_qty`, `dosage_unit`, `frequency`, `indication`, `duration`. The renderer therefore draws the full body: `1 TABLET`, `3 TIMES A DAY / 3 KALI SEHARI`, `For: Alignment Test`, `Duration: 1 Day`.
+- **Real dispensed label** prints from a `consultation_items` row. When a medicine is added through the catalog picker, its inventory `default_dosage_qty / default_dosage_unit / default_frequency / default_instruction / default_duration / default_indication / default_precaution` are **never copied onto the consultation_items row**. Unless the doctor opens the instructions modal and types them in, those columns stay `NULL`. The renderer then prints only header + medicine name + QTY/EXP — which is exactly what your second screenshot shows.
 
-Turn `DocumentTemplateBuilder` into a two-pane manager: a list of saved templates on the left, the existing editor on the right.
+So the fix is to make every dispensed item carry the same fields the test item has.
 
-### 1. Load saved templates
-- Use existing `useDocumentTemplates()` hook to fetch all active templates.
-- Show them as a vertical list (name + type badge + paper size). Highlight the active one.
-- Add a "+ New Template" button at the top of the list that resets the editor to a blank draft.
+## Plan
 
-### 2. Make the editor edit-aware
-- Track `editingId: string | null` in state.
-- Clicking a template loads its `name`, `type`, `content`, `paper_size`, `orientation` into the editor state and sets `editingId`.
-- `handleSave` passes `id: editingId ?? undefined` to `useUpsertDocumentTemplate` so it updates instead of inserting a duplicate. After a successful insert, capture the returned `id` and set it as `editingId` so subsequent saves update the same row.
-- Header title shows "Editing: {name}" vs "New Template" based on `editingId`.
+1. **`src/components/clinic/visit/CatalogItemPicker.tsx`** — when `catalog === 'inventory'`, forward the picked item's prescribing defaults onto the insert payload:
+   - `indication`      ← `default_indication`
+   - `dosage_qty`      ← `Number(default_dosage_qty)` (string → number, ignore NaN)
+   - `dosage_unit`     ← `default_dosage_unit`
+   - `frequency`       ← `default_frequency`
+   - `instruction`     ← `default_instruction`
+   - `duration`        ← `default_duration` joined with `default_duration_unit` if both present (e.g. `"3 days"`), to match what the label expects.
+   - `precaution`      ← `default_precaution`
+   Only set keys when the source value is non-empty so the doctor's manual edits in the instructions modal still win.
 
-### 3. Delete + duplicate
-- Add a new `useDeleteDocumentTemplate` hook (soft delete via `is_active=false`, since the table already has that flag — keeps historical `consultation_documents.template_id` links intact).
-- Row actions on hover: **Duplicate** (loads values but clears `editingId` so Save creates a new row with " (copy)" appended) and **Delete** (confirm dialog → soft delete → toast).
+2. **`src/components/clinic/visit/VisitDetailsColumn.tsx`** — in `openLabelPdf`, when mapping `rows` to `DrugLabelItem`, fall back to the linked `inventory_items.default_*` columns if the row's own prescribing field is null. This rescues rows that were already dispensed before fix #1 lands, and matches the test-print behaviour for any item with sensible inventory defaults.
+   - Requires extending the select in `src/hooks/clinic/useConsultationItems.ts` from `inventory_items(unit:unit_of_measure)` to also pull `default_indication, default_dosage_qty, default_dosage_unit, default_frequency, default_instruction, default_duration, default_duration_unit, default_precaution`.
 
-### 4. Layout
-- Three columns on large screens: `[templates list 280px] [editor] [paper preview]`. Stack vertically below `lg`.
-- List uses the same slate/white styling as the rest of the builder.
-
-## Files touched
-
-- `src/components/clinic/settings/DocumentTemplateBuilder.tsx` — add list pane, load/duplicate/delete handlers, edit-aware save.
-- `src/hooks/clinic/useClinicDocuments.ts` — add `useDeleteDocumentTemplate` (soft delete) and make `useUpsertDocumentTemplate.onSuccess` return the saved row so the caller can pick up the new `id`.
+3. **No changes** to `printDrugLabel.ts`, `PrinterCalibration.tsx`, label settings, or the calibration offsets — header, divider, fonts, QTY/EXP layout are already identical between the two flows.
 
 ## Out of scope
-
-- No DB migration. `clinic_document_templates` already has `id`, `is_active`, and the upsert path; existing RLS for staff/admin already covers update + soft-delete.
-- No change to `IssueDocumentModal` or the dispensary/consultation document panels.
+- Backfilling historical `consultation_items` rows in the DB (the print-time fallback in step 2 covers them visually).
+- Changing the instructions modal UX.
+- Any change to the printer offset / paper size / toggles in `drug_label_settings`.
