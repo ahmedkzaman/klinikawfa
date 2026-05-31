@@ -11,7 +11,7 @@ import { PieChart, Pie, Cell } from 'recharts';
 import { CalendarCheck, CalendarOff, AlertTriangle, Clock, Download, ChevronLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { bento, bentoHeader, pageInner, pageShell, secondaryBtn, softInput, chartColors } from '@/lib/clinic/bentoTokens';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isWeekend } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isWeekend, differenceInMinutes } from 'date-fns';
 import {
   getAllShiftsForMonth,
   calculateLatenessMinutes,
@@ -40,6 +40,28 @@ const chartConfig = {
   late: { label: 'Late', color: COLORS.late },
 };
 
+type ClockOutStatus = 'on_time' | 'early' | 'late' | 'missing' | 'na';
+
+const getClockOutSeverityClasses = (status: ClockOutStatus): string => {
+  switch (status) {
+    case 'on_time': return 'bg-emerald-50 text-emerald-700';
+    case 'early': return 'bg-amber-50 text-amber-700';
+    case 'late': return 'bg-amber-50 text-amber-700';
+    case 'missing': return 'bg-rose-50 text-rose-700';
+    default: return 'bg-slate-50 text-slate-600';
+  }
+};
+
+const getClockOutStatusLabel = (status: ClockOutStatus): string => {
+  switch (status) {
+    case 'on_time': return 'On Time (Out)';
+    case 'early': return 'Early Clock-Out';
+    case 'late': return 'Late Clock-Out';
+    case 'missing': return 'No Clock-Out';
+    default: return '-';
+  }
+};
+
 type DetailRecord = {
   userId: string;
   fullName: string;
@@ -50,6 +72,9 @@ type DetailRecord = {
   status: string;
   severity: LatenessSeverity;
   workHours: string;
+  expectedClockOut: string;
+  actualClockOut: string;
+  clockOutStatus: ClockOutStatus;
 };
 
 type StaffSummary = {
@@ -167,6 +192,8 @@ export default function AdminAttendanceReview() {
         perUser[profile.id].push(full);
       };
 
+      const todayStr = format(now, 'yyyy-MM-dd');
+
       workingDays.forEach(day => {
         const dayStr = format(day, 'yyyy-MM-dd');
         const isOnLeave = userLeaves.some(l => l.start_date <= dayStr && l.end_date >= dayStr);
@@ -174,6 +201,7 @@ export default function AdminAttendanceReview() {
         const punchIn = dayRecords.find((a: any) => a.punch_type === 'in');
         const punchOut = dayRecords.find((a: any) => a.punch_type === 'out');
         const shiftStart = userShifts[dayStr]?.start || DEFAULT_SHIFT_START;
+        const shiftEnd = userShifts[dayStr]?.end || '17:00';
 
         let workHoursStr = '-';
         if (punchIn && punchOut) {
@@ -181,9 +209,30 @@ export default function AdminAttendanceReview() {
           workHoursStr = formatWorkHours(wh);
         }
 
+        // Compute clock-out fields
+        let expectedClockOut = '-';
+        let actualClockOut = '-';
+        let clockOutStatus: ClockOutStatus = 'na';
+        if (punchIn) {
+          expectedClockOut = shiftEnd;
+          if (punchOut) {
+            const outDate = new Date(punchOut.punch_time);
+            actualClockOut = format(outDate, 'HH:mm');
+            const [endH, endM] = shiftEnd.split(':').map(Number);
+            const expectedOutDate = new Date(`${dayStr}T00:00:00`);
+            expectedOutDate.setHours(endH, endM, 0, 0);
+            const diff = differenceInMinutes(outDate, expectedOutDate);
+            if (diff < -15) clockOutStatus = 'early';
+            else if (diff > 15) clockOutStatus = 'late';
+            else clockOutStatus = 'on_time';
+          } else {
+            clockOutStatus = dayStr < todayStr ? 'missing' : 'na';
+          }
+        }
+
         if (isOnLeave) {
           totalLeave++; summary.leave++;
-          pushRecord(details.leave, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: '-', latenessDuration: '-', status: 'Leave', severity: 'on_time', workHours: '-' });
+          pushRecord(details.leave, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: '-', latenessDuration: '-', status: 'Leave', severity: 'on_time', workHours: '-', expectedClockOut: '-', actualClockOut: '-', clockOutStatus: 'na' });
         } else if (punchIn) {
           const punchTime = new Date(punchIn.punch_time);
           const lateMin = calculateLatenessMinutes(punchTime, shiftStart, day);
@@ -191,17 +240,17 @@ export default function AdminAttendanceReview() {
 
           if (severity === 'late') {
             totalLate++; summary.late++;
-            pushRecord(details.late, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: `${Math.round(lateMin)} min`, status: 'Late (≥15 min)', severity, workHours: workHoursStr });
+            pushRecord(details.late, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: `${Math.round(lateMin)} min`, status: 'Late (≥15 min)', severity, workHours: workHoursStr, expectedClockOut, actualClockOut, clockOutStatus });
           } else if (severity === 'minor_late') {
             totalLate++; summary.late++;
-            pushRecord(details.late, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: `${Math.round(lateMin)} min`, status: 'Minor Late (1-14 min)', severity, workHours: workHoursStr });
+            pushRecord(details.late, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: `${Math.round(lateMin)} min`, status: 'Minor Late (1-14 min)', severity, workHours: workHoursStr, expectedClockOut, actualClockOut, clockOutStatus });
           } else {
             totalPresent++; summary.present++;
-            pushRecord(details.working, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: '-', status: 'On Time', severity, workHours: workHoursStr });
+            pushRecord(details.working, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: format(punchTime, 'HH:mm'), latenessDuration: '-', status: 'On Time', severity, workHours: workHoursStr, expectedClockOut, actualClockOut, clockOutStatus });
           }
         } else {
           totalAbsent++; summary.absent++;
-          pushRecord(details.absent, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: '-', latenessDuration: '-', status: 'Absent', severity: 'on_time', workHours: '-' });
+          pushRecord(details.absent, { date: dayStr, expectedClockIn: shiftStart, actualClockIn: '-', latenessDuration: '-', status: 'Absent', severity: 'on_time', workHours: '-', expectedClockOut: '-', actualClockOut: '-', clockOutStatus: 'na' });
         }
       });
 
@@ -222,8 +271,8 @@ export default function AdminAttendanceReview() {
   const exportCSV = () => {
     const allRecords = [...stats.details.working, ...stats.details.leave, ...stats.details.absent, ...stats.details.late];
     allRecords.sort((a, b) => a.date.localeCompare(b.date) || a.fullName.localeCompare(b.fullName));
-    const header = 'Full Name,Date,Expected Clock-In,Actual Clock-In,Lateness Duration,Work Hours,Status\n';
-    const rows = allRecords.map(r => `"${r.fullName}","${r.date}","${r.expectedClockIn}","${r.actualClockIn}","${r.latenessDuration}","${r.workHours}","${r.status}"`).join('\n');
+    const header = 'Full Name,Date,Expected Clock-In,Actual Clock-In,Expected Clock-Out,Actual Clock-Out,Lateness Duration,Work Hours,Clock-In Status,Clock-Out Status\n';
+    const rows = allRecords.map(r => `"${r.fullName}","${r.date}","${r.expectedClockIn}","${r.actualClockIn}","${r.expectedClockOut}","${r.actualClockOut}","${r.latenessDuration}","${r.workHours}","${r.status}","${getClockOutStatusLabel(r.clockOutStatus)}"`).join('\n');
     const blob = new Blob([header + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -388,6 +437,8 @@ export default function AdminAttendanceReview() {
                     <TableHead>Date</TableHead>
                     <TableHead>Expected Clock-In</TableHead>
                     <TableHead>Actual Clock-In</TableHead>
+                    <TableHead>Expected Clock-Out</TableHead>
+                    <TableHead>Actual Clock-Out</TableHead>
                     <TableHead>Lateness</TableHead>
                     <TableHead>Work Hours</TableHead>
                     <TableHead>Status</TableHead>
@@ -400,12 +451,21 @@ export default function AdminAttendanceReview() {
                       <TableCell className="text-slate-600">{r.date}</TableCell>
                       <TableCell className="text-slate-600">{r.expectedClockIn}</TableCell>
                       <TableCell className="text-slate-600">{r.actualClockIn}</TableCell>
+                      <TableCell className="text-slate-600">{r.expectedClockOut}</TableCell>
+                      <TableCell className="text-slate-600">{r.actualClockOut}</TableCell>
                       <TableCell className="text-slate-600">{r.latenessDuration}</TableCell>
                       <TableCell className="text-xs text-slate-600">{r.workHours}</TableCell>
                       <TableCell>
-                        <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', getLatenessColorClasses(r.severity))}>
-                          {r.status}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', getLatenessColorClasses(r.severity))}>
+                            {r.status}
+                          </span>
+                          {r.clockOutStatus !== 'na' && (
+                            <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', getClockOutSeverityClasses(r.clockOutStatus))}>
+                              {getClockOutStatusLabel(r.clockOutStatus)}
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
