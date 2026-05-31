@@ -56,8 +56,6 @@ function useQueueEntriesRealtimeSync() {
  * Uses an "Allow-list" of statuses to prevent enum spelling errors.
  */
 export function useQueueEntries() {
-  const qc = useQueryClient();
-
   const query = useQuery<QueueEntryWithJoins[]>({
     queryKey: QUEUE_QUERY_KEY,
     queryFn: async () => {
