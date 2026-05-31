@@ -121,7 +121,7 @@ const schema = z
     relationship: z.string().optional(),
 
     // Today's visit
-    visit_type: z.enum(['consultation', 'direct_sale']),
+    visit_type: z.enum(['consultation', 'direct_sale', 'payment_only']),
     visit_purpose: z.enum([
       'consultation',
       'follow_up',
@@ -282,6 +282,8 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
   const paymentMethod = watch('payment_method');
   const visitType = watch('visit_type');
   const isDirectSale = visitType === 'direct_sale';
+  const isPaymentOnly = visitType === 'payment_only';
+  const skipClinicalUI = isDirectSale || isPaymentOnly;
   const nationalId = watch('national_id');
   const dobValue = watch('date_of_birth');
   const genderValue = watch('gender');
