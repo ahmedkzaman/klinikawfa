@@ -36,7 +36,7 @@ const SECTIONS: { key: SectionKey; title: string; description: string }[] = [
 ];
 
 export default function SettingsPage() {
-  const { isAdmin, isSpecialAdmin, isOpsOrAdmin } = useAuth();
+  const { isAdmin, isSpecialAdmin, isOpsOrAdmin, isOpsStaff } = useAuth();
   const adminAccess = isAdmin || isSpecialAdmin;
 
   const cards: SettingsCard[] = [
@@ -62,6 +62,14 @@ export default function SettingsPage() {
       description: 'Manage staff roles and locum doctor profiles.',
       icon: Users,
       visible: adminAccess,
+      group: 'access',
+    },
+    {
+      href: '/clinic/settings/locum-registration',
+      title: 'Register Locum',
+      description: 'Create a locum doctor account for today\u2019s clinic session.',
+      icon: UserPlus,
+      visible: isOpsStaff && !adminAccess,
       group: 'access',
     },
     {

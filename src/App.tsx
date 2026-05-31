@@ -79,6 +79,7 @@ import SettingsPage from "./pages/clinic/settings/SettingsPage";
 import ClinicProfile from "./pages/clinic/settings/ClinicProfile";
 import InClinicSettings from "./pages/clinic/settings/InClinicSettings";
 import UserManagementSettings from "./pages/clinic/settings/UserManagementSettings";
+import LocumRegistration from "./pages/clinic/settings/LocumRegistration";
 import InventorySettings from "./pages/clinic/settings/InventorySettings";
 import DiagnosisSweeper from "./pages/clinic/settings/DiagnosisSweeper";
 import PanelsSettings from "./pages/clinic/settings/PanelsSettings";
@@ -339,6 +340,14 @@ const App = () => (
                   element={
                     <ClinicProtectedRoute requiredRole="admin">
                       <UserManagementSettings />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
+                  path="settings/locum-registration"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <LocumRegistration />
                     </ClinicProtectedRoute>
                   }
                 />
