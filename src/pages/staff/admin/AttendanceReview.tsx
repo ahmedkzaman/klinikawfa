@@ -437,6 +437,8 @@ export default function AdminAttendanceReview() {
                     <TableHead>Date</TableHead>
                     <TableHead>Expected Clock-In</TableHead>
                     <TableHead>Actual Clock-In</TableHead>
+                    <TableHead>Expected Clock-Out</TableHead>
+                    <TableHead>Actual Clock-Out</TableHead>
                     <TableHead>Lateness</TableHead>
                     <TableHead>Work Hours</TableHead>
                     <TableHead>Status</TableHead>
@@ -449,12 +451,21 @@ export default function AdminAttendanceReview() {
                       <TableCell className="text-slate-600">{r.date}</TableCell>
                       <TableCell className="text-slate-600">{r.expectedClockIn}</TableCell>
                       <TableCell className="text-slate-600">{r.actualClockIn}</TableCell>
+                      <TableCell className="text-slate-600">{r.expectedClockOut}</TableCell>
+                      <TableCell className="text-slate-600">{r.actualClockOut}</TableCell>
                       <TableCell className="text-slate-600">{r.latenessDuration}</TableCell>
                       <TableCell className="text-xs text-slate-600">{r.workHours}</TableCell>
                       <TableCell>
-                        <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', getLatenessColorClasses(r.severity))}>
-                          {r.status}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', getLatenessColorClasses(r.severity))}>
+                            {r.status}
+                          </span>
+                          {r.clockOutStatus !== 'na' && (
+                            <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', getClockOutSeverityClasses(r.clockOutStatus))}>
+                              {getClockOutStatusLabel(r.clockOutStatus)}
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
