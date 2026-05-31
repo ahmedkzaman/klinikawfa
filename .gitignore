@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+stress-tests/reports/
+stress-tests/snapshots/
+stress-tests/.env.staging
+stress-tests/node_modules/

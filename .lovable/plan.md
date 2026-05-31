@@ -1,80 +1,209 @@
-# MyKad Light Hardening + Fallback UI
 
-Retain the existing localhost MyKad bridge but make the UI resilient when it's unreachable. No new reader implementation.
+# Klinik Awfa Stress Test Plan (revised)
 
-## 1. New polling hook — `src/hooks/useMyKadBridge.ts`
+Staging-only, locally-run harness covering DB scale, RPC contention, UI chaos, RLS abuse, and observability. Lives in `stress-tests/` and never touches production.
 
-```ts
-type BridgeStatus = 'connected_card_ready' | 'connected_no_card' | 'disconnected';
-export function useMyKadBridge(intervalMs = 10_000): { status: BridgeStatus }
+---
+
+## Phase 0 — Staging setup
+
+**Manual** (documented in `stress-tests/README.md`, no automation):
+
+1. Create a new Supabase project in the **Singapore** region with the **same compute tier as production** (for parity with `ncysmppzfjtiekfnomdv`).
+2. Apply every migration in `supabase/migrations/` via the Supabase CLI (`supabase db push --linked`).
+3. Configure auth providers with dummy credentials. Stripe → test-mode key. ElevenLabs/Gemini → no keys (functions short-circuit).
+4. Paste the new ref, DB URL, anon key, and service-role key into `stress-tests/.env.staging` (gitignored).
+5. Enable `pg_stat_statements` + `auto_explain` (`min_duration = 200ms`) in the staging DB.
+
+**Hard guard** — `stress-tests/scripts/guard-not-prod.sh` runs at the top of every script and exits non-zero if `STAGING_PROJECT_REF` is empty or equals `ncysmppzfjtiekfnomdv`.
+
+**Snapshot** — `stress-tests/scripts/snapshot.sh` runs `pg_dump --schema-only` + a row-count manifest before and after each phase into `stress-tests/snapshots/{timestamp}/`.
+
+---
+
+## Phase A — Database Scale Test (full volume, no scale-down)
+
+**Goal:** force the working set out of `shared_buffers` so missing indexes surface as real disk-bound seq scans.
+
+### Seeder — `stress-tests/seed/seed.ts` (bun + faker + `postgres`)
+
+Optimised for raw throughput, not for app correctness:
+
+1. **Disable user triggers** on target tables for the duration of the load:
+   ```sql
+   ALTER TABLE public.patients          DISABLE TRIGGER USER;
+   ALTER TABLE public.queue_entries     DISABLE TRIGGER USER;
+   ALTER TABLE public.consultations     DISABLE TRIGGER USER;
+   ALTER TABLE public.consultation_items DISABLE TRIGGER USER;
+   ALTER TABLE public.payments          DISABLE TRIGGER USER;
+   ALTER TABLE public.inventory_item_batches DISABLE TRIGGER USER;
+   ALTER TABLE public.inventory_transactions DISABLE TRIGGER USER;
+   ```
+2. **Drop non-PK indexes** on target tables, load via `COPY ... FROM STDIN` in 50k-row chunks, then `CREATE INDEX CONCURRENTLY` to rebuild — same shape as prod migrations.
+3. **Re-enable triggers** at the end and run `ANALYZE`.
+4. Fixed RNG seed for reproducibility. Idempotent: re-running truncates target tables first (after confirming staging guard).
+
+Volumes (kept exactly as requested):
+
+| Table | Rows |
+|---|---|
+| `patients` | 250,000 |
+| `queue_entries` | 1,000,000 |
+| `consultations` | ~800,000 (derived) |
+| `consultation_items` | 500,000 |
+| `payments` | 100,000 |
+| `inventory_transactions` | 50,000 |
+| `inventory_item_batches` | derived from transactions |
+| `panel_claims` | derived (sampled then inserted directly, since trigger is off) |
+
+Distributions: realistic MyKad IC patterns, MY phone prefixes, 24-month spread, status-mix tuned to production ratios, item names sampled from the actual `inventory_items`/`services` tables.
+
+### Benchmark — `stress-tests/phase-a/bench.ts`
+
+Per query: `EXPLAIN (ANALYZE, BUFFERS)` once + 200-iteration timing loop (cold + warm). After the warm pass, flushes the kernel page cache between runs where possible (`pg_prewarm` reset trick on a dummy table). Outputs Markdown with p50/p95/p99, buffer hit ratio, and plan summary.
+
+Queries (lifted verbatim from real hooks):
+1. **Patient search** — `usePatients`: `ilike` on `name`/`phone`/`reg_no`/`national_id`.
+2. **Today queue** — `useQueueEntries`: `created_at::date = current_date` + status filter + joins.
+3. **Patient visit history** — `usePatientVisitHistory`.
+4. **Checkout prep** — `DispenseCheckout`: consultation + items + payments.
+5. **Inventory FEFO** — `inventory_item_batches` by `inventory_item_id` order by `expiry_date`.
+6. **Panel claims** — `usePanelClaims` over 30-day range.
+
+### Targets (p95)
+
+| Query | Target |
+|---|---|
+| Patient search | < 200ms |
+| Queue today | < 300ms |
+| Checkout prep | < 300ms |
+| FEFO batch | < 50ms |
+| Visit history | < 250ms |
+| Panel claims (30d) | < 400ms |
+
+Any `Seq Scan` on `patients`, `queue_entries`, `consultations`, `consultation_items`, `payments`, `inventory_item_batches` = failure. Missing indexes are written up as proposed migrations under `stress-tests/reports/proposed-migrations/` (not applied).
+
+---
+
+## Phase B — RPC Contention Test (k6, local)
+
+**Goal:** prove `SECURITY DEFINER` RPCs serialise correctly under concurrent fire.
+
+`k6` is installed locally (`nix run nixpkgs#k6 --`), not added to npm deps. Each scenario: seed one target row → fire 50 VUs (`shared-iterations`, 50 iters, 50 VUs, `maxDuration: 30s`) against the staging PostgREST `/rpc/...` endpoint using a service-role JWT bound to a fake staff user.
+
+### Scenarios
+
+| Script | Target RPC | Expected success | Expected failures |
+|---|---|---|---|
+| `checkout-race.js` | `checkout_visit` on same `consultation_id` | 1 | 49 × `ALREADY_COMPLETED` |
+| `fefo-race.js` | `commit_inventory_fefo` on same low-stock item | N (= stock) | rest report `shortfall>0` |
+| `queue-status-race.js` | direct UPDATE of `queue_entries.clinic_status` | 1 | rest no-op |
+| `settle-debt-race.js` | `settle_multiple_debts` on same payment_only entry | 1 | 49 × `ALREADY_COMPLETED`/`OVERPAYMENT` |
+| `owe-slip-race.js` | `fulfill_owe_slip` on same slip | 1 | 49 × `SLIP_CLOSED`/`OVER_FULFILL` |
+
+### Validators — `stress-tests/phase-b/validate.ts`
+
+Post-run invariants (queried via `psql`):
+- `SUM(payments.amount) <= consultation_total` per consultation
+- `inventory_items.stock >= 0` and `stock >= allocated_quantity`
+- `COUNT(DISTINCT queue_sequence) = COUNT(*)` per day
+- No `consultations.status='completed'` with an open `queue_entries`
+- `inventory_transactions` qty deltas reconcile against `inventory_item_batches.quantity_remaining`
+
+Phase fails if any invariant breaks.
+
+---
+
+## Phase C — UI Chaos Test (Playwright, local)
+
+Playwright runs locally against the staging preview URL with a logged-in cashier `storageState`. **k6 is never run in parallel with Playwright** — the orchestrator runs Phase B and Phase C strictly sequentially to avoid CPU/memory contention skewing latency.
+
+### Cases
+
+1. **Slow 3G** — full register → check-in → consult → checkout flow with throttling. No spinner > 10s; buttons toggle `disabled`.
+2. **Offline mid-checkout** — `context.setOffline(true)` between Pay click and response. Expect recoverable toast + Retry; state preserved.
+3. **Double-click guard** — `dblclick` Pay / Check-in / Dispense. Exactly 1 network call; button immediately disabled.
+4. **Refresh after Pay click** — refresh mid-request. Visit ends either fully paid or untouched — never half (covered by Phase B locks).
+5. **MyKad bridge offline** — block `127.0.0.1:8787`. Bridge dot turns red ≤12s; manual IC still works; "Read MyKad" times out in 3s and refocuses IC field.
+6. **Drug label overflow** — print a label with 120-char medicine name + 400-char instructions. Capture print preview screenshot; assert ≤2 lines clip outside the 60×50mm frame.
+7. **Two-tab same patient** — two contexts open same `queue_entry_id`, both attempt status change; loser gets a clean message.
+
+Pass criteria: no unhandled promise rejection, no infinite spinner, no console error matching `/Error|TypeError|Unhandled/`.
+
+---
+
+## Phase D — Security / RLS Abuse Test
+
+For each role (`guest`, `locum`, `operations`, `staff`, `doctor_admin`, `admin`, `special_admin`), seed an auth user, log in via password grant, run the abuse matrix and assert the **exact** error code/status.
+
+| Actor | Target | Expected |
+|---|---|---|
+| `staff` | `admin_assign_role` | `NOT_AUTHORIZED` (42501) |
+| `operations` | `consultations` INSERT for arbitrary patient | RLS deny |
+| `locum` | `payments` SELECT outside own consultation | RLS deny |
+| `guest` | `/clinic/*` HTTP | redirect `/auth` |
+| `guest` | direct `GET /rest/v1/patients` | RLS deny |
+| non-admin | `user_roles` UPDATE self → `special_admin` | RLS deny |
+| any | `inventory_items` UPDATE `cost_price` | RLS deny unless permitted |
+| `locum` | `panel_claims` SELECT | RLS deny |
+| any | `appointment_submission_log` SELECT | RLS deny (write-only via RPC) |
+| any | read `auth.users` | denied |
+
+---
+
+## Phase E — Observability (side-car)
+
+`stress-tests/observe/watch.ts` runs throughout phases A–D:
+
+- `supabase--db_health` every 30s (CPU, conns, WAL, deadlocks, OOM)
+- `pg_stat_statements` top 20 by total_time, diffed per phase
+- `pg_stat_activity` `wait_event` for Lock/LWLock during Phase B
+- `pg_locks` snapshots during contention scripts
+- `supabase--edge_function_logs` for every function (errors only)
+- `supabase--analytics_query` for PostgREST 4xx/5xx and realtime join lag
+
+Output: `stress-tests/reports/{runId}/observe.md` with CSVs + verdict.
+
+---
+
+## Orchestrator & layout
+
+`bun run stress` runs phases **strictly in order** (A → B → C → D, observability side-car for all). `--phase a|b|c|d` scopes.
+
+```text
+stress-tests/
+  .env.staging.example
+  README.md                  # manual staging setup, run instructions, target tables
+  package.json               # bun deps: faker, postgres, playwright (k6 binary external)
+  scripts/
+    guard-not-prod.sh
+    snapshot.sh
+  seed/
+    seed.ts                  # trigger-disable + COPY + index rebuild
+    fixtures/
+  phase-a/
+    bench.ts
+    queries/*.sql
+  phase-b/
+    *.k6.js
+    validate.ts
+  phase-c/
+    playwright.config.ts
+    tests/*.spec.ts
+  phase-d/
+    rls.test.ts
+    matrix.ts
+  observe/
+    watch.ts
+  reports/                   # gitignored
+  snapshots/                 # gitignored
 ```
 
-Behavior:
-- On mount, immediately ping bridge status URL, then `setInterval` every 10s. Clean up on unmount.
-- Endpoint: derive from `VITE_MYKAD_BRIDGE_URL` (replace trailing `/read-mykad` with `/status`); fallback to `http://127.0.0.1:8787/status`.
-- Use `fetch(url, { signal: AbortSignal.timeout(2000) })`. Wrap the whole call in `try/catch` and return `'disconnected'` on any throw — no `console.error`/`console.warn` (silent).
-- Parse JSON `{ card_present: boolean }` (or similar). Map:
-  - HTTP ok + `card_present === true` → `connected_card_ready`
-  - HTTP ok + `card_present === false` → `connected_no_card`
-  - Any network/timeout/non-ok → `disconnected`
-- Pause polling while `document.hidden` to avoid background spam; resume on `visibilitychange`.
-
-## 2. Fortify `src/components/clinic/RegisterAndCheckInDialog.tsx`
-
-- **Traffic-light dot** in the `DialogHeader` row (right of `DialogTitle`):
-  - 8px circle: green / amber / red based on hook status, with `title` tooltip ("MyKad reader ready" / "Reader connected, no card" / "Reader offline — type IC manually").
-- **IC input is always first-class**: keep the existing manual `Input` visible and labelled regardless of bridge state. Never hide it behind a tab or "Reader Failed" panel.
-- **Accelerator button** next to the IC input: replace/augment the existing `ReadMyKadButton` usage with an inline button that:
-  1. Calls `readMyKad()` from `useMyKadReader` wrapped in `Promise.race([readMyKad(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000))])`.
-  2. On success → autofill fields (existing logic preserved).
-  3. On timeout/error → **no modal popup, no blocking toast**. Use a single low-intrusion `toast.message()` (auto-dismiss) at most, and immediately call `icInputRef.current?.focus()` and `select()` so the cashier can type without an extra click.
-- Add `const icInputRef = useRef<HTMLInputElement>(null)` and wire it to the IC `<Input ref={icInputRef} id="ic-input" />`.
-- Disable the accelerator button only while a read is in flight; do **not** disable it when status is `disconnected` — clicking it will just trigger the 3s timeout + focus fallback, which is the desired graceful degradation.
-
-Internals only — no schema, backend, or RPC changes. Existing `useMyKadReader` and `ReadMyKadButton` helpers remain; this dialog stops relying on `ReadMyKadButton` for the in-dialog UX and uses an inline button so it can own the timeout + focus behavior. `ReadMyKadButton` stays for other call sites.
-
-## 3. Disaster recovery doc — `MYKAD_SETUP.md` (repo root)
-
-Structured template with placeholders:
-
-```
-# MyKad Bridge — Front Desk Setup & Recovery
-
-## 1. Workstation Requirements
-- Expected Windows Version: <e.g. Windows 11 23H2 / Windows 10 LTSC 2021>
-- Reader hardware: <model, USB port>
-
-## 2. Silent Installer Dependencies
-- .NET Framework: <version>
-- Visual C++ Redistributable: <version>
-- Bridge service version: <x.y.z>
-- Install command: <silent flags>
-
-## 3. Browser Security Flags (Chrome / Edge)
-- chrome://flags/#allow-insecure-localhost → Enabled
-- chrome://flags/#block-insecure-private-network-requests → Disabled
-- Allowed origin for mixed content: https://klinikawfa.com
-
-## 4. Restart Protocol (Front Desk Staff)
-1. Confirm the dot indicator in the registration dialog is RED.
-2. Unplug the card reader USB cable, wait 5 seconds, plug back in.
-3. Open Services.msc → restart "Klinik Awfa MyKad Bridge".
-4. Reload the registration page (Ctrl+F5).
-5. If still RED after 60 seconds, fall back to manual IC entry and notify IT.
-
-## 5. Escalation
-- Tier 1: <name / phone>
-- Tier 2: <vendor support contact>
-```
-
-## Files touched
-
-- **Create** `src/hooks/useMyKadBridge.ts`
-- **Create** `MYKAD_SETUP.md`
-- **Edit** `src/components/clinic/RegisterAndCheckInDialog.tsx` (status dot, IC ref, inline Read button with 3s race + focus fallback)
+---
 
 ## Out of scope
 
-- No WebUSB / PC/SC implementation.
-- No changes to `useMyKadReader.ts`, `ReadMyKadButton.tsx`, or other call sites.
-- No bridge-side code, installers, or backend changes.
+- No changes to production project, app code, or current migrations.
+- No CI wiring (local-only by design — CI runners cannot give honest k6/Playwright numbers).
+- Missing-index migrations from Phase A are proposed in reports, not applied.
+- No staging-provisioning automation — manual dashboard setup only.
