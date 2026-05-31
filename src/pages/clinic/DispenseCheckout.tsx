@@ -259,7 +259,12 @@ export default function DispenseCheckout() {
     () => payments.reduce((acc, p) => acc + Number(p.amount ?? 0), 0),
     [payments],
   );
+  const otherChargesTotal = useMemo(
+    () => selectedCharges.reduce((acc, c) => acc + Number(c.amount ?? 0), 0),
+    [selectedCharges],
+  );
   const outstanding = Math.max(subtotal - paid, 0);
+  const totalDue = Math.max(outstanding + otherChargesTotal, 0);
   const [printPaymentId, setPrintPaymentId] = useState<string | null>(null);
   const latestPaymentId = useMemo(() => {
     if (!payments.length) return null;
@@ -285,36 +290,76 @@ export default function DispenseCheckout() {
     [items],
   );
 
+  // Keep amount-paid input in sync with the current total due, unless the
+  // cashier has manually typed a partial amount this session.
+  const userEditedAmountRef = useRef(false);
+  useEffect(() => {
+    if (userEditedAmountRef.current) return;
+    setAmountPaidInput(totalDue.toFixed(2));
+  }, [totalDue]);
+
+  const amountPaidNum = parseFloat(amountPaidInput);
+  const safeAmountPaid = Number.isFinite(amountPaidNum) ? Math.max(amountPaidNum, 0) : 0;
+  const balanceDue = Math.max(totalDue - safeAmountPaid, 0);
+  const isOverpay = safeAmountPaid > totalDue + 0.01;
+
   const handleComplete = async () => {
     if (!queueEntryId || !consultation?.id) return;
+    if (totalDue > 0 && !paymentMethod) {
+      toast.error('Select a payment method');
+      return;
+    }
+    if (isOverpay) {
+      toast.error('Amount paid exceeds total due');
+      return;
+    }
+    setCheckoutPending(true);
     try {
-      // Batch-commit Other Charges as consultation_items first.
-      if (selectedCharges.length > 0) {
-        await Promise.all(
-          selectedCharges.map((c) =>
-            addConsultationItem.mutateAsync({
-              consultation_id: consultation.id,
-              item_name: c.name,
-              quantity: 1,
-              price: c.amount,
-            }),
-          ),
+      const { data, error } = await supabase.rpc('checkout_visit', {
+        p_queue_entry_id: queueEntryId,
+        p_consultation_id: consultation.id,
+        p_total_amount: totalDue,
+        p_amount_paid: safeAmountPaid,
+        p_payment_method: paymentMethod,
+        p_payment_type: panelId ? 'panel' : 'self_pay',
+        p_panel_provider_id: panelId ?? null,
+        p_other_charges: selectedCharges.map((c) => ({
+          name: c.name,
+          amount: c.amount,
+        })),
+        p_notes: null,
+      });
+      if (error) throw error;
+      const result = (data ?? {}) as {
+        status?: string;
+        balance_due?: number;
+        payment_id?: string | null;
+      };
+      // Refresh local caches so the freshly-recorded payment + completed
+      // consultation/queue show up immediately.
+      qc.invalidateQueries({ queryKey: ['payments', queueEntryId] });
+      qc.invalidateQueries({ queryKey: ['consultation', queueEntryId] });
+      qc.invalidateQueries({ queryKey: ['consultation_items', consultation.id] });
+      qc.invalidateQueries({ queryKey: ['queue_entries'] });
+
+      if (result.status === 'paid') {
+        toast.success('Payment recorded · Visit checked out');
+        navigate('/clinic/queue');
+      } else {
+        toast.success(
+          `Partial payment recorded · Balance RM ${Number(result.balance_due ?? balanceDue).toFixed(2)}`,
         );
+        // Stay on page; clear charges (now committed) and reset amount tracker.
+        setSelectedCharges([]);
+        userEditedAmountRef.current = false;
       }
-      await updateConsultation.mutateAsync({
-        id: consultation.id,
-        status: 'completed',
-      });
-      await updateQueue.mutateAsync({
-        id: queueEntryId,
-        clinic_status: 'completed',
-      });
-      toast.success('Checkout completed');
-      navigate('/clinic/dispensary');
     } catch (err) {
       toast.error((err as Error).message);
+    } finally {
+      setCheckoutPending(false);
     }
   };
+
 
   if (entriesLoading) {
     return (
