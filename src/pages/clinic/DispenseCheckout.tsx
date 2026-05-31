@@ -107,6 +107,9 @@ export default function DispenseCheckout() {
   const [voidingDoc, setVoidingDoc] = useState<ConsultationDocument | null>(null);
   const [viewingDoc, setViewingDoc] = useState<ConsultationDocument | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [amountPaidInput, setAmountPaidInput] = useState<string>('');
+  const [paymentMethod, setPaymentMethod] = useState<string>('cash');
+  const [checkoutPending, setCheckoutPending] = useState(false);
   const handleChargesChange = useCallback((c: SelectedCharge[]) => {
     setSelectedCharges(c);
   }, []);
