@@ -19,12 +19,43 @@ export const ACTIVE_STATUSES = [
 ] as const;
 
 /**
+ * Shared realtime sync for `queue_entries`.
+ *
+ * Consolidates what used to be three separate channel subscriptions (one per
+ * consumer hook) into a single channel per mounted hook-call. A change event
+ * invalidates ALL three query keys, so any page that uses any of these hooks
+ * automatically keeps the others fresh too — at the cost of zero extra
+ * subscriptions vs. the previous design.
+ *
+ * Cleanup is guaranteed via `supabase.removeChannel(channel)` on unmount.
+ */
+function useQueueEntriesRealtimeSync() {
+  const qc = useQueryClient();
+  useEffect(() => {
+    const channel = supabase
+      .channel("clinic-queue-entries-sync")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "queue_entries" },
+        () => {
+          qc.invalidateQueries({ queryKey: QUEUE_QUERY_KEY });
+          qc.invalidateQueries({ queryKey: CONSULT_QUEUE_QUERY_KEY });
+          qc.invalidateQueries({ queryKey: CANCELLED_TODAY_QUERY_KEY });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [qc]);
+}
+
+/**
  * Today's active queue entries for the main Queue Board.
  * Uses an "Allow-list" of statuses to prevent enum spelling errors.
  */
 export function useQueueEntries() {
-  const qc = useQueryClient();
-
   const query = useQuery<QueueEntryWithJoins[]>({
     queryKey: QUEUE_QUERY_KEY,
     queryFn: async () => {
@@ -61,18 +92,7 @@ export function useQueueEntries() {
     staleTime: 30_000,
   });
 
-  useEffect(() => {
-    const channel = supabase
-      .channel("clinic-queue-entries")
-      .on("postgres_changes", { event: "*", schema: "public", table: "queue_entries" }, () => {
-        qc.invalidateQueries({ queryKey: QUEUE_QUERY_KEY });
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [qc]);
+  useQueueEntriesRealtimeSync();
 
   return query;
 }
@@ -83,8 +103,6 @@ export function useQueueEntries() {
  * Restored to fix production build errors.
  */
 export function useConsultationQueueEntries() {
-  const qc = useQueryClient();
-
   const query = useQuery<QueueEntryWithJoins[]>({
     queryKey: CONSULT_QUEUE_QUERY_KEY,
     queryFn: async () => {
@@ -114,18 +132,7 @@ export function useConsultationQueueEntries() {
     staleTime: 15_000,
   });
 
-  useEffect(() => {
-    const channel = supabase
-      .channel("clinic-consultation-queue")
-      .on("postgres_changes", { event: "*", schema: "public", table: "queue_entries" }, () => {
-        qc.invalidateQueries({ queryKey: CONSULT_QUEUE_QUERY_KEY });
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [qc]);
+  useQueueEntriesRealtimeSync();
 
   return query;
 }
@@ -321,7 +328,6 @@ export function useRestoreQueueEntry() {
 }
 
 export function useCancelledTodayEntries() {
-  const qc = useQueryClient();
   const query = useQuery<QueueEntryWithJoins[]>({
     queryKey: CANCELLED_TODAY_QUERY_KEY,
     queryFn: async () => {
@@ -341,17 +347,7 @@ export function useCancelledTodayEntries() {
     staleTime: 30_000,
   });
 
-  useEffect(() => {
-    const channel = supabase
-      .channel("clinic-queue-cancelled-today")
-      .on("postgres_changes", { event: "*", schema: "public", table: "queue_entries" }, () => {
-        qc.invalidateQueries({ queryKey: CANCELLED_TODAY_QUERY_KEY });
-      })
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [qc]);
+  useQueueEntriesRealtimeSync();
 
   return query;
 }
