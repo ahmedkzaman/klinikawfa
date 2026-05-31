@@ -19,6 +19,39 @@ export const ACTIVE_STATUSES = [
 ] as const;
 
 /**
+ * Shared realtime sync for `queue_entries`.
+ *
+ * Consolidates what used to be three separate channel subscriptions (one per
+ * consumer hook) into a single channel per mounted hook-call. A change event
+ * invalidates ALL three query keys, so any page that uses any of these hooks
+ * automatically keeps the others fresh too — at the cost of zero extra
+ * subscriptions vs. the previous design.
+ *
+ * Cleanup is guaranteed via `supabase.removeChannel(channel)` on unmount.
+ */
+function useQueueEntriesRealtimeSync() {
+  const qc = useQueryClient();
+  useEffect(() => {
+    const channel = supabase
+      .channel("clinic-queue-entries-sync")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "queue_entries" },
+        () => {
+          qc.invalidateQueries({ queryKey: QUEUE_QUERY_KEY });
+          qc.invalidateQueries({ queryKey: CONSULT_QUEUE_QUERY_KEY });
+          qc.invalidateQueries({ queryKey: CANCELLED_TODAY_QUERY_KEY });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [qc]);
+}
+
+/**
  * Today's active queue entries for the main Queue Board.
  * Uses an "Allow-list" of statuses to prevent enum spelling errors.
  */
