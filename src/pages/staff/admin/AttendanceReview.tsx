@@ -457,7 +457,10 @@ export default function AdminAttendanceReview() {
                       <TableCell className="text-xs text-slate-600">{r.workHours}</TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-1 items-start">
-                          <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', getLatenessColorClasses(r.severity))}>
+                          <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium',
+                            r.status === 'Absent' ? 'bg-rose-50 text-rose-700'
+                              : r.status === 'Leave' ? 'bg-blue-50 text-blue-700'
+                              : getLatenessColorClasses(r.severity))}>
                             {r.status}
                           </span>
                           {r.clockOutStatus !== 'na' && (
