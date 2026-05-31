@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Info, Printer, FileText, FilePlus2, Pencil, Trash2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Info, Printer, FileText, FilePlus2, Pencil, Trash2, Tags } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -31,6 +31,7 @@ import {
 import { printDocument } from '@/lib/clinic/printDocument';
 
 import { PrintReceiptDialog } from '@/components/clinic/billing/PrintReceiptDialog';
+import { DrugLabelPrintout } from '@/components/clinic/dispensary/DrugLabelPrintout';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -263,6 +264,7 @@ export default function DispenseCheckout() {
   const outstanding = Math.max(subtotal - paid, 0);
   const totalDue = Math.max(outstanding + otherChargesTotal, 0);
   const [printPaymentId, setPrintPaymentId] = useState<string | null>(null);
+  const [printLabels, setPrintLabels] = useState(false);
   const latestPaymentId = useMemo(() => {
     if (!payments.length) return null;
     const sorted = [...payments].sort(
@@ -691,6 +693,16 @@ export default function DispenseCheckout() {
               Print Receipt
             </Button>
           )}
+          {consultation?.id && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPrintLabels(true)}
+            >
+              <Tags className="h-4 w-4 mr-2" />
+              Print Drug Labels
+            </Button>
+          )}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -744,6 +756,14 @@ export default function DispenseCheckout() {
         onOpenChange={(o) => !o && setPrintPaymentId(null)}
         paymentId={printPaymentId}
       />
+      {consultation?.id && (
+        <DrugLabelPrintout
+          consultationId={consultation.id}
+          patientName={patient?.name ?? null}
+          open={printLabels}
+          onClose={() => setPrintLabels(false)}
+        />
+      )}
 
       <IssueDocumentModal
         isOpen={!!issuingTemplate || !!editingDoc}
