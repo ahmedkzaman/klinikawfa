@@ -34,10 +34,9 @@ import { toast } from 'sonner';
 
 const ROLE_OPTIONS: AppRole[] = [
   'guest',
-  'staff',
   'locum',
   'resident_doctor',
-  'operations',
+  'ops_staff',
   'doctor_admin',
   'admin',
   'special_admin',
@@ -45,10 +44,11 @@ const ROLE_OPTIONS: AppRole[] = [
 
 const ROLE_LABEL: Record<AppRole, string> = {
   guest: 'Guest',
-  staff: 'Staff',
+  staff: 'Staff (legacy)',
   locum: 'Locum Doctor',
   resident_doctor: 'Resident Doctor',
-  operations: 'Operations',
+  operations: 'Operations (legacy)',
+  ops_staff: 'Ops Staff',
   doctor_admin: 'Doctor Admin',
   admin: 'Admin',
   special_admin: 'Special Admin',
