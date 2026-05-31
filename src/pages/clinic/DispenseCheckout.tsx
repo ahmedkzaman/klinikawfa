@@ -97,8 +97,6 @@ export default function DispenseCheckout() {
   const { data: entries = [], isLoading: entriesLoading } =
     useConsultationQueueEntries();
   const updateQueue = useUpdateQueueEntry();
-  const updateConsultation = useUpdateConsultation();
-  const addConsultationItem = useAddConsultationItem();
 
   const [selectedCharges, setSelectedCharges] = useState<SelectedCharge[]>([]);
   const [editingItem, setEditingItem] = useState<ConsultationItemRow | null>(null);
