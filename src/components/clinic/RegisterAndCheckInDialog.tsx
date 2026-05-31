@@ -257,6 +257,10 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
   const { data: panels = [] } = useInsuranceProviders({ activeOnly: true });
 
   const [submitting, setSubmitting] = useState(false);
+  const [readingMyKad, setReadingMyKad] = useState(false);
+  const icInputRef = useRef<HTMLInputElement | null>(null);
+  const { readMyKad } = useMyKadReader();
+  const { status: bridgeStatus } = useMyKadBridge();
   const [loadedPatientId, setLoadedPatientId] = useState<string | null>(null);
   const [loadedIc, setLoadedIc] = useState<string | null>(null);
   const [principalQuery, setPrincipalQuery] = useState('');
