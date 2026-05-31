@@ -5475,6 +5475,8 @@ export type Database = {
         }
         Returns: Json
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       sync_roster_zone_assignments:
         | { Args: { _month: number; _year: number }; Returns: undefined }
         | { Args: { p_roster_id: string }; Returns: undefined }
