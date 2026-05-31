@@ -341,15 +341,13 @@ export default function DispenseCheckout() {
 
       if (result.status === 'paid') {
         toast.success('Payment recorded · Visit checked out');
-        navigate('/clinic/queue');
       } else {
         toast.success(
-          `Partial payment recorded · Balance RM ${Number(result.balance_due ?? balanceDue).toFixed(2)}`,
+          `Partial payment recorded · Balance RM ${Number(result.balance_due ?? balanceDue).toFixed(2)} carried as debt`,
         );
-        // Stay on page; clear charges (now committed) and reset amount tracker.
-        setSelectedCharges([]);
-        userEditedAmountRef.current = false;
       }
+      // RPC now closes the ticket on both paid and partial — always return to queue.
+      navigate('/clinic/queue');
     } catch (err) {
       toast.error((err as Error).message);
     } finally {

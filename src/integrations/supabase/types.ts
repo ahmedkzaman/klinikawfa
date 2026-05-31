@@ -5465,6 +5465,16 @@ export type Database = {
         Args: { _invoice_id: string; _items: Json }
         Returns: undefined
       }
+      settle_multiple_debts: {
+        Args: {
+          p_amount_paid: number
+          p_consultation_ids: string[]
+          p_notes?: string
+          p_payment_method: string
+          p_queue_entry_id: string
+        }
+        Returns: Json
+      }
       sync_roster_zone_assignments:
         | { Args: { _month: number; _year: number }; Returns: undefined }
         | { Args: { p_roster_id: string }; Returns: undefined }
