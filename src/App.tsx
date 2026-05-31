@@ -343,6 +343,14 @@ const App = () => (
                   }
                 />
                 <Route
+                  path="settings/locum-registration"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <LocumRegistration />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
                   path="settings/inventory"
                   element={
                     <ClinicProtectedRoute>
