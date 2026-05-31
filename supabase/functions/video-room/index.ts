@@ -99,19 +99,17 @@ serve(async (req) => {
 
     const userId = claimsData.claims.sub as string;
 
-    // Check if user is staff or admin
-    const { data: roleData } = await supabaseClient
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .in("role", ["admin", "staff"]);
+    // Check if user is staff or admin (covers all internal staff roles)
+    const { data: isAllowed, error: roleErr } = await supabaseClient
+      .rpc("is_staff_or_admin", { _user_id: userId });
 
-    if (!roleData || roleData.length === 0) {
+    if (roleErr || !isAllowed) {
       return new Response(
         JSON.stringify({ error: "Insufficient permissions" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 }
       );
     }
+
 
     // POST: Create new room
     if (req.method === "POST" && action === "create") {
