@@ -106,13 +106,13 @@ export function DrugLabelPrintout({
       if (itemIds.length > 0) {
         const today = format(new Date(), 'yyyy-MM-dd');
         const { data: batches } = await supabase
-          .from('inventory_batches')
-          .select('item_id, expiry_date')
-          .in('item_id', itemIds)
+          .from('inventory_item_batches')
+          .select('inventory_item_id, expiry_date')
+          .in('inventory_item_id', itemIds)
           .gte('expiry_date', today)
           .order('expiry_date', { ascending: true });
-        for (const b of (batches ?? []) as Array<{ item_id: string; expiry_date: string }>) {
-          if (!expiryMap.has(b.item_id)) expiryMap.set(b.item_id, b.expiry_date);
+        for (const b of (batches ?? []) as Array<{ inventory_item_id: string; expiry_date: string }>) {
+          if (!expiryMap.has(b.inventory_item_id)) expiryMap.set(b.inventory_item_id, b.expiry_date);
         }
       }
 
