@@ -71,6 +71,16 @@ import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
+import { PAYMENT_METHOD_OPTIONS } from '@/lib/clinic/paymentMethod';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   bento,
   bentoHeader,
