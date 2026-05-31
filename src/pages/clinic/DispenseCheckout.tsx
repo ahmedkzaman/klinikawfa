@@ -264,6 +264,7 @@ export default function DispenseCheckout() {
   const outstanding = Math.max(subtotal - paid, 0);
   const totalDue = Math.max(outstanding + otherChargesTotal, 0);
   const [printPaymentId, setPrintPaymentId] = useState<string | null>(null);
+  const [printLabels, setPrintLabels] = useState(false);
   const latestPaymentId = useMemo(() => {
     if (!payments.length) return null;
     const sorted = [...payments].sort(
@@ -690,6 +691,16 @@ export default function DispenseCheckout() {
             >
               <Printer className="h-4 w-4 mr-2" />
               Print Receipt
+            </Button>
+          )}
+          {consultation?.id && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPrintLabels(true)}
+            >
+              <Tags className="h-4 w-4 mr-2" />
+              Print Drug Labels
             </Button>
           )}
           <TooltipProvider>
