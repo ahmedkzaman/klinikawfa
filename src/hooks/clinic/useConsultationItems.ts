@@ -17,7 +17,7 @@ export function useConsultationItems(consultationId: string | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('consultation_items')
-        .select('*, inventory_items(unit:unit_of_measure), services(name), packages(name)')
+        .select('*, inventory_items(unit:unit_of_measure, default_indication, default_dosage_qty, default_dosage_unit, default_frequency, default_instruction, default_duration, default_duration_unit, default_precaution), services(name), packages(name)')
         .eq('consultation_id', consultationId!)
         .is('deleted_at', null)
         .order('created_at');
