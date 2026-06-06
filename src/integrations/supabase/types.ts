@@ -61,39 +61,59 @@ export type Database = {
       }
       appointments: {
         Row: {
+          appointment_date: string
+          appointment_time: string
           created_at: string
           id: string
           message: string | null
-          name: string
-          phone: string
-          preferred_date: string
-          preferred_time: string
+          patient_ic: string | null
+          patient_name: string
+          patient_phone: string
+          payment_reference: string | null
           service: string
+          service_slug: string | null
           status: string
+          updated_at: string | null
         }
         Insert: {
+          appointment_date: string
+          appointment_time: string
           created_at?: string
           id?: string
           message?: string | null
-          name: string
-          phone: string
-          preferred_date: string
-          preferred_time: string
+          patient_ic?: string | null
+          patient_name: string
+          patient_phone: string
+          payment_reference?: string | null
           service: string
+          service_slug?: string | null
           status?: string
+          updated_at?: string | null
         }
         Update: {
+          appointment_date?: string
+          appointment_time?: string
           created_at?: string
           id?: string
           message?: string | null
-          name?: string
-          phone?: string
-          preferred_date?: string
-          preferred_time?: string
+          patient_ic?: string | null
+          patient_name?: string
+          patient_phone?: string
+          payment_reference?: string | null
           service?: string
+          service_slug?: string | null
           status?: string
+          updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "appointments_service_slug_fkey"
+            columns: ["service_slug"]
+            isOneToOne: false
+            referencedRelation: "clinic_services"
+            referencedColumns: ["slug"]
+          },
+        ]
       }
       appraisal_responses: {
         Row: {
