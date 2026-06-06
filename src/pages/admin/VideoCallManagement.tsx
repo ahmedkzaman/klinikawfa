@@ -489,7 +489,8 @@ export default function VideoCallManagement() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className={pageShell}>
+      <div className={pageInner}>
       {/* Cancel Confirmation Dialog */}
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
         <AlertDialogContent>
