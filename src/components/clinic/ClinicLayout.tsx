@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
-import { InternalMessenger } from '@/components/clinic/chat/InternalMessenger';
+import { StaffChat } from '@/components/staff/chat/StaffChat';
 
 type ClinicNavItem = {
   href: string;
@@ -239,7 +239,7 @@ export function ClinicLayout() {
           <Outlet />
         </main>
       </div>
-      <InternalMessenger />
+      <StaffChat />
     </div>
   );
 }
