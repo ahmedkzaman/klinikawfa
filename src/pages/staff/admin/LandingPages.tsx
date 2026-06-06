@@ -5,12 +5,13 @@ import { z } from "zod";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { formatDistanceToNow } from "date-fns";
-import { Plus, Edit, Trash2, ExternalLink } from "lucide-react";
+import { Plus, Edit, Trash2, ExternalLink, Upload, Loader2, Check } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -45,6 +46,9 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Card } from "@/components/ui/card";
+
+const MEDIA_BUCKET = "clinic-assets";
+const MEDIA_PREFIX = "landing-pages";
 
 interface ClinicService {
   id: string;
@@ -85,12 +89,18 @@ const DEFAULTS: FormValues = {
   services_list: [{ value: "" }],
 };
 
+const sanitizeName = (name: string) =>
+  name.toLowerCase().replace(/[^a-z0-9.]+/g, "-").replace(/-+/g, "-");
+
 export default function LandingPages() {
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<ClinicService | null>(null);
   const [deleteRecordId, setDeleteRecordId] = useState<string | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [uploadingField, setUploadingField] = useState<
+    "hero_image_url" | "promo_video_url" | null
+  >(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -101,6 +111,8 @@ export default function LandingPages() {
     name: "services_list",
     control: form.control,
   });
+
+  const watched = form.watch();
 
   const { data: services, isLoading } = useQuery({
     queryKey: ["clinic-services-admin"],
@@ -134,6 +146,27 @@ export default function LandingPages() {
         : [{ value: "" }],
     });
     setIsFormOpen(true);
+  };
+
+  const handleFileUpload = async (
+    field: "hero_image_url" | "promo_video_url",
+    file: File,
+  ) => {
+    setUploadingField(field);
+    try {
+      const fileName = `${MEDIA_PREFIX}/${Date.now()}-${sanitizeName(file.name)}`;
+      const { error: uploadError } = await supabase.storage
+        .from(MEDIA_BUCKET)
+        .upload(fileName, file, { cacheControl: "3600", upsert: false });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(fileName);
+      form.setValue(field, data.publicUrl, { shouldDirty: true, shouldValidate: true });
+      toast.success("File uploaded");
+    } catch (err: any) {
+      toast.error(err?.message || "Upload failed");
+    } finally {
+      setUploadingField(null);
+    }
   };
 
   const saveMutation = useMutation({
@@ -192,6 +225,8 @@ export default function LandingPages() {
   });
 
   const onSubmit = (values: FormValues) => saveMutation.mutate(values);
+
+  const isUploading = uploadingField !== null;
 
   return (
     <div className="container py-8 space-y-6">
@@ -284,7 +319,7 @@ export default function LandingPages() {
 
       {/* CREATE / EDIT */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingRecord ? "Edit Landing Page" : "Create Landing Page"}
@@ -292,7 +327,7 @@ export default function LandingPages() {
           </DialogHeader>
 
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <div className="grid gap-4">
                 <FormField
                   control={form.control}
@@ -364,10 +399,49 @@ export default function LandingPages() {
                   name="hero_image_url"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Hero Image URL (Optional)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="https://..." type="url" {...field} />
-                      </FormControl>
+                      <FormLabel>Hero Image</FormLabel>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <FormControl>
+                          <Input
+                            placeholder="https://... or upload below"
+                            type="url"
+                            {...field}
+                          />
+                        </FormControl>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            id="hero-upload"
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) handleFileUpload("hero_image_url", f);
+                              e.target.value = "";
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            asChild
+                            disabled={isUploading}
+                          >
+                            <label htmlFor="hero-upload" className="cursor-pointer">
+                              {uploadingField === "hero_image_url" ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Uploading...
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="mr-2 h-4 w-4" />
+                                  Upload
+                                </>
+                              )}
+                            </label>
+                          </Button>
+                        </div>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -378,10 +452,49 @@ export default function LandingPages() {
                   name="promo_video_url"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Promo Video URL (Optional)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="https://..." type="url" {...field} />
-                      </FormControl>
+                      <FormLabel>Promo Video</FormLabel>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <FormControl>
+                          <Input
+                            placeholder="https://... or upload below"
+                            type="url"
+                            {...field}
+                          />
+                        </FormControl>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            id="video-upload"
+                            type="file"
+                            accept="video/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) handleFileUpload("promo_video_url", f);
+                              e.target.value = "";
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            asChild
+                            disabled={isUploading}
+                          >
+                            <label htmlFor="video-upload" className="cursor-pointer">
+                              {uploadingField === "promo_video_url" ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Uploading...
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="mr-2 h-4 w-4" />
+                                  Upload
+                                </>
+                              )}
+                            </label>
+                          </Button>
+                        </div>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -432,6 +545,82 @@ export default function LandingPages() {
                 )}
               </div>
 
+              <Separator />
+
+              {/* LIVE PREVIEW */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-slate-700">Live Preview</h3>
+                  <span className="text-xs text-muted-foreground">
+                    Mirrors the public /services/{watched.slug || "..."} page
+                  </span>
+                </div>
+                <div className="rounded-xl border bg-slate-50 overflow-hidden">
+                  {/* Hero */}
+                  <div className="relative bg-gradient-to-br from-[#261d84] to-[#1a1462] text-white p-8 sm:p-10">
+                    {watched.hero_image_url && (
+                      <img
+                        src={watched.hero_image_url}
+                        alt={watched.title || "Hero"}
+                        className="absolute inset-0 w-full h-full object-cover opacity-30"
+                      />
+                    )}
+                    <div className="relative max-w-2xl">
+                      <h1 className="text-2xl sm:text-3xl font-bold mb-3 leading-tight">
+                        {watched.title || "Your Landing Page Title"}
+                      </h1>
+                      <p className="text-sm sm:text-base text-white/90 mb-5 whitespace-pre-line">
+                        {watched.description ||
+                          "Your subtitle / description will appear here."}
+                      </p>
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center rounded-lg bg-[#c2272c] hover:bg-[#a82026] text-white text-sm font-semibold px-5 py-2.5"
+                      >
+                        {watched.call_to_action || "Call to Action"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Services list */}
+                  <div className="p-6 sm:p-8 bg-white">
+                    <h2 className="text-lg font-semibold text-slate-900 mb-4">
+                      What's Included
+                    </h2>
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      {watched.services_list
+                        ?.filter((s) => s.value?.trim())
+                        .map((s, i) => (
+                          <div
+                            key={i}
+                            className="flex items-start gap-2 text-sm text-slate-700"
+                          >
+                            <Check className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+                            <span>{s.value}</span>
+                          </div>
+                        )) || (
+                        <p className="text-sm text-muted-foreground">
+                          No services listed yet.
+                        </p>
+                      )}
+                    </div>
+
+                    {watched.promo_video_url && (
+                      <div className="mt-6">
+                        <h3 className="text-sm font-semibold text-slate-700 mb-2">
+                          Promo Video
+                        </h3>
+                        <video
+                          src={watched.promo_video_url}
+                          controls
+                          className="w-full max-w-md rounded-lg border"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="flex justify-end gap-2 pt-4">
                 <Button
                   type="button"
@@ -440,8 +629,15 @@ export default function LandingPages() {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={saveMutation.isPending}>
-                  {saveMutation.isPending ? "Saving..." : "Save Landing Page"}
+                <Button
+                  type="submit"
+                  disabled={saveMutation.isPending || isUploading}
+                >
+                  {saveMutation.isPending
+                    ? "Saving..."
+                    : isUploading
+                    ? "Uploading…"
+                    : "Save Landing Page"}
                 </Button>
               </div>
             </form>
