@@ -51,6 +51,7 @@ import PayrollProfiles from "./pages/staff/admin/PayrollProfiles";
 import DailyTaskReview from "./pages/staff/admin/DailyTaskReview";
 import CircularNotices from "./pages/staff/admin/CircularNotices";
 import PunchSettings from "./pages/staff/admin/PunchSettings";
+import LandingPages from "./pages/staff/admin/LandingPages";
 import StaffInbox from "./pages/staff/Inbox";
 
 // Website Management (formerly /admin)
@@ -166,6 +167,7 @@ const App = () => (
                 <Route path="admin/daily-tasks" element={<DailyTaskReview />} />
                 <Route path="admin/notices" element={<CircularNotices />} />
                 <Route path="admin/punch-settings" element={<PunchSettings />} />
+                <Route path="admin/landing-pages" element={<LandingPages />} />
                 {/* Website Management */}
                 <Route path="website/leads" element={<LeadsManagement />} />
                 <Route path="website/team" element={<TeamManagement />} />

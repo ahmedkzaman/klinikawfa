@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import {
   MapPin, Clock, History, Settings, LogOut, Menu, Home, Users, Map, CalendarDays, CalendarOff, Inbox, FileText,
   LayoutDashboard, CalendarCheck, Stethoscope, Image, Star, ChevronDown, ClipboardCheck, ClipboardList,
-  User, BarChart3, CheckSquare, DollarSign, Megaphone, AlertTriangle, Activity
+  User, BarChart3, CheckSquare, DollarSign, Megaphone, AlertTriangle, Activity, Globe
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -50,6 +50,7 @@ const adminNavItems = [
   { href: '/staff/admin/daily-tasks', label: 'Daily Tasks', icon: ClipboardList },
   { href: '/staff/admin/notices', label: 'Circular Notices', icon: Megaphone },
   { href: '/staff/admin/punch-settings', label: 'Punch Settings', icon: Clock },
+  { href: '/staff/admin/landing-pages', label: 'Landing Pages', icon: Globe },
 ];
 
 const contentNavItems = [
