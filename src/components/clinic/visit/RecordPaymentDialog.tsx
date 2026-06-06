@@ -150,10 +150,8 @@ export function RecordPaymentDialog({
       toast.error('Amount must be a number ≥ 0');
       return;
     }
-    if (paymentType === 'self_pay' && numericAmount <= 0) {
-      toast.error('Self-pay amount must be greater than 0');
-      return;
-    }
+    // RM 0 self-pay is allowed for no-charge visits (e.g. quick consult, advice
+    // only). Treat it as a zero-amount checkout that still completes the visit.
     if (numericAmount > 0 && !selfPayMethod) {
       toast.error('Please select a payment method');
       return;
