@@ -568,39 +568,52 @@ function ItemList({
                 </div>
               )}
 
-              {/* Inline qty controls + remove (kept for editability) */}
+              {/* Inline qty controls + price (free-text rows) + remove */}
               {canEdit && (
-                <div className="mt-2 flex items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={() => onQty(item.id, item.quantity ?? 1, -1)}
-                    disabled={(item.quantity ?? 1) <= 1 || updatingId}
-                    aria-label="Decrease quantity"
-                  >
-                    <Minus className="h-3 w-3" />
-                  </Button>
-                  <span className="w-7 text-center text-xs font-medium tabular-nums">
-                    {item.quantity ?? 1}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={() => onQty(item.id, item.quantity ?? 1, 1)}
-                    disabled={updatingId}
-                    aria-label="Increase quantity"
-                  >
-                    <Plus className="h-3 w-3" />
-                  </Button>
+                <div className="mt-2 flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => onQty(item.id, item.quantity ?? 1, -1)}
+                      disabled={(item.quantity ?? 1) <= 1 || updatingId}
+                      aria-label="Decrease quantity"
+                    >
+                      <Minus className="h-3 w-3" />
+                    </Button>
+                    <span className="w-7 text-center text-xs font-medium tabular-nums">
+                      {item.quantity ?? 1}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => onQty(item.id, item.quantity ?? 1, 1)}
+                      disabled={updatingId}
+                      aria-label="Increase quantity"
+                    >
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  {item.item_id == null &&
+                    item.service_id == null &&
+                    item.package_id == null && (
+                      <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                        RM
+                        <PriceInput
+                          value={Number(item.price ?? 0)}
+                          onCommit={(v) => onPrice(item.id, v)}
+                        />
+                      </label>
+                    )}
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6 ml-1 text-muted-foreground hover:text-destructive"
+                    className="h-6 w-6 ml-auto text-muted-foreground hover:text-destructive"
                     onClick={() => onRemove(item.id)}
                     disabled={removingId}
                     aria-label="Remove item"
