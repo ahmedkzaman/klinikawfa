@@ -1,27 +1,149 @@
-# Move Video Calls to Clinic Portal
+## Goal
+Rewrite `src/pages/ServiceDetail.tsx` to be a public, Supabase-driven landing page reading from `public.clinic_services` by `slug`, with loading skeleton, 404 state, and a clean hero + checklist + bottom CTA layout. CTAs link to `/appointment`.
 
-Move the Video Call Management page from `/staff/website/video-calls` into the Clinic Portal at `/clinic/video-calls`.
+## File: `src/pages/ServiceDetail.tsx` (full rewrite)
 
-## Changes
+```tsx
+import { useParams, Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { MainLayout } from "@/components/layout/MainLayout";
+import { SEOHead } from "@/components/seo/SEOHead";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ArrowLeft, CheckCircle, Calendar, AlertTriangle } from "lucide-react";
 
-**1. `src/App.tsx`**
-- Remove `<Route path="website/video-calls" ...>` from the staff section.
-- Add `<Route path="video-calls" element={<VideoCallManagement />} />` inside the `/clinic` routes block (gated by `ClinicProtectedRoute` with `requiredRole="ops_or_admin"` to match the existing telemed/billing access level).
-- Keep the existing `VideoCallManagement` import (or move it next to other clinic page imports — purely cosmetic).
+interface ClinicService {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  services_list: string[];
+  call_to_action: string;
+}
 
-**2. `src/components/clinic/ClinicLayout.tsx`**
-- Add a new entry to `clinicNavItems`: `{ href: '/clinic/video-calls', label: 'Video Calls', icon: Video }` (import `Video` from `lucide-react`).
-- Place it in the "Clinical & Operations" cluster — suggested position: right after `Appointments`, so it reads Patients → Appointments → **Video Calls** → Queue Board.
-- Visible to all clinic staff (no `adminOnly` / `specialAdminOnly` flag); locums won't see it since they only see `locumAllowed` items.
+export default function ServiceDetail() {
+  const { slug } = useParams<{ slug: string }>();
 
-**3. `src/components/staff/StaffLayout.tsx`**
-- Remove the `{ href: '/staff/website/video-calls', label: 'Video Calls', icon: Video }` line from `contentNavItems`.
-- Remove the now-unused `Video` import if nothing else references it.
+  const { data: service, isLoading, isError } = useQuery({
+    queryKey: ["clinic-service", slug],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clinic_services")
+        .select("*")
+        .eq("slug", slug!)
+        .maybeSingle();
+      if (error) throw error;
+      return data as ClinicService | null;
+    },
+    enabled: !!slug,
+  });
 
-## Out of scope
-- No DB / RLS / edge function changes — `video_rooms` table and `video-room` function already work from any authenticated staff context.
-- No changes to `VideoCallManagement.tsx` itself; it renders correctly under either layout.
-- No redirect from the old `/staff/website/video-calls` URL (internal-only page, no external bookmarks expected). Happy to add a `<Navigate>` redirect if you want one — say the word.
+  // Loading
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <section className="bg-gradient-to-br from-primary/10 via-background to-accent/5 py-16 md:py-24">
+          <div className="container space-y-4">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-12 w-2/3" />
+            <Skeleton className="h-6 w-full max-w-2xl" />
+            <Skeleton className="h-12 w-48" />
+          </div>
+        </section>
+        <section className="container py-16">
+          <Skeleton className="h-8 w-48 mb-8" />
+          <div className="grid gap-4 sm:grid-cols-2">
+            {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-20 w-full" />)}
+          </div>
+        </section>
+      </MainLayout>
+    );
+  }
 
-## Access
-Anyone who can enter `/clinic` with `ops_or_admin` (operations staff, doctor-admin, admin, special-admin) will see and use the page. Locums and pure clinical-only roles will not.
+  // 404
+  if (isError || !service) {
+    return (
+      <MainLayout>
+        <section className="container py-24 text-center">
+          <AlertTriangle className="mx-auto mb-4 h-12 w-12 text-amber-500" />
+          <h1 className="mb-3">404 – Service Not Found</h1>
+          <p className="mx-auto mb-8 max-w-md text-muted-foreground">
+            The healthcare service you are looking for does not exist or has been removed.
+          </p>
+          <Button asChild size="lg">
+            <Link to="/services"><ArrowLeft className="mr-2 h-5 w-5" /> Return to Services</Link>
+          </Button>
+        </section>
+      </MainLayout>
+    );
+  }
+
+  // Loaded
+  return (
+    <MainLayout>
+      <SEOHead title={service.title} description={service.description} url={`/services/${service.slug}`} />
+
+      {/* Hero */}
+      <section className="bg-gradient-to-br from-primary/10 via-background to-accent/5 py-16 md:py-24">
+        <div className="container">
+          <Link to="/services" className="mb-6 inline-flex items-center text-sm text-muted-foreground hover:text-primary">
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Services
+          </Link>
+          <h1 className="mb-4">{service.title}</h1>
+          <p className="mb-8 max-w-2xl text-lg text-muted-foreground">{service.description}</p>
+          <Button asChild size="lg">
+            <Link to="/appointment"><Calendar className="mr-2 h-5 w-5" /> {service.call_to_action}</Link>
+          </Button>
+        </div>
+      </section>
+
+      {/* Services list */}
+      <section className="container py-16">
+        <h2 className="mb-8">What's Included</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {service.services_list?.map((item, index) => (
+            <Card key={index} className="border-border/50 shadow-soft">
+              <CardContent className="flex items-start gap-3 p-4">
+                <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                <span className="text-sm">{item}</span>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Disclaimer */}
+        <Card className="mt-12 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
+          <CardContent className="flex items-start gap-3 p-6">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              <strong>Medical Disclaimer:</strong> Information provided is for educational purposes only.
+              Specific treatments, procedures, or prescriptions are subject to clinical assessment by our medical officers.
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Bottom CTA */}
+      <section className="bg-primary py-16 text-primary-foreground">
+        <div className="container text-center">
+          <h2 className="mb-4 text-primary-foreground">Ready to seek treatment?</h2>
+          <p className="mx-auto mb-8 max-w-xl text-primary-foreground/80">
+            Book an appointment online or walk in to our clinic today. Our medical team is ready to assist you.
+          </p>
+          <Button asChild size="lg" variant="secondary">
+            <Link to="/appointment"><Calendar className="mr-2 h-5 w-5" /> {service.call_to_action}</Link>
+          </Button>
+        </div>
+      </section>
+    </MainLayout>
+  );
+}
+```
+
+## Notes
+- Route `/services/:slug` in `src/App.tsx` already maps to this component — no router change.
+- Uses `maybeSingle()` so a missing slug becomes `null` (not an error) and triggers the 404 branch.
+- Public-read RLS on `clinic_services` is already enabled, so no migration needed.
+- No edits to `/services` index or `src/lib/serviceContent.ts`.
