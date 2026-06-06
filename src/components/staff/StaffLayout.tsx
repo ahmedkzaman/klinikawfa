@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
+import { StaffChat } from '@/components/staff/chat/StaffChat';
 
 const staffNavItems = [
   { href: '/staff/dashboard', label: 'Dashboard', icon: Home },
