@@ -391,6 +391,7 @@ export function VisitDetailsColumn({
               rows={items}
               canEdit={canEdit}
               onQty={handleQty}
+              onPrice={handlePrice}
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
@@ -411,6 +412,7 @@ export function VisitDetailsColumn({
               rows={itemsRows}
               canEdit={canEdit}
               onQty={handleQty}
+              onPrice={handlePrice}
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
@@ -431,6 +433,7 @@ export function VisitDetailsColumn({
               rows={servicesRows}
               canEdit={canEdit}
               onQty={handleQty}
+              onPrice={handlePrice}
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
@@ -451,6 +454,7 @@ export function VisitDetailsColumn({
               rows={packagesRows}
               canEdit={canEdit}
               onQty={handleQty}
+              onPrice={handlePrice}
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
