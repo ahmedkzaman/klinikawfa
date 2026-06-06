@@ -55,7 +55,7 @@ const adminNavItems = [
 const contentNavItems = [
   { href: '/staff/website/leads', label: 'Leads / Appointments', icon: CalendarCheck },
   { href: '/staff/website/team', label: 'Team', icon: Stethoscope },
-  { href: '/staff/website/video-calls', label: 'Video Calls', icon: Video },
+  
   { href: '/staff/website/blog', label: 'Blog Posts', icon: FileText },
   { href: '/staff/website/gallery', label: 'Gallery', icon: Image },
   { href: '/staff/website/reviews', label: 'Reviews', icon: Star },
