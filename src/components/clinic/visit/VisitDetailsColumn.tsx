@@ -252,6 +252,16 @@ export function VisitDetailsColumn({
   };
 
 
+  const handlePrice = async (id: string, nextPrice: number) => {
+    if (!consultationId) return;
+    try {
+      await updateItem.mutateAsync({ id, consultationId, price: nextPrice });
+      toast.success('Price updated');
+    } catch (err) {
+      toast.error('Failed to update price: ' + (err as Error).message);
+    }
+  };
+
   const handleRemove = async (id: string) => {
     if (!consultationId) return;
     try {
