@@ -239,7 +239,7 @@ export function ClinicLayout() {
           <Outlet />
         </main>
       </div>
-      <InternalMessenger />
+      <StaffChat />
     </div>
   );
 }
