@@ -1,149 +1,29 @@
 ## Goal
-Rewrite `src/pages/ServiceDetail.tsx` to be a public, Supabase-driven landing page reading from `public.clinic_services` by `slug`, with loading skeleton, 404 state, and a clean hero + checklist + bottom CTA layout. CTAs link to `/appointment`.
+Build Landing Pages CMS at `/staff/admin/landing-pages` for full CRUD of `public.clinic_services`.
 
-## File: `src/pages/ServiceDetail.tsx` (full rewrite)
+## Files
 
-```tsx
-import { useParams, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { MainLayout } from "@/components/layout/MainLayout";
-import { SEOHead } from "@/components/seo/SEOHead";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, CheckCircle, Calendar, AlertTriangle } from "lucide-react";
+### 1. `src/pages/staff/admin/LandingPages.tsx` (new)
+Self-contained admin page using React Hook Form + Zod + TanStack Query.
 
-interface ClinicService {
-  id: string;
-  slug: string;
-  title: string;
-  description: string;
-  services_list: string[];
-  call_to_action: string;
-}
+- **List view**: shadcn `Table` with columns Title, Slug (mono), Last Updated (relative via `date-fns/formatDistanceToNow`), Actions. Actions: open public page (`/services/{slug}` new tab), Edit, Delete. Loading row + empty state row.
+- **Header**: title "Landing Pages" + "Create New Landing Page" button.
+- **Create/Edit `Dialog`** (max-w-2xl, scrollable) shared for both modes. Fields: title, slug (disabled in edit mode, helper "No spaces, lowercase only, e.g. rawatan-ke-rumah"), call_to_action (default "Book Appointment"), description (Textarea rows={4}), hero_image_url (optional url), promo_video_url (optional url), services_list dynamic editor (`useFieldArray` over `{value: string}[]`, Add Item / trash row, disabled trash when length===1).
+- **Zod schema**: slug regex `^[a-z0-9]+(?:-[a-z0-9]+)*$` max 80; title 1–120; description 1–500; cta 1–60; urls `.url().optional().or(z.literal(""))`; services_list min 1 item.
+- **Save mutation**: maps field array to string[], filters empties, nulls empty urls. Insert on create; Update with `updated_at: new Date().toISOString()` on edit. Error 23505 → "slug already exists" toast. Success → toast + close + invalidate `['clinic-services-admin']`.
+- **Delete**: `AlertDialog` confirm → delete by id → toast + invalidate.
 
-export default function ServiceDetail() {
-  const { slug } = useParams<{ slug: string }>();
+### 2. `src/App.tsx`
+- Import `LandingPages` with the other staff admin pages.
+- Add `<Route path="admin/landing-pages" element={<LandingPages />} />` inside the existing `/staff` block (next to other `admin/*` routes around line 167).
 
-  const { data: service, isLoading, isError } = useQuery({
-    queryKey: ["clinic-service", slug],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clinic_services")
-        .select("*")
-        .eq("slug", slug!)
-        .maybeSingle();
-      if (error) throw error;
-      return data as ClinicService | null;
-    },
-    enabled: !!slug,
-  });
+### 3. `src/components/staff/StaffLayout.tsx`
+- Add `Globe` to the lucide-react import on line 10–13.
+- Append `{ href: '/staff/admin/landing-pages', label: 'Landing Pages', icon: Globe }` to `adminNavItems` (after Punch Settings, line 52).
 
-  // Loading
-  if (isLoading) {
-    return (
-      <MainLayout>
-        <section className="bg-gradient-to-br from-primary/10 via-background to-accent/5 py-16 md:py-24">
-          <div className="container space-y-4">
-            <Skeleton className="h-5 w-32" />
-            <Skeleton className="h-12 w-2/3" />
-            <Skeleton className="h-6 w-full max-w-2xl" />
-            <Skeleton className="h-12 w-48" />
-          </div>
-        </section>
-        <section className="container py-16">
-          <Skeleton className="h-8 w-48 mb-8" />
-          <div className="grid gap-4 sm:grid-cols-2">
-            {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-20 w-full" />)}
-          </div>
-        </section>
-      </MainLayout>
-    );
-  }
+## Access control
+`/staff/admin/*` already runs under StaffLayout's auth+role gating, and `clinic_services` RLS only allows mutations for `is_admin(auth.uid())` — non-admins will see read-only failures via toast. No new wrapper needed.
 
-  // 404
-  if (isError || !service) {
-    return (
-      <MainLayout>
-        <section className="container py-24 text-center">
-          <AlertTriangle className="mx-auto mb-4 h-12 w-12 text-amber-500" />
-          <h1 className="mb-3">404 – Service Not Found</h1>
-          <p className="mx-auto mb-8 max-w-md text-muted-foreground">
-            The healthcare service you are looking for does not exist or has been removed.
-          </p>
-          <Button asChild size="lg">
-            <Link to="/services"><ArrowLeft className="mr-2 h-5 w-5" /> Return to Services</Link>
-          </Button>
-        </section>
-      </MainLayout>
-    );
-  }
-
-  // Loaded
-  return (
-    <MainLayout>
-      <SEOHead title={service.title} description={service.description} url={`/services/${service.slug}`} />
-
-      {/* Hero */}
-      <section className="bg-gradient-to-br from-primary/10 via-background to-accent/5 py-16 md:py-24">
-        <div className="container">
-          <Link to="/services" className="mb-6 inline-flex items-center text-sm text-muted-foreground hover:text-primary">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Services
-          </Link>
-          <h1 className="mb-4">{service.title}</h1>
-          <p className="mb-8 max-w-2xl text-lg text-muted-foreground">{service.description}</p>
-          <Button asChild size="lg">
-            <Link to="/appointment"><Calendar className="mr-2 h-5 w-5" /> {service.call_to_action}</Link>
-          </Button>
-        </div>
-      </section>
-
-      {/* Services list */}
-      <section className="container py-16">
-        <h2 className="mb-8">What's Included</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {service.services_list?.map((item, index) => (
-            <Card key={index} className="border-border/50 shadow-soft">
-              <CardContent className="flex items-start gap-3 p-4">
-                <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-                <span className="text-sm">{item}</span>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Disclaimer */}
-        <Card className="mt-12 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
-          <CardContent className="flex items-start gap-3 p-6">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-            <p className="text-sm text-amber-800 dark:text-amber-200">
-              <strong>Medical Disclaimer:</strong> Information provided is for educational purposes only.
-              Specific treatments, procedures, or prescriptions are subject to clinical assessment by our medical officers.
-            </p>
-          </CardContent>
-        </Card>
-      </section>
-
-      {/* Bottom CTA */}
-      <section className="bg-primary py-16 text-primary-foreground">
-        <div className="container text-center">
-          <h2 className="mb-4 text-primary-foreground">Ready to seek treatment?</h2>
-          <p className="mx-auto mb-8 max-w-xl text-primary-foreground/80">
-            Book an appointment online or walk in to our clinic today. Our medical team is ready to assist you.
-          </p>
-          <Button asChild size="lg" variant="secondary">
-            <Link to="/appointment"><Calendar className="mr-2 h-5 w-5" /> {service.call_to_action}</Link>
-          </Button>
-        </div>
-      </section>
-    </MainLayout>
-  );
-}
-```
-
-## Notes
-- Route `/services/:slug` in `src/App.tsx` already maps to this component — no router change.
-- Uses `maybeSingle()` so a missing slug becomes `null` (not an error) and triggers the 404 branch.
-- Public-read RLS on `clinic_services` is already enabled, so no migration needed.
-- No edits to `/services` index or `src/lib/serviceContent.ts`.
+## Out of scope
+- No schema, RLS, or storage changes (hero_image_url is plain text input only).
+- No bilingual fields, pagination, bulk actions.
