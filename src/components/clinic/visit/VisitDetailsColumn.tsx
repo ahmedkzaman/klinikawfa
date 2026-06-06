@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { format } from 'date-fns';
+import { Input } from '@/components/ui/input';
 import {
   FileText,
   Image as ImageIcon,
@@ -251,6 +252,16 @@ export function VisitDetailsColumn({
   };
 
 
+  const handlePrice = async (id: string, nextPrice: number) => {
+    if (!consultationId) return;
+    try {
+      await updateItem.mutateAsync({ id, consultationId, price: nextPrice });
+      toast.success('Price updated');
+    } catch (err) {
+      toast.error('Failed to update price: ' + (err as Error).message);
+    }
+  };
+
   const handleRemove = async (id: string) => {
     if (!consultationId) return;
     try {
@@ -380,6 +391,7 @@ export function VisitDetailsColumn({
               rows={items}
               canEdit={canEdit}
               onQty={handleQty}
+              onPrice={handlePrice}
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
@@ -400,6 +412,7 @@ export function VisitDetailsColumn({
               rows={itemsRows}
               canEdit={canEdit}
               onQty={handleQty}
+              onPrice={handlePrice}
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
@@ -420,6 +433,7 @@ export function VisitDetailsColumn({
               rows={servicesRows}
               canEdit={canEdit}
               onQty={handleQty}
+              onPrice={handlePrice}
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
@@ -440,6 +454,7 @@ export function VisitDetailsColumn({
               rows={packagesRows}
               canEdit={canEdit}
               onQty={handleQty}
+              onPrice={handlePrice}
               onRemove={handleRemove}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
@@ -479,6 +494,7 @@ interface ItemListProps {
   canEdit: boolean;
   canEditInstructions: boolean;
   onQty: (id: string, currentQty: number, delta: number) => void;
+  onPrice: (id: string, nextPrice: number) => void;
   onRemove: (id: string) => void;
   onPrintLabel: (item: ConsultationItemRow) => void;
   onEdit: (item: ConsultationItemRow) => void;
@@ -492,6 +508,7 @@ function ItemList({
   canEdit,
   canEditInstructions,
   onQty,
+  onPrice,
   onRemove,
   onPrintLabel,
   onEdit,
@@ -551,39 +568,52 @@ function ItemList({
                 </div>
               )}
 
-              {/* Inline qty controls + remove (kept for editability) */}
+              {/* Inline qty controls + price (free-text rows) + remove */}
               {canEdit && (
-                <div className="mt-2 flex items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={() => onQty(item.id, item.quantity ?? 1, -1)}
-                    disabled={(item.quantity ?? 1) <= 1 || updatingId}
-                    aria-label="Decrease quantity"
-                  >
-                    <Minus className="h-3 w-3" />
-                  </Button>
-                  <span className="w-7 text-center text-xs font-medium tabular-nums">
-                    {item.quantity ?? 1}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={() => onQty(item.id, item.quantity ?? 1, 1)}
-                    disabled={updatingId}
-                    aria-label="Increase quantity"
-                  >
-                    <Plus className="h-3 w-3" />
-                  </Button>
+                <div className="mt-2 flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => onQty(item.id, item.quantity ?? 1, -1)}
+                      disabled={(item.quantity ?? 1) <= 1 || updatingId}
+                      aria-label="Decrease quantity"
+                    >
+                      <Minus className="h-3 w-3" />
+                    </Button>
+                    <span className="w-7 text-center text-xs font-medium tabular-nums">
+                      {item.quantity ?? 1}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => onQty(item.id, item.quantity ?? 1, 1)}
+                      disabled={updatingId}
+                      aria-label="Increase quantity"
+                    >
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  {item.item_id == null &&
+                    item.service_id == null &&
+                    item.package_id == null && (
+                      <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                        RM
+                        <PriceInput
+                          value={Number(item.price ?? 0)}
+                          onCommit={(v) => onPrice(item.id, v)}
+                        />
+                      </label>
+                    )}
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6 ml-1 text-muted-foreground hover:text-destructive"
+                    className="h-6 w-6 ml-auto text-muted-foreground hover:text-destructive"
                     onClick={() => onRemove(item.id)}
                     disabled={removingId}
                     aria-label="Remove item"
@@ -731,5 +761,58 @@ function DocumentsList({ attachments, isLoading }: DocumentsListProps) {
         );
       })}
     </ul>
+  );
+}
+
+/**
+ * Inline editable price for free-text (manual) consultation-item rows.
+ * Commits on blur or Enter; reverts on Escape. Skips the commit when the
+ * value is unchanged so we don't spam the API with no-op updates.
+ */
+function PriceInput({
+  value,
+  onCommit,
+}: {
+  value: number;
+  onCommit: (next: number) => void;
+}) {
+  const [local, setLocal] = useState<string>(value.toFixed(2));
+  const lastCommittedRef = useRef<number>(value);
+
+  useEffect(() => {
+    setLocal(value.toFixed(2));
+    lastCommittedRef.current = value;
+  }, [value]);
+
+  const commit = () => {
+    const n = parseFloat(local);
+    if (Number.isNaN(n) || n < 0) {
+      setLocal(lastCommittedRef.current.toFixed(2));
+      return;
+    }
+    if (n === lastCommittedRef.current) return;
+    lastCommittedRef.current = n;
+    onCommit(n);
+  };
+
+  return (
+    <Input
+      type="number"
+      min={0}
+      step={0.01}
+      value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          (e.target as HTMLInputElement).blur();
+        } else if (e.key === 'Escape') {
+          setLocal(lastCommittedRef.current.toFixed(2));
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      className="h-7 w-24 text-xs tabular-nums"
+    />
   );
 }
