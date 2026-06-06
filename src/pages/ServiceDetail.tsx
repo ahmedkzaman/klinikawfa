@@ -1,5 +1,6 @@
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import DOMPurify from "dompurify";
 import { supabase } from "@/integrations/supabase/client";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { SEOHead } from "@/components/seo/SEOHead";
@@ -7,6 +8,21 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, CheckCircle, Calendar, AlertTriangle } from "lucide-react";
+
+const purifyConfig = {
+  ADD_TAGS: ["iframe", "video", "source"],
+  ADD_ATTR: [
+    "allow",
+    "allowfullscreen",
+    "frameborder",
+    "scrolling",
+    "controls",
+    "target",
+  ],
+};
+
+const stripHtml = (html: string) =>
+  (html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 
 interface ClinicService {
   id: string;
@@ -81,7 +97,7 @@ export default function ServiceDetail() {
     <MainLayout>
       <SEOHead
         title={service.title}
-        description={service.description}
+        description={stripHtml(service.description).substring(0, 160)}
         url={`/services/${service.slug}`}
       />
 
@@ -95,7 +111,12 @@ export default function ServiceDetail() {
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Services
           </Link>
           <h1 className="mb-4">{service.title}</h1>
-          <p className="mb-8 max-w-2xl text-lg text-muted-foreground">{service.description}</p>
+          <div
+            className="service-rich-content prose max-w-none mb-8 text-muted-foreground"
+            dangerouslySetInnerHTML={{
+              __html: DOMPurify.sanitize(service.description || "", purifyConfig),
+            }}
+          />
           <Button asChild size="lg">
             <Link to="/appointment">
               <Calendar className="mr-2 h-5 w-5" /> {service.call_to_action}
