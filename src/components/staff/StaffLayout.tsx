@@ -390,6 +390,7 @@ export function StaffLayout() {
         <main className="flex-1">
           <Outlet />
         </main>
+        <StaffChat />
       </div>
     </div>
   );
