@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   MapPin, Clock, History, Settings, LogOut, Menu, Home, Users, Map, CalendarDays, CalendarOff, Inbox, FileText,
-  LayoutDashboard, CalendarCheck, Stethoscope, Video, Image, Star, ChevronDown, ClipboardCheck, ClipboardList,
+  LayoutDashboard, CalendarCheck, Stethoscope, Image, Star, ChevronDown, ClipboardCheck, ClipboardList,
   User, BarChart3, CheckSquare, DollarSign, Megaphone, AlertTriangle, Activity
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -55,7 +55,7 @@ const adminNavItems = [
 const contentNavItems = [
   { href: '/staff/website/leads', label: 'Leads / Appointments', icon: CalendarCheck },
   { href: '/staff/website/team', label: 'Team', icon: Stethoscope },
-  { href: '/staff/website/video-calls', label: 'Video Calls', icon: Video },
+  
   { href: '/staff/website/blog', label: 'Blog Posts', icon: FileText },
   { href: '/staff/website/gallery', label: 'Gallery', icon: Image },
   { href: '/staff/website/reviews', label: 'Reviews', icon: Star },

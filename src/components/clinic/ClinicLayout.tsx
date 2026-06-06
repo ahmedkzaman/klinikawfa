@@ -23,6 +23,7 @@ import {
   ClipboardList,
   Activity,
   TrendingUp,
+  Video,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -41,6 +42,7 @@ type ClinicNavItem = {
 const clinicNavItems: ClinicNavItem[] = [
   { href: '/clinic/patients', label: 'Patients', icon: Users },
   { href: '/clinic/appointments', label: 'Appointments', icon: CalendarDays, locumAllowed: true },
+  { href: '/clinic/video-calls', label: 'Video Calls', icon: Video },
   { href: '/clinic/queue', label: 'Queue Board', icon: LayoutDashboard, locumAllowed: true },
   { href: '/clinic/consultation', label: 'Consultation', icon: Stethoscope, locumAllowed: true },
   { href: '/clinic/dispensary', label: 'Dispensary', icon: Pill },
