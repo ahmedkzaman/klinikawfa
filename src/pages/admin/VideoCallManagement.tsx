@@ -545,23 +545,19 @@ export default function VideoCallManagement() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-3xl font-bold">
-            {'Video Calls'}
-          </h1>
-          <p className="text-muted-foreground">
-            {'Manage video consultation sessions'}
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Video Calls</h1>
+          <p className="text-sm text-slate-500">Manage video consultation sessions</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchRooms} disabled={isLoading}>
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" onClick={fetchRooms} disabled={isLoading} className={secondaryBtn}>
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             {'Refresh'}
           </Button>
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
             <DialogTrigger asChild>
-              <Button>
+              <Button className={primaryBtn}>
                 <Plus className="h-4 w-4 mr-2" />
                 {'New Room'}
               </Button>
