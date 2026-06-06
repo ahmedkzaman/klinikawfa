@@ -1,29 +1,87 @@
-## Goal
-Build Landing Pages CMS at `/staff/admin/landing-pages` for full CRUD of `public.clinic_services`.
+# Patient Self-Booking & Admin Appointment Sync
 
-## Files
+## 1. Public booking page — `src/pages/AppointmentBooking.tsx`
 
-### 1. `src/pages/staff/admin/LandingPages.tsx` (new)
-Self-contained admin page using React Hook Form + Zod + TanStack Query.
+Replace the existing `/appointment` route (currently `src/pages/Appointment.tsx`) with a fresh multi-step component wrapped in `MainLayout` + `SEOHead`.
 
-- **List view**: shadcn `Table` with columns Title, Slug (mono), Last Updated (relative via `date-fns/formatDistanceToNow`), Actions. Actions: open public page (`/services/{slug}` new tab), Edit, Delete. Loading row + empty state row.
-- **Header**: title "Landing Pages" + "Create New Landing Page" button.
-- **Create/Edit `Dialog`** (max-w-2xl, scrollable) shared for both modes. Fields: title, slug (disabled in edit mode, helper "No spaces, lowercase only, e.g. rawatan-ke-rumah"), call_to_action (default "Book Appointment"), description (Textarea rows={4}), hero_image_url (optional url), promo_video_url (optional url), services_list dynamic editor (`useFieldArray` over `{value: string}[]`, Add Item / trash row, disabled trash when length===1).
-- **Zod schema**: slug regex `^[a-z0-9]+(?:-[a-z0-9]+)*$` max 80; title 1–120; description 1–500; cta 1–60; urls `.url().optional().or(z.literal(""))`; services_list min 1 item.
-- **Save mutation**: maps field array to string[], filters empties, nulls empty urls. Insert on create; Update with `updated_at: new Date().toISOString()` on edit. Error 23505 → "slug already exists" toast. Success → toast + close + invalidate `['clinic-services-admin']`.
-- **Delete**: `AlertDialog` confirm → delete by id → toast + invalidate.
+State: `step` (1 | 2 | 3 | 4-success), plus `react-hook-form` with `zod` resolver covering all fields, so each "Next" button calls `form.trigger([...stepFields])` before advancing.
 
-### 2. `src/App.tsx`
-- Import `LandingPages` with the other staff admin pages.
-- Add `<Route path="admin/landing-pages" element={<LandingPages />} />` inside the existing `/staff` block (next to other `admin/*` routes around line 167).
+**Step 1 — Patient Details (Card)**
+- `patient_name` (text, 2–80, trimmed)
+- `patient_phone` (text, regex `^\+?60?1\d{7,9}$` or simple `^[0-9+\-\s]{8,15}$`)
+- `patient_ic` (12-digit Malaysian IC, optional spaces/dashes stripped)
+- Next button → validate → step 2
 
-### 3. `src/components/staff/StaffLayout.tsx`
-- Add `Globe` to the lucide-react import on line 10–13.
-- Append `{ href: '/staff/admin/landing-pages', label: 'Landing Pages', icon: Globe }` to `adminNavItems` (after Punch Settings, line 52).
+**Step 2 — Service & Slot (Card)**
+- `useQuery(['clinic-services-public'])` → `supabase.from('clinic_services').select('slug,title').order('title')`. Render in a `Select`; selected option writes `service_slug` and the display `service` title.
+- Date: shadcn `Popover` + `Calendar` (`mode="single"`, `disabled={{ before: today }}`, `pointer-events-auto`). Stored as ISO `yyyy-MM-dd`.
+- Time: `Select` of 30-min slots from `09:00`–`16:30` inclusive (last bookable slot `16:30`, clinic closes 17:00). Generated client-side.
+- Back / Next.
 
-## Access control
-`/staff/admin/*` already runs under StaffLayout's auth+role gating, and `clinic_services` RLS only allows mutations for `is_admin(auth.uid())` — non-admins will see read-only failures via toast. No new wrapper needed.
+**Step 3 — Payment Lock & Checkout (Card)**
+- Read-only summary list of all entered values + service title.
+- Notice block: "A booking fee is required to confirm this slot. Your appointment will be marked **Pending Payment** until the fee is received."
+- PDPA consent checkbox (required).
+- Primary button **"Proceed to Payment"** runs the `bookMutation`:
+  ```ts
+  supabase.from('appointments').insert({
+    patient_name, patient_phone, patient_ic,
+    service: serviceTitle,
+    service_slug,
+    appointment_date,
+    appointment_time, // 'HH:mm'
+    status: 'pending_payment',
+  }).select('id').single()
+  ```
+  On success → store returned id → advance to success step. On error → `toast.destructive`.
+
+**Step 4 — Success screen**
+- Centered Card with `CheckCircle`, headline "Booking received", subtext "Redirecting to secure payment gateway…", booking reference (short id), and a "Return home" link. No actual redirect yet (Stripe wiring deferred).
+
+A small stepper header (1 ▸ 2 ▸ 3) at top of the card for orientation.
+
+## 2. Admin sync dashboard — `src/pages/staff/admin/AppointmentsView.tsx`
+
+Route `/staff/admin/appointments` inside the existing StaffLayout (auth + admin gating already enforced).
+
+**Data**
+```ts
+useQuery(['admin-appointments'], () =>
+  supabase
+    .from('appointments')
+    .select('id, patient_name, patient_phone, patient_ic, appointment_date, appointment_time, service, status, clinic_services:service_slug(title)')
+    .order('appointment_date', { ascending: true })
+    .order('appointment_time', { ascending: true })
+)
+```
+Service column prefers `clinic_services.title`, falls back to `appointments.service`.
+
+**Layout**
+- Page header "Appointments" + small refresh button.
+- `Tabs` with two values:
+  - `upcoming` — rows where `status = 'confirmed'` and `appointment_date >= today`.
+  - `pending` — rows where `status = 'pending_payment'`.
+- Each tab renders the same `Table`: Date · Time · Patient Name · Service · Contact (phone) · Status badge · Actions.
+- Empty state row per tab.
+
+**Row actions (Admins only, gated by `isAdmin` from `useAuth`)**
+- Always: **Cancel Booking** → `AlertDialog` confirm → `update({ status: 'cancelled', updated_at: now })`.
+- Upcoming tab: **Mark as Completed** → `update({ status: 'completed' })`.
+- Pending tab: **Force Confirm** (cash at counter) → `update({ status: 'confirmed', payment_reference: 'COUNTER-CASH' })`.
+
+All mutations use a single `useMutation` factory that takes `(id, patch)`, shows a toast, and invalidates `['admin-appointments']`.
+
+## 3. Wiring
+
+- `src/App.tsx`:
+  - Replace `import Appointment from "./pages/Appointment"` with `import AppointmentBooking from "./pages/AppointmentBooking"` and update the `/appointment` route element.
+  - Add `<Route path="admin/appointments" element={<AppointmentsView />} />` inside the existing `/staff` block.
+- `src/components/staff/StaffLayout.tsx`: add `CalendarCheck` (already imported) entry `{ href: '/staff/admin/appointments', label: 'Appointments', icon: CalendarCheck }` to `adminNavItems`, placed just below "Admin Dashboard".
 
 ## Out of scope
-- No schema, RLS, or storage changes (hero_image_url is plain text input only).
-- No bilingual fields, pagination, bulk actions.
+
+- Real Stripe checkout (button stays mocked, success screen only).
+- Slot-conflict prevention / availability lookup against existing bookings.
+- Bilingual copy (will inherit current `LanguageContext` for static labels only where trivial).
+- Schema, RLS, or storage changes — all required policies and FKs already exist.
+- Edits to the legacy `pages/Appointment.tsx` beyond removing its route import (file can be deleted in a follow-up if unused).
