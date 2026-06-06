@@ -763,3 +763,56 @@ function DocumentsList({ attachments, isLoading }: DocumentsListProps) {
     </ul>
   );
 }
+
+/**
+ * Inline editable price for free-text (manual) consultation-item rows.
+ * Commits on blur or Enter; reverts on Escape. Skips the commit when the
+ * value is unchanged so we don't spam the API with no-op updates.
+ */
+function PriceInput({
+  value,
+  onCommit,
+}: {
+  value: number;
+  onCommit: (next: number) => void;
+}) {
+  const [local, setLocal] = useState<string>(value.toFixed(2));
+  const lastCommittedRef = useRef<number>(value);
+
+  useEffect(() => {
+    setLocal(value.toFixed(2));
+    lastCommittedRef.current = value;
+  }, [value]);
+
+  const commit = () => {
+    const n = parseFloat(local);
+    if (Number.isNaN(n) || n < 0) {
+      setLocal(lastCommittedRef.current.toFixed(2));
+      return;
+    }
+    if (n === lastCommittedRef.current) return;
+    lastCommittedRef.current = n;
+    onCommit(n);
+  };
+
+  return (
+    <Input
+      type="number"
+      min={0}
+      step={0.01}
+      value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          (e.target as HTMLInputElement).blur();
+        } else if (e.key === 'Escape') {
+          setLocal(lastCommittedRef.current.toFixed(2));
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      className="h-7 w-24 text-xs tabular-nums"
+    />
+  );
+}
