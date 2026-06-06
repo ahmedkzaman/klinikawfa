@@ -378,15 +378,14 @@ export default function VideoCallManagement() {
   };
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-      pending: 'outline',
-      paid: 'secondary',
-      test: 'secondary',
-      active: 'default',
-      ended: 'destructive',
-      cancelled: 'destructive',
+    const styles: Record<string, string> = {
+      pending: 'bg-amber-50 text-amber-700',
+      paid: 'bg-blue-50 text-blue-700',
+      test: 'bg-violet-50 text-violet-700',
+      active: 'bg-emerald-50 text-emerald-700',
+      ended: 'bg-slate-100 text-slate-600',
+      cancelled: 'bg-rose-50 text-rose-700',
     };
-
     const labels: Record<string, string> = {
       pending: 'Pending',
       paid: 'Paid',
@@ -395,11 +394,10 @@ export default function VideoCallManagement() {
       ended: 'Ended',
       cancelled: 'Cancelled',
     };
-
     return (
-      <Badge variant={variants[status] || 'outline'}>
+      <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium', styles[status] || 'bg-slate-50 text-slate-600')}>
         {labels[status] || status}
-      </Badge>
+      </span>
     );
   };
 
