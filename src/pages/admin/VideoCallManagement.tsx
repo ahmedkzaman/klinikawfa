@@ -578,6 +578,7 @@ export default function VideoCallManagement() {
                   </Label>
                   <Input
                     id="patient_name"
+                    className={softInput}
                     value={newRoom.patient_name}
                     onChange={(e) => setNewRoom({ ...newRoom, patient_name: e.target.value })}
                     placeholder="John Doe"
@@ -589,6 +590,7 @@ export default function VideoCallManagement() {
                   </Label>
                   <Input
                     id="patient_phone"
+                    className={softInput}
                     value={newRoom.patient_phone}
                     onChange={(e) => setNewRoom({ ...newRoom, patient_phone: e.target.value })}
                     placeholder="+60123456789"
@@ -601,6 +603,7 @@ export default function VideoCallManagement() {
                   <Input
                     id="patient_email"
                     type="email"
+                    className={softInput}
                     value={newRoom.patient_email}
                     onChange={(e) => setNewRoom({ ...newRoom, patient_email: e.target.value })}
                     placeholder="patient@email.com"
@@ -612,6 +615,7 @@ export default function VideoCallManagement() {
                   </Label>
                   <Textarea
                     id="notes"
+                    className={softInput}
                     value={newRoom.notes}
                     onChange={(e) => setNewRoom({ ...newRoom, notes: e.target.value })}
                     placeholder={'Additional notes...'}
@@ -622,7 +626,7 @@ export default function VideoCallManagement() {
                 <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
                   {'Cancel'}
                 </Button>
-                <Button onClick={createRoom} disabled={isCreating}>
+                <Button onClick={createRoom} disabled={isCreating} className={primaryBtn}>
                   {isCreating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   {'Create'}
                 </Button>
@@ -633,7 +637,7 @@ export default function VideoCallManagement() {
           {/* Test Room Dialog */}
           <Dialog open={showTestDialog} onOpenChange={setShowTestDialog}>
             <DialogTrigger asChild>
-              <Button variant="secondary">
+              <Button variant="secondary" className={secondaryBtn}>
                 <Video className="h-4 w-4 mr-2" />
                 {'Teleconsultation Test'}
               </Button>
@@ -654,6 +658,7 @@ export default function VideoCallManagement() {
                   </Label>
                   <Input
                     id="test_patient_name"
+                    className={softInput}
                     value={newRoom.patient_name}
                     onChange={(e) => setNewRoom({ ...newRoom, patient_name: e.target.value })}
                     placeholder="Test Patient"
@@ -665,6 +670,7 @@ export default function VideoCallManagement() {
                   </Label>
                   <Input
                     id="test_patient_phone"
+                    className={softInput}
                     value={newRoom.patient_phone}
                     onChange={(e) => setNewRoom({ ...newRoom, patient_phone: e.target.value })}
                     placeholder="+60123456789"
@@ -676,6 +682,7 @@ export default function VideoCallManagement() {
                   </Label>
                   <Textarea
                     id="test_notes"
+                    className={softInput}
                     value={newRoom.notes}
                     onChange={(e) => setNewRoom({ ...newRoom, notes: e.target.value })}
                     placeholder={'Additional notes...'}
@@ -686,7 +693,7 @@ export default function VideoCallManagement() {
                 <Button variant="outline" onClick={() => setShowTestDialog(false)}>
                   {'Cancel'}
                 </Button>
-                <Button onClick={createTestRoom} disabled={isCreatingTest} variant="secondary">
+                <Button onClick={createTestRoom} disabled={isCreatingTest} variant="secondary" className={secondaryBtn}>
                   {isCreatingTest && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   {'Create Test'}
                 </Button>
