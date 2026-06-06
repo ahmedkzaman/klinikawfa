@@ -50,8 +50,11 @@ const statusVariant: Record<string, string> = {
   checked_in: "bg-blue-100 text-blue-800",
 };
 
-export default function AppointmentsView() {
-  const { isAdmin } = useAuth();
+export default function AppointmentsPanel() {
+  const { isAdmin, isOpsOrAdmin } = useAuth();
+  // Mirror the DB-level `is_ops_or_admin` check on the RPC so the UI never
+  // promises an action the database will reject.
+  const canManage = isAdmin || isOpsOrAdmin;
   const { toast } = useToast();
   const qc = useQueryClient();
   const [tab, setTab] = useState<"upcoming" | "pending">("upcoming");
@@ -101,6 +104,8 @@ export default function AppointmentsView() {
     };
   }, [rows, todayIso]);
 
+  const colSpan = canManage ? 7 : 6;
+
   const renderTable = (data: Row[], variant: "upcoming" | "pending") => (
     <div className="rounded-lg border bg-white overflow-x-auto">
       <Table>
@@ -112,19 +117,19 @@ export default function AppointmentsView() {
             <TableHead>Service</TableHead>
             <TableHead>Contact</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+            {canManage && <TableHead className="text-right">Actions</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
           {isLoading ? (
             <TableRow>
-              <TableCell colSpan={7} className="text-center py-10">
+              <TableCell colSpan={colSpan} className="text-center py-10">
                 <Loader2 className="h-5 w-5 animate-spin mx-auto" />
               </TableCell>
             </TableRow>
           ) : data.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="text-center py-10 text-slate-500">
+              <TableCell colSpan={colSpan} className="text-center py-10 text-slate-500">
                 No appointments here.
               </TableCell>
             </TableRow>
@@ -146,8 +151,8 @@ export default function AppointmentsView() {
                     {r.status.replace(/_/g, " ")}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-right">
-                  {isAdmin && (
+                {canManage && (
+                  <TableCell className="text-right">
                     <div className="inline-flex gap-2">
                       {variant === "pending" && (
                         <Button
@@ -225,8 +230,8 @@ export default function AppointmentsView() {
                         </AlertDialogContent>
                       </AlertDialog>
                     </div>
-                  )}
-                </TableCell>
+                  </TableCell>
+                )}
               </TableRow>
             ))
           )}
@@ -239,7 +244,7 @@ export default function AppointmentsView() {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Appointments</h1>
+          <h2 className="text-xl font-bold text-slate-900">Appointments</h2>
           <p className="text-sm text-slate-500">
             Sync of all public bookings into the clinic schedule.
           </p>

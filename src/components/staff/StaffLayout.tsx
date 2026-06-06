@@ -21,7 +21,7 @@ const staffNavItems = [
   { href: '/staff/inbox', label: 'Inbox', icon: Inbox },
   { href: '/staff/punch', label: 'Punch In/Out', icon: MapPin },
   { href: '/staff/history', label: 'History', icon: History },
-  { href: '/staff/calendar', label: 'Calendar', icon: CalendarDays },
+  { href: '/staff/calendar', label: 'Calendar & Appointments', icon: CalendarDays },
   { href: '/staff/documents', label: 'Documents', icon: FileText },
   { href: '/staff/dr-roster', label: 'Dr Roster', icon: Stethoscope },
   { href: '/staff/staff-roster', label: 'Staff Roster', icon: Users },
@@ -37,7 +37,7 @@ const applicationsNavItems = [
 
 const adminNavItems = [
   { href: '/staff/admin', label: 'Admin Dashboard', icon: Settings },
-  { href: '/staff/admin/appointments', label: 'Appointments', icon: CalendarCheck },
+  
   { href: '/staff/admin/employees', label: 'Employees', icon: Users },
   { href: '/staff/admin/zones', label: 'Zones', icon: Map },
   { href: '/staff/admin/assignments', label: 'Assignments', icon: Clock },
