@@ -191,6 +191,14 @@ const App = () => (
                 <Route path="queue" element={<QueueBoard />} />
                 <Route path="appointments" element={<Appointments />} />
                 <Route
+                  path="video-calls"
+                  element={
+                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                      <VideoCallManagement />
+                    </ClinicProtectedRoute>
+                  }
+                />
+                <Route
                   path="patients"
                   element={
                     <ClinicProtectedRoute requiredRole="clinical_staff">
