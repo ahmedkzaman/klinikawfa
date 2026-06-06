@@ -37,6 +37,7 @@ const applicationsNavItems = [
 
 const adminNavItems = [
   { href: '/staff/admin', label: 'Admin Dashboard', icon: Settings },
+  { href: '/staff/admin/appointments', label: 'Appointments', icon: CalendarCheck },
   { href: '/staff/admin/employees', label: 'Employees', icon: Users },
   { href: '/staff/admin/zones', label: 'Zones', icon: Map },
   { href: '/staff/admin/assignments', label: 'Assignments', icon: Clock },

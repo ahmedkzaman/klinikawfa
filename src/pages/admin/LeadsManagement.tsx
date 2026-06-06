@@ -96,8 +96,8 @@ export default function LeadsManagement() {
   const filteredLeads = useMemo(() => {
     return leads.filter((lead) => {
       const matchesSearch = 
-        lead.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.phone.includes(searchQuery) ||
+        lead.patient_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        lead.patient_phone.includes(searchQuery) ||
         lead.service.toLowerCase().includes(searchQuery.toLowerCase());
       
       const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
@@ -145,10 +145,10 @@ export default function LeadsManagement() {
     const csvContent = [
       headers.join(','),
       ...filteredLeads.map(lead => [
-        lead.preferred_date,
-        lead.preferred_time,
-        `"${lead.name}"`,
-        lead.phone,
+        lead.appointment_date,
+        lead.appointment_time,
+        `"${lead.patient_name}"`,
+        lead.patient_phone,
         `"${lead.service}"`,
         lead.status,
         `"${lead.message || ''}"`,
@@ -259,11 +259,11 @@ export default function LeadsManagement() {
                   {filteredLeads.map((lead) => (
                     <TableRow key={lead.id}>
                       <TableCell className="whitespace-nowrap">
-                        {format(new Date(lead.preferred_date), 'dd/MM/yyyy')}
+                        {format(new Date(lead.appointment_date), 'dd/MM/yyyy')}
                       </TableCell>
-                      <TableCell>{lead.preferred_time}</TableCell>
-                      <TableCell className="font-medium">{lead.name}</TableCell>
-                      <TableCell>{lead.phone}</TableCell>
+                      <TableCell>{lead.appointment_time}</TableCell>
+                      <TableCell className="font-medium">{lead.patient_name}</TableCell>
+                      <TableCell>{lead.patient_phone}</TableCell>
                       <TableCell className="max-w-[150px] truncate">{lead.service}</TableCell>
                       <TableCell>
                         <Badge className={statusColors[lead.status] || ''} variant="secondary">
@@ -282,14 +282,14 @@ export default function LeadsManagement() {
                           <Button 
                             variant="ghost" 
                             size="icon"
-                            onClick={() => callPhone(lead.phone)}
+                            onClick={() => callPhone(lead.patient_phone)}
                           >
                             <Phone className="h-4 w-4" />
                           </Button>
                           <Button 
                             variant="ghost" 
                             size="icon"
-                            onClick={() => openWhatsApp(lead.phone, lead.name)}
+                            onClick={() => openWhatsApp(lead.patient_phone, lead.patient_name)}
                           >
                             <MessageSquare className="h-4 w-4" />
                           </Button>
@@ -325,13 +325,13 @@ export default function LeadsManagement() {
                   <label className="text-sm font-medium text-muted-foreground">
                     {language === 'ms' ? 'Nama' : 'Name'}
                   </label>
-                  <p className="font-medium">{selectedLead.name}</p>
+                  <p className="font-medium">{selectedLead.patient_name}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">
                     {language === 'ms' ? 'Telefon' : 'Phone'}
                   </label>
-                  <p className="font-medium">{selectedLead.phone}</p>
+                  <p className="font-medium">{selectedLead.patient_phone}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">
@@ -345,14 +345,14 @@ export default function LeadsManagement() {
                       {language === 'ms' ? 'Tarikh' : 'Date'}
                     </label>
                     <p className="font-medium">
-                      {format(new Date(selectedLead.preferred_date), 'dd/MM/yyyy')}
+                      {format(new Date(selectedLead.appointment_date), 'dd/MM/yyyy')}
                     </p>
                   </div>
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">
                       {language === 'ms' ? 'Masa' : 'Time'}
                     </label>
-                    <p className="font-medium">{selectedLead.preferred_time}</p>
+                    <p className="font-medium">{selectedLead.appointment_time}</p>
                   </div>
                 </div>
                 {selectedLead.message && (
@@ -401,14 +401,14 @@ export default function LeadsManagement() {
                 <Button 
                   className="flex-1" 
                   variant="outline"
-                  onClick={() => callPhone(selectedLead.phone)}
+                  onClick={() => callPhone(selectedLead.patient_phone)}
                 >
                   <Phone className="mr-2 h-4 w-4" />
                   {language === 'ms' ? 'Panggil' : 'Call'}
                 </Button>
                 <Button 
                   className="flex-1"
-                  onClick={() => openWhatsApp(selectedLead.phone, selectedLead.name)}
+                  onClick={() => openWhatsApp(selectedLead.patient_phone, selectedLead.patient_name)}
                 >
                   <MessageSquare className="mr-2 h-4 w-4" />
                   WhatsApp

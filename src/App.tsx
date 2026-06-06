@@ -11,7 +11,8 @@ import Index from "./pages/Index";
 import Services from "./pages/Services";
 import ServiceDetail from "./pages/ServiceDetail";
 import Doctors from "./pages/Doctors";
-import Appointment from "./pages/Appointment";
+import AppointmentBooking from "./pages/AppointmentBooking";
+import AppointmentsView from "./pages/staff/admin/AppointmentsView";
 import Gallery from "./pages/Gallery";
 import HealthTips from "./pages/HealthTips";
 import Auth from "./pages/Auth";
@@ -125,7 +126,7 @@ const App = () => (
               <Route path="/services" element={<Services />} />
               <Route path="/services/:slug" element={<ServiceDetail />} />
               <Route path="/doctors" element={<Doctors />} />
-              <Route path="/appointment" element={<Appointment />} />
+              <Route path="/appointment" element={<AppointmentBooking />} />
               <Route path="/gallery" element={<Gallery />} />
               <Route path="/health-tips" element={<HealthTips />} />
               <Route path="/health-tips/:slug" element={<BlogPost />} />
@@ -168,6 +169,7 @@ const App = () => (
                 <Route path="admin/notices" element={<CircularNotices />} />
                 <Route path="admin/punch-settings" element={<PunchSettings />} />
                 <Route path="admin/landing-pages" element={<LandingPages />} />
+                <Route path="admin/appointments" element={<AppointmentsView />} />
                 {/* Website Management */}
                 <Route path="website/leads" element={<LeadsManagement />} />
                 <Route path="website/team" element={<TeamManagement />} />
