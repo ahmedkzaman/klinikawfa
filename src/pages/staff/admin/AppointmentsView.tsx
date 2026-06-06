@@ -153,19 +153,33 @@ export default function AppointmentsView() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() =>
-                            mutate.mutate({
-                              id: r.id,
-                              patch: {
-                                status: "confirmed",
-                                payment_reference: "COUNTER-CASH",
+                          onClick={async () => {
+                            const { error } = await supabase.rpc(
+                              "promote_appointment_to_clinic",
+                              {
+                                p_appointment_id: r.id,
+                                p_payment_reference: "COUNTER-CASH",
                               },
-                            })
-                          }
+                            );
+                            if (error) {
+                              toast({
+                                title: "Force confirm failed",
+                                description: error.message,
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+                            qc.invalidateQueries({ queryKey: ["admin-appointments"] });
+                            qc.invalidateQueries({ queryKey: ["clinic", "clinic_appointments"] });
+                            toast({
+                              title: "Confirmed & added to clinic schedule",
+                            });
+                          }}
                         >
                           <BadgeCheck className="h-4 w-4" /> Force Confirm
                         </Button>
                       )}
+
                       {variant === "upcoming" && (
                         <Button
                           size="sm"
