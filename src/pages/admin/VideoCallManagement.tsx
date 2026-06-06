@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
-import { useLanguage } from '@/contexts/LanguageContext';
+
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Video, 
@@ -56,7 +56,7 @@ interface VideoRoom {
 }
 
 export default function VideoCallManagement() {
-  const { language } = useLanguage();
+  
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -120,13 +120,32 @@ export default function VideoCallManagement() {
 
   useEffect(() => {
     fetchRooms();
+
+    // Realtime sync: refresh list on any change to video_rooms or video_payments
+    const channel = supabase
+      .channel('video-call-management')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'video_rooms' }, () => {
+        fetchRooms();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'video_payments' }, () => {
+        fetchRooms();
+      })
+      .subscribe();
+
+    // Fallback polling every 15s in case realtime drops
+    const interval = setInterval(fetchRooms, 15000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, []);
 
   const createRoom = async () => {
     if (!newRoom.patient_name || !newRoom.patient_phone) {
       toast({
-        title: language === 'ms' ? 'Ralat' : 'Error',
-        description: language === 'ms' ? 'Nama dan telefon diperlukan' : 'Name and phone required',
+        title: 'Error',
+        description: 'Name and phone required',
         variant: 'destructive',
       });
       return;
@@ -158,7 +177,7 @@ export default function VideoCallManagement() {
       }
 
       toast({
-        title: language === 'ms' ? 'Berjaya!' : 'Success!',
+        title: 'Success!',
         description: `Room created: ${result.room.room_code}`,
       });
 
@@ -179,8 +198,8 @@ export default function VideoCallManagement() {
   const createTestRoom = async () => {
     if (!newRoom.patient_name || !newRoom.patient_phone) {
       toast({
-        title: language === 'ms' ? 'Ralat' : 'Error',
-        description: language === 'ms' ? 'Nama dan telefon diperlukan' : 'Name and phone required',
+        title: 'Error',
+        description: 'Name and phone required',
         variant: 'destructive',
       });
       return;
@@ -212,7 +231,7 @@ export default function VideoCallManagement() {
       }
 
       toast({
-        title: language === 'ms' ? 'Berjaya!' : 'Success!',
+        title: 'Success!',
         description: `Test room created: ${result.room.room_code}`,
       });
 
@@ -260,10 +279,8 @@ export default function VideoCallManagement() {
       }
 
       toast({
-        title: language === 'ms' ? 'Bilik Dibatalkan' : 'Room Cancelled',
-        description: language === 'ms' 
-          ? `Bilik untuk ${room.patient_name} telah dibatalkan`
-          : `Room for ${room.patient_name} has been cancelled`,
+        title: 'Room Cancelled',
+        description: `Room for ${room.patient_name} has been cancelled`,
       });
 
       fetchRooms();
@@ -307,10 +324,8 @@ export default function VideoCallManagement() {
       }
 
       toast({
-        title: language === 'ms' ? 'Bilik Dipadam' : 'Room Deleted',
-        description: language === 'ms' 
-          ? `Bilik untuk ${room.patient_name} telah dipadam`
-          : `Room for ${room.patient_name} has been deleted`,
+        title: 'Room Deleted',
+        description: `Room for ${room.patient_name} has been deleted`,
       });
 
       fetchRooms();
@@ -330,7 +345,7 @@ export default function VideoCallManagement() {
   const copyRoomCode = (code: string) => {
     navigator.clipboard.writeText(code);
     toast({
-      title: language === 'ms' ? 'Disalin!' : 'Copied!',
+      title: 'Copied!',
       description: `Room code ${code} copied to clipboard`,
     });
   };
@@ -340,10 +355,8 @@ export default function VideoCallManagement() {
     const patientUrl = `${baseUrl}/video-call?room=${code}`;
     navigator.clipboard.writeText(patientUrl);
     toast({
-      title: language === 'ms' ? 'Pautan Disalin!' : 'Link Copied!',
-      description: language === 'ms' 
-        ? 'Pautan panggilan video pesakit disalin ke papan klip'
-        : 'Patient video call link copied to clipboard',
+      title: 'Link Copied!',
+      description: 'Patient video call link copied to clipboard',
     });
   };
 
@@ -372,18 +385,18 @@ export default function VideoCallManagement() {
       cancelled: 'destructive',
     };
 
-    const labels: Record<string, Record<string, string>> = {
-      pending: { ms: 'Menunggu', en: 'Pending' },
-      paid: { ms: 'Dibayar', en: 'Paid' },
-      test: { ms: 'Ujian', en: 'Test' },
-      active: { ms: 'Aktif', en: 'Active' },
-      ended: { ms: 'Tamat', en: 'Ended' },
-      cancelled: { ms: 'Dibatalkan', en: 'Cancelled' },
+    const labels: Record<string, string> = {
+      pending: 'Pending',
+      paid: 'Paid',
+      test: 'Test',
+      active: 'Active',
+      ended: 'Ended',
+      cancelled: 'Cancelled',
     };
 
     return (
       <Badge variant={variants[status] || 'outline'}>
-        {labels[status]?.[language] || status}
+        {labels[status] || status}
       </Badge>
     );
   };
@@ -414,7 +427,7 @@ export default function VideoCallManagement() {
             onClick={() => startCall(room.room_code)}
           >
             <Phone className="h-4 w-4 mr-1" />
-            {language === 'ms' ? 'Mulakan' : 'Start'}
+            {'Start'}
           </Button>
         )}
         
@@ -430,7 +443,7 @@ export default function VideoCallManagement() {
             {(room.status === 'pending' || room.status === 'paid' || room.status === 'active' || room.status === 'test') && (
               <DropdownMenuItem onClick={() => copyPatientLink(room.room_code)}>
                 <Link className="h-4 w-4 mr-2" />
-                {language === 'ms' ? 'Salin Pautan' : 'Copy Link'}
+                {'Copy Link'}
               </DropdownMenuItem>
             )}
 
@@ -438,7 +451,7 @@ export default function VideoCallManagement() {
             {isEnded && (
               <DropdownMenuItem onClick={() => copyRoomCode(room.room_code)}>
                 <Eye className="h-4 w-4 mr-2" />
-                {language === 'ms' ? 'Lihat Butiran' : 'View Details'}
+                {'View Details'}
               </DropdownMenuItem>
             )}
 
@@ -451,7 +464,7 @@ export default function VideoCallManagement() {
                   className="text-destructive focus:text-destructive"
                 >
                   <XCircle className="h-4 w-4 mr-2" />
-                  {language === 'ms' ? 'Batalkan Bilik' : 'Cancel Room'}
+                  {'Cancel Room'}
                 </DropdownMenuItem>
               </>
             )}
@@ -465,7 +478,7 @@ export default function VideoCallManagement() {
                   className="text-destructive focus:text-destructive"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
-                  {language === 'ms' ? 'Padam Bilik' : 'Delete Room'}
+                  {'Delete Room'}
                 </DropdownMenuItem>
               </>
             )}
@@ -482,17 +495,15 @@ export default function VideoCallManagement() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {language === 'ms' ? 'Batalkan Bilik Video?' : 'Cancel Video Room?'}
+              {'Cancel Video Room?'}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {language === 'ms' 
-                ? `Adakah anda pasti mahu membatalkan bilik untuk "${selectedRoom?.patient_name}"? Tindakan ini tidak boleh dibatalkan. Pesakit tidak akan dapat menyertai.`
-                : `Are you sure you want to cancel the room for "${selectedRoom?.patient_name}"? This action cannot be undone. The patient will not be able to join.`}
+              {`Are you sure you want to cancel the room for "${selectedRoom?.patient_name}"? This action cannot be undone. The patient will not be able to join.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isProcessing}>
-              {language === 'ms' ? 'Simpan Bilik' : 'Keep Room'}
+              {'Keep Room'}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => selectedRoom && cancelRoom(selectedRoom)}
@@ -500,7 +511,7 @@ export default function VideoCallManagement() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isProcessing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {language === 'ms' ? 'Batalkan Bilik' : 'Cancel Room'}
+              {'Cancel Room'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -511,17 +522,15 @@ export default function VideoCallManagement() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {language === 'ms' ? 'Padam Bilik Video?' : 'Delete Video Room?'}
+              {'Delete Video Room?'}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {language === 'ms' 
-                ? `Adakah anda pasti mahu memadam bilik untuk "${selectedRoom?.patient_name}"? Semua rekod dan data pembayaran berkaitan akan dipadam secara kekal.`
-                : `Are you sure you want to delete the room for "${selectedRoom?.patient_name}"? All related records and payment data will be permanently deleted.`}
+              {`Are you sure you want to delete the room for "${selectedRoom?.patient_name}"? All related records and payment data will be permanently deleted.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isProcessing}>
-              {language === 'ms' ? 'Batal' : 'Cancel'}
+              {'Cancel'}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => selectedRoom && deleteRoom(selectedRoom)}
@@ -529,7 +538,7 @@ export default function VideoCallManagement() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isProcessing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {language === 'ms' ? 'Padam Bilik' : 'Delete Room'}
+              {'Delete Room'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -538,41 +547,37 @@ export default function VideoCallManagement() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">
-            {language === 'ms' ? 'Panggilan Video' : 'Video Calls'}
+            {'Video Calls'}
           </h1>
           <p className="text-muted-foreground">
-            {language === 'ms' 
-              ? 'Urus sesi perundingan video' 
-              : 'Manage video consultation sessions'}
+            {'Manage video consultation sessions'}
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={fetchRooms} disabled={isLoading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            {language === 'ms' ? 'Muat Semula' : 'Refresh'}
+            {'Refresh'}
           </Button>
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
-                {language === 'ms' ? 'Bilik Baru' : 'New Room'}
+                {'New Room'}
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>
-                  {language === 'ms' ? 'Cipta Bilik Video' : 'Create Video Room'}
+                  {'Create Video Room'}
                 </DialogTitle>
                 <DialogDescription>
-                  {language === 'ms' 
-                    ? 'Cipta bilik video untuk pesakit. Kod bilik akan dijana secara automatik.'
-                    : 'Create a video room for a patient. Room code will be generated automatically.'}
+                  {'Create a video room for a patient. Room code will be generated automatically.'}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
                   <Label htmlFor="patient_name">
-                    {language === 'ms' ? 'Nama Pesakit' : 'Patient Name'} *
+                    {'Patient Name'} *
                   </Label>
                   <Input
                     id="patient_name"
@@ -583,7 +588,7 @@ export default function VideoCallManagement() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="patient_phone">
-                    {language === 'ms' ? 'Telefon' : 'Phone'} *
+                    {'Phone'} *
                   </Label>
                   <Input
                     id="patient_phone"
@@ -594,7 +599,7 @@ export default function VideoCallManagement() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="patient_email">
-                    {language === 'ms' ? 'Emel (Pilihan)' : 'Email (Optional)'}
+                    {'Email (Optional)'}
                   </Label>
                   <Input
                     id="patient_email"
@@ -606,23 +611,23 @@ export default function VideoCallManagement() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="notes">
-                    {language === 'ms' ? 'Nota (Pilihan)' : 'Notes (Optional)'}
+                    {'Notes (Optional)'}
                   </Label>
                   <Textarea
                     id="notes"
                     value={newRoom.notes}
                     onChange={(e) => setNewRoom({ ...newRoom, notes: e.target.value })}
-                    placeholder={language === 'ms' ? 'Nota tambahan...' : 'Additional notes...'}
+                    placeholder={'Additional notes...'}
                   />
                 </div>
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
-                  {language === 'ms' ? 'Batal' : 'Cancel'}
+                  {'Cancel'}
                 </Button>
                 <Button onClick={createRoom} disabled={isCreating}>
                   {isCreating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  {language === 'ms' ? 'Cipta' : 'Create'}
+                  {'Create'}
                 </Button>
               </div>
             </DialogContent>
@@ -633,24 +638,22 @@ export default function VideoCallManagement() {
             <DialogTrigger asChild>
               <Button variant="secondary">
                 <Video className="h-4 w-4 mr-2" />
-                {language === 'ms' ? 'Ujian Telekonsultasi' : 'Teleconsultation Test'}
+                {'Teleconsultation Test'}
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>
-                  {language === 'ms' ? 'Ujian Telekonsultasi' : 'Teleconsultation Test'}
+                  {'Teleconsultation Test'}
                 </DialogTitle>
                 <DialogDescription>
-                  {language === 'ms' 
-                    ? 'Cipta bilik ujian tanpa pembayaran Stripe. Untuk tujuan ujian sahaja.'
-                    : 'Create a test room without Stripe payment. For testing purposes only.'}
+                  {'Create a test room without Stripe payment. For testing purposes only.'}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
                   <Label htmlFor="test_patient_name">
-                    {language === 'ms' ? 'Nama Pesakit' : 'Patient Name'} *
+                    {'Patient Name'} *
                   </Label>
                   <Input
                     id="test_patient_name"
@@ -661,7 +664,7 @@ export default function VideoCallManagement() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="test_patient_phone">
-                    {language === 'ms' ? 'Telefon' : 'Phone'} *
+                    {'Phone'} *
                   </Label>
                   <Input
                     id="test_patient_phone"
@@ -672,23 +675,23 @@ export default function VideoCallManagement() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="test_notes">
-                    {language === 'ms' ? 'Nota (Pilihan)' : 'Notes (Optional)'}
+                    {'Notes (Optional)'}
                   </Label>
                   <Textarea
                     id="test_notes"
                     value={newRoom.notes}
                     onChange={(e) => setNewRoom({ ...newRoom, notes: e.target.value })}
-                    placeholder={language === 'ms' ? 'Nota tambahan...' : 'Additional notes...'}
+                    placeholder={'Additional notes...'}
                   />
                 </div>
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setShowTestDialog(false)}>
-                  {language === 'ms' ? 'Batal' : 'Cancel'}
+                  {'Cancel'}
                 </Button>
                 <Button onClick={createTestRoom} disabled={isCreatingTest} variant="secondary">
                   {isCreatingTest && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  {language === 'ms' ? 'Cipta Ujian' : 'Create Test'}
+                  {'Create Test'}
                 </Button>
               </div>
             </DialogContent>
@@ -701,7 +704,7 @@ export default function VideoCallManagement() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              {language === 'ms' ? 'Jumlah Bilik' : 'Total Rooms'}
+              {'Total Rooms'}
             </CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -712,7 +715,7 @@ export default function VideoCallManagement() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              {language === 'ms' ? 'Menunggu Bayaran' : 'Pending Payment'}
+              {'Pending Payment'}
             </CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -723,7 +726,7 @@ export default function VideoCallManagement() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              {language === 'ms' ? 'Panggilan Aktif' : 'Active Calls'}
+              {'Active Calls'}
             </CardTitle>
             <Video className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -734,7 +737,7 @@ export default function VideoCallManagement() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              {language === 'ms' ? 'Jumlah Hasil' : 'Total Revenue'}
+              {'Total Revenue'}
             </CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -747,7 +750,7 @@ export default function VideoCallManagement() {
       {/* Rooms Table */}
       <Card>
         <CardHeader>
-          <CardTitle>{language === 'ms' ? 'Senarai Bilik' : 'Room List'}</CardTitle>
+          <CardTitle>{'Room List'}</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -756,21 +759,19 @@ export default function VideoCallManagement() {
             </div>
           ) : rooms.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              {language === 'ms' 
-                ? 'Tiada bilik video. Cipta bilik baru untuk bermula.'
-                : 'No video rooms. Create a new room to get started.'}
+              {'No video rooms. Create a new room to get started.'}
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{language === 'ms' ? 'Kod Bilik' : 'Room Code'}</TableHead>
-                  <TableHead>{language === 'ms' ? 'Pesakit' : 'Patient'}</TableHead>
-                  <TableHead>{language === 'ms' ? 'Status' : 'Status'}</TableHead>
-                  <TableHead>{language === 'ms' ? 'Tempoh' : 'Duration'}</TableHead>
-                  <TableHead>{language === 'ms' ? 'Jumlah' : 'Amount'}</TableHead>
-                  <TableHead>{language === 'ms' ? 'Dicipta' : 'Created'}</TableHead>
-                  <TableHead className="text-right">{language === 'ms' ? 'Tindakan' : 'Actions'}</TableHead>
+                  <TableHead>{'Room Code'}</TableHead>
+                  <TableHead>{'Patient'}</TableHead>
+                  <TableHead>{'Status'}</TableHead>
+                  <TableHead>{'Duration'}</TableHead>
+                  <TableHead>{'Amount'}</TableHead>
+                  <TableHead>{'Created'}</TableHead>
+                  <TableHead className="text-right">{'Actions'}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -784,7 +785,7 @@ export default function VideoCallManagement() {
                           size="icon"
                           className="h-6 w-6"
                           onClick={() => copyPatientLink(room.room_code)}
-                          title={language === 'ms' ? 'Salin Pautan' : 'Copy Link'}
+                          title={'Copy Link'}
                         >
                           <Copy className="h-3 w-3" />
                         </Button>
