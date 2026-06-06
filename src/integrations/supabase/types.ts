@@ -4049,6 +4049,7 @@ export type Database = {
           content: string
           created_at: string | null
           id: string
+          receiver_id: string | null
           sender_id: string
           sender_name: string
         }
@@ -4056,6 +4057,7 @@ export type Database = {
           content: string
           created_at?: string | null
           id?: string
+          receiver_id?: string | null
           sender_id: string
           sender_name: string
         }
@@ -4063,6 +4065,7 @@ export type Database = {
           content?: string
           created_at?: string | null
           id?: string
+          receiver_id?: string | null
           sender_id?: string
           sender_name?: string
         }
