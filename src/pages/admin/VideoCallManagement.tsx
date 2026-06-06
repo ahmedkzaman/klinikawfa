@@ -366,18 +366,18 @@ export default function VideoCallManagement() {
       cancelled: 'destructive',
     };
 
-    const labels: Record<string, Record<string, string>> = {
-      pending: { ms: 'Menunggu', en: 'Pending' },
-      paid: { ms: 'Dibayar', en: 'Paid' },
-      test: { ms: 'Ujian', en: 'Test' },
-      active: { ms: 'Aktif', en: 'Active' },
-      ended: { ms: 'Tamat', en: 'Ended' },
-      cancelled: { ms: 'Dibatalkan', en: 'Cancelled' },
+    const labels: Record<string, string> = {
+      pending: 'Pending',
+      paid: 'Paid',
+      test: 'Test',
+      active: 'Active',
+      ended: 'Ended',
+      cancelled: 'Cancelled',
     };
 
     return (
       <Badge variant={variants[status] || 'outline'}>
-        {labels[status]?.[language] || status}
+        {labels[status] || status}
       </Badge>
     );
   };
