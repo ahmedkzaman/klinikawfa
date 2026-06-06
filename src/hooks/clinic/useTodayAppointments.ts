@@ -19,9 +19,9 @@ export function useTodayAppointments() {
       const { data, error } = await supabase
         .from('appointments')
         .select('*')
-        .eq('preferred_date', todayStr)
+        .eq('appointment_date', todayStr)
         .eq('status', 'pending')
-        .order('preferred_time', { ascending: true });
+        .order('appointment_time', { ascending: true });
 
       if (error) throw error;
       return data ?? [];

@@ -105,9 +105,9 @@ export function CheckInAppointmentDialog({ open, onOpenChange }: CheckInAppointm
                 <Card key={a.id} className="hover:border-primary transition-colors">
                   <CardContent className="flex items-center justify-between gap-3 py-3">
                     <div className="min-w-0">
-                      <p className="font-medium text-foreground truncate">{a.name}</p>
+                      <p className="font-medium text-foreground truncate">{a.patient_name}</p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {a.preferred_time?.slice(0, 5)} · {a.service} · {a.phone}
+                        {a.appointment_time?.slice(0, 5)} · {a.service} · {a.patient_phone}
                       </p>
                     </div>
                     <Button size="sm" onClick={() => setActiveAppt(a)}>
@@ -121,10 +121,10 @@ export function CheckInAppointmentDialog({ open, onOpenChange }: CheckInAppointm
             <div className="space-y-4">
               <Card className="bg-muted/40 border-border">
                 <CardContent className="py-3 text-sm">
-                  <p className="font-medium text-foreground">{activeAppt.name}</p>
+                  <p className="font-medium text-foreground">{activeAppt.patient_name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {activeAppt.preferred_time?.slice(0, 5)} ·{' '}
-                    {format(new Date(activeAppt.preferred_date), 'd MMM')} ·{' '}
+                    {activeAppt.appointment_time?.slice(0, 5)} ·{' '}
+                    {format(new Date(activeAppt.appointment_date), 'd MMM')} ·{' '}
                     {activeAppt.service}
                   </p>
                 </CardContent>
