@@ -167,6 +167,7 @@ const App = () => (
                 <Route path="admin/daily-tasks" element={<DailyTaskReview />} />
                 <Route path="admin/notices" element={<CircularNotices />} />
                 <Route path="admin/punch-settings" element={<PunchSettings />} />
+                <Route path="admin/landing-pages" element={<LandingPages />} />
                 {/* Website Management */}
                 <Route path="website/leads" element={<LeadsManagement />} />
                 <Route path="website/team" element={<TeamManagement />} />
