@@ -7,11 +7,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { formatDistanceToNow } from "date-fns";
 import { Plus, Edit, Trash2, ExternalLink, Upload, Loader2, Check } from "lucide-react";
 import { toast } from "sonner";
+import DOMPurify from "dompurify";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { RichTextEditor } from "@/components/admin/RichTextEditor";
 import {
   Table,
   TableBody,
@@ -68,7 +69,7 @@ const formSchema = z.object({
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "No spaces, lowercase & hyphens only")
     .max(80),
   title: z.string().min(1, "Title is required").max(120),
-  description: z.string().min(1, "Description is required").max(500),
+  description: z.string().min(1, "Description is required").max(20000),
   call_to_action: z.string().min(1, "CTA is required").max(60),
   hero_image_url: z.string().url("Must be a valid URL").optional().or(z.literal("")),
   promo_video_url: z.string().url("Must be a valid URL").optional().or(z.literal("")),
@@ -101,6 +102,7 @@ export default function LandingPages() {
   const [uploadingField, setUploadingField] = useState<
     "hero_image_url" | "promo_video_url" | null
   >(null);
+  const [isInlineUploading, setIsInlineUploading] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -385,10 +387,18 @@ export default function LandingPages() {
                   name="description"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Description / Subtitle</FormLabel>
+                      <FormLabel>Description / Page Content</FormLabel>
                       <FormControl>
-                        <Textarea rows={4} {...field} />
+                        <RichTextEditor
+                          value={field.value || ""}
+                          onChange={field.onChange}
+                          onUploadStateChange={setIsInlineUploading}
+                          placeholder="Write your page content. Use the toolbar to add images, videos, headings, and lists."
+                        />
                       </FormControl>
+                      <FormDescription>
+                        Click the image or video icon in the toolbar to upload media inline.
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -569,10 +579,25 @@ export default function LandingPages() {
                       <h1 className="text-2xl sm:text-3xl font-bold mb-3 leading-tight">
                         {watched.title || "Your Landing Page Title"}
                       </h1>
-                      <p className="text-sm sm:text-base text-white/90 mb-5 whitespace-pre-line">
-                        {watched.description ||
-                          "Your subtitle / description will appear here."}
-                      </p>
+                      <div
+                        className="service-rich-content prose prose-invert max-w-none text-sm sm:text-base text-white/90 mb-5"
+                        dangerouslySetInnerHTML={{
+                          __html: DOMPurify.sanitize(
+                            watched.description ||
+                              "<p>Your description will appear here.</p>",
+                            {
+                              ADD_TAGS: ["video", "source", "iframe"],
+                              ADD_ATTR: [
+                                "controls",
+                                "allow",
+                                "allowfullscreen",
+                                "frameborder",
+                                "target",
+                              ],
+                            },
+                          ),
+                        }}
+                      />
                       <button
                         type="button"
                         className="inline-flex items-center justify-center rounded-lg bg-[#c2272c] hover:bg-[#a82026] text-white text-sm font-semibold px-5 py-2.5"
@@ -631,11 +656,11 @@ export default function LandingPages() {
                 </Button>
                 <Button
                   type="submit"
-                  disabled={saveMutation.isPending || isUploading}
+                  disabled={saveMutation.isPending || isUploading || isInlineUploading}
                 >
                   {saveMutation.isPending
                     ? "Saving..."
-                    : isUploading
+                    : isUploading || isInlineUploading
                     ? "Uploading…"
                     : "Save Landing Page"}
                 </Button>
