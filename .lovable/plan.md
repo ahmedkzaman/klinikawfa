@@ -1,87 +1,52 @@
-# Patient Self-Booking & Admin Appointment Sync
+# Merge Appointment Sync into Staff Calendar (Role-Gated)
 
-## 1. Public booking page — `src/pages/AppointmentBooking.tsx`
+Merge the public appointment booking dashboard into the existing Staff Calendar as a second tab. Page is visible to all staff, but mutation buttons are gated to admin/ops so the UI matches the DB-level RPC check.
 
-Replace the existing `/appointment` route (currently `src/pages/Appointment.tsx`) with a fresh multi-step component wrapped in `MainLayout` + `SEOHead`.
+## 1. New component — `src/components/staff/calendar/AppointmentsPanel.tsx`
 
-State: `step` (1 | 2 | 3 | 4-success), plus `react-hook-form` with `zod` resolver covering all fields, so each "Next" button calls `form.trigger([...stepFields])` before advancing.
-
-**Step 1 — Patient Details (Card)**
-- `patient_name` (text, 2–80, trimmed)
-- `patient_phone` (text, regex `^\+?60?1\d{7,9}$` or simple `^[0-9+\-\s]{8,15}$`)
-- `patient_ic` (12-digit Malaysian IC, optional spaces/dashes stripped)
-- Next button → validate → step 2
-
-**Step 2 — Service & Slot (Card)**
-- `useQuery(['clinic-services-public'])` → `supabase.from('clinic_services').select('slug,title').order('title')`. Render in a `Select`; selected option writes `service_slug` and the display `service` title.
-- Date: shadcn `Popover` + `Calendar` (`mode="single"`, `disabled={{ before: today }}`, `pointer-events-auto`). Stored as ISO `yyyy-MM-dd`.
-- Time: `Select` of 30-min slots from `09:00`–`16:30` inclusive (last bookable slot `16:30`, clinic closes 17:00). Generated client-side.
-- Back / Next.
-
-**Step 3 — Payment Lock & Checkout (Card)**
-- Read-only summary list of all entered values + service title.
-- Notice block: "A booking fee is required to confirm this slot. Your appointment will be marked **Pending Payment** until the fee is received."
-- PDPA consent checkbox (required).
-- Primary button **"Proceed to Payment"** runs the `bookMutation`:
+- Move the entire body of `src/pages/staff/admin/AppointmentsView.tsx` here: data fetch via `@tanstack/react-query`, inner Upcoming/Pending tabs, table, `AlertDialog` confirmations, and the `promote_appointment_to_clinic` RPC call.
+- Import `useAuth` and derive:
   ```ts
-  supabase.from('appointments').insert({
-    patient_name, patient_phone, patient_ic,
-    service: serviceTitle,
-    service_slug,
-    appointment_date,
-    appointment_time, // 'HH:mm'
-    status: 'pending_payment',
-  }).select('id').single()
+  const { isAdmin, isOps } = useAuth(); // use whichever flags exist
+  const canManage = isAdmin || isOps;
   ```
-  On success → store returned id → advance to success step. On error → `toast.destructive`.
+  (Confirm exact field names from `AuthContext` during implementation; fall back to a role-string check if needed.)
+- Wrap the "Actions" `<TableHead>` and every per-row action button (Cancel, Mark Completed, Force Confirm) in `{canManage && ...}`.
+- Standard staff see a clean read-only dashboard; admin/ops see the full action set. RPC `is_ops_or_admin` check stays untouched as a defense-in-depth backstop.
 
-**Step 4 — Success screen**
-- Centered Card with `CheckCircle`, headline "Booking received", subtext "Redirecting to secure payment gateway…", booking reference (short id), and a "Return home" link. No actual redirect yet (Stripe wiring deferred).
+## 2. Refactor `src/pages/staff/Calendar.tsx`
 
-A small stepper header (1 ▸ 2 ▸ 3) at top of the card for orientation.
+- Keep the existing Task/Leave calendar UI intact — extract it into a local `TaskCalendarView` block or inline under the first tab.
+- Add `Tabs` wrapper using shadcn `Tabs`:
+  - Tab 1: **Task Calendar** (existing month/week/day + dialog).
+  - Tab 2: **Appointments** → `<AppointmentsPanel />`.
+- Sync active tab with URL:
+  ```ts
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') === 'appointments' ? 'appointments' : 'calendar';
+  const onTabChange = (v: string) => setParams(p => { p.set('tab', v); return p; }, { replace: true });
+  ```
+- Default tab when no param: `calendar`.
 
-## 2. Admin sync dashboard — `src/pages/staff/admin/AppointmentsView.tsx`
+## 3. Routing — `src/App.tsx`
 
-Route `/staff/admin/appointments` inside the existing StaffLayout (auth + admin gating already enforced).
+- Remove `import AppointmentsView from "./pages/staff/admin/AppointmentsView"`.
+- Remove the `<Route path="admin/appointments" element={<AppointmentsView />} />` line.
+- Leave the existing `/staff/calendar` route as-is.
 
-**Data**
-```ts
-useQuery(['admin-appointments'], () =>
-  supabase
-    .from('appointments')
-    .select('id, patient_name, patient_phone, patient_ic, appointment_date, appointment_time, service, status, clinic_services:service_slug(title)')
-    .order('appointment_date', { ascending: true })
-    .order('appointment_time', { ascending: true })
-)
-```
-Service column prefers `clinic_services.title`, falls back to `appointments.service`.
+## 4. Sidebar — `src/components/staff/StaffLayout.tsx`
 
-**Layout**
-- Page header "Appointments" + small refresh button.
-- `Tabs` with two values:
-  - `upcoming` — rows where `status = 'confirmed'` and `appointment_date >= today`.
-  - `pending` — rows where `status = 'pending_payment'`.
-- Each tab renders the same `Table`: Date · Time · Patient Name · Service · Contact (phone) · Status badge · Actions.
-- Empty state row per tab.
+- Remove the "Appointments" item from `adminNavItems`.
+- In `staffNavItems`, rename the existing Calendar item label to `"Calendar & Appointments"` (icon and href unchanged).
 
-**Row actions (Admins only, gated by `isAdmin` from `useAuth`)**
-- Always: **Cancel Booking** → `AlertDialog` confirm → `update({ status: 'cancelled', updated_at: now })`.
-- Upcoming tab: **Mark as Completed** → `update({ status: 'completed' })`.
-- Pending tab: **Force Confirm** (cash at counter) → `update({ status: 'confirmed', payment_reference: 'COUNTER-CASH' })`.
+## 5. Cleanup
 
-All mutations use a single `useMutation` factory that takes `(id, patch)`, shows a toast, and invalidates `['admin-appointments']`.
+- Delete `src/pages/staff/admin/AppointmentsView.tsx` after the extraction is verified.
 
-## 3. Wiring
+## Acceptance checks
 
-- `src/App.tsx`:
-  - Replace `import Appointment from "./pages/Appointment"` with `import AppointmentBooking from "./pages/AppointmentBooking"` and update the `/appointment` route element.
-  - Add `<Route path="admin/appointments" element={<AppointmentsView />} />` inside the existing `/staff` block.
-- `src/components/staff/StaffLayout.tsx`: add `CalendarCheck` (already imported) entry `{ href: '/staff/admin/appointments', label: 'Appointments', icon: CalendarCheck }` to `adminNavItems`, placed just below "Admin Dashboard".
-
-## Out of scope
-
-- Real Stripe checkout (button stays mocked, success screen only).
-- Slot-conflict prevention / availability lookup against existing bookings.
-- Bilingual copy (will inherit current `LanguageContext` for static labels only where trivial).
-- Schema, RLS, or storage changes — all required policies and FKs already exist.
-- Edits to the legacy `pages/Appointment.tsx` beyond removing its route import (file can be deleted in a follow-up if unused).
+- `/staff/calendar` loads with two tabs; default is Task Calendar.
+- `/staff/calendar?tab=appointments` deep-links to the Appointments tab.
+- Non-admin/non-ops staff: see table data, no Actions column, no action buttons.
+- Admin/ops: see all action buttons; Force Confirm still triggers `promote_appointment_to_clinic` and invalidates both `['admin-appointments']` and `['clinic', 'clinic_appointments']` query keys.
+- `/staff/admin/appointments` no longer resolves; sidebar shows the renamed entry only once.
