@@ -995,7 +995,9 @@ export type Database = {
           call_to_action: string
           created_at: string | null
           description: string
+          hero_image_url: string | null
           id: string
+          promo_video_url: string | null
           services_list: string[]
           slug: string
           title: string
@@ -1005,7 +1007,9 @@ export type Database = {
           call_to_action: string
           created_at?: string | null
           description: string
+          hero_image_url?: string | null
           id?: string
+          promo_video_url?: string | null
           services_list: string[]
           slug: string
           title: string
@@ -1015,7 +1019,9 @@ export type Database = {
           call_to_action?: string
           created_at?: string | null
           description?: string
+          hero_image_url?: string | null
           id?: string
+          promo_video_url?: string | null
           services_list?: string[]
           slug?: string
           title?: string
