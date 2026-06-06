@@ -5394,6 +5394,10 @@ export type Database = {
       }
     }
     Functions: {
+      _promote_appointment_to_clinic_internal: {
+        Args: { p_appointment_id: string; p_payment_reference?: string }
+        Returns: string
+      }
       _resolve_inventory_item_id: {
         Args: { _item_name: string }
         Returns: string
