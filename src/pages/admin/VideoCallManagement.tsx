@@ -31,6 +31,8 @@ import {
   Eye
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
+import { bento, pageInner, pageShell, primaryBtn, secondaryBtn, softInput } from '@/lib/clinic/bentoTokens';
 
 interface VideoRoom {
   id: string;
