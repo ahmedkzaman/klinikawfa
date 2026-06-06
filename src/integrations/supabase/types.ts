@@ -715,6 +715,7 @@ export type Database = {
           id: string
           notes: string | null
           patient_id: string
+          source_appointment_id: string | null
           status: Database["public"]["Enums"]["clinic_appointment_status"]
           updated_at: string
         }
@@ -726,6 +727,7 @@ export type Database = {
           id?: string
           notes?: string | null
           patient_id: string
+          source_appointment_id?: string | null
           status?: Database["public"]["Enums"]["clinic_appointment_status"]
           updated_at?: string
         }
@@ -737,6 +739,7 @@ export type Database = {
           id?: string
           notes?: string | null
           patient_id?: string
+          source_appointment_id?: string | null
           status?: Database["public"]["Enums"]["clinic_appointment_status"]
           updated_at?: string
         }
@@ -753,6 +756,13 @@ export type Database = {
             columns: ["patient_id"]
             isOneToOne: false
             referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clinic_appointments_source_appointment_id_fkey"
+            columns: ["source_appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
             referencedColumns: ["id"]
           },
         ]
@@ -5497,6 +5507,10 @@ export type Database = {
       is_special_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff_or_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff_or_clinical: { Args: { _user_id: string }; Returns: boolean }
+      promote_appointment_to_clinic: {
+        Args: { p_appointment_id: string; p_payment_reference?: string }
+        Returns: string
+      }
       recalc_client_invoice_total: {
         Args: { _invoice_id: string }
         Returns: undefined
