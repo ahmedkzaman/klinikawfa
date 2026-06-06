@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   MapPin, Clock, History, Settings, LogOut, Menu, Home, Users, Map, CalendarDays, CalendarOff, Inbox, FileText,
-  LayoutDashboard, CalendarCheck, Stethoscope, Video, Image, Star, ChevronDown, ClipboardCheck, ClipboardList,
+  LayoutDashboard, CalendarCheck, Stethoscope, Image, Star, ChevronDown, ClipboardCheck, ClipboardList,
   User, BarChart3, CheckSquare, DollarSign, Megaphone, AlertTriangle, Activity
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
