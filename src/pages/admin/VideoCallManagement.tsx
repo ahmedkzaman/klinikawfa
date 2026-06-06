@@ -822,6 +822,7 @@ export default function VideoCallManagement() {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
