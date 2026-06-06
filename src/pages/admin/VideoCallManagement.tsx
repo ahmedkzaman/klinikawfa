@@ -31,6 +31,8 @@ import {
   Eye
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
+import { bento, pageInner, pageShell, primaryBtn, secondaryBtn, softInput } from '@/lib/clinic/bentoTokens';
 
 interface VideoRoom {
   id: string;
@@ -376,15 +378,14 @@ export default function VideoCallManagement() {
   };
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-      pending: 'outline',
-      paid: 'secondary',
-      test: 'secondary',
-      active: 'default',
-      ended: 'destructive',
-      cancelled: 'destructive',
+    const styles: Record<string, string> = {
+      pending: 'bg-amber-50 text-amber-700',
+      paid: 'bg-blue-50 text-blue-700',
+      test: 'bg-violet-50 text-violet-700',
+      active: 'bg-emerald-50 text-emerald-700',
+      ended: 'bg-slate-100 text-slate-600',
+      cancelled: 'bg-rose-50 text-rose-700',
     };
-
     const labels: Record<string, string> = {
       pending: 'Pending',
       paid: 'Paid',
@@ -393,11 +394,10 @@ export default function VideoCallManagement() {
       ended: 'Ended',
       cancelled: 'Cancelled',
     };
-
     return (
-      <Badge variant={variants[status] || 'outline'}>
+      <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium', styles[status] || 'bg-slate-50 text-slate-600')}>
         {labels[status] || status}
-      </Badge>
+      </span>
     );
   };
 
@@ -489,7 +489,8 @@ export default function VideoCallManagement() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className={pageShell}>
+      <div className={pageInner}>
       {/* Cancel Confirmation Dialog */}
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
         <AlertDialogContent>
@@ -544,23 +545,19 @@ export default function VideoCallManagement() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-3xl font-bold">
-            {'Video Calls'}
-          </h1>
-          <p className="text-muted-foreground">
-            {'Manage video consultation sessions'}
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Video Calls</h1>
+          <p className="text-sm text-slate-500">Manage video consultation sessions</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchRooms} disabled={isLoading}>
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" onClick={fetchRooms} disabled={isLoading} className={secondaryBtn}>
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             {'Refresh'}
           </Button>
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
             <DialogTrigger asChild>
-              <Button>
+              <Button className={primaryBtn}>
                 <Plus className="h-4 w-4 mr-2" />
                 {'New Room'}
               </Button>
@@ -581,6 +578,7 @@ export default function VideoCallManagement() {
                   </Label>
                   <Input
                     id="patient_name"
+                    className={softInput}
                     value={newRoom.patient_name}
                     onChange={(e) => setNewRoom({ ...newRoom, patient_name: e.target.value })}
                     placeholder="John Doe"
@@ -592,6 +590,7 @@ export default function VideoCallManagement() {
                   </Label>
                   <Input
                     id="patient_phone"
+                    className={softInput}
                     value={newRoom.patient_phone}
                     onChange={(e) => setNewRoom({ ...newRoom, patient_phone: e.target.value })}
                     placeholder="+60123456789"
@@ -604,6 +603,7 @@ export default function VideoCallManagement() {
                   <Input
                     id="patient_email"
                     type="email"
+                    className={softInput}
                     value={newRoom.patient_email}
                     onChange={(e) => setNewRoom({ ...newRoom, patient_email: e.target.value })}
                     placeholder="patient@email.com"
@@ -615,6 +615,7 @@ export default function VideoCallManagement() {
                   </Label>
                   <Textarea
                     id="notes"
+                    className={softInput}
                     value={newRoom.notes}
                     onChange={(e) => setNewRoom({ ...newRoom, notes: e.target.value })}
                     placeholder={'Additional notes...'}
@@ -625,7 +626,7 @@ export default function VideoCallManagement() {
                 <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
                   {'Cancel'}
                 </Button>
-                <Button onClick={createRoom} disabled={isCreating}>
+                <Button onClick={createRoom} disabled={isCreating} className={primaryBtn}>
                   {isCreating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   {'Create'}
                 </Button>
@@ -636,7 +637,7 @@ export default function VideoCallManagement() {
           {/* Test Room Dialog */}
           <Dialog open={showTestDialog} onOpenChange={setShowTestDialog}>
             <DialogTrigger asChild>
-              <Button variant="secondary">
+              <Button variant="secondary" className={secondaryBtn}>
                 <Video className="h-4 w-4 mr-2" />
                 {'Teleconsultation Test'}
               </Button>
@@ -657,6 +658,7 @@ export default function VideoCallManagement() {
                   </Label>
                   <Input
                     id="test_patient_name"
+                    className={softInput}
                     value={newRoom.patient_name}
                     onChange={(e) => setNewRoom({ ...newRoom, patient_name: e.target.value })}
                     placeholder="Test Patient"
@@ -668,6 +670,7 @@ export default function VideoCallManagement() {
                   </Label>
                   <Input
                     id="test_patient_phone"
+                    className={softInput}
                     value={newRoom.patient_phone}
                     onChange={(e) => setNewRoom({ ...newRoom, patient_phone: e.target.value })}
                     placeholder="+60123456789"
@@ -679,6 +682,7 @@ export default function VideoCallManagement() {
                   </Label>
                   <Textarea
                     id="test_notes"
+                    className={softInput}
                     value={newRoom.notes}
                     onChange={(e) => setNewRoom({ ...newRoom, notes: e.target.value })}
                     placeholder={'Additional notes...'}
@@ -689,7 +693,7 @@ export default function VideoCallManagement() {
                 <Button variant="outline" onClick={() => setShowTestDialog(false)}>
                   {'Cancel'}
                 </Button>
-                <Button onClick={createTestRoom} disabled={isCreatingTest} variant="secondary">
+                <Button onClick={createTestRoom} disabled={isCreatingTest} variant="secondary" className={secondaryBtn}>
                   {isCreatingTest && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   {'Create Test'}
                 </Button>
@@ -701,56 +705,56 @@ export default function VideoCallManagement() {
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
+        <Card className={bento}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+            <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
               {'Total Rooms'}
             </CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
+            <div className="text-2xl font-bold text-slate-900">{stats.total}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={bento}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+            <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
               {'Pending Payment'}
             </CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.pending}</div>
+            <div className="text-2xl font-bold text-slate-900">{stats.pending}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={bento}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+            <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
               {'Active Calls'}
             </CardTitle>
             <Video className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.active}</div>
+            <div className="text-2xl font-bold text-emerald-600">{stats.active}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={bento}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+            <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
               {'Total Revenue'}
             </CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.revenue)}</div>
+            <div className="text-2xl font-bold text-slate-900">{formatCurrency(stats.revenue)}</div>
           </CardContent>
         </Card>
       </div>
 
       {/* Rooms Table */}
-      <Card>
+      <Card className={bento}>
         <CardHeader>
-          <CardTitle>{'Room List'}</CardTitle>
+          <CardTitle className="text-base font-semibold text-slate-900">{'Room List'}</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -821,6 +825,7 @@ export default function VideoCallManagement() {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
