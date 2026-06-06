@@ -990,6 +990,39 @@ export type Database = {
           },
         ]
       }
+      clinic_services: {
+        Row: {
+          call_to_action: string
+          created_at: string | null
+          description: string
+          id: string
+          services_list: string[]
+          slug: string
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          call_to_action: string
+          created_at?: string | null
+          description: string
+          id?: string
+          services_list: string[]
+          slug: string
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          call_to_action?: string
+          created_at?: string | null
+          description?: string
+          id?: string
+          services_list?: string[]
+          slug?: string
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       clinic_settings: {
         Row: {
           address_line_1: string
