@@ -51,6 +51,7 @@ import PayrollProfiles from "./pages/staff/admin/PayrollProfiles";
 import DailyTaskReview from "./pages/staff/admin/DailyTaskReview";
 import CircularNotices from "./pages/staff/admin/CircularNotices";
 import PunchSettings from "./pages/staff/admin/PunchSettings";
+import LandingPages from "./pages/staff/admin/LandingPages";
 import StaffInbox from "./pages/staff/Inbox";
 
 // Website Management (formerly /admin)
