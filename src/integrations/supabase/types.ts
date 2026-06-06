@@ -4044,6 +4044,30 @@ export type Database = {
         }
         Relationships: []
       }
+      staff_messages: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          sender_id: string
+          sender_name: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          sender_id: string
+          sender_name: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          sender_id?: string
+          sender_name?: string
+        }
+        Relationships: []
+      }
       staff_notifications: {
         Row: {
           created_at: string
