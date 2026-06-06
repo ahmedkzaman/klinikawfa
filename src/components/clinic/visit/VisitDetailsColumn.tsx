@@ -490,6 +490,7 @@ interface ItemListProps {
   canEdit: boolean;
   canEditInstructions: boolean;
   onQty: (id: string, currentQty: number, delta: number) => void;
+  onPrice: (id: string, nextPrice: number) => void;
   onRemove: (id: string) => void;
   onPrintLabel: (item: ConsultationItemRow) => void;
   onEdit: (item: ConsultationItemRow) => void;
@@ -503,6 +504,7 @@ function ItemList({
   canEdit,
   canEditInstructions,
   onQty,
+  onPrice,
   onRemove,
   onPrintLabel,
   onEdit,
