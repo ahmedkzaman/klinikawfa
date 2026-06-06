@@ -50,6 +50,7 @@ const adminNavItems = [
   { href: '/staff/admin/daily-tasks', label: 'Daily Tasks', icon: ClipboardList },
   { href: '/staff/admin/notices', label: 'Circular Notices', icon: Megaphone },
   { href: '/staff/admin/punch-settings', label: 'Punch Settings', icon: Clock },
+  { href: '/staff/admin/landing-pages', label: 'Landing Pages', icon: Globe },
 ];
 
 const contentNavItems = [
