@@ -120,6 +120,25 @@ export default function VideoCallManagement() {
 
   useEffect(() => {
     fetchRooms();
+
+    // Realtime sync: refresh list on any change to video_rooms or video_payments
+    const channel = supabase
+      .channel('video-call-management')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'video_rooms' }, () => {
+        fetchRooms();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'video_payments' }, () => {
+        fetchRooms();
+      })
+      .subscribe();
+
+    // Fallback polling every 15s in case realtime drops
+    const interval = setInterval(fetchRooms, 15000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, []);
 
   const createRoom = async () => {
