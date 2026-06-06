@@ -56,7 +56,7 @@ interface VideoRoom {
 }
 
 export default function VideoCallManagement() {
-  const { language } = useLanguage();
+  
   const { toast } = useToast();
   const navigate = useNavigate();
 
