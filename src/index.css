@@ -507,3 +507,21 @@
   [data-radix-popper-content-wrapper],
   [data-sonner-toaster] { display: none !important; }
 }
+
+/* Rich Text Editor — public rendering */
+.service-rich-content img,
+.service-rich-content video {
+  @apply max-w-full h-auto rounded-lg shadow-sm my-6 border border-border/50 mx-auto;
+}
+.service-rich-content ul { @apply list-disc pl-6 my-4; }
+.service-rich-content ol { @apply list-decimal pl-6 my-4; }
+.service-rich-content a  { @apply text-primary hover:underline; }
+.service-rich-content h1,
+.service-rich-content h2,
+.service-rich-content h3 { @apply text-foreground font-bold mt-6 mb-3; }
+.service-rich-content p { @apply my-3; }
+
+/* Quill editor sizing */
+.rich-text-editor-wrapper .ql-container { min-height: 220px; font-size: 0.95rem; }
+.rich-text-editor-wrapper .ql-toolbar { border-top-left-radius: 0.375rem; border-top-right-radius: 0.375rem; }
+.rich-text-editor-wrapper .ql-container.ql-snow { border-bottom-left-radius: 0.375rem; border-bottom-right-radius: 0.375rem; }
