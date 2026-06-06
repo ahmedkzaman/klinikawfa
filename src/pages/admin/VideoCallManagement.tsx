@@ -698,56 +698,56 @@ export default function VideoCallManagement() {
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
+        <Card className={bento}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+            <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
               {'Total Rooms'}
             </CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
+            <div className="text-2xl font-bold text-slate-900">{stats.total}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={bento}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+            <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
               {'Pending Payment'}
             </CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.pending}</div>
+            <div className="text-2xl font-bold text-slate-900">{stats.pending}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={bento}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+            <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
               {'Active Calls'}
             </CardTitle>
             <Video className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.active}</div>
+            <div className="text-2xl font-bold text-emerald-600">{stats.active}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={bento}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+            <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
               {'Total Revenue'}
             </CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.revenue)}</div>
+            <div className="text-2xl font-bold text-slate-900">{formatCurrency(stats.revenue)}</div>
           </CardContent>
         </Card>
       </div>
 
       {/* Rooms Table */}
-      <Card>
+      <Card className={bento}>
         <CardHeader>
-          <CardTitle>{'Room List'}</CardTitle>
+          <CardTitle className="text-base font-semibold text-slate-900">{'Room List'}</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
