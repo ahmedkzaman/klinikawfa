@@ -1,39 +1,27 @@
-## Goal
-Add clock-out time + clock-out status to `/staff/admin/attendance-review` (drill-down table + CSV), per the snippets provided.
+# Move Video Calls to Clinic Portal
 
-## File
-`src/pages/staff/admin/AttendanceReview.tsx` only.
+Move the Video Call Management page from `/staff/website/video-calls` into the Clinic Portal at `/clinic/video-calls`.
 
 ## Changes
 
-### 1. Types
-Add `ClockOutStatus = 'on_time' | 'early' | 'late' | 'missing' | 'na'` and extend `DetailRecord` with `expectedClockOut`, `actualClockOut`, `clockOutStatus`.
+**1. `src/App.tsx`**
+- Remove `<Route path="website/video-calls" ...>` from the staff section.
+- Add `<Route path="video-calls" element={<VideoCallManagement />} />` inside the `/clinic` routes block (gated by `ClinicProtectedRoute` with `requiredRole="ops_or_admin"` to match the existing telemed/billing access level).
+- Keep the existing `VideoCallManagement` import (or move it next to other clinic page imports — purely cosmetic).
 
-### 2. Helpers (module scope)
-- `getClockOutSeverityClasses(status)` — emerald / amber / amber / rose / gray.
-- `getClockOutStatusLabel(status)` — "On Time (Out)", "Early Clock-Out", "Late Clock-Out", "No Clock-Out", "-".
+**2. `src/components/clinic/ClinicLayout.tsx`**
+- Add a new entry to `clinicNavItems`: `{ href: '/clinic/video-calls', label: 'Video Calls', icon: Video }` (import `Video` from `lucide-react`).
+- Place it in the "Clinical & Operations" cluster — suggested position: right after `Appointments`, so it reads Patients → Appointments → **Video Calls** → Queue Board.
+- Visible to all clinic staff (no `adminOnly` / `specialAdminOnly` flag); locums won't see it since they only see `locumAllowed` items.
 
-### 3. Day-loop computation (inside `stats` useMemo)
-For each working day, compute alongside existing logic:
-- `expectedClockOut = userShifts[dayStr]?.end ?? '17:00'`
-- If `punchIn` exists:
-  - `punchOut` present → format HH:mm, compare to expected end using `differenceInMinutes`:
-    - `< -15` → `early`, `> 15` → `late`, else `on_time`
-  - No `punchOut` and `dayStr < todayStr` → `missing`
-  - No `punchOut` and `dayStr === todayStr` → `na`
-- Leave / Absent rows → `na`, `-`, `-`.
-
-Push fields into every `pushRecord(...)` call (working / late / leave / absent).
-
-Note: use `date-fns` `differenceInMinutes` (add to existing import); build the expected-end Date from `new Date(`${dayStr}T${expectedClockOut}:00`)` (local-tz, matching how `punch_time` is parsed elsewhere). Use `punchOut.punch_time` (existing field), not `created_at`.
-
-### 4. Drill-down table
-Insert two columns after "Actual Clock-In": **Expected Clock-Out**, **Actual Clock-Out**. Replace the single Status cell with a stacked pair: existing lateness badge on top + clock-out badge below (hidden when `na`). Keep current tailwind utility classes (no new `Badge` import needed — reuse the existing `<span class="px-2 py-0.5 rounded-full text-xs font-medium ...">` pattern).
-
-### 5. CSV export
-Extend header to: `Full Name, Date, Expected Clock-In, Actual Clock-In, Expected Clock-Out, Actual Clock-Out, Lateness Duration, Work Hours, Clock-In Status, Clock-Out Status`. Map new fields per record using `getClockOutStatusLabel`.
+**3. `src/components/staff/StaffLayout.tsx`**
+- Remove the `{ href: '/staff/website/video-calls', label: 'Video Calls', icon: Video }` line from `contentNavItems`.
+- Remove the now-unused `Video` import if nothing else references it.
 
 ## Out of scope
-- No DB changes; `attendance_records` already carries `punch_type='out'`.
-- Summary tiles, pie chart, Staff Summary table layout unchanged.
-- ±15-minute on-time grace mirrors the existing lateness convention; no new admin setting.
+- No DB / RLS / edge function changes — `video_rooms` table and `video-room` function already work from any authenticated staff context.
+- No changes to `VideoCallManagement.tsx` itself; it renders correctly under either layout.
+- No redirect from the old `/staff/website/video-calls` URL (internal-only page, no external bookmarks expected). Happy to add a `<Navigate>` redirect if you want one — say the word.
+
+## Access
+Anyone who can enter `/clinic` with `ops_or_admin` (operations staff, doctor-admin, admin, special-admin) will see and use the page. Locums and pure clinical-only roles will not.
