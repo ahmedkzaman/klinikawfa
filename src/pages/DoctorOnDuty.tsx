@@ -33,7 +33,12 @@ const SHIFT_LABELS: Record<string, { en: string; ms: string }> = {
   S3: { en: 'Night Shift', ms: 'Syif Malam' },
 };
 
-const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, '').replace(/\s+/g, ' ').trim();
+const STOPWORDS = new Set(['dr', 'doctor', 'mr', 'mrs', 'ms', 'bin', 'binti', 'bt', 'b']);
+const tokenize = (s: string): string[] =>
+  s.toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .split(/\s+/)
+    .filter(t => t.length >= 3 && !STOPWORDS.has(t));
 
 export default function DoctorOnDuty() {
   const { language } = useLanguage();
@@ -68,12 +73,12 @@ export default function DoctorOnDuty() {
   const photoFor = useMemo(() => {
     return (doctorName: string | null): string => {
       if (!doctorName) return locumAvatar;
-      const target = normalize(doctorName);
+      if (/^locum\b/i.test(doctorName.trim())) return locumAvatar;
+      const targetTokens = new Set(tokenize(doctorName));
+      if (targetTokens.size === 0) return locumAvatar;
       const match = photos.find(p => {
-        const en = p.name_en ? normalize(p.name_en) : '';
-        const ms = p.name_ms ? normalize(p.name_ms) : '';
-        return (en && (target.includes(en) || en.includes(target))) ||
-               (ms && (target.includes(ms) || ms.includes(target)));
+        const tmTokens = [...tokenize(p.name_en || ''), ...tokenize(p.name_ms || '')];
+        return tmTokens.some(t => targetTokens.has(t));
       });
       return match?.photo_url || locumAvatar;
     };
