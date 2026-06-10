@@ -33,7 +33,12 @@ const SHIFT_LABELS: Record<string, { en: string; ms: string }> = {
   S3: { en: 'Night Shift', ms: 'Syif Malam' },
 };
 
-const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, '').replace(/\s+/g, ' ').trim();
+const STOPWORDS = new Set(['dr', 'doctor', 'mr', 'mrs', 'ms', 'bin', 'binti', 'bt', 'b']);
+const tokenize = (s: string): string[] =>
+  s.toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .split(/\s+/)
+    .filter(t => t.length >= 3 && !STOPWORDS.has(t));
 
 export default function DoctorOnDuty() {
   const { language } = useLanguage();
