@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { MainLayout } from '@/components/layout';
 import { SEOHead } from '@/components/seo';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { CLINIC_INFO } from '@/lib/constants';
 import { Stethoscope, Clock, Phone, MessageCircle, Calendar as CalendarIcon, Sun, Sunset, Moon, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format, addDays } from 'date-fns';
+import locumAvatar from '@/assets/locum-doctor-avatar.jpg';
 
 type DutyRow = {
   shift: string;
@@ -17,6 +18,8 @@ type DutyRow = {
   end_time: string;
   doctor_name: string | null;
 };
+
+type DoctorPhoto = { name_en: string | null; name_ms: string | null; photo_url: string | null };
 
 const SHIFT_ICONS: Record<string, JSX.Element> = {
   S1: <Sun className="h-6 w-6" />,
@@ -30,10 +33,13 @@ const SHIFT_LABELS: Record<string, { en: string; ms: string }> = {
   S3: { en: 'Night Shift', ms: 'Syif Malam' },
 };
 
+const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, '').replace(/\s+/g, ' ').trim();
+
 export default function DoctorOnDuty() {
   const { language } = useLanguage();
   const [date, setDate] = useState<Date>(new Date());
   const [rows, setRows] = useState<DutyRow[]>([]);
+  const [photos, setPhotos] = useState<DoctorPhoto[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -41,19 +47,39 @@ export default function DoctorOnDuty() {
     const load = async () => {
       setLoading(true);
       const dateStr = format(date, 'yyyy-MM-dd');
-      const { data, error } = await supabase.rpc('get_doctors_on_duty', { _date: dateStr });
+      const [dutyRes, photoRes] = await Promise.all([
+        supabase.rpc('get_doctors_on_duty', { _date: dateStr }),
+        supabase.from('team_members').select('name_en, name_ms, photo_url').eq('type', 'doctor'),
+      ]);
       if (cancelled) return;
-      if (error) {
-        console.error('Failed to load doctors on duty', error);
+      if (dutyRes.error) {
+        console.error('Failed to load doctors on duty', dutyRes.error);
         setRows([]);
       } else {
-        setRows((data as DutyRow[]) || []);
+        setRows((dutyRes.data as DutyRow[]) || []);
       }
+      setPhotos((photoRes.data as DoctorPhoto[]) || []);
       setLoading(false);
     };
     load();
     return () => { cancelled = true; };
   }, [date]);
+
+  const photoFor = useMemo(() => {
+    return (doctorName: string | null): string => {
+      if (!doctorName) return locumAvatar;
+      const target = normalize(doctorName);
+      const match = photos.find(p => {
+        const en = p.name_en ? normalize(p.name_en) : '';
+        const ms = p.name_ms ? normalize(p.name_ms) : '';
+        return (en && (target.includes(en) || en.includes(target))) ||
+               (ms && (target.includes(ms) || ms.includes(target)));
+      });
+      return match?.photo_url || locumAvatar;
+    };
+  }, [photos]);
+
+
 
   const isToday = format(date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
   const dateLabel = format(date, 'EEEE, dd MMMM yyyy');
@@ -135,12 +161,22 @@ export default function DoctorOnDuty() {
                       <div className="text-white/90">{SHIFT_ICONS[r.shift]}</div>
                     </div>
                     <CardContent className="p-5">
-                      <div className="flex items-center gap-2 text-slate-500 text-sm mb-3">
+                      <div className="flex items-center gap-2 text-slate-500 text-sm mb-4">
                         <Clock className="h-4 w-4" />
                         <span>{r.start_time} – {r.end_time}</span>
                       </div>
                       {r.doctor_name ? (
-                        <div>
+                        <div className="flex flex-col items-center text-center">
+                          <div className="relative mb-3">
+                            <img
+                              src={photoFor(r.doctor_name)}
+                              alt={r.doctor_name}
+                              loading="lazy"
+                              width={96}
+                              height={96}
+                              className="h-24 w-24 rounded-full object-cover ring-4 ring-[#261d84]/10 shadow-md"
+                            />
+                          </div>
                           <div className="text-xs text-slate-500 mb-1">
                             {language === 'ms' ? 'Doktor Bertugas' : 'On Duty'}
                           </div>
@@ -149,9 +185,10 @@ export default function DoctorOnDuty() {
                           </div>
                         </div>
                       ) : (
-                        <div className="text-sm text-slate-400 italic">
+                        <div className="flex flex-col items-center text-center text-sm text-slate-400 italic py-6">
                           {language === 'ms' ? 'Tiada doktor dijadualkan' : 'No doctor scheduled'}
                         </div>
+
                       )}
                     </CardContent>
                   </Card>
