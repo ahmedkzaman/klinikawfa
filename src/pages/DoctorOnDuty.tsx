@@ -73,12 +73,12 @@ export default function DoctorOnDuty() {
   const photoFor = useMemo(() => {
     return (doctorName: string | null): string => {
       if (!doctorName) return locumAvatar;
-      const target = normalize(doctorName);
+      if (/^locum\b/i.test(doctorName.trim())) return locumAvatar;
+      const targetTokens = new Set(tokenize(doctorName));
+      if (targetTokens.size === 0) return locumAvatar;
       const match = photos.find(p => {
-        const en = p.name_en ? normalize(p.name_en) : '';
-        const ms = p.name_ms ? normalize(p.name_ms) : '';
-        return (en && (target.includes(en) || en.includes(target))) ||
-               (ms && (target.includes(ms) || ms.includes(target)));
+        const tmTokens = [...tokenize(p.name_en || ''), ...tokenize(p.name_ms || '')];
+        return tmTokens.some(t => targetTokens.has(t));
       });
       return match?.photo_url || locumAvatar;
     };
