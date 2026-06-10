@@ -161,12 +161,22 @@ export default function DoctorOnDuty() {
                       <div className="text-white/90">{SHIFT_ICONS[r.shift]}</div>
                     </div>
                     <CardContent className="p-5">
-                      <div className="flex items-center gap-2 text-slate-500 text-sm mb-3">
+                      <div className="flex items-center gap-2 text-slate-500 text-sm mb-4">
                         <Clock className="h-4 w-4" />
                         <span>{r.start_time} – {r.end_time}</span>
                       </div>
                       {r.doctor_name ? (
-                        <div>
+                        <div className="flex flex-col items-center text-center">
+                          <div className="relative mb-3">
+                            <img
+                              src={photoFor(r.doctor_name)}
+                              alt={r.doctor_name}
+                              loading="lazy"
+                              width={96}
+                              height={96}
+                              className="h-24 w-24 rounded-full object-cover ring-4 ring-[#261d84]/10 shadow-md"
+                            />
+                          </div>
                           <div className="text-xs text-slate-500 mb-1">
                             {language === 'ms' ? 'Doktor Bertugas' : 'On Duty'}
                           </div>
@@ -175,9 +185,10 @@ export default function DoctorOnDuty() {
                           </div>
                         </div>
                       ) : (
-                        <div className="text-sm text-slate-400 italic">
+                        <div className="flex flex-col items-center text-center text-sm text-slate-400 italic py-6">
                           {language === 'ms' ? 'Tiada doktor dijadualkan' : 'No doctor scheduled'}
                         </div>
+
                       )}
                     </CardContent>
                   </Card>
