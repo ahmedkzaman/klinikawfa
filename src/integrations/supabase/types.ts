@@ -5497,6 +5497,16 @@ export type Database = {
       }
       generate_po_number: { Args: never; Returns: string }
       get_doctor_id_for_user: { Args: { _user_id: string }; Returns: string }
+      get_doctors_on_duty: {
+        Args: { _date?: string }
+        Returns: {
+          doctor_name: string
+          end_time: string
+          label: string
+          shift: string
+          start_time: string
+        }[]
+      }
       get_next_queue_number: { Args: never; Returns: number }
       get_server_now: { Args: never; Returns: string }
       get_video_room_signaling: {

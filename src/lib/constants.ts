@@ -146,6 +146,7 @@ export const NAV_ITEMS = [
   { href: '/', labelKey: 'nav.home' },
   { href: '/services', labelKey: 'nav.services' },
   { href: '/doctors', labelKey: 'nav.doctors' },
+  { href: '/doctor-on-duty', labelKey: 'nav.onDuty' },
   { href: '/appointment', labelKey: 'nav.appointment' },
   { href: '/gallery', labelKey: 'nav.gallery' },
   { href: '/health-tips', labelKey: 'nav.healthTips' },

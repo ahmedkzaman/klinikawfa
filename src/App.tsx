@@ -11,6 +11,7 @@ import Index from "./pages/Index";
 import Services from "./pages/Services";
 import ServiceDetail from "./pages/ServiceDetail";
 import Doctors from "./pages/Doctors";
+import DoctorOnDuty from "./pages/DoctorOnDuty";
 import AppointmentBooking from "./pages/AppointmentBooking";
 
 import Gallery from "./pages/Gallery";
@@ -126,6 +127,7 @@ const App = () => (
               <Route path="/services" element={<Services />} />
               <Route path="/services/:slug" element={<ServiceDetail />} />
               <Route path="/doctors" element={<Doctors />} />
+              <Route path="/doctor-on-duty" element={<DoctorOnDuty />} />
               <Route path="/appointment" element={<AppointmentBooking />} />
               <Route path="/gallery" element={<Gallery />} />
               <Route path="/health-tips" element={<HealthTips />} />
