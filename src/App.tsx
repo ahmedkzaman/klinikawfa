@@ -11,6 +11,7 @@ import Index from "./pages/Index";
 import Services from "./pages/Services";
 import ServiceDetail from "./pages/ServiceDetail";
 import Doctors from "./pages/Doctors";
+import DoctorOnDuty from "./pages/DoctorOnDuty";
 import AppointmentBooking from "./pages/AppointmentBooking";
 
 import Gallery from "./pages/Gallery";
