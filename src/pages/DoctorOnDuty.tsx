@@ -192,7 +192,7 @@ export default function DoctorOnDuty() {
                   </a>
                 </Button>
                 <Button asChild variant="outline" className="border-white text-white hover:bg-white/10">
-                  <a href={`https://wa.me/${CLINIC_INFO.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">
+                  <a href={CLINIC_INFO.whatsapp} target="_blank" rel="noopener noreferrer">
                     <MessageCircle className="h-4 w-4 mr-2" />
                     WhatsApp
                   </a>
