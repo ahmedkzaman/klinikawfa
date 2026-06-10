@@ -17,6 +17,7 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.home': 'Utama',
     'nav.services': 'Perkhidmatan',
     'nav.doctors': 'Doktor',
+    'nav.onDuty': 'Doktor Bertugas',
     'nav.appointment': 'Temujanji',
     'nav.gallery': 'Galeri',
     'nav.healthTips': 'Tips Kesihatan',
