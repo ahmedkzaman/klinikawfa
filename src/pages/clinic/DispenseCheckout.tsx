@@ -264,7 +264,36 @@ export default function DispenseCheckout() {
     [selectedCharges],
   );
   const outstanding = Math.max(subtotal - paid, 0);
-  const totalDue = Math.max(outstanding + otherChargesTotal, 0);
+  // Grand total = items still owed + extra charges (replaces previous `totalDue`).
+  const grandTotal = Math.max(outstanding + otherChargesTotal, 0);
+
+  // --- Panel coverage split ------------------------------------------------
+  // Default: if a panel is attached, the panel covers the full grand total
+  // (patient owes RM 0). Staff can lower the coverage to record a co-pay.
+  const userEditedPanelRef = useRef(false);
+  useEffect(() => {
+    if (!panelId) {
+      // No panel → force coverage to 0 and reset edit flag.
+      userEditedPanelRef.current = false;
+      setPanelCoveredAmount(0);
+      setPanelCoveredInput('');
+      return;
+    }
+    if (userEditedPanelRef.current) {
+      // Respect the staff's manual coverage value, but clamp to grandTotal.
+      setPanelCoveredAmount((prev) => {
+        const clamped = Math.min(Math.max(prev, 0), grandTotal);
+        if (clamped !== prev) setPanelCoveredInput(clamped.toFixed(2));
+        return clamped;
+      });
+      return;
+    }
+    setPanelCoveredAmount(grandTotal);
+    setPanelCoveredInput(grandTotal.toFixed(2));
+  }, [panelId, grandTotal]);
+
+  const patientDue = Math.max(grandTotal - panelCoveredAmount, 0);
+
   const [printPaymentId, setPrintPaymentId] = useState<string | null>(null);
   const [printLabels, setPrintLabels] = useState(false);
   const latestPaymentId = useMemo(() => {
@@ -291,38 +320,36 @@ export default function DispenseCheckout() {
     [items],
   );
 
-  // Keep amount-paid input in sync with the current total due, unless the
-  // cashier has manually typed a partial amount this session.
+  // Keep amount-paid input in sync with what the patient currently owes,
+  // unless the cashier has manually typed a partial amount this session.
   const userEditedAmountRef = useRef(false);
   useEffect(() => {
     if (userEditedAmountRef.current) return;
-    setAmountPaidInput(totalDue.toFixed(2));
-  }, [totalDue]);
+    setAmountPaidInput(patientDue.toFixed(2));
+  }, [patientDue]);
 
   const amountPaidNum = parseFloat(amountPaidInput);
   const safeAmountPaid = Number.isFinite(amountPaidNum) ? Math.max(amountPaidNum, 0) : 0;
-  const balanceDue = Math.max(totalDue - safeAmountPaid, 0);
-  const isOverpay = safeAmountPaid > totalDue + 0.01;
+  const balanceDue = Math.max(patientDue - safeAmountPaid, 0);
+  const isOverpay = safeAmountPaid > patientDue + 0.01;
 
   /**
    * Single source of truth for whether the Checkout button is allowed to fire.
-   * Memoized so the 6-clause boolean only re-evaluates when an input flips,
-   * not on every parent re-render (typing, tooltip hover, etc).
    */
   const canSubmitCheckout = useMemo(() => {
     if (anyPartialMissingReason) return false;
     if (!consultation?.id) return false;
     if (checkoutPending) return false;
-    if (isOverpay) return false;
-    if (totalDue > 0 && safeAmountPaid <= 0) return false;
-    if (totalDue > 0 && !paymentMethod) return false;
+    if (patientDue > 0 && isOverpay) return false;
+    if (patientDue > 0 && safeAmountPaid <= 0) return false;
+    if (patientDue > 0 && !paymentMethod) return false;
     return true;
   }, [
     anyPartialMissingReason,
     consultation?.id,
     checkoutPending,
     isOverpay,
-    totalDue,
+    patientDue,
     safeAmountPaid,
     paymentMethod,
   ]);
