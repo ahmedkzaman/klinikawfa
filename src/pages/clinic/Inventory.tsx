@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Package, Plus, Pill, ClipboardList, Boxes } from 'lucide-react';
+import { Package, Plus, Pill, ClipboardList, Boxes, Search, X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { ItemBatchesSheet } from '@/components/clinic/inventory/ItemBatchesSheet';
 import { SEOHead } from '@/components/seo/SEOHead';
 import { Button } from '@/components/ui/button';
