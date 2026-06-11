@@ -108,6 +108,8 @@ export default function DispenseCheckout() {
   const [amountPaidInput, setAmountPaidInput] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<string>('cash');
   const [checkoutPending, setCheckoutPending] = useState(false);
+  const [panelCoveredAmount, setPanelCoveredAmount] = useState<number>(0);
+  const [panelCoveredInput, setPanelCoveredInput] = useState<string>('');
   const handleChargesChange = useCallback((c: SelectedCharge[]) => {
     setSelectedCharges(c);
   }, []);
