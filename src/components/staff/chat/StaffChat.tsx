@@ -296,13 +296,16 @@ export function StaffChat() {
       <SheetTrigger asChild>
         <Button
           size="icon"
-          className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-40 h-14 w-14 rounded-full shadow-xl bg-blue-600 hover:bg-blue-700 text-white"
+          className={cn(
+            "fixed bottom-20 right-4 md:bottom-6 md:right-6 z-40 h-14 w-14 rounded-full shadow-xl bg-blue-600 hover:bg-blue-700 text-white",
+            unreadCount > 0 && !open && "animate-bounce"
+          )}
           aria-label="Open staff chat"
         >
           <MessageSquare className="h-6 w-6" />
-          {onlineUsers.length > 0 && (
-            <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-emerald-500 text-white text-[10px] font-semibold flex items-center justify-center">
-              {onlineUsers.length}
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center ring-2 ring-white animate-pulse">
+              {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           )}
         </Button>
