@@ -38,6 +38,35 @@ function formatTime(iso: string) {
   }
 }
 
+function playAlarmBeep() {
+  try {
+    const Ctx =
+      (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx: AudioContext = new Ctx();
+    const now = ctx.currentTime;
+    const pattern = [880, 1175, 880];
+    pattern.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const start = now + i * 0.18;
+      const end = start + 0.16;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.35, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, end);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(start);
+      osc.stop(end + 0.02);
+    });
+    setTimeout(() => ctx.close().catch(() => {}), 900);
+  } catch {
+    // ignore
+  }
+}
+
 export function StaffChat() {
   const { user, role } = useAuth();
   const [open, setOpen] = useState(false);
@@ -48,10 +77,36 @@ export function StaffChat() {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [displayName, setDisplayName] = useState<string>('Staff');
   const [activeChat, setActiveChat] = useState<ActiveChat>('global');
+  const [unreadCount, setUnreadCount] = useState(0);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const openRef = useRef(open);
+  const activeChatRef = useRef<ActiveChat>(activeChat);
+  const myIdRef = useRef<string | null>(null);
+  const initialLoadedRef = useRef(false);
 
   const myId = user?.id ?? null;
   const eligible = !!myId && !!role && role !== 'guest';
+
+  useEffect(() => { openRef.current = open; }, [open]);
+  useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
+  useEffect(() => { myIdRef.current = myId; }, [myId]);
+
+  // Reset unread when opening
+  useEffect(() => {
+    if (open) setUnreadCount(0);
+  }, [open, activeChat]);
+
+  // Vibrate periodically when there are unread messages and chat is closed
+  useEffect(() => {
+    if (!unreadCount || open) return;
+    if (typeof navigator === 'undefined' || !navigator.vibrate) return;
+    const interval = window.setInterval(() => {
+      try { navigator.vibrate([200, 100, 200]); } catch { /* noop */ }
+    }, 5000);
+    // initial buzz
+    try { navigator.vibrate([200, 100, 200]); } catch { /* noop */ }
+    return () => window.clearInterval(interval);
+  }, [unreadCount, open]);
 
   // Display name
   useEffect(() => {
