@@ -693,55 +693,104 @@ export default function DispenseCheckout() {
               )}
             </div>
             <div className="tabular-nums text-sm text-slate-700">
-              Total due:{' '}
-              <span className="font-bold text-slate-900">RM {totalDue.toFixed(2)}</span>
-              {' '}· Balance:{' '}
-              <span
-                className={cn(
-                  'font-bold tabular-nums',
-                  balanceDue > 0 ? 'text-amber-600' : 'text-emerald-600',
-                )}
-              >
-                RM {balanceDue.toFixed(2)}
-              </span>
+              Grand Total:{' '}
+              <span className="font-bold text-slate-900">RM {grandTotal.toFixed(2)}</span>
+            </div>
+            {panelId && (
+              <div className="tabular-nums text-sm text-slate-700">
+                Covered by Panel:{' '}
+                <span className="font-bold text-emerald-700">
+                  −RM {panelCoveredAmount.toFixed(2)}
+                </span>
+              </div>
+            )}
+            <div className="tabular-nums text-sm text-slate-700">
+              {panelId ? 'Patient Pays' : 'Total Due'}:{' '}
+              <span className="font-bold text-slate-900">RM {patientDue.toFixed(2)}</span>
+              {patientDue > 0 && (
+                <>
+                  {' '}· Balance:{' '}
+                  <span
+                    className={cn(
+                      'font-bold tabular-nums',
+                      balanceDue > 0 ? 'text-amber-600' : 'text-emerald-600',
+                    )}
+                  >
+                    RM {balanceDue.toFixed(2)}
+                  </span>
+                </>
+              )}
             </div>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="pay-method" className="text-xs text-slate-500">
-              Method
-            </Label>
-            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-              <SelectTrigger id="pay-method" className="h-9 w-[160px]">
-                <SelectValue placeholder="Method" />
-              </SelectTrigger>
-              <SelectContent>
-                {PAYMENT_METHOD_OPTIONS.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {panelId && (
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="panel-covered" className="text-xs text-slate-500">
+                Covered by Panel (RM)
+              </Label>
+              <Input
+                id="panel-covered"
+                type="number"
+                step="0.01"
+                min="0"
+                max={grandTotal}
+                className="h-9 w-32 tabular-nums"
+                value={panelCoveredInput}
+                onChange={(e) => {
+                  userEditedPanelRef.current = true;
+                  const raw = e.target.value;
+                  setPanelCoveredInput(raw);
+                  const n = parseFloat(raw);
+                  const clamped = Number.isFinite(n)
+                    ? Math.min(Math.max(n, 0), grandTotal)
+                    : 0;
+                  setPanelCoveredAmount(clamped);
+                  // Reset cashier-entered amount so it auto-syncs to the new patientDue.
+                  userEditedAmountRef.current = false;
+                }}
+              />
+            </div>
+          )}
 
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="amount-paid" className="text-xs text-slate-500">
-              Amount Paid (RM)
-            </Label>
-            <Input
-              id="amount-paid"
-              type="number"
-              step="0.01"
-              min="0"
-              className="h-9 w-32 tabular-nums"
-              value={amountPaidInput}
-              onChange={(e) => {
-                userEditedAmountRef.current = true;
-                setAmountPaidInput(e.target.value);
-              }}
-            />
-          </div>
+          {patientDue > 0 && (
+            <>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="pay-method" className="text-xs text-slate-500">
+                  Method
+                </Label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger id="pay-method" className="h-9 w-[160px]">
+                    <SelectValue placeholder="Method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_METHOD_OPTIONS.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="amount-paid" className="text-xs text-slate-500">
+                  Amount Paid (RM)
+                </Label>
+                <Input
+                  id="amount-paid"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="h-9 w-32 tabular-nums"
+                  value={amountPaidInput}
+                  onChange={(e) => {
+                    userEditedAmountRef.current = true;
+                    setAmountPaidInput(e.target.value);
+                  }}
+                />
+              </div>
+            </>
+          )}
 
           {latestPaymentId && (
             <Button
@@ -775,9 +824,13 @@ export default function DispenseCheckout() {
                     <CheckCircle2 className="h-4 w-4 mr-2" />
                     {checkoutPending
                       ? 'Processing…'
-                      : balanceDue > 0
-                        ? 'Record Partial Payment'
-                        : 'Complete Checkout'}
+                      : patientDue === 0 && panelId
+                        ? 'Complete Panel Checkout'
+                        : panelId && panelCoveredAmount > 0
+                          ? 'Record Co-pay & Complete'
+                          : balanceDue > 0
+                            ? 'Record Partial Payment'
+                            : 'Complete Checkout'}
                   </Button>
                 </span>
               </TooltipTrigger>
