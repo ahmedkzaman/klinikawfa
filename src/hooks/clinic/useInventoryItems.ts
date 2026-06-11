@@ -6,7 +6,7 @@ const SAFE_QUERY_KEY = ['inventory_items_safe'];
 const DASHBOARD_QUERY_KEY = ['clinic', 'inventory-dashboard'];
 
 function invalidateInventory(queryClient: ReturnType<typeof useQueryClient>) {
-  queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+  invalidateInventory(queryClient);
   queryClient.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY });
   queryClient.invalidateQueries({ queryKey: SAFE_QUERY_KEY });
 }
@@ -53,7 +53,7 @@ export function useInventoryItems() {
         .insert(values as any);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
+    onSuccess: () => invalidateInventory(queryClient),
   });
 
   const updateItem = useMutation({
@@ -65,7 +65,7 @@ export function useInventoryItems() {
         .eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
+    onSuccess: () => invalidateInventory(queryClient),
   });
 
   const deleteItem = useMutation({
@@ -73,7 +73,7 @@ export function useInventoryItems() {
       const { error } = await supabase.from('inventory_items').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
+    onSuccess: () => invalidateInventory(queryClient),
   });
 
   return { items, isLoading, addItem, updateItem, deleteItem };
@@ -201,7 +201,7 @@ export function useAddInventoryItem() {
       if (error) throw error;
       return { id: (data as { id: string }).id };
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
+    onSuccess: () => invalidateInventory(queryClient),
   });
 }
 
@@ -217,6 +217,6 @@ export function useUpdateInventoryItem() {
       if (error) throw error;
       return { id };
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
+    onSuccess: () => invalidateInventory(queryClient),
   });
 }
