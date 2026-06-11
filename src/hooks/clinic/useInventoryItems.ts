@@ -6,7 +6,7 @@ const SAFE_QUERY_KEY = ['inventory_items_safe'];
 const DASHBOARD_QUERY_KEY = ['clinic', 'inventory-dashboard'];
 
 function invalidateInventory(queryClient: ReturnType<typeof useQueryClient>) {
-  invalidateInventory(queryClient);
+  queryClient.invalidateQueries({ queryKey: QUERY_KEY });
   queryClient.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY });
   queryClient.invalidateQueries({ queryKey: SAFE_QUERY_KEY });
 }
