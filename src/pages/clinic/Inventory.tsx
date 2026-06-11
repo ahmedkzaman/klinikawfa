@@ -91,10 +91,21 @@ export default function Inventory() {
   const [editTarget, setEditTarget] = useState<InventoryDashboardRow | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [batchesTarget, setBatchesTarget] = useState<InventoryDashboardRow | null>(null);
+  const [search, setSearch] = useState('');
+
+  const searchedItems = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((it) =>
+      [it.name, it.category, ...(Array.isArray(it.groups) ? it.groups : [])]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q)),
+    );
+  }, [items, search]);
 
   const tagged = useMemo(
-    () => items.map((it) => ({ item: it, tags: classify(it) })),
-    [items],
+    () => searchedItems.map((it) => ({ item: it, tags: classify(it) })),
+    [searchedItems],
   );
 
   const counts = useMemo(() => {
