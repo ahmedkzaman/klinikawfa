@@ -3,6 +3,13 @@ import { supabase } from '@/integrations/supabase/client';
 
 const QUERY_KEY = ['inventory_items'];
 const SAFE_QUERY_KEY = ['inventory_items_safe'];
+const DASHBOARD_QUERY_KEY = ['clinic', 'inventory-dashboard'];
+
+function invalidateInventory(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+  queryClient.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY });
+  queryClient.invalidateQueries({ queryKey: SAFE_QUERY_KEY });
+}
 
 /**
  * Cost-free inventory listing for roles that are not allowed to see
