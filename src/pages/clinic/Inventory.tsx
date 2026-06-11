@@ -190,19 +190,40 @@ export default function Inventory() {
             <StockTakePanel />
           ) : (
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabKey)}>
-              <TabsList className="flex-wrap h-auto">
-                {(Object.keys(TAB_LABELS) as TabKey[]).map((key) => (
-                  <TabsTrigger key={key} value={key} className="gap-1.5">
-                    {TAB_LABELS[key]}
-                    <Badge
-                      variant="secondary"
-                      className="h-5 px-1.5 text-[10px] tabular-nums"
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <TabsList className="flex-wrap h-auto">
+                  {(Object.keys(TAB_LABELS) as TabKey[]).map((key) => (
+                    <TabsTrigger key={key} value={key} className="gap-1.5">
+                      {TAB_LABELS[key]}
+                      <Badge
+                        variant="secondary"
+                        className="h-5 px-1.5 text-[10px] tabular-nums"
+                      >
+                        {counts[key]}
+                      </Badge>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+                <div className="relative w-full sm:w-72">
+                  <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search by name, category, group…"
+                    className="pl-8 pr-8 h-9"
+                  />
+                  {search && (
+                    <button
+                      type="button"
+                      onClick={() => setSearch('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      aria-label="Clear search"
                     >
-                      {counts[key]}
-                    </Badge>
-                  </TabsTrigger>
-                ))}
-              </TabsList>
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
 
               <TabsContent value={activeTab} className="mt-4">
                 {isLoading ? (
