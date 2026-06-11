@@ -155,6 +155,15 @@ export function StaffChat() {
         (payload) => {
           const row = payload.new as StaffMessage;
           setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
+          const meId = myIdRef.current;
+          if (!meId || row.sender_id === meId) return;
+          // Determine which chat this message belongs to
+          const chatKey: ActiveChat = row.receiver_id === null ? 'global' : row.sender_id;
+          const isViewing = openRef.current && activeChatRef.current === chatKey;
+          if (!isViewing) {
+            setUnreadCount((c) => c + 1);
+            playAlarmBeep();
+          }
         }
       )
       .subscribe();
