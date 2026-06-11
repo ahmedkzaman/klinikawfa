@@ -29,6 +29,7 @@ import {
 import { cn } from '@/lib/utils';
 import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
 import { StaffChat } from '@/components/staff/chat/StaffChat';
+import { useClinicChimes } from '@/hooks/clinic/useClinicChimes';
 
 type ClinicNavItem = {
   href: string;
@@ -112,6 +113,7 @@ export function ClinicLayout() {
   const { user, isSpecialAdmin, isAdmin, isLocum, signOut } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  useClinicChimes();
 
   return (
     <div className="min-h-screen flex w-full bg-slate-50">
