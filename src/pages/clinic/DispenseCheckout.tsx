@@ -357,30 +357,34 @@ export default function DispenseCheckout() {
 
   const handleComplete = async () => {
     if (!queueEntryId || !consultation?.id) return;
-    if (totalDue > 0 && !paymentMethod) {
+    if (patientDue > 0 && !paymentMethod) {
       toast.error('Select a payment method');
       return;
     }
-    if (isOverpay) {
+    if (patientDue > 0 && isOverpay) {
       toast.error('Amount paid exceeds total due');
       return;
     }
     setCheckoutPending(true);
     try {
-      const { data, error } = await supabase.rpc('checkout_visit', {
+      const isPanelOnly = patientDue === 0 && !!panelId;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rpcArgs: any = {
         p_queue_entry_id: queueEntryId,
         p_consultation_id: consultation.id,
-        p_total_amount: totalDue,
-        p_amount_paid: safeAmountPaid,
-        p_payment_method: paymentMethod,
+        p_total_amount: grandTotal,
+        p_amount_paid: patientDue === 0 ? 0 : safeAmountPaid,
+        p_payment_method: isPanelOnly ? 'panel' : paymentMethod,
         p_payment_type: panelId ? 'panel' : 'self_pay',
         p_panel_provider_id: panelId ?? null,
+        p_panel_covered_amount: panelCoveredAmount,
         p_other_charges: selectedCharges.map((c) => ({
           name: c.name,
           amount: c.amount,
         })),
         p_notes: null,
-      });
+      };
+      const { data, error } = await supabase.rpc('checkout_visit', rpcArgs);
       if (error) throw error;
       const result = (data ?? {}) as {
         status?: string;
@@ -394,7 +398,9 @@ export default function DispenseCheckout() {
       qc.invalidateQueries({ queryKey: ['consultation_items', consultation.id] });
       qc.invalidateQueries({ queryKey: ['queue_entries'] });
 
-      if (result.status === 'paid') {
+      if (isPanelOnly) {
+        toast.success('Panel checkout completed');
+      } else if (result.status === 'paid') {
         toast.success('Payment recorded · Visit checked out');
       } else {
         toast.success(
@@ -409,6 +415,7 @@ export default function DispenseCheckout() {
       setCheckoutPending(false);
     }
   };
+
 
 
   if (entriesLoading) {
