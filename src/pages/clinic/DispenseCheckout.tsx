@@ -108,6 +108,8 @@ export default function DispenseCheckout() {
   const [amountPaidInput, setAmountPaidInput] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<string>('cash');
   const [checkoutPending, setCheckoutPending] = useState(false);
+  const [panelCoveredAmount, setPanelCoveredAmount] = useState<number>(0);
+  const [panelCoveredInput, setPanelCoveredInput] = useState<string>('');
   const handleChargesChange = useCallback((c: SelectedCharge[]) => {
     setSelectedCharges(c);
   }, []);
@@ -262,7 +264,36 @@ export default function DispenseCheckout() {
     [selectedCharges],
   );
   const outstanding = Math.max(subtotal - paid, 0);
-  const totalDue = Math.max(outstanding + otherChargesTotal, 0);
+  // Grand total = items still owed + extra charges (replaces previous `totalDue`).
+  const grandTotal = Math.max(outstanding + otherChargesTotal, 0);
+
+  // --- Panel coverage split ------------------------------------------------
+  // Default: if a panel is attached, the panel covers the full grand total
+  // (patient owes RM 0). Staff can lower the coverage to record a co-pay.
+  const userEditedPanelRef = useRef(false);
+  useEffect(() => {
+    if (!panelId) {
+      // No panel → force coverage to 0 and reset edit flag.
+      userEditedPanelRef.current = false;
+      setPanelCoveredAmount(0);
+      setPanelCoveredInput('');
+      return;
+    }
+    if (userEditedPanelRef.current) {
+      // Respect the staff's manual coverage value, but clamp to grandTotal.
+      setPanelCoveredAmount((prev) => {
+        const clamped = Math.min(Math.max(prev, 0), grandTotal);
+        if (clamped !== prev) setPanelCoveredInput(clamped.toFixed(2));
+        return clamped;
+      });
+      return;
+    }
+    setPanelCoveredAmount(grandTotal);
+    setPanelCoveredInput(grandTotal.toFixed(2));
+  }, [panelId, grandTotal]);
+
+  const patientDue = Math.max(grandTotal - panelCoveredAmount, 0);
+
   const [printPaymentId, setPrintPaymentId] = useState<string | null>(null);
   const [printLabels, setPrintLabels] = useState(false);
   const latestPaymentId = useMemo(() => {
@@ -289,38 +320,36 @@ export default function DispenseCheckout() {
     [items],
   );
 
-  // Keep amount-paid input in sync with the current total due, unless the
-  // cashier has manually typed a partial amount this session.
+  // Keep amount-paid input in sync with what the patient currently owes,
+  // unless the cashier has manually typed a partial amount this session.
   const userEditedAmountRef = useRef(false);
   useEffect(() => {
     if (userEditedAmountRef.current) return;
-    setAmountPaidInput(totalDue.toFixed(2));
-  }, [totalDue]);
+    setAmountPaidInput(patientDue.toFixed(2));
+  }, [patientDue]);
 
   const amountPaidNum = parseFloat(amountPaidInput);
   const safeAmountPaid = Number.isFinite(amountPaidNum) ? Math.max(amountPaidNum, 0) : 0;
-  const balanceDue = Math.max(totalDue - safeAmountPaid, 0);
-  const isOverpay = safeAmountPaid > totalDue + 0.01;
+  const balanceDue = Math.max(patientDue - safeAmountPaid, 0);
+  const isOverpay = safeAmountPaid > patientDue + 0.01;
 
   /**
    * Single source of truth for whether the Checkout button is allowed to fire.
-   * Memoized so the 6-clause boolean only re-evaluates when an input flips,
-   * not on every parent re-render (typing, tooltip hover, etc).
    */
   const canSubmitCheckout = useMemo(() => {
     if (anyPartialMissingReason) return false;
     if (!consultation?.id) return false;
     if (checkoutPending) return false;
-    if (isOverpay) return false;
-    if (totalDue > 0 && safeAmountPaid <= 0) return false;
-    if (totalDue > 0 && !paymentMethod) return false;
+    if (patientDue > 0 && isOverpay) return false;
+    if (patientDue > 0 && safeAmountPaid <= 0) return false;
+    if (patientDue > 0 && !paymentMethod) return false;
     return true;
   }, [
     anyPartialMissingReason,
     consultation?.id,
     checkoutPending,
     isOverpay,
-    totalDue,
+    patientDue,
     safeAmountPaid,
     paymentMethod,
   ]);
@@ -328,30 +357,34 @@ export default function DispenseCheckout() {
 
   const handleComplete = async () => {
     if (!queueEntryId || !consultation?.id) return;
-    if (totalDue > 0 && !paymentMethod) {
+    if (patientDue > 0 && !paymentMethod) {
       toast.error('Select a payment method');
       return;
     }
-    if (isOverpay) {
+    if (patientDue > 0 && isOverpay) {
       toast.error('Amount paid exceeds total due');
       return;
     }
     setCheckoutPending(true);
     try {
-      const { data, error } = await supabase.rpc('checkout_visit', {
+      const isPanelOnly = patientDue === 0 && !!panelId;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rpcArgs: any = {
         p_queue_entry_id: queueEntryId,
         p_consultation_id: consultation.id,
-        p_total_amount: totalDue,
-        p_amount_paid: safeAmountPaid,
-        p_payment_method: paymentMethod,
+        p_total_amount: grandTotal,
+        p_amount_paid: patientDue === 0 ? 0 : safeAmountPaid,
+        p_payment_method: isPanelOnly ? 'panel' : paymentMethod,
         p_payment_type: panelId ? 'panel' : 'self_pay',
         p_panel_provider_id: panelId ?? null,
+        p_panel_covered_amount: panelCoveredAmount,
         p_other_charges: selectedCharges.map((c) => ({
           name: c.name,
           amount: c.amount,
         })),
         p_notes: null,
-      });
+      };
+      const { data, error } = await supabase.rpc('checkout_visit', rpcArgs);
       if (error) throw error;
       const result = (data ?? {}) as {
         status?: string;
@@ -365,7 +398,9 @@ export default function DispenseCheckout() {
       qc.invalidateQueries({ queryKey: ['consultation_items', consultation.id] });
       qc.invalidateQueries({ queryKey: ['queue_entries'] });
 
-      if (result.status === 'paid') {
+      if (isPanelOnly) {
+        toast.success('Panel checkout completed');
+      } else if (result.status === 'paid') {
         toast.success('Payment recorded · Visit checked out');
       } else {
         toast.success(
@@ -380,6 +415,7 @@ export default function DispenseCheckout() {
       setCheckoutPending(false);
     }
   };
+
 
 
   if (entriesLoading) {
@@ -657,55 +693,104 @@ export default function DispenseCheckout() {
               )}
             </div>
             <div className="tabular-nums text-sm text-slate-700">
-              Total due:{' '}
-              <span className="font-bold text-slate-900">RM {totalDue.toFixed(2)}</span>
-              {' '}· Balance:{' '}
-              <span
-                className={cn(
-                  'font-bold tabular-nums',
-                  balanceDue > 0 ? 'text-amber-600' : 'text-emerald-600',
-                )}
-              >
-                RM {balanceDue.toFixed(2)}
-              </span>
+              Grand Total:{' '}
+              <span className="font-bold text-slate-900">RM {grandTotal.toFixed(2)}</span>
+            </div>
+            {panelId && (
+              <div className="tabular-nums text-sm text-slate-700">
+                Covered by Panel:{' '}
+                <span className="font-bold text-emerald-700">
+                  −RM {panelCoveredAmount.toFixed(2)}
+                </span>
+              </div>
+            )}
+            <div className="tabular-nums text-sm text-slate-700">
+              {panelId ? 'Patient Pays' : 'Total Due'}:{' '}
+              <span className="font-bold text-slate-900">RM {patientDue.toFixed(2)}</span>
+              {patientDue > 0 && (
+                <>
+                  {' '}· Balance:{' '}
+                  <span
+                    className={cn(
+                      'font-bold tabular-nums',
+                      balanceDue > 0 ? 'text-amber-600' : 'text-emerald-600',
+                    )}
+                  >
+                    RM {balanceDue.toFixed(2)}
+                  </span>
+                </>
+              )}
             </div>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="pay-method" className="text-xs text-slate-500">
-              Method
-            </Label>
-            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-              <SelectTrigger id="pay-method" className="h-9 w-[160px]">
-                <SelectValue placeholder="Method" />
-              </SelectTrigger>
-              <SelectContent>
-                {PAYMENT_METHOD_OPTIONS.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {panelId && (
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="panel-covered" className="text-xs text-slate-500">
+                Covered by Panel (RM)
+              </Label>
+              <Input
+                id="panel-covered"
+                type="number"
+                step="0.01"
+                min="0"
+                max={grandTotal}
+                className="h-9 w-32 tabular-nums"
+                value={panelCoveredInput}
+                onChange={(e) => {
+                  userEditedPanelRef.current = true;
+                  const raw = e.target.value;
+                  setPanelCoveredInput(raw);
+                  const n = parseFloat(raw);
+                  const clamped = Number.isFinite(n)
+                    ? Math.min(Math.max(n, 0), grandTotal)
+                    : 0;
+                  setPanelCoveredAmount(clamped);
+                  // Reset cashier-entered amount so it auto-syncs to the new patientDue.
+                  userEditedAmountRef.current = false;
+                }}
+              />
+            </div>
+          )}
 
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="amount-paid" className="text-xs text-slate-500">
-              Amount Paid (RM)
-            </Label>
-            <Input
-              id="amount-paid"
-              type="number"
-              step="0.01"
-              min="0"
-              className="h-9 w-32 tabular-nums"
-              value={amountPaidInput}
-              onChange={(e) => {
-                userEditedAmountRef.current = true;
-                setAmountPaidInput(e.target.value);
-              }}
-            />
-          </div>
+          {patientDue > 0 && (
+            <>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="pay-method" className="text-xs text-slate-500">
+                  Method
+                </Label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger id="pay-method" className="h-9 w-[160px]">
+                    <SelectValue placeholder="Method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_METHOD_OPTIONS.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="amount-paid" className="text-xs text-slate-500">
+                  Amount Paid (RM)
+                </Label>
+                <Input
+                  id="amount-paid"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="h-9 w-32 tabular-nums"
+                  value={amountPaidInput}
+                  onChange={(e) => {
+                    userEditedAmountRef.current = true;
+                    setAmountPaidInput(e.target.value);
+                  }}
+                />
+              </div>
+            </>
+          )}
 
           {latestPaymentId && (
             <Button
@@ -739,9 +824,13 @@ export default function DispenseCheckout() {
                     <CheckCircle2 className="h-4 w-4 mr-2" />
                     {checkoutPending
                       ? 'Processing…'
-                      : balanceDue > 0
-                        ? 'Record Partial Payment'
-                        : 'Complete Checkout'}
+                      : patientDue === 0 && panelId
+                        ? 'Complete Panel Checkout'
+                        : panelId && panelCoveredAmount > 0
+                          ? 'Record Co-pay & Complete'
+                          : balanceDue > 0
+                            ? 'Record Partial Payment'
+                            : 'Complete Checkout'}
                   </Button>
                 </span>
               </TooltipTrigger>
