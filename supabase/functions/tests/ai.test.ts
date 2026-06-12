@@ -90,6 +90,7 @@ Deno.test({
   } finally {
     globalThis.fetch = originalFetch;
   }
+  },
 });
 
 // ---------- 413: payload over the cap (via Content-Length header) ----------
