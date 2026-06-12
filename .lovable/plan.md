@@ -1,84 +1,58 @@
-# Plan: Test Coverage for Auth & Edge Functions
+# Final Security Pass, Cleanup & CI/CD Gate
 
-Scope: add focused unit tests around the new security boundaries (Edge Function auth helpers + frontend route guard). No production code is changed; no real Supabase keys are used in tests.
+## 1. Create `.github/workflows/security-gate.yml`
 
-## 1. Edge Function tests (Deno)
+New file. Triggers on `push` and `pull_request` to `main`. Single job `security-and-type-check` on `ubuntu-latest` with sequential steps:
 
-**New file:** `supabase/functions/tests/ai.test.ts`
+1. `actions/checkout@v3`
+2. `actions/setup-node@v3` (node 20, npm cache)
+3. `npm ci`
+4. `npm run lint`
+5. `npx tsc --noEmit`
+6. `npm test`
+7. `npm run build`
+8. `npm audit --omit=dev || true` (non-blocking)
 
-Targets the pure logic in `supabase/functions/_shared/auth-helpers.ts`:
-- `validatePayloadSize` / `readJsonWithLimit` — byte-cap enforcement
-- `requireRole` — JWT presence + role allow-list
-- `withAuth` / `sanitizeError` — preflight, method, and error sanitization paths
+No matrix, no extra jobs — minimal gate as spec'd.
 
-Test cases:
+## 2. PHI / Secret Log Audit on the 3 AI/TTS functions
 
-1. **401 — missing Authorization header**
-   - Build a `Request` with no `Authorization` header.
-   - Call `requireRole(req, ['clinical'])` and assert it throws `HttpError` with `status === 401` and `safeMessage === 'Unauthorized'`.
+Audit result of current `console.*` calls in `generate-bio/index.ts`, `generate-tts/index.ts`, `structure-medical-notes/index.ts`:
 
-2. **403 — authenticated user with disallowed role**
-   - Stub `Deno.env` for `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` with dummy values (`http://localhost`, `test-anon`, `test-service`) — never real keys.
-   - Monkey-patch `globalThis.fetch` to:
-     - return `{ id: 'u1', ... }` for the `/auth/v1/user` call (simulates a valid JWT),
-     - return `[{ role: 'patient' }]` for the `user_roles` PostgREST query.
-   - Build a `Request` with `Authorization: Bearer fake.jwt.token`.
-   - Assert `requireRole(req, ['clinical','admin','special_admin'])` throws `HttpError` with `status === 403` and `safeMessage === 'Forbidden'`.
-   - Restore `fetch` in a `finally`.
+| Line | Statement | PHI/secret? | Action |
+| --- | --- | --- | --- |
+| bio:25, tts:20, notes:42 | `missing_api_key` literal tag | No | keep |
+| bio:51 | `invoked by ${userId}` | No (uuid only) | keep |
+| tts:32 | `invoked by ${userId} len=${text.length}` | No (metadata) | keep |
+| notes:47 | `invoked by ${userId} len=${transcript.length}` | No (metadata) | keep |
+| bio:101 / tts:48 / notes:91 | `ai_gateway_error` + numeric status | No | keep |
+| bio:110, bio:119, tts:54, notes:100, notes:107 | static failure tags (`empty_ai_content`, `ai_parse_error`, `empty_audio`, `no_tool_call`, `parse_error`) | No | keep |
 
-3. **413 — payload over the cap**
-   - Build a `Request` with `Content-Length: 30000` header and a 30 KB body.
-   - Call `readJsonWithLimit(req, 20 * 1024)` and assert it throws `HttpError` with `status === 413`.
-   - Also assert the streaming path: a request with no `Content-Length` but body bytes exceeding the cap still throws 413 (validates the in-loop accumulator, not just the header check).
+No raw transcripts, prompts, bio outputs, or API key values are logged today — the prior hardening pass already scrubbed them. **No edits to the three function files are required.** I will re-grep before finalizing to confirm nothing slipped in.
 
-4. **`sanitizeError` does not leak internals**
-   - Pass an `Error("OPENAI_API_KEY=sk-live-XYZ stacktrace at /home/...")` through the public response path (call `withAuth` with a handler that throws it, using a mocked allowed role).
-   - Assert response status is `500`, body is generic (`{ error: 'Internal Server Error' }` or equivalent), and the body string does not contain `sk-live`, `OPENAI`, or any file path fragment.
+If anything turns up on the final grep (e.g. a `console.log(transcript)` or `console.log(content)`), it will be deleted or replaced with a metadata-only equivalent of the form `console.log('[fn] event', { userId, len })`.
 
-Run with `supabase--test_edge_functions` (`functions: ["tests"]` or pattern filter). All env reads use stubbed values; no network egress.
+## 3. `supabase/config.toml` sanity check
 
-## 2. Frontend route-guard tests (Vitest)
+Current state already correct:
 
-**Delete:** `src/test/example.test.ts`
-**New file:** `src/test/auth-guards.test.tsx`
+```
+[functions.generate-bio]        verify_jwt = true
+[functions.generate-tts]        verify_jwt = true
+[functions.structure-medical-notes] verify_jwt = true
+```
 
-Mocks `@/contexts/AuthContext` so `useAuth()` returns controlled values; mocks `react-router-dom`'s `Navigate` to a sentinel component that records the `to` prop. Renders `<ProtectedRoute>` inside a `MemoryRouter`.
+No `verify_jwt = false` entries on those three. No changes needed; will re-read in build mode to confirm before closing the task.
 
-Test cases:
+## Verification
 
-1. **Unauthenticated → redirects to `/auth`**
-   - `useAuth` mock: `{ user: null, loading: false, rolesLoading: false, role: null, isAdmin: false, isStaffOrAdmin: false }`.
-   - Render `<ProtectedRoute requireStaffOrAdmin><div>secret</div></ProtectedRoute>`.
-   - Assert children are not in the DOM and the `Navigate` sentinel reports `to === '/auth'`.
+- Re-grep `console\.` across the three function files.
+- Re-read `supabase/config.toml` to confirm the three `verify_jwt = true` lines.
+- Workflow YAML is lint-clean (2-space indent, quoted `on:` keys).
 
-2. **Authenticated non-admin → forbidden from admin-only route**
-   - `useAuth` mock: `{ user: { id: 'u1' }, loading: false, rolesLoading: false, role: 'ops_staff', isAdmin: false, isStaffOrAdmin: true }` (closest analogue to spec's `role: 'ops'`; project has no standalone `ops` enum value).
-   - Render `<ProtectedRoute requireAdmin><div>doctor-only</div></ProtectedRoute>`.
-   - Assert children are not rendered and `Navigate` reports `to === '/'`.
+## Out of scope
 
-3. **Guest firewall** (bonus, same file, very cheap)
-   - `useAuth` mock with `role: 'guest'`, `requireStaffOrAdmin`.
-   - Assert redirect to `/`.
-
-4. **Happy path** — admin user with `requireAdmin` renders children.
-
-No network calls. `@/integrations/supabase/client` is not imported by `ProtectedRoute`, so no Supabase mock is required; if a transitive import appears at test time we will `vi.mock('@/integrations/supabase/client', () => ({ supabase: {} }))`.
-
-## Notes on the literal spec
-
-- Spec asks for `role: 'patient'` and `role: 'ops'` JWTs. This codebase stores roles in `public.user_roles` (enum `app_role`), not in the JWT, and has no `patient` or `ops` enum values. The Deno test simulates `patient` as the `user_roles` row value (the actual code path), and the Vitest test uses `ops_staff` (the real enum) — both faithfully exercise the "disallowed role" branch.
-- No real keys: all `Deno.env.get` calls are backed by `Deno.env.set` with throwaway strings inside `try/finally`. Vitest never imports `@/integrations/supabase/client` for these tests.
-
-## Verification after implementation
-
-- `npm run lint`
-- `npx tsc --noEmit`
-- `npm test` (runs `vitest run`)
-- `npm run build`
-- Edge function tests via `supabase--test_edge_functions` with `pattern: "auth-helpers"` (or run the `tests` folder).
-
-## Risks / rollback
-
-- Risk: `withAuth` may import modules that touch `Deno.env` at import time — if so, env stubs must be set before the dynamic import. Mitigation: use `await import("../_shared/auth-helpers.ts")` inside each test after `Deno.env.set`.
-- Risk: `Navigate` mock could break other suites if module-scoped. Mitigation: `vi.mock` scoped to this test file only.
-- Rollback: tests are additive — delete the two new files and restore `example.test.ts` (one line) to revert.
+- No frontend changes.
+- No new RLS migrations.
+- No edits to test files.
+- Not flipping `npm audit` to blocking (spec says non-blocking).
