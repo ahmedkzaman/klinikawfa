@@ -1,138 +1,84 @@
-# Plan — Harden RLS for PHI & Billing (corrected)
+# Plan: Test Coverage for Auth & Edge Functions
 
-## Why the literal spec must be adapted
+Scope: add focused unit tests around the new security boundaries (Edge Function auth helpers + frontend route guard). No production code is changed; no real Supabase keys are used in tests.
 
-Three issues confirmed against the live schema. Sticking to the prompt verbatim would compile but be wrong at runtime.
+## 1. Edge Function tests (Deno)
 
-1. **`auth.jwt() ->> 'role'` does not return app roles.** It returns Supabase's built-in PostgREST role (`authenticated`, `anon`, `service_role`). The real role enum (`admin`, `doctor`, `staff`, `locum`, etc.) lives in `public.user_roles` and is read via existing SECURITY DEFINER helpers (`is_admin`, `is_internal_staff`, `is_ops_or_admin`, `has_strict_role`, `has_role`). Using a JWT claim that is never populated would silently deny everyone except service_role — including the staff app. We will use the helpers, which is the pattern already documented in the project memory ([User Roles] system prompt) and used by every other policy.
-2. **`consultations.doctor_id` is `doctors.id`, not `auth.users.id`.** `doctor_id = auth.uid()` always returns false. Locum scoping has to go through `doctors.user_id` (or, simpler and consistent with the rest of the app, `has_strict_role(auth.uid(),'locum')` plus the existing `is_clinical` set — there is no locum-only PHI partition in the current product).
-3. **`patients.id` is not an auth user id.** Patients are not authenticated users in this product — there is no patient portal. A `patients.id = auth.uid()` clause would be dead code. I will not add a patient-self-read policy; the requirement is implicitly satisfied because no `patient` role exists and no anon access is granted.
+**New file:** `supabase/functions/tests/ai.test.ts`
 
-So the spec's intent — "only clinical/admin/ops touch PHI; only ops/admin touch billing writes; everyone else denied" — is honoured, but expressed with the helpers that actually work.
+Targets the pure logic in `supabase/functions/_shared/auth-helpers.ts`:
+- `validatePayloadSize` / `readJsonWithLimit` — byte-cap enforcement
+- `requireRole` — JWT presence + role allow-list
+- `withAuth` / `sanitizeError` — preflight, method, and error sanitization paths
 
-## Helper to add
+Test cases:
 
-```sql
-CREATE OR REPLACE FUNCTION public.is_clinical(_user_id uuid)
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.user_roles
-    WHERE user_id = _user_id
-      AND role IN ('doctor','doctor_admin','resident_doctor','locum','admin','special_admin')
-  )
-$$;
-```
-Re-uses existing `is_admin`, `is_internal_staff`, `is_ops_or_admin` for the rest.
+1. **401 — missing Authorization header**
+   - Build a `Request` with no `Authorization` header.
+   - Call `requireRole(req, ['clinical'])` and assert it throws `HttpError` with `status === 401` and `safeMessage === 'Unauthorized'`.
 
-## Migration file
+2. **403 — authenticated user with disallowed role**
+   - Stub `Deno.env` for `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` with dummy values (`http://localhost`, `test-anon`, `test-service`) — never real keys.
+   - Monkey-patch `globalThis.fetch` to:
+     - return `{ id: 'u1', ... }` for the `/auth/v1/user` call (simulates a valid JWT),
+     - return `[{ role: 'patient' }]` for the `user_roles` PostgREST query.
+   - Build a `Request` with `Authorization: Bearer fake.jwt.token`.
+   - Assert `requireRole(req, ['clinical','admin','special_admin'])` throws `HttpError` with `status === 403` and `safeMessage === 'Forbidden'`.
+   - Restore `fetch` in a `finally`.
 
-`supabase/migrations/20260612000000_harden_phi_billing_rls.sql` — single transaction, idempotent (`DROP POLICY IF EXISTS`). RLS is already enabled on every listed table.
+3. **413 — payload over the cap**
+   - Build a `Request` with `Content-Length: 30000` header and a 30 KB body.
+   - Call `readJsonWithLimit(req, 20 * 1024)` and assert it throws `HttpError` with `status === 413`.
+   - Also assert the streaming path: a request with no `Content-Length` but body bytes exceeding the cap still throws 413 (validates the in-loop accumulator, not just the header check).
 
-### PHI cluster — `patients`, `consultations`, `vital_signs`
+4. **`sanitizeError` does not leak internals**
+   - Pass an `Error("OPENAI_API_KEY=sk-live-XYZ stacktrace at /home/...")` through the public response path (call `withAuth` with a handler that throws it, using a mocked allowed role).
+   - Assert response status is `500`, body is generic (`{ error: 'Internal Server Error' }` or equivalent), and the body string does not contain `sk-live`, `OPENAI`, or any file path fragment.
 
-Drop every existing permissive policy on these three tables, then:
+Run with `supabase--test_edge_functions` (`functions: ["tests"]` or pattern filter). All env reads use stubbed values; no network egress.
 
-```sql
--- patients
-CREATE POLICY patients_select ON public.patients
-  FOR SELECT TO authenticated
-  USING (public.is_internal_staff(auth.uid()));
+## 2. Frontend route-guard tests (Vitest)
 
-CREATE POLICY patients_insert ON public.patients
-  FOR INSERT TO authenticated
-  WITH CHECK (public.is_ops_or_admin(auth.uid()));
+**Delete:** `src/test/example.test.ts`
+**New file:** `src/test/auth-guards.test.tsx`
 
-CREATE POLICY patients_update ON public.patients
-  FOR UPDATE TO authenticated
-  USING (public.is_ops_or_admin(auth.uid()))
-  WITH CHECK (public.is_ops_or_admin(auth.uid()));
+Mocks `@/contexts/AuthContext` so `useAuth()` returns controlled values; mocks `react-router-dom`'s `Navigate` to a sentinel component that records the `to` prop. Renders `<ProtectedRoute>` inside a `MemoryRouter`.
 
-CREATE POLICY patients_delete ON public.patients
-  FOR DELETE TO authenticated
-  USING (public.is_admin(auth.uid()));
+Test cases:
 
--- consultations
-CREATE POLICY consultations_select ON public.consultations
-  FOR SELECT TO authenticated
-  USING (public.is_internal_staff(auth.uid()));
+1. **Unauthenticated → redirects to `/auth`**
+   - `useAuth` mock: `{ user: null, loading: false, rolesLoading: false, role: null, isAdmin: false, isStaffOrAdmin: false }`.
+   - Render `<ProtectedRoute requireStaffOrAdmin><div>secret</div></ProtectedRoute>`.
+   - Assert children are not in the DOM and the `Navigate` sentinel reports `to === '/auth'`.
 
-CREATE POLICY consultations_insert ON public.consultations
-  FOR INSERT TO authenticated
-  WITH CHECK (public.is_clinical(auth.uid()));
+2. **Authenticated non-admin → forbidden from admin-only route**
+   - `useAuth` mock: `{ user: { id: 'u1' }, loading: false, rolesLoading: false, role: 'ops_staff', isAdmin: false, isStaffOrAdmin: true }` (closest analogue to spec's `role: 'ops'`; project has no standalone `ops` enum value).
+   - Render `<ProtectedRoute requireAdmin><div>doctor-only</div></ProtectedRoute>`.
+   - Assert children are not rendered and `Navigate` reports `to === '/'`.
 
-CREATE POLICY consultations_update ON public.consultations
-  FOR UPDATE TO authenticated
-  USING (public.is_clinical(auth.uid()))
-  WITH CHECK (public.is_clinical(auth.uid()));
--- Existing trigger `guard_completed_consultation_notes` keeps locking completed notes.
+3. **Guest firewall** (bonus, same file, very cheap)
+   - `useAuth` mock with `role: 'guest'`, `requireStaffOrAdmin`.
+   - Assert redirect to `/`.
 
-CREATE POLICY consultations_delete ON public.consultations
-  FOR DELETE TO authenticated
-  USING (public.is_admin(auth.uid()));
+4. **Happy path** — admin user with `requireAdmin` renders children.
 
--- vital_signs
-CREATE POLICY vital_signs_select ON public.vital_signs
-  FOR SELECT TO authenticated
-  USING (public.is_internal_staff(auth.uid()));
+No network calls. `@/integrations/supabase/client` is not imported by `ProtectedRoute`, so no Supabase mock is required; if a transitive import appears at test time we will `vi.mock('@/integrations/supabase/client', () => ({ supabase: {} }))`.
 
-CREATE POLICY vital_signs_write ON public.vital_signs
-  FOR INSERT TO authenticated
-  WITH CHECK (public.is_ops_or_admin(auth.uid()));
+## Notes on the literal spec
 
-CREATE POLICY vital_signs_update ON public.vital_signs
-  FOR UPDATE TO authenticated
-  USING (public.is_ops_or_admin(auth.uid()))
-  WITH CHECK (public.is_ops_or_admin(auth.uid()));
+- Spec asks for `role: 'patient'` and `role: 'ops'` JWTs. This codebase stores roles in `public.user_roles` (enum `app_role`), not in the JWT, and has no `patient` or `ops` enum values. The Deno test simulates `patient` as the `user_roles` row value (the actual code path), and the Vitest test uses `ops_staff` (the real enum) — both faithfully exercise the "disallowed role" branch.
+- No real keys: all `Deno.env.get` calls are backed by `Deno.env.set` with throwaway strings inside `try/finally`. Vitest never imports `@/integrations/supabase/client` for these tests.
 
-CREATE POLICY vital_signs_delete ON public.vital_signs
-  FOR DELETE TO authenticated
-  USING (public.is_admin(auth.uid()));
-```
-No `TO anon` grants. RLS denies guests by default.
+## Verification after implementation
 
-### Billing cluster — `corporate_clients`, `client_invoices`, `clinic_packages`
+- `npm run lint`
+- `npx tsc --noEmit`
+- `npm test` (runs `vitest run`)
+- `npm run build`
+- Edge function tests via `supabase--test_edge_functions` with `pattern: "auth-helpers"` (or run the `tests` folder).
 
-Drop existing permissive write policies, then:
+## Risks / rollback
 
-```sql
--- read: any internal staff (clinical roles can view billing context)
-CREATE POLICY corporate_clients_select ON public.corporate_clients
-  FOR SELECT TO authenticated USING (public.is_internal_staff(auth.uid()));
-CREATE POLICY client_invoices_select ON public.client_invoices
-  FOR SELECT TO authenticated USING (public.is_internal_staff(auth.uid()));
-CREATE POLICY clinic_packages_select ON public.clinic_packages
-  FOR SELECT TO authenticated USING (public.is_internal_staff(auth.uid()));
-
--- write: ops/admin/special_admin only
-CREATE POLICY corporate_clients_write ON public.corporate_clients
-  FOR INSERT TO authenticated WITH CHECK (public.is_ops_or_admin(auth.uid()));
-CREATE POLICY corporate_clients_upd ON public.corporate_clients
-  FOR UPDATE TO authenticated
-  USING (public.is_ops_or_admin(auth.uid()))
-  WITH CHECK (public.is_ops_or_admin(auth.uid()));
-CREATE POLICY corporate_clients_del ON public.corporate_clients
-  FOR DELETE TO authenticated USING (public.is_admin(auth.uid()));
-
--- (same INSERT/UPDATE/DELETE pattern repeated for client_invoices and clinic_packages)
-```
-`is_ops_or_admin` already maps to `staff/ops_staff/operations/admin/special_admin/doctor_admin/resident_doctor` — the operational set the spec asks for. Patients have no role and guests are unauthenticated → both denied by default.
-
-## Out of scope (kept for a later migration)
-`queue_entries`, `consultation_items`, `consultation_attachments`, `consultation_documents`, `consultation_transcripts`, `payments`, `einvoices`, `vendor_invoices`, `client_invoice_items`, `clinic_package_items`, `inventory_adjustments`, `panel_*`, `package_items`. The spec named only the six tables above; expanding scope here would risk the staff portal. They will be tackled in a follow-up cluster migration once this lands clean.
-
-## Risks & rollback
-- **Risk:** any frontend code that read PHI/billing while logged in as a role outside `is_internal_staff` (e.g. a user with only `guest`) would silently get empty results today and now gets RLS denials. Mitigation: AuthContext already routes those users away from `/clinic` and `/staff`.
-- **Risk:** dropping the old policies by exact name requires we know them. `DROP POLICY IF EXISTS` against every name we observed in `supabase/migrations/*.sql` (verified via grep) is included; the migration also runs a defensive `pg_policies` loop to drop any leftover policy whose `qual` or `with_check` text is exactly `true` on these six tables, so no stale permissive policy can survive.
-- **Rollback:** a paired down-migration recreating the prior `USING (true)` policies will be committed in a sibling `*_rollback.sql` file (not auto-applied). Restoring is a one-line `psql -f` if needed.
-
-## Verification
-```
-npm run lint
-npx tsc --noEmit
-npm test
-npm run build
-```
-Plus:
-- Supabase linter via the linter tool (expect no new warnings on these 6 tables).
-- Smoke test as a staff user: PatientsList, ConsultationDetail, VitalSigns entry, Receivables, PanelClaims, Procurement (corporate clients edit), Settings → Packages.
-- Negative test: log in as a `guest`-role user and confirm `/clinic/patients` returns empty / denied.
+- Risk: `withAuth` may import modules that touch `Deno.env` at import time — if so, env stubs must be set before the dynamic import. Mitigation: use `await import("../_shared/auth-helpers.ts")` inside each test after `Deno.env.set`.
+- Risk: `Navigate` mock could break other suites if module-scoped. Mitigation: `vi.mock` scoped to this test file only.
+- Rollback: tests are additive — delete the two new files and restore `example.test.ts` (one line) to revert.
