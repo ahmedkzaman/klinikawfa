@@ -199,6 +199,7 @@ Deno.test({
   } finally {
     globalThis.fetch = originalFetch;
   }
+  },
 });
 
 // ---------- sanitizeError directly: HttpError passes through, generic Error masked ----------
