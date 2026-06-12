@@ -98,7 +98,7 @@ import {
   TreatmentItemCard,
   type TreatmentItemCardItem,
 } from '@/components/clinic/consultation/TreatmentItemCard';
-import { DiagnosisCombobox } from '@/components/clinic/consultation/DiagnosisCombobox';
+import { MultiDiagnosisPicker } from '@/components/clinic/consultation/MultiDiagnosisPicker';
 import { useDiagnoses } from '@/hooks/clinic/useDiagnoses';
 import { SessionAttachmentsStrip } from '@/components/clinic/consultation/SessionAttachmentsStrip';
 import { PatientAlertBanner } from '@/components/clinic/PatientAlertBanner';
@@ -884,7 +884,7 @@ export default function ConsultationDetail() {
                     <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       Diagnosis
                     </Label>
-                    <DiagnosisCombobox
+                    <MultiDiagnosisPicker
                       diagnosisId={diagnosisId}
                       diagnosisText={diagnosisText}
                       onChange={({ diagnosis_id, diagnosis_text }) => {
