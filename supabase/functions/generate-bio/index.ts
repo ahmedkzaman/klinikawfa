@@ -1,9 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-};
+import { withAuth, HttpError } from "../_shared/auth-helpers.ts";
 
 interface GenerateBioRequest {
   name: string;
@@ -16,50 +11,46 @@ interface GenerateBioRequest {
   additional_notes?: string;
 }
 
-serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+const FN = "generate-bio";
 
-  try {
+Deno.serve(withAuth<GenerateBioRequest, { bio_ms: string; bio_en: string }>(
+  {
+    fnName: FN,
+    allowedRoles: ["clinical", "ops", "admin", "special_admin"],
+    maxBytes: 8 * 1024,
+  },
+  async (body, { userId }) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+      console.error(`[${FN}] missing_api_key`);
+      throw new HttpError(500, "Internal error");
     }
 
-    const body: GenerateBioRequest = await req.json();
-    const { 
-      name, 
-      title_ms, 
-      title_en, 
-      qualifications, 
-      expertise_ms, 
-      expertise_en, 
-      years_experience, 
-      additional_notes 
-    } = body;
+    const {
+      name,
+      title_ms,
+      title_en,
+      qualifications,
+      expertise_ms,
+      expertise_en,
+      years_experience,
+      additional_notes,
+    } = body ?? ({} as GenerateBioRequest);
 
-    console.log("Generating biography for:", name);
+    if (!name || typeof name !== "string") {
+      throw new HttpError(400, "Invalid request");
+    }
 
-    // Build context for the AI
-    const qualificationsText = qualifications.length > 0 
-      ? qualifications.join(", ") 
-      : "Not specified";
-    
-    const expertiseMsText = expertise_ms.length > 0 
-      ? expertise_ms.join(", ") 
-      : "Perubatan am";
-    
-    const expertiseEnText = expertise_en.length > 0 
-      ? expertise_en.join(", ") 
-      : "General practice";
-    
-    const experienceText = years_experience 
-      ? `${years_experience} years of experience` 
+    const qualificationsText = qualifications?.length ? qualifications.join(", ") : "Not specified";
+    const expertiseMsText = expertise_ms?.length ? expertise_ms.join(", ") : "Perubatan am";
+    const expertiseEnText = expertise_en?.length ? expertise_en.join(", ") : "General practice";
+    const experienceText = years_experience
+      ? `${years_experience} years of experience`
       : "Several years of experience";
 
-    const systemPrompt = `You are a professional medical biography writer. Your task is to create eloquent, professional biographies for healthcare practitioners. 
+    console.log(`[${FN}] invoked by ${userId}`);
+
+    const systemPrompt = `You are a professional medical biography writer. Your task is to create eloquent, professional biographies for healthcare practitioners.
 
 IMPORTANT GUIDELINES:
 - Write in third person
@@ -87,7 +78,7 @@ Qualifications: ${qualificationsText}
 Special Interests (Malay): ${expertiseMsText}
 Special Interests (English): ${expertiseEnText}
 Experience: ${experienceText}
-${additional_notes ? `Additional Notes to Include: ${additional_notes}` : ''}
+${additional_notes ? `Additional Notes to Include: ${additional_notes}` : ""}
 
 Remember: Create warm, professional, flowery prose. Do NOT use "specialist" or "pakar" terms.`;
 
@@ -107,61 +98,31 @@ Remember: Create warm, professional, flowery prose. Do NOT use "specialist" or "
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), 
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add more credits." }), 
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
-      throw new Error(`AI gateway error: ${response.status}`);
+      console.error(`[${FN}] ai_gateway_error`, response.status);
+      if (response.status === 429) throw new HttpError(429, "Rate limited");
+      if (response.status === 402) throw new HttpError(402, "AI credits exhausted");
+      throw new HttpError(502, "Upstream failed");
     }
 
     const aiResponse = await response.json();
-    const content = aiResponse.choices?.[0]?.message?.content;
-
+    const content = aiResponse?.choices?.[0]?.message?.content;
     if (!content) {
-      throw new Error("No content in AI response");
+      console.error(`[${FN}] empty_ai_content`);
+      throw new HttpError(502, "Upstream failed");
     }
 
-    console.log("AI response content:", content);
-
-    // Parse the JSON response from AI
     let bios: { bio_ms: string; bio_en: string };
     try {
-      // Remove any markdown code blocks if present
-      const cleanContent = content.replace(/```json\n?|\n?```/g, '').trim();
-      bios = JSON.parse(cleanContent);
-    } catch (parseError) {
-      console.error("Failed to parse AI response:", parseError);
-      throw new Error("Failed to parse AI response as JSON");
+      const clean = String(content).replace(/```json\n?|\n?```/g, "").trim();
+      bios = JSON.parse(clean);
+    } catch {
+      console.error(`[${FN}] ai_parse_error`);
+      throw new HttpError(502, "Upstream failed");
     }
 
     if (!bios.bio_ms || !bios.bio_en) {
-      throw new Error("AI response missing required fields");
+      throw new HttpError(502, "Upstream failed");
     }
-
-    console.log("Successfully generated biographies");
-
-    return new Response(
-      JSON.stringify(bios),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-
-  } catch (error) {
-    console.error("Error in generate-bio function:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error occurred" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return bios;
+  },
+));

@@ -1,76 +1,86 @@
+# Plan — Harden Auth for AI/TTS Edge Functions
 
-## Goal
+Backend-only. No frontend React changes. Three Edge Functions get JWT enforcement, role gating, payload caps, and sanitized errors via a shared helper.
 
-Split visit liability between Corporate Panel and Patient in `DispenseCheckout`. Allow zero-liability panel checkouts (no payment method required) and support partial co-pays when the panel coverage is reduced below the grand total.
+## Role mapping (app_role → allowed sets)
 
-## Scope
+The DB enum has no literal `clinical` or `ops`. Map the requested labels to existing roles in `public.user_roles.role`:
 
-Single file: `src/pages/clinic/DispenseCheckout.tsx` (frontend only).
-The `checkout_visit` RPC already accepts `p_payment_type: 'panel'` and `p_panel_provider_id`. Panel coverage accounting is handled downstream via `panel_claims`, so no DB migration is required for the basic split. A `p_panel_covered_amount` parameter will be sent — if the RPC ignores it the existing claim flow still records full coverage, and we can wire the param into the RPC in a follow-up.
+- `clinical` → `doctor`, `doctor_admin`, `resident_doctor`, `locum`
+- `ops` → `staff`, `ops_staff`, `operations`
+- `admin` → `admin`, `doctor_admin`
+- `special_admin` → `special_admin`
 
-## Changes (all in DispenseCheckout.tsx)
+The helper expands the friendly labels into the concrete role set before checking.
 
-### 1. State & math
+## Files
 
-- Add `const [panelCoveredAmount, setPanelCoveredAmount] = useState<number>(0);`
-- Add `const [panelCoveredInput, setPanelCoveredInput] = useState<string>('');` for the editable input (keeps the field controlled while the user types decimals).
-- Rename the meaning of `totalDue`:
-  - `grandTotal = outstanding + otherChargesTotal` (replaces current `totalDue`)
-  - `patientDue = Math.max(0, grandTotal - panelCoveredAmount)`
-- `useEffect` on `[grandTotal, panelId]`: if `panelId` present, default `panelCoveredAmount` and `panelCoveredInput` to `grandTotal` (full coverage). If no `panelId`, force both to 0. Use a `userEditedPanelRef` so manual edits aren't overwritten by item changes — but always clamp to `[0, grandTotal]`.
-- Pre-fill `amountPaidInput` with `patientDue` (instead of the old `totalDue`), respecting the existing `userEditedAmountRef`.
+### 1. `supabase/config.toml` (edit)
+Flip three entries to `verify_jwt = true`:
+- `[functions.generate-bio]`
+- `[functions.structure-medical-notes]`
+- `[functions.generate-tts]` (new block — currently absent)
 
-### 2. UI — panel coverage input + 3-line summary
+Leave webhooks/public flows untouched: `video-webhook`, `video-room`, `video-payment`, `submit-appointment`, `publish-scheduled-posts`, `admin-create-user`, `elevenlabs-scribe-token`.
 
-In the fixed footer:
+### 2. `supabase/functions/_shared/auth-helpers.ts` (new)
+Exports:
+- `corsHeaders` — single source of truth (re-export pattern so functions stop duplicating).
+- `HttpError` class with `status` and safe `message`.
+- `requireRole(req, allowedLabels: Array<'clinical'|'ops'|'admin'|'special_admin'>) → Promise<{ userId, role }>`
+  - Reads `Authorization: Bearer <jwt>`; 401 if missing/malformed.
+  - Creates a Supabase client with the user JWT, calls `auth.getUser()`; 401 if invalid.
+  - Reads `public.user_roles` with the service-role client (single source of truth; ignores any claim that could be spoofed).
+  - Expands labels to concrete enum values; 403 if role not in set.
+  - Returns `{ userId, role }`.
+- `validatePayloadSize(req, maxBytes)` — checks `Content-Length`; 413 if exceeded. For chunked/missing header, also caps by reading body once and returning the parsed text/JSON so handlers don't double-read.
+  - Pattern: `readJsonWithLimit<T>(req, maxBytes): Promise<T>` returning the parsed body, throwing `HttpError(413)` if oversize, `HttpError(400)` on invalid JSON.
+- `sanitizeError(err) → { status, body }` — converts `HttpError` to its status+message, everything else to `{ status: 500, body: { error: 'Internal error' } }`. Logs server-side with `console.error` but never echoes stack/keys/PHI in the response.
+- `withAuth(handler, opts)` — small wrapper that handles `OPTIONS`, method check, role gate, payload parse, try/catch, and final JSON response with `corsHeaders`.
 
-- When `panelId` is present, render a number input **"Covered by Panel (RM)"** bound to `panelCoveredInput`, with `min=0`, `max=grandTotal`, `step=0.01`. On change: update both `panelCoveredInput` and `panelCoveredAmount` (clamped), and mark `userEditedPanelRef.current = true`.
-- Replace the current single "Total due" line with:
-  ```
-  Grand Total:        RM XX.XX
-  Covered by Panel:  -RM XX.XX     (only when panelId)
-  Patient Pays:       RM YY.YY
-  ```
-  Self-pay keeps a single "Total due" line.
+### 3. Refactor functions (edit, body-only)
+For each function, replace the top-level `serve(...)` body with a `withAuth` call:
 
-### 3. Conditional patient payment UI + validation
+- `supabase/functions/structure-medical-notes/index.ts`
+  - Allowed: `['clinical', 'admin', 'special_admin']`
+  - `maxBytes: 20 * 1024`
+  - Keep existing AI gateway call; never log `transcript` content (only length).
 
-- When `patientDue === 0`:
-  - Hide the **Method** select and **Amount Paid** input.
-  - Skip the `paymentMethod` / `safeAmountPaid <= 0` / `isOverpay` clauses in `canSubmitCheckout` and in `handleComplete`.
-  - Button label: **"Complete Panel Checkout"**.
-- When `patientDue > 0`:
-  - Show Method + Amount Paid (existing fields, with `safeAmountPaid` validated against `patientDue` instead of the old `totalDue`).
-  - Pre-fill Amount Paid with `patientDue`.
-  - Button label: **"Record Co-pay & Complete"** when `panelCoveredAmount > 0`, otherwise the existing **"Complete Checkout"** / **"Record Partial Payment"** logic.
+- `supabase/functions/generate-bio/index.ts`
+  - Allowed: `['clinical', 'ops', 'admin', 'special_admin']`
+  - `maxBytes: 8 * 1024` (small JSON form payload)
+  - Drop verbose error text in responses; keep server-side `console.error`.
 
-### 4. RPC payload
+- `supabase/functions/generate-tts/index.ts`
+  - Allowed: `['clinical', 'ops', 'admin', 'special_admin']`
+  - `maxBytes: 16 * 1024` (covers 5000-char text + voice metadata)
+  - Existing 5000-char and field checks remain.
 
-In `handleComplete`:
-
-```ts
-supabase.rpc('checkout_visit', {
-  p_queue_entry_id: queueEntryId,
-  p_consultation_id: consultation.id,
-  p_total_amount: grandTotal,
-  p_amount_paid: patientDue === 0 ? 0 : safeAmountPaid,
-  p_payment_method: patientDue === 0 ? 'panel' : paymentMethod,
-  p_payment_type: panelId ? 'panel' : 'self_pay',
-  p_panel_provider_id: panelId ?? null,
-  p_panel_covered_amount: panelCoveredAmount,   // new — RPC may ignore until wired
-  p_other_charges: selectedCharges.map(c => ({ name: c.name, amount: c.amount })),
-  p_notes: null,
-})
-```
-
-Cast the call to `any` for the new param to satisfy the generated RPC types until the migration lands.
-
-### 5. Success toast
-
-- `patientDue === 0` → "Panel checkout completed".
-- Otherwise keep existing paid / partial-payment messages.
+All three:
+- Return only generic safe messages: `{ error: 'Unauthorized' | 'Forbidden' | 'Payload too large' | 'Invalid request' | 'Upstream failed' | 'Internal error' }`.
+- Preserve existing CORS headers on every response (including errors).
+- No change to request/response JSON shape on success — frontend untouched.
 
 ## Out of scope
+- Frontend code (none touched; existing `supabase.functions.invoke` already attaches JWT).
+- RLS changes, other Edge Functions, test scaffolding (covered by separate plan items).
+- DB migrations.
 
-- No changes to `BillingDetailsColumn`, `DispensePanel`, per-item pricing, or the medication-discount logic.
-- No DB migration in this pass. A follow-up can add a `p_panel_covered_amount` argument and persist it on `panel_claims.amount` so reduced-coverage co-pays update the claim ledger correctly.
+## Risks & rollback
+- Risk: a caller invoking these functions via raw `fetch` without a session token will now get 401. Mitigation: all callers in `src/` use `supabase.functions.invoke`, which attaches the session JWT automatically.
+- Risk: role label mismatch (e.g. a user has only `staff` and tries to call `structure-medical-notes`). Intended — clinical PHI tooling shouldn't be invoked by non-clinical roles.
+- Rollback: revert the three `verify_jwt` flips in `config.toml` and remove the `withAuth` wrapper / shared helper import in each function. Helper file is additive and harmless if unused.
+
+## Verification (post-implementation)
+```
+npm run lint
+npx tsc --noEmit
+npm test
+npm run build
+```
+Plus manual edge calls:
+- anon `curl -X POST .../generate-bio` → 401
+- authed non-clinical user → 403
+- authed doctor with 25KB body to `structure-medical-notes` → 413
+- authed doctor with valid body → 200
+- error path returns no stack/key strings (grep response body)
