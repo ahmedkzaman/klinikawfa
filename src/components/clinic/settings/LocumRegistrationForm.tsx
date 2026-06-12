@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
+import { generateTemporaryPassword } from '@/lib/security';
 import { toast } from 'sonner';
 
 interface LocumRegistrationFormProps {
@@ -15,6 +16,8 @@ interface LocumRegistrationFormProps {
   /** Render the default standalone submit button when no footer is provided. */
   showDefaultSubmit?: boolean;
 }
+
+type FunctionErrorBody = { error?: unknown };
 
 /**
  * Shared form for creating a Locum doctor account. Used by both the
@@ -30,7 +33,7 @@ export function LocumRegistrationForm({
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('test1234');
+  const [password, setPassword] = useState(() => generateTemporaryPassword());
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -38,7 +41,7 @@ export function LocumRegistrationForm({
     setFullName('');
     setEmail('');
     setPhone('');
-    setPassword('test1234');
+    setPassword(generateTemporaryPassword());
     setShowPassword(false);
   };
 
@@ -64,14 +67,15 @@ export function LocumRegistrationForm({
         },
       });
       if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
+      const functionBody = data as FunctionErrorBody | null;
+      if (functionBody?.error) throw new Error(String(functionBody.error));
 
       toast.success(`Locum account created for ${email.trim()}`);
       qc.invalidateQueries({ queryKey: ['clinic_users'] });
       reset();
       onSuccess?.();
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to create locum account');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create locum account');
     } finally {
       setSubmitting(false);
     }

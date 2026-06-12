@@ -19,6 +19,8 @@ const purifyConfig = {
     "controls",
     "target",
   ],
+  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
+  FORBID_ATTR: ["style", "onerror", "onload", "onclick"],
 };
 
 const stripHtml = (html: string) =>

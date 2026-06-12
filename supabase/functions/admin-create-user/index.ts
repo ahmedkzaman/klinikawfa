@@ -18,7 +18,7 @@ const BodySchema = z.object({
   email: z.string().email().max(255),
   fullName: z.string().min(1).max(255),
   phone: z.string().max(40).optional().nullable(),
-  password: z.string().min(8).max(72).optional(),
+  password: z.string().min(8).max(72),
   role: z
     .enum(['locum', 'resident_doctor', 'ops_staff', 'staff', 'operations'])
     .default('locum'),
@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
   if (!parsed.success) {
     return json({ error: parsed.error.flatten().fieldErrors }, 400);
   }
-  const { email, fullName, phone, password: bodyPassword } = parsed.data;
+  const { email, fullName, phone, password } = parsed.data;
   // SECURITY: Ops-tier callers (front desk) can ONLY ever create locums.
   // We hardcode the role server-side and ignore whatever the client sent,
   // so a tampered request cannot escalate to resident_doctor/ops_staff/etc.
@@ -101,9 +101,9 @@ Deno.serve(async (req) => {
   }
 
   // 5. Create the user. `email_confirm: true` is REQUIRED — locums and staff
-  // created here must be able to log in immediately at the front desk. Do not
-  // remove unless you also build an email-verification fallback flow.
-  const password = bodyPassword && bodyPassword.length >= 8 ? bodyPassword : 'test1234';
+  // created here must be able to log in immediately at the front desk. The
+  // caller must provide a unique temporary password; never fall back to a
+  // shared default password.
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
     email,
     password,

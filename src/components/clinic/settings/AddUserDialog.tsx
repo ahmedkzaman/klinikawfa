@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
+import { generateTemporaryPassword } from '@/lib/security';
 import { toast } from 'sonner';
 
 export type CreatableUserRole = 'locum' | 'resident_doctor';
@@ -27,7 +28,7 @@ const ROLE_COPY: Record<
     namePlaceholder: 'Dr. Ahmad bin Ali',
     emailPlaceholder: 'locum@example.com',
     cta: 'Create Locum',
-    success: 'Locum account created. Default password: test1234',
+    success: 'Locum account created with a generated temporary password.',
   },
   resident_doctor: {
     title: 'Add Resident Doctor',
@@ -36,7 +37,7 @@ const ROLE_COPY: Record<
     namePlaceholder: 'Dr. Siti binti Rahman',
     emailPlaceholder: 'doctor@klinikawfa.com',
     cta: 'Create Resident Doctor',
-    success: 'Resident Doctor account created. Default password: test1234',
+    success: 'Resident Doctor account created with a generated temporary password.',
   },
 };
 
@@ -45,6 +46,8 @@ interface AddUserDialogProps {
   onOpenChange: (open: boolean) => void;
   role: CreatableUserRole;
 }
+
+type FunctionErrorBody = { error?: unknown };
 
 export function AddUserDialog({ open, onOpenChange, role }: AddUserDialogProps) {
   const qc = useQueryClient();
@@ -69,23 +72,26 @@ export function AddUserDialog({ open, onOpenChange, role }: AddUserDialogProps) 
     }
     setSubmitting(true);
     try {
+      const temporaryPassword = generateTemporaryPassword();
       const { data, error } = await supabase.functions.invoke('admin-create-user', {
         body: {
           email: email.trim(),
           fullName: fullName.trim(),
           phone: phone.trim() || null,
+          password: temporaryPassword,
           role,
         },
       });
       if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
+      const functionBody = data as FunctionErrorBody | null;
+      if (functionBody?.error) throw new Error(String(functionBody.error));
 
-      toast.success(copy.success);
+      toast.success(`${copy.success} Temporary password: ${temporaryPassword}`);
       qc.invalidateQueries({ queryKey: ['clinic_users'] });
       reset();
       onOpenChange(false);
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to create user');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create user');
     } finally {
       setSubmitting(false);
     }
@@ -97,8 +103,7 @@ export function AddUserDialog({ open, onOpenChange, role }: AddUserDialogProps) 
         <DialogHeader>
           <DialogTitle>{copy.title}</DialogTitle>
           <DialogDescription>
-            {copy.description} Default password will be{' '}
-            <code className="font-mono text-xs px-1 rounded bg-muted">test1234</code>.
+            {copy.description} A unique temporary password will be generated and shown once after creation.
             User should change it on first login.
           </DialogDescription>
         </DialogHeader>

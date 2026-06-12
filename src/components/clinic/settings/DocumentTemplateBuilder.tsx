@@ -22,6 +22,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
+import { escapeHtml } from '@/lib/security';
 
 const PREVIEW_DICTIONARY: Record<string, string> = {
   '{{patient_name}}': 'Ahmad bin Ali',
@@ -84,9 +85,6 @@ const DOC_TYPE_LABEL = (v: string) =>
 
 const BLANK_CONTENT =
   'MEMORANDUM\n\nDate: {{current_date}}\nTo: Whom It May Concern\n\nThis is to certify that {{patient_name}} (IC: {{patient_ic}}) was examined at {{clinic_name}} by {{doctor_name}}.\n\nDiagnosis: {{diagnosis}}';
-
-const escapeHtml = (str: string) =>
-  str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 export default function DocumentTemplateBuilder() {
   const { data: templates = [], isLoading } = useDocumentTemplates();

@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { escapeHtml, isSafeUrl } from '@/lib/security';
 
 interface MarkdownRendererProps {
   content: string;
@@ -11,11 +12,8 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
 
     let result = content;
 
-    // Escape HTML to prevent XSS
-    result = result
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+    // Escape HTML to prevent XSS before converting trusted markdown tokens.
+    result = escapeHtml(result);
 
     // Process markdown syntax
     // Headers (### before ##)
@@ -27,10 +25,16 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
     result = result.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     result = result.replace(/\*(.+?)\*/g, '<em>$1</em>');
 
-    // Links [text](url)
+    // Links [text](url) — only allow safe schemes after escaping link text.
     result = result.replace(
       /\[([^\]]+)\]\(([^)]+)\)/g,
-      '<a href="$2" class="text-primary underline hover:no-underline" target="_blank" rel="noopener noreferrer">$1</a>'
+      (_match, rawText: string, rawUrl: string) => {
+        const text = rawText;
+        const url = rawUrl.trim().replace(/&amp;/g, '&');
+        if (!isSafeUrl(url)) return text;
+        const href = escapeHtml(url);
+        return `<a href="${href}" class="text-primary underline hover:no-underline" target="_blank" rel="noopener noreferrer">${text}</a>`;
+      },
     );
 
     // Unordered lists

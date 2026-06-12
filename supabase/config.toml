@@ -7,7 +7,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.generate-blog-content]
-verify_jwt = false
+verify_jwt = true
 
 [functions.video-room]
 verify_jwt = false
@@ -22,7 +22,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.elevenlabs-scribe-token]
-verify_jwt = false
+verify_jwt = true
 
 [functions.structure-medical-notes]
 verify_jwt = true
@@ -31,4 +31,4 @@ verify_jwt = true
 verify_jwt = false
 
 [functions.admin-create-user]
-verify_jwt = false
+verify_jwt = true
