@@ -38,7 +38,13 @@ Deno.test("requireRole -> 401 when Authorization header is missing", async () =>
 });
 
 // ---------- 403: authenticated user with disallowed role ----------
-Deno.test("requireRole -> 403 when role is not in allow-list (patient)", async () => {
+Deno.test({
+  name: "requireRole -> 403 when role is not in allow-list (patient)",
+  // Supabase client spins up internal timers (realtime heartbeat) that we
+  // don't own; disable resource/op sanitizers for tests that touch it.
+  sanitizeOps: false,
+  sanitizeResources: false,
+  fn: async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = ((input: Request | URL | string, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
