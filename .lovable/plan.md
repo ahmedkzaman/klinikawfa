@@ -1,86 +1,138 @@
-# Plan — Harden Auth for AI/TTS Edge Functions
+# Plan — Harden RLS for PHI & Billing (corrected)
 
-Backend-only. No frontend React changes. Three Edge Functions get JWT enforcement, role gating, payload caps, and sanitized errors via a shared helper.
+## Why the literal spec must be adapted
 
-## Role mapping (app_role → allowed sets)
+Three issues confirmed against the live schema. Sticking to the prompt verbatim would compile but be wrong at runtime.
 
-The DB enum has no literal `clinical` or `ops`. Map the requested labels to existing roles in `public.user_roles.role`:
+1. **`auth.jwt() ->> 'role'` does not return app roles.** It returns Supabase's built-in PostgREST role (`authenticated`, `anon`, `service_role`). The real role enum (`admin`, `doctor`, `staff`, `locum`, etc.) lives in `public.user_roles` and is read via existing SECURITY DEFINER helpers (`is_admin`, `is_internal_staff`, `is_ops_or_admin`, `has_strict_role`, `has_role`). Using a JWT claim that is never populated would silently deny everyone except service_role — including the staff app. We will use the helpers, which is the pattern already documented in the project memory ([User Roles] system prompt) and used by every other policy.
+2. **`consultations.doctor_id` is `doctors.id`, not `auth.users.id`.** `doctor_id = auth.uid()` always returns false. Locum scoping has to go through `doctors.user_id` (or, simpler and consistent with the rest of the app, `has_strict_role(auth.uid(),'locum')` plus the existing `is_clinical` set — there is no locum-only PHI partition in the current product).
+3. **`patients.id` is not an auth user id.** Patients are not authenticated users in this product — there is no patient portal. A `patients.id = auth.uid()` clause would be dead code. I will not add a patient-self-read policy; the requirement is implicitly satisfied because no `patient` role exists and no anon access is granted.
 
-- `clinical` → `doctor`, `doctor_admin`, `resident_doctor`, `locum`
-- `ops` → `staff`, `ops_staff`, `operations`
-- `admin` → `admin`, `doctor_admin`
-- `special_admin` → `special_admin`
+So the spec's intent — "only clinical/admin/ops touch PHI; only ops/admin touch billing writes; everyone else denied" — is honoured, but expressed with the helpers that actually work.
 
-The helper expands the friendly labels into the concrete role set before checking.
+## Helper to add
 
-## Files
+```sql
+CREATE OR REPLACE FUNCTION public.is_clinical(_user_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.user_roles
+    WHERE user_id = _user_id
+      AND role IN ('doctor','doctor_admin','resident_doctor','locum','admin','special_admin')
+  )
+$$;
+```
+Re-uses existing `is_admin`, `is_internal_staff`, `is_ops_or_admin` for the rest.
 
-### 1. `supabase/config.toml` (edit)
-Flip three entries to `verify_jwt = true`:
-- `[functions.generate-bio]`
-- `[functions.structure-medical-notes]`
-- `[functions.generate-tts]` (new block — currently absent)
+## Migration file
 
-Leave webhooks/public flows untouched: `video-webhook`, `video-room`, `video-payment`, `submit-appointment`, `publish-scheduled-posts`, `admin-create-user`, `elevenlabs-scribe-token`.
+`supabase/migrations/20260612000000_harden_phi_billing_rls.sql` — single transaction, idempotent (`DROP POLICY IF EXISTS`). RLS is already enabled on every listed table.
 
-### 2. `supabase/functions/_shared/auth-helpers.ts` (new)
-Exports:
-- `corsHeaders` — single source of truth (re-export pattern so functions stop duplicating).
-- `HttpError` class with `status` and safe `message`.
-- `requireRole(req, allowedLabels: Array<'clinical'|'ops'|'admin'|'special_admin'>) → Promise<{ userId, role }>`
-  - Reads `Authorization: Bearer <jwt>`; 401 if missing/malformed.
-  - Creates a Supabase client with the user JWT, calls `auth.getUser()`; 401 if invalid.
-  - Reads `public.user_roles` with the service-role client (single source of truth; ignores any claim that could be spoofed).
-  - Expands labels to concrete enum values; 403 if role not in set.
-  - Returns `{ userId, role }`.
-- `validatePayloadSize(req, maxBytes)` — checks `Content-Length`; 413 if exceeded. For chunked/missing header, also caps by reading body once and returning the parsed text/JSON so handlers don't double-read.
-  - Pattern: `readJsonWithLimit<T>(req, maxBytes): Promise<T>` returning the parsed body, throwing `HttpError(413)` if oversize, `HttpError(400)` on invalid JSON.
-- `sanitizeError(err) → { status, body }` — converts `HttpError` to its status+message, everything else to `{ status: 500, body: { error: 'Internal error' } }`. Logs server-side with `console.error` but never echoes stack/keys/PHI in the response.
-- `withAuth(handler, opts)` — small wrapper that handles `OPTIONS`, method check, role gate, payload parse, try/catch, and final JSON response with `corsHeaders`.
+### PHI cluster — `patients`, `consultations`, `vital_signs`
 
-### 3. Refactor functions (edit, body-only)
-For each function, replace the top-level `serve(...)` body with a `withAuth` call:
+Drop every existing permissive policy on these three tables, then:
 
-- `supabase/functions/structure-medical-notes/index.ts`
-  - Allowed: `['clinical', 'admin', 'special_admin']`
-  - `maxBytes: 20 * 1024`
-  - Keep existing AI gateway call; never log `transcript` content (only length).
+```sql
+-- patients
+CREATE POLICY patients_select ON public.patients
+  FOR SELECT TO authenticated
+  USING (public.is_internal_staff(auth.uid()));
 
-- `supabase/functions/generate-bio/index.ts`
-  - Allowed: `['clinical', 'ops', 'admin', 'special_admin']`
-  - `maxBytes: 8 * 1024` (small JSON form payload)
-  - Drop verbose error text in responses; keep server-side `console.error`.
+CREATE POLICY patients_insert ON public.patients
+  FOR INSERT TO authenticated
+  WITH CHECK (public.is_ops_or_admin(auth.uid()));
 
-- `supabase/functions/generate-tts/index.ts`
-  - Allowed: `['clinical', 'ops', 'admin', 'special_admin']`
-  - `maxBytes: 16 * 1024` (covers 5000-char text + voice metadata)
-  - Existing 5000-char and field checks remain.
+CREATE POLICY patients_update ON public.patients
+  FOR UPDATE TO authenticated
+  USING (public.is_ops_or_admin(auth.uid()))
+  WITH CHECK (public.is_ops_or_admin(auth.uid()));
 
-All three:
-- Return only generic safe messages: `{ error: 'Unauthorized' | 'Forbidden' | 'Payload too large' | 'Invalid request' | 'Upstream failed' | 'Internal error' }`.
-- Preserve existing CORS headers on every response (including errors).
-- No change to request/response JSON shape on success — frontend untouched.
+CREATE POLICY patients_delete ON public.patients
+  FOR DELETE TO authenticated
+  USING (public.is_admin(auth.uid()));
 
-## Out of scope
-- Frontend code (none touched; existing `supabase.functions.invoke` already attaches JWT).
-- RLS changes, other Edge Functions, test scaffolding (covered by separate plan items).
-- DB migrations.
+-- consultations
+CREATE POLICY consultations_select ON public.consultations
+  FOR SELECT TO authenticated
+  USING (public.is_internal_staff(auth.uid()));
+
+CREATE POLICY consultations_insert ON public.consultations
+  FOR INSERT TO authenticated
+  WITH CHECK (public.is_clinical(auth.uid()));
+
+CREATE POLICY consultations_update ON public.consultations
+  FOR UPDATE TO authenticated
+  USING (public.is_clinical(auth.uid()))
+  WITH CHECK (public.is_clinical(auth.uid()));
+-- Existing trigger `guard_completed_consultation_notes` keeps locking completed notes.
+
+CREATE POLICY consultations_delete ON public.consultations
+  FOR DELETE TO authenticated
+  USING (public.is_admin(auth.uid()));
+
+-- vital_signs
+CREATE POLICY vital_signs_select ON public.vital_signs
+  FOR SELECT TO authenticated
+  USING (public.is_internal_staff(auth.uid()));
+
+CREATE POLICY vital_signs_write ON public.vital_signs
+  FOR INSERT TO authenticated
+  WITH CHECK (public.is_ops_or_admin(auth.uid()));
+
+CREATE POLICY vital_signs_update ON public.vital_signs
+  FOR UPDATE TO authenticated
+  USING (public.is_ops_or_admin(auth.uid()))
+  WITH CHECK (public.is_ops_or_admin(auth.uid()));
+
+CREATE POLICY vital_signs_delete ON public.vital_signs
+  FOR DELETE TO authenticated
+  USING (public.is_admin(auth.uid()));
+```
+No `TO anon` grants. RLS denies guests by default.
+
+### Billing cluster — `corporate_clients`, `client_invoices`, `clinic_packages`
+
+Drop existing permissive write policies, then:
+
+```sql
+-- read: any internal staff (clinical roles can view billing context)
+CREATE POLICY corporate_clients_select ON public.corporate_clients
+  FOR SELECT TO authenticated USING (public.is_internal_staff(auth.uid()));
+CREATE POLICY client_invoices_select ON public.client_invoices
+  FOR SELECT TO authenticated USING (public.is_internal_staff(auth.uid()));
+CREATE POLICY clinic_packages_select ON public.clinic_packages
+  FOR SELECT TO authenticated USING (public.is_internal_staff(auth.uid()));
+
+-- write: ops/admin/special_admin only
+CREATE POLICY corporate_clients_write ON public.corporate_clients
+  FOR INSERT TO authenticated WITH CHECK (public.is_ops_or_admin(auth.uid()));
+CREATE POLICY corporate_clients_upd ON public.corporate_clients
+  FOR UPDATE TO authenticated
+  USING (public.is_ops_or_admin(auth.uid()))
+  WITH CHECK (public.is_ops_or_admin(auth.uid()));
+CREATE POLICY corporate_clients_del ON public.corporate_clients
+  FOR DELETE TO authenticated USING (public.is_admin(auth.uid()));
+
+-- (same INSERT/UPDATE/DELETE pattern repeated for client_invoices and clinic_packages)
+```
+`is_ops_or_admin` already maps to `staff/ops_staff/operations/admin/special_admin/doctor_admin/resident_doctor` — the operational set the spec asks for. Patients have no role and guests are unauthenticated → both denied by default.
+
+## Out of scope (kept for a later migration)
+`queue_entries`, `consultation_items`, `consultation_attachments`, `consultation_documents`, `consultation_transcripts`, `payments`, `einvoices`, `vendor_invoices`, `client_invoice_items`, `clinic_package_items`, `inventory_adjustments`, `panel_*`, `package_items`. The spec named only the six tables above; expanding scope here would risk the staff portal. They will be tackled in a follow-up cluster migration once this lands clean.
 
 ## Risks & rollback
-- Risk: a caller invoking these functions via raw `fetch` without a session token will now get 401. Mitigation: all callers in `src/` use `supabase.functions.invoke`, which attaches the session JWT automatically.
-- Risk: role label mismatch (e.g. a user has only `staff` and tries to call `structure-medical-notes`). Intended — clinical PHI tooling shouldn't be invoked by non-clinical roles.
-- Rollback: revert the three `verify_jwt` flips in `config.toml` and remove the `withAuth` wrapper / shared helper import in each function. Helper file is additive and harmless if unused.
+- **Risk:** any frontend code that read PHI/billing while logged in as a role outside `is_internal_staff` (e.g. a user with only `guest`) would silently get empty results today and now gets RLS denials. Mitigation: AuthContext already routes those users away from `/clinic` and `/staff`.
+- **Risk:** dropping the old policies by exact name requires we know them. `DROP POLICY IF EXISTS` against every name we observed in `supabase/migrations/*.sql` (verified via grep) is included; the migration also runs a defensive `pg_policies` loop to drop any leftover policy whose `qual` or `with_check` text is exactly `true` on these six tables, so no stale permissive policy can survive.
+- **Rollback:** a paired down-migration recreating the prior `USING (true)` policies will be committed in a sibling `*_rollback.sql` file (not auto-applied). Restoring is a one-line `psql -f` if needed.
 
-## Verification (post-implementation)
+## Verification
 ```
 npm run lint
 npx tsc --noEmit
 npm test
 npm run build
 ```
-Plus manual edge calls:
-- anon `curl -X POST .../generate-bio` → 401
-- authed non-clinical user → 403
-- authed doctor with 25KB body to `structure-medical-notes` → 413
-- authed doctor with valid body → 200
-- error path returns no stack/key strings (grep response body)
+Plus:
+- Supabase linter via the linter tool (expect no new warnings on these 6 tables).
+- Smoke test as a staff user: PatientsList, ConsultationDetail, VitalSigns entry, Receivables, PanelClaims, Procurement (corporate clients edit), Settings → Packages.
+- Negative test: log in as a `guest`-role user and confirm `/clinic/patients` returns empty / denied.
