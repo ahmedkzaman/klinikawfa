@@ -1,0 +1,297 @@
+{
+  "status": "safe-foundation-only",
+  "databaseConnectionRequired": false,
+  "canonicalGroups": {
+    "special_admin": [
+      "special_admin"
+    ],
+    "admin": [
+      "admin"
+    ],
+    "doctor": [
+      "doctor_admin",
+      "resident_doctor"
+    ],
+    "ops": [
+      "ops_staff",
+      "operations",
+      "staff"
+    ],
+    "locum": [
+      "locum"
+    ],
+    "guest": [
+      "guest",
+      "unauthenticated"
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "clinical_portal_access",
+      "description": "Access clinical portal workflows.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "allow",
+        "doctor": "allow",
+        "ops": "allow",
+        "locum": "scoped_assigned_patient_only",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "admin_staff_portal_access",
+      "description": "Access admin staff portal.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "allow",
+        "doctor": "deny",
+        "ops": "deny",
+        "locum": "deny",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "assign_roles",
+      "description": "Assign or change user roles.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "deny",
+        "doctor": "deny",
+        "ops": "deny",
+        "locum": "deny",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "view_secrets",
+      "description": "View secrets or sensitive configuration values.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "deny",
+        "doctor": "deny",
+        "ops": "deny",
+        "locum": "deny",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "destructive_admin_actions",
+      "description": "Perform destructive or irreversible admin actions.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "deny",
+        "doctor": "deny",
+        "ops": "deny",
+        "locum": "deny",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "read_all_patients",
+      "description": "Read all patient records.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "allow",
+        "doctor": "allow",
+        "ops": "allow",
+        "locum": "deny_assigned_patient_only",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "search_export_patient_records",
+      "description": "Search or export patient records.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "allow",
+        "doctor": "allow",
+        "ops": "allow",
+        "locum": "deny_assigned_patient_only",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "historical_consultations_vitals",
+      "description": "View historical consultations and vitals.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "allow",
+        "doctor": "allow",
+        "ops": "allow",
+        "locum": "scoped_assigned_patient_only",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "key_in_items",
+      "description": "Key in consultation/order/service items.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "allow",
+        "doctor": "allow",
+        "ops": "allow",
+        "locum": "allow_assigned_patient_only",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "view_item_prices",
+      "description": "View item prices/costs.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "allow",
+        "doctor": "allow",
+        "ops": "allow",
+        "locum": "deny",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "view_stock_quantity",
+      "description": "View stock quantity.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "allow",
+        "doctor": "allow",
+        "ops": "allow",
+        "locum": "allow",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "create_update_delete_payments",
+      "description": "Create, update, or delete payments.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "allow",
+        "doctor": "allow",
+        "ops": "allow",
+        "locum": "deny",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "view_panel_claims",
+      "description": "View panel claims.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "allow",
+        "doctor": "allow",
+        "ops": "allow",
+        "locum": "deny",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "view_einvoices_tax_billing",
+      "description": "View e-invoices, tax, and billing data.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "allow",
+        "doctor": "deny",
+        "ops": "allow",
+        "locum": "deny",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "void_refund_delete_financial_records",
+      "description": "Void, refund, or delete financial records.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "allow",
+        "doctor": "deny",
+        "ops": "allow",
+        "locum": "deny",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "update_package_pricing_vendor_invoices",
+      "description": "Update packages, pricing, or vendor invoices.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "allow",
+        "doctor": "deny",
+        "ops": "deny",
+        "locum": "deny",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "video_room_lookup",
+      "description": "Lookup video room by room code.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "allow",
+        "doctor": "allow",
+        "ops": "allow",
+        "locum": "deny",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "video_lookup_returns_patient_name",
+      "description": "Return patient name from video room lookup.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "allow",
+        "doctor": "allow",
+        "ops": "allow",
+        "locum": "deny",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "create_end_video_rooms",
+      "description": "Create or end video rooms.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "allow",
+        "doctor": "allow",
+        "ops": "allow",
+        "locum": "deny",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "charge_additional_video_payment",
+      "description": "Charge additional video payment.",
+      "expected": {
+        "special_admin": "allow",
+        "admin": "allow",
+        "doctor": "allow",
+        "ops": "allow",
+        "locum": "deny",
+        "guest": "deny"
+      }
+    },
+    {
+      "id": "anonymous_public_review_insert",
+      "description": "Insert public reviews anonymously.",
+      "expected": {
+        "special_admin": "deny",
+        "admin": "deny",
+        "doctor": "deny",
+        "ops": "deny",
+        "locum": "deny",
+        "guest": "deny"
+      }
+    }
+  ],
+  "openRecommendationsNeeded": [
+    "Explain and recommend payment mutation model: direct table policy vs RPC-only vs Edge Function-only.",
+    "Explain implications of allowing both payment verify endpoint and Stripe webhook to update the database, including idempotency and source-of-truth model.",
+    "Review whether public appointment submission rate limit is sufficient and recommend spam controls if needed.",
+    "Recommend moderation/spam-control design for non-anonymous public reviews.",
+    "Recommend staging, rollback, downtime, and feature-flag/safe-view/RPC rollout plan before policy tightening."
+  ],
+  "futureIntegrationTestNotes": [
+    "Use only a disposable local database or an explicitly approved staging database.",
+    "Do not use production unless DocM3d separately approves production read-only validation.",
+    "For each policy assertion, seed minimal records for owner, assigned locum, unrelated locum, doctor, ops, admin, special_admin, and guest/anon contexts.",
+    "Assert locum can key in items and view stock quantity for assigned patients while price/cost fields remain unavailable.",
+    "Assert video room lookup is denied for public/guest and locum, but allowed for doctor, ops, admin, and special_admin.",
+    "Assert anonymous public review insert is denied or routed to a moderated non-public workflow."
+  ]
+}
