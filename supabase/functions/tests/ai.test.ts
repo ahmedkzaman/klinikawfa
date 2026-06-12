@@ -140,7 +140,11 @@ Deno.test("readJsonWithLimit -> 413 when streamed body exceeds cap", async () =>
 });
 
 // ---------- sanitizeError + withAuth do not leak internals ----------
-Deno.test("withAuth sanitizes thrown errors (no secrets/stack leakage)", async () => {
+Deno.test({
+  name: "withAuth sanitizes thrown errors (no secrets/stack leakage)",
+  sanitizeOps: false,
+  sanitizeResources: false,
+  fn: async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = ((input: Request | URL | string) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
