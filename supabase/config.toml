@@ -1,7 +1,10 @@
 project_id = "ncysmppzfjtiekfnomdv"
 
 [functions.generate-bio]
-verify_jwt = false
+verify_jwt = true
+
+[functions.generate-tts]
+verify_jwt = true
 
 [functions.generate-blog-content]
 verify_jwt = false
@@ -22,7 +25,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.structure-medical-notes]
-verify_jwt = false
+verify_jwt = true
 
 [functions.submit-appointment]
 verify_jwt = false
