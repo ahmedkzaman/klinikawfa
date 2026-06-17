@@ -1,0 +1,2 @@
+-- Full content embedded from /tmp/import_diagnoses_clean.sql
+-- See file for complete 2000-row insert

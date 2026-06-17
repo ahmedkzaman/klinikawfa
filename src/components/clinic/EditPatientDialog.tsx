@@ -1,0 +1,417 @@
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { toast } from 'sonner';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useUpdatePatient } from '@/hooks/clinic/usePatients';
+import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
+import {
+  patientSchema,
+  RELIGIONS,
+  ID_TYPE_OPTIONS,
+  ID_TYPE_FIELD_LABEL,
+  ID_TYPE_PLACEHOLDER,
+  type PatientFormData,
+  type IdType,
+} from '@/components/clinic/patientFormSchema';
+import {
+  ReadMyKadButton,
+  cleanIC,
+  mapGender,
+  mapDOB,
+} from '@/components/clinic/ReadMyKadButton';
+import { toMalayTitleCase, toUpperSafe } from '@/lib/textCase';
+import type { PatientRow } from '@/types/clinic';
+
+type FormData = PatientFormData;
+
+interface EditPatientDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  patient: PatientRow;
+  onUpdated?: (patient: PatientRow) => void;
+}
+
+function buildDefaults(p: PatientRow): FormData {
+  return {
+    id_type: (((p as PatientRow & { id_type?: string | null }).id_type ?? 'mykad') as IdType),
+    name: p.name ?? '',
+    phone: p.phone ?? '',
+    national_id: p.national_id ?? '',
+    passport_no: p.passport_no ?? '',
+    date_of_birth: p.date_of_birth ?? '',
+    gender: ((p.gender ?? '') as FormData['gender']),
+    email: p.email ?? '',
+    religion: p.religion ?? '',
+    emergency_contact_name: p.emergency_contact_name ?? '',
+    emergency_contact_phone: p.emergency_contact_phone ?? '',
+    default_panel_id: p.default_panel_id ?? null,
+    allergies: p.allergies ?? '',
+    underlying_conditions: p.underlying_conditions ?? '',
+    address: (p as PatientRow & { address?: string | null }).address ?? '',
+    panel_remarks: (p as PatientRow & { panel_remarks?: string | null }).panel_remarks ?? '',
+  };
+}
+
+export function EditPatientDialog({
+  open,
+  onOpenChange,
+  patient,
+  onUpdated,
+}: EditPatientDialogProps) {
+  const update = useUpdatePatient();
+  const { data: panels = [] } = useInsuranceProviders({ activeOnly: true });
+  const [submitting, setSubmitting] = useState(false);
+  const [mykadConsent, setMykadConsent] = useState(false);
+  const [justRead, setJustRead] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    reset,
+    formState: { errors },
+  } = useForm<FormData>({
+    resolver: zodResolver(patientSchema),
+    defaultValues: buildDefaults(patient),
+  });
+
+  const idType = (watch('id_type') ?? 'mykad') as IdType;
+  const isMykad = idType === 'mykad';
+  const isPassportType = idType === 'passport';
+
+  // Re-sync form whenever a different patient is loaded into the dialog.
+  useEffect(() => {
+    if (open) {
+      const defaults = buildDefaults(patient);
+      defaults.name = toMalayTitleCase(defaults.name);
+      reset(defaults);
+      setMykadConsent(false);
+      setJustRead(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patient.id, open]);
+
+  const onSubmit = async (data: FormData) => {
+    setSubmitting(true);
+    try {
+      const updated = await update.mutateAsync({
+        id: patient.id,
+        patch: {
+          name: toUpperSafe(data.name),
+          phone: data.phone || null,
+          id_type: data.id_type,
+          national_id: data.national_id?.trim() || null,
+          passport_no: data.passport_no?.trim() || null,
+          date_of_birth: data.date_of_birth || null,
+          gender: data.gender || null,
+          email: data.email || null,
+          religion: data.religion,
+          emergency_contact_name: data.emergency_contact_name,
+          emergency_contact_phone: data.emergency_contact_phone,
+          default_panel_id: data.default_panel_id || null,
+          allergies: data.allergies || null,
+          underlying_conditions: data.underlying_conditions || null,
+          address: data.address ? toUpperSafe(data.address) : null,
+          panel_remarks: (data.panel_remarks ?? '').trim() || null,
+        } as never,
+      });
+      toast.success(`Patient updated: ${updated.name}`);
+      onOpenChange(false);
+      onUpdated?.(updated);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to update patient';
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Patient</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="rounded-md border bg-muted/30 p-3 flex items-start gap-2">
+            <Checkbox
+              id="edit_mykad_consent"
+              checked={mykadConsent}
+              onCheckedChange={(v) => setMykadConsent(v === true)}
+              className="mt-0.5"
+            />
+            <Label htmlFor="edit_mykad_consent" className="text-sm font-normal leading-snug cursor-pointer">
+              Patient consents to MyKad being read for clinic registration purpose.
+            </Label>
+          </div>
+
+          {justRead && (
+            <Alert>
+              <AlertDescription>
+                Please confirm patient details before saving.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div>
+            <Label htmlFor="edit_name">Full name *</Label>
+            <Input
+              id="edit_name"
+              {...register('name', {
+                onBlur: (e) => {
+                  const formatted = toMalayTitleCase(e.target.value);
+                  if (formatted !== e.target.value) {
+                    setValue('name', formatted, { shouldValidate: true, shouldDirty: true });
+                  }
+                },
+              })}
+            />
+            {errors.name && (
+              <p className="text-sm text-destructive mt-1">{errors.name.message}</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <Label htmlFor="edit_id_type">ID Type *</Label>
+              <Select
+                value={idType}
+                onValueChange={(v) => setValue('id_type', v as IdType, { shouldValidate: true, shouldDirty: true })}
+              >
+                <SelectTrigger id="edit_id_type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ID_TYPE_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {!isPassportType && (
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="edit_national_id">{ID_TYPE_FIELD_LABEL[idType]} *</Label>
+                  {isMykad && (
+                    <ReadMyKadButton
+                      disabled={!mykadConsent}
+                      onRead={(data) => {
+                        if (data.name)
+                          setValue('name', toMalayTitleCase(data.name), { shouldValidate: true, shouldDirty: true });
+                        const ic = cleanIC(data.ic_no);
+                        if (ic)
+                          setValue('national_id', ic, { shouldValidate: true, shouldDirty: true });
+                        const dob = mapDOB(data.dob);
+                        if (dob)
+                          setValue('date_of_birth', dob, { shouldValidate: true, shouldDirty: true });
+                        const g = mapGender(data.gender);
+                        if (g) setValue('gender', g, { shouldValidate: true, shouldDirty: true });
+                        if (data.address)
+                          setValue('address', toUpperSafe(data.address), { shouldValidate: true, shouldDirty: true });
+                        setJustRead(true);
+                        toast.success('MyKad read successfully');
+                      }}
+                    />
+                  )}
+                </div>
+                <Input
+                  id="edit_national_id"
+                  placeholder={ID_TYPE_PLACEHOLDER[idType]}
+                  {...register('national_id')}
+                />
+                {errors.national_id && (
+                  <p className="text-sm text-destructive mt-1">{errors.national_id.message}</p>
+                )}
+              </div>
+            )}
+            <div>
+              <Label htmlFor="edit_passport_no">Passport No. {isPassportType ? '*' : ''}</Label>
+              <Input
+                id="edit_passport_no"
+                placeholder={isPassportType ? 'e.g. A12345678' : 'For foreign patients'}
+                {...register('passport_no')}
+              />
+              {errors.passport_no && (
+                <p className="text-sm text-destructive mt-1">{errors.passport_no.message}</p>
+              )}
+            </div>
+            {isMykad && (
+              <p className="text-xs text-muted-foreground md:col-span-3 -mt-2">
+                Provide MyKad for Malaysians or Passport No. for foreigners (one is required).
+              </p>
+            )}
+          </div>
+
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="edit_phone">Phone *</Label>
+              <Input id="edit_phone" placeholder="+60 12 345 6789" {...register('phone')} />
+              {errors.phone && (
+                <p className="text-sm text-destructive mt-1">{errors.phone.message}</p>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="edit_email">Email</Label>
+              <Input id="edit_email" type="email" {...register('email')} />
+              {errors.email && (
+                <p className="text-sm text-destructive mt-1">{errors.email.message}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <Label htmlFor="edit_dob">Date of birth</Label>
+              <Input id="edit_dob" type="date" {...register('date_of_birth')} />
+            </div>
+            <div>
+              <Label htmlFor="edit_gender">Gender</Label>
+              <Select
+                value={watch('gender') ?? ''}
+                onValueChange={(v) => setValue('gender', v as FormData['gender'])}
+              >
+                <SelectTrigger id="edit_gender">
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="male">Male</SelectItem>
+                  <SelectItem value="female">Female</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="edit_religion">Religion *</Label>
+              <Select
+                value={watch('religion') ?? ''}
+                onValueChange={(v) => setValue('religion', v, { shouldValidate: true })}
+              >
+                <SelectTrigger id="edit_religion">
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  {RELIGIONS.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.religion && (
+                <p className="text-sm text-destructive mt-1">{errors.religion.message}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+            <p className="text-sm font-medium">Emergency Contact</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="edit_ec_name">Contact name *</Label>
+                <Input id="edit_ec_name" {...register('emergency_contact_name')} />
+                {errors.emergency_contact_name && (
+                  <p className="text-sm text-destructive mt-1">
+                    {errors.emergency_contact_name.message}
+                  </p>
+                )}
+              </div>
+              <div>
+                <Label htmlFor="edit_ec_phone">Contact phone *</Label>
+                <Input
+                  id="edit_ec_phone"
+                  placeholder="+60 12 345 6789"
+                  {...register('emergency_contact_phone')}
+                />
+                {errors.emergency_contact_phone && (
+                  <p className="text-sm text-destructive mt-1">
+                    {errors.emergency_contact_phone.message}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="edit_default_panel">Default Panel (optional)</Label>
+            <Select
+              value={watch('default_panel_id') ?? '__none__'}
+              onValueChange={(v) =>
+                setValue('default_panel_id', v === '__none__' ? null : v, {
+                  shouldValidate: true,
+                })
+              }
+            >
+              <SelectTrigger id="edit_default_panel">
+                <SelectValue placeholder="Self-Pay (no panel)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Self-Pay (no panel)</SelectItem>
+                {panels.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="edit_address">Address</Label>
+            <Textarea id="edit_address" rows={2} placeholder="Auto-filled from MyKad" {...register('address')} />
+          </div>
+          <div>
+            <Label htmlFor="edit_panel_remarks">Patient's Panel Balance / Remarks</Label>
+            <Textarea
+              id="edit_panel_remarks"
+              rows={2}
+              placeholder="e.g. Balance RM 21 as of 2/2/26"
+              {...register('panel_remarks')}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Record remaining balance or limits. Shown to doctors and dispensary on
+              every visit, even when paying cash.
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="edit_allergies">Allergies</Label>
+            <Textarea id="edit_allergies" rows={2} {...register('allergies')} />
+          </div>
+          <div>
+            <Label htmlFor="edit_underlying">Underlying conditions</Label>
+            <Textarea id="edit_underlying" rows={2} {...register('underlying_conditions')} />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? 'Saving…' : 'Save changes'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

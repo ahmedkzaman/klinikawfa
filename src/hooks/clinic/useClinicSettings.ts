@@ -1,0 +1,118 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+
+export interface ClinicSettings {
+  id: string;
+  clinic_name: string;
+  address_line_1: string;
+  address_line_2: string;
+  phone: string;
+  email: string;
+  logo_url: string;
+  logo_height_px: number;
+  letterhead_text_px: number;
+  content_margin_top: number;
+  sst_number: string | null;
+  bank_name: string | null;
+  bank_account_no: string | null;
+  bank_account_holder: string | null;
+  queue_call_by: 'name' | 'number';
+  tv_youtube_id: string | null;
+  tv_ticker_text: string | null;
+  tts_language: 'ms-MY' | 'en-US';
+  procurement_urgent_days: number;
+  procurement_surge_trend: number;
+  procurement_surge_lift: number;
+  procurement_surge_days_cover: number;
+  forecast_top_diagnoses: number;
+  forecast_top_items: number;
+  updated_at: string;
+}
+
+const DEFAULTS: ClinicSettings = {
+  id: '',
+  clinic_name: 'Klinik Awfa',
+  address_line_1: '',
+  address_line_2: '',
+  phone: '',
+  email: '',
+  logo_url: '',
+  logo_height_px: 64,
+  letterhead_text_px: 12,
+  content_margin_top: 120,
+  sst_number: null,
+  bank_name: null,
+  bank_account_no: null,
+  bank_account_holder: null,
+  queue_call_by: 'number',
+  tv_youtube_id: null,
+  tv_ticker_text: null,
+  tts_language: 'ms-MY',
+  procurement_urgent_days: 7,
+  procurement_surge_trend: 20,
+  procurement_surge_lift: 1.5,
+  procurement_surge_days_cover: 30,
+  forecast_top_diagnoses: 5,
+  forecast_top_items: 3,
+  updated_at: new Date().toISOString(),
+};
+
+export function useClinicSettings() {
+  const qc = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ['clinic_settings'],
+    queryFn: async (): Promise<ClinicSettings> => {
+      const { data, error } = await supabase
+        .from('clinic_settings' as never)
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as unknown as ClinicSettings) ?? DEFAULTS;
+    },
+    staleTime: 60_000,
+  });
+
+  const update = useMutation({
+    mutationFn: async (patch: Partial<Omit<ClinicSettings, 'id' | 'updated_at'>>) => {
+      const id = query.data?.id;
+      if (!id) throw new Error('Settings row not loaded yet');
+      const { error } = await supabase
+        .from('clinic_settings' as never)
+        .update(patch as never)
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['clinic_settings'] }),
+  });
+
+  const uploadLogo = useMutation({
+    mutationFn: async (file: File): Promise<string> => {
+      const id = query.data?.id;
+      if (!id) throw new Error('Settings row not loaded yet');
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+      const path = `clinic-logo/logo-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from('clinic-assets')
+        .upload(path, file, { cacheControl: '3600', upsert: true });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from('clinic-assets').getPublicUrl(path);
+      const url = pub.publicUrl;
+      const { error: updErr } = await supabase
+        .from('clinic_settings' as never)
+        .update({ logo_url: url } as never)
+        .eq('id', id);
+      if (updErr) throw updErr;
+      return url;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['clinic_settings'] }),
+  });
+
+  return {
+    settings: query.data ?? DEFAULTS,
+    isLoading: query.isLoading,
+    update,
+    uploadLogo,
+  };
+}

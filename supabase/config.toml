@@ -1,0 +1,34 @@
+project_id = "ncysmppzfjtiekfnomdv"
+
+[functions.generate-bio]
+verify_jwt = true
+
+[functions.generate-tts]
+verify_jwt = true
+
+[functions.generate-blog-content]
+verify_jwt = true
+
+[functions.video-room]
+verify_jwt = false
+
+[functions.video-payment]
+verify_jwt = false
+
+[functions.video-webhook]
+verify_jwt = false
+
+[functions.publish-scheduled-posts]
+verify_jwt = false
+
+[functions.elevenlabs-scribe-token]
+verify_jwt = true
+
+[functions.structure-medical-notes]
+verify_jwt = true
+
+[functions.submit-appointment]
+verify_jwt = false
+
+[functions.admin-create-user]
+verify_jwt = true

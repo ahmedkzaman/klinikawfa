@@ -1,0 +1,27 @@
+-- Reverses setup-targets.sql. Run after each Phase B run to reset state for
+-- the next pass. Children first, then parents, due to FKs.
+DELETE FROM public.payments              WHERE queue_entry_id IN (
+  'q0000000-0000-0000-0000-000000000001',
+  'q0000000-0000-0000-0000-000000000002',
+  'q0000000-0000-0000-0000-000000000003'
+);
+DELETE FROM public.pharmacy_owe_slips    WHERE id = '05100000-0000-0000-0000-000000000001';
+DELETE FROM public.inventory_transactions WHERE batch_id = 'b0000000-0000-0000-0000-000000000001';
+DELETE FROM public.inventory_item_batches WHERE id = 'b0000000-0000-0000-0000-000000000001';
+DELETE FROM public.inventory_items        WHERE id = '11110000-0000-0000-0000-000000000001';
+DELETE FROM public.consultation_items    WHERE id IN (
+  'i0000000-0000-0000-0000-000000000001',
+  'i0000000-0000-0000-0000-000000000003',
+  'i0000000-0000-0000-0000-000000000099'
+);
+DELETE FROM public.consultations         WHERE id IN (
+  'x0000000-0000-0000-0000-000000000001',
+  'x0000000-0000-0000-0000-000000000002',
+  'x0000000-0000-0000-0000-000000000003'
+);
+DELETE FROM public.queue_entries         WHERE id IN (
+  'q0000000-0000-0000-0000-000000000001',
+  'q0000000-0000-0000-0000-000000000002',
+  'q0000000-0000-0000-0000-000000000003'
+);
+DELETE FROM public.patients              WHERE id = 'c0000000-0000-0000-0000-000000000001';

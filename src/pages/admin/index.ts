@@ -1,0 +1,9 @@
+export { default as LeadsManagement } from './LeadsManagement';
+export { default as BlogManagement } from './BlogManagement';
+export { default as BlogEditor } from './BlogEditor';
+export { default as GalleryManagement } from './GalleryManagement';
+export { default as TeamManagement } from './TeamManagement';
+export { default as TeamEditor } from './TeamEditor';
+export { default as VideoCallManagement } from './VideoCallManagement';
+export { default as ReviewsManagement } from './ReviewsManagement';
+export { default as AdminSettings } from './Settings';

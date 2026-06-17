@@ -1,0 +1,153 @@
+// Clinic contact information
+export const CLINIC_INFO = {
+  name: 'Klinik Awfa',
+  phone: '+60 18-252 3531',
+  phoneLink: 'tel:+60182523531',
+  whatsapp: 'https://wa.me/60182523531',
+  address: {
+    line1: 'B2 & B4, Jalan KS 1/12',
+    line2: 'KotaSAS Avenue',
+    city: '25200 Kuantan',
+    state: 'Pahang',
+    country: 'Malaysia',
+    full: 'B2 & B4, Jalan KS 1/12, KotaSAS Avenue, 25200 Kuantan, Pahang',
+  },
+  hours: {
+    days: 'Setiap Hari / Every Day',
+    time: '8:00 AM - 12:00 Midnight',
+    timeMalay: '8.00 pagi - 12.00 tengah malam',
+  },
+  tagline: {
+    ms: 'Klinik Keluarga Anda',
+    en: 'Your Family Clinic',
+  },
+  googleMapsUrl: 'https://maps.google.com/?q=3.871944656053272,103.27734116870465',
+  googleMapsEmbed: 'https://maps.google.com/maps?q=3.871944656053272,103.27734116870465&t=&z=17&ie=UTF8&iwloc=&output=embed',
+} as const;
+
+// Service categories
+export const SERVICES = [
+  {
+    id: 'general-treatment',
+    slug: 'rawatan-umum',
+    icon: 'Stethoscope',
+    titleMs: 'Rawatan Umum',
+    titleEn: 'General Treatment',
+  },
+  {
+    id: 'cold-flu',
+    slug: 'sakit-tekak-selsema-demam',
+    icon: 'Thermometer',
+    titleMs: 'Sakit Tekak / Selsema / Demam',
+    titleEn: 'Sore Throat / Cold / Fever',
+  },
+  {
+    id: 'rapid-tests',
+    slug: 'ujian-pantas',
+    icon: 'TestTube',
+    titleMs: 'Ujian Pantas: Influenza / COVID / RSV / Adenovirus',
+    titleEn: 'Rapid Tests: Influenza / COVID / RSV / Adenovirus',
+  },
+  {
+    id: 'nebulizer',
+    slug: 'nebulizer',
+    icon: 'Wind',
+    titleMs: 'Terapi Nebulizer',
+    titleEn: 'Nebulizer Therapy',
+  },
+  {
+    id: 'sputum-suction',
+    slug: 'sedutan-kahak',
+    icon: 'CoughingBaby',
+    titleMs: 'Sedutan Kahak',
+    titleEn: 'Sputum Suction',
+  },
+  {
+    id: 'nasal-irrigation',
+    slug: 'pencucian-hidung',
+    icon: 'Droplets',
+    titleMs: 'Pencucian Hidung',
+    titleEn: 'Nasal Irrigation',
+  },
+  {
+    id: 'ear-care',
+    slug: 'penjagaan-telinga',
+    icon: 'Ear',
+    titleMs: 'Penjagaan Telinga (Microsuction)',
+    titleEn: 'Ear Care (Microsuction)',
+  },
+  {
+    id: 'circumcision',
+    slug: 'khatan',
+    icon: 'Banana',
+    titleMs: 'Khatan: Kanak-kanak & Dewasa',
+    titleEn: 'Circumcision: Children & Adults',
+  },
+  {
+    id: 'lump-wart',
+    slug: 'ketumbuhan-ketuat',
+    icon: 'Circle',
+    titleMs: 'Rawatan Ketumbuhan & Ketuat',
+    titleEn: 'Lump & Wart Treatment',
+  },
+  {
+    id: 'full-blood-count',
+    slug: 'ujian-darah-penuh',
+    icon: 'Droplet',
+    titleMs: 'Ujian Darah Penuh (FBC)',
+    titleEn: 'Full Blood Count (FBC)',
+  },
+  {
+    id: 'dengue-test',
+    slug: 'ujian-denggi',
+    icon: 'Mosquito',
+    titleMs: 'Ujian Denggi',
+    titleEn: 'Dengue Test',
+  },
+  {
+    id: 'blood-investigation',
+    slug: 'pemeriksaan-darah',
+    icon: 'FlaskConical',
+    titleMs: 'Pemeriksaan Darah Menyeluruh',
+    titleEn: 'Thorough Blood Investigation',
+  },
+  {
+    id: 'student-checkup',
+    slug: 'pemeriksaan-pelajar',
+    icon: 'GraduationCap',
+    titleMs: 'Pemeriksaan Kesihatan Pelajar',
+    titleEn: 'Student Medical Checkup',
+  },
+  {
+    id: 'pre-employment-checkup',
+    slug: 'pemeriksaan-pra-pekerjaan',
+    icon: 'Briefcase',
+    titleMs: 'Pemeriksaan Kesihatan Pra-Pekerjaan',
+    titleEn: 'Pre-Employment Medical Checkup',
+  },
+  {
+    id: 'return-to-work',
+    slug: 'pemeriksaan-kembali-bekerja',
+    icon: 'ClipboardCheck',
+    titleMs: 'Penilaian Kecergasan Bekerja',
+    titleEn: 'Fitness to Work Assessment',
+  },
+  {
+    id: 'haj-checkup',
+    slug: 'pemeriksaan-haji-2026',
+    icon: 'Kaaba',
+    titleMs: 'Pemeriksaan Kesihatan Haji 2026',
+    titleEn: 'Haj 2026 Medical Checkup',
+  },
+] as const;
+
+// Navigation items
+export const NAV_ITEMS = [
+  { href: '/', labelKey: 'nav.home' },
+  { href: '/services', labelKey: 'nav.services' },
+  { href: '/doctors', labelKey: 'nav.doctors' },
+  { href: '/doctor-on-duty', labelKey: 'nav.onDuty' },
+  { href: '/appointment', labelKey: 'nav.appointment' },
+  { href: '/gallery', labelKey: 'nav.gallery' },
+  { href: '/health-tips', labelKey: 'nav.healthTips' },
+] as const;

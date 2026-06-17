@@ -1,0 +1,621 @@
+import { useState, useMemo } from 'react';
+import { Search, Package, Clock, AlertTriangle, FileText } from 'lucide-react';
+import { useDocumentTemplates, type DocumentTemplate } from '@/hooks/clinic/useClinicDocuments';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { useInventoryItems } from '@/hooks/clinic/useInventoryItems';
+import { useServices } from '@/hooks/clinic/useServices';
+import { usePackages } from '@/hooks/clinic/usePackages';
+import { useCreateRestockRequest } from '@/hooks/clinic/useRestockRequests';
+
+export interface SelectedDefaults {
+  indication?: string | null;
+  dosage_qty?: string | null;
+  dosage_unit?: string | null;
+  frequency?: string | null;
+  instruction?: string | null;
+  duration?: string | null;
+  duration_unit?: string | null;
+  precaution?: string | null;
+}
+
+interface SelectedItem {
+  id: string;
+  name: string;
+  price: number;
+  type: 'item' | 'service' | 'package';
+  defaults?: SelectedDefaults;
+}
+
+interface Props {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onInsert: (items: SelectedItem[]) => void;
+  /** When true, use panel/standard tier pricing first; otherwise self-pay first. */
+  isPanel?: boolean;
+  /** Called when a row of type=document is clicked. */
+  onIssueDocument?: (template: DocumentTemplate) => void;
+}
+
+interface CombinedRow {
+  id: string;
+  name: string;
+  stock: number | null;
+  uom: string;
+  group: string;
+  price: string;
+  priceNum: number;
+  type: 'item' | 'service' | 'package' | 'document';
+  /** Lowercase inventory category, blank for services/packages. */
+  categoryLower: string;
+  /** Lowercase generic name, blank when none / not applicable. */
+  genericLower: string;
+  /** ISO date for the next-expiring batch, or null. Inventory items only. */
+  nearestExpiry: string | null;
+  defaults?: SelectedDefaults;
+  /** Original document template payload, only set when type=document. */
+  template?: DocumentTemplate;
+}
+
+type PickerTab = 'all' | 'medicine' | 'procedure' | 'package' | 'document';
+
+const PROCEDURE_NAME_RE = /\b(fee|procedure|service)\b/i;
+
+/** Shared mapping rule used by both the picker and the Treatment Plan tabs. */
+function rowMatchesTab(row: CombinedRow, tab: PickerTab): boolean {
+  if (tab === 'all') return true;
+  if (tab === 'medicine') {
+    return row.type === 'item' && row.categoryLower === 'medication';
+  }
+  if (tab === 'procedure') {
+    if (row.type === 'service') return true;
+    if (row.type === 'item' && PROCEDURE_NAME_RE.test(row.name)) return true;
+    return false;
+  }
+  if (tab === 'package') return row.type === 'package';
+  if (tab === 'document') return row.type === 'document';
+  return true;
+}
+
+/**
+ * Picks the first finite, positive number from a list of candidates.
+ * Used to drive tier-aware pricing without silently inserting RM 0.00.
+ */
+const resolvePrice = (
+  ...candidates: Array<number | string | null | undefined>
+): number => {
+  for (const c of candidates) {
+    const n = Number(c);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return 0;
+};
+
+const LOW_STOCK_THRESHOLD = 10;
+const EXPIRY_WARNING_DAYS = 30;
+
+function daysUntil(iso: string | null): number | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return Math.ceil((d.getTime() - Date.now()) / 86_400_000);
+}
+
+function StockBadges({
+  stock,
+  nearestExpiry,
+}: {
+  stock: number | null;
+  nearestExpiry: string | null;
+}) {
+  const days = daysUntil(nearestExpiry);
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {stock === 0 ? (
+        <Badge variant="destructive" className="text-[10px] py-0 px-1.5">
+          Out of stock
+        </Badge>
+      ) : stock !== null && stock <= LOW_STOCK_THRESHOLD ? (
+        <Badge className="text-[10px] py-0 px-1.5 bg-amber-100 text-amber-800 hover:bg-amber-100 border-transparent">
+          Low stock: {stock}
+        </Badge>
+      ) : stock !== null ? (
+        <Badge className="text-[10px] py-0 px-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-transparent">
+          {stock} in stock
+        </Badge>
+      ) : null}
+      {days !== null && days <= EXPIRY_WARNING_DAYS && days >= 0 && (
+        <Badge className="text-[10px] py-0 px-1.5 bg-orange-100 text-orange-800 hover:bg-orange-100 border-transparent inline-flex items-center gap-0.5">
+          <Clock className="h-2.5 w-2.5" />
+          Expiring in {days}d
+        </Badge>
+      )}
+    </div>
+  );
+}
+
+export function AddTreatmentBulkDialog({
+  open,
+  onOpenChange,
+  onInsert,
+  isPanel = false,
+  onIssueDocument,
+}: Props) {
+  const [search, setSearch] = useState('');
+  const [tab, setTab] = useState<PickerTab>('all');
+  const [selected, setSelected] = useState<SelectedItem[]>([]);
+  const [restockNotified, setRestockNotified] = useState<Set<string>>(new Set());
+
+  const { items: inventoryItems } = useInventoryItems();
+  const { services } = useServices();
+  const { packages } = usePackages();
+  const { data: documentTemplates = [] } = useDocumentTemplates();
+  const createRestock = useCreateRestockRequest();
+
+  const requestRestock = (itemId: string) => {
+    if (restockNotified.has(itemId)) return;
+    createRestock.mutate(
+      { itemId, reason: 'Low stock flagged in treatment picker' },
+      {
+        onSuccess: () => {
+          setRestockNotified((prev) => {
+            const next = new Set(prev);
+            next.add(itemId);
+            return next;
+          });
+        },
+      },
+    );
+  };
+
+  const allItems = useMemo<CombinedRow[]>(() => {
+    const combined: CombinedRow[] = [];
+
+    inventoryItems.forEach((i) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ii = i as any;
+      const priceNum = isPanel
+        ? resolvePrice(ii.standard_panel_price, i.price_to_patient_min, i.price_to_patient_max)
+        : resolvePrice(i.price_to_patient_min, i.price_to_patient_max, ii.standard_panel_price);
+
+      const priceLabel =
+        isPanel
+          ? `RM ${priceNum.toFixed(2)} (Panel)`
+          : i.price_to_patient_min === i.price_to_patient_max
+            ? `RM ${Number(i.price_to_patient_min).toFixed(2)}`
+            : `RM ${Number(i.price_to_patient_min).toFixed(2)} - ${Number(
+                i.price_to_patient_max,
+              ).toFixed(2)}`;
+
+      combined.push({
+        id: i.id,
+        name: i.name,
+        stock: i.stock,
+        uom: i.groups || '—',
+        group: i.category,
+        price: priceLabel,
+        priceNum,
+        type: 'item',
+        categoryLower: (i.category ?? '').toLowerCase(),
+        genericLower: (ii.generic_name ?? '').toLowerCase(),
+        nearestExpiry: (ii.nearest_expiry_date as string | null) ?? null,
+        defaults: {
+          indication: ii.default_indication ?? null,
+          dosage_qty: ii.default_dosage_qty ?? null,
+          dosage_unit: ii.default_dosage_unit ?? null,
+          frequency: ii.default_frequency ?? null,
+          instruction: ii.default_instruction ?? null,
+          duration: ii.default_duration ?? null,
+          duration_unit: ii.default_duration_unit ?? null,
+          precaution: ii.default_precaution ?? null,
+        },
+      });
+    });
+
+    services.forEach((s) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ss = s as any;
+      const priceNum = isPanel
+        ? resolvePrice(ss.standard_panel_price, s.price_to_patient)
+        : resolvePrice(s.price_to_patient, ss.standard_panel_price);
+      combined.push({
+        id: s.id,
+        name: s.name,
+        stock: null,
+        uom: s.type,
+        group: 'Service',
+        price: `RM ${priceNum.toFixed(2)}${isPanel ? ' (Panel)' : ''}`,
+        priceNum,
+        type: 'service',
+        categoryLower: '',
+        genericLower: '',
+        nearestExpiry: null,
+      });
+    });
+
+    packages.forEach((p) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pp = p as any;
+      const priceNum = isPanel
+        ? resolvePrice(pp.standard_panel_price, p.price)
+        : resolvePrice(p.price, pp.standard_panel_price);
+      combined.push({
+        id: p.id,
+        name: p.name,
+        stock: p.stock,
+        uom: 'Package',
+        group: 'Package',
+        price: `RM ${priceNum.toFixed(2)}${isPanel ? ' (Panel)' : ''}`,
+        priceNum,
+        type: 'package',
+        categoryLower: '',
+        genericLower: '',
+        nearestExpiry: null,
+      });
+    });
+
+    documentTemplates.forEach((t) => {
+      const typeLabel =
+        t.type === 'mc'
+          ? 'Medical Certificate'
+          : t.type === 'referral'
+            ? 'Referral Letter'
+            : t.type === 'prescription'
+              ? 'Prescription Slip'
+              : t.type === 'quarantine'
+                ? 'Quarantine Notice'
+                : 'Memo';
+      combined.push({
+        id: t.id,
+        name: t.name,
+        stock: null,
+        uom: typeLabel,
+        group: 'Document',
+        price: '—',
+        priceNum: 0,
+        type: 'document',
+        categoryLower: '',
+        genericLower: '',
+        nearestExpiry: null,
+        template: t,
+      });
+    });
+
+    return combined;
+  }, [inventoryItems, services, packages, documentTemplates, isPanel]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    // Search wins over tabs: a non-empty query searches the entire combined list
+    // across name, generic_name, and the group label (case-insensitive).
+    if (q) {
+      return allItems.filter(
+        (i) =>
+          i.name.toLowerCase().includes(q) ||
+          i.genericLower.includes(q) ||
+          i.group.toLowerCase().includes(q),
+      );
+    }
+    return allItems.filter((i) => rowMatchesTab(i, tab));
+  }, [allItems, search, tab]);
+
+  const tabCounts = useMemo(
+    () => ({
+      all: allItems.length,
+      medicine: allItems.filter((i) => rowMatchesTab(i, 'medicine')).length,
+      procedure: allItems.filter((i) => rowMatchesTab(i, 'procedure')).length,
+      package: allItems.filter((i) => rowMatchesTab(i, 'package')).length,
+      document: allItems.filter((i) => rowMatchesTab(i, 'document')).length,
+    }),
+    [allItems],
+  );
+
+  const toggleItem = (item: CombinedRow) => {
+    if (item.type === 'document') {
+      if (item.template && onIssueDocument) {
+        onIssueDocument(item.template);
+        onOpenChange(false);
+      }
+      return;
+    }
+    setSelected((prev) => {
+      const exists = prev.find((s) => s.id === item.id);
+      if (exists) return prev.filter((s) => s.id !== item.id);
+      return [
+        ...prev,
+        {
+          id: item.id,
+          name: item.name,
+          price: item.priceNum,
+          type: item.type as SelectedItem['type'],
+          defaults: item.defaults,
+        },
+      ];
+    });
+  };
+
+  const toggleAll = () => {
+    const selectable = filtered.filter((i) => i.type !== 'document');
+    const allSelected =
+      selectable.length > 0 &&
+      selectable.every((item) => selected.some((s) => s.id === item.id));
+    if (allSelected) {
+      const ids = new Set(selectable.map((i) => i.id));
+      setSelected((prev) => prev.filter((s) => !ids.has(s.id)));
+    } else {
+      setSelected((prev) => {
+        const existing = new Set(prev.map((s) => s.id));
+        const newItems: SelectedItem[] = selectable
+          .filter((i) => !existing.has(i.id))
+          .map((i) => ({
+            id: i.id,
+            name: i.name,
+            price: i.priceNum,
+            type: i.type as SelectedItem['type'],
+            defaults: i.defaults,
+          }));
+        return [...prev, ...newItems];
+      });
+    }
+  };
+
+  const allVisibleSelected =
+    filtered.length > 0 && filtered.every((item) => selected.some((s) => s.id === item.id));
+
+  const removeSelected = (id: string) => {
+    setSelected((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const handleInsert = () => {
+    onInsert(selected);
+    setSelected([]);
+    setSearch('');
+    onOpenChange(false);
+  };
+
+  const handleClose = (v: boolean) => {
+    if (!v) {
+      setSelected([]);
+      setSearch('');
+    }
+    onOpenChange(v);
+  };
+
+  const lowStockSelected = useMemo(() => {
+    const byId = new Map(allItems.map((r) => [r.id, r]));
+    return selected
+      .map((s) => byId.get(s.id))
+      .filter(
+        (r): r is CombinedRow =>
+          !!r && r.type === 'item' && r.stock !== null && r.stock <= LOW_STOCK_THRESHOLD,
+      );
+  }, [selected, allItems]);
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-5xl h-[80vh] flex flex-col p-0">
+        <DialogHeader className="px-6 pt-6 pb-0">
+          <DialogTitle>
+            Add treatment in bulk
+            {isPanel && (
+              <span className="ml-2 text-xs font-medium text-amber-700">
+                · Panel pricing
+              </span>
+            )}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-1 overflow-hidden">
+          {/* Left - search & table */}
+          <div className="flex-1 flex flex-col border-r px-6 pb-4">
+            <p className="text-sm text-muted-foreground mb-3">
+              Tick the checkbox to select item.
+            </p>
+            <div className="relative mb-3">
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name, generic name, or group… (searches all tabs)"
+                className="pr-9"
+              />
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {([
+                { key: 'all', label: 'All' },
+                { key: 'medicine', label: 'Medicine' },
+                { key: 'procedure', label: 'Procedures' },
+                { key: 'package', label: 'Packages' },
+                { key: 'document', label: 'Documents' },
+              ] as { key: PickerTab; label: string }[]).map((t) => {
+                const active = tab === t.key;
+                const disabled = !!search.trim();
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => setTab(t.key)}
+                    disabled={disabled}
+                    title={disabled ? 'Clear search to filter by tab' : undefined}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      active && !disabled
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                    } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  >
+                    {t.label} ({tabCounts[t.key]})
+                  </button>
+                );
+              })}
+            </div>
+            <ScrollArea className="flex-1">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox checked={allVisibleSelected} onCheckedChange={toggleAll} />
+                    </TableHead>
+                    <TableHead>NAME</TableHead>
+                    <TableHead>STOCK</TableHead>
+                    <TableHead>UOM</TableHead>
+                    <TableHead>GROUP</TableHead>
+                    <TableHead>PRICE</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((item) => {
+                    const isSelected = selected.some((s) => s.id === item.id);
+                    const isDoc = item.type === 'document';
+                    return (
+                      <TableRow
+                        key={`${item.type}-${item.id}`}
+                        className="cursor-pointer"
+                        onClick={() => toggleItem(item)}
+                      >
+                        <TableCell>
+                          {isDoc ? (
+                            <FileText className="h-4 w-4 text-blue-600" />
+                          ) : (
+                            <Checkbox checked={isSelected} />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm font-medium">
+                          <div>{item.name}</div>
+                          {item.type === 'item' && (
+                            <StockBadges stock={item.stock} nearestExpiry={item.nearestExpiry} />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm">{item.stock ?? '—'}</TableCell>
+                        <TableCell className="text-sm">{item.uom}</TableCell>
+                        <TableCell className="text-sm">{item.group}</TableCell>
+                        <TableCell className="text-sm">{item.price}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {filtered.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="text-center text-sm text-muted-foreground py-8"
+                      >
+                        No items found.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </div>
+
+          {/* Right - selected items */}
+          <div className="w-72 flex flex-col px-4 pb-4">
+            <div className="flex items-center justify-between mb-3 pt-1">
+              <h3 className="text-sm font-semibold">Selected item</h3>
+              {selected.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelected([])}
+                  className="text-xs text-destructive hover:underline"
+                >
+                  Remove all
+                </button>
+              )}
+            </div>
+            {lowStockSelected.length > 0 && (
+              <Alert className="mb-3 border-amber-300 bg-amber-50 text-amber-900">
+                <AlertTriangle className="h-4 w-4 !text-amber-700" />
+                <AlertTitle className="text-amber-900">Low stock on selected items</AlertTitle>
+                <AlertDescription className="text-amber-900">
+                  <div className="mt-2 space-y-1.5">
+                    {lowStockSelected.map((row) => {
+                      const notified = restockNotified.has(row.id);
+                      return (
+                        <div
+                          key={row.id}
+                          className="flex items-center justify-between gap-2 text-xs"
+                        >
+                          <span className="truncate">
+                            <span className="font-medium">{row.name}</span>
+                            <span className="text-amber-700"> · {row.stock} left</span>
+                          </span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={notified ? 'outline' : 'default'}
+                            disabled={notified || createRestock.isPending}
+                            onClick={() => requestRestock(row.id)}
+                            className="h-7 text-[11px] shrink-0"
+                          >
+                            {notified ? 'Pharmacy notified' : 'Request Restock'}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
+            {selected.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center">
+                <Package className="h-10 w-10 text-muted-foreground/40 mb-2" />
+                <p className="text-sm font-medium text-muted-foreground">
+                  No items selected
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Any selected items from your list will show up here.
+                </p>
+              </div>
+            ) : (
+              <ScrollArea className="flex-1">
+                <div className="space-y-2">
+                  {selected.map((s, idx) => (
+                    <div
+                      key={s.id}
+                      className="flex items-center justify-between p-2 rounded-md bg-muted/50 text-sm"
+                    >
+                      <span className="truncate flex-1">
+                        <span className="text-muted-foreground mr-1.5">{idx + 1}.</span>
+                        {s.name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeSelected(s.id)}
+                        className="ml-2 text-xs text-destructive hover:underline shrink-0"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="border-t px-6 py-4 flex justify-end">
+          <Button onClick={handleInsert} disabled={selected.length === 0}>
+            Insert to treatment plan
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
