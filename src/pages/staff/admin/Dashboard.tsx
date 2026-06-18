@@ -70,8 +70,15 @@ export default function StaffAdminDashboard() {
         const onDuty: DutyInfo[] = [];
 
         const shiftLabels: Record<string, string> = roster.roster_type === 'doctor'
-          ? { shift1: 'S1 (8am-2pm)', shift2: 'S2 (2pm-8pm)', shift3: 'S3 (8pm-12am)' }
-          : { shift1: 'S1 (8am-4pm)', shift2: 'S2 (4pm-12am)' };
+          ? {
+              DOC_S1: 'S1 (8am-1pm)', DOC_S2: 'S2 (2pm-7pm)', DOC_S3: 'S3 (8pm-12am)',
+              // Back-compat with older saved rosters
+              shift1: 'S1 (8am-1pm)', shift2: 'S2 (2pm-7pm)', shift3: 'S3 (8pm-12am)',
+            }
+          : {
+              shift1: 'S1 (8am-4pm)', shift2: 'S2 (4pm-12am)', shift3: 'S3 (8pm-12am)',
+              S1: 'S1 (8am-4pm)', S2: 'S2 (4pm-12am)', S3: 'S3 (8pm-12am)',
+            };
 
         const dutyMap: Record<string, string[]> = {};
         for (const [shiftKey, label] of Object.entries(shiftLabels)) {
