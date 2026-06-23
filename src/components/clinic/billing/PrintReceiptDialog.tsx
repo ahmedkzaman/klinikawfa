@@ -1,5 +1,9 @@
+import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Printer, Loader2 } from 'lucide-react';
+import { Printer, Loader2, Download } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
