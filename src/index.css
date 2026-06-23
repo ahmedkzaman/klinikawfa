@@ -487,7 +487,18 @@
     left: 0 !important;
     top: 0 !important;
     width: 100% !important;
+    max-width: none !important;
+    min-height: 0 !important;
     margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    overflow: visible !important;
+  }
+  /* Unconstrain any wrappers around the print container */
+  .print-container,
+  .print-container * {
+    overflow: visible !important;
   }
   /* Defeat Radix Dialog centering transforms during print */
   div[role="dialog"],
