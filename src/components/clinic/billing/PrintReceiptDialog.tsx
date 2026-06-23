@@ -1,5 +1,9 @@
+import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Printer, Loader2 } from 'lucide-react';
+import { Printer, Loader2, Download } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -96,8 +100,67 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId }: Props) {
     },
   });
 
+  const receiptRef = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = useState(false);
+
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!receiptRef.current || !data) return;
+    setDownloading(true);
+    try {
+      // A4 @ 96dpi ≈ 794 × 1123 px. Render the receipt at A4 width for crisp output.
+      const A4_WIDTH_PX = 794;
+      const node = receiptRef.current;
+      const prevWidth = node.style.width;
+      const prevMaxWidth = node.style.maxWidth;
+      const prevPadding = node.style.padding;
+      const prevMinHeight = node.style.minHeight;
+      node.style.width = `${A4_WIDTH_PX}px`;
+      node.style.maxWidth = `${A4_WIDTH_PX}px`;
+      node.style.padding = '40px';
+      node.style.minHeight = '0';
+
+      const canvas = await html2canvas(node, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        windowWidth: A4_WIDTH_PX,
+      });
+
+      node.style.width = prevWidth;
+      node.style.maxWidth = prevMaxWidth;
+      node.style.padding = prevPadding;
+      node.style.minHeight = prevMinHeight;
+
+      const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+      const pageWidth = pdf.internal.pageSize.getWidth(); // 210
+      const pageHeight = pdf.internal.pageSize.getHeight(); // 297
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+
+      let heightLeft = imgHeight;
+      let position = 0;
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+      while (heightLeft > 0) {
+        position -= pageHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      const shortId = data.paymentId.slice(0, 8).toUpperCase();
+      pdf.save(`Receipt-${shortId}.pdf`);
+    } catch (e) {
+      console.error('PDF download failed', e);
+      toast.error('Failed to generate PDF');
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
@@ -114,7 +177,9 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId }: Props) {
               Loading receipt…
             </div>
           ) : (
-            <ReceiptTemplate data={data} settings={settings} />
+            <div ref={receiptRef}>
+              <ReceiptTemplate data={data} settings={settings} />
+            </div>
           )}
         </div>
 
@@ -126,6 +191,19 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId }: Props) {
           >
             Close
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!data || downloading}
+            onClick={handleDownloadPdf}
+          >
+            {downloading ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
+            Download PDF
+          </Button>
           <Button type="button" disabled={!data} onClick={handlePrint}>
             <Printer className="h-4 w-4 mr-2" />
             Print Receipt
@@ -135,3 +213,4 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId }: Props) {
     </Dialog>
   );
 }
+
