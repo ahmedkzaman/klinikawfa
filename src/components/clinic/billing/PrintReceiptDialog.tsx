@@ -110,47 +110,74 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId }: Props) {
   const handleDownloadPdf = async () => {
     if (!receiptRef.current || !data) return;
     setDownloading(true);
+    let host: HTMLDivElement | null = null;
     try {
-      // A4 @ 96dpi ≈ 794 × 1123 px. Render the receipt at A4 width for crisp output.
-      const A4_WIDTH_PX = 794;
-      const node = receiptRef.current;
-      const prevWidth = node.style.width;
-      const prevMaxWidth = node.style.maxWidth;
-      const prevPadding = node.style.padding;
-      const prevMinHeight = node.style.minHeight;
-      node.style.width = `${A4_WIDTH_PX}px`;
-      node.style.maxWidth = `${A4_WIDTH_PX}px`;
-      node.style.padding = '40px';
-      node.style.minHeight = '0';
+      // Render the receipt off-screen at exact A4 content width so html2canvas
+      // captures the real layout (not the constrained dialog width).
+      const A4_WIDTH_MM = 210;
+      const A4_HEIGHT_MM = 297;
+      const MARGIN_MM = 12;
+      const CONTENT_WIDTH_MM = A4_WIDTH_MM - MARGIN_MM * 2; // 186mm
+      const MM_TO_PX = 96 / 25.4; // CSS px per mm @ 96dpi
+      const RENDER_WIDTH_PX = Math.round(CONTENT_WIDTH_MM * MM_TO_PX); // ~703px
 
-      const canvas = await html2canvas(node, {
+      const clone = receiptRef.current.cloneNode(true) as HTMLDivElement;
+      // Reset constraining classes/styles on the cloned root
+      clone.style.width = `${RENDER_WIDTH_PX}px`;
+      clone.style.maxWidth = 'none';
+      clone.style.minHeight = '0';
+      clone.style.margin = '0';
+      clone.style.padding = '0';
+      clone.style.background = '#ffffff';
+      clone.style.color = '#000000';
+
+      host = document.createElement('div');
+      host.style.position = 'fixed';
+      host.style.left = '-10000px';
+      host.style.top = '0';
+      host.style.width = `${RENDER_WIDTH_PX}px`;
+      host.style.background = '#ffffff';
+      host.style.zIndex = '-1';
+      host.appendChild(clone);
+      document.body.appendChild(host);
+
+      // Wait a tick for layout/images
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      const imgs = Array.from(clone.querySelectorAll('img'));
+      await Promise.all(
+        imgs.map(
+          (img) =>
+            new Promise<void>((resolve) => {
+              if (img.complete && img.naturalWidth > 0) return resolve();
+              img.onload = () => resolve();
+              img.onerror = () => resolve();
+            }),
+        ),
+      );
+
+      const canvas = await html2canvas(clone, {
         scale: 2,
         backgroundColor: '#ffffff',
         useCORS: true,
-        windowWidth: A4_WIDTH_PX,
+        windowWidth: RENDER_WIDTH_PX,
+        width: RENDER_WIDTH_PX,
       });
 
-      node.style.width = prevWidth;
-      node.style.maxWidth = prevMaxWidth;
-      node.style.padding = prevPadding;
-      node.style.minHeight = prevMinHeight;
-
       const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-      const pageWidth = pdf.internal.pageSize.getWidth(); // 210
-      const pageHeight = pdf.internal.pageSize.getHeight(); // 297
-      const imgWidth = pageWidth;
+      const imgWidth = CONTENT_WIDTH_MM;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
       const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const pageContentHeight = A4_HEIGHT_MM - MARGIN_MM * 2;
 
       let heightLeft = imgHeight;
-      let position = 0;
-      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+      let position = MARGIN_MM;
+      pdf.addImage(imgData, 'JPEG', MARGIN_MM, position, imgWidth, imgHeight);
+      heightLeft -= pageContentHeight;
       while (heightLeft > 0) {
-        position -= pageHeight;
+        position = MARGIN_MM - (imgHeight - heightLeft);
         pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
+        pdf.addImage(imgData, 'JPEG', MARGIN_MM, position, imgWidth, imgHeight);
+        heightLeft -= pageContentHeight;
       }
 
       const shortId = data.paymentId.slice(0, 8).toUpperCase();
@@ -159,6 +186,7 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId }: Props) {
       console.error('PDF download failed', e);
       toast.error('Failed to generate PDF');
     } finally {
+      if (host && host.parentNode) host.parentNode.removeChild(host);
       setDownloading(false);
     }
   };
