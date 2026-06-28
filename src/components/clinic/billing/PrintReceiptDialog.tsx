@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Printer, Loader2, Download } from 'lucide-react';
 import html2canvas from 'html2canvas';
@@ -22,6 +22,8 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   paymentId: string | null;
+  /** When true, auto-trigger PDF download once the receipt data loads, then close. */
+  autoDownload?: boolean;
 }
 
 export function PrintReceiptDialog({ open, onOpenChange, paymentId }: Props) {
