@@ -193,6 +193,24 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
     }
   };
 
+  const autoDownloadTriggeredRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!open || !autoDownload || !data || isLoading || downloading) return;
+    if (autoDownloadTriggeredRef.current === data.paymentId) return;
+    autoDownloadTriggeredRef.current = data.paymentId;
+    (async () => {
+      await handleDownloadPdf();
+      onOpenChange(false);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, autoDownload, data, isLoading]);
+
+  useEffect(() => {
+    if (!open) autoDownloadTriggeredRef.current = null;
+  }, [open]);
+
+
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg p-0 gap-0">
