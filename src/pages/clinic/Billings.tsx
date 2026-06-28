@@ -516,6 +516,14 @@ export default function Billings() {
         onOpenChange={(o) => !o && setPrintPaymentId(null)}
         paymentId={printPaymentId}
       />
+
+      <PrintReceiptDialog
+        open={!!downloadPaymentId}
+        onOpenChange={(o) => !o && setDownloadPaymentId(null)}
+        paymentId={downloadPaymentId}
+        autoDownload
+      />
+
     </div>
   );
 }
