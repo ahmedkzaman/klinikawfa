@@ -26,7 +26,7 @@ interface Props {
   autoDownload?: boolean;
 }
 
-export function PrintReceiptDialog({ open, onOpenChange, paymentId }: Props) {
+export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload = false }: Props) {
   const { settings } = useClinicSettings();
 
   const { data, isLoading } = useQuery<ReceiptData | null>({
