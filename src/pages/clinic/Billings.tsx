@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { format, subDays } from 'date-fns';
-import { ExternalLink, Receipt, Printer } from 'lucide-react';
+import { ExternalLink, Receipt, Printer, Download } from 'lucide-react';
 import { PrintReceiptDialog } from '@/components/clinic/billing/PrintReceiptDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -93,6 +93,7 @@ export default function Billings() {
   const [to, setTo] = useState<string>(format(today, 'yyyy-MM-dd'));
   const [activeTab, setActiveTab] = useState<TabKey>('paid');
   const [printPaymentId, setPrintPaymentId] = useState<string | null>(null);
+  const [downloadPaymentId, setDownloadPaymentId] = useState<string | null>(null);
 
   const fromISO = useMemo(() => new Date(`${from}T00:00:00`).toISOString(), [from]);
   const toISO = useMemo(() => new Date(`${to}T23:59:59`).toISOString(), [to]);
@@ -468,16 +469,28 @@ export default function Billings() {
 
                 <div className="flex items-center gap-1">
                   {e.latestPaymentId && visitCount === 1 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
-                      onClick={() => setPrintPaymentId(e.latestPaymentId)}
-                      title="Print receipt"
-                    >
-                      <Printer className="h-3.5 w-3.5" />
-                    </Button>
+                    <>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                        onClick={() => setPrintPaymentId(e.latestPaymentId)}
+                        title="Print receipt"
+                      >
+                        <Printer className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                        onClick={() => setDownloadPaymentId(e.latestPaymentId)}
+                        title="Download PDF receipt"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
                   )}
                   <Button
                     asChild
@@ -503,6 +516,14 @@ export default function Billings() {
         onOpenChange={(o) => !o && setPrintPaymentId(null)}
         paymentId={printPaymentId}
       />
+
+      <PrintReceiptDialog
+        open={!!downloadPaymentId}
+        onOpenChange={(o) => !o && setDownloadPaymentId(null)}
+        paymentId={downloadPaymentId}
+        autoDownload
+      />
+
     </div>
   );
 }

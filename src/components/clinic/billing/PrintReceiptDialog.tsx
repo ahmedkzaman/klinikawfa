@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Printer, Loader2, Download } from 'lucide-react';
 import html2canvas from 'html2canvas';
@@ -22,9 +22,11 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   paymentId: string | null;
+  /** When true, auto-trigger PDF download once the receipt data loads, then close. */
+  autoDownload?: boolean;
 }
 
-export function PrintReceiptDialog({ open, onOpenChange, paymentId }: Props) {
+export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload = false }: Props) {
   const { settings } = useClinicSettings();
 
   const { data, isLoading } = useQuery<ReceiptData | null>({
@@ -190,6 +192,24 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId }: Props) {
       setDownloading(false);
     }
   };
+
+  const autoDownloadTriggeredRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!open || !autoDownload || !data || isLoading || downloading) return;
+    if (autoDownloadTriggeredRef.current === data.paymentId) return;
+    autoDownloadTriggeredRef.current = data.paymentId;
+    (async () => {
+      await handleDownloadPdf();
+      onOpenChange(false);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, autoDownload, data, isLoading]);
+
+  useEffect(() => {
+    if (!open) autoDownloadTriggeredRef.current = null;
+  }, [open]);
+
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
