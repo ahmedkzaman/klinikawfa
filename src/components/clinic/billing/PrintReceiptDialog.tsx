@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Printer, Loader2, Download } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
-import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -16,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
+import { downloadReceiptPdf, printReceipt } from '@/lib/clinic/printReceipt';
 import { ReceiptTemplate, type ReceiptData } from './ReceiptTemplate';
 
 interface Props {
