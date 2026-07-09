@@ -43,7 +43,13 @@ export function ReceiptTemplate({ data, settings }: Props) {
   return (
     <div
       className="print-container max-w-2xl mx-auto bg-white text-black p-8 min-h-[1056px] print:max-w-none print:mx-0 print:w-full print:min-h-0 print:p-0 print:shadow-none"
-      style={{ colorScheme: 'light' }}
+      style={{
+        colorScheme: 'light',
+        fontFamily: "Arial, Helvetica, 'Liberation Sans', sans-serif",
+        fontSynthesis: 'none',
+        WebkitFontSmoothing: 'antialiased',
+        textRendering: 'geometricPrecision',
+      }}
     >
       {/* Letterhead */}
       <div className="flex items-start justify-between gap-6 pb-4 border-b-2 border-black">
