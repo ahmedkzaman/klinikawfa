@@ -183,8 +183,12 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
             )}
             Download PDF
           </Button>
-          <Button type="button" disabled={!data} onClick={handlePrint}>
-            <Printer className="h-4 w-4 mr-2" />
+          <Button type="button" disabled={!data || printing} onClick={handlePrint}>
+            {printing ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Printer className="h-4 w-4 mr-2" />
+            )}
             Print Receipt
           </Button>
         </DialogFooter>
