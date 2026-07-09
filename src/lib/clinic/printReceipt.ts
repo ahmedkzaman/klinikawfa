@@ -61,7 +61,7 @@ async function buildReceiptPdf({ data, settings }: RenderOptions): Promise<jsPDF
 
   let textX = PAGE.margin;
   if (logo && logoW > 0) {
-    pdf.addImage(logo.dataUrl, PAGE.margin, headerTop, logoW, logoH);
+    pdf.addImage(logo.dataUrl, 'PNG', PAGE.margin, headerTop, logoW, logoH);
     textX = PAGE.margin + logoW + 4;
   }
 
