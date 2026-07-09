@@ -91,7 +91,9 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
           : null,
         patientName: patient?.name ?? 'Walk-in',
         patientIc: patient?.national_id ?? null,
-        patientAge: calculateClinicalAge(patient?.date_of_birth),
+        patientAge: patient?.date_of_birth
+          ? calculateClinicalAge(patient.date_of_birth).replace(/^Age:\s*/i, '')
+          : null,
         items,
         subtotal,
         invoiceTotal: subtotal,
