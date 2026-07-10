@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "Staff can update inventory operational fields" ON public.inventory_items;
