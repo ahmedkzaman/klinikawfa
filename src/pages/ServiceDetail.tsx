@@ -1,6 +1,5 @@
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import DOMPurify from "dompurify";
 import { supabase } from "@/integrations/supabase/client";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { SEOHead } from "@/components/seo/SEOHead";
@@ -8,20 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, CheckCircle, Calendar, AlertTriangle } from "lucide-react";
-
-const purifyConfig = {
-  ADD_TAGS: ["iframe", "video", "source"],
-  ADD_ATTR: [
-    "allow",
-    "allowfullscreen",
-    "frameborder",
-    "scrolling",
-    "controls",
-    "target",
-  ],
-  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
-  FORBID_ATTR: ["style", "onerror", "onload", "onclick"],
-};
+// GHSA-v3m3-f69x-jf25: Quill HTML export must pass through the shared sanitizer.
+import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
 
 const stripHtml = (html: string) =>
   (html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -116,7 +103,7 @@ export default function ServiceDetail() {
           <div
             className="service-rich-content prose max-w-none mb-8 text-muted-foreground"
             dangerouslySetInnerHTML={{
-              __html: DOMPurify.sanitize(service.description || "", purifyConfig),
+              __html: sanitizeRichHtml(service.description || ""),
             }}
           />
           <Button asChild size="lg">

@@ -7,7 +7,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { formatDistanceToNow } from "date-fns";
 import { Plus, Edit, Trash2, ExternalLink, Upload, Loader2, Check } from "lucide-react";
 import { toast } from "sonner";
-import DOMPurify from "dompurify";
+// GHSA-v3m3-f69x-jf25: Quill HTML export must pass through the shared sanitizer.
+import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -582,19 +583,9 @@ export default function LandingPages() {
                       <div
                         className="service-rich-content prose prose-invert max-w-none text-sm sm:text-base text-white/90 mb-5"
                         dangerouslySetInnerHTML={{
-                          __html: DOMPurify.sanitize(
+                          __html: sanitizeRichHtml(
                             watched.description ||
                               "<p>Your description will appear here.</p>",
-                            {
-                              ADD_TAGS: ["video", "source", "iframe"],
-                              ADD_ATTR: [
-                                "controls",
-                                "allow",
-                                "allowfullscreen",
-                                "frameborder",
-                                "target",
-                              ],
-                            },
                           ),
                         }}
                       />
