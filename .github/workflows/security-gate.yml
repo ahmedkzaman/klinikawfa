@@ -36,8 +36,41 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Dependency audit
-        run: npm audit --omit=dev --audit-level=high
+      - name: Dependency audit (public npm registry, fail-closed JSON parse)
+        env:
+          npm_config_registry: https://registry.npmjs.org/
+        run: |
+          set -o pipefail
+          # Capture stdout only; npm audit exits non-zero on findings AND on transport errors.
+          # We do NOT rely on the exit code alone — the JSON body is parsed and validated.
+          npm audit --omit=dev --json > audit.json
+          audit_exit=$?
+          echo "npm audit exit code: $audit_exit"
+          node --input-type=module -e "
+            import { readFileSync } from 'node:fs';
+            let raw;
+            try { raw = readFileSync('audit.json', 'utf8'); }
+            catch (e) { console.error('audit.json missing'); process.exit(1); }
+            if (!raw.trim()) { console.error('audit.json is empty'); process.exit(1); }
+            let data;
+            try { data = JSON.parse(raw); }
+            catch (e) { console.error('audit.json is not valid JSON:', e.message); process.exit(1); }
+            if (data && data.error) {
+              console.error('npm audit reported an error:', JSON.stringify(data.error));
+              process.exit(1);
+            }
+            const sev = (data && data.metadata && data.metadata.vulnerabilities) || null;
+            if (!sev || typeof sev !== 'object') {
+              console.error('audit.json missing metadata.vulnerabilities'); process.exit(1);
+            }
+            const high = Number(sev.high || 0);
+            const critical = Number(sev.critical || 0);
+            console.log('Vulnerability summary:', JSON.stringify(sev));
+            if (high > 0 || critical > 0) {
+              console.error('Blocking: high=' + high + ' critical=' + critical);
+              process.exit(1);
+            }
+          "
 
       - name: Reject committed private environment files
         run: |
