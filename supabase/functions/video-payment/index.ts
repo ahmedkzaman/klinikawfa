@@ -55,7 +55,7 @@ serve(async (req) => {
 
     if (req.method === "POST" && action === "create-deposit") {
       const body = await req.json();
-      const { room_code, success_url, cancel_url } = body;
+      const { room_code } = body;
 
       if (!room_code) {
         return new Response(JSON.stringify({ error: "Room code is required" }), {
@@ -85,7 +85,7 @@ serve(async (req) => {
         });
       } // Create Stripe checkout session
 
-      const origin = req.headers.get("origin") || "https://klinikawfa.lovable.app";
+      const origin = (Deno.env.get("SITE_URL") || "https://klinikawfa.com").replace(/\/$/, "");
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card", "fpx", "grabpay"],
         line_items: [
@@ -102,8 +102,8 @@ serve(async (req) => {
           },
         ],
         mode: "payment",
-        success_url: success_url || `${origin}/video-call?room=${room.room_code}&payment=success`,
-        cancel_url: cancel_url || `${origin}/video-call?room=${room.room_code}&payment=cancelled`,
+        success_url: `${origin}/video-call?room=${room.room_code}&payment=success`,
+        cancel_url: `${origin}/video-call?room=${room.room_code}&payment=cancelled`,
         metadata: {
           room_id: room.id,
           payment_type: "deposit",
@@ -143,6 +143,21 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: "Invalid token" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
           status: 401,
+        });
+      }
+
+      const { data: roleRow, error: roleError } = await supabaseClient
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userData.user.id)
+        .maybeSingle();
+      const allowedRoles = new Set([
+        "staff", "ops_staff", "operations", "admin", "special_admin", "doctor_admin",
+      ]);
+      if (roleError || !roleRow?.role || !allowedRoles.has(roleRow.role)) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 403,
         });
       }
 
@@ -269,4 +284,3 @@ serve(async (req) => {
     });
   }
 });
-

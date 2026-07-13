@@ -47,12 +47,6 @@ export function WhySection() {
 
   return (
     <section className="relative py-20 md:py-28 overflow-hidden">
-      {/* Subtle background elements */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-accent/5 rounded-full blur-3xl" />
-      </div>
-
       <div className="container relative z-10">
         <motion.div
           initial={false}
@@ -65,7 +59,7 @@ export function WhySection() {
             initial={false}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
-            className="inline-block mb-4 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium border border-primary/20"
+            className="inline-block mb-4 border-b border-primary pb-1 text-primary text-sm font-semibold uppercase tracking-[0.12em]"
           >
             {language === 'ms' ? 'Mengapa Pilih Kami' : 'Why Choose Us'}
           </motion.span>
@@ -86,7 +80,7 @@ export function WhySection() {
         >
           {whyCards.map((card, index) => (
             <motion.div key={card.titleKey} variants={itemVariants}>
-              <Card className="group h-full interactive-card border-border/50 shadow-soft rounded-2xl overflow-hidden">
+              <Card className="group h-full interactive-card border-border shadow-soft rounded-lg overflow-hidden hover:border-primary/30">
                 <CardContent className="flex items-start gap-5 p-6">
                   <div className="icon-gradient h-14 w-14 shrink-0 text-primary relative z-10">
                     <card.icon className="h-7 w-7 relative z-10" />

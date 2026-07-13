@@ -36,5 +36,12 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Dependency audit (non-blocking)
-        run: npm audit --omit=dev || true
+      - name: Dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Reject committed private environment files
+        run: |
+          if find . -type f -name '.env*' ! -name '*.example' ! -path './node_modules/*' | grep -q .; then
+            echo 'Private environment file detected in the repository.'
+            exit 1
+          fi
