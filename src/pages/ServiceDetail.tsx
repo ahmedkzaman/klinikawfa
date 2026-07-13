@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, CheckCircle, Calendar, AlertTriangle } from "lucide-react";
 // GHSA-v3m3-f69x-jf25: Quill HTML export must pass through the shared sanitizer.
 import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
+import { resolveServiceCategorySlug } from "@/lib/serviceSlugMap";
 
 const stripHtml = (html: string) =>
   (html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
