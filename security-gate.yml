@@ -11,16 +11,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        # actions/checkout v7.0.0
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        # actions/setup-node v6.4.0
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: "20"
           cache: "npm"
 
       - name: Install dependencies
@@ -36,14 +34,12 @@ jobs:
         run: npm test
 
       - name: Build
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
         run: npm run build
 
       - name: Setup Deno
-        # Pinned to the immutable commit SHA of denoland/setup-deno v2.0.4.
+        # Pinned to the immutable commit SHA of denoland/setup-deno v2.0.4
+        # (https://github.com/denoland/setup-deno/releases/tag/v2.0.4).
+        # Update the SHA + comment together after re-reviewing a new release.
         uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282
         with:
           # v1.46.3 matches the Supabase Edge Functions runtime the tests target.
@@ -55,12 +51,15 @@ jobs:
       - name: Deno tests (edge function auth helpers)
         run: deno test --allow-net --allow-env supabase/functions/tests/ai.test.ts
 
+
       - name: Dependency audit (public npm registry, fail-closed JSON parse)
         env:
           npm_config_registry: https://registry.npmjs.org/
         run: |
-          # npm audit exits non-zero for vulnerabilities and transport errors.
-          # Capture its output and let the validator decide whether to pass.
+          # Do NOT enable `set -e` here. `npm audit` exits non-zero when it
+          # finds vulnerabilities AND on transport errors; the Node validator
+          # below is the sole authority on pass/fail. Capture stdout, ignore
+          # the audit exit code, and let the validator decide.
           set +e
           npm audit --omit=dev --json > audit.json
           audit_exit=$?
@@ -81,8 +80,7 @@ jobs:
             }
             const sev = (data && data.metadata && data.metadata.vulnerabilities) || null;
             if (!sev || typeof sev !== 'object') {
-              console.error('audit.json missing metadata.vulnerabilities');
-              process.exit(1);
+              console.error('audit.json missing metadata.vulnerabilities'); process.exit(1);
             }
             const high = Number(sev.high || 0);
             const critical = Number(sev.critical || 0);
@@ -92,6 +90,7 @@ jobs:
               process.exit(1);
             }
           "
+
 
       - name: Reject committed private environment files
         run: |
