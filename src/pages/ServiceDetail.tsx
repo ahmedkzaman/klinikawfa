@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, CheckCircle, Calendar, AlertTriangle } from "lucide-react";
 // GHSA-v3m3-f69x-jf25: Quill HTML export must pass through the shared sanitizer.
 import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
+import { resolveServiceCategorySlug } from "@/lib/serviceSlugMap";
 
 const stripHtml = (html: string) =>
   (html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -25,18 +26,20 @@ interface ClinicService {
 export default function ServiceDetail() {
   const { slug } = useParams<{ slug: string }>();
 
+  const dbSlug = resolveServiceCategorySlug(slug);
+
   const { data: service, isLoading, isError } = useQuery({
-    queryKey: ["clinic-service", slug],
+    queryKey: ["clinic-service", dbSlug],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clinic_services" as never)
         .select("*")
-        .eq("slug", slug!)
+        .eq("slug", dbSlug!)
         .maybeSingle();
       if (error) throw error;
       return (data as ClinicService | null) ?? null;
     },
-    enabled: !!slug,
+    enabled: !!dbSlug,
   });
 
   if (isLoading) {
