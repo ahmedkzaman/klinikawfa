@@ -37,15 +37,20 @@ jobs:
         run: npm run build
 
       - name: Setup Deno
-        uses: denoland/setup-deno@v1.1.4
+        # Pinned to the immutable commit SHA of denoland/setup-deno v2.0.4
+        # (https://github.com/denoland/setup-deno/releases/tag/v2.0.4).
+        # Update the SHA + comment together after re-reviewing a new release.
+        uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282
         with:
+          # v1.46.3 matches the Supabase Edge Functions runtime the tests target.
           deno-version: v1.46.3
 
-      - name: Deno tests (shared secure-random)
-        run: deno test --allow-net --allow-env supabase/functions/_shared/secure-random_test.ts
+      - name: Deno tests (shared secure-random, no extra permissions)
+        run: deno test supabase/functions/_shared/secure-random_test.ts
 
       - name: Deno tests (edge function auth helpers)
         run: deno test --allow-net --allow-env supabase/functions/tests/ai.test.ts
+
 
       - name: Dependency audit (public npm registry, fail-closed JSON parse)
         env:
