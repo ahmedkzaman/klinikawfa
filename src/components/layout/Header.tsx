@@ -33,7 +33,7 @@ export function Header() {
       initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.4 }}
-      className="sticky top-0 z-50 w-full border-b border-border/30 glass"
+      className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur-sm"
     >
       <div className="container flex h-16 items-center justify-between md:h-18">
         {/* Logo */}
@@ -57,7 +57,7 @@ export function Header() {
               key={item.href}
               to={item.href}
               className={cn(
-                'relative px-4 py-2 text-sm font-medium rounded-xl transition-all duration-300',
+                'relative px-3 py-2 text-sm font-medium transition-colors duration-200',
                 isActive(item.href)
                   ? 'text-primary'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -67,7 +67,7 @@ export function Header() {
               {isActive(item.href) && (
                 <motion.div
                   layoutId="activeNav"
-                  className="absolute inset-0 bg-primary/10 rounded-xl -z-10"
+                  className="absolute inset-x-3 -bottom-[13px] h-0.5 bg-primary"
                   transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                 />
               )}
@@ -86,7 +86,7 @@ export function Header() {
               className={cn(
                 'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-300',
                 language === 'ms'
-                  ? 'bg-gradient-to-r from-primary to-primary-glow text-primary-foreground shadow-sm'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
@@ -99,7 +99,7 @@ export function Header() {
               className={cn(
                 'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-300',
                 language === 'en'
-                  ? 'bg-gradient-to-r from-primary to-primary-glow text-primary-foreground shadow-sm'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
@@ -135,7 +135,7 @@ export function Header() {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="sm" className="gap-2 hover:bg-muted/50">
-                      <div className="h-7 w-7 rounded-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center">
+                      <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center">
                         <User className="h-4 w-4 text-primary-foreground" />
                       </div>
                       <span className="max-w-[100px] truncate text-xs">{user.email}</span>
@@ -175,7 +175,7 @@ export function Header() {
               className={cn(
                 'px-2 py-1 text-xs font-semibold rounded-md transition-all',
                 language === 'ms'
-                  ? 'bg-gradient-to-r from-primary to-primary-glow text-primary-foreground'
+                  ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground'
               )}
             >
@@ -188,7 +188,7 @@ export function Header() {
               className={cn(
                 'px-2 py-1 text-xs font-semibold rounded-md transition-all',
                 language === 'en'
-                  ? 'bg-gradient-to-r from-primary to-primary-glow text-primary-foreground'
+                  ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground'
               )}
             >
@@ -203,7 +203,7 @@ export function Header() {
                 <span className="sr-only">Toggle menu</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-full max-w-sm glass border-l border-border/30">
+            <SheetContent side="right" className="w-full max-w-sm bg-background border-l border-border">
               <div className="flex flex-col gap-6 pt-8">
                 <nav className="flex flex-col gap-2">
                   {NAV_ITEMS.map((item) => (

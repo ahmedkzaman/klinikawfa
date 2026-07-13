@@ -125,10 +125,9 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error("Webhook error:", error);
-    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("video_webhook_unhandled", { name: error instanceof Error ? error.name : typeof error });
     return new Response(
-      JSON.stringify({ error: message }),
+      JSON.stringify({ error: "Internal error" }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
     );
   }

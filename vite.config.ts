@@ -6,11 +6,14 @@ import { componentTagger } from "lovable-tagger";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const supabaseUrl = env.VITE_SUPABASE_URL || "https://ncysmppzfjtiekfnomdv.supabase.co";
+  const supabaseUrl = env.VITE_SUPABASE_URL;
   const supabasePublishableKey =
     env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    env.VITE_SUPABASE_ANON_KEY ||
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jeXNtcHB6Zmp0aWVrZm5vbWR2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5MTIzNTEsImV4cCI6MjA4NTQ4ODM1MX0.4JUfcL915cqt42h-gocFeZ4OQQT27BOtI0YaQSPxlCg";
+    env.VITE_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabasePublishableKey || !env.VITE_SUPABASE_PROJECT_ID) {
+    throw new Error("Missing required Supabase environment variables.");
+  }
 
   return {
     define: {
@@ -18,7 +21,7 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(supabasePublishableKey),
       "import.meta.env.VITE_SUPABASE_ANON_KEY": JSON.stringify(supabasePublishableKey),
       "import.meta.env.VITE_SUPABASE_PROJECT_ID": JSON.stringify(
-        env.VITE_SUPABASE_PROJECT_ID || "ncysmppzfjtiekfnomdv"
+        env.VITE_SUPABASE_PROJECT_ID
       ),
     },
     server: {

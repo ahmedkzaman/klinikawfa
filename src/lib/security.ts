@@ -14,7 +14,8 @@ export function isSafeUrl(rawUrl: string): boolean {
   const value = rawUrl.trim();
   if (!value) return false;
 
-  if (value.startsWith('/') || value.startsWith('#')) return true;
+  // Allow root-relative paths, but reject protocol-relative URLs (//host).
+  if ((value.startsWith('/') && !value.startsWith('//')) || value.startsWith('#')) return true;
 
   try {
     const parsed = new URL(value);
@@ -41,7 +42,19 @@ const TEMP_PASSWORD_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23
 
 export function generateTemporaryPassword(length = 16): string {
   const normalizedLength = Math.max(12, Math.min(72, Math.floor(length)));
-  const bytes = new Uint8Array(normalizedLength);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => TEMP_PASSWORD_CHARS[byte % TEMP_PASSWORD_CHARS.length]).join('');
+  const output: string[] = [];
+  const alphabetLength = TEMP_PASSWORD_CHARS.length;
+  const unbiasedLimit = Math.floor(256 / alphabetLength) * alphabetLength;
+
+  while (output.length < normalizedLength) {
+    const bytes = new Uint8Array(normalizedLength - output.length);
+    crypto.getRandomValues(bytes);
+    for (const byte of bytes) {
+      if (byte >= unbiasedLimit) continue;
+      output.push(TEMP_PASSWORD_CHARS[byte % alphabetLength]);
+      if (output.length === normalizedLength) break;
+    }
+  }
+
+  return output.join('');
 }

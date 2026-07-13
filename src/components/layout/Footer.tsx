@@ -10,13 +10,7 @@ export function Footer() {
   const { language } = useLanguage();
   const { user, isStaffOrAdmin } = useAuth();
   return (
-    <footer className="relative bg-gradient-to-br from-primary via-primary to-primary-glow text-primary-foreground overflow-hidden">
-      {/* Decorative elements */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-white/5 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-white/5 rounded-full blur-3xl" />
-      </div>
-
+    <footer className="relative bg-primary text-primary-foreground overflow-hidden">
       <div className="container relative z-10 py-14 md:py-20">
         <div className="mb-10">
           <img src={logoKlinikAwfa} alt="Klinik Awfa Logo" className="h-14 w-auto brightness-0 invert opacity-90" />

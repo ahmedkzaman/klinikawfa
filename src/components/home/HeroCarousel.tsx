@@ -4,7 +4,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { CLINIC_INFO } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Calendar, MessageCircle, Phone, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, MessageCircle, Phone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface HeroSlide {
@@ -109,9 +109,8 @@ export function HeroCarousel({ autoPlayInterval = 5000 }: HeroCarouselProps) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="mb-6 inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-sm font-medium text-primary border border-primary/20"
+            className="mb-6 inline-flex items-center border-l-2 border-primary pl-3 text-sm font-semibold uppercase tracking-[0.16em] text-primary"
           >
-            <Sparkles className="h-4 w-4" />
             {CLINIC_INFO.name}
           </motion.div>
 
@@ -154,7 +153,7 @@ export function HeroCarousel({ autoPlayInterval = 5000 }: HeroCarouselProps) {
           >
             <Button 
               size="lg" 
-              className="min-w-[180px] btn-primary-glow bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary" 
+              className="min-w-[180px] bg-primary hover:bg-primary/90" 
               asChild
             >
               <Link to="/appointment">
@@ -196,7 +195,7 @@ export function HeroCarousel({ autoPlayInterval = 5000 }: HeroCarouselProps) {
                 className={cn(
                   'h-3 rounded-full transition-all duration-500',
                   currentSlide === index
-                    ? 'w-10 bg-gradient-to-r from-primary to-primary-glow shadow-glow-primary'
+                    ? 'w-10 bg-primary'
                     : 'w-3 bg-primary/30 hover:bg-primary/50'
                 )}
                 aria-label={`Go to slide ${index + 1}`}

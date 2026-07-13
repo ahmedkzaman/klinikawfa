@@ -2,30 +2,41 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Klinik Awfa Design System - Enhanced Edition
-   Modern, vibrant medical clinic with dynamic gradients, glass effects, and bold accents
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Klinik Awfa Design System
+   Restrained, clinical and editorial: high contrast, quiet surfaces and measured accents.
    All colors in HSL format
 */
 
 @layer base {
   :root {
     /* Core backgrounds - Clean white */
-    --background: 240 20% 98%;
-    --foreground: 245 50% 20%;
+    --background: 210 20% 98%;
+    --foreground: 220 32% 14%;
 
     /* Card surfaces */
     --card: 0 0% 100%;
-    --card-foreground: 245 50% 20%;
+    --card-foreground: 220 32% 14%;
 
     /* Popover surfaces */
     --popover: 0 0% 100%;
-    --popover-foreground: 245 50% 20%;
+    --popover-foreground: 220 32% 14%;
 
     /* Primary - Deep Royal Blue #261d84 toned */
-    --primary: 245 63% 32%;
+    --primary: 226 58% 28%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 245 55% 45%;
-    --primary-light: 245 50% 55%;
+    --primary-glow: 226 58% 28%;
+    --primary-light: 226 38% 48%;
 
     /* Secondary - Soft blue-gray */
     --secondary: 240 20% 94%;
@@ -63,7 +74,7 @@
     --ring: 245 63% 32%;
 
     /* Border radius */
-    --radius: 0.875rem;
+    --radius: 0.5rem;
 
     /* Sidebar (for admin) */
     --sidebar-background: 245 50% 18%;
@@ -76,11 +87,11 @@
     --sidebar-ring: 358 68% 50%;
 
     /* Enhanced Shadows */
-    --shadow-soft: 0 2px 12px -3px hsl(245 50% 20% / 0.08), 0 1px 3px -1px hsl(245 50% 20% / 0.05);
-    --shadow-card: 0 8px 30px -8px hsl(245 50% 20% / 0.1), 0 4px 12px -4px hsl(245 50% 20% / 0.08);
-    --shadow-elevated: 0 20px 50px -15px hsl(245 50% 20% / 0.15), 0 10px 25px -8px hsl(245 50% 20% / 0.1);
-    --shadow-glow-primary: 0 8px 40px -8px hsl(245 63% 32% / 0.4);
-    --shadow-glow-accent: 0 8px 40px -8px hsl(358 68% 46% / 0.4);
+    --shadow-soft: 0 1px 2px hsl(220 32% 14% / 0.06);
+    --shadow-card: 0 6px 20px -12px hsl(220 32% 14% / 0.24);
+    --shadow-elevated: 0 16px 36px -18px hsl(220 32% 14% / 0.3);
+    --shadow-glow-primary: 0 6px 16px -10px hsl(226 58% 28% / 0.35);
+    --shadow-glow-accent: 0 6px 16px -10px hsl(358 68% 46% / 0.3);
   }
 
   .dark {
@@ -154,14 +165,13 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
 
   /* Typography scale - Enhanced */
   h1 {
     @apply text-3xl font-bold tracking-tight md:text-4xl lg:text-5xl xl:text-6xl;
-    background: linear-gradient(135deg, hsl(var(--foreground)) 0%, hsl(var(--foreground) / 0.8) 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
+    color: hsl(var(--foreground));
   }
 
   h2 {
@@ -180,40 +190,27 @@
 @layer components {
   /* Glass morphism card */
   .glass-card {
-    @apply bg-card/70 backdrop-blur-xl border border-border/50;
-    box-shadow: 
-      0 4px 24px -4px hsl(var(--primary) / 0.08),
-      0 0 0 1px hsl(var(--border) / 0.5),
-      inset 0 1px 0 0 hsl(0 0% 100% / 0.1);
+    @apply bg-card border border-border;
+    box-shadow: var(--shadow-card);
   }
 
   /* Gradient text */
   .gradient-text {
-    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary-glow)) 50%, hsl(var(--accent)) 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: hsl(var(--primary));
   }
 
   /* Gradient background sections */
   .gradient-section {
-    background: 
-      radial-gradient(ellipse 80% 50% at 50% -20%, hsl(var(--primary) / 0.08) 0%, transparent 50%),
-      radial-gradient(ellipse 60% 40% at 100% 100%, hsl(var(--accent) / 0.05) 0%, transparent 50%),
-      hsl(var(--background));
+    background: hsl(var(--background));
   }
 
   .gradient-section-alt {
-    background: 
-      radial-gradient(ellipse 70% 50% at 0% 50%, hsl(var(--primary) / 0.06) 0%, transparent 50%),
-      radial-gradient(ellipse 50% 40% at 100% 0%, hsl(var(--accent) / 0.04) 0%, transparent 50%),
-      hsl(var(--muted) / 0.5);
+    background: hsl(var(--muted) / 0.5);
   }
 
   /* Floating orbs */
   .floating-orb {
-    @apply absolute rounded-full blur-3xl opacity-40 pointer-events-none;
-    animation: float 20s ease-in-out infinite;
+    display: none;
   }
 
   .floating-orb-primary {
@@ -231,13 +228,11 @@
   }
 
   .interactive-card::before {
-    content: '';
-    @apply absolute inset-0 opacity-0 transition-opacity duration-500;
-    background: radial-gradient(600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), hsl(var(--primary) / 0.1), transparent 40%);
+    content: none;
   }
 
   .interactive-card:hover::before {
-    @apply opacity-100;
+    @apply opacity-0;
   }
 
   .interactive-card:hover {
