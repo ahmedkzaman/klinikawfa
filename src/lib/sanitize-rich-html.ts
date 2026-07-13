@@ -17,7 +17,7 @@ import DOMPurify from "dompurify";
  * boundary only.
  */
 const RICH_HTML_CONFIG = {
-  ADD_TAGS: ["iframe", "video", "source"],
+  ADD_TAGS: ["iframe", "video", "source"] as string[],
   ADD_ATTR: [
     "allow",
     "allowfullscreen",
@@ -25,11 +25,11 @@ const RICH_HTML_CONFIG = {
     "scrolling",
     "controls",
     "target",
-  ],
+  ] as string[],
   ALLOWED_URI_REGEXP:
     /^(?:(?:https?|mailto|tel):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
-  FORBID_ATTR: ["style", "onerror", "onload", "onclick"],
-} as const;
+  FORBID_ATTR: ["style", "onerror", "onload", "onclick"] as string[],
+};
 
 export function sanitizeRichHtml(html: string): string {
   if (!html) return "";
