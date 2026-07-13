@@ -12,12 +12,14 @@ export const SERVICE_CATEGORY_SLUG_MAP: Record<string, string> = {
   'ujian-darah-penuh': 'rawatan-am',
   'ujian-denggi': 'rawatan-am',
 
-  // Prosedur Minor & Pembedahan
+  // Prosedur Kecil / Minor & Pembedahan (public alias `prosedur-kecil` → DB `prosedur-minor`)
+  'prosedur-kecil': 'prosedur-minor',
   'penjagaan-telinga': 'prosedur-minor',
   'khatan': 'prosedur-minor',
   'ketumbuhan-ketuat': 'prosedur-minor',
 
-  // Pemeriksaan Kesihatan
+  // Pemeriksaan Kesihatan (canonical DB slug is already public-facing)
+  'pemeriksaan-kesihatan': 'pemeriksaan-kesihatan',
   'pemeriksaan-darah': 'pemeriksaan-kesihatan',
   'pemeriksaan-pelajar': 'pemeriksaan-kesihatan',
   'pemeriksaan-pra-pekerjaan': 'pemeriksaan-kesihatan',
