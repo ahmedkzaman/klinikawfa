@@ -26,18 +26,20 @@ interface ClinicService {
 export default function ServiceDetail() {
   const { slug } = useParams<{ slug: string }>();
 
+  const dbSlug = resolveServiceCategorySlug(slug);
+
   const { data: service, isLoading, isError } = useQuery({
-    queryKey: ["clinic-service", slug],
+    queryKey: ["clinic-service", dbSlug],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clinic_services" as never)
         .select("*")
-        .eq("slug", slug!)
+        .eq("slug", dbSlug!)
         .maybeSingle();
       if (error) throw error;
       return (data as ClinicService | null) ?? null;
     },
-    enabled: !!slug,
+    enabled: !!dbSlug,
   });
 
   if (isLoading) {
