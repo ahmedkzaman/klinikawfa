@@ -25,12 +25,17 @@ export default defineConfig(({ mode }) => {
   ].filter(Boolean);
 
   if (missing.length > 0) {
-    // Warn rather than fail: hosted dev-mode builds may not inject VITE_* vars
-    // into process.env, and the Supabase client will surface a clear runtime
-    // error if they're truly absent at load time.
-    console.warn(
-      `[vite.config] Missing Supabase environment variables: ${missing.join(", ")}`
-    );
+    // Fail closed for every mode except "development". Hosted dev-mode builds
+    // may legitimately omit VITE_* vars from process.env, and the Supabase
+    // client will still surface a clear runtime error at load time. Any other
+    // mode (production, staging, test, etc.) must fail the build with the
+    // exact missing variable names. CI=true does NOT bypass this check.
+    const message = `Missing required Supabase environment variables: ${missing.join(", ")}`;
+    if (mode === "development") {
+      console.warn(`[vite.config] ${message}`);
+    } else {
+      throw new Error(message);
+    }
   }
 
 
