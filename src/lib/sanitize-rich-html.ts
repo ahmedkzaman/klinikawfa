@@ -16,7 +16,7 @@ import DOMPurify from "dompurify";
  * persistence regression pass. Sanitization here happens at the output
  * boundary only.
  */
-const RICH_HTML_CONFIG: DOMPurify.Config = {
+const RICH_HTML_CONFIG = {
   ADD_TAGS: ["iframe", "video", "source"],
   ADD_ATTR: [
     "allow",
@@ -29,7 +29,7 @@ const RICH_HTML_CONFIG: DOMPurify.Config = {
   ALLOWED_URI_REGEXP:
     /^(?:(?:https?|mailto|tel):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
   FORBID_ATTR: ["style", "onerror", "onload", "onclick"],
-};
+} as const;
 
 export function sanitizeRichHtml(html: string): string {
   if (!html) return "";
