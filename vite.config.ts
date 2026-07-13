@@ -5,15 +5,31 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), "");
+  // Merge Vite's mode-specific .env with the process environment so hosted
+  // builds (which inject VITE_* vars via process.env, without a .env file on
+  // disk) resolve the same names as local development. process.env wins on
+  // key conflicts so the deployment environment can override .env.
+  const fileEnv = loadEnv(mode, process.cwd(), "");
+  const env = { ...fileEnv, ...process.env };
+
   const supabaseUrl = env.VITE_SUPABASE_URL;
   const supabasePublishableKey =
     env.VITE_SUPABASE_PUBLISHABLE_KEY ||
     env.VITE_SUPABASE_ANON_KEY;
+  const supabaseProjectId = env.VITE_SUPABASE_PROJECT_ID;
 
-  if (!supabaseUrl || !supabasePublishableKey || !env.VITE_SUPABASE_PROJECT_ID) {
-    throw new Error("Missing required Supabase environment variables.");
+  const missing = [
+    !supabaseUrl && "VITE_SUPABASE_URL",
+    !supabasePublishableKey && "VITE_SUPABASE_PUBLISHABLE_KEY",
+    !supabaseProjectId && "VITE_SUPABASE_PROJECT_ID",
+  ].filter(Boolean);
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing required Supabase environment variables: ${missing.join(", ")}`
+    );
   }
+
 
   return {
     define: {
