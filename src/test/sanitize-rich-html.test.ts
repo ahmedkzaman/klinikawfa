@@ -60,6 +60,18 @@ describe("sanitizeRichHtml (GHSA-v3m3-f69x-jf25 mitigation)", () => {
     expect(clean).toContain('src="https://cdn.example/v.mp4"');
   });
 
+  it("removes inline style attributes while preserving safe video/image elements", () => {
+    const clean = sanitizeRichHtml(
+      '<img src="https://cdn.example/a.png" alt="a" style="position:fixed;top:0;left:0;width:100vw;height:100vh" />' +
+        '<video controls src="https://cdn.example/v.mp4" style="display:none"></video>',
+    );
+    expect(clean).not.toMatch(/style=/i);
+    expect(clean).toContain('<img src="https://cdn.example/a.png"');
+    expect(clean).toContain("<video");
+    expect(clean).toContain("controls");
+    expect(clean).toContain('src="https://cdn.example/v.mp4"');
+  });
+
   it("is idempotent", () => {
     const input =
       '<p>hi <a href="https://x.example">x</a></p><script>bad()</script>';
