@@ -11,7 +11,7 @@ import DOMPurify from "dompurify";
  * through `sanitizeRichHtml` so the output DOMPurify config is applied
  * consistently at the rendering boundary.
  *
- * We deliberately do NOT sanitize on editor input / on save — that would
+ * We deliberately do NOT sanitize on editor input or on save; that would
  * silently mutate stored content and require a separate rendering and
  * persistence regression pass. Sanitization here happens at the output
  * boundary only.
