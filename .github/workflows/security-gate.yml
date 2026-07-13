@@ -36,16 +36,30 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1.1.4
+        with:
+          deno-version: v1.46.3
+
+      - name: Deno tests (shared secure-random)
+        run: deno test --allow-net --allow-env supabase/functions/_shared/secure-random_test.ts
+
+      - name: Deno tests (edge function auth helpers)
+        run: deno test --allow-net --allow-env supabase/functions/tests/ai.test.ts
+
       - name: Dependency audit (public npm registry, fail-closed JSON parse)
         env:
           npm_config_registry: https://registry.npmjs.org/
         run: |
-          set -o pipefail
-          # Capture stdout only; npm audit exits non-zero on findings AND on transport errors.
-          # We do NOT rely on the exit code alone — the JSON body is parsed and validated.
+          # Do NOT enable `set -e` here. `npm audit` exits non-zero when it
+          # finds vulnerabilities AND on transport errors; the Node validator
+          # below is the sole authority on pass/fail. Capture stdout, ignore
+          # the audit exit code, and let the validator decide.
+          set +e
           npm audit --omit=dev --json > audit.json
           audit_exit=$?
-          echo "npm audit exit code: $audit_exit"
+          set -e
+          echo "npm audit exit code (informational only): $audit_exit"
           node --input-type=module -e "
             import { readFileSync } from 'node:fs';
             let raw;
@@ -71,6 +85,7 @@ jobs:
               process.exit(1);
             }
           "
+
 
       - name: Reject committed private environment files
         run: |
