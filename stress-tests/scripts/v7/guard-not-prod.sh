@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # v7 staging guard.
 #
-# Adds two checks over v6:
-#   * STAGING_API_URL must EXACTLY equal https://$STAGING_PROJECT_REF.supabase.co
-#   * STAGING_DB_URL must be demonstrably associated with the SAME staging
-#     project ref — either matches db.<ref>.supabase.co host or an AWS
-#     pooler host whose querystring includes the ref
-#     (options=project%3D<ref> or ?project=<ref>).
-# Continues rejecting the production ref.
+# Structural URL parsing (not substring matching):
+#   * STAGING_API_URL must EXACTLY equal https://<STAGING_PROJECT_REF>.supabase.co
+#   * STAGING_DB_URL must parse and be demonstrably associated with the SAME
+#     staging project ref, either:
+#       (a) Direct connection: host == db.<ref>.supabase.co
+#       (b) Pooler:            host ends in ".pooler.supabase.com"
+#                              AND (URL-decoded username == "postgres.<ref>"
+#                                   OR decoded ?options= "project=<ref>"
+#                                   OR decoded ?project=<ref>)
+#   * Reject suffix-spoofed hosts (e.g. evil-db.<ref>.supabase.co.attacker.tld)
+#   * Reject refs occurring only in password or unrelated query params.
+#   * Continue rejecting the production ref anywhere in the parsed structure.
 set -euo pipefail
 
 ENV_FILE="${ENV_FILE:-$(dirname "$0")/../../.env.staging}"
@@ -43,27 +48,93 @@ if [[ "$STAGING_API_URL" != "$EXPECTED_API" ]]; then
   echo "FATAL: STAGING_API_URL must equal ${EXPECTED_API}." >&2; exit 2
 fi
 
-# --- DB URL association ---
-DB_OK=0
-# db.<ref>.supabase.co host form
-if [[ "$STAGING_DB_URL" == *"@db.${STAGING_PROJECT_REF}.supabase.co"* ]]; then
-  DB_OK=1
-fi
-# pooler forms carrying the ref in querystring
-if [[ "$STAGING_DB_URL" == *"project%3D${STAGING_PROJECT_REF}"* ]] \
-   || [[ "$STAGING_DB_URL" == *"project=${STAGING_PROJECT_REF}"* ]] \
-   || [[ "$STAGING_DB_URL" == *"?options=project%3D${STAGING_PROJECT_REF}"* ]] \
-   || [[ "$STAGING_DB_URL" == *"&options=project%3D${STAGING_PROJECT_REF}"* ]]; then
-  DB_OK=1
-fi
-if [[ $DB_OK -ne 1 ]]; then
-  echo "FATAL: STAGING_DB_URL is not demonstrably associated with STAGING_PROJECT_REF." >&2
+# --- Structural DB URL validation (Python: no substring tricks) ---
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "FATAL: python3 is required for structural STAGING_DB_URL validation." >&2
   exit 2
 fi
 
-# Explicit production-ref reject on the DB URL too.
-if [[ "$STAGING_DB_URL" == *"$PROD_REF"* ]]; then
-  echo "FATAL: STAGING_DB_URL contains production ref." >&2; exit 2
-fi
+STAGING_DB_URL="$STAGING_DB_URL" \
+STAGING_PROJECT_REF="$STAGING_PROJECT_REF" \
+PROD_REF="$PROD_REF" \
+python3 - <<'PY'
+import os, sys, re
+from urllib.parse import urlsplit, parse_qs, unquote
 
-echo "OK: v7 staging guard passed (ref pattern + API exact + DB associated + not-prod)"
+url  = os.environ["STAGING_DB_URL"]
+ref  = os.environ["STAGING_PROJECT_REF"]
+prod = os.environ["PROD_REF"]
+
+def die(msg):
+    print(f"FATAL: {msg}", file=sys.stderr); sys.exit(2)
+
+try:
+    p = urlsplit(url)
+except Exception as e:
+    die(f"STAGING_DB_URL parse error: {e}")
+
+if p.scheme not in ("postgres", "postgresql"):
+    die(f"STAGING_DB_URL scheme must be postgres/postgresql, got {p.scheme!r}")
+
+host = (p.hostname or "").lower()
+if not host:
+    die("STAGING_DB_URL has no host")
+
+user = unquote(p.username or "")
+qs   = parse_qs(p.query, keep_blank_values=True)
+
+# Extract explicit "project=<ref>" from ?project= or ?options=project=<ref>.
+project_opt = None
+if "project" in qs and qs["project"]:
+    project_opt = qs["project"][0]
+elif "options" in qs and qs["options"]:
+    opts = unquote(qs["options"][0])
+    # tolerate "-c project=xxx" or "project=xxx"
+    m = re.search(r"project=([a-z0-9]{20})", opts)
+    if m:
+        project_opt = m.group(1)
+
+# --- classify + validate association ---
+DIRECT_HOST  = f"db.{ref}.supabase.co"
+POOLER_SFX   = ".pooler.supabase.com"
+EXPECTED_USR = f"postgres.{ref}"
+
+associated = False
+kind = "unknown"
+
+if host == DIRECT_HOST:
+    kind = "direct"
+    associated = True
+elif host.endswith(POOLER_SFX) and host != POOLER_SFX.lstrip("."):
+    kind = "pooler"
+    if user == EXPECTED_USR:
+        associated = True
+    elif project_opt is not None and project_opt == ref:
+        associated = True
+    else:
+        die(f"pooler host {host!r} but neither username nor project option matches ref {ref!r}")
+else:
+    die(f"STAGING_DB_URL host {host!r} is not db.{ref}.supabase.co and not a *.pooler.supabase.com host")
+
+if not associated:
+    die("STAGING_DB_URL not demonstrably associated with STAGING_PROJECT_REF")
+
+# --- reject production ref anywhere in parsed structure (not password) ---
+# Password is intentionally ignored: a random password may collide with a
+# 20-char alnum ref by pattern only. We check the structural fields only.
+def contains_prod(s: str) -> bool:
+    return prod in (s or "")
+
+if contains_prod(host):
+    die("STAGING_DB_URL host contains production ref")
+if contains_prod(user):
+    die("STAGING_DB_URL username contains production ref")
+if project_opt and prod == project_opt:
+    die("STAGING_DB_URL project option equals production ref")
+if contains_prod(p.path or ""):
+    die("STAGING_DB_URL path contains production ref")
+
+print(f"OK: v7 staging guard passed (kind={kind}, host={host})")
+PY
+
+echo "OK: v7 staging guard passed (ref pattern + API exact + DB structurally associated + not-prod)"

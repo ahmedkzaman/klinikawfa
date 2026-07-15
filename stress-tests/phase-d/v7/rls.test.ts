@@ -65,17 +65,24 @@ for (const c of MATRIX) {
     // Verify step defeats silent zero-row UPDATE.
     if (c.expect.verify) {
       const v = c.expect.verify;
-      // Use the SAME (already-authenticated) actor to re-read: if RLS lets
-      // them see the row at all, we can compare. For user_roles the actor
-      // can always see its own row (see user_roles policy 'own read').
       const idValue = v.id === "__self__" ? api.uid : v.id;
       const idColumn = v.table === "user_roles" ? "user_id" : "id";
       const { data, error } = await api.from(v.table).select(v.column).eq(idColumn, idValue);
       expect(error).toBeNull();
       expect(Array.isArray(data) && data.length > 0).toBe(true);
-      for (const row of data as Array<Record<string, unknown>>) {
+      for (const row of data as unknown as Array<Record<string, unknown>>) {
         expect(row[v.column]).toBe(v.equals as never);
       }
+    }
+
+    // Absence check: probe with a role broad enough to read the row if it
+    // exists (special_admin sees active + voided across all fixture tables).
+    if (c.expect.assertAbsentRow) {
+      const a = c.expect.assertAbsentRow;
+      const probe = await clientFor("special_admin");
+      const { data, error } = await probe.from(a.table).select("id").eq("id", a.id);
+      expect(error).toBeNull();
+      expect((data ?? []).length).toBe(0);
     }
   });
 }

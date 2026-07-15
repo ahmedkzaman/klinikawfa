@@ -40,6 +40,21 @@ for v in "${REQUIRED_VARS[@]}"; do
   fi
 done
 
+# --- 1b. Strict canonical UUID validation for every RLS_*_UID -------------
+# Refuse to run if any UID is not a lower-case canonical UUID. Prevents any
+# SQL-metacharacter reaching psql regardless of interpolation path.
+UUID_PATTERN='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+UID_VARS=(
+  RLS_LOCUM_UID RLS_RESIDENT_UID RLS_STAFF_UID RLS_OPS_UID RLS_OPS_STAFF_UID
+  RLS_DOCTOR_ADMIN_UID RLS_ADMIN_UID RLS_SPECIAL_ADMIN_UID RLS_GUEST_UID
+)
+for v in "${UID_VARS[@]}"; do
+  if [[ ! "${!v}" =~ $UUID_PATTERN ]]; then
+    echo "FATAL: $v is not a canonical lower-case UUID. Refusing to run." >&2
+    exit 2
+  fi
+done
+
 # --- 2. TypeScript compile before any DB write ----------------------------
 echo "→ bunx tsc --noEmit -p $ROOT_DIR/tsconfig.json"
 ( cd "$ROOT_DIR" && bunx tsc --noEmit -p tsconfig.json )
@@ -51,7 +66,12 @@ verify_uid_email() {
   local uid_var="$1" email_var="$2" role="$3"
   local uid="${!uid_var}" email="${!email_var}"
   local got
-  got="$(psql "$STAGING_DB_URL" -Atqc "SELECT email FROM auth.users WHERE id = '${uid}'::uuid")"
+  # NEVER interpolate ${uid} into SQL text. Pass it as a safely quoted psql
+  # variable and cast :'test_uid'::uuid inside the query.
+  got="$(psql "$STAGING_DB_URL" \
+      -v ON_ERROR_STOP=1 \
+      -v test_uid="$uid" \
+      -Atqc "SELECT email FROM auth.users WHERE id = :'test_uid'::uuid")"
   if [[ "$got" != "$email" ]]; then
     echo "FATAL: ${role} UID does not map to ${email_var} in auth.users" >&2; exit 2
   fi
