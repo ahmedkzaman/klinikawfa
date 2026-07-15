@@ -27,16 +27,12 @@ DECLARE
     'consultation_items|consultation_items_read_active',
     'panel_claims|Strict doctors and admins can view panel claims',
     'panel_claims|panel_claims_read_all',
+    'payments|Special admins can view voided payments',
     'payments|Strict doctors and admins can view payments',
     'payments|payments_read_active'
-  ]::text[];
-  -- 7 known baseline rows above; the eighth is the preserved voided
-  -- payments policy whose exact name is asserted below to keep the
-  -- expected array in strict sorted order.
+  ];
 BEGIN
-  expected := expected || 'payments|Special admins can view voided payments';
-  -- Re-sort into the canonical order used for actual.
-  SELECT array_agg(x ORDER BY x) INTO expected FROM unnest(expected) AS x;
+
 
   SELECT array_agg(tablename || '|' || policyname ORDER BY tablename, policyname)
     INTO actual
