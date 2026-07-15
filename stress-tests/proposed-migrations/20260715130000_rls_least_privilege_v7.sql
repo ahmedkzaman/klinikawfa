@@ -5,13 +5,19 @@
 -- REVIEW-ONLY. Not under supabase/migrations/. Copy verbatim into a real
 -- migration only after explicit approval.
 --
--- Preflight verifies the exact NINE-element baseline captured from the live
--- staging database (six insecure/dead policies + THREE preserved rows: the
--- two special_admin voided policies AND the pre-existing
--- consultation_items_read_active — plus the two "Strict doctors and admins…"
--- policies on role `public`). It validates policyname, table, roles,
--- permissiveness, cmd, normalized qual, and normalized with_check for every
--- row — not just names.
+-- Baseline: EIGHT SELECT policies across the four tables (captured from
+-- staging). SIX are dropped/replaced by least-privilege equivalents. TWO
+-- are preserved unchanged — both special_admin voided policies:
+--   * consultation_items_special_admin_read_voided
+--   * payments_special_admin_read_voided
+-- Note: `consultation_items_read_active` is dropped and its coverage is
+-- folded into the new combined `consultation_items_active_read` policy;
+-- it is NOT one of the preserved policies.
+--
+-- Preflight verifies the exact EIGHT-element baseline captured from the
+-- live staging database. It validates policyname, table, roles,
+-- permissiveness, cmd, normalized qual, and normalized with_check for
+-- every row — not just names.
 --
 -- Postflight verifies the exact final SELECT inventory the same way, and
 -- also verifies the two preserved voided policies' full definitions are
