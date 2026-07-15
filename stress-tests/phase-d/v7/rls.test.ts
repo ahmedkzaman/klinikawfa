@@ -70,7 +70,7 @@ for (const c of MATRIX) {
       const { data, error } = await api.from(v.table).select(v.column).eq(idColumn, idValue);
       expect(error).toBeNull();
       expect(Array.isArray(data) && data.length > 0).toBe(true);
-      for (const row of data as Array<Record<string, unknown>>) {
+      for (const row of data as unknown as Array<Record<string, unknown>>) {
         expect(row[v.column]).toBe(v.equals as never);
       }
     }
