@@ -119,16 +119,17 @@ CREATE POLICY "clinic_appointments_own_clinician_read"
   ON public.clinic_appointments FOR SELECT TO authenticated
   USING (doctor_id = public.get_doctor_id_for_user(auth.uid()));
 
--- consultation_items: ops/admin full read on active rows; clinician own read.
+-- consultation_items: single combined SELECT policy so total CI SELECT count
+-- (this + preserved voided) equals two. Grants active read to ops/admin OR to
+-- the owning clinician.
 CREATE POLICY "consultation_items_active_read"
-  ON public.consultation_items FOR SELECT TO authenticated
-  USING (deleted_at IS NULL AND public.is_ops_or_admin());
-
-CREATE POLICY "consultation_items_own_clinician_read"
   ON public.consultation_items FOR SELECT TO authenticated
   USING (
     deleted_at IS NULL
-    AND public.is_current_user_consultation_doctor(consultation_id)
+    AND (
+      public.is_ops_or_admin()
+      OR public.is_current_user_consultation_doctor(consultation_id)
+    )
   );
 
 -- panel_claims: finance-admin only.
@@ -150,22 +151,23 @@ CREATE POLICY "payments_own_clinician_read"
 
 -- -----------------------------------------------------------------------------
 -- 4. Postflight: verify the final SELECT inventory equals the exact sorted
---    expected array. Then verify no blanket USING(true) SELECT policy remains.
+--    expected array (eight policies: 2 CA + 2 CI + 1 PC + 3 P). Then verify
+--    no blanket USING(true) SELECT policy remains.
 -- -----------------------------------------------------------------------------
 DO $postflight$
 DECLARE
   actual        text[];
   expected      text[] := ARRAY[
-    'clinic_appointments|Special admins can view voided clinic_appointments',
     'clinic_appointments|clinic_appointments_internal_read',
     'clinic_appointments|clinic_appointments_own_clinician_read',
     'consultation_items|Special admins can view voided consultation_items',
     'consultation_items|consultation_items_active_read',
-    'consultation_items|consultation_items_own_clinician_read',
     'panel_claims|panel_claims_finance_admin_read',
+    'payments|Special admins can view voided payments',
     'payments|payments_active_staff_read',
     'payments|payments_own_clinician_read'
   ];
+
   blanket_count int;
 BEGIN
   SELECT array_agg(tablename || '|' || policyname ORDER BY tablename, policyname)
