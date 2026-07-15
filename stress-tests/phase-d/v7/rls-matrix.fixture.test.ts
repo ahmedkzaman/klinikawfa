@@ -142,12 +142,13 @@ test("[locum]         consultation_items → own active only", async () => {
   expect(await selectIds(clients.locum!, "consultation_items", ITEM_IDS))
     .toEqual(sorted([FIX.item.locumActive]));
 });
-test("[resident]      consultation_items → own active only", async () => {
+test("[resident]      consultation_items → all active", async () => {
   expect(await selectIds(clients.resident!, "consultation_items", ITEM_IDS))
-    .toEqual(sorted([FIX.item.residentActive]));
+    .toEqual(sorted(CI_ACTIVE));
 });
-test("[staff]         consultation_items → none (staff not in ops_or_admin)", async () => {
-  expect(await selectIds(clients.staff!, "consultation_items", ITEM_IDS)).toEqual([]);
+test("[staff]         consultation_items → all active", async () => {
+  expect(await selectIds(clients.staff!, "consultation_items", ITEM_IDS))
+    .toEqual(sorted(CI_ACTIVE));
 });
 test("[ops]           consultation_items → all active", async () => {
   expect(await selectIds(clients.ops!, "consultation_items", ITEM_IDS))
