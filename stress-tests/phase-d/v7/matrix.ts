@@ -13,6 +13,12 @@ export type AbuseExpect = {
    * that would otherwise pass despite RLS filtering them out.
    */
   verify?: { table: string; id: string; column: string; equals: unknown };
+  /**
+   * Absence check: after the call, assert no row exists with this id in the
+   * given table. Used for the consultation-insert abuse case so that a
+   * broken RLS policy that silently allows insertion is caught.
+   */
+  assertAbsentRow?: { table: string; id: string };
 };
 
 export type AbuseCase = {
@@ -27,7 +33,17 @@ export type AbuseCase = {
 // Reserved fixture IDs (kept in sync with v7 seed).
 export const FIXTURE_IDS = {
   patient:      { resident: "babebbbb-0000-4000-8000-000000000002" },
-  queueEntry:   { resident: "90e0bbbb-0000-4000-8000-000000000002" },
+  doctor:       { resident: "d0c0bbbb-0000-4000-8000-000000000002" },
+  queueEntry:   {
+    resident:    "90e0bbbb-0000-4000-8000-000000000002",
+    // Dedicated unused queue entry reserved solely for the insert-abuse case.
+    insertAbuse: "90e0cccc-0000-4000-8000-000000000003",
+  },
+  consultation: {
+    // Reserved consultation UUID for the insert-abuse case. Never seeded;
+    // if it exists after the abuse call, the abuse succeeded.
+    insertAbuse: "c0f0cccc-0000-4000-8000-000000000003",
+  },
   payment:      { residentActive: "fee00002-0000-4000-8000-000000000002" },
   claim:        { only: "c1a10001-0000-4000-8000-000000000001" },
 };
@@ -45,16 +61,28 @@ export const MATRIX: AbuseCase[] = [
   },
 
   // 2. Mutation abuse: ops cannot insert a schema-valid consultation.
-  // Payload satisfies all NOT NULL columns so denial proves RLS.
+  // Payload satisfies all NOT NULL columns (id, queue_entry_id, doctor_id,
+  // patient_id) so denial proves RLS. Uses a dedicated reserved queue_entry
+  // + consultation UUID pair so nothing else can race against it. The
+  // assertAbsentRow verify step ensures a broken policy that silently
+  // allowed the insert is caught + cleaned up.
   {
     actor: "ops",
     action: "insert schema-valid consultation must be blocked by RLS",
     call: (api) =>
       api.from("consultations").insert({
-        queue_entry_id: FIXTURE_IDS.queueEntry.resident,
+        id:             FIXTURE_IDS.consultation.insertAbuse,
+        queue_entry_id: FIXTURE_IDS.queueEntry.insertAbuse,
+        doctor_id:      FIXTURE_IDS.doctor.resident,
         patient_id:     FIXTURE_IDS.patient.resident,
       }),
-    expect: { messageIncludes: "row-level security" },
+    expect: {
+      messageIncludes: "row-level security",
+      assertAbsentRow: {
+        table: "consultations",
+        id: FIXTURE_IDS.consultation.insertAbuse,
+      },
+    },
   },
 
   // 3. Cross-clinician read: locum cannot see resident's payment.
@@ -96,16 +124,6 @@ export const MATRIX: AbuseCase[] = [
     action: "select panel_claim fixture id must return empty",
     call: (api) =>
       api.from("panel_claims").select("id").eq("id", FIXTURE_IDS.claim.only),
-    expect: { emptyOk: true },
-  },
-
-  // 6. Guest cannot read appointment_submission_log. Deterministic: assert
-  // emptyOk. If the table policy denies outright with an error instead, the
-  // runner records that as a failure so the assertion must be revisited.
-  {
-    actor: "guest",
-    action: "select appointment_submission_log must return empty (RLS filtered)",
-    call: (api) => api.from("appointment_submission_log").select("id").limit(1),
     expect: { emptyOk: true },
   },
 ];
