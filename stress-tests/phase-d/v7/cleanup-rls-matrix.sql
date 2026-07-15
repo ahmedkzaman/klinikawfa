@@ -29,8 +29,9 @@ $guard$;
 BEGIN;
 
 -- FK order: panel_claims → payments → consultation_items → clinic_appointments
---        → consultations → queue_entries → insurance_providers
---        → patients → doctors → user_roles (per-pair)
+--        → consultations (incl. reserved abuse UUID) → queue_entries (incl.
+--        reserved abuse queue_entry) → insurance_providers → patients
+--        → doctors → user_roles (ALL rows for the nine test UIDs).
 
 DELETE FROM public.panel_claims WHERE id IN (
   'c1a10001-0000-4000-8000-000000000001'
@@ -53,14 +54,18 @@ DELETE FROM public.clinic_appointments WHERE id IN (
   'a99cbbbb-0000-4000-8000-000000000002'
 );
 
+-- Reserved insert-abuse consultation UUID: removed unconditionally in case a
+-- broken RLS policy allowed the insertion.
 DELETE FROM public.consultations WHERE id IN (
   'c0f0aaaa-0000-4000-8000-000000000001',
-  'c0f0bbbb-0000-4000-8000-000000000002'
+  'c0f0bbbb-0000-4000-8000-000000000002',
+  'c0f0cccc-0000-4000-8000-000000000003'
 );
 
 DELETE FROM public.queue_entries WHERE id IN (
   '90e0aaaa-0000-4000-8000-000000000001',
-  '90e0bbbb-0000-4000-8000-000000000002'
+  '90e0bbbb-0000-4000-8000-000000000002',
+  '90e0cccc-0000-4000-8000-000000000003'
 );
 
 DELETE FROM public.insurance_providers WHERE id IN (
@@ -77,17 +82,20 @@ DELETE FROM public.doctors WHERE id IN (
   'd0c0bbbb-0000-4000-8000-000000000002'
 );
 
--- Remove each exact seeded (user_id, role) pair. No placeholder rows.
-DELETE FROM public.user_roles WHERE (user_id, role) IN (
-  (NULLIF(:'RLS_LOCUM_UID','')::uuid,         'locum'),
-  (NULLIF(:'RLS_RESIDENT_UID','')::uuid,      'resident_doctor'),
-  (NULLIF(:'RLS_STAFF_UID','')::uuid,         'staff'),
-  (NULLIF(:'RLS_OPS_UID','')::uuid,           'operations'),
-  (NULLIF(:'RLS_OPS_STAFF_UID','')::uuid,     'ops_staff'),
-  (NULLIF(:'RLS_DOCTOR_ADMIN_UID','')::uuid,  'doctor_admin'),
-  (NULLIF(:'RLS_ADMIN_UID','')::uuid,         'admin'),
-  (NULLIF(:'RLS_SPECIAL_ADMIN_UID','')::uuid, 'special_admin'),
-  (NULLIF(:'RLS_GUEST_UID','')::uuid,         'guest')
+-- Delete EVERY user_roles row belonging to the nine dedicated RLS test UIDs
+-- regardless of role. If a privilege-escalation exploit slipped a
+-- 'special_admin' row onto one of these accounts, cleanup must not leave
+-- it behind. NULLIF guards against an empty psql variable (unset → NULL).
+DELETE FROM public.user_roles WHERE user_id IN (
+  NULLIF(:'RLS_LOCUM_UID','')::uuid,
+  NULLIF(:'RLS_RESIDENT_UID','')::uuid,
+  NULLIF(:'RLS_STAFF_UID','')::uuid,
+  NULLIF(:'RLS_OPS_UID','')::uuid,
+  NULLIF(:'RLS_OPS_STAFF_UID','')::uuid,
+  NULLIF(:'RLS_DOCTOR_ADMIN_UID','')::uuid,
+  NULLIF(:'RLS_ADMIN_UID','')::uuid,
+  NULLIF(:'RLS_SPECIAL_ADMIN_UID','')::uuid,
+  NULLIF(:'RLS_GUEST_UID','')::uuid
 );
 
 COMMIT;
