@@ -1,5 +1,5 @@
 -- =============================================================================
--- Phase-D RLS matrix fixture seed (v7). Schema-correct; idempotent.
+-- Phase-D RLS matrix fixture seed (v7). Schema-correct and fail-closed.
 --
 -- Fixes over v6:
 --   * consultations gets required queue_entry_id.
@@ -45,10 +45,7 @@ BEGIN;
 --   doctors:              d0c0aaaa/d0c0bbbb-...
 --   patients:              babeaaaa/babebbbb-...
 --   queue_entries:         90e0aaaa/90e0bbbb/90e0cccc-...   (v7)
---   consultations:         c0f0aaaa/c0f0bbbb-...
---                          c0f0cccc-... (reserved insert-abuse target;
---                          NEVER inserted here — cleanup deletes it if a
---                          broken RLS policy allowed insertion)
+--   consultations:         c0f0aaaa/c0f0bbbb plus c0f0cccc abuse ID
 --   clinic_appointments:   a99caaaa/a99cbbbb-...
 --   consultation_items:    dead0001/dead0002/dead000f-...
 --   payments:              fee00001/fee00002/fee0000f-...
@@ -56,16 +53,14 @@ BEGIN;
 --   panel_claims:          c1a10001-...
 -- -----------------------------------------------------------------------------
 
--- Dedicated-test-account guard: refuse if ANY of the nine RLS test UIDs
--- already has a user_roles row. That proves these accounts are dedicated
--- and initially clean; without it, a leftover role from a prior aborted
--- run (including a successful privilege-escalation exploit) could be
--- mistaken for an intentional seed.
-DO $dedicated$
+-- Refuse to overwrite existing rows or reuse accounts that already have roles.
+-- This makes cleanup safe: the nine accounts are proven dedicated to this run.
+DO $fixture_preflight$
 DECLARE
-  cnt integer;
+  existing_roles integer;
+  existing_rows  integer;
 BEGIN
-  SELECT count(*) INTO cnt
+  SELECT count(*) INTO existing_roles
     FROM public.user_roles
    WHERE user_id IN (
      :'RLS_LOCUM_UID'::uuid,
@@ -78,13 +73,52 @@ BEGIN
      :'RLS_SPECIAL_ADMIN_UID'::uuid,
      :'RLS_GUEST_UID'::uuid
    );
-  IF cnt <> 0 THEN
+
+  IF existing_roles <> 0 THEN
     RAISE EXCEPTION
-      'seed refused: % pre-existing user_roles row(s) for the nine RLS test UIDs. These must be dedicated accounts with zero roles before seeding.',
-      cnt;
+      'seed refused: the dedicated RLS test accounts already have % user_roles row(s)',
+      existing_roles;
+  END IF;
+
+  SELECT
+      (SELECT count(*) FROM public.doctors WHERE id IN (
+        'd0c0aaaa-0000-4000-8000-000000000001',
+        'd0c0bbbb-0000-4000-8000-000000000002'))
+    + (SELECT count(*) FROM public.patients WHERE id IN (
+        'babeaaaa-0000-4000-8000-000000000001',
+        'babebbbb-0000-4000-8000-000000000002'))
+    + (SELECT count(*) FROM public.insurance_providers WHERE id =
+        '9a11e100-0000-4000-8000-000000000001')
+    + (SELECT count(*) FROM public.queue_entries WHERE id IN (
+        '90e0aaaa-0000-4000-8000-000000000001',
+        '90e0bbbb-0000-4000-8000-000000000002',
+        '90e0cccc-0000-4000-8000-000000000003'))
+    + (SELECT count(*) FROM public.consultations WHERE id IN (
+        'c0f0aaaa-0000-4000-8000-000000000001',
+        'c0f0bbbb-0000-4000-8000-000000000002',
+        'c0f0cccc-0000-4000-8000-000000000003'))
+    + (SELECT count(*) FROM public.clinic_appointments WHERE id IN (
+        'a99caaaa-0000-4000-8000-000000000001',
+        'a99cbbbb-0000-4000-8000-000000000002'))
+    + (SELECT count(*) FROM public.consultation_items WHERE id IN (
+        'dead0001-0000-4000-8000-000000000001',
+        'dead0002-0000-4000-8000-000000000002',
+        'dead000f-0000-4000-8000-00000000000f'))
+    + (SELECT count(*) FROM public.payments WHERE id IN (
+        'fee00001-0000-4000-8000-000000000001',
+        'fee00002-0000-4000-8000-000000000002',
+        'fee0000f-0000-4000-8000-00000000000f'))
+    + (SELECT count(*) FROM public.panel_claims WHERE id =
+        'c1a10001-0000-4000-8000-000000000001')
+    INTO existing_rows;
+
+  IF existing_rows <> 0 THEN
+    RAISE EXCEPTION
+      'seed refused: % reserved fixture row(s) already exist; run guarded cleanup and investigate first',
+      existing_rows;
   END IF;
 END
-$dedicated$;
+$fixture_preflight$;
 
 -- User role assignments.
 INSERT INTO public.user_roles (user_id, role) VALUES
@@ -97,33 +131,31 @@ INSERT INTO public.user_roles (user_id, role) VALUES
   (:'RLS_ADMIN_UID'::uuid,         'admin'),
   (:'RLS_SPECIAL_ADMIN_UID'::uuid, 'special_admin'),
   (:'RLS_GUEST_UID'::uuid,         'guest')
-ON CONFLICT (user_id, role) DO NOTHING;
+;
 
 -- Doctors.
 INSERT INTO public.doctors (id, user_id, name) VALUES
   ('d0c0aaaa-0000-4000-8000-000000000001', :'RLS_LOCUM_UID'::uuid,    'RLS Fixture Locum'),
   ('d0c0bbbb-0000-4000-8000-000000000002', :'RLS_RESIDENT_UID'::uuid, 'RLS Fixture Resident')
-ON CONFLICT (id) DO UPDATE SET user_id = EXCLUDED.user_id;
+;
 
 -- Patients.
 INSERT INTO public.patients (id, name) VALUES
   ('babeaaaa-0000-4000-8000-000000000001', 'RLS Fixture Patient A'),
   ('babebbbb-0000-4000-8000-000000000002', 'RLS Fixture Patient B')
-ON CONFLICT (id) DO NOTHING;
+;
 
 -- Insurance provider (panel) — required by panel_claims.panel_id.
 INSERT INTO public.insurance_providers (id, name) VALUES
   ('9a11e100-0000-4000-8000-000000000001', 'RLS Fixture Panel')
-ON CONFLICT (id) DO NOTHING;
+;
 
 -- Queue entries — required by consultations.queue_entry_id and payments.queue_entry_id.
--- 90e0cccc is reserved for the ops-insert-abuse consultation attempt and is
--- deliberately NOT referenced by any seeded consultation.
 INSERT INTO public.queue_entries (id, patient_id) VALUES
   ('90e0aaaa-0000-4000-8000-000000000001', 'babeaaaa-0000-4000-8000-000000000001'),
   ('90e0bbbb-0000-4000-8000-000000000002', 'babebbbb-0000-4000-8000-000000000002'),
   ('90e0cccc-0000-4000-8000-000000000003', 'babebbbb-0000-4000-8000-000000000002')
-ON CONFLICT (id) DO NOTHING;
+;
 
 -- Consultations.
 INSERT INTO public.consultations (id, queue_entry_id, doctor_id, patient_id) VALUES
@@ -135,7 +167,7 @@ INSERT INTO public.consultations (id, queue_entry_id, doctor_id, patient_id) VAL
    '90e0bbbb-0000-4000-8000-000000000002',
    'd0c0bbbb-0000-4000-8000-000000000002',
    'babebbbb-0000-4000-8000-000000000002')
-ON CONFLICT (id) DO NOTHING;
+;
 
 -- clinic_appointments (date + time required).
 INSERT INTO public.clinic_appointments
@@ -149,7 +181,7 @@ VALUES
    'd0c0bbbb-0000-4000-8000-000000000002',
    'babebbbb-0000-4000-8000-000000000002',
    DATE '2099-01-01', TIME '10:00:00')
-ON CONFLICT (id) DO NOTHING;
+;
 
 -- consultation_items (item_name required).
 INSERT INTO public.consultation_items (id, consultation_id, item_name, deleted_at, deleted_by) VALUES
@@ -160,7 +192,7 @@ INSERT INTO public.consultation_items (id, consultation_id, item_name, deleted_a
   ('dead000f-0000-4000-8000-00000000000f',
    'c0f0aaaa-0000-4000-8000-000000000001', 'RLS Fixture Item Voided',
    now(), :'RLS_SPECIAL_ADMIN_UID'::uuid)
-ON CONFLICT (id) DO NOTHING;
+;
 
 -- payments (queue_entry_id + payment_method required).
 INSERT INTO public.payments
@@ -176,7 +208,7 @@ VALUES
    '90e0aaaa-0000-4000-8000-000000000001',
    'c0f0aaaa-0000-4000-8000-000000000001', 'cash',
    now(), :'RLS_SPECIAL_ADMIN_UID'::uuid)
-ON CONFLICT (id) DO NOTHING;
+;
 
 -- panel_claims (claim_no + panel_id + patient_id required; no consultation_id column).
 INSERT INTO public.panel_claims (id, claim_no, panel_id, patient_id, queue_entry_id) VALUES
@@ -185,6 +217,6 @@ INSERT INTO public.panel_claims (id, claim_no, panel_id, patient_id, queue_entry
    '9a11e100-0000-4000-8000-000000000001',
    'babeaaaa-0000-4000-8000-000000000001',
    '90e0aaaa-0000-4000-8000-000000000001')
-ON CONFLICT (id) DO NOTHING;
+;
 
 COMMIT;
