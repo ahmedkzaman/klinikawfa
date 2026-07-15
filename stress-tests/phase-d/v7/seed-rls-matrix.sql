@@ -117,9 +117,12 @@ INSERT INTO public.insurance_providers (id, name) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Queue entries — required by consultations.queue_entry_id and payments.queue_entry_id.
+-- 90e0cccc is reserved for the ops-insert-abuse consultation attempt and is
+-- deliberately NOT referenced by any seeded consultation.
 INSERT INTO public.queue_entries (id, patient_id) VALUES
   ('90e0aaaa-0000-4000-8000-000000000001', 'babeaaaa-0000-4000-8000-000000000001'),
-  ('90e0bbbb-0000-4000-8000-000000000002', 'babebbbb-0000-4000-8000-000000000002')
+  ('90e0bbbb-0000-4000-8000-000000000002', 'babebbbb-0000-4000-8000-000000000002'),
+  ('90e0cccc-0000-4000-8000-000000000003', 'babebbbb-0000-4000-8000-000000000002')
 ON CONFLICT (id) DO NOTHING;
 
 -- Consultations.
