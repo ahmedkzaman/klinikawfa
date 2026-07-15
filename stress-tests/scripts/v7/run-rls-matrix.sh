@@ -40,19 +40,26 @@ for v in "${REQUIRED_VARS[@]}"; do
   fi
 done
 
-# --- 1b. Strict canonical UUID validation for every RLS_*_UID -------------
-# Refuse to run if any UID is not a lower-case canonical UUID. Prevents any
-# SQL-metacharacter reaching psql regardless of interpolation path.
-UUID_PATTERN='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+# All account IDs must be canonical UUIDs and must be distinct. This prevents
+# SQL injection and prevents one auth account from accidentally representing
+# multiple matrix roles.
+UUID_PATTERN='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
 UID_VARS=(
-  RLS_LOCUM_UID RLS_RESIDENT_UID RLS_STAFF_UID RLS_OPS_UID RLS_OPS_STAFF_UID
-  RLS_DOCTOR_ADMIN_UID RLS_ADMIN_UID RLS_SPECIAL_ADMIN_UID RLS_GUEST_UID
+  RLS_LOCUM_UID RLS_RESIDENT_UID RLS_STAFF_UID RLS_OPS_UID
+  RLS_OPS_STAFF_UID RLS_DOCTOR_ADMIN_UID RLS_ADMIN_UID
+  RLS_SPECIAL_ADMIN_UID RLS_GUEST_UID
 )
-for v in "${UID_VARS[@]}"; do
-  if [[ ! "${!v}" =~ $UUID_PATTERN ]]; then
-    echo "FATAL: $v is not a canonical lower-case UUID. Refusing to run." >&2
-    exit 2
+declare -A SEEN_UIDS=()
+for uid_var in "${UID_VARS[@]}"; do
+  uid="${!uid_var}"
+  if [[ ! "$uid" =~ $UUID_PATTERN ]]; then
+    echo "FATAL: $uid_var is not a canonical UUID." >&2; exit 2
   fi
+  uid_key="${uid,,}"
+  if [[ -n "${SEEN_UIDS[$uid_key]:-}" ]]; then
+    echo "FATAL: $uid_var duplicates ${SEEN_UIDS[$uid_key]}." >&2; exit 2
+  fi
+  SEEN_UIDS[$uid_key]="$uid_var"
 done
 
 # --- 2. TypeScript compile before any DB write ----------------------------
@@ -66,12 +73,8 @@ verify_uid_email() {
   local uid_var="$1" email_var="$2" role="$3"
   local uid="${!uid_var}" email="${!email_var}"
   local got
-  # NEVER interpolate ${uid} into SQL text. Pass it as a safely quoted psql
-  # variable and cast :'test_uid'::uuid inside the query.
-  got="$(psql "$STAGING_DB_URL" \
-      -v ON_ERROR_STOP=1 \
-      -v test_uid="$uid" \
-      -Atqc "SELECT email FROM auth.users WHERE id = :'test_uid'::uuid")"
+  got="$(psql "$STAGING_DB_URL" -v "test_uid=$uid" -Atqc \
+    "SELECT email FROM auth.users WHERE id = :'test_uid'::uuid")"
   if [[ "$got" != "$email" ]]; then
     echo "FATAL: ${role} UID does not map to ${email_var} in auth.users" >&2; exit 2
   fi
@@ -131,6 +134,20 @@ TEST_STATUS=0
 ( cd "$ROOT_DIR" && bun test \
     phase-d/v7/rls-matrix.fixture.test.ts \
     phase-d/v7/rls.test.ts ) || TEST_STATUS=$?
+
+# If the schema-valid abuse insert unexpectedly succeeded, its explicit ID
+# makes it observable here and removable by cleanup. Do not rely on the actor's
+# own SELECT policy to prove database absence.
+ABUSE_CONSULTATION_ID='c0f0cccc-0000-4000-8000-000000000003'
+set +e
+ABUSE_COUNT="$(psql "$STAGING_DB_URL" -v "abuse_id=$ABUSE_CONSULTATION_ID" -Atqc \
+  "SELECT count(*) FROM public.consultations WHERE id = :'abuse_id'::uuid")"
+ABUSE_VERIFY_STATUS=$?
+set -e
+if [[ $ABUSE_VERIFY_STATUS -ne 0 || "$ABUSE_COUNT" != "0" ]]; then
+  echo "FATAL: deterministic abuse consultation is present or could not be verified absent." >&2
+  if [[ $TEST_STATUS -eq 0 ]]; then TEST_STATUS=1; fi
+fi
 
 # --- 7. Final exit --------------------------------------------------------
 trap - EXIT INT TERM
