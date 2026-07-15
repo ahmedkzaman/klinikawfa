@@ -44,14 +44,47 @@ BEGIN;
 -- Reserved fixture identifiers (hex-only UUIDs).
 --   doctors:              d0c0aaaa/d0c0bbbb-...
 --   patients:              babeaaaa/babebbbb-...
---   queue_entries:         90e0aaaa/90e0bbbb-...   (v7)
+--   queue_entries:         90e0aaaa/90e0bbbb/90e0cccc-...   (v7)
 --   consultations:         c0f0aaaa/c0f0bbbb-...
+--                          c0f0cccc-... (reserved insert-abuse target;
+--                          NEVER inserted here — cleanup deletes it if a
+--                          broken RLS policy allowed insertion)
 --   clinic_appointments:   a99caaaa/a99cbbbb-...
 --   consultation_items:    dead0001/dead0002/dead000f-...
 --   payments:              fee00001/fee00002/fee0000f-...
 --   insurance_providers:   9a11e100-...             (v7)
 --   panel_claims:          c1a10001-...
 -- -----------------------------------------------------------------------------
+
+-- Dedicated-test-account guard: refuse if ANY of the nine RLS test UIDs
+-- already has a user_roles row. That proves these accounts are dedicated
+-- and initially clean; without it, a leftover role from a prior aborted
+-- run (including a successful privilege-escalation exploit) could be
+-- mistaken for an intentional seed.
+DO $dedicated$
+DECLARE
+  cnt integer;
+BEGIN
+  SELECT count(*) INTO cnt
+    FROM public.user_roles
+   WHERE user_id IN (
+     :'RLS_LOCUM_UID'::uuid,
+     :'RLS_RESIDENT_UID'::uuid,
+     :'RLS_STAFF_UID'::uuid,
+     :'RLS_OPS_UID'::uuid,
+     :'RLS_OPS_STAFF_UID'::uuid,
+     :'RLS_DOCTOR_ADMIN_UID'::uuid,
+     :'RLS_ADMIN_UID'::uuid,
+     :'RLS_SPECIAL_ADMIN_UID'::uuid,
+     :'RLS_GUEST_UID'::uuid
+   );
+  IF cnt <> 0 THEN
+    RAISE EXCEPTION
+      'seed refused: % pre-existing user_roles row(s) for the nine RLS test UIDs. These must be dedicated accounts with zero roles before seeding.',
+      cnt;
+  END IF;
+END
+$dedicated$;
 
 -- User role assignments.
 INSERT INTO public.user_roles (user_id, role) VALUES
