@@ -1,13 +1,17 @@
 -- =============================================================================
 -- EMERGENCY ONLY — RLS Hardening v7 rollback.
 --
--- Restores the exact six pre-v7 SELECT policies captured verbatim from
--- pg_policies on the staging database (matching name, role, permissiveness,
--- command, USING, and WITH_CHECK). The three preserved policies (both
--- special_admin voided policies and consultation_items_read_active) are NOT
--- re-created — they were never dropped. Note: `payments_read_active` and
--- `consultation_items_read_active` both use USING(deleted_at IS NULL); the
--- CI one is preserved and the payments one is restored here.
+-- Pre-v7 SELECT baseline across the four affected tables was EIGHT policies.
+-- v7 dropped SIX of them and preserved TWO — both special_admin voided
+-- policies:
+--   * consultation_items_special_admin_read_voided
+--   * payments_special_admin_read_voided
+--
+-- This script restores the six dropped policies verbatim from the captured
+-- staging pre-state (name, role, permissiveness, command, USING, WITH CHECK).
+-- The two preserved policies are NOT re-created here because v7 never
+-- dropped them. `consultation_items_read_active` WAS dropped by v7 and is
+-- restored below — it is not one of the preserved policies.
 --
 -- REVIEW-ONLY. Lives outside supabase/migrations/. Run manually only if the
 -- v7 migration must be reverted.
