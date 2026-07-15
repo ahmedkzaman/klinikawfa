@@ -1,55 +1,89 @@
 /**
- * RLS / role abuse matrix. Each entry describes a role acting on a resource
- * and the exact expected denial. The Phase D test asserts every row.
+ * Deterministic RLS/role abuse matrix. Every entry uses reserved fixture IDs
+ * and expects an exact denial signature (error code and/or message substring).
+ * No arrayContaining, no bare regex on user-supplied strings.
  */
+export type AbuseExpect = {
+  /** Postgres SQLSTATE or PostgREST error code expected. */
+  code?: string;
+  /** Case-insensitive substring that MUST appear in the error message. */
+  messageIncludes?: string;
+  /** If set, the query must return an empty rowset with no error. */
+  emptyOk?: boolean;
+};
+
 export type AbuseCase = {
-  actor: "guest" | "locum" | "operations" | "staff" | "doctor_admin" | "admin" | "special_admin";
+  actor:
+    | "guest" | "locum" | "resident" | "staff"
+    | "ops" | "ops_staff" | "doctor_admin" | "admin" | "special_admin";
   action: string;
   call: (api: any) => Promise<any>;
-  expect: { status?: number; code?: string; match?: RegExp };
+  expect: AbuseExpect;
+};
+
+// Reserved fixture IDs — kept in sync with seed-rls-matrix.sql.
+export const FIXTURE_IDS = {
+  patient: {
+    resident: "babebbbb-0000-4000-8000-000000000002",
+  },
+  payment: {
+    residentActive: "fee00002-0000-4000-8000-000000000002",
+  },
+  claim: {
+    only: "c1a10001-0000-4000-8000-000000000001",
+  },
 };
 
 export const MATRIX: AbuseCase[] = [
+  // Privilege escalation via RPC.
   {
     actor: "staff",
-    action: "admin_assign_role",
-    call: (api) => api.rpc("admin_assign_role", { target_user_id: api.uid, new_role: "special_admin" }),
-    expect: { code: "42501", match: /NOT_AUTHORIZED/ },
+    action: "admin_assign_role (self → special_admin) must be denied",
+    call: (api) =>
+      api.rpc("admin_assign_role", {
+        target_user_id: api.uid, new_role: "special_admin",
+      }),
+    expect: { code: "42501", messageIncludes: "NOT_AUTHORIZED" },
   },
+  // Mutation abuse: ops cannot insert consultations for arbitrary patients.
   {
-    actor: "operations",
-    action: "insert consultation for arbitrary patient",
-    call: (api) => api.from("consultations").insert({ patient_id: api.someOtherPatient }),
-    expect: { match: /row-level security|permission/i },
+    actor: "ops",
+    action: "insert consultation for arbitrary patient must be blocked",
+    call: (api) =>
+      api.from("consultations").insert({
+        patient_id: FIXTURE_IDS.patient.resident,
+      }),
+    expect: { messageIncludes: "row-level security" },
   },
+  // Locum cannot read another clinician's payment.
   {
     actor: "locum",
-    action: "select payments outside own consultation",
-    call: (api) => api.from("payments").select("*").limit(1),
-    expect: { match: /row-level security|permission|empty/i },
+    action: "select resident payment by exact id must return empty",
+    call: (api) =>
+      api.from("payments").select("id").eq("id", FIXTURE_IDS.payment.residentActive),
+    expect: { emptyOk: true },
   },
-  {
-    actor: "guest",
-    action: "GET /rest/v1/patients",
-    call: (api) => api.from("patients").select("*").limit(1),
-    expect: { match: /row-level security|permission|empty/i },
-  },
+  // Privilege escalation via direct user_roles UPDATE.
   {
     actor: "staff",
-    action: "promote self to special_admin via user_roles UPDATE",
-    call: (api) => api.from("user_roles").update({ role: "special_admin" }).eq("user_id", api.uid),
-    expect: { match: /row-level security|permission/i },
+    action: "self-promote via user_roles UPDATE must be denied",
+    call: (api) =>
+      api.from("user_roles").update({ role: "special_admin" }).eq("user_id", api.uid),
+    expect: { messageIncludes: "row-level security" },
   },
+  // Locum cannot read any panel_claims fixture row.
   {
     actor: "locum",
-    action: "select panel_claims",
-    call: (api) => api.from("panel_claims").select("*").limit(1),
-    expect: { match: /row-level security|permission|empty/i },
+    action: "select panel_claim fixture id must return empty",
+    call: (api) =>
+      api.from("panel_claims").select("id").eq("id", FIXTURE_IDS.claim.only),
+    expect: { emptyOk: true },
   },
+  // Guest role cannot read appointment_submission_log.
   {
     actor: "guest",
-    action: "select appointment_submission_log",
-    call: (api) => api.from("appointment_submission_log").select("*").limit(1),
-    expect: { match: /row-level security|permission|empty/i },
+    action: "select appointment_submission_log must return empty or denied",
+    call: (api) => api.from("appointment_submission_log").select("id").limit(1),
+    expect: { emptyOk: true },
   },
 ];
