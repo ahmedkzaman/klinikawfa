@@ -8,7 +8,8 @@
     "phase:a": "bun run phase-a/bench.ts",
     "phase:b:validate": "bun run phase-b/validate.ts",
     "phase:c": "bunx playwright test --config=phase-c/playwright.config.ts",
-    "phase:d": "bun test phase-d/rls.test.ts",
+    "phase:d": "bash scripts/run-rls-matrix.sh",
+    "phase:d:matrix": "bash scripts/run-rls-matrix.sh",
     "seed": "bun run seed/seed.ts",
     "observe": "bun run observe/watch.ts"
   },

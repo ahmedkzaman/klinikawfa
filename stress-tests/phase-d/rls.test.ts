@@ -1,36 +1,66 @@
 /**
- * Per-role RLS abuse test. Spins up an authed Supabase client per role
- * and asserts every entry in MATRIX returns the expected denial.
+ * Privilege-escalation and mutation-abuse tests. Preserves the pre-v6
+ * coverage but uses RLS_* credentials, deterministic fixture IDs, and
+ * exact denial-shape assertions.
  *
- * Expects pre-seeded auth users in staging:
- *   staging+{role}@klinikawfa.test  / password: stress-test-{role}
+ * Fails at import unless the guarded runner exported RLS_MATRIX_RUNNER=1.
  */
 import { test, expect } from "bun:test";
-import { createClient } from "@supabase/supabase-js";
-import { MATRIX } from "./matrix";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { MATRIX, type AbuseCase } from "./matrix";
 
-const URL = process.env.STAGING_API_URL!;
+if (process.env.RLS_MATRIX_RUNNER !== "1") {
+  throw new Error(
+    "rls.test.ts must only be executed through scripts/run-rls-matrix.sh"
+  );
+}
+
+const URL_ = process.env.STAGING_API_URL!;
 const ANON = process.env.STAGING_ANON_KEY!;
 
-async function clientFor(role: string) {
-  const sb = createClient(URL, ANON);
+type Actor = AbuseCase["actor"];
+
+const CRED: Record<Actor, { uid: string; email: string; pw: string }> = {
+  guest:         { uid: process.env.RLS_GUEST_UID!,         email: process.env.RLS_GUEST_EMAIL!,         pw: process.env.RLS_GUEST_PASSWORD! },
+  locum:         { uid: process.env.RLS_LOCUM_UID!,         email: process.env.RLS_LOCUM_EMAIL!,         pw: process.env.RLS_LOCUM_PASSWORD! },
+  resident:      { uid: process.env.RLS_RESIDENT_UID!,      email: process.env.RLS_RESIDENT_EMAIL!,      pw: process.env.RLS_RESIDENT_PASSWORD! },
+  staff:         { uid: process.env.RLS_STAFF_UID!,         email: process.env.RLS_STAFF_EMAIL!,         pw: process.env.RLS_STAFF_PASSWORD! },
+  ops:           { uid: process.env.RLS_OPS_UID!,           email: process.env.RLS_OPS_EMAIL!,           pw: process.env.RLS_OPS_PASSWORD! },
+  ops_staff:     { uid: process.env.RLS_OPS_STAFF_UID!,     email: process.env.RLS_OPS_STAFF_EMAIL!,     pw: process.env.RLS_OPS_STAFF_PASSWORD! },
+  doctor_admin:  { uid: process.env.RLS_DOCTOR_ADMIN_UID!,  email: process.env.RLS_DOCTOR_ADMIN_EMAIL!,  pw: process.env.RLS_DOCTOR_ADMIN_PASSWORD! },
+  admin:         { uid: process.env.RLS_ADMIN_UID!,         email: process.env.RLS_ADMIN_EMAIL!,         pw: process.env.RLS_ADMIN_PASSWORD! },
+  special_admin: { uid: process.env.RLS_SPECIAL_ADMIN_UID!, email: process.env.RLS_SPECIAL_ADMIN_EMAIL!, pw: process.env.RLS_SPECIAL_ADMIN_PASSWORD! },
+};
+
+async function clientFor(actor: Actor) {
+  const sb = createClient(URL_, ANON, { auth: { persistSession: false } });
   const { data, error } = await sb.auth.signInWithPassword({
-    email: `staging+${role}@klinikawfa.test`,
-    password: `stress-test-${role}`,
+    email: CRED[actor].email, password: CRED[actor].pw,
   });
-  if (error || !data.user) throw new Error(`login failed for ${role}: ${error?.message}`);
-  return { ...sb, uid: data.user.id, someOtherPatient: "00000000-0000-0000-0000-000000000001" } as any;
+  if (error || !data.user) throw new Error(`sign-in failed for ${actor}`);
+  if (data.user.id !== CRED[actor].uid) {
+    throw new Error(`signed-in user id does not match RLS_${actor.toUpperCase()}_UID`);
+  }
+  return Object.assign(sb, { uid: data.user.id }) as SupabaseClient & { uid: string };
 }
 
 for (const c of MATRIX) {
-  test(`[${c.actor}] ${c.action} → denied`, async () => {
-    const api = c.actor === "guest"
-      ? Object.assign(createClient(URL, ANON), { uid: null, someOtherPatient: "x" })
-      : await clientFor(c.actor);
+  test(`[${c.actor}] ${c.action}`, async () => {
+    const api = await clientFor(c.actor);
     const res: any = await c.call(api).catch((e: any) => ({ error: e }));
+
+    if (c.expect.emptyOk) {
+      expect(res.error).toBeNull();
+      expect(Array.isArray(res.data) ? res.data.length : 0).toBe(0);
+      return;
+    }
+
     const err = res?.error;
-    const body = err ? `${err.code ?? ""} ${err.message ?? ""}` : JSON.stringify(res?.data ?? "");
+    expect(err).not.toBeNull();
     if (c.expect.code) expect(err?.code).toBe(c.expect.code);
-    if (c.expect.match) expect(body).toMatch(c.expect.match);
+    if (c.expect.messageIncludes) {
+      expect(String(err?.message ?? "").toLowerCase())
+        .toContain(c.expect.messageIncludes.toLowerCase());
+    }
   });
 }
