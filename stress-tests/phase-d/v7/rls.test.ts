@@ -47,7 +47,14 @@ async function clientFor(actor: Actor): Promise<SupabaseClient & { uid: string }
 for (const c of MATRIX) {
   test(`[${c.actor}] ${c.action}`, async () => {
     const api = await clientFor(c.actor);
-    const res: any = await c.call(api).catch((e: any) => ({ error: e }));
+    let res: any;
+    try {
+      // Supabase query builders are PromiseLike/thenable, but do not expose
+      // Promise.prototype.catch directly in every client version.
+      res = await c.call(api);
+    } catch (error) {
+      res = { error };
+    }
 
     if (c.expect.emptyOk) {
       expect(res.error).toBeNull();

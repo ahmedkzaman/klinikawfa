@@ -11,23 +11,32 @@
 --   * Supporting queue_entries + insurance_providers fixtures added so all
 --     NOT NULL/FK constraints resolve deterministically.
 --
--- Internal guard: refuses unless the runner exports
---   PGOPTIONS="-c app.staging_project_ref=<staging_ref>"
--- and passes -v STAGING_PROJECT_REF=<same_ref>.
+-- Internal guard: refuses unless the locked database-side staging marker
+-- exists and equals the runner's externally guarded STAGING_PROJECT_REF.
 -- =============================================================================
 
 \set ON_ERROR_STOP on
 
+-- psql variables are not expanded inside dollar-quoted PL/pgSQL blocks.
+-- Copy the externally guarded ref into a session setting before entering the
+-- block, then compare the two independently supplied settings there.
+SELECT set_config('app.claimed_staging_project_ref', :'STAGING_PROJECT_REF', false);
+
 DO $guard$
 DECLARE
-  marker  text := current_setting('app.staging_project_ref', true);
-  claimed text := :'STAGING_PROJECT_REF';
+  marker  text;
+  claimed text := current_setting('app.claimed_staging_project_ref', true);
 BEGIN
+  IF to_regclass('rls_test_support.environment_marker') IS NULL THEN
+    RAISE EXCEPTION 'seed refused: locked staging environment marker is missing';
+  END IF;
+  EXECUTE 'SELECT project_ref FROM rls_test_support.environment_marker WHERE singleton = true'
+    INTO marker;
   IF marker IS NULL OR marker = '' THEN
-    RAISE EXCEPTION 'seed refused: app.staging_project_ref not set via PGOPTIONS';
+    RAISE EXCEPTION 'seed refused: locked staging environment marker is empty';
   END IF;
   IF marker <> claimed THEN
-    RAISE EXCEPTION 'seed refused: PGOPTIONS marker does not match STAGING_PROJECT_REF psql var';
+    RAISE EXCEPTION 'seed refused: database marker does not match guarded STAGING_PROJECT_REF';
   END IF;
   IF marker !~ '^[a-z0-9]{20}$' THEN
     RAISE EXCEPTION 'seed refused: project ref does not match ^[a-z0-9]{20}$';
@@ -39,6 +48,23 @@ END
 $guard$;
 
 BEGIN;
+
+-- Materialize the regex-validated runner UUID variables outside PL/pgSQL so
+-- psql can substitute them. The temporary table disappears at COMMIT.
+CREATE TEMP TABLE _rls_fixture_actor_ids (
+  uid uuid PRIMARY KEY
+) ON COMMIT DROP;
+
+INSERT INTO _rls_fixture_actor_ids (uid) VALUES
+  (:'RLS_LOCUM_UID'::uuid),
+  (:'RLS_RESIDENT_UID'::uuid),
+  (:'RLS_STAFF_UID'::uuid),
+  (:'RLS_OPS_UID'::uuid),
+  (:'RLS_OPS_STAFF_UID'::uuid),
+  (:'RLS_DOCTOR_ADMIN_UID'::uuid),
+  (:'RLS_ADMIN_UID'::uuid),
+  (:'RLS_SPECIAL_ADMIN_UID'::uuid),
+  (:'RLS_GUEST_UID'::uuid);
 
 -- -----------------------------------------------------------------------------
 -- Reserved fixture identifiers (hex-only UUIDs).
@@ -62,17 +88,7 @@ DECLARE
 BEGIN
   SELECT count(*) INTO existing_roles
     FROM public.user_roles
-   WHERE user_id IN (
-     :'RLS_LOCUM_UID'::uuid,
-     :'RLS_RESIDENT_UID'::uuid,
-     :'RLS_STAFF_UID'::uuid,
-     :'RLS_OPS_UID'::uuid,
-     :'RLS_OPS_STAFF_UID'::uuid,
-     :'RLS_DOCTOR_ADMIN_UID'::uuid,
-     :'RLS_ADMIN_UID'::uuid,
-     :'RLS_SPECIAL_ADMIN_UID'::uuid,
-     :'RLS_GUEST_UID'::uuid
-   );
+   WHERE user_id IN (SELECT uid FROM _rls_fixture_actor_ids);
 
   IF existing_roles <> 0 THEN
     RAISE EXCEPTION
