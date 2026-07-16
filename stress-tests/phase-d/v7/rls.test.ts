@@ -19,6 +19,8 @@ const URL_ = process.env.STAGING_API_URL!;
 const ANON = process.env.STAGING_ANON_KEY!;
 
 type Actor = AbuseCase["actor"];
+type ErrorLike = { code?: string; message?: string };
+type CallResult = { error: ErrorLike | null; data?: unknown };
 
 const CRED: Record<Actor, { uid: string; email: string; pw: string }> = {
   guest:         { uid: process.env.RLS_GUEST_UID!,         email: process.env.RLS_GUEST_EMAIL!,         pw: process.env.RLS_GUEST_PASSWORD! },
@@ -47,7 +49,18 @@ async function clientFor(actor: Actor): Promise<SupabaseClient & { uid: string }
 for (const c of MATRIX) {
   test(`[${c.actor}] ${c.action}`, async () => {
     const api = await clientFor(c.actor);
-    const res: any = await c.call(api).catch((e: any) => ({ error: e }));
+    let res: CallResult;
+    try {
+      // Supabase query builders are PromiseLike/thenable, but do not expose
+      // Promise.prototype.catch directly in every client version.
+      res = await c.call(api) as unknown as CallResult;
+    } catch (error) {
+      res = {
+        error: {
+          message: error instanceof Error ? error.message : String(error),
+        },
+      };
+    }
 
     if (c.expect.emptyOk) {
       expect(res.error).toBeNull();

@@ -81,7 +81,7 @@ beforeAll(async () => {
   clients.admin         = await signIn("admin");
   clients.special_admin = await signIn("special_admin");
   clients.guest         = await signIn("guest");
-});
+}, 30_000);
 
 const sorted = (xs: string[]) => [...xs].sort();
 

@@ -4,10 +4,11 @@
 #
 # 1. Sources .env.staging via scripts/v7/guard-not-prod.sh.
 # 2. Runs `bunx tsc --noEmit -p tsconfig.json` before touching the database.
-# 3. Verifies every RLS_*_UID maps to its expected RLS_*_EMAIL in auth.users.
-# 4. Seeds the v7 fixtures with the internal marker.
-# 5. Runs both v7 test files.
-# 6. Cleans up in FK order, passing all nine RLS_*_UID variables. If cleanup
+# 3. Bootstraps/verifies the locked staging-only database marker.
+# 4. Verifies every RLS_*_UID maps to its expected RLS_*_EMAIL in auth.users.
+# 5. Seeds the v7 fixtures with the internal marker.
+# 6. Runs both v7 test files.
+# 7. Cleans up in FK order, passing all nine RLS_*_UID variables. If cleanup
 #    fails the runner exits nonzero even when tests pass.
 # =============================================================================
 set -euo pipefail
@@ -66,15 +67,21 @@ done
 echo "→ bunx tsc --noEmit -p $ROOT_DIR/tsconfig.json"
 ( cd "$ROOT_DIR" && bunx tsc --noEmit -p tsconfig.json )
 
-# --- 3. UID ↔ email verification -----------------------------------------
-export PGOPTIONS="-c app.staging_project_ref=${STAGING_PROJECT_REF}"
+# --- 3. Locked staging marker ---------------------------------------------
+psql "$STAGING_DB_URL" -v ON_ERROR_STOP=1 \
+  -v STAGING_PROJECT_REF="$STAGING_PROJECT_REF" \
+  -f "$ROOT_DIR/phase-d/v7/bootstrap-staging-marker.sql"
 
+# --- 4. UID ↔ email verification -----------------------------------------
 verify_uid_email() {
   local uid_var="$1" email_var="$2" role="$3"
   local uid="${!uid_var}" email="${!email_var}"
   local got
-  got="$(psql "$STAGING_DB_URL" -v "test_uid=$uid" -Atqc \
-    "SELECT email FROM auth.users WHERE id = :'test_uid'::uuid")"
+  # `psql -c` does not perform psql-variable interpolation. `uid` is safe to
+  # embed here because every value passed this point has already matched the
+  # strict canonical UUID regex above.
+  got="$(psql "$STAGING_DB_URL" -Atqc \
+    "SELECT email FROM auth.users WHERE id = '${uid}'::uuid")"
   if [[ "$got" != "$email" ]]; then
     echo "FATAL: ${role} UID does not map to ${email_var} in auth.users" >&2; exit 2
   fi
@@ -140,8 +147,8 @@ TEST_STATUS=0
 # own SELECT policy to prove database absence.
 ABUSE_CONSULTATION_ID='c0f0cccc-0000-4000-8000-000000000003'
 set +e
-ABUSE_COUNT="$(psql "$STAGING_DB_URL" -v "abuse_id=$ABUSE_CONSULTATION_ID" -Atqc \
-  "SELECT count(*) FROM public.consultations WHERE id = :'abuse_id'::uuid")"
+ABUSE_COUNT="$(psql "$STAGING_DB_URL" -Atqc \
+  "SELECT count(*) FROM public.consultations WHERE id = '${ABUSE_CONSULTATION_ID}'::uuid")"
 ABUSE_VERIFY_STATUS=$?
 set -e
 if [[ $ABUSE_VERIFY_STATUS -ne 0 || "$ABUSE_COUNT" != "0" ]]; then

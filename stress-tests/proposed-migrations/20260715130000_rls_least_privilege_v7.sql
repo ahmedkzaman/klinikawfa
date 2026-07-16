@@ -39,12 +39,12 @@ DECLARE
     -- format: table|policy|roles|permissive|cmd|norm(qual)|norm(with_check)
     'clinic_appointments|Authenticated can read clinic_appointments|{authenticated}|PERMISSIVE|SELECT|true|',
     'consultation_items|consultation_items_read_active|{authenticated}|PERMISSIVE|SELECT|deleted_atisnull|',
-    'consultation_items|consultation_items_special_admin_read_voided|{authenticated}|PERMISSIVE|SELECT|is_special_admin(auth.uid())anddeleted_atisnotnull|',
-    'panel_claims|Strict doctors and admins can view panel claims|{public}|PERMISSIVE|SELECT|has_strict_role(auth.uid(),''doctor''::text)oris_admin(auth.uid())|',
+    'consultation_items|consultation_items_special_admin_read_voided|{authenticated}|PERMISSIVE|SELECT|is_special_adminauth.uidanddeleted_atisnotnull|',
+    'panel_claims|Strict doctors and admins can view panel claims|{public}|PERMISSIVE|SELECT|has_strict_roleauth.uid,''doctor''::textoris_adminauth.uid|',
     'panel_claims|panel_claims_read_all|{authenticated}|PERMISSIVE|SELECT|true|',
-    'payments|Strict doctors and admins can view payments|{public}|PERMISSIVE|SELECT|has_strict_role(auth.uid(),''doctor''::text)oris_admin(auth.uid())|',
+    'payments|Strict doctors and admins can view payments|{public}|PERMISSIVE|SELECT|has_strict_roleauth.uid,''doctor''::textoris_adminauth.uid|',
     'payments|payments_read_active|{authenticated}|PERMISSIVE|SELECT|deleted_atisnull|',
-    'payments|payments_special_admin_read_voided|{authenticated}|PERMISSIVE|SELECT|is_special_admin(auth.uid())anddeleted_atisnotnull|'
+    'payments|payments_special_admin_read_voided|{authenticated}|PERMISSIVE|SELECT|is_special_adminauth.uidanddeleted_atisnotnull|'
   ];
 BEGIN
   SELECT array_agg(
@@ -153,14 +153,14 @@ DO $postflight$
 DECLARE
   actual   text[];
   expected text[] := ARRAY[
-    'clinic_appointments|clinic_appointments_internal_read|{authenticated}|PERMISSIVE|SELECT|is_internal_staff(auth.uid())|',
-    'clinic_appointments|clinic_appointments_own_clinician_read|{authenticated}|PERMISSIVE|SELECT|doctor_id=get_doctor_id_for_user(auth.uid())|',
-    'consultation_items|consultation_items_active_read|{authenticated}|PERMISSIVE|SELECT|deleted_atisnulland[is_ops_or_admin(auth.uid())oris_current_user_consultation_doctor(consultation_id)]|',
-    'consultation_items|consultation_items_special_admin_read_voided|{authenticated}|PERMISSIVE|SELECT|is_special_admin(auth.uid())anddeleted_atisnotnull|',
-    'panel_claims|panel_claims_finance_admin_read|{authenticated}|PERMISSIVE|SELECT|is_finance_admin()|',
-    'payments|payments_active_staff_read|{authenticated}|PERMISSIVE|SELECT|deleted_atisnullandis_staff_or_admin(auth.uid())|',
-    'payments|payments_own_clinician_read|{authenticated}|PERMISSIVE|SELECT|deleted_atisnullandis_current_user_consultation_doctor(consultation_id)|',
-    'payments|payments_special_admin_read_voided|{authenticated}|PERMISSIVE|SELECT|is_special_admin(auth.uid())anddeleted_atisnotnull|'
+    'clinic_appointments|clinic_appointments_internal_read|{authenticated}|PERMISSIVE|SELECT|is_internal_staffauth.uid|',
+    'clinic_appointments|clinic_appointments_own_clinician_read|{authenticated}|PERMISSIVE|SELECT|doctor_id=get_doctor_id_for_userauth.uid|',
+    'consultation_items|consultation_items_active_read|{authenticated}|PERMISSIVE|SELECT|deleted_atisnulland[is_ops_or_adminauth.uidoris_current_user_consultation_doctorconsultation_id]|',
+    'consultation_items|consultation_items_special_admin_read_voided|{authenticated}|PERMISSIVE|SELECT|is_special_adminauth.uidanddeleted_atisnotnull|',
+    'panel_claims|panel_claims_finance_admin_read|{authenticated}|PERMISSIVE|SELECT|is_finance_admin|',
+    'payments|payments_active_staff_read|{authenticated}|PERMISSIVE|SELECT|deleted_atisnullandis_staff_or_adminauth.uid|',
+    'payments|payments_own_clinician_read|{authenticated}|PERMISSIVE|SELECT|deleted_atisnullandis_current_user_consultation_doctorconsultation_id|',
+    'payments|payments_special_admin_read_voided|{authenticated}|PERMISSIVE|SELECT|is_special_adminauth.uidanddeleted_atisnotnull|'
   ];
   norm_actual text;
   blanket_count int;
@@ -200,7 +200,7 @@ BEGIN
        AND permissive='PERMISSIVE' AND cmd='SELECT'
        AND roles = '{authenticated}'::name[]
        AND regexp_replace(lower(coalesce(qual,'')), '[[:space:]()]','','g')
-           = 'is_special_admin(auth.uid())anddeleted_atisnotnull'
+           = 'is_special_adminauth.uidanddeleted_atisnotnull'
   ) THEN
     RAISE EXCEPTION 'v7 postflight: preserved CI voided policy definition drifted';
   END IF;
@@ -212,7 +212,7 @@ BEGIN
        AND permissive='PERMISSIVE' AND cmd='SELECT'
        AND roles = '{authenticated}'::name[]
        AND regexp_replace(lower(coalesce(qual,'')), '[[:space:]()]','','g')
-           = 'is_special_admin(auth.uid())anddeleted_atisnotnull'
+           = 'is_special_adminauth.uidanddeleted_atisnotnull'
   ) THEN
     RAISE EXCEPTION 'v7 postflight: preserved payments voided policy definition drifted';
   END IF;

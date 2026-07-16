@@ -6,16 +6,24 @@
 
 \set ON_ERROR_STOP on
 
+-- psql variables are not expanded inside dollar-quoted PL/pgSQL blocks.
+SELECT set_config('app.claimed_staging_project_ref', :'STAGING_PROJECT_REF', false);
+
 DO $guard$
 DECLARE
-  marker  text := current_setting('app.staging_project_ref', true);
-  claimed text := :'STAGING_PROJECT_REF';
+  marker  text;
+  claimed text := current_setting('app.claimed_staging_project_ref', true);
 BEGIN
+  IF to_regclass('rls_test_support.environment_marker') IS NULL THEN
+    RAISE EXCEPTION 'cleanup refused: locked staging environment marker is missing';
+  END IF;
+  EXECUTE 'SELECT project_ref FROM rls_test_support.environment_marker WHERE singleton = true'
+    INTO marker;
   IF marker IS NULL OR marker = '' THEN
-    RAISE EXCEPTION 'cleanup refused: app.staging_project_ref not set via PGOPTIONS';
+    RAISE EXCEPTION 'cleanup refused: locked staging environment marker is empty';
   END IF;
   IF marker <> claimed THEN
-    RAISE EXCEPTION 'cleanup refused: PGOPTIONS marker does not match STAGING_PROJECT_REF psql var';
+    RAISE EXCEPTION 'cleanup refused: database marker does not match guarded STAGING_PROJECT_REF';
   END IF;
   IF marker !~ '^[a-z0-9]{20}$' THEN
     RAISE EXCEPTION 'cleanup refused: project ref does not match ^[a-z0-9]{20}$';
