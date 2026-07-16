@@ -22,6 +22,7 @@ const {
   sanitizeError,
   withAuth,
 } = await import("../_shared/auth-helpers.ts");
+const { validateBlogContentRequest } = await import("../generate-blog-content/validation.ts");
 
 // ---------- 401: missing Authorization header ----------
 Deno.test("requireRole -> 401 when Authorization header is missing", async () => {
@@ -227,4 +228,38 @@ Deno.test("withAuth handles OPTIONS preflight and rejects non-POST", async () =>
   const get = await handler(new Request("http://localhost/fn", { method: "GET" }));
   assertEquals(get.status, 405);
   await get.text();
+});
+
+Deno.test("blog generation validation accepts a bounded administrative request", () => {
+  const result = validateBlogContentRequest({
+    topic: "  Demam kanak-kanak  ",
+    key_points: ["  Tanda amaran  ", "Bila perlu berjumpa doktor"],
+    category: "Kesihatan keluarga",
+    tone: "empathetic",
+    target_audience: "Ibu bapa",
+  });
+
+  assertEquals(result.topic, "Demam kanak-kanak");
+  assertEquals(result.key_points, ["Tanda amaran", "Bila perlu berjumpa doktor"]);
+});
+
+Deno.test("blog generation validation rejects oversized or untrusted input", () => {
+  const invalidRequests = [
+    null,
+    { topic: "x", key_points: [], category: "c", tone: "empathetic", target_audience: "a" },
+    { topic: "x", key_points: ["y"], category: "c", tone: "hostile", target_audience: "a" },
+    { topic: "x".repeat(201), key_points: ["y"], category: "c", tone: "educational", target_audience: "a" },
+    { topic: "x", key_points: Array.from({ length: 11 }, () => "y"), category: "c", tone: "motivational", target_audience: "a" },
+  ];
+
+  for (const request of invalidRequests) {
+    let caught: unknown;
+    try {
+      validateBlogContentRequest(request);
+    } catch (error) {
+      caught = error;
+    }
+    assert(caught instanceof HttpError);
+    assertEquals((caught as InstanceType<typeof HttpError>).status, 400);
+  }
 });

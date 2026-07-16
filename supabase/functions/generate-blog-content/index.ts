@@ -1,18 +1,18 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  readJsonWithLimit,
+  requireRole,
+  sanitizeError,
+} from "../_shared/auth-helpers.ts";
+import {
+  type BlogContentRequest,
+  validateBlogContentRequest,
+} from "./validation.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
-
-interface BlogContentRequest {
-  topic: string;
-  key_points: string[];
-  category: string;
-  tone: 'empathetic' | 'educational' | 'motivational';
-  target_audience: string;
-}
 
 interface BlogContentResponse {
   title_ms: string;
@@ -85,35 +85,19 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  if (req.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: "Method not allowed" }),
+      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
   try {
-    // Verify JWT authentication (required for Lovable Cloud)
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      console.error("Missing or invalid authorization header");
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const token = authHeader.replace('Bearer ', '');
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-    
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) {
-      console.error("JWT verification failed:", authError);
-      return new Response(
-        JSON.stringify({ error: "Invalid authentication" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log("Authenticated user:", user.id);
+    // Blog generation is an administrative workflow. A valid JWT alone is
+    // insufficient because any ordinary account could otherwise spend AI
+    // credits. The shared guard verifies the JWT and reads the authoritative
+    // role through the service client.
+    await requireRole(req, ["ops", "admin", "special_admin"]);
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -121,18 +105,11 @@ serve(async (req) => {
       throw new Error("AI service is not configured");
     }
 
-    const body: BlogContentRequest = await req.json();
-    console.log("generate_blog_start", { userId: user.id });
+    const rawBody = await readJsonWithLimit<unknown>(req, 20 * 1024);
+    const body: BlogContentRequest = validateBlogContentRequest(rawBody);
+    console.log("generate_blog_start");
 
     const { topic, key_points, category, tone, target_audience } = body;
-
-    // Validate required fields
-    if (!topic || !key_points || key_points.length === 0) {
-      return new Response(
-        JSON.stringify({ error: "Topic and key points are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
     // Build the user prompt
     const userPrompt = `Please write an emotional, engaging health blog article with the following details:
@@ -179,8 +156,8 @@ Write both Malay and English versions with genuine emotional connection.`;
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("AI Gateway error:", response.status, errorText);
+      // Never log the upstream body: it can echo prompts or provider details.
+      console.error("generate_blog_gateway_failed", { status: response.status });
       
       if (response.status === 429) {
         return new Response(
@@ -236,21 +213,17 @@ Write both Malay and English versions with genuine emotional connection.`;
       throw new Error("Invalid response structure from AI");
     }
 
-    console.log("generate_blog_ok", { userId: user.id });
+    console.log("generate_blog_ok");
     return new Response(
       JSON.stringify(blogContent),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error) {
-    console.error("generate_blog_unhandled", {
-      name: error instanceof Error ? error.name : typeof error,
-    });
+    const safe = sanitizeError(error, "generate-blog-content");
     return new Response(
-      JSON.stringify({ 
-        error: error instanceof Error ? error.message : "Failed to generate content" 
-      }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify(safe.body),
+      { status: safe.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
