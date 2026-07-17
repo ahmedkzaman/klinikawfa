@@ -5543,6 +5543,11 @@ export type Database = {
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_clinical: { Args: { _user_id: string }; Returns: boolean }
+      is_current_user_consultation_doctor: {
+        Args: { _consultation_id: string }
+        Returns: boolean
+      }
+      is_finance_admin: { Args: never; Returns: boolean }
       is_internal_staff: { Args: { _user_id: string }; Returns: boolean }
       is_ops_or_admin: { Args: { _user_id: string }; Returns: boolean }
       is_special_admin: { Args: { _user_id: string }; Returns: boolean }
