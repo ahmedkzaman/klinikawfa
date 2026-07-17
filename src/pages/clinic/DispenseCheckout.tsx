@@ -152,12 +152,17 @@ export default function DispenseCheckout() {
     medication_discount_pct: number;
     consultation_fee_override: number | null;
   } | null>(null);
+  const [panelInfoStatus, setPanelInfoStatus] = useState<
+    'idle' | 'loading' | 'ready' | 'error'
+  >('idle');
   useEffect(() => {
     let cancelled = false;
     if (!panelId) {
       setPanelInfo(null);
+      setPanelInfoStatus('idle');
       return;
     }
+    setPanelInfoStatus('loading');
     (async () => {
       const { data, error } = await supabase
         .from('insurance_providers')
@@ -168,6 +173,7 @@ export default function DispenseCheckout() {
       if (cancelled) return;
       if (error || !data) {
         setPanelInfo(null);
+        setPanelInfoStatus('error');
         return;
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -178,6 +184,7 @@ export default function DispenseCheckout() {
         consultation_fee_override:
           d.consultation_fee_override == null ? null : Number(d.consultation_fee_override),
       });
+      setPanelInfoStatus('ready');
     })();
     return () => {
       cancelled = true;
@@ -337,6 +344,7 @@ export default function DispenseCheckout() {
    * Single source of truth for whether the Checkout button is allowed to fire.
    */
   const canSubmitCheckout = useMemo(() => {
+    if (panelId && panelInfoStatus !== 'ready') return false;
     if (anyPartialMissingReason) return false;
     if (!consultation?.id) return false;
     if (checkoutPending) return false;
@@ -345,6 +353,8 @@ export default function DispenseCheckout() {
     if (patientDue > 0 && !paymentMethod) return false;
     return true;
   }, [
+    panelId,
+    panelInfoStatus,
     anyPartialMissingReason,
     consultation?.id,
     checkoutPending,
@@ -834,6 +844,9 @@ export default function DispenseCheckout() {
                   </Button>
                 </span>
               </TooltipTrigger>
+              {panelId && panelInfoStatus !== 'ready' && (
+                <TooltipContent>Panel billing details are unavailable.</TooltipContent>
+              )}
               {isOverpay && (
                 <TooltipContent>Amount paid exceeds total due.</TooltipContent>
               )}

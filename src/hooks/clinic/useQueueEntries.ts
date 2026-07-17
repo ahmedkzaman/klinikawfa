@@ -2,11 +2,27 @@ import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchInsuranceProviderDirectory } from "@/hooks/clinic/useInsuranceProviders";
 import type { QueueEntryWithJoins, QueueEntryRow } from "@/types/clinic";
 
 const QUEUE_QUERY_KEY = ["clinic", "queue-entries"] as const;
 const CONSULT_QUEUE_QUERY_KEY = ["clinic", "consultation-queue-entries"] as const;
 const CANCELLED_TODAY_QUERY_KEY = ["clinic", "queue-entries", "cancelled-today"] as const;
+async function attachInsuranceProviderDirectory(
+  rows: unknown[],
+): Promise<QueueEntryWithJoins[]> {
+  const providers = await fetchInsuranceProviderDirectory();
+  const providersById = new Map(providers.map((provider) => [provider.id, provider]));
+
+  return (rows as Array<Record<string, unknown> & { panel_id?: string | null }>).map(
+    (row) => ({
+      ...row,
+      insurance_providers: row.panel_id
+        ? providersById.get(row.panel_id) ?? null
+        : null,
+    }),
+  ) as unknown as QueueEntryWithJoins[];
+}
 
 /** Shared "Active" statuses — entries in any of these stay visible across day boundaries. */
 export const ACTIVE_STATUSES = [
@@ -71,8 +87,7 @@ export function useQueueEntries() {
           `
           *,
           patients ( name, phone ),
-          doctors:assigned_doctor_id ( name ),
-          insurance_providers ( id, name )
+          doctors:assigned_doctor_id ( name )
         `,
         )
         .is("deleted_at", null)
@@ -87,7 +102,7 @@ export function useQueueEntries() {
         console.error("Queue Query Error:", error);
         throw error;
       }
-      return (data ?? []) as unknown as QueueEntryWithJoins[];
+      return attachInsuranceProviderDirectory(data ?? []);
     },
     staleTime: 30_000,
   });
@@ -118,8 +133,7 @@ export function useConsultationQueueEntries() {
           *,
           patients ( * ),
           doctors:assigned_doctor_id ( id, name, avatar_url ),
-          rooms:assigned_room_id ( id, label ),
-          insurance_providers ( id, name )
+          rooms:assigned_room_id ( id, label )
         `,
         )
         .is("deleted_at", null)
@@ -127,7 +141,7 @@ export function useConsultationQueueEntries() {
         .order("created_at", { ascending: true });
 
       if (error) throw error;
-      return (data ?? []) as unknown as QueueEntryWithJoins[];
+      return attachInsuranceProviderDirectory(data ?? []);
     },
     staleTime: 15_000,
   });
@@ -212,14 +226,15 @@ export function useQueueEntry(id?: string) {
           *,
           patients ( * ),
           doctors:assigned_doctor_id ( id, name, avatar_url ),
-          rooms:assigned_room_id ( id, label ),
-          insurance_providers ( id, name )
+          rooms:assigned_room_id ( id, label )
         `,
         )
         .eq("id", id!)
         .maybeSingle();
       if (error) throw error;
-      return (data ?? null) as unknown as QueueEntryWithJoins | null;
+      if (!data) return null;
+      const [entry] = await attachInsuranceProviderDirectory([data]);
+      return entry ?? null;
     },
   });
 }
@@ -342,7 +357,7 @@ export function useCancelledTodayEntries() {
         .order("cancelled_at", { ascending: false });
 
       if (error) throw error;
-      return (data ?? []) as unknown as QueueEntryWithJoins[];
+      return attachInsuranceProviderDirectory(data ?? []);
     },
     staleTime: 30_000,
   });

@@ -30,12 +30,12 @@ import { toast } from 'sonner';
 import {
   type InsuranceProviderRow,
   useDeleteInsuranceProvider,
-  useInsuranceProviders,
+  useFinanceInsuranceProviders,
 } from '@/hooks/clinic/useInsuranceProviders';
 import { PanelDialog } from '@/components/clinic/settings/PanelDialog';
 
 export default function PanelsSettings() {
-  const { data: panels = [], isLoading } = useInsuranceProviders();
+  const { data: panels = [], isLoading } = useFinanceInsuranceProviders();
   const deleteMut = useDeleteInsuranceProvider();
 
   const [search, setSearch] = useState('');
