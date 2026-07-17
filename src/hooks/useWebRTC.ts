@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { ConnectionStatus } from '@/components/video/ConnectionStatusIndicator';
 
@@ -123,7 +124,7 @@ export function useWebRTC({
     if (isStaff && roomCode) {
       try {
         await supabase.from('video_rooms')
-          .update({ current_offer: null } as any)
+          .update({ current_offer: null })
           .eq('room_code', roomCode);
         console.log('[WebRTC] Cleared offer from database');
       } catch (err) {
@@ -369,6 +370,7 @@ export function useWebRTC({
       
       const channel = supabase.channel(`video-room-${roomCode}`, {
         config: {
+          private: true,
           presence: { key: isStaff ? 'staff' : 'patient' },
         },
       });
@@ -391,15 +393,15 @@ export function useWebRTC({
           const state = channel.presenceState();
           console.log('[WebRTC] Presence sync:', state);
           // Check if the other party is already present
-          const hasStaff = Object.keys(state).some(key => key === 'staff' || state[key]?.some?.((p: any) => p.role === 'staff'));
-          const hasPatient = Object.keys(state).some(key => key === 'patient' || state[key]?.some?.((p: any) => p.role === 'patient'));
+          const hasStaff = Object.keys(state).some(key => key === 'staff' || state[key]?.some?.(p => p.role === 'staff'));
+          const hasPatient = Object.keys(state).some(key => key === 'patient' || state[key]?.some?.(p => p.role === 'patient'));
           console.log('[WebRTC] Presence state - Staff:', hasStaff, 'Patient:', hasPatient);
         })
         .on('presence', { event: 'join' }, ({ newPresences }) => {
           console.log('[WebRTC] Presence join:', newPresences);
           
           // Check if patient joined (more robust detection)
-          const patientJoined = newPresences?.some((p: any) => 
+          const patientJoined = newPresences?.some(p =>
             p.role === 'patient' || p.presence_ref?.includes('patient')
           );
           
@@ -701,7 +703,7 @@ export function useWebRTC({
         // This ensures patient can ALWAYS get the offer even if broadcast is missed
         try {
           const { error } = await supabase.from('video_rooms')
-            .update({ current_offer: offer } as any)
+            .update({ current_offer: offer as unknown as Json })
             .eq('room_code', roomCode);
           if (error) throw error;
           console.log('[WebRTC] Offer saved to database for reliable delivery');
@@ -724,7 +726,7 @@ export function useWebRTC({
         const checkAndSendOffer = () => {
           const state = channelRef.current?.presenceState() || {};
           const hasPatient = Object.keys(state).some(key => 
-            key === 'patient' || state[key]?.some?.((p: any) => p.role === 'patient')
+            key === 'patient' || state[key]?.some?.(p => p.role === 'patient')
           );
           
           if (hasPatient && currentOfferRef.current) {
@@ -896,13 +898,13 @@ export function useWebRTC({
     }
   };
 
-  const retryCall = useCallback(async () => {
+  const retryCall = async () => {
     console.log('[WebRTC] Retrying call...');
     cleanup();
     setConnectionError(null);
     setConnectionStatus('idle');
     await startCall();
-  }, [cleanup]);
+  };
 
   const endCall = () => {
     console.log('[WebRTC] Ending call');
@@ -942,7 +944,7 @@ export function useWebRTC({
     return () => {
       cleanup();
     };
-  }, []);
+  }, [cleanup]);
 
   return {
     localStream,
