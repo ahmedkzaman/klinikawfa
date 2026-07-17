@@ -5553,6 +5553,14 @@ export type Database = {
       is_special_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff_or_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff_or_clinical: { Args: { _user_id: string }; Returns: boolean }
+      get_insurance_provider_directory: {
+        Args: { _active_only?: boolean }
+        Returns: {
+          id: string
+          name: string
+          status: string
+        }[]
+      }
       promote_appointment_to_clinic: {
         Args: { p_appointment_id: string; p_payment_reference?: string }
         Returns: string

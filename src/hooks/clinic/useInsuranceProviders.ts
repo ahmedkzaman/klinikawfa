@@ -8,6 +8,10 @@ export type InsuranceProviderInsert =
   Database['public']['Tables']['insurance_providers']['Insert'];
 export type InsuranceProviderUpdate =
   Database['public']['Tables']['insurance_providers']['Update'];
+export type InsuranceProviderDirectoryRow = Pick<
+  InsuranceProviderRow,
+  'id' | 'name' | 'status'
+>;
 
 interface UseInsuranceProvidersOptions {
   activeOnly?: boolean;
@@ -15,15 +19,33 @@ interface UseInsuranceProvidersOptions {
 
 export function useInsuranceProviders(options: UseInsuranceProvidersOptions = {}) {
   const { activeOnly = false } = options;
+  return useQuery<InsuranceProviderDirectoryRow[]>({
+    queryKey: ['insurance_providers', 'directory', activeOnly ? 'active' : 'all'],
+    queryFn: () => fetchInsuranceProviderDirectory(activeOnly),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export async function fetchInsuranceProviderDirectory(
+  activeOnly = false,
+): Promise<InsuranceProviderDirectoryRow[]> {
+  const { data, error } = await supabase.rpc(
+    'get_insurance_provider_directory',
+    { _active_only: activeOnly },
+  );
+  if (error) throw error;
+  return (data ?? []) as InsuranceProviderDirectoryRow[];
+}
+
+/** Full provider records contain identifiers and negotiated financial terms. */
+export function useFinanceInsuranceProviders() {
   return useQuery<InsuranceProviderRow[]>({
-    queryKey: ['insurance_providers', activeOnly ? 'active' : 'all'],
+    queryKey: ['insurance_providers', 'finance', 'all'],
     queryFn: async () => {
-      let query = supabase
+      const { data, error } = await supabase
         .from('insurance_providers')
         .select('*')
         .order('name', { ascending: true });
-      if (activeOnly) query = query.eq('status', 'active');
-      const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as InsuranceProviderRow[];
     },
