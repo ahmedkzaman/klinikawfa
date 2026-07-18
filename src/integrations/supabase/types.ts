@@ -5496,6 +5496,43 @@ export type Database = {
         Returns: Json
       }
       generate_po_number: { Args: never; Returns: string }
+      get_clinic_settings: {
+        Args: never
+        Returns: {
+          address_line_1: string
+          address_line_2: string
+          bank_account_holder: string | null
+          bank_account_no: string | null
+          bank_name: string | null
+          clinic_name: string
+          content_margin_top: number
+          email: string
+          forecast_top_diagnoses: number
+          forecast_top_items: number
+          id: string
+          letterhead_text_px: number
+          logo_height_px: number
+          logo_url: string
+          phone: string
+          procurement_surge_days_cover: number
+          procurement_surge_lift: number
+          procurement_surge_trend: number
+          procurement_urgent_days: number
+          queue_call_by: string
+          singleton: boolean
+          sst_number: string | null
+          tts_language: string
+          tv_ticker_text: string | null
+          tv_youtube_id: string | null
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "clinic_settings"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_doctor_id_for_user: { Args: { _user_id: string }; Returns: string }
       get_doctors_on_duty: {
         Args: { _date?: string }
@@ -5505,6 +5542,14 @@ export type Database = {
           label: string
           shift: string
           start_time: string
+        }[]
+      }
+      get_insurance_provider_directory: {
+        Args: { _active_only?: boolean }
+        Returns: {
+          id: string
+          name: string
+          status: string
         }[]
       }
       get_next_queue_number: { Args: never; Returns: number }
@@ -5553,18 +5598,6 @@ export type Database = {
       is_special_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff_or_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff_or_clinical: { Args: { _user_id: string }; Returns: boolean }
-      get_clinic_settings: {
-        Args: never
-        Returns: Database["public"]["Tables"]["clinic_settings"]["Row"][]
-      }
-      get_insurance_provider_directory: {
-        Args: { _active_only?: boolean }
-        Returns: {
-          id: string
-          name: string
-          status: string
-        }[]
-      }
       promote_appointment_to_clinic: {
         Args: { p_appointment_id: string; p_payment_reference?: string }
         Returns: string
