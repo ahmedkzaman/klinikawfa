@@ -1,40 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Settings as SettingsIcon, CreditCard, Eye, EyeOff, Loader2, CheckCircle, XCircle, Key, Shield, Video, Upload, Trash2, Image } from 'lucide-react';
+import { Settings as SettingsIcon, CreditCard, Loader2, Video, Upload, Trash2, Image } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-interface StripeKeyState {
-  value: string;
-  show: boolean;
-  hasValue: boolean;
-  isSaving: boolean;
-}
 
 export default function Settings() {
   const { toast } = useToast();
   const { language } = useLanguage();
   const { isAdmin } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
-  
-  const [secretKey, setSecretKey] = useState<StripeKeyState>({
-    value: '',
-    show: false,
-    hasValue: false,
-    isSaving: false,
-  });
-  
-  const [restrictedKey, setRestrictedKey] = useState<StripeKeyState>({
-    value: '',
-    show: false,
-    hasValue: false,
-    isSaving: false,
-  });
 
   // Video upload state
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -56,29 +34,16 @@ export default function Settings() {
   }, []);
 
   const fetchSettings = async () => {
-    setIsLoading(true);
     try {
       const { data, error } = await supabase
         .from('app_settings')
         .select('key, value')
-        .in('key', ['stripe_secret_key', 'stripe_restricted_key', 'homepage_video_url', 'homepage_video_poster']);
+        .in('key', ['homepage_video_url', 'homepage_video_poster']);
 
       if (error) throw error;
 
       data?.forEach((setting) => {
-        if (setting.key === 'stripe_secret_key') {
-          setSecretKey(prev => ({
-            ...prev,
-            value: setting.value || '',
-            hasValue: (setting.value || '').length > 0,
-          }));
-        } else if (setting.key === 'stripe_restricted_key') {
-          setRestrictedKey(prev => ({
-            ...prev,
-            value: setting.value || '',
-            hasValue: (setting.value || '').length > 0,
-          }));
-        } else if (setting.key === 'homepage_video_url') {
+        if (setting.key === 'homepage_video_url') {
           setVideoUrl(setting.value || null);
         } else if (setting.key === 'homepage_video_poster') {
           setPosterUrl(setting.value || null);
@@ -86,8 +51,6 @@ export default function Settings() {
       });
     } catch (error) {
       console.error('Error fetching settings:', error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -305,181 +268,6 @@ export default function Settings() {
     }
   };
 
-  const saveKey = async (keyType: 'secret' | 'restricted') => {
-    const isSecret = keyType === 'secret';
-    const keyState = isSecret ? secretKey : restrictedKey;
-    const setKeyState = isSecret ? setSecretKey : setRestrictedKey;
-    const dbKey = isSecret ? 'stripe_secret_key' : 'stripe_restricted_key';
-    const prefix = isSecret ? 'sk_' : 'rk_';
-    const keyName = isSecret 
-      ? (language === 'ms' ? 'Kunci Rahsia' : 'Secret Key')
-      : (language === 'ms' ? 'Kunci Terhad' : 'Restricted Key');
-
-    if (!keyState.value.trim()) {
-      toast({
-        title: language === 'ms' ? 'Ralat' : 'Error',
-        description: language === 'ms' ? `Sila masukkan ${keyName}` : `Please enter a ${keyName}`,
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!keyState.value.startsWith(prefix)) {
-      toast({
-        title: language === 'ms' ? 'Kunci Tidak Sah' : 'Invalid Key',
-        description: language === 'ms' 
-          ? `${keyName} harus bermula dengan "${prefix}"` 
-          : `${keyName} should start with "${prefix}"`,
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setKeyState(prev => ({ ...prev, isSaving: true }));
-    try {
-      const { error } = await supabase
-        .from('app_settings')
-        .update({ value: keyState.value })
-        .eq('key', dbKey);
-
-      if (error) throw error;
-
-      setKeyState(prev => ({ ...prev, hasValue: true }));
-      toast({
-        title: language === 'ms' ? 'Berjaya' : 'Success',
-        description: language === 'ms' ? `${keyName} telah disimpan` : `${keyName} has been saved`,
-      });
-    } catch (error) {
-      console.error('Error saving key:', error);
-      toast({
-        title: language === 'ms' ? 'Ralat' : 'Error',
-        description: language === 'ms' ? `Gagal menyimpan ${keyName}` : `Failed to save ${keyName}`,
-        variant: 'destructive',
-      });
-    } finally {
-      setKeyState(prev => ({ ...prev, isSaving: false }));
-    }
-  };
-
-  const clearKey = async (keyType: 'secret' | 'restricted') => {
-    const isSecret = keyType === 'secret';
-    const setKeyState = isSecret ? setSecretKey : setRestrictedKey;
-    const dbKey = isSecret ? 'stripe_secret_key' : 'stripe_restricted_key';
-    const keyName = isSecret 
-      ? (language === 'ms' ? 'Kunci Rahsia' : 'Secret Key')
-      : (language === 'ms' ? 'Kunci Terhad' : 'Restricted Key');
-
-    setKeyState(prev => ({ ...prev, isSaving: true }));
-    try {
-      const { error } = await supabase
-        .from('app_settings')
-        .update({ value: '' })
-        .eq('key', dbKey);
-
-      if (error) throw error;
-
-      setKeyState({ value: '', show: false, hasValue: false, isSaving: false });
-      toast({
-        title: language === 'ms' ? 'Dibersihkan' : 'Cleared',
-        description: language === 'ms' ? `${keyName} telah dibuang` : `${keyName} has been removed`,
-      });
-    } catch (error) {
-      console.error('Error clearing key:', error);
-      toast({
-        title: language === 'ms' ? 'Ralat' : 'Error',
-        description: language === 'ms' ? `Gagal mengosongkan ${keyName}` : `Failed to clear ${keyName}`,
-        variant: 'destructive',
-      });
-    } finally {
-      setKeyState(prev => ({ ...prev, isSaving: false }));
-    }
-  };
-
-  const maskKey = (key: string) => {
-    if (!key || key.length < 12) return key;
-    return key.slice(0, 7) + '•'.repeat(Math.min(key.length - 11, 20)) + key.slice(-4);
-  };
-
-  const KeyInput = ({ 
-    keyType, 
-    keyState, 
-    setKeyState,
-    placeholder,
-    icon: Icon,
-    title,
-    description,
-  }: {
-    keyType: 'secret' | 'restricted';
-    keyState: StripeKeyState;
-    setKeyState: React.Dispatch<React.SetStateAction<StripeKeyState>>;
-    placeholder: string;
-    icon: React.ElementType;
-    title: string;
-    description: string;
-  }) => (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        <Label className="text-base font-medium">{title}</Label>
-        {keyState.hasValue ? (
-          <span className="flex items-center gap-1 text-xs text-green-600 ml-auto">
-            <CheckCircle className="h-3 w-3" />
-            {language === 'ms' ? 'Dikonfigurasi' : 'Configured'}
-          </span>
-        ) : (
-          <span className="flex items-center gap-1 text-xs text-amber-600 ml-auto">
-            <XCircle className="h-3 w-3" />
-            {language === 'ms' ? 'Belum dikonfigurasi' : 'Not configured'}
-          </span>
-        )}
-      </div>
-      
-      <p className="text-sm text-muted-foreground">{description}</p>
-      
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Input
-            type={keyState.show ? 'text' : 'password'}
-            value={keyState.show ? keyState.value : maskKey(keyState.value)}
-            onChange={(e) => setKeyState(prev => ({ ...prev, value: e.target.value }))}
-            placeholder={placeholder}
-            className="pr-10 font-mono text-sm"
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="absolute right-0 top-0 h-full"
-            onClick={() => setKeyState(prev => ({ ...prev, show: !prev.show }))}
-          >
-            {keyState.show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex gap-2">
-        <Button 
-          size="sm" 
-          onClick={() => saveKey(keyType)} 
-          disabled={keyState.isSaving}
-        >
-          {keyState.isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-          {language === 'ms' ? 'Simpan' : 'Save'}
-        </Button>
-        {keyState.hasValue && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => clearKey(keyType)}
-            disabled={keyState.isSaving}
-          >
-            {language === 'ms' ? 'Kosongkan' : 'Clear'}
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-
   return (
     <div className="space-y-6">
       <div>
@@ -501,62 +289,22 @@ export default function Settings() {
               {language === 'ms' ? 'Integrasi Stripe' : 'Stripe Integration'}
             </CardTitle>
             <CardDescription>
-              {language === 'ms' 
-                ? 'Konfigurasikan kunci API Stripe untuk pemprosesan pembayaran' 
-                : 'Configure your Stripe API keys for payment processing'}
+              {language === 'ms'
+                ? 'Kelayakan Stripe diurus secara selamat melalui Rahsia Cloud Lovable'
+                : 'Stripe credentials are managed securely through Lovable Cloud Secrets'}
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {isLoading ? (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {language === 'ms' ? 'Memuatkan tetapan...' : 'Loading settings...'}
-              </div>
-            ) : (
-              <>
-                {/* Secret Key Section */}
-                <KeyInput
-                  keyType="secret"
-                  keyState={secretKey}
-                  setKeyState={setSecretKey}
-                  placeholder="sk_live_... or sk_test_..."
-                  icon={Key}
-                  title={language === 'ms' ? 'Kunci Rahsia (Secret Key)' : 'Secret Key'}
-                  description={language === 'ms' 
-                    ? 'Kunci rahsia mempunyai akses penuh ke akaun Stripe anda. Bermula dengan "sk_".'
-                    : 'Secret key has full access to your Stripe account. Starts with "sk_".'}
-                />
-
-                <Separator />
-
-                {/* Restricted Key Section */}
-                <KeyInput
-                  keyType="restricted"
-                  keyState={restrictedKey}
-                  setKeyState={setRestrictedKey}
-                  placeholder="rk_live_... or rk_test_..."
-                  icon={Shield}
-                  title={language === 'ms' ? 'Kunci Terhad (Restricted Key)' : 'Restricted Key'}
-                  description={language === 'ms' 
-                    ? 'Kunci terhad mempunyai kebenaran terhad untuk operasi tertentu. Bermula dengan "rk_".'
-                    : 'Restricted key has limited permissions for specific operations. Starts with "rk_".'}
-                />
-
-                <Separator />
-
-                {/* Security Notice */}
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                  <h4 className="font-medium text-amber-800 mb-1">
-                    ⚠️ {language === 'ms' ? 'Notis Keselamatan' : 'Security Notice'}
-                  </h4>
-                  <p className="text-sm text-amber-700">
-                    {language === 'ms' 
-                      ? 'Kunci API anda disimpan dalam pangkalan data. Untuk keselamatan maksimum, pertimbangkan untuk menggunakan rahsia persekitaran melalui tetapan Cloud Lovable.' 
-                      : 'Your API keys are stored in the database. For maximum security, consider using environment secrets through Lovable\'s Cloud settings instead.'}
-                  </p>
-                </div>
-              </>
-            )}
+          <CardContent>
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+              <h4 className="mb-1 font-medium text-emerald-800">
+                {language === 'ms' ? 'Diurus Dengan Selamat' : 'Securely Managed'}
+              </h4>
+              <p className="text-sm text-emerald-700">
+                {language === 'ms'
+                  ? 'Nilai rahsia tidak pernah dimuatkan ke dalam pelayar atau disimpan dalam pangkalan data aplikasi.'
+                  : 'Secret values are never loaded into the browser or stored in the application database.'}
+              </p>
+            </div>
           </CardContent>
         </Card>
       )}

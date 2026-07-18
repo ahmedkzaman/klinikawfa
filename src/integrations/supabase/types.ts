@@ -5553,6 +5553,10 @@ export type Database = {
       is_special_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff_or_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff_or_clinical: { Args: { _user_id: string }; Returns: boolean }
+      get_clinic_settings: {
+        Args: never
+        Returns: Database["public"]["Tables"]["clinic_settings"]["Row"][]
+      }
       get_insurance_provider_directory: {
         Args: { _active_only?: boolean }
         Returns: {

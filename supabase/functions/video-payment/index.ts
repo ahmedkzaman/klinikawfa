@@ -26,19 +26,9 @@ serve(async (req) => {
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    ); // Get Stripe key from database, fallback to environment variable
+    );
 
-    let stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY") || "";
-    const { data: settingsData } = await supabaseClient
-      .from("app_settings")
-      .select("value")
-      .eq("key", "stripe_secret_key")
-      .single();
-    if (settingsData?.value && settingsData.value.length > 0) {
-      stripeSecretKey = settingsData.value;
-    }
-
-
+    const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY") || "";
     if (!stripeSecretKey) {
       return new Response(JSON.stringify({ error: "Stripe API key not configured" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -63,13 +63,9 @@ export function useClinicSettings() {
   const query = useQuery({
     queryKey: ['clinic_settings'],
     queryFn: async (): Promise<ClinicSettings> => {
-      const { data, error } = await supabase
-        .from('clinic_settings' as never)
-        .select('*')
-        .limit(1)
-        .maybeSingle();
+      const { data, error } = await supabase.rpc('get_clinic_settings');
       if (error) throw error;
-      return (data as unknown as ClinicSettings) ?? DEFAULTS;
+      return ((data?.[0] as ClinicSettings | undefined) ?? DEFAULTS);
     },
     staleTime: 60_000,
   });
