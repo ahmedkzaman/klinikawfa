@@ -73,10 +73,13 @@ BEGIN
     RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
   END IF;
 
-  RETURN QUERY
-  SELECT CASE
-    WHEN public.is_finance_admin() THEN cs
-    ELSE jsonb_populate_record(
+  IF public.is_finance_admin() THEN
+    RETURN QUERY
+    SELECT cs.*
+    FROM public.clinic_settings AS cs;
+  ELSE
+    RETURN QUERY
+    SELECT (jsonb_populate_record(
       NULL::public.clinic_settings,
       to_jsonb(cs) || jsonb_build_object(
         'bank_name', NULL,
@@ -84,9 +87,9 @@ BEGIN
         'bank_account_holder', NULL,
         'sst_number', NULL
       )
-    )
-  END
-  FROM public.clinic_settings AS cs;
+    )).*
+    FROM public.clinic_settings AS cs;
+  END IF;
 END;
 $function$;
 

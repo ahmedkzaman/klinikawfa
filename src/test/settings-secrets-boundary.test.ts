@@ -37,6 +37,14 @@ describe('settings and secrets boundary', () => {
     expect(migration).toContain(
       'GRANT EXECUTE ON FUNCTION public.get_clinic_settings() TO authenticated;',
     );
+    expect(migration).toContain('IF public.is_finance_admin() THEN');
+    expect(migration).toContain('SELECT cs.*');
+    expect(migration).toMatch(
+      /SELECT\s+\(jsonb_populate_record\([\s\S]*?\)\)\.\*/,
+    );
+    expect(migration).not.toMatch(
+      /RETURN QUERY\s+SELECT CASE[\s\S]*?THEN cs/,
+    );
   });
 
   test('redacts bank and tax fields for non-finance clinic roles', () => {
