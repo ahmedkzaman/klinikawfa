@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Calendar, MessageCircle, Phone } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import clinicExterior from '@/assets/klinik-awfa-exterior.webp';
 
 interface HeroSlide {
   id: number;
@@ -76,6 +77,15 @@ export function HeroCarousel({ autoPlayInterval = 5000 }: HeroCarouselProps) {
     >
       {/* Animated background */}
       <div className="absolute inset-0 gradient-section">
+        <img
+          src={clinicExterior}
+          alt=""
+          aria-hidden="true"
+          decoding="async"
+          loading="eager"
+          draggable={false}
+          className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover object-[68%_center] opacity-[0.13] md:object-center dark:opacity-[0.08]"
+        />
         <motion.div 
           className="floating-orb floating-orb-primary w-[600px] h-[600px] -top-40 -right-40"
           animate={{ 
