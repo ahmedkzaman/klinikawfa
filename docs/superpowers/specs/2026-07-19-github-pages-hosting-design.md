@@ -1,6 +1,6 @@
 # Klinik Awfa GitHub Pages Hosting Design
 
-**Date:** 2026-07-19  
+**Date:** 2026-07-19
 **Status:** Approved design; implementation not yet started
 
 ## Objective
@@ -151,4 +151,3 @@ The work is complete when:
 5. The live homepage shows the new clinic-photo background.
 6. The listed direct routes and Supabase-backed public reads work.
 7. No private environment file or sensitive credential is present in Git or the deployed artifact.
-
