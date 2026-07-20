@@ -16,7 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { generateTemporaryPassword } from '@/lib/security';
 import { toast } from 'sonner';
 
-export type CreatableUserRole = 'locum' | 'resident_doctor';
+export type CreatableUserRole = 'locum' | 'resident_doctor' | 'website_editor';
 
 const ROLE_COPY: Record<
   CreatableUserRole,
@@ -38,6 +38,14 @@ const ROLE_COPY: Record<
     emailPlaceholder: 'doctor@klinikawfa.com',
     cta: 'Create Resident Doctor',
     success: 'Resident Doctor account created with a generated temporary password.',
+  },
+  website_editor: {
+    title: 'Add Website Editor',
+    description: 'Creates a Website Editor account silently â€” your session stays active.',
+    namePlaceholder: 'Website Editor',
+    emailPlaceholder: 'editor@klinikawfa.com',
+    cta: 'Create Website Editor',
+    success: 'Website Editor account created with a generated temporary password.',
   },
 };
 

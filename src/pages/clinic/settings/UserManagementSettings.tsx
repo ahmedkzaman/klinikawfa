@@ -52,6 +52,7 @@ const ROLE_LABEL: Record<AppRole, string> = {
   doctor_admin: 'Doctor Admin',
   admin: 'Admin',
   special_admin: 'Special Admin',
+  website_editor: 'Website Editor',
 };
 
 export default function UserManagementSettings() {
@@ -62,6 +63,7 @@ export default function UserManagementSettings() {
   const canAddLocum = isAdmin || isSpecialAdmin || role === 'staff';
   // Only admins can create employee accounts (resident doctors). Staff can only invite locums.
   const canAddResident = isAdmin || isSpecialAdmin;
+  const canAddWebsiteEditor = isAdmin;
 
   const [search, setSearch] = useState('');
   const [pendingUserId, setPendingUserId] = useState<string | null>(null);
@@ -152,6 +154,12 @@ export default function UserManagementSettings() {
               <Button onClick={() => setAddUserDialog({ open: true, role: 'resident_doctor' })}>
                 <UserPlus className="h-4 w-4 mr-2" />
                 Add Resident Doctor
+              </Button>
+            )}
+            {canAddWebsiteEditor && (
+              <Button onClick={() => setAddUserDialog({ open: true, role: 'website_editor' })}>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Add Website Editor
               </Button>
             )}
           </div>

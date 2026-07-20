@@ -11,6 +11,7 @@ export type AppRole =
   | 'staff'
   | 'locum'
   | 'resident_doctor'
+  | 'website_editor'
   | 'guest';
 
 interface AuthContextType {
