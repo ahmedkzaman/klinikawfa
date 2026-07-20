@@ -161,3 +161,40 @@ The first GREEN invocation attempt exposed two local runtime issues before test 
 ### External-action confirmation
 
 Zero staging or external actions were taken. The guard, runner, fixture, seed, cleanup, Storage API, database, Supabase network, migrations, accounts, deployment, and publication were not executed. All checks were local source, type, syntax, test, scan, and diff checks only.
+
+## Final follow-up: closed privileged Storage target API
+
+### Status
+
+PASS - the privileged Storage helper boundary is now closed over four literal target keys. No helper accepts or exports a structural bucket/path target.
+
+Implementation commit: `4c450c297d7a95f65beb518165cf3b6044287452` (`Close privileged Storage target API`)
+
+### Root cause and TDD evidence
+
+The former tuple-derived object union was structurally typed. Because the reserved paths are computed strings, an object with a recognized bucket and an arbitrary string path could be type-compatible with the helper parameter.
+
+The permanent static contract was changed first. Its RED run collected 12 tests: 11 passed and the single Storage lifecycle contract failed at the old array/object API. After the fixture change, the same focused serial suite passed 12/12.
+
+### Implementation
+
+- Replaced object parameters with `PrivilegedStorageTargetKey`, the `keyof` union of one private mapping.
+- The only accepted keys are `websiteMedia`, `privatePanelClaim`, `seededDailyReport`, and `deniedDailyReport`.
+- Every privileged helper resolves bucket/path internally; call sites pass literal keys only.
+- Added non-executed `@ts-expect-error` calls for an arbitrary key and an arbitrary structural bucket/path object. A clean stress TypeScript run proves both negative assertions are active and consumed.
+- Runtime target resolutions, preflight reset, denial snapshots/restoration, post-delete verification, afterAll cleanup, endpoint guards, credential handling, and the original matrix behavior are unchanged.
+
+### Verification
+
+- Focused hardening contracts: 12/12 passed.
+- Stress fixture TypeScript: `tsc --noEmit -p stress-tests/tsconfig.json` passed, including both negative compile-time contracts.
+- Full serial Vitest: 18/18 files and 124/124 tests passed.
+- Changed-file credential scan: zero JWT, connection-string, secret-token, or populated service-role credential hits.
+- Diff and staged whitespace checks: passed.
+- Implementation staged review contained exactly the fixture and its permanent source contract.
+
+The suite emitted only the existing Vite plugin guidance and React Router future-flag warnings. No new warning or failure was introduced.
+
+### External-action confirmation and concerns
+
+Zero external actions were taken. The guard, runner, fixture, Storage API, database, Supabase network, migrations, accounts, deployment, and publication were not executed. Runtime staging behavior remains intentionally unexecuted until a separately authorized guarded run.
