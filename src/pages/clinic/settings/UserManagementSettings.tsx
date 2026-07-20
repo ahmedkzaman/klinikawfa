@@ -40,6 +40,7 @@ const ROLE_OPTIONS: AppRole[] = [
   'doctor_admin',
   'admin',
   'special_admin',
+  'website_editor',
 ];
 
 const ROLE_LABEL: Record<AppRole, string> = {

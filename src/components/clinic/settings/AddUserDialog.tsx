@@ -41,7 +41,7 @@ const ROLE_COPY: Record<
   },
   website_editor: {
     title: 'Add Website Editor',
-    description: 'Creates a Website Editor account silently â€” your session stays active.',
+    description: 'Creates a Website Editor account silently - your session stays active.',
     namePlaceholder: 'Website Editor',
     emailPlaceholder: 'editor@klinikawfa.com',
     cta: 'Create Website Editor',

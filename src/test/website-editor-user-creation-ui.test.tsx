@@ -3,13 +3,14 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 const useAuthMock = vi.fn();
+const useClinicUsersMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => useAuthMock(),
 }));
 
 vi.mock("@/hooks/clinic/useClinicUsers", () => ({
-  useClinicUsers: () => ({ data: [], isLoading: false }),
+  useClinicUsers: () => useClinicUsersMock(),
 }));
 
 vi.mock("@tanstack/react-query", () => ({
@@ -40,6 +41,8 @@ const baseAuth = {
 describe("Website Editor account creation", () => {
   beforeEach(() => {
     useAuthMock.mockReset();
+    useClinicUsersMock.mockReset();
+    useClinicUsersMock.mockReturnValue({ data: [], isLoading: false });
   });
 
   it.each(["admin", "special_admin", "doctor_admin"])(
@@ -78,5 +81,40 @@ describe("Website Editor account creation", () => {
     );
 
     expect(screen.queryByRole("button", { name: "Add Website Editor" })).toBeNull();
+  });
+
+  it("shows Website Editor rows and offers the guarded role option to special admins", () => {
+    useAuthMock.mockReturnValue({
+      ...baseAuth,
+      role: "special_admin",
+      isSpecialAdmin: true,
+    });
+    useClinicUsersMock.mockReturnValue({
+      data: [
+        {
+          id: "website-editor-1",
+          full_name: "Website Editor",
+          email: "editor@klinikawfa.com",
+          phone: null,
+          mmc_number: null,
+          requested_role: "website_editor",
+          role: "website_editor",
+          doctor: null,
+        },
+      ],
+      isLoading: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <UserManagementSettings />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getAllByText("Website Editor", { exact: true })).toHaveLength(2);
+    const roleSelect = screen.getByRole("combobox");
+    expect(roleSelect).toBeEnabled();
+    fireEvent.click(roleSelect);
+    expect(screen.getByRole("option", { name: "Website Editor" })).toBeInTheDocument();
   });
 });
