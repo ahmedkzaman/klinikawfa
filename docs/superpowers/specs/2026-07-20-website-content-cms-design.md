@@ -29,7 +29,7 @@ The system must:
 7. Public functional and protected routes keep their application logic and layout. Content editing must never expose or modify clinic, authentication, finance, payroll, inventory, or patient workflows.
 8. Meta Pixel is **off by default**, is configured only by an Administrator, and cannot load or send an event until the visitor explicitly accepts Marketing consent.
 9. Website Editors cannot view analytics controls or modify tracking configuration.
-10. Meta tracking is limited to allowlisted public-page events and never receives patient, medical, appointment-form, authentication, contact-field, or account data.
+10. Meta tracking is limited to generic PageView events on a small allowlist of non-detail public pages and never receives patient, medical, appointment, conversion, authentication, contact-field, or account data.
 
 ## 3. Approaches Considered
 
@@ -154,7 +154,7 @@ The CMS keeps these existing published tables as their source of truth:
 - `blog_posts`
 - `gallery_images`
 
-`clinic_reviews` remains the operational source for review submissions and patient linkage, but it is never granted to `website_editor`. Add `website_review_presentations` as the isolated public-content source for testimonials. It contains only the approved display name/text in Malay and optional English, rating, public source label, publication status/order, timestamps, and a non-public source reference where applicable. It contains no `patient_id`, Google review identifier, WhatsApp state, or other clinic workflow field. Seed the currently active public reviews into this table without changing their displayed wording.
+`clinic_reviews` remains an operational patient-linked table and is never read, copied, or granted to `website_editor`. The current Home testimonials already come from the separate public `reviews` presentation table. Add `website_review_presentations` as the isolated CMS publication source and seed it only from published rows in `reviews`, preserving displayed wording. It contains only the approved display name/text in Malay and optional English, rating, public source label, publication status/order, timestamps, and a non-public reference to the source `reviews` row where applicable. It contains no `patient_id`, Google review identifier, WhatsApp state, or other clinic workflow field.
 
 Where an existing public resource lacks bilingual fields, add only the required presentation columns: Malay/English title, body, or alt text as applicable. Preserve the exact existing value as the initial Malay value, leave optional English empty, and use the documented Malay fallback. Team members and blog posts continue using their existing bilingual columns. Review quotes are never machine-translated during migration.
 
@@ -284,15 +284,11 @@ The privacy notice identifies Meta as the Marketing analytics provider, explains
 
 ### 12.4 Event and route allowlist
 
-Automatic advanced matching, automatic event detection, and arbitrary custom payloads are disabled. A typed tracking adapter exposes only these calls:
+Meta's Business Tools Terms prohibit sending health or other sensitive information. Consent does not override that restriction. Automatic advanced matching, automatic event detection, conversion events, and arbitrary custom payloads are therefore disabled. The initial typed tracking adapter exposes only `PageView`, with no parameters.
 
-- `PageView`: initial load and client-side navigation on allowlisted public content routes after consent;
-- `Contact`: click on a public telephone or WhatsApp call-to-action after consent;
-- `Schedule`: click that opens the public appointment route after consent.
+The adapter accepts no name, email, phone number, account identifier, medical field, form value, service name/slug, article slug, search term, free text, conversion state, custom user property, or URL query string. Event code must not read appointment, contact, review, or authentication state. Telephone, WhatsApp, and appointment call-to-action clicks are not tracked.
 
-The adapter accepts no name, email, phone number, account identifier, medical field, form value, search term, free text, custom user property, or URL query string. Event code must not read appointment or authentication form state.
-
-The centralized route classifier allowlists `/`, `/services`, `/services/:slug`, `/doctors`, `/doctor-on-duty`, `/gallery`, `/health-tips`, `/health-tips/:slug`, `/pages/:slug`, `/privacy`, and `/terms`; every unrecognized route defaults to tracking denied. Pixel initialization and all events are prohibited on `/auth`, `/staff`, `/clinic`, `/editor`, payment routes, appointment-form routes, password/reset routes, callback routes, and any future route marked protected. Tracking is also denied whenever the current URL has a query string, preventing Meta from receiving query parameters through the page URL. The appointment call-to-action may emit `Schedule` before navigation, but the appointment page and its form emit no PageView or submission event. Live Preview never initializes the Pixel or emits events.
+The centralized route classifier allowlists only `/`, `/services`, `/doctors`, `/gallery`, `/health-tips`, `/privacy`, and `/terms`; every detail page and unrecognized route defaults to tracking denied. Pixel initialization and all events are prohibited on service details, health-tip details, `/doctor-on-duty`, `/pages/:slug`, `/appointment`, `/auth`, `/staff`, `/clinic`, `/editor`, payment routes, appointment-form routes, password/reset routes, callback routes, and any future route not explicitly approved as generic. Tracking is also denied whenever the current URL has a query string, preventing Meta from receiving query parameters through the page URL. Live Preview never initializes the Pixel or emits events.
 
 ### 12.5 Runtime isolation, failure behavior, and CSP
 
@@ -350,7 +346,7 @@ The migration must compare seeded values against an approved snapshot. A mismatc
 - public fallback rendering when CMS data is unavailable.
 - consent banner acceptance, rejection, persistence, version changes, reopening, and withdrawal;
 - Meta script absent before consent and present at most once after valid consent;
-- `PageView`, `Contact`, and `Schedule` allowlisting, SPA deduplication, and zero arbitrary event payloads;
+- generic `PageView` allowlisting, SPA deduplication, and zero event payloads or conversion events;
 - no initialization or events on protected, appointment-form, authentication, payment, callback, or Live Preview routes;
 - configuration failure and script blocking leave the website fully functional;
 - analytics settings route and controls are available to Administrators and rejected for Website Editors and other roles.
