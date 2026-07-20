@@ -51,7 +51,11 @@ fi
 
 EXPECTED_DB_HOST="db.${STAGING_PROJECT_REF}.supabase.co"
 ESCAPED_DB_HOST="${EXPECTED_DB_HOST//./\\.}"
-DB_URL_PATTERN="^postgresql://postgres:[^@/[:space:]]+@${ESCAPED_DB_HOST}:5432/postgres(\\?[^#[:space:]]*)?$"
+if [[ "${STAGING_DB_URL:-}" == *"?"* || "${STAGING_DB_URL:-}" == *"#"* ]]; then
+  echo "FATAL: STAGING_DB_URL may not contain query parameters or fragments." >&2
+  exit 2
+fi
+DB_URL_PATTERN="^postgresql://postgres:[^@/[:space:]?#]+@${ESCAPED_DB_HOST}:5432/postgres$"
 if [[ -z "${STAGING_DB_URL:-}" || ! "$STAGING_DB_URL" =~ $DB_URL_PATTERN ]]; then
   echo "FATAL: STAGING_DB_URL is not the canonical direct staging database URL." >&2
   exit 2
@@ -60,5 +64,10 @@ if [[ "$STAGING_DB_URL" == *"$KNOWN_PRODUCTION_PROJECT_REF"* ]]; then
   echo "FATAL: STAGING_DB_URL contains the production ref. Refusing to run." >&2
   exit 2
 fi
+
+# Prevent inherited libpq routing settings from altering the validated URI.
+unset PGHOST PGHOSTADDR PGPORT PGDATABASE PGUSER PGSERVICE PGSERVICEFILE
+readonly PGSSLMODE="require"
+export PGSSLMODE
 
 echo "OK: staging guard passed (immutable production ref + bound API/DB endpoints)"

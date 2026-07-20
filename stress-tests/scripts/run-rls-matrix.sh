@@ -54,6 +54,17 @@ for uid_var in "${UID_VARS[@]}"; do
   fi
 done
 
+declare -A SEEN_UIDS=()
+for uid_var in "${UID_VARS[@]}"; do
+  uid="${!uid_var}"
+  normalized_uid="${uid,,}"
+  if [[ -n "${SEEN_UIDS[$normalized_uid]:-}" ]]; then
+    echo "FATAL: duplicate actor UID configured for $uid_var." >&2
+    exit 2
+  fi
+  SEEN_UIDS[$normalized_uid]="$uid_var"
+done
+
 # --- 3. TypeScript compile before any DB action ----------------------------
 echo "→ bunx tsc --noEmit -p $ROOT_DIR/tsconfig.json"
 ( cd "$ROOT_DIR" && bunx tsc --noEmit -p tsconfig.json )

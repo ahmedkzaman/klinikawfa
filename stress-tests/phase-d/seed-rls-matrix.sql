@@ -77,6 +77,7 @@ BEGIN;
 --   page with draft      : cafe5005-0000-4000-8000-000000000002
 --   draft INSERT target  : cafe5005-0000-4000-8000-000000000003
 --   private clinic review: cafe5005-0000-4000-8000-000000000004
+--   staff INSERT target  : cafe5005-0000-4000-8000-000000000005
 
 -- -----------------------------------------------------------------------------
 -- User role assignments (one row per dedicated account).
@@ -149,7 +150,34 @@ VALUES
     0,
     NULL,
     NULL
+  ),
+  (
+    'cafe5005-0000-4000-8000-000000000005',
+    'content',
+    'rls-matrix-staff-insert-target',
+    '{}'::jsonb,
+    'draft',
+    0,
+    NULL,
+    NULL
   );
+
+-- The draft trigger calls auth.uid(), authorizes through user_roles, and stamps
+-- updated_by. Set both standard Supabase request-claim forms transaction-locally
+-- to the runner-verified Website Editor only for this trigger-aware insert.
+SELECT set_config(
+  'request.jwt.claim.sub', :'RLS_WEBSITE_EDITOR_UID', true
+) IS NOT NULL AS website_editor_claim_sub_set
+\gset
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub', :'RLS_WEBSITE_EDITOR_UID',
+    'role', 'authenticated'
+  )::text,
+  true
+) IS NOT NULL AS website_editor_claims_set
+\gset
 
 INSERT INTO public.website_page_drafts (
   page_id, draft_content, base_revision, updated_by
@@ -160,6 +188,24 @@ VALUES (
   0,
   :'RLS_WEBSITE_EDITOR_UID'::uuid
 );
+
+DO $verify_draft_actor$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.website_page_drafts
+    WHERE page_id = 'cafe5005-0000-4000-8000-000000000002'
+      AND updated_by = current_setting('request.jwt.claim.sub', true)::uuid
+  ) THEN
+    RAISE EXCEPTION 'seed failed: draft trigger did not stamp verified Website Editor';
+  END IF;
+END
+$verify_draft_actor$;
+
+SELECT set_config('request.jwt.claim.sub', '', true) IS NOT NULL AS claim_sub_cleared
+\gset
+SELECT set_config('request.jwt.claims', '{}'::jsonb::text, true) IS NOT NULL AS claims_cleared
+\gset
 
 INSERT INTO public.clinic_reviews (
   id, patient_id, patient_name, rating, review_text, status

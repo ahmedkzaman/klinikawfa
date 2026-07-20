@@ -71,6 +71,7 @@ const PUBLISHED_PAGE_ID = "cafe5005-0000-4000-8000-000000000001";
 const PRIVATE_DRAFT_PAGE_ID = "cafe5005-0000-4000-8000-000000000002";
 const INSERT_DRAFT_PAGE_ID = "cafe5005-0000-4000-8000-000000000003";
 const PRIVATE_REVIEW_ID = "cafe5005-0000-4000-8000-000000000004";
+const STAFF_INSERT_PAGE_ID = "cafe5005-0000-4000-8000-000000000005";
 const FIXTURE_PATIENT_ID = "babeaaaa-0000-4000-8000-000000000001";
 const mediaBase = `rls-matrix-${credentials.website_editor.uid}.webp`;
 const MEDIA_PATH = `pages/${mediaBase}`;
@@ -241,6 +242,18 @@ beforeAll(async () => {
     throw new Error("draft INSERT target already has a draft row");
   }
 
+  const staffInsertTarget = await clients.website_editor!
+    .from("website_page_drafts")
+    .select("page_id")
+    .eq("page_id", STAFF_INSERT_PAGE_ID);
+  if (
+    staffInsertTarget.error ||
+    !Array.isArray(staffInsertTarget.data) ||
+    staffInsertTarget.data.length !== 0
+  ) {
+    throw new Error("staff INSERT target already has a draft row");
+  }
+
   await verifyPrivateReviewFixture();
 
   const trackingResult = await clients.admin!
@@ -278,7 +291,10 @@ afterAll(async () => {
   }
 });
 
-const operations: Record<Operation, (client: SupabaseClient) => Promise<boolean>> = {
+const operations: Record<
+  Operation,
+  (client: SupabaseClient, actor: Actor) => Promise<boolean>
+> = {
   "website_pages.selectPublished": async (client) => {
     const { data, error } = await client
       .from("website_pages")
@@ -307,7 +323,26 @@ const operations: Record<Operation, (client: SupabaseClient) => Promise<boolean>
       .eq("page_id", PRIVATE_DRAFT_PAGE_ID);
     return error === null && exactRow(data, "page_id", PRIVATE_DRAFT_PAGE_ID);
   },
-  "website_page_drafts.upsert": async (client) => {
+  "website_page_drafts.upsert": async (client, actor) => {
+    if (actor === "staff") {
+      const deniedInsert = await client
+        .from("website_page_drafts")
+        .upsert(
+          {
+            page_id: STAFF_INSERT_PAGE_ID,
+            draft_content: { matrix: "staff-insert-denial" },
+            base_revision: 0,
+          },
+          { onConflict: "page_id" }
+        )
+        .select("page_id,draft_content,base_revision");
+      return (
+        deniedInsert.error === null &&
+        exactDraft(deniedInsert.data, STAFF_INSERT_PAGE_ID, "staff-insert-denial")
+      );
+    }
+    if (actor !== "website_editor") return false;
+
     const inserted = await client
       .from("website_page_drafts")
       .upsert(
@@ -396,7 +431,7 @@ for (const [description, actor, operation, expected] of [
   ...supplementalCases,
 ]) {
   test(`[${actor}] ${description}`, async () => {
-    const actual = await operations[operation](clients[actor]!);
+    const actual = await operations[operation](clients[actor]!, actor);
     expect(actual).toBe(expected);
   });
 }
