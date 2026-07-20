@@ -151,6 +151,18 @@ describe("dormant staging matrix hardening contracts", () => {
     join(root, "stress-tests", "phase-d", "cleanup-rls-matrix.sql"),
     "utf8",
   );
+  const runner = readFileSync(
+    join(root, "stress-tests", "scripts", "run-rls-matrix.sh"),
+    "utf8",
+  );
+  const guard = readFileSync(
+    join(root, "stress-tests", "scripts", "guard-not-prod.sh"),
+    "utf8",
+  );
+  const stagingEnvExample = readFileSync(
+    join(root, "stress-tests", ".env.staging.example"),
+    "utf8",
+  );
 
   it("keeps the required 15-case matrix byte-for-byte in order", () => {
     const casesBlock = fixture.match(/export const cases = \[([\s\S]*?)\] as const;/)?.[1] ?? "";
@@ -241,5 +253,62 @@ describe("dormant staging matrix hardening contracts", () => {
     expect(seed).toContain("INSERT INTO public.daily_reports");
     expect(cleanup).toContain("DELETE FROM public.attendance_records");
     expect(cleanup).toContain("DELETE FROM public.daily_reports");
+  });
+
+  it("requires a blank staging-only cleanup credential after endpoint guards", () => {
+    expect(stagingEnvExample).toMatch(/^STAGING_SERVICE_ROLE_KEY=\r?$/m);
+    expect(stagingEnvExample).not.toMatch(/^STAGING_SERVICE_ROLE_KEY=.+$/m);
+    const requiredVars =
+      runner.match(/REQUIRED_VARS=\(([\s\S]*?)\n\)/)?.[1] ?? "";
+    expect(requiredVars).toContain("STAGING_SERVICE_ROLE_KEY");
+    expect(runner.indexOf('source "$SCRIPT_DIR/guard-not-prod.sh"')).toBeLessThan(
+      runner.indexOf("STAGING_SERVICE_ROLE_KEY"),
+    );
+    expect(guard).toContain('EXPECTED_API_URL="https://${STAGING_PROJECT_REF}.supabase.co"');
+    expect(guard).toContain('if [[ "${STAGING_API_URL:-}" != "$EXPECTED_API_URL" ]]');
+    expect(runner).not.toMatch(/echo[^\n]*\$\{?STAGING_SERVICE_ROLE_KEY/i);
+  });
+
+  it("uses exact-path privileged Storage lifecycle evidence and cleanup", () => {
+    expect(fixture).toContain("const PRIVILEGED_STORAGE_TARGETS = [");
+    for (const target of [
+      '{ bucket: "website-media", path: MEDIA_PATH }',
+      '{ bucket: "panel-claim-docs", path: PRIVATE_MEDIA_PATH }',
+      '{ bucket: "daily-reports", path: DAILY_REPORT_MEDIA_PATH }',
+      '{ bucket: "daily-reports", path: DENIED_DAILY_REPORT_MEDIA_PATH }',
+    ]) {
+      expect(fixture).toContain(target);
+    }
+    expect(fixture).toMatch(
+      /beforeAll\(async \(\) => \{[\s\S]*createClient\(URL, requiredEnv\("STAGING_SERVICE_ROLE_KEY"\)/,
+    );
+    expect(fixture).not.toMatch(/const\s+SERVICE_ROLE_KEY\s*=/);
+    for (const helper of [
+      "privilegedStorageSnapshot",
+      "resetPrivilegedStorageTarget",
+      "restorePrivilegedStorageSnapshot",
+      "cleanupPrivilegedStorageTarget",
+    ]) {
+      expect(fixture).toContain(`function ${helper}`);
+    }
+    for (const operation of [
+      "private_documents.insert",
+      "daily-reports.insert",
+      "daily-reports.update",
+      "daily-reports.delete",
+    ]) {
+      const operationBody =
+        fixture.match(
+          new RegExp(`"${operation.replace(".", "\\.")}":([\\s\\S]*?)(?=\\n  "[^"\\n]+":|\\n};)`),
+        )?.[1] ?? "";
+      expect(operationBody, operation).toContain("privilegedStorageSnapshot");
+      expect(operationBody, operation).toContain("restorePrivilegedStorageSnapshot");
+    }
+    const afterAllBody = fixture.match(/afterAll\(async \(\) => \{([\s\S]*?)\n\}\);/)?.[1] ?? "";
+    expect(afterAllBody).toContain("cleanupPrivilegedStorageTarget");
+    expect(afterAllBody).not.toMatch(/cleanupStoragePath\(clients\.(website_editor|admin|staff)/);
+    const websiteDelete =
+      fixture.match(/"website-media\.delete":([\s\S]*?)(?=\n  "[^"\n]+":|\n};)/)?.[1] ?? "";
+    expect(websiteDelete).toContain("privilegedStorageSnapshot");
   });
 });

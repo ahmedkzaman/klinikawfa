@@ -97,6 +97,19 @@ const DAILY_REPORT_MEDIA_PATH = `${credentials.staff.uid}/rls-matrix-daily-repor
 const DENIED_DAILY_REPORT_MEDIA_PATH = `${credentials.website_editor.uid}/rls-matrix-daily-report.webp`;
 const DAILY_REPORT_MEDIA_BYTES = new Uint8Array([0x44, 0x41, 0x49, 0x4c, 0x59]);
 const MUTATED_DAILY_REPORT_MEDIA_BYTES = new Uint8Array([0x44, 0x45, 0x4e, 0x49, 0x45, 0x44]);
+const PRIVILEGED_STORAGE_TARGETS = [
+  { bucket: "website-media", path: MEDIA_PATH },
+  { bucket: "panel-claim-docs", path: PRIVATE_MEDIA_PATH },
+  { bucket: "daily-reports", path: DAILY_REPORT_MEDIA_PATH },
+  { bucket: "daily-reports", path: DENIED_DAILY_REPORT_MEDIA_PATH },
+] as const;
+type PrivilegedStorageTarget = (typeof PRIVILEGED_STORAGE_TARGETS)[number];
+const WEBSITE_MEDIA_TARGET = PRIVILEGED_STORAGE_TARGETS[0];
+const PRIVATE_MEDIA_TARGET = PRIVILEGED_STORAGE_TARGETS[1];
+const DAILY_REPORT_MEDIA_TARGET = PRIVILEGED_STORAGE_TARGETS[2];
+const DENIED_DAILY_REPORT_MEDIA_TARGET = PRIVILEGED_STORAGE_TARGETS[3];
+
+let privilegedStorageClient: SupabaseClient | undefined;
 
 let trackingSetting: {
   provider: string;
@@ -191,25 +204,87 @@ async function matchingStorageRows(
   return (data ?? []).filter((row) => row.name === name);
 }
 
-async function assertStoragePathAbsent(
-  client: SupabaseClient,
-  bucket: string,
-  path: string
+function requirePrivilegedStorageClient(): SupabaseClient {
+  if (!privilegedStorageClient) {
+    throw new Error("privileged Storage cleanup client is not initialized");
+  }
+  return privilegedStorageClient;
+}
+
+async function privilegedStorageSnapshot(
+  target: PrivilegedStorageTarget
+): Promise<string> {
+  const client = requirePrivilegedStorageClient();
+  const matches = await matchingStorageRows(client, target.bucket, target.path);
+  if (matches.length === 0) return JSON.stringify({ exists: false });
+  if (matches.length !== 1) {
+    throw new Error("reserved Storage path matched more than one object");
+  }
+
+  const { data, error } = await client.storage
+    .from(target.bucket)
+    .download(target.path);
+  if (error || !data) throw new Error("privileged Storage snapshot download failed");
+  return JSON.stringify({
+    exists: true,
+    bytes: Array.from(new Uint8Array(await data.arrayBuffer())),
+  });
+}
+
+async function cleanupPrivilegedStorageTarget(
+  target: PrivilegedStorageTarget
 ): Promise<void> {
-  if ((await matchingStorageRows(client, bucket, path)).length !== 0) {
-    throw new Error("reserved Storage path is not empty");
+  const before = await privilegedStorageSnapshot(target);
+  if (before === JSON.stringify({ exists: false })) return;
+
+  const { error } = await requirePrivilegedStorageClient()
+    .storage.from(target.bucket)
+    .remove([target.path]);
+  if (error) throw new Error("privileged reserved Storage cleanup request failed");
+  if ((await privilegedStorageSnapshot(target)) !== JSON.stringify({ exists: false })) {
+    throw new Error("privileged reserved Storage cleanup did not remove the object");
   }
 }
 
-async function cleanupStoragePath(
-  client: SupabaseClient,
-  bucket: string,
-  path: string
+async function resetPrivilegedStorageTarget(
+  target: PrivilegedStorageTarget
 ): Promise<void> {
-  const { error } = await client.storage.from(bucket).remove([path]);
-  if (error) throw new Error("reserved Storage cleanup request failed");
-  if ((await matchingStorageRows(client, bucket, path)).length !== 0) {
-    throw new Error("reserved Storage cleanup did not remove the object");
+  await cleanupPrivilegedStorageTarget(target);
+  if ((await privilegedStorageSnapshot(target)) !== JSON.stringify({ exists: false })) {
+    throw new Error("privileged reserved Storage preflight reset failed");
+  }
+}
+
+async function restorePrivilegedStorageSnapshot(
+  target: PrivilegedStorageTarget,
+  before: string
+): Promise<void> {
+  const parsed = JSON.parse(before) as { exists: boolean; bytes?: number[] };
+  if (!parsed.exists) {
+    await cleanupPrivilegedStorageTarget(target);
+  } else {
+    if (!parsed.bytes) {
+      throw new Error("privileged Storage restoration snapshot has no bytes");
+    }
+    const client = requirePrivilegedStorageClient();
+    const exists =
+      (await matchingStorageRows(client, target.bucket, target.path)).length === 1;
+    const bucket = client.storage.from(target.bucket);
+    const bytes = new Uint8Array(parsed.bytes);
+    const result = exists
+      ? await bucket.update(target.path, bytes, {
+          contentType: "image/webp",
+          upsert: true,
+        })
+      : await bucket.upload(target.path, bytes, {
+          contentType: "image/webp",
+          upsert: false,
+        });
+    if (result.error) throw new Error("privileged Storage restoration failed");
+  }
+
+  if ((await privilegedStorageSnapshot(target)) !== before) {
+    throw new Error("privileged Storage restoration verification failed");
   }
 }
 
@@ -284,44 +359,6 @@ async function restoreDailyReportFixture(): Promise<void> {
   if (inserted.error) throw new Error("daily report fixture reset insert failed");
 }
 
-async function storageBytesSnapshot(
-  client: SupabaseClient,
-  bucket: string,
-  path: string
-): Promise<string> {
-  if ((await matchingStorageRows(client, bucket, path)).length === 0) {
-    return JSON.stringify({ exists: false });
-  }
-  const { data, error } = await client.storage.from(bucket).download(path);
-  if (error || !data) throw new Error("privileged Storage snapshot download failed");
-  return JSON.stringify({
-    exists: true,
-    bytes: Array.from(new Uint8Array(await data.arrayBuffer())),
-  });
-}
-
-async function restoreDailyReportStorage(before: string): Promise<void> {
-  const parsed = JSON.parse(before) as { exists: boolean; bytes?: number[] };
-  if (!parsed.exists || !parsed.bytes) {
-    throw new Error("daily-report Storage restoration requires the seeded object");
-  }
-  const bucket = clients.staff!.storage.from("daily-reports");
-  const bytes = new Uint8Array(parsed.bytes);
-  const exists =
-    (await matchingStorageRows(clients.staff!, "daily-reports", DAILY_REPORT_MEDIA_PATH))
-      .length === 1;
-  const result = exists
-    ? await bucket.update(DAILY_REPORT_MEDIA_PATH, bytes, {
-        contentType: "image/webp",
-        upsert: true,
-      })
-    : await bucket.upload(DAILY_REPORT_MEDIA_PATH, bytes, {
-        contentType: "image/webp",
-        upsert: false,
-      });
-  if (result.error) throw new Error("daily-report Storage restoration failed");
-}
-
 async function verifyActiveReviewFixture(): Promise<void> {
   const { data, error } = await clients.admin!
     .from("clinic_reviews")
@@ -343,6 +380,17 @@ async function verifyActiveReviewFixture(): Promise<void> {
 }
 
 beforeAll(async () => {
+  privilegedStorageClient = createClient(URL, requiredEnv("STAGING_SERVICE_ROLE_KEY"), {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+  for (const target of PRIVILEGED_STORAGE_TARGETS) {
+    await resetPrivilegedStorageTarget(target);
+  }
+
   clients.anon = createClient(URL, ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -421,14 +469,6 @@ beforeAll(async () => {
   }
   trackingSetting = trackingResult.data as typeof trackingSetting;
 
-  await assertStoragePathAbsent(clients.website_editor!, "website-media", MEDIA_PATH);
-  await assertStoragePathAbsent(clients.admin!, "panel-claim-docs", PRIVATE_MEDIA_PATH);
-  await assertStoragePathAbsent(clients.staff!, "daily-reports", DAILY_REPORT_MEDIA_PATH);
-  await assertStoragePathAbsent(
-    clients.admin!,
-    "daily-reports",
-    DENIED_DAILY_REPORT_MEDIA_PATH
-  );
   if (!(await upload(clients.staff!, "daily-reports", DAILY_REPORT_MEDIA_PATH))) {
     throw new Error("daily-report Storage fixture upload failed");
   }
@@ -437,11 +477,8 @@ beforeAll(async () => {
     bytes: Array.from(DAILY_REPORT_MEDIA_BYTES),
   });
   if (
-    (await storageBytesSnapshot(
-      clients.staff!,
-      "daily-reports",
-      DAILY_REPORT_MEDIA_PATH
-    )) !== expectedStorageSnapshot
+    (await privilegedStorageSnapshot(DAILY_REPORT_MEDIA_TARGET)) !==
+    expectedStorageSnapshot
   ) {
     throw new Error("daily-report Storage fixture is missing or changed");
   }
@@ -449,46 +486,11 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const failures: string[] = [];
-  if (clients.website_editor) {
+  for (const target of PRIVILEGED_STORAGE_TARGETS) {
     try {
-      await cleanupStoragePath(clients.website_editor, "website-media", MEDIA_PATH);
+      await cleanupPrivilegedStorageTarget(target);
     } catch {
-      failures.push("website-media");
-    }
-  }
-  if (clients.admin) {
-    try {
-      await cleanupStoragePath(clients.admin, "panel-claim-docs", PRIVATE_MEDIA_PATH);
-    } catch {
-      failures.push("panel-claim-docs");
-    }
-  }
-  if (clients.staff) {
-    try {
-      await cleanupStoragePath(clients.staff, "daily-reports", DAILY_REPORT_MEDIA_PATH);
-    } catch {
-      failures.push("daily-reports seeded object");
-    }
-  }
-  if (clients.admin && clients.website_editor) {
-    try {
-      if (
-        (
-          await matchingStorageRows(
-            clients.admin,
-            "daily-reports",
-            DENIED_DAILY_REPORT_MEDIA_PATH
-          )
-        ).length !== 0
-      ) {
-        await cleanupStoragePath(
-          clients.website_editor,
-          "daily-reports",
-          DENIED_DAILY_REPORT_MEDIA_PATH
-        );
-      }
-    } catch {
-      failures.push("daily-reports unexpected Website Editor object");
+      failures.push(`${target.bucket}/${target.path}`);
     }
   }
   if (failures.length !== 0) {
@@ -622,8 +624,19 @@ const operations: Record<
       }
     );
   },
-  "private_documents.insert": (client) =>
-    upload(client, "panel-claim-docs", PRIVATE_MEDIA_PATH),
+  "private_documents.insert": async (client) =>
+    attemptAndVerifyDeniedMutation(
+      () => privilegedStorageSnapshot(PRIVATE_MEDIA_TARGET),
+      () =>
+        client.storage
+          .from("panel-claim-docs")
+          .upload(PRIVATE_MEDIA_PATH, MEDIA_BYTES, {
+            contentType: "image/webp",
+            upsert: false,
+          }),
+      async (before) =>
+        restorePrivilegedStorageSnapshot(PRIVATE_MEDIA_TARGET, before)
+    ),
   "website-media.insert": (client) => upload(client, "website-media", MEDIA_PATH),
   "website-media.list": async (client) =>
     (await matchingStorageRows(client, "website-media", MEDIA_PATH)).length === 1,
@@ -806,14 +819,7 @@ const operations: Record<
   },
   "daily-reports.insert": async (client) =>
     attemptAndVerifyDeniedMutation(
-      async () =>
-        JSON.stringify(
-          await matchingStorageRows(
-            clients.admin!,
-            "daily-reports",
-            DENIED_DAILY_REPORT_MEDIA_PATH
-          )
-        ),
+      () => privilegedStorageSnapshot(DENIED_DAILY_REPORT_MEDIA_TARGET),
       () =>
         client.storage
           .from("daily-reports")
@@ -821,21 +827,12 @@ const operations: Record<
             contentType: "image/webp",
             upsert: false,
           }),
-      async () =>
-        cleanupStoragePath(
-          clients.website_editor!,
-          "daily-reports",
-          DENIED_DAILY_REPORT_MEDIA_PATH
-        )
+      async (before) =>
+        restorePrivilegedStorageSnapshot(DENIED_DAILY_REPORT_MEDIA_TARGET, before)
     ),
   "daily-reports.update": async (client) =>
     attemptAndVerifyDeniedMutation(
-      () =>
-        storageBytesSnapshot(
-          clients.staff!,
-          "daily-reports",
-          DAILY_REPORT_MEDIA_PATH
-        ),
+      () => privilegedStorageSnapshot(DAILY_REPORT_MEDIA_TARGET),
       () =>
         client.storage
           .from("daily-reports")
@@ -843,18 +840,15 @@ const operations: Record<
             contentType: "image/webp",
             upsert: true,
           }),
-      async (before) => restoreDailyReportStorage(before)
+      async (before) =>
+        restorePrivilegedStorageSnapshot(DAILY_REPORT_MEDIA_TARGET, before)
     ),
   "daily-reports.delete": async (client) =>
     attemptAndVerifyDeniedMutation(
-      () =>
-        storageBytesSnapshot(
-          clients.staff!,
-          "daily-reports",
-          DAILY_REPORT_MEDIA_PATH
-        ),
+      () => privilegedStorageSnapshot(DAILY_REPORT_MEDIA_TARGET),
       () => client.storage.from("daily-reports").remove([DAILY_REPORT_MEDIA_PATH]),
-      async (before) => restoreDailyReportStorage(before)
+      async (before) =>
+        restorePrivilegedStorageSnapshot(DAILY_REPORT_MEDIA_TARGET, before)
     ),
   "website-media.select": async (client) =>
     (await matchingStorageRows(client, "website-media", MEDIA_PATH)).length === 1,
@@ -866,12 +860,13 @@ const operations: Record<
   },
   "website-media.delete": async (client) => {
     const { data, error } = await client.storage.from("website-media").remove([MEDIA_PATH]);
+    const after = await privilegedStorageSnapshot(WEBSITE_MEDIA_TARGET);
     return (
       error === null &&
       Array.isArray(data) &&
       data.length === 1 &&
       data[0]?.name === MEDIA_PATH &&
-      (await matchingStorageRows(client, "website-media", MEDIA_PATH)).length === 0
+      after === JSON.stringify({ exists: false })
     );
   },
 };
