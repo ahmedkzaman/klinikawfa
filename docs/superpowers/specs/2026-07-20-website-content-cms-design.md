@@ -14,7 +14,7 @@ The system must:
 - let authorized users manage Home, general pages, services/landing pages, team/doctor profiles, blog posts, gallery images, reviews, and public navigation;
 - support separate Malay and English content fields;
 - provide private drafts, a bottom-of-editor Live Preview, explicit publishing, revision history, and rollback;
-- provide Administrator-controlled Meta Pixel analytics that remains completely inactive until a visitor explicitly accepts Marketing consent;
+- provide role-controlled Meta Pixel configuration that remains completely inactive until a visitor explicitly accepts Marketing consent;
 - keep the site's professional responsive design locked while exposing approved content, media, visibility, and ordering controls;
 - enforce authorization in PostgreSQL RLS and Storage policies, not only in the React interface.
 
@@ -27,8 +27,8 @@ The system must:
 5. Editable content has separate Malay and English fields.
 6. Existing content is copied exactly into the initial published state; the migration must not rewrite wording.
 7. Public functional and protected routes keep their application logic and layout. Content editing must never expose or modify clinic, authentication, finance, payroll, inventory, or patient workflows.
-8. Meta Pixel is **off by default**, is configured only by an Administrator, and cannot load or send an event until the visitor explicitly accepts Marketing consent.
-9. Website Editors cannot view analytics controls or modify tracking configuration.
+8. Meta Pixel is **off by default**, is configured only by `admin`, `special_admin`, `doctor_admin`, or `website_editor`, and cannot load or send an event until the visitor explicitly accepts Marketing consent.
+9. The roles `admin`, `special_admin`, `doctor_admin`, and `website_editor` may view and update Meta Pixel configuration; this permission does not grant Website Editors access to analytics reports or any other administrative setting.
 10. Meta tracking is limited to generic PageView events on a small allowlist of non-detail public pages and never receives patient, medical, appointment, conversion, authentication, contact-field, or account data.
 
 ## 3. Approaches Considered
@@ -95,7 +95,7 @@ Create a dedicated `/editor` layout containing only:
 
 Existing content-management screens may be reused internally, but they must be mounted behind the Website Editor guard and updated to use the shared draft, preview, validation, and publish patterns.
 
-Administrators additionally see **Analytics & Consent**. This item is omitted for `website_editor`, and its route is protected by both an Administrator-only route guard and database authorization.
+The roles `admin`, `special_admin`, `doctor_admin`, and `website_editor` see **Analytics & Consent**. Its route is protected by a dedicated tracking-settings capability and matching database authorization. This capability covers only Pixel ID, enabled state, and consent version; it must not be reused for analytics reports, integrations, secrets, or other administrative settings.
 
 ## 6. Structured Page Model
 
@@ -262,11 +262,11 @@ Add a single-row `website_tracking_settings` table containing:
 - positive integer `consent_version`;
 - `updated_by` and `updated_at` audit fields.
 
-The Administrator roles `admin`, `special_admin`, and `doctor_admin` may update the configuration. `website_editor` may not update it and receives no analytics settings route. Browser clients can read only `provider`, `enabled`, `pixel_id`, and `consent_version`; the audit fields are not exposed through the Data API.
+The roles `admin`, `special_admin`, `doctor_admin`, and `website_editor` may update the configuration and receive the Analytics & Consent settings route. Browser clients can read only `provider`, `enabled`, `pixel_id`, and `consent_version`; the audit fields are not exposed through the Data API. This narrow permission does not classify `website_editor` as an Administrator and grants no access to analytics reports, integrations, secrets, or unrelated settings.
 
-The migration must explicitly grant only the required Data API privileges and enable RLS. The `anon` and `authenticated` database roles receive `SELECT` only on the four public-safe columns. The `authenticated` database role receives `UPDATE` only on `enabled`, `pixel_id`, and `consent_version`; RLS then restricts that update to the three Administrator application roles with both `USING` and `WITH CHECK` predicates. Database-side logic owns `updated_by` and `updated_at`; browser clients cannot assign them. No service-role key is used in the browser, no Pixel ID is hard-coded in source, and an empty or invalid Pixel ID behaves as disabled.
+The migration must explicitly grant only the required Data API privileges and enable RLS. The `anon` and `authenticated` database roles receive `SELECT` only on the four public-safe columns. The `authenticated` database role receives `UPDATE` only on `enabled`, `pixel_id`, and `consent_version`; RLS then restricts that update to the four approved application roles with both `USING` and `WITH CHECK` predicates through a dedicated `private.can_manage_tracking_settings()` helper. Database-side logic owns `updated_by` and `updated_at`; browser clients cannot assign them. No service-role key is used in the browser, no Pixel ID is hard-coded in source, and an empty or invalid Pixel ID behaves as disabled.
 
-Although a Meta Pixel ID is public once the Pixel runs, configuration changes remain Administrator-only so a Website Editor or ordinary authenticated user cannot redirect production analytics to another account.
+Although a Meta Pixel ID is public once the Pixel runs, configuration changes remain restricted to the four approved roles so an ordinary authenticated user cannot redirect production analytics to another account. Every change records the authenticated actor and timestamp.
 
 ### 12.3 Consent experience
 
@@ -349,7 +349,7 @@ The migration must compare seeded values against an approved snapshot. A mismatc
 - generic `PageView` allowlisting, SPA deduplication, and zero event payloads or conversion events;
 - no initialization or events on protected, appointment-form, authentication, payment, callback, or Live Preview routes;
 - configuration failure and script blocking leave the website fully functional;
-- analytics settings route and controls are available to Administrators and rejected for Website Editors and other roles.
+- analytics settings route and controls are available to `admin`, `special_admin`, `doctor_admin`, and `website_editor`, and rejected for every other role.
 
 ### 16.2 Database and Storage tests
 

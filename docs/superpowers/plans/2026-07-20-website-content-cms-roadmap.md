@@ -83,7 +83,7 @@ File: `docs/superpowers/plans/2026-07-20-consent-gated-meta-pixel.md`
 
 Consumes:
 
-- Administrator-only editor route from Plan 1;
+- dedicated four-role tracking-settings route from Plan 1;
 - `website_tracking_settings` from Plan 1;
 - public navigation/layout from Plans 2 and 3.
 
@@ -92,7 +92,7 @@ Produces:
 - bilingual consent controls and privacy disclosure;
 - local consent persistence, withdrawal, and version changes;
 - idempotent dynamic Meta loader and strict route/event allowlist;
-- Administrator-only analytics settings;
+- tracking settings restricted to `admin`, `special_admin`, `doctor_admin`, and `website_editor`;
 - CSP and browser-network validation.
 
 Exit gate: tests prove zero Meta requests without consent, after rejection/withdrawal, and on prohibited routes. Tracking remains disabled in production.

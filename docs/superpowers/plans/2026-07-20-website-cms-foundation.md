@@ -4,7 +4,7 @@
 
 **Goal:** Establish the `website_editor` authorization boundary, secure CMS database/storage foundation, and isolated `/editor` application shell without granting access to staff or clinic systems.
 
-**Architecture:** Use a dedicated application role plus two narrowly scoped database helpers: website management for Administrators/Website Editors and analytics management for Administrators only. Published records, private drafts, versions, review presentations, navigation, and tracking configuration use separate tables with explicit grants and RLS. The React editor sits outside `StaffLayout` behind its own route guard.
+**Architecture:** Use a dedicated application role plus two narrowly scoped database helpers: website management and Meta tracking-settings management. Both capabilities allow `admin`, `special_admin`, `doctor_admin`, and `website_editor`, but the tracking helper is deliberately separate so it cannot authorize analytics reports, integrations, secrets, or unrelated settings. Published records, private drafts, versions, review presentations, navigation, and tracking configuration use separate tables with explicit grants and RLS. The React editor sits outside `StaffLayout` behind its own route guard.
 
 **Tech Stack:** PostgreSQL 17, Supabase Auth/RLS/Storage/Data API, generated Supabase TypeScript types, React 18, React Router 6, TypeScript 5, Vitest, Testing Library.
 
@@ -167,7 +167,7 @@ git commit -m "Add website editor role and guarded account creation"
 - Create via CLI: `supabase/migrations/*_create_website_cms_foundation.sql`
 
 **Interfaces:**
-- Produces: `private.can_manage_website() -> boolean`, `private.can_manage_analytics() -> boolean`.
+- Produces: `private.can_manage_website() -> boolean`, `private.can_manage_tracking_settings() -> boolean`.
 - Produces tables: `website_pages`, `website_page_drafts`, `website_content_drafts`, `website_content_versions`, `website_navigation_items`, `website_navigation_drafts`, `website_review_presentations`, `website_tracking_settings`.
 - Produces Storage bucket: `website-media`.
 
@@ -202,13 +202,26 @@ describe("website CMS foundation migration", () => {
   it("uses auth.uid based private helpers and revokes PUBLIC execute", () => {
     const sql = foundationSql();
     expect(sql).toContain("CREATE OR REPLACE FUNCTION private.can_manage_website()");
-    expect(sql).toContain("CREATE OR REPLACE FUNCTION private.can_manage_analytics()");
+    expect(sql).toContain("CREATE OR REPLACE FUNCTION private.can_manage_tracking_settings()");
     expect(sql).toContain("auth.uid()");
     expect(sql).toMatch(/REVOKE ALL ON FUNCTION private\.can_manage_website\(\) FROM PUBLIC/i);
-    expect(sql).toMatch(/REVOKE ALL ON FUNCTION private\.can_manage_analytics\(\) FROM PUBLIC/i);
+    expect(sql).toMatch(/REVOKE ALL ON FUNCTION private\.can_manage_tracking_settings\(\) FROM PUBLIC/i);
     expect(sql).toContain("CREATE OR REPLACE FUNCTION private.stamp_website_draft_actor()");
     expect(sql).toMatch(/NEW\.updated_by\s*:=\s*\(SELECT auth\.uid\(\)\)/i);
     expect(sql).not.toContain("user_metadata");
+  });
+
+  it("restricts tracking settings to the exact approved role set", () => {
+    const sql = foundationSql();
+    const body = sql.match(
+      /CREATE OR REPLACE FUNCTION private\.can_manage_tracking_settings\(\)[\s\S]*?AS \$\$([\s\S]*?)\$\$;/i,
+    )?.[1] ?? "";
+    expect(body).toContain(
+      "ur.role::text IN ('admin', 'special_admin', 'doctor_admin', 'website_editor')",
+    );
+    for (const denied of ["staff", "ops_staff", "operations", "locum", "resident_doctor", "guest"]) {
+      expect(body).not.toContain(`'${denied}'`);
+    }
   });
 
   it("enables RLS and keeps clinic_reviews outside the editor boundary", () => {
@@ -274,7 +287,7 @@ AS $$
   );
 $$;
 
-CREATE OR REPLACE FUNCTION private.can_manage_analytics()
+CREATE OR REPLACE FUNCTION private.can_manage_tracking_settings()
 RETURNS boolean
 LANGUAGE sql
 STABLE
@@ -285,14 +298,14 @@ AS $$
     SELECT 1
     FROM public.user_roles AS ur
     WHERE ur.user_id = (SELECT auth.uid())
-      AND ur.role::text IN ('admin', 'special_admin', 'doctor_admin')
+      AND ur.role::text IN ('admin', 'special_admin', 'doctor_admin', 'website_editor')
   );
 $$;
 
 REVOKE ALL ON FUNCTION private.can_manage_website() FROM PUBLIC;
-REVOKE ALL ON FUNCTION private.can_manage_analytics() FROM PUBLIC;
+REVOKE ALL ON FUNCTION private.can_manage_tracking_settings() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION private.can_manage_website() TO authenticated;
-GRANT EXECUTE ON FUNCTION private.can_manage_analytics() TO authenticated;
+GRANT EXECUTE ON FUNCTION private.can_manage_tracking_settings() TO authenticated;
 
 CREATE OR REPLACE FUNCTION private.stamp_website_draft_actor()
 RETURNS trigger
@@ -435,8 +448,8 @@ The same migration must first `REVOKE ALL` on all eight tables from `anon` and `
 | `website_review_presentations` | `anon`, `authenticated`: safe display-column `SELECT` | `status = 'published'`; omit `source_review_id` and publishing identity |
 | `website_review_presentations` | `authenticated`: same safe-column `SELECT` | additional policy `private.can_manage_website()` so editors can read archived/draft-status presentation rows; no client mutation grant |
 | `website_tracking_settings` | `anon`, `authenticated`: `SELECT (provider,enabled,pixel_id,consent_version)` | `enabled = true`; no audit-column grant |
-| `website_tracking_settings` | `authenticated`: same safe-column `SELECT` | additional policy `private.can_manage_analytics()` so Administrators can read the disabled row |
-| `website_tracking_settings` | `authenticated`: `UPDATE (enabled,pixel_id,consent_version)` | `private.can_manage_analytics()` for both `USING` and `WITH CHECK` |
+| `website_tracking_settings` | `authenticated`: same safe-column `SELECT` | additional policy `private.can_manage_tracking_settings()` so the four approved roles can read the disabled row |
+| `website_tracking_settings` | `authenticated`: `UPDATE (enabled,pixel_id,consent_version)` | `private.can_manage_tracking_settings()` for both `USING` and `WITH CHECK` |
 
 Enable RLS on every table. Every editor-facing policy must be `TO authenticated`; every published-read policy must be explicitly `TO anon, authenticated`. The insert policy for `website_pages` must repeat the draft-skeleton predicates in `WITH CHECK`; application validation alone is insufficient. Do not grant `TRUNCATE`, `REFERENCES`, trigger creation, or sequence access to browser roles. Because current Supabase projects no longer automatically expose newly created tables to the Data API, these explicit grants are required rather than assumed.
 
@@ -483,15 +496,15 @@ git commit -m "Add secure website CMS data foundation"
 - Create: `src/test/website-access.test.ts`
 
 **Interfaces:**
-- Produces: `isWebsiteEditorRole(role)`, `canManageWebsiteRole(role)`, `canManageAnalyticsRole(role)`.
-- Produces context booleans: `canManageWebsite`, `canManageAnalytics`.
+- Produces: `isWebsiteEditorRole(role)`, `canManageWebsiteRole(role)`, `canManageTrackingSettingsRole(role)`.
+- Produces context booleans: `canManageWebsite`, `canManageTrackingSettings`.
 
 - [ ] **Step 1: Write failing capability tests**
 
 ```ts
 import { describe, expect, it } from "vitest";
 import {
-  canManageAnalyticsRole,
+  canManageTrackingSettingsRole,
   canManageWebsiteRole,
   isWebsiteEditorRole,
 } from "@/lib/website-access";
@@ -504,10 +517,15 @@ describe("website role capabilities", () => {
     expect(canManageWebsiteRole("doctor_admin")).toBe(true);
   });
 
-  it("keeps analytics Administrator-only", () => {
-    expect(canManageAnalyticsRole("website_editor")).toBe(false);
-    expect(canManageAnalyticsRole("admin")).toBe(true);
-  });
+  it.each(["admin", "special_admin", "doctor_admin", "website_editor"])(
+    "allows %s to manage Meta tracking settings",
+    (role) => expect(canManageTrackingSettingsRole(role)).toBe(true),
+  );
+
+  it.each(["staff", "ops_staff", "operations", "locum", "resident_doctor", "guest", null])(
+    "denies Meta tracking settings to %s",
+    (role) => expect(canManageTrackingSettingsRole(role)).toBe(false),
+  );
 
   it.each(["staff", "ops_staff", "operations", "locum", "resident_doctor", "guest", null])(
     "denies website management to %s",
@@ -546,12 +564,12 @@ export function canManageWebsiteRole(role: AppRole | null): boolean {
   return isWebsiteEditorRole(role) || WEBSITE_ADMIN_ROLES.includes(role as AppRole);
 }
 
-export function canManageAnalyticsRole(role: AppRole | null): boolean {
-  return WEBSITE_ADMIN_ROLES.includes(role as AppRole);
+export function canManageTrackingSettingsRole(role: AppRole | null): boolean {
+  return canManageWebsiteRole(role);
 }
 ```
 
-Add `"website_editor"` to `AppRole`. Add `canManageWebsite` and `canManageAnalytics` to the context interface/provider using these functions. Do not change the definitions of `isAdmin`, `isStaffOrAdmin`, `isOpsOrAdmin`, `isClinical`, or `canViewInsights`.
+Add `"website_editor"` to `AppRole`. Add `canManageWebsite` and `canManageTrackingSettings` to the context interface/provider using these functions. Do not change the definitions of `isAdmin`, `isStaffOrAdmin`, `isOpsOrAdmin`, `isClinical`, or `canViewInsights`. Do not introduce a general `canManageAnalytics` capability: this permission applies only to the single Meta tracking-settings row and route.
 
 - [ ] **Step 4: Run focused and existing auth tests**
 
@@ -585,7 +603,7 @@ git commit -m "Add isolated website editor capability"
 
 **Interfaces:**
 - Produces routes: `/editor`, `/editor/home`, `/editor/pages`, `/editor/services`, `/editor/team`, `/editor/blog`, `/editor/gallery`, `/editor/reviews`, `/editor/navigation`, `/editor/analytics`.
-- Produces: Administrator-only visibility for `/editor/analytics`.
+- Produces: `/editor/analytics` visibility for `admin`, `special_admin`, `doctor_admin`, and `website_editor` only.
 
 - [ ] **Step 1: Write failing route-guard tests**
 
@@ -600,6 +618,16 @@ it.each(["website_editor", "admin", "special_admin", "doctor_admin"])(
 it.each(["staff", "ops_staff", "operations", "locum", "resident_doctor", "guest"])(
   "redirects %s away from /editor",
   (role) => expect(renderGuard(role).queryByTestId("location")).toHaveTextContent("/"),
+);
+
+it.each(["website_editor", "admin", "special_admin", "doctor_admin"])(
+  "allows %s into /editor/analytics with the tracking-settings guard",
+  (role) => expect(renderTrackingSettingsGuard(role).queryByText("Tracking settings")).toBeInTheDocument(),
+);
+
+it.each(["staff", "ops_staff", "operations", "locum", "resident_doctor", "guest"])(
+  "redirects %s away from /editor/analytics",
+  (role) => expect(renderTrackingSettingsGuard(role).queryByTestId("location")).toHaveTextContent("/editor"),
 );
 
 it("redirects anonymous visitors to /auth", () => {
@@ -618,27 +646,27 @@ Expected: FAIL because the editor guard and layout do not exist.
 ```tsx
 export function EditorProtectedRoute({
   children,
-  requireAnalyticsAdmin = false,
+  requireTrackingSettings = false,
 }: {
   children: React.ReactNode;
-  requireAnalyticsAdmin?: boolean;
+  requireTrackingSettings?: boolean;
 }) {
-  const { user, loading, rolesLoading, canManageWebsite, canManageAnalytics } = useAuth();
+  const { user, loading, rolesLoading, canManageWebsite, canManageTrackingSettings } = useAuth();
   const location = useLocation();
 
   if (loading || rolesLoading) return <EditorLoadingState />;
   if (!user) return <Navigate to="/auth" state={{ from: location }} replace />;
   if (!canManageWebsite) return <Navigate to="/" replace />;
-  if (requireAnalyticsAdmin && !canManageAnalytics) return <Navigate to="/editor" replace />;
+  if (requireTrackingSettings && !canManageTrackingSettings) return <Navigate to="/editor" replace />;
   return <>{children}</>;
 }
 ```
 
-`EditorLayout` uses a focused navigation list and renders Analytics & Consent only when `canManageAnalytics` is true. It must not import `StaffLayout`, staff chat, onboarding, notices, clinic menus, or clinic hooks.
+`EditorLayout` uses a focused navigation list and renders Analytics & Consent only when `canManageTrackingSettings` is true. It must not import `StaffLayout`, staff chat, onboarding, notices, clinic menus, or clinic hooks.
 
 - [ ] **Step 4: Register the editor routes**
 
-Wrap `/editor` with `EditorProtectedRoute`, render `EditorLayout`, and use temporary unavailable-state route elements that say “Coming in the next CMS plan” for child routes not yet implemented. Wrap only `/editor/analytics` with `requireAnalyticsAdmin`.
+Wrap `/editor` with `EditorProtectedRoute`, render `EditorLayout`, and use temporary unavailable-state route elements that say “Coming in the next CMS plan” for child routes not yet implemented. Wrap only `/editor/analytics` with `requireTrackingSettings`.
 
 Update `Auth.tsx` so `role === "website_editor"` redirects to `/editor` before clinic/staff role branches. In `StaffLayout`, make the current Website Management group Administrator-only and add “Website Editor” linking to `/editor`. Preserve Administrator links to website leads/settings and the legacy content screens until Plan 3 migrates those content screens; no ordinary staff/locum/resident may see the group.
 
@@ -700,7 +728,10 @@ const cases = [
   ["ordinary staff writes website draft", "staff", "website_page_drafts.upsert", false],
   ["locum opens editor data", "locum", "website_page_drafts.select", false],
   ["administrator updates tracking", "admin", "website_tracking_settings.update", true],
-  ["website editor updates tracking", "website_editor", "website_tracking_settings.update", false],
+  ["special administrator updates tracking", "special_admin", "website_tracking_settings.update", true],
+  ["doctor administrator updates tracking", "doctor_admin", "website_tracking_settings.update", true],
+  ["website editor updates tracking", "website_editor", "website_tracking_settings.update", true],
+  ["ordinary staff updates tracking", "staff", "website_tracking_settings.update", false],
 ] as const;
 ```
 

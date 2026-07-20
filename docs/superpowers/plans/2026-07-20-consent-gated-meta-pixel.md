@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add an Administrator-controlled Meta Pixel that stays disabled by default, loads only after explicit Marketing consent, and sends parameter-free PageView events only from generic non-sensitive public routes.
+**Goal:** Add a role-controlled Meta Pixel that stays disabled by default, loads only after explicit Marketing consent, and sends parameter-free PageView events only from generic non-sensitive public routes.
 
-**Architecture:** A first-party consent store, strict route classifier, idempotent Meta loader, and React controller remain separate modules. The controller combines public configuration, consent, and route state; any missing/invalid condition fails closed. A bilingual banner/settings dialog manages consent, while an Administrator-only editor page manages Pixel ID, enabled state, and consent version.
+**Architecture:** A first-party consent store, strict route classifier, idempotent Meta loader, and React controller remain separate modules. The controller combines public configuration, consent, and route state; any missing/invalid condition fails closed. A bilingual banner/settings dialog manages consent, while a dedicated tracking-settings route allows exactly `admin`, `special_admin`, `doctor_admin`, and `website_editor` to manage Pixel ID, enabled state, and consent version without granting broader analytics or administrative access.
 
 **Tech Stack:** React 18, React Router 6, TypeScript 5, TanStack Query, Supabase Postgres/RLS, Vitest, Testing Library, GitHub Pages.
 
@@ -18,13 +18,13 @@
 - Generic allowlist: `/`, `/services`, `/doctors`, `/gallery`, `/health-tips`, `/privacy`, `/terms`.
 - Deny service/article/details, doctor duty, general-page slugs, appointments, auth, staff, clinic, editor, video, TV, payment, callbacks, reset, locum registration, every unrecognized route, and every URL with a query string.
 - Never read or transmit form state, medical/service/article details, names, emails, phones, IDs, search terms, free text, or URL parameters.
-- Website Editor cannot view or update analytics controls.
+- Exactly `admin`, `special_admin`, `doctor_admin`, and `website_editor` may view or update tracking settings; every other role is denied.
 - Tracking failure never blocks page rendering, navigation, phone/WhatsApp links, or appointments.
 - No Pixel ID entry, analytics enablement, production migration, or deployment occurs without its separate checkpoint.
 
 ---
 
-### Task 1: Add public-safe tracking configuration API and Administrator editor
+### Task 1: Add public-safe tracking configuration API and four-role editor
 
 **Files:**
 - Create: `src/features/analytics/config.ts`
@@ -36,7 +36,7 @@
 **Interfaces:**
 - Produces `TrackingConfig = { provider: "meta_pixel"; enabled: boolean; pixelId: string | null; consentVersion: number }`.
 - Produces `fetchTrackingConfig()` and `updateTrackingConfig(input)`.
-- Route `/editor/analytics` remains inside `EditorProtectedRoute requireAnalyticsAdmin`.
+- Route `/editor/analytics` remains inside `EditorProtectedRoute requireTrackingSettings`.
 
 - [ ] **Step 1: Write failing API/UI tests**
 
@@ -54,10 +54,20 @@ it("rejects invalid Pixel IDs before a request", async () => {
   expect(updateMock).not.toHaveBeenCalled();
 });
 
-it("does not render analytics settings for website_editor", () => {
-  expect(renderAnalyticsRoute("website_editor").getByTestId("location"))
-    .toHaveTextContent("/editor");
-});
+it.each(["admin", "special_admin", "doctor_admin", "website_editor"])(
+  "renders tracking settings for %s",
+  (role) => {
+    expect(renderAnalyticsRoute(role).getByRole("heading", { name: /analytics.*consent/i }))
+      .toBeInTheDocument();
+  },
+);
+
+it.each(["staff", "ops_staff", "operations", "locum", "resident_doctor", "guest"])(
+  "redirects %s away from tracking settings",
+  (role) => {
+    expect(renderAnalyticsRoute(role).getByTestId("location")).toHaveTextContent("/editor");
+  },
+);
 ```
 
 - [ ] **Step 2: Run tests and verify they fail**
@@ -70,7 +80,7 @@ Expected: FAIL because the config module and editor page do not exist.
 
 Run: `npx supabase migration new stamp_website_tracking_settings`
 
-Add a private trigger function that rejects non-admin updates, assigns `NEW.updated_by := auth.uid()` and `NEW.updated_at := now()`, and leaves `provider` immutable. Revoke direct updates to `provider`, `updated_by`, and `updated_at`. Keep RLS `USING` and `WITH CHECK` from the foundation migration.
+Add a private trigger function that rejects updates unless `private.can_manage_tracking_settings()` is true, assigns `NEW.updated_by := auth.uid()` and `NEW.updated_at := now()`, and leaves `provider` immutable. Revoke direct updates to `provider`, `updated_by`, and `updated_at`. Keep RLS `USING` and `WITH CHECK` from the foundation migration. The trigger and RLS must use the same dedicated helper so frontend visibility cannot widen database authorization.
 
 - [ ] **Step 4: Implement the public-safe configuration API**
 
@@ -96,7 +106,7 @@ export async function fetchTrackingConfig(): Promise<TrackingConfig | null> {
 
 `updateTrackingConfig` requires a valid ID before enabling, positive integer consent version, and updates only `enabled`, `pixel_id`, `consent_version`.
 
-- [ ] **Step 5: Build the Administrator-only settings page**
+- [ ] **Step 5: Build the dedicated tracking-settings page**
 
 Provide fields for Pixel ID, enabled state, and consent version. Explain that the Pixel ID is public when active, tracking is PageView-only, detail/appointment routes are excluded, and increasing consent version asks visitors again. Require a confirmation dialog before changing disabled to enabled. Do not add a “test event” button because it could bypass normal visitor consent.
 
@@ -113,7 +123,7 @@ Expected: PASS.
 
 ```powershell
 git add src/features/analytics/config.ts src/pages/editor/AnalyticsSettings.tsx src/test/analytics-settings.test.tsx src/App.tsx supabase/migrations
-git commit -m "Add administrator analytics settings"
+git commit -m "Add protected Meta tracking settings"
 ```
 
 ---
