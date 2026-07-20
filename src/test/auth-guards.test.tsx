@@ -48,6 +48,8 @@ const baseAuth = {
   isLocum: false,
   isClinical: false,
   canViewInsights: false,
+  canManageWebsite: false,
+  canManageTrackingSettings: false,
   signIn: vi.fn(),
   signUp: vi.fn(),
   signOut: vi.fn(),
@@ -106,6 +108,28 @@ describe("ProtectedRoute", () => {
     });
 
     renderGuard({ requireStaffOrAdmin: true });
+
+    expect(screen.queryByTestId("children")).toBeNull();
+    expect(navigations).toContain("/");
+  });
+
+  it("keeps Website Editor excluded from existing staff and administrator guards", () => {
+    useAuthMock.mockReturnValue({
+      ...baseAuth,
+      user: { id: "u-website-editor" },
+      role: "website_editor",
+      canManageWebsite: true,
+      canManageTrackingSettings: true,
+    });
+
+    const { unmount } = renderGuard({ requireStaffOrAdmin: true });
+
+    expect(screen.queryByTestId("children")).toBeNull();
+    expect(navigations).toContain("/");
+
+    unmount();
+    navigations.length = 0;
+    renderGuard({ requireAdmin: true });
 
     expect(screen.queryByTestId("children")).toBeNull();
     expect(navigations).toContain("/");
