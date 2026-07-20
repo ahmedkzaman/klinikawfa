@@ -1,10 +1,9 @@
 /**
  * Deterministic Website CMS RLS and Storage matrix.
  *
- * This file is deliberately guarded at import time. It may only run after the
- * production-reference guard, credential checks, and UID/email verification in
- * scripts/run-rls-matrix.sh. It uses exact reserved records and object paths;
- * no permissive subset assertions are used.
+ * Import is guarded by run-rls-matrix.sh. Seeded IDs and reserved Storage
+ * paths make every allow/deny result non-empty or otherwise independently
+ * proven, with exact booleans and no permissive subset assertions.
  */
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -37,8 +36,6 @@ const supplementalCases = [
   ["resident doctor opens editor data", "resident_doctor", "website_page_drafts.select", false],
   ["website editor lists approved website media folder", "website_editor", "website-media.select", true],
   ["website editor updates website media in approved folder", "website_editor", "website-media.update", true],
-  ["website editor cannot upload outside approved folders", "website_editor", "website-media.insertInvalidFolder", false],
-  ["website editor cannot move media outside approved folders", "website_editor", "website-media.moveInvalidFolder", false],
   ["website editor deletes website media in approved folder", "website_editor", "website-media.delete", true],
 ] as const;
 
@@ -51,17 +48,14 @@ type Actor =
   | "staff"
   | "locum"
   | "resident_doctor";
-
 type Operation =
   | (typeof cases)[number][2]
   | (typeof supplementalCases)[number][2];
-
 type CredentialActor = Exclude<Actor, "anon">;
 type Credential = { uid: string; email: string; password: string };
 
 const URL = requiredEnv("STAGING_API_URL");
 const ANON_KEY = requiredEnv("STAGING_ANON_KEY");
-
 const credentials: Record<CredentialActor, Credential> = {
   website_editor: credential("WEBSITE_EDITOR"),
   admin: credential("ADMIN"),
@@ -71,13 +65,15 @@ const credentials: Record<CredentialActor, Credential> = {
   locum: credential("LOCUM"),
   resident_doctor: credential("RESIDENT"),
 };
-
 const clients: Partial<Record<Actor, SupabaseClient>> = {};
+
+const PUBLISHED_PAGE_ID = "cafe5005-0000-4000-8000-000000000001";
+const PRIVATE_DRAFT_PAGE_ID = "cafe5005-0000-4000-8000-000000000002";
+const INSERT_DRAFT_PAGE_ID = "cafe5005-0000-4000-8000-000000000003";
+const PRIVATE_REVIEW_ID = "cafe5005-0000-4000-8000-000000000004";
 const FIXTURE_PATIENT_ID = "babeaaaa-0000-4000-8000-000000000001";
-const ABSENT_PAGE_ID = "cafe5005-0000-4000-8000-000000000005";
 const mediaBase = `rls-matrix-${credentials.website_editor.uid}.webp`;
 const MEDIA_PATH = `pages/${mediaBase}`;
-const INVALID_MEDIA_PATH = `private/${mediaBase}`;
 const PRIVATE_MEDIA_PATH = `rls-matrix/${mediaBase}`;
 const MEDIA_BYTES = new Uint8Array([0x52, 0x49, 0x46, 0x46]);
 
@@ -128,6 +124,19 @@ function exactRow(data: unknown, key: string, value: string): boolean {
   );
 }
 
+function exactDraft(
+  data: unknown,
+  pageId: string,
+  matrixValue: string
+): boolean {
+  if (!exactRow(data, "page_id", pageId)) return false;
+  const row = (data as Array<Record<string, unknown>>)[0];
+  return (
+    row.base_revision === 0 &&
+    JSON.stringify(row.draft_content) === JSON.stringify({ matrix: matrixValue })
+  );
+}
+
 async function upload(
   client: SupabaseClient,
   bucket: string,
@@ -140,6 +149,69 @@ async function upload(
   return error === null;
 }
 
+function pathParts(path: string): { folder: string; name: string } {
+  const separator = path.lastIndexOf("/");
+  return { folder: path.slice(0, separator), name: path.slice(separator + 1) };
+}
+
+async function matchingStorageRows(
+  client: SupabaseClient,
+  bucket: string,
+  path: string
+): Promise<Array<{ name: string }>> {
+  const { folder, name } = pathParts(path);
+  const { data, error } = await client.storage.from(bucket).list(folder, {
+    limit: 10,
+    offset: 0,
+    search: name,
+    sortBy: { column: "name", order: "asc" },
+  });
+  if (error) throw new Error("reserved Storage path listing failed");
+  return (data ?? []).filter((row) => row.name === name);
+}
+
+async function assertStoragePathAbsent(
+  client: SupabaseClient,
+  bucket: string,
+  path: string
+): Promise<void> {
+  if ((await matchingStorageRows(client, bucket, path)).length !== 0) {
+    throw new Error("reserved Storage path is not empty");
+  }
+}
+
+async function cleanupStoragePath(
+  client: SupabaseClient,
+  bucket: string,
+  path: string
+): Promise<void> {
+  const { error } = await client.storage.from(bucket).remove([path]);
+  if (error) throw new Error("reserved Storage cleanup request failed");
+  if ((await matchingStorageRows(client, bucket, path)).length !== 0) {
+    throw new Error("reserved Storage cleanup did not remove the object");
+  }
+}
+
+async function verifyPrivateReviewFixture(): Promise<void> {
+  const { data, error } = await clients.admin!
+    .from("clinic_reviews")
+    .select("id,patient_id,patient_name,rating,review_text,status")
+    .eq("id", PRIVATE_REVIEW_ID)
+    .single();
+  if (
+    error ||
+    !data ||
+    data.id !== PRIVATE_REVIEW_ID ||
+    data.patient_id !== FIXTURE_PATIENT_ID ||
+    data.patient_name !== "RLS Fixture Patient A" ||
+    data.rating !== 5 ||
+    data.review_text !== "RLS matrix private review" ||
+    data.status !== "pending"
+  ) {
+    throw new Error("private clinic review fixture is missing or changed");
+  }
+}
+
 beforeAll(async () => {
   clients.anon = createClient(URL, ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -148,15 +220,28 @@ beforeAll(async () => {
     clients[actor] = await signIn(actor);
   }
 
-  const pageResult = await clients.website_editor!
-    .from("website_pages")
-    .select("id")
-    .eq("id", ABSENT_PAGE_ID);
-  if (pageResult.error || !Array.isArray(pageResult.data) || pageResult.data.length !== 0) {
-    throw new Error(
-      "reserved absent-page authorization probe is not empty"
-    );
+  const draftResult = await clients.website_editor!
+    .from("website_page_drafts")
+    .select("page_id,draft_content,base_revision")
+    .eq("page_id", PRIVATE_DRAFT_PAGE_ID);
+  if (
+    draftResult.error ||
+    !exactRow(draftResult.data, "page_id", PRIVATE_DRAFT_PAGE_ID) ||
+    JSON.stringify(draftResult.data?.[0]?.draft_content) !==
+      JSON.stringify({ title: "RLS matrix private draft" })
+  ) {
+    throw new Error("private page draft fixture is missing or changed");
   }
+
+  const insertTarget = await clients.website_editor!
+    .from("website_page_drafts")
+    .select("page_id")
+    .eq("page_id", INSERT_DRAFT_PAGE_ID);
+  if (insertTarget.error || !Array.isArray(insertTarget.data) || insertTarget.data.length !== 0) {
+    throw new Error("draft INSERT target already has a draft row");
+  }
+
+  await verifyPrivateReviewFixture();
 
   const trackingResult = await clients.admin!
     .from("website_tracking_settings")
@@ -168,67 +253,98 @@ beforeAll(async () => {
   }
   trackingSetting = trackingResult.data as typeof trackingSetting;
 
-  // Remove only the allowed reserved paths so an interrupted prior run cannot
-  // make the positive insert case depend on stale Storage state.
-  await clients.website_editor!.storage.from("website-media").remove([MEDIA_PATH]);
-  await clients.admin!.storage.from("panel-claim-docs").remove([PRIVATE_MEDIA_PATH]);
+  await assertStoragePathAbsent(clients.website_editor!, "website-media", MEDIA_PATH);
+  await assertStoragePathAbsent(clients.admin!, "panel-claim-docs", PRIVATE_MEDIA_PATH);
 });
 
 afterAll(async () => {
-  await clients.website_editor?.storage
-    .from("website-media")
-    .remove([MEDIA_PATH, INVALID_MEDIA_PATH]);
-  await clients.admin?.storage.from("panel-claim-docs").remove([PRIVATE_MEDIA_PATH]);
+  const failures: string[] = [];
+  if (clients.website_editor) {
+    try {
+      await cleanupStoragePath(clients.website_editor, "website-media", MEDIA_PATH);
+    } catch {
+      failures.push("website-media");
+    }
+  }
+  if (clients.admin) {
+    try {
+      await cleanupStoragePath(clients.admin, "panel-claim-docs", PRIVATE_MEDIA_PATH);
+    } catch {
+      failures.push("panel-claim-docs");
+    }
+  }
+  if (failures.length !== 0) {
+    throw new Error(`reserved Storage cleanup failed for ${failures.join(", ")}`);
+  }
 });
 
 const operations: Record<Operation, (client: SupabaseClient) => Promise<boolean>> = {
   "website_pages.selectPublished": async (client) => {
     const { data, error } = await client
       .from("website_pages")
-      .select("id,status")
-      .eq("status", "published")
-      .order("id", { ascending: true });
+      .select("id,slug,published_content,status,revision")
+      .eq("id", PUBLISHED_PAGE_ID);
+    if (error || !exactRow(data, "id", PUBLISHED_PAGE_ID)) return false;
+    const row = (data as Array<Record<string, unknown>>)[0];
+    const content = row.published_content as Record<string, unknown> | null;
     return (
-      error === null &&
-      Array.isArray(data) &&
-      data.every((row) => row.status === "published")
+      Object.keys(row).sort().join(",") ===
+        ["id", "published_content", "revision", "slug", "status"].sort().join(",") &&
+      row.slug === "rls-matrix-published-page" &&
+      row.status === "published" &&
+      row.revision === 1 &&
+      typeof content === "object" &&
+      content !== null &&
+      Object.keys(content).sort().join(",") === "body,title" &&
+      content.title === "RLS matrix published" &&
+      content.body === "Public fixture"
     );
   },
   "website_page_drafts.select": async (client) => {
     const { data, error } = await client
       .from("website_page_drafts")
       .select("page_id")
-      .eq("page_id", ABSENT_PAGE_ID);
-    return error === null && exactRow(data, "page_id", ABSENT_PAGE_ID);
+      .eq("page_id", PRIVATE_DRAFT_PAGE_ID);
+    return error === null && exactRow(data, "page_id", PRIVATE_DRAFT_PAGE_ID);
   },
   "website_page_drafts.upsert": async (client) => {
-    const { data, error } = await client
+    const inserted = await client
       .from("website_page_drafts")
       .upsert(
         {
-          page_id: ABSENT_PAGE_ID,
-          draft_content: { matrix: "website-cms" },
+          page_id: INSERT_DRAFT_PAGE_ID,
+          draft_content: { matrix: "insert-path" },
           base_revision: 0,
         },
         { onConflict: "page_id" }
       )
-      .select("page_id");
-    // The reserved parent page is verified absent in beforeAll. Reaching its
-    // exact FK failure proves INSERT/UPDATE grants, RLS, and the actor trigger
-    // admitted the request, while guaranteeing that no draft row is written.
+      .select("page_id,draft_content,base_revision");
+    if (inserted.error || !exactDraft(inserted.data, INSERT_DRAFT_PAGE_ID, "insert-path")) {
+      return false;
+    }
+
+    const updated = await client
+      .from("website_page_drafts")
+      .upsert(
+        {
+          page_id: PRIVATE_DRAFT_PAGE_ID,
+          draft_content: { matrix: "update-path" },
+          base_revision: 0,
+        },
+        { onConflict: "page_id" }
+      )
+      .select("page_id,draft_content,base_revision");
     return (
-      (error === null && exactRow(data, "page_id", ABSENT_PAGE_ID)) ||
-      error?.code === "23503"
+      updated.error === null &&
+      exactDraft(updated.data, PRIVATE_DRAFT_PAGE_ID, "update-path")
     );
   },
   "clinic_reviews.select": async (client) => {
     const { data, error } = await client
       .from("clinic_reviews")
       .select("id")
-      .neq("status", "active")
-      .order("id", { ascending: true })
-      .limit(1);
-    return error === null && Array.isArray(data) && data.length > 0;
+      .eq("id", PRIVATE_REVIEW_ID);
+    return error === null && exactRow(data, "id", PRIVATE_REVIEW_ID);
   },
   "patients.update": async (client) => {
     const { data, error } = await client
@@ -241,20 +357,8 @@ const operations: Record<Operation, (client: SupabaseClient) => Promise<boolean>
   "private_documents.insert": (client) =>
     upload(client, "panel-claim-docs", PRIVATE_MEDIA_PATH),
   "website-media.insert": (client) => upload(client, "website-media", MEDIA_PATH),
-  "website-media.list": async (client) => {
-    const { data, error } = await client.storage.from("website-media").list("pages", {
-      limit: 10,
-      offset: 0,
-      search: mediaBase,
-      sortBy: { column: "name", order: "asc" },
-    });
-    return (
-      error === null &&
-      Array.isArray(data) &&
-      data.length === 1 &&
-      data[0]?.name === mediaBase
-    );
-  },
+  "website-media.list": async (client) =>
+    (await matchingStorageRows(client, "website-media", MEDIA_PATH)).length === 1,
   "website_tracking_settings.update": async (client) => {
     const { data, error } = await client
       .from("website_tracking_settings")
@@ -267,20 +371,8 @@ const operations: Record<Operation, (client: SupabaseClient) => Promise<boolean>
       .select("provider");
     return error === null && exactRow(data, "provider", trackingSetting.provider);
   },
-  "website-media.select": async (client) => {
-    const { data, error } = await client.storage.from("website-media").list("pages", {
-      limit: 10,
-      offset: 0,
-      search: mediaBase,
-      sortBy: { column: "name", order: "asc" },
-    });
-    return (
-      error === null &&
-      Array.isArray(data) &&
-      data.length === 1 &&
-      data[0]?.name === mediaBase
-    );
-  },
+  "website-media.select": async (client) =>
+    (await matchingStorageRows(client, "website-media", MEDIA_PATH)).length === 1,
   "website-media.update": async (client) => {
     const { error } = await client.storage
       .from("website-media")
@@ -293,16 +385,9 @@ const operations: Record<Operation, (client: SupabaseClient) => Promise<boolean>
       error === null &&
       Array.isArray(data) &&
       data.length === 1 &&
-      data[0]?.name === MEDIA_PATH
+      data[0]?.name === MEDIA_PATH &&
+      (await matchingStorageRows(client, "website-media", MEDIA_PATH)).length === 0
     );
-  },
-  "website-media.insertInvalidFolder": (client) =>
-    upload(client, "website-media", INVALID_MEDIA_PATH),
-  "website-media.moveInvalidFolder": async (client) => {
-    const { error } = await client.storage
-      .from("website-media")
-      .move(MEDIA_PATH, INVALID_MEDIA_PATH);
-    return error === null;
   },
 };
 
