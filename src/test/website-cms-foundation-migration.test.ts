@@ -64,4 +64,38 @@ describe("website CMS foundation migration", () => {
     }
     expect(sql).not.toMatch(/ON public\.clinic_reviews[\s\S]*can_manage_website/i);
   });
+
+  it("wraps every row-independent policy helper call in SELECT", () => {
+    const sql = foundationSql();
+    const policies = sql.slice(
+      sql.indexOf('CREATE POLICY "Published website pages are readable"'),
+    );
+    expect(
+      policies.match(/\(SELECT private\.can_manage_website\(\)\)/g) ?? [],
+    ).toHaveLength(25);
+    expect(
+      policies.match(/\(SELECT private\.can_manage_tracking_settings\(\)\)/g) ?? [],
+    ).toHaveLength(3);
+    const withoutWrappedCalls = policies
+      .replaceAll("(SELECT private.can_manage_website())", "")
+      .replaceAll("(SELECT private.can_manage_tracking_settings())", "");
+    expect(withoutWrappedCalls).not.toContain("private.can_manage_website()");
+    expect(withoutWrappedCalls).not.toContain("private.can_manage_tracking_settings()");
+  });
+
+  it("indexes non-unique foreign-key columns without duplicating keyed links", () => {
+    const sql = foundationSql();
+    for (const index of [
+      "CREATE INDEX idx_website_pages_published_by ON public.website_pages (published_by);",
+      "CREATE INDEX idx_website_page_drafts_updated_by ON public.website_page_drafts (updated_by);",
+      "CREATE INDEX idx_website_content_drafts_updated_by ON public.website_content_drafts (updated_by);",
+      "CREATE INDEX idx_website_content_versions_published_by ON public.website_content_versions (published_by);",
+      "CREATE INDEX idx_website_navigation_items_page_id ON public.website_navigation_items (page_id);",
+      "CREATE INDEX idx_website_navigation_items_parent_id ON public.website_navigation_items (parent_id);",
+      "CREATE INDEX idx_website_navigation_drafts_updated_by ON public.website_navigation_drafts (updated_by);",
+      "CREATE INDEX idx_website_tracking_settings_updated_by ON public.website_tracking_settings (updated_by);",
+    ]) {
+      expect(sql).toContain(index);
+    }
+  });
 });

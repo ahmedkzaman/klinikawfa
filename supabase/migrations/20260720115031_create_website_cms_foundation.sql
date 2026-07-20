@@ -157,6 +157,15 @@ CREATE TABLE public.website_tracking_settings (
   CHECK (NOT enabled OR pixel_id IS NOT NULL)
 );
 
+CREATE INDEX idx_website_pages_published_by ON public.website_pages (published_by);
+CREATE INDEX idx_website_page_drafts_updated_by ON public.website_page_drafts (updated_by);
+CREATE INDEX idx_website_content_drafts_updated_by ON public.website_content_drafts (updated_by);
+CREATE INDEX idx_website_content_versions_published_by ON public.website_content_versions (published_by);
+CREATE INDEX idx_website_navigation_items_page_id ON public.website_navigation_items (page_id);
+CREATE INDEX idx_website_navigation_items_parent_id ON public.website_navigation_items (parent_id);
+CREATE INDEX idx_website_navigation_drafts_updated_by ON public.website_navigation_drafts (updated_by);
+CREATE INDEX idx_website_tracking_settings_updated_by ON public.website_tracking_settings (updated_by);
+
 INSERT INTO public.website_tracking_settings (provider, enabled, pixel_id, consent_version)
 VALUES ('meta_pixel', false, NULL, 1)
 ON CONFLICT (provider) DO NOTHING;
@@ -228,14 +237,14 @@ CREATE POLICY "Website managers can preview website pages"
 ON public.website_pages
 FOR SELECT
 TO authenticated
-USING (private.can_manage_website());
+USING ((SELECT private.can_manage_website()));
 
 CREATE POLICY "Website managers can create content page skeletons"
 ON public.website_pages
 FOR INSERT
 TO authenticated
 WITH CHECK (
-  private.can_manage_website()
+  (SELECT private.can_manage_website())
   AND kind = 'content'
   AND status = 'draft'
   AND published_content = '{}'::jsonb
@@ -246,57 +255,57 @@ CREATE POLICY "Website managers can read page drafts"
 ON public.website_page_drafts
 FOR SELECT
 TO authenticated
-USING (private.can_manage_website());
+USING ((SELECT private.can_manage_website()));
 
 CREATE POLICY "Website managers can insert page drafts"
 ON public.website_page_drafts
 FOR INSERT
 TO authenticated
-WITH CHECK (private.can_manage_website());
+WITH CHECK ((SELECT private.can_manage_website()));
 
 CREATE POLICY "Website managers can update page drafts"
 ON public.website_page_drafts
 FOR UPDATE
 TO authenticated
-USING (private.can_manage_website())
-WITH CHECK (private.can_manage_website());
+USING ((SELECT private.can_manage_website()))
+WITH CHECK ((SELECT private.can_manage_website()));
 
 CREATE POLICY "Website managers can delete page drafts"
 ON public.website_page_drafts
 FOR DELETE
 TO authenticated
-USING (private.can_manage_website());
+USING ((SELECT private.can_manage_website()));
 
 CREATE POLICY "Website managers can read content drafts"
 ON public.website_content_drafts
 FOR SELECT
 TO authenticated
-USING (private.can_manage_website());
+USING ((SELECT private.can_manage_website()));
 
 CREATE POLICY "Website managers can insert content drafts"
 ON public.website_content_drafts
 FOR INSERT
 TO authenticated
-WITH CHECK (private.can_manage_website());
+WITH CHECK ((SELECT private.can_manage_website()));
 
 CREATE POLICY "Website managers can update content drafts"
 ON public.website_content_drafts
 FOR UPDATE
 TO authenticated
-USING (private.can_manage_website())
-WITH CHECK (private.can_manage_website());
+USING ((SELECT private.can_manage_website()))
+WITH CHECK ((SELECT private.can_manage_website()));
 
 CREATE POLICY "Website managers can delete content drafts"
 ON public.website_content_drafts
 FOR DELETE
 TO authenticated
-USING (private.can_manage_website());
+USING ((SELECT private.can_manage_website()));
 
 CREATE POLICY "Website managers can read content versions"
 ON public.website_content_versions
 FOR SELECT
 TO authenticated
-USING (private.can_manage_website());
+USING ((SELECT private.can_manage_website()));
 
 CREATE POLICY "Visible navigation items are readable"
 ON public.website_navigation_items
@@ -308,32 +317,32 @@ CREATE POLICY "Website managers can preview navigation items"
 ON public.website_navigation_items
 FOR SELECT
 TO authenticated
-USING (private.can_manage_website());
+USING ((SELECT private.can_manage_website()));
 
 CREATE POLICY "Website managers can read navigation drafts"
 ON public.website_navigation_drafts
 FOR SELECT
 TO authenticated
-USING (private.can_manage_website());
+USING ((SELECT private.can_manage_website()));
 
 CREATE POLICY "Website managers can insert navigation drafts"
 ON public.website_navigation_drafts
 FOR INSERT
 TO authenticated
-WITH CHECK (private.can_manage_website());
+WITH CHECK ((SELECT private.can_manage_website()));
 
 CREATE POLICY "Website managers can update navigation drafts"
 ON public.website_navigation_drafts
 FOR UPDATE
 TO authenticated
-USING (private.can_manage_website())
-WITH CHECK (private.can_manage_website());
+USING ((SELECT private.can_manage_website()))
+WITH CHECK ((SELECT private.can_manage_website()));
 
 CREATE POLICY "Website managers can delete navigation drafts"
 ON public.website_navigation_drafts
 FOR DELETE
 TO authenticated
-USING (private.can_manage_website());
+USING ((SELECT private.can_manage_website()));
 
 CREATE POLICY "Published review presentations are readable"
 ON public.website_review_presentations
@@ -345,7 +354,7 @@ CREATE POLICY "Website managers can preview review presentations"
 ON public.website_review_presentations
 FOR SELECT
 TO authenticated
-USING (private.can_manage_website());
+USING ((SELECT private.can_manage_website()));
 
 CREATE POLICY "Enabled tracking settings are readable"
 ON public.website_tracking_settings
@@ -357,14 +366,14 @@ CREATE POLICY "Tracking managers can read tracking settings"
 ON public.website_tracking_settings
 FOR SELECT
 TO authenticated
-USING (private.can_manage_tracking_settings());
+USING ((SELECT private.can_manage_tracking_settings()));
 
 CREATE POLICY "Tracking managers can update tracking settings"
 ON public.website_tracking_settings
 FOR UPDATE
 TO authenticated
-USING (private.can_manage_tracking_settings())
-WITH CHECK (private.can_manage_tracking_settings());
+USING ((SELECT private.can_manage_tracking_settings()))
+WITH CHECK ((SELECT private.can_manage_tracking_settings()));
 
 CREATE TRIGGER stamp_website_page_draft_actor
 BEFORE INSERT OR UPDATE ON public.website_page_drafts
@@ -407,7 +416,7 @@ FOR INSERT
 TO authenticated
 WITH CHECK (
   bucket_id = 'website-media'
-  AND private.can_manage_website()
+  AND (SELECT private.can_manage_website())
   AND (storage.foldername(name))[1] IN (
     'home', 'pages', 'services', 'team', 'blog', 'gallery', 'reviews'
   )
@@ -419,7 +428,7 @@ FOR SELECT
 TO authenticated
 USING (
   bucket_id = 'website-media'
-  AND private.can_manage_website()
+  AND (SELECT private.can_manage_website())
   AND (storage.foldername(name))[1] IN (
     'home', 'pages', 'services', 'team', 'blog', 'gallery', 'reviews'
   )
@@ -431,14 +440,14 @@ FOR UPDATE
 TO authenticated
 USING (
   bucket_id = 'website-media'
-  AND private.can_manage_website()
+  AND (SELECT private.can_manage_website())
   AND (storage.foldername(name))[1] IN (
     'home', 'pages', 'services', 'team', 'blog', 'gallery', 'reviews'
   )
 )
 WITH CHECK (
   bucket_id = 'website-media'
-  AND private.can_manage_website()
+  AND (SELECT private.can_manage_website())
   AND (storage.foldername(name))[1] IN (
     'home', 'pages', 'services', 'team', 'blog', 'gallery', 'reviews'
   )
@@ -450,7 +459,7 @@ FOR DELETE
 TO authenticated
 USING (
   bucket_id = 'website-media'
-  AND private.can_manage_website()
+  AND (SELECT private.can_manage_website())
   AND (storage.foldername(name))[1] IN (
     'home', 'pages', 'services', 'team', 'blog', 'gallery', 'reviews'
   )
