@@ -118,3 +118,46 @@ Zero external actions were taken. Specifically, no migration, guard, runner, see
 - Deno is unavailable, as stated in the brief; no Deno check was attempted.
 - Binding safety constraints prohibited applying/parsing the migration against a live or local database and prohibited running the staging harness. SQL/runtime behavior therefore has static-contract, TypeScript, and review evidence only until a separately authorized guarded staging run.
 - Supabase documentation/changelog lookup was not performed because the task expressly prohibited network operations; the installed CLI's local help was used instead.
+
+## Follow-up: privileged Storage lifecycle actor
+
+### Status
+
+PASS - the remaining staging-only Storage lifecycle defect is fixed in a separate local commit. The Website Editor denial probes no longer depend on Website Editor, staff, or administrator Storage visibility to prove or restore exact object state.
+
+Implementation commit: `6a79f5563f90d08e9748a1025a6e287b4b644d41` (`Harden staging Storage lifecycle cleanup`)
+
+### TDD evidence
+
+The permanent source contract was extended first. The RED run collected 12 tests: 10 passed and 2 failed for exactly the missing behavior:
+
+- the runner did not require `STAGING_SERVICE_ROLE_KEY`;
+- the fixture had no exact-target privileged client, lifecycle helpers, or privileged post-delete evidence.
+
+After implementation, the same focused serial suite passed 12/12 tests.
+
+### Implementation
+
+- Reused the existing blank `STAGING_SERVICE_ROLE_KEY=` staging example variable; no value was added anywhere.
+- Added the variable name to the guarded runner's required-variable list. The production/endpoint guard is still sourced first, and the runner reports only an empty variable's name, never its value.
+- Creates the service-role Supabase client only inside the dormant fixture's `beforeAll`; there is no module-level service key and no frontend use.
+- Restricts privileged helpers by TypeScript union to exactly four reserved test targets: the Website Editor website-media object, private panel-claim document object, seeded staff daily-report object, and denied Website Editor daily-report object.
+- Uses that client only for exact preflight reset/absence, before-and-after snapshots, unexpected restoration, post-cleanup verification, allowed website-media post-delete verification, and `afterAll` cleanup.
+- All cleanup, restoration, and verification errors throw. Consequently the fixture fails and the runner returns nonzero rather than silently leaving an unexpected object behind.
+- Preserves the original 15-case matrix order and booleans, all supplemental cases, actor/identity checks, immutable production guard, and prior policy fixes.
+
+### Verification
+
+- Focused hardening contracts: 12/12 passed.
+- Stress fixture TypeScript: `tsc --noEmit -p stress-tests/tsconfig.json` passed.
+- Changed runner syntax: `bash -n stress-tests/scripts/run-rls-matrix.sh` passed.
+- Full serial Vitest: 18/18 files and 124/124 tests passed with the serial fork pool.
+- Changed-file credential scan: zero JWT, connection-string, secret-token, or populated service-role credential hits.
+- Diff whitespace check: passed.
+- Staged review before the implementation commit contained exactly the source contract, dormant fixture, and guarded runner.
+
+The first GREEN invocation attempt exposed two local runtime issues before test collection: the default Bun executable was incompatible with the machine CPU, and baseline Bun is incompatible with Vitest workers on Windows. Verification then used the existing portable Node runtime already present in the workspace; no package was installed or downloaded.
+
+### External-action confirmation
+
+Zero staging or external actions were taken. The guard, runner, fixture, seed, cleanup, Storage API, database, Supabase network, migrations, accounts, deployment, and publication were not executed. All checks were local source, type, syntax, test, scan, and diff checks only.
