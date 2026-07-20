@@ -270,15 +270,22 @@ describe("dormant staging matrix hardening contracts", () => {
   });
 
   it("uses exact-path privileged Storage lifecycle evidence and cleanup", () => {
-    expect(fixture).toContain("const PRIVILEGED_STORAGE_TARGETS = [");
+    expect(fixture).toContain("const PRIVILEGED_STORAGE_TARGETS = {");
     for (const target of [
-      '{ bucket: "website-media", path: MEDIA_PATH }',
-      '{ bucket: "panel-claim-docs", path: PRIVATE_MEDIA_PATH }',
-      '{ bucket: "daily-reports", path: DAILY_REPORT_MEDIA_PATH }',
-      '{ bucket: "daily-reports", path: DENIED_DAILY_REPORT_MEDIA_PATH }',
+      'websiteMedia: { bucket: "website-media", path: MEDIA_PATH }',
+      'privatePanelClaim: { bucket: "panel-claim-docs", path: PRIVATE_MEDIA_PATH }',
+      'seededDailyReport: { bucket: "daily-reports", path: DAILY_REPORT_MEDIA_PATH }',
+      'deniedDailyReport: { bucket: "daily-reports", path: DENIED_DAILY_REPORT_MEDIA_PATH }',
     ]) {
       expect(fixture).toContain(target);
     }
+    expect(fixture).toContain(
+      "type PrivilegedStorageTargetKey = keyof typeof PRIVILEGED_STORAGE_TARGETS;",
+    );
+    expect(fixture).not.toMatch(/export\s+(?:const|type)\s+PrivilegedStorageTarget/);
+    expect(fixture).not.toContain(
+      "type PrivilegedStorageTarget = (typeof PRIVILEGED_STORAGE_TARGETS)[number]",
+    );
     expect(fixture).toMatch(
       /beforeAll\(async \(\) => \{[\s\S]*createClient\(URL, requiredEnv\("STAGING_SERVICE_ROLE_KEY"\)/,
     );
@@ -290,7 +297,20 @@ describe("dormant staging matrix hardening contracts", () => {
       "cleanupPrivilegedStorageTarget",
     ]) {
       expect(fixture).toContain(`function ${helper}`);
+      expect(fixture).toMatch(
+        new RegExp(
+          `function ${helper}\\(\\s*targetKey: PrivilegedStorageTargetKey`,
+        ),
+      );
     }
+    expect(fixture).toContain("if (false) {");
+    expect(fixture.match(/@ts-expect-error/g)).toHaveLength(2);
+    expect(fixture).toContain(
+      'privilegedStorageSnapshot("arbitraryStorageTarget")',
+    );
+    expect(fixture).toContain(
+      'privilegedStorageSnapshot({ bucket: "website-media", path: "arbitrary.webp" })',
+    );
     for (const operation of [
       "private_documents.insert",
       "daily-reports.insert",
