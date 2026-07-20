@@ -99,21 +99,21 @@ Administrators additionally see **Analytics & Consent**. This item is omitted fo
 
 ## 6. Structured Page Model
 
-### 6.1 `website_pages`
+### 6.1 Published pages and private page drafts
 
-Add a public-content table for Home, safe system-page copy, and newly created general pages. Each row contains:
+Add `website_pages` as the public source for Home, safe system-page copy, and newly created general pages. Each row contains:
 
 - stable UUID;
 - page kind: `home`, `system_content`, or `content`;
 - unique slug, with Home represented by a fixed reserved record;
-- private `draft_content` JSONB;
 - public `published_content` JSONB;
 - integer revision number for optimistic concurrency;
 - publication status and timestamps;
-- `updated_by` and `published_by` user IDs;
-- created and updated timestamps.
+- `published_by` and audit timestamps.
 
-Only `published_content` may be returned to anonymous users. Draft fields and editor identifiers are never exposed through an anonymous policy or public view.
+Add `website_page_drafts` as a separate private table with one row per managed page. It contains the page ID, private `draft_content` JSONB, expected base revision, `updated_by`, and timestamps.
+
+Anonymous and ordinary authenticated clients receive column-level `SELECT` only for the safe published page fields. They receive no privilege or policy on `website_page_drafts`. Administrators and Website Editors access drafts through explicit RLS policies. Separating the tables prevents a signed-in non-editor from selecting private draft columns through Supabase's shared `authenticated` database role.
 
 ### 6.2 Home-page content schema
 
@@ -153,7 +153,10 @@ The CMS keeps these existing published tables as their source of truth:
 - `team_members`
 - `blog_posts`
 - `gallery_images`
-- `clinic_reviews`
+
+`clinic_reviews` remains the operational source for review submissions and patient linkage, but it is never granted to `website_editor`. Add `website_review_presentations` as the isolated public-content source for testimonials. It contains only the approved display name/text in Malay and optional English, rating, public source label, publication status/order, timestamps, and a non-public source reference where applicable. It contains no `patient_id`, Google review identifier, WhatsApp state, or other clinic workflow field. Seed the currently active public reviews into this table without changing their displayed wording.
+
+Where an existing public resource lacks bilingual fields, add only the required presentation columns: Malay/English title, body, or alt text as applicable. Preserve the exact existing value as the initial Malay value, leave optional English empty, and use the documented Malay fallback. Team members and blog posts continue using their existing bilingual columns. Review quotes are never machine-translated during migration.
 
 A private `website_content_drafts` table stores validated draft payloads for existing resources without changing their public rows. The key is `(resource_type, resource_id)`. Supported resource types are fixed in a database enum or check constraint; clients cannot invent a table or column name.
 
@@ -289,7 +292,7 @@ Automatic advanced matching, automatic event detection, and arbitrary custom pay
 
 The adapter accepts no name, email, phone number, account identifier, medical field, form value, search term, free text, custom user property, or URL query string. Event code must not read appointment or authentication form state.
 
-The centralized route classifier allowlists `/`, `/services`, `/services/:slug`, `/doctors`, `/gallery`, `/blog`, `/blog/:slug`, and `/pages/:slug`; every unrecognized route defaults to tracking denied. Pixel initialization and all events are prohibited on `/auth`, `/staff`, `/clinic`, `/editor`, payment routes, appointment-form routes, password/reset routes, callback routes, and any future route marked protected. Tracking is also denied whenever the current URL has a query string, preventing Meta from receiving query parameters through the page URL. The appointment call-to-action may emit `Schedule` before navigation, but the appointment page and its form emit no PageView or submission event. Live Preview never initializes the Pixel or emits events.
+The centralized route classifier allowlists `/`, `/services`, `/services/:slug`, `/doctors`, `/doctor-on-duty`, `/gallery`, `/health-tips`, `/health-tips/:slug`, `/pages/:slug`, `/privacy`, and `/terms`; every unrecognized route defaults to tracking denied. Pixel initialization and all events are prohibited on `/auth`, `/staff`, `/clinic`, `/editor`, payment routes, appointment-form routes, password/reset routes, callback routes, and any future route marked protected. Tracking is also denied whenever the current URL has a query string, preventing Meta from receiving query parameters through the page URL. The appointment call-to-action may emit `Schedule` before navigation, but the appointment page and its form emit no PageView or submission event. Live Preview never initializes the Pixel or emits events.
 
 ### 12.5 Runtime isolation, failure behavior, and CSP
 
@@ -305,11 +308,11 @@ The migration must inventory existing policies before replacement and verify the
 
 Required outcomes:
 
-- anonymous: read published pages, visible navigation, published/active website entities, and public website media only;
+- anonymous: read safe published page columns, visible navigation, published/active website entities, isolated published review presentations, public-safe tracking columns, and public website media only;
 - Website Editor: read/write website drafts, published website entities, navigation, versions, and approved website-media folders only;
 - Administrator: retain current website-management access plus the new editor workspace;
 - all other authenticated roles: retain only their existing least-privilege access and gain no Website Editor permissions;
-- Website Editor: explicitly denied clinic, patient, appointment administration, finance, payroll, inventory, staff administration, secrets, private storage, and role assignment.
+- Website Editor: explicitly denied `clinic_reviews`, clinic, patient, appointment administration, finance, payroll, inventory, staff administration, secrets, private storage, and role assignment.
 
 Frontend guards are usability controls only. RLS and Storage policies are the authoritative boundary.
 
@@ -358,6 +361,8 @@ The migration must compare seeded values against an approved snapshot. A mismatc
 - Website Editor CRUD succeeds only for approved website tables and folders;
 - Website Editor reads/writes fail for clinic, patient, finance, payroll, inventory, secrets, private documents, and user-role assignment;
 - anonymous draft/version reads fail;
+- ordinary authenticated draft reads fail even while their session uses the shared `authenticated` database role;
+- Website Editor reads of `clinic_reviews` fail while safe `website_review_presentations` management succeeds;
 - stale-revision publish fails without partial writes;
 - publish writes a version and increments revision atomically;
 - migration preflight/postflight policy inventory and content-preservation guards pass.
