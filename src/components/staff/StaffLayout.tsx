@@ -56,6 +56,7 @@ const adminNavItems = [
 ];
 
 const contentNavItems = [
+  { href: '/editor', label: 'Website Editor', icon: Globe },
   { href: '/staff/website/leads', label: 'Leads / Appointments', icon: CalendarCheck },
   { href: '/staff/website/team', label: 'Team', icon: Stethoscope },
   
@@ -170,7 +171,8 @@ function SidebarNav({ isAdmin, isOpsOrAdmin, pathname, onLinkClick, unreadNotice
         </>
       )}
 
-      {/* Content Management - All Staff */}
+      {/* Website Management - Administrators */}
+      {isAdmin && (
       <>
         <div className="my-4 mx-4 border-t border-slate-100" />
         <div className="px-4 mb-2">
@@ -195,6 +197,7 @@ function SidebarNav({ isAdmin, isOpsOrAdmin, pathname, onLinkClick, unreadNotice
           ))}
         </div>
       </>
+      )}
     </nav>
   );
 }

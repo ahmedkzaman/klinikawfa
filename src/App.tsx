@@ -104,6 +104,9 @@ import TeamEditor from "./pages/admin/TeamEditor";
 import VideoCallManagement from "./pages/admin/VideoCallManagement";
 import ReviewsManagement from "./pages/admin/ReviewsManagement";
 import AdminSettings from "./pages/admin/Settings";
+import { EditorProtectedRoute } from "./components/editor/EditorProtectedRoute";
+import { EditorLayout } from "./components/editor/EditorLayout";
+import EditorDashboard from "./pages/editor/Dashboard";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -113,6 +116,17 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+function EditorUnavailableState() {
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm" aria-labelledby="editor-unavailable-title">
+      <h1 id="editor-unavailable-title" className="text-xl font-semibold text-slate-900">Coming in the next CMS plan</h1>
+      <p className="mt-2 text-sm leading-6 text-slate-600">
+        This section is being prepared for the next phase of the website editor.
+      </p>
+    </section>
+  );
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -138,6 +152,33 @@ const App = () => (
               <Route path="/video-call" element={<VideoCall />} />
               <Route path="/video-call/staff" element={<VideoCallStaff />} />
               <Route path="/tv" element={<QueueTV />} />
+
+              <Route
+                path="/editor"
+                element={
+                  <EditorProtectedRoute>
+                    <EditorLayout />
+                  </EditorProtectedRoute>
+                }
+              >
+                <Route index element={<Navigate to="home" replace />} />
+                <Route path="home" element={<EditorDashboard />} />
+                <Route path="pages" element={<EditorUnavailableState />} />
+                <Route path="services" element={<EditorUnavailableState />} />
+                <Route path="team" element={<EditorUnavailableState />} />
+                <Route path="blog" element={<EditorUnavailableState />} />
+                <Route path="gallery" element={<EditorUnavailableState />} />
+                <Route path="reviews" element={<EditorUnavailableState />} />
+                <Route path="navigation" element={<EditorUnavailableState />} />
+                <Route
+                  path="analytics"
+                  element={
+                    <EditorProtectedRoute requireTrackingSettings>
+                      <EditorUnavailableState />
+                    </EditorProtectedRoute>
+                  }
+                />
+              </Route>
 
               {/* Staff Portal Routes */}
               <Route path="/staff" element={<StaffLayout />}>

@@ -27,7 +27,9 @@ export default function Auth() {
   // Role-aware redirect once session and role are both resolved
   useEffect(() => {
     if (!user || authLoading || rolesLoading) return;
-    if (role === 'locum') {
+    if (role === 'website_editor') {
+      navigate('/editor', { replace: true });
+    } else if (role === 'locum') {
       navigate('/clinic/queue', { replace: true });
     } else if (
       role === 'admin' ||
