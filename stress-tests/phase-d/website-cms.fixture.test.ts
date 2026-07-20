@@ -37,6 +37,18 @@ const supplementalCases = [
   ["website editor lists approved website media folder", "website_editor", "website-media.select", true],
   ["website editor updates website media in approved folder", "website_editor", "website-media.update", true],
   ["website editor deletes website media in approved folder", "website_editor", "website-media.delete", true],
+  ["website editor reads own punch record", "website_editor", "attendance_records.select", false],
+  ["website editor inserts own punch record", "website_editor", "attendance_records.insert", false],
+  ["website editor updates own punch record", "website_editor", "attendance_records.update", false],
+  ["website editor deletes own punch record", "website_editor", "attendance_records.delete", false],
+  ["website editor reads own staff daily report", "website_editor", "daily_reports.select", false],
+  ["website editor inserts own staff daily report", "website_editor", "daily_reports.insert", false],
+  ["website editor updates own staff daily report", "website_editor", "daily_reports.update", false],
+  ["website editor deletes own staff daily report", "website_editor", "daily_reports.delete", false],
+  ["website editor reads private daily-report file", "website_editor", "daily-reports.select", false],
+  ["website editor uploads private daily-report file", "website_editor", "daily-reports.insert", false],
+  ["website editor updates private daily-report file", "website_editor", "daily-reports.update", false],
+  ["website editor deletes private daily-report file", "website_editor", "daily-reports.delete", false],
 ] as const;
 
 type Actor =
@@ -72,11 +84,19 @@ const PRIVATE_DRAFT_PAGE_ID = "cafe5005-0000-4000-8000-000000000002";
 const INSERT_DRAFT_PAGE_ID = "cafe5005-0000-4000-8000-000000000003";
 const PRIVATE_REVIEW_ID = "cafe5005-0000-4000-8000-000000000004";
 const STAFF_INSERT_PAGE_ID = "cafe5005-0000-4000-8000-000000000005";
+const ATTENDANCE_ROW_ID = "cafe5005-0000-4000-8000-000000000006";
+const DAILY_REPORT_ROW_ID = "cafe5005-0000-4000-8000-000000000007";
+const ATTENDANCE_INSERT_ID = "cafe5005-0000-4000-8000-000000000008";
+const DAILY_REPORT_INSERT_ID = "cafe5005-0000-4000-8000-000000000009";
 const FIXTURE_PATIENT_ID = "babeaaaa-0000-4000-8000-000000000001";
 const mediaBase = `rls-matrix-${credentials.website_editor.uid}.webp`;
 const MEDIA_PATH = `pages/${mediaBase}`;
 const PRIVATE_MEDIA_PATH = `rls-matrix/${mediaBase}`;
 const MEDIA_BYTES = new Uint8Array([0x52, 0x49, 0x46, 0x46]);
+const DAILY_REPORT_MEDIA_PATH = `${credentials.staff.uid}/rls-matrix-daily-report.webp`;
+const DENIED_DAILY_REPORT_MEDIA_PATH = `${credentials.website_editor.uid}/rls-matrix-daily-report.webp`;
+const DAILY_REPORT_MEDIA_BYTES = new Uint8Array([0x44, 0x41, 0x49, 0x4c, 0x59]);
+const MUTATED_DAILY_REPORT_MEDIA_BYTES = new Uint8Array([0x44, 0x45, 0x4e, 0x49, 0x45, 0x44]);
 
 let trackingSetting: {
   provider: string;
@@ -193,7 +213,116 @@ async function cleanupStoragePath(
   }
 }
 
-async function verifyPrivateReviewFixture(): Promise<void> {
+async function attemptAndVerifyDeniedMutation(
+  snapshot: () => Promise<string>,
+  attempt: () => PromiseLike<unknown>,
+  restore: (before: string) => Promise<void>
+): Promise<boolean> {
+  const before = await snapshot();
+  try {
+    await attempt();
+  } catch {
+    // A thrown client error is an acceptable denial; the privileged post-read
+    // below remains the source of truth for whether anything changed.
+  }
+  const after = await snapshot();
+  if (after === before) return false;
+
+  await restore(before);
+  if ((await snapshot()) !== before) {
+    throw new Error("denied mutation changed state and restoration failed");
+  }
+  return true;
+}
+
+async function rowSnapshot(
+  client: SupabaseClient,
+  table: string,
+  columns: string,
+  key: string,
+  value: string
+): Promise<string> {
+  const { data, error } = await client.from(table).select(columns).eq(key, value);
+  if (error) throw new Error(`privileged ${table} snapshot failed`);
+  return JSON.stringify(data ?? []);
+}
+
+async function restoreAttendanceFixture(): Promise<void> {
+  const deleted = await clients.admin!
+    .from("attendance_records")
+    .delete()
+    .eq("id", ATTENDANCE_ROW_ID);
+  if (deleted.error) throw new Error("attendance fixture reset delete failed");
+
+  const inserted = await clients.admin!.from("attendance_records").insert({
+    id: ATTENDANCE_ROW_ID,
+    user_id: credentials.website_editor.uid,
+    punch_type: "in",
+    punch_time: "2099-12-30T01:00:00.000Z",
+    face_verified: false,
+    logical_work_date: "2099-12-30",
+    shift_key: null,
+    admin_note: "RLS matrix Website Editor attendance denial",
+    recorded_by: credentials.admin.uid,
+  });
+  if (inserted.error) throw new Error("attendance fixture reset insert failed");
+}
+
+async function restoreDailyReportFixture(): Promise<void> {
+  const deleted = await clients.admin!
+    .from("daily_reports")
+    .delete()
+    .eq("id", DAILY_REPORT_ROW_ID);
+  if (deleted.error) throw new Error("daily report fixture reset delete failed");
+
+  const inserted = await clients.admin!.from("daily_reports").insert({
+    id: DAILY_REPORT_ROW_ID,
+    user_id: credentials.website_editor.uid,
+    report_date: "2099-12-30",
+    whatsapp_blast_count: 7,
+  });
+  if (inserted.error) throw new Error("daily report fixture reset insert failed");
+}
+
+async function storageBytesSnapshot(
+  client: SupabaseClient,
+  bucket: string,
+  path: string
+): Promise<string> {
+  if ((await matchingStorageRows(client, bucket, path)).length === 0) {
+    return JSON.stringify({ exists: false });
+  }
+  const { data, error } = await client.storage.from(bucket).download(path);
+  if (error || !data) throw new Error("privileged Storage snapshot download failed");
+  return JSON.stringify({
+    exists: true,
+    bytes: Array.from(new Uint8Array(await data.arrayBuffer())),
+  });
+}
+
+async function restoreDailyReportStorage(before: string): Promise<void> {
+  const parsed = JSON.parse(before) as { exists: boolean; bytes?: number[] };
+  if (!parsed.exists || !parsed.bytes) {
+    throw new Error("daily-report Storage restoration requires the seeded object");
+  }
+  const bucket = clients.staff!.storage.from("daily-reports");
+  const bytes = new Uint8Array(parsed.bytes);
+  const exists =
+    (await matchingStorageRows(clients.staff!, "daily-reports", DAILY_REPORT_MEDIA_PATH))
+      .length === 1;
+  const result = exists
+    ? await bucket.update(DAILY_REPORT_MEDIA_PATH, bytes, {
+        contentType: "image/webp",
+        upsert: true,
+      })
+    : await bucket.upload(DAILY_REPORT_MEDIA_PATH, bytes, {
+        contentType: "image/webp",
+        upsert: false,
+      });
+  if (result.error) throw new Error("daily-report Storage restoration failed");
+}
+
+async function verifyActiveReviewFixture(): Promise<void> {
   const { data, error } = await clients.admin!
     .from("clinic_reviews")
     .select("id,patient_id,patient_name,rating,review_text,status")
@@ -207,9 +336,9 @@ async function verifyPrivateReviewFixture(): Promise<void> {
     data.patient_name !== "RLS Fixture Patient A" ||
     data.rating !== 5 ||
     data.review_text !== "RLS matrix private review" ||
-    data.status !== "pending"
+    data.status !== "active"
   ) {
-    throw new Error("private clinic review fixture is missing or changed");
+    throw new Error("active clinic review fixture is missing or changed");
   }
 }
 
@@ -254,7 +383,33 @@ beforeAll(async () => {
     throw new Error("staff INSERT target already has a draft row");
   }
 
-  await verifyPrivateReviewFixture();
+  await verifyActiveReviewFixture();
+
+  const attendanceFixture = JSON.parse(
+    await rowSnapshot(
+      clients.admin!,
+      "attendance_records",
+      "id,user_id,punch_type,admin_note",
+      "id",
+      ATTENDANCE_ROW_ID
+    )
+  ) as unknown;
+  if (!exactRow(attendanceFixture, "id", ATTENDANCE_ROW_ID)) {
+    throw new Error("Website Editor attendance denial fixture is missing");
+  }
+
+  const dailyReportFixture = JSON.parse(
+    await rowSnapshot(
+      clients.admin!,
+      "daily_reports",
+      "id,user_id,report_date,whatsapp_blast_count",
+      "id",
+      DAILY_REPORT_ROW_ID
+    )
+  ) as unknown;
+  if (!exactRow(dailyReportFixture, "id", DAILY_REPORT_ROW_ID)) {
+    throw new Error("Website Editor daily report denial fixture is missing");
+  }
 
   const trackingResult = await clients.admin!
     .from("website_tracking_settings")
@@ -268,6 +423,28 @@ beforeAll(async () => {
 
   await assertStoragePathAbsent(clients.website_editor!, "website-media", MEDIA_PATH);
   await assertStoragePathAbsent(clients.admin!, "panel-claim-docs", PRIVATE_MEDIA_PATH);
+  await assertStoragePathAbsent(clients.staff!, "daily-reports", DAILY_REPORT_MEDIA_PATH);
+  await assertStoragePathAbsent(
+    clients.admin!,
+    "daily-reports",
+    DENIED_DAILY_REPORT_MEDIA_PATH
+  );
+  if (!(await upload(clients.staff!, "daily-reports", DAILY_REPORT_MEDIA_PATH))) {
+    throw new Error("daily-report Storage fixture upload failed");
+  }
+  const expectedStorageSnapshot = JSON.stringify({
+    exists: true,
+    bytes: Array.from(DAILY_REPORT_MEDIA_BYTES),
+  });
+  if (
+    (await storageBytesSnapshot(
+      clients.staff!,
+      "daily-reports",
+      DAILY_REPORT_MEDIA_PATH
+    )) !== expectedStorageSnapshot
+  ) {
+    throw new Error("daily-report Storage fixture is missing or changed");
+  }
 });
 
 afterAll(async () => {
@@ -284,6 +461,34 @@ afterAll(async () => {
       await cleanupStoragePath(clients.admin, "panel-claim-docs", PRIVATE_MEDIA_PATH);
     } catch {
       failures.push("panel-claim-docs");
+    }
+  }
+  if (clients.staff) {
+    try {
+      await cleanupStoragePath(clients.staff, "daily-reports", DAILY_REPORT_MEDIA_PATH);
+    } catch {
+      failures.push("daily-reports seeded object");
+    }
+  }
+  if (clients.admin && clients.website_editor) {
+    try {
+      if (
+        (
+          await matchingStorageRows(
+            clients.admin,
+            "daily-reports",
+            DENIED_DAILY_REPORT_MEDIA_PATH
+          )
+        ).length !== 0
+      ) {
+        await cleanupStoragePath(
+          clients.website_editor,
+          "daily-reports",
+          DENIED_DAILY_REPORT_MEDIA_PATH
+        );
+      }
+    } catch {
+      failures.push("daily-reports unexpected Website Editor object");
     }
   }
   if (failures.length !== 0) {
@@ -325,20 +530,31 @@ const operations: Record<
   },
   "website_page_drafts.upsert": async (client, actor) => {
     if (actor === "staff") {
-      const deniedInsert = await client
-        .from("website_page_drafts")
-        .upsert(
-          {
-            page_id: STAFF_INSERT_PAGE_ID,
-            draft_content: { matrix: "staff-insert-denial" },
-            base_revision: 0,
-          },
-          { onConflict: "page_id" }
-        )
-        .select("page_id,draft_content,base_revision");
-      return (
-        deniedInsert.error === null &&
-        exactDraft(deniedInsert.data, STAFF_INSERT_PAGE_ID, "staff-insert-denial")
+      return attemptAndVerifyDeniedMutation(
+        () =>
+          rowSnapshot(
+            clients.website_editor!,
+            "website_page_drafts",
+            "page_id,draft_content,base_revision",
+            "page_id",
+            STAFF_INSERT_PAGE_ID
+          ),
+        () =>
+          client.from("website_page_drafts").upsert(
+            {
+              page_id: STAFF_INSERT_PAGE_ID,
+              draft_content: { matrix: "staff-insert-denial" },
+              base_revision: 0,
+            },
+            { onConflict: "page_id" }
+          ),
+        async () => {
+          const { error } = await clients.website_editor!
+            .from("website_page_drafts")
+            .delete()
+            .eq("page_id", STAFF_INSERT_PAGE_ID);
+          if (error) throw new Error("unexpected staff draft cleanup failed");
+        }
       );
     }
     if (actor !== "website_editor") return false;
@@ -382,19 +598,65 @@ const operations: Record<
     return error === null && exactRow(data, "id", PRIVATE_REVIEW_ID);
   },
   "patients.update": async (client) => {
-    const { data, error } = await client
-      .from("patients")
-      .update({ name: "RLS Fixture Patient A" })
-      .eq("id", FIXTURE_PATIENT_ID)
-      .select("id");
-    return error === null && exactRow(data, "id", FIXTURE_PATIENT_ID);
+    return attemptAndVerifyDeniedMutation(
+      () =>
+        rowSnapshot(
+          clients.admin!,
+          "patients",
+          "id,name",
+          "id",
+          FIXTURE_PATIENT_ID
+        ),
+      () =>
+        client
+          .from("patients")
+          .update({ name: "RLS Fixture Patient A unauthorized mutation" })
+          .eq("id", FIXTURE_PATIENT_ID),
+      async (before) => {
+        const rows = JSON.parse(before) as Array<{ name: string }>;
+        const { error } = await clients.admin!
+          .from("patients")
+          .update({ name: rows[0]!.name })
+          .eq("id", FIXTURE_PATIENT_ID);
+        if (error) throw new Error("unexpected patient mutation restoration failed");
+      }
+    );
   },
   "private_documents.insert": (client) =>
     upload(client, "panel-claim-docs", PRIVATE_MEDIA_PATH),
   "website-media.insert": (client) => upload(client, "website-media", MEDIA_PATH),
   "website-media.list": async (client) =>
     (await matchingStorageRows(client, "website-media", MEDIA_PATH)).length === 1,
-  "website_tracking_settings.update": async (client) => {
+  "website_tracking_settings.update": async (client, actor) => {
+    if (actor === "staff") {
+      return attemptAndVerifyDeniedMutation(
+        () =>
+          rowSnapshot(
+            clients.admin!,
+            "website_tracking_settings",
+            "provider,enabled,pixel_id,consent_version",
+            "provider",
+            trackingSetting.provider
+          ),
+        () =>
+          client
+            .from("website_tracking_settings")
+            .update({ consent_version: trackingSetting.consent_version + 1000 })
+            .eq("provider", trackingSetting.provider),
+        async (before) => {
+          const rows = JSON.parse(before) as Array<typeof trackingSetting>;
+          const { error } = await clients.admin!
+            .from("website_tracking_settings")
+            .update({
+              enabled: rows[0]!.enabled,
+              pixel_id: rows[0]!.pixel_id,
+              consent_version: rows[0]!.consent_version,
+            })
+            .eq("provider", rows[0]!.provider);
+          if (error) throw new Error("unexpected tracking mutation restoration failed");
+        }
+      );
+    }
     const { data, error } = await client
       .from("website_tracking_settings")
       .update({
@@ -406,6 +668,194 @@ const operations: Record<
       .select("provider");
     return error === null && exactRow(data, "provider", trackingSetting.provider);
   },
+  "attendance_records.select": async (client) => {
+    const { data, error } = await client
+      .from("attendance_records")
+      .select("id")
+      .eq("id", ATTENDANCE_ROW_ID);
+    return error === null && exactRow(data, "id", ATTENDANCE_ROW_ID);
+  },
+  "attendance_records.insert": async (client) =>
+    attemptAndVerifyDeniedMutation(
+      () =>
+        rowSnapshot(
+          clients.admin!,
+          "attendance_records",
+          "id,user_id,punch_type,admin_note",
+          "id",
+          ATTENDANCE_INSERT_ID
+        ),
+      () =>
+        client.from("attendance_records").insert({
+          id: ATTENDANCE_INSERT_ID,
+          user_id: credentials.website_editor.uid,
+          punch_type: "in",
+          punch_time: "2099-12-31T01:00:00.000Z",
+          face_verified: false,
+          logical_work_date: "2099-12-31",
+          admin_note: "unauthorized Website Editor attendance insert",
+        }),
+      async () => {
+        const { error } = await clients.admin!
+          .from("attendance_records")
+          .delete()
+          .eq("id", ATTENDANCE_INSERT_ID);
+        if (error) throw new Error("unexpected attendance insert cleanup failed");
+      }
+    ),
+  "attendance_records.update": async (client) =>
+    attemptAndVerifyDeniedMutation(
+      () =>
+        rowSnapshot(
+          clients.admin!,
+          "attendance_records",
+          "id,user_id,punch_type,admin_note",
+          "id",
+          ATTENDANCE_ROW_ID
+        ),
+      () =>
+        client
+          .from("attendance_records")
+          .update({ admin_note: "unauthorized Website Editor attendance update" })
+          .eq("id", ATTENDANCE_ROW_ID),
+      async () => restoreAttendanceFixture()
+    ),
+  "attendance_records.delete": async (client) =>
+    attemptAndVerifyDeniedMutation(
+      () =>
+        rowSnapshot(
+          clients.admin!,
+          "attendance_records",
+          "id,user_id,punch_type,admin_note",
+          "id",
+          ATTENDANCE_ROW_ID
+        ),
+      () => client.from("attendance_records").delete().eq("id", ATTENDANCE_ROW_ID),
+      async () => restoreAttendanceFixture()
+    ),
+  "daily_reports.select": async (client) => {
+    const { data, error } = await client
+      .from("daily_reports")
+      .select("id")
+      .eq("id", DAILY_REPORT_ROW_ID);
+    return error === null && exactRow(data, "id", DAILY_REPORT_ROW_ID);
+  },
+  "daily_reports.insert": async (client) =>
+    attemptAndVerifyDeniedMutation(
+      () =>
+        rowSnapshot(
+          clients.admin!,
+          "daily_reports",
+          "id,user_id,report_date,whatsapp_blast_count",
+          "id",
+          DAILY_REPORT_INSERT_ID
+        ),
+      () =>
+        client.from("daily_reports").insert({
+          id: DAILY_REPORT_INSERT_ID,
+          user_id: credentials.website_editor.uid,
+          report_date: "2099-12-31",
+          whatsapp_blast_count: 999,
+        }),
+      async () => {
+        const { error } = await clients.admin!
+          .from("daily_reports")
+          .delete()
+          .eq("id", DAILY_REPORT_INSERT_ID);
+        if (error) throw new Error("unexpected daily report insert cleanup failed");
+      }
+    ),
+  "daily_reports.update": async (client) =>
+    attemptAndVerifyDeniedMutation(
+      () =>
+        rowSnapshot(
+          clients.admin!,
+          "daily_reports",
+          "id,user_id,report_date,whatsapp_blast_count",
+          "id",
+          DAILY_REPORT_ROW_ID
+        ),
+      () =>
+        client
+          .from("daily_reports")
+          .update({ whatsapp_blast_count: 999 })
+          .eq("id", DAILY_REPORT_ROW_ID),
+      async () => restoreDailyReportFixture()
+    ),
+  "daily_reports.delete": async (client) =>
+    attemptAndVerifyDeniedMutation(
+      () =>
+        rowSnapshot(
+          clients.admin!,
+          "daily_reports",
+          "id,user_id,report_date,whatsapp_blast_count",
+          "id",
+          DAILY_REPORT_ROW_ID
+        ),
+      () => client.from("daily_reports").delete().eq("id", DAILY_REPORT_ROW_ID),
+      async () => restoreDailyReportFixture()
+    ),
+  "daily-reports.select": async (client) => {
+    try {
+      return (
+        await matchingStorageRows(client, "daily-reports", DAILY_REPORT_MEDIA_PATH)
+      ).length === 1;
+    } catch {
+      return false;
+    }
+  },
+  "daily-reports.insert": async (client) =>
+    attemptAndVerifyDeniedMutation(
+      async () =>
+        JSON.stringify(
+          await matchingStorageRows(
+            clients.admin!,
+            "daily-reports",
+            DENIED_DAILY_REPORT_MEDIA_PATH
+          )
+        ),
+      () =>
+        client.storage
+          .from("daily-reports")
+          .upload(DENIED_DAILY_REPORT_MEDIA_PATH, DAILY_REPORT_MEDIA_BYTES, {
+            contentType: "image/webp",
+            upsert: false,
+          }),
+      async () =>
+        cleanupStoragePath(
+          clients.website_editor!,
+          "daily-reports",
+          DENIED_DAILY_REPORT_MEDIA_PATH
+        )
+    ),
+  "daily-reports.update": async (client) =>
+    attemptAndVerifyDeniedMutation(
+      () =>
+        storageBytesSnapshot(
+          clients.staff!,
+          "daily-reports",
+          DAILY_REPORT_MEDIA_PATH
+        ),
+      () =>
+        client.storage
+          .from("daily-reports")
+          .update(DAILY_REPORT_MEDIA_PATH, MUTATED_DAILY_REPORT_MEDIA_BYTES, {
+            contentType: "image/webp",
+            upsert: true,
+          }),
+      async (before) => restoreDailyReportStorage(before)
+    ),
+  "daily-reports.delete": async (client) =>
+    attemptAndVerifyDeniedMutation(
+      () =>
+        storageBytesSnapshot(
+          clients.staff!,
+          "daily-reports",
+          DAILY_REPORT_MEDIA_PATH
+        ),
+      () => client.storage.from("daily-reports").remove([DAILY_REPORT_MEDIA_PATH]),
+      async (before) => restoreDailyReportStorage(before)
+    ),
   "website-media.select": async (client) =>
     (await matchingStorageRows(client, "website-media", MEDIA_PATH)).length === 1,
   "website-media.update": async (client) => {

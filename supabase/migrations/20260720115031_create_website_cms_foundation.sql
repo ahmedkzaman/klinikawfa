@@ -70,7 +70,7 @@ CREATE TABLE public.website_pages (
   CHECK (
     kind <> 'content' OR slug NOT IN (
       'auth', 'staff', 'clinic', 'appointment', 'services', 'doctors',
-      'doctor-on-duty', 'gallery', 'health-tips', 'editor', 'privacy',
+      'doctor-on-duty', 'gallery', 'health-tips', 'blog', 'editor', 'privacy',
       'terms', 'video-call', 'tv', 'reset-password', 'locum-register',
       'api', 'functions'
     )

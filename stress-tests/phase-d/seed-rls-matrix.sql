@@ -76,8 +76,10 @@ BEGIN;
 --   published page       : cafe5005-0000-4000-8000-000000000001
 --   page with draft      : cafe5005-0000-4000-8000-000000000002
 --   draft INSERT target  : cafe5005-0000-4000-8000-000000000003
---   private clinic review: cafe5005-0000-4000-8000-000000000004
+--   active clinic review : cafe5005-0000-4000-8000-000000000004
 --   staff INSERT target  : cafe5005-0000-4000-8000-000000000005
+--   Website Editor attendance row: cafe5005-0000-4000-8000-000000000006
+--   Website Editor daily report  : cafe5005-0000-4000-8000-000000000007
 
 -- -----------------------------------------------------------------------------
 -- User role assignments (one row per dedicated account).
@@ -216,7 +218,33 @@ VALUES (
   'RLS Fixture Patient A',
   5,
   'RLS matrix private review',
-  'pending'
+  'active'
+);
+
+INSERT INTO public.attendance_records (
+  id, user_id, punch_type, punch_time, face_verified,
+  logical_work_date, shift_key, admin_note, recorded_by
+)
+VALUES (
+  'cafe5005-0000-4000-8000-000000000006',
+  :'RLS_WEBSITE_EDITOR_UID'::uuid,
+  'in',
+  '2099-12-30 01:00:00+00'::timestamptz,
+  false,
+  '2099-12-30'::date,
+  NULL,
+  'RLS matrix Website Editor attendance denial',
+  :'RLS_ADMIN_UID'::uuid
+);
+
+INSERT INTO public.daily_reports (
+  id, user_id, report_date, whatsapp_blast_count
+)
+VALUES (
+  'cafe5005-0000-4000-8000-000000000007',
+  :'RLS_WEBSITE_EDITOR_UID'::uuid,
+  '2099-12-30'::date,
+  7
 );
 
 -- -----------------------------------------------------------------------------

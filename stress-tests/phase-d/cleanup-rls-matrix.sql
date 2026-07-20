@@ -39,6 +39,16 @@ $guard$;
 
 BEGIN;
 
+DELETE FROM public.daily_reports WHERE id IN (
+  'cafe5005-0000-4000-8000-000000000007',
+  'cafe5005-0000-4000-8000-000000000009'
+);
+
+DELETE FROM public.attendance_records WHERE id IN (
+  'cafe5005-0000-4000-8000-000000000006',
+  'cafe5005-0000-4000-8000-000000000008'
+);
+
 DELETE FROM public.website_page_drafts WHERE page_id IN (
   'cafe5005-0000-4000-8000-000000000002',
   'cafe5005-0000-4000-8000-000000000003',
