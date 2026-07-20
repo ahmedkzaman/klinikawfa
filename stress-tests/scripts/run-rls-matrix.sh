@@ -34,6 +34,7 @@ REQUIRED_VARS=(
   RLS_DOCTOR_ADMIN_UID RLS_DOCTOR_ADMIN_EMAIL RLS_DOCTOR_ADMIN_PASSWORD
   RLS_ADMIN_UID RLS_ADMIN_EMAIL RLS_ADMIN_PASSWORD
   RLS_SPECIAL_ADMIN_UID RLS_SPECIAL_ADMIN_EMAIL RLS_SPECIAL_ADMIN_PASSWORD
+  RLS_WEBSITE_EDITOR_UID RLS_WEBSITE_EDITOR_EMAIL RLS_WEBSITE_EDITOR_PASSWORD
   RLS_GUEST_UID RLS_GUEST_EMAIL RLS_GUEST_PASSWORD
 )
 for v in "${REQUIRED_VARS[@]}"; do
@@ -72,6 +73,7 @@ verify_uid_email RLS_OPS_STAFF_UID      RLS_OPS_STAFF_EMAIL      ops_staff
 verify_uid_email RLS_DOCTOR_ADMIN_UID   RLS_DOCTOR_ADMIN_EMAIL   doctor_admin
 verify_uid_email RLS_ADMIN_UID          RLS_ADMIN_EMAIL          admin
 verify_uid_email RLS_SPECIAL_ADMIN_UID  RLS_SPECIAL_ADMIN_EMAIL  special_admin
+verify_uid_email RLS_WEBSITE_EDITOR_UID RLS_WEBSITE_EDITOR_EMAIL website_editor
 verify_uid_email RLS_GUEST_UID          RLS_GUEST_EMAIL          guest
 
 # --- 5. Seed fixtures -----------------------------------------------------
@@ -107,10 +109,11 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# --- 7. Run both test files ------------------------------------------------
+# --- 7. Run all test files -------------------------------------------------
 TEST_STATUS=0
 ( cd "$ROOT_DIR" && bun test \
     phase-d/rls-matrix.fixture.test.ts \
+    phase-d/website-cms.fixture.test.ts \
     phase-d/rls.test.ts ) || TEST_STATUS=$?
 
 # --- 8. Final exit --------------------------------------------------------
