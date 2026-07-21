@@ -339,11 +339,139 @@ git commit -m "chore: add guarded database cutover runner"
 
 ---
 
+### Task 3A: Preserve Populated Source Fields and Complete the Rehearsal
+
+**Files:**
+- Modify: `supabase/migrations/20260721174422_preserve_source_cutover_fields.sql`
+- Create: `src/test/cutover-compatibility-migration.test.ts`
+- Modify: `scripts/cutover/database-reconcile.ps1`
+
+**Interfaces:**
+- Consumes: the fail-closed Task 3 report identifying two incompatible tables, eight populated source-only columns, and four lossless appointment renames.
+- Produces: additive target compatibility columns and constraints plus a loader transform that maps the renamed appointment fields; a new protected rehearsal report with `pass=true`.
+
+- [ ] **Step 1: Write the failing compatibility contract test**
+
+```ts
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+
+const sql = readFileSync(
+  "supabase/migrations/20260721174422_preserve_source_cutover_fields.sql",
+  "utf8",
+).toLowerCase();
+
+describe("source cutover compatibility migration", () => {
+  it.each([
+    "patient_ic text",
+    "service_slug text",
+    "payment_reference text",
+    "updated_at timestamp with time zone default now()",
+  ])("preserves appointments field %s", (definition) => {
+    expect(sql).toContain(definition);
+  });
+
+  it.each([
+    "cancelled_at timestamp with time zone",
+    "cancelled_by uuid",
+    "cancellation_reason text",
+    "queue_sequence integer",
+  ])("preserves queue field %s", (definition) => {
+    expect(sql).toContain(definition);
+  });
+
+  it("restores both source foreign keys", () => {
+    expect(sql).toContain("foreign key (service_slug) references public.clinic_services(slug)");
+    expect(sql).toContain("foreign key (cancelled_by) references auth.users(id)");
+  });
+
+  it("does not replace the authoritative target appointment columns or default", () => {
+    expect(sql).not.toMatch(/drop\s+column/);
+    expect(sql).not.toContain("alter column status set default");
+    expect(sql).not.toContain("patient_name text");
+    expect(sql).not.toContain("patient_phone text");
+  });
+});
+```
+
+- [ ] **Step 2: Run the focused test and observe failure against the empty CLI scaffold**
+
+Run: `npm test -- src/test/cutover-compatibility-migration.test.ts`
+
+Expected: FAIL because none of the columns or constraints exist in the empty migration.
+
+- [ ] **Step 3: Implement the additive compatibility migration**
+
+```sql
+alter table public.appointments
+  add column if not exists patient_ic text,
+  add column if not exists service_slug text,
+  add column if not exists payment_reference text,
+  add column if not exists updated_at timestamp with time zone default now();
+
+alter table public.queue_entries
+  add column if not exists cancelled_at timestamp with time zone,
+  add column if not exists cancelled_by uuid,
+  add column if not exists cancellation_reason text,
+  add column if not exists queue_sequence integer;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.appointments'::regclass
+      and conname = 'appointments_service_slug_fkey'
+  ) then
+    alter table public.appointments
+      add constraint appointments_service_slug_fkey
+      foreign key (service_slug) references public.clinic_services(slug);
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.queue_entries'::regclass
+      and conname = 'queue_entries_cancelled_by_fkey'
+  ) then
+    alter table public.queue_entries
+      add constraint queue_entries_cancelled_by_fkey
+      foreign key (cancelled_by) references auth.users(id);
+  end if;
+end
+$$;
+```
+
+- [ ] **Step 4: Add the explicit lossless appointment rename map to the loader**
+
+The generated `INSERT ... SELECT` for `public.appointments` must map source `patient_name` to target `name`, `patient_phone` to `phone`, `appointment_date` to `preferred_date`, and `appointment_time` to `preferred_time`. It must copy the eight newly represented fields by identical name. All other tables continue through the intersection-based mapping. The target `status` default remains `'pending'`, but every imported source row copies its explicit source status value.
+
+- [ ] **Step 5: Apply the migration only to target scratch and rerun the full rehearsal**
+
+Run: `npm test -- src/test/cutover-compatibility-migration.test.ts src/test/staff-messages-migration.test.ts`
+
+Expected: PASS.
+
+Run: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/cutover/database-reconcile.ps1 -Phase Rehearse`
+
+Expected: protected report `pass=true`; public row-count mismatches `0`; Auth users `11`; identities `11`; sessions `0`; refresh tokens `0`; unvalidated constraints `0`; sequence failures `0`; target write connections `0`.
+
+- [ ] **Step 6: Run the pre-write verification gate and commit**
+
+Run: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/cutover/database-reconcile.ps1 -Phase Verify`
+
+Expected: exit 0 while performing read-only checks only.
+
+```powershell
+git add supabase/migrations/20260721174422_preserve_source_cutover_fields.sql src/test/cutover-compatibility-migration.test.ts scripts/cutover/database-reconcile.ps1
+git commit -m "feat: preserve source cutover fields"
+```
+
+---
+
 ### Task 4: Import Application Data and Portable Auth Records
 
 **Files:**
 - Modify outside Git: protected cutover manifests and SQL generated by `scripts/cutover/database-reconcile.ps1`
-- Apply: the six approved CMS migrations and `supabase/migrations/20260721162256_restore_staff_messages.sql`
+- Apply: the six approved CMS migrations, `supabase/migrations/20260721162256_restore_staff_messages.sql`, and `supabase/migrations/20260721174422_preserve_source_cutover_fields.sql`
 
 **Interfaces:**
 - Consumes: passing rehearsal report and verified pre-cutover target backup.
@@ -355,21 +483,7 @@ Run: `powershell -File scripts/cutover/database-reconcile.ps1 -Phase Verify`
 
 Expected: target ref correct; target backup digest valid; source archive digest valid; rehearsal `pass=true`; target is not serving the public frontend; no private artifact is tracked by Git.
 
-- [ ] **Step 2: Import public data in a single guarded transaction**
-
-The import truncates only source-owned application tables represented in the approved archive, never managed schemas or `supabase_migrations`. It disables user triggers only within the controlled import transaction where necessary, restores table data in dependency order, resets sequences from `max(id)`, reenables triggers, and validates foreign keys before commit. `public.staff_messages` data is held until its hardened schema exists.
-
-Run: `powershell -File scripts/cutover/database-reconcile.ps1 -Phase Import`
-
-Expected: transaction commits once; no managed schema definition is replaced; no constraint failure; row-count report is written outside Git.
-
-- [ ] **Step 3: Import only portable Auth users and identities**
-
-The generated Auth SQL inserts the 11 source `auth.users` rows and 11 `auth.identities` rows with source UUIDs, encrypted password hashes, confirmation state, `raw_app_meta_data`, and provider linkage. It excludes `auth.sessions`, `auth.refresh_tokens`, one-time tokens, audit logs, MFA challenges, and instance settings.
-
-Expected queries: `select count(*) from auth.users` returns `11`; `select count(*) from auth.identities` returns `11`; no source session or refresh-token row was inserted. Existing target count was zero, so UUID conflicts must be zero.
-
-- [ ] **Step 4: Apply only the seven reconciled migrations through a temporary whitelist workdir**
+- [ ] **Step 2: Apply only the eight reconciled migrations through a temporary whitelist workdir**
 
 Copy exactly these files to a protected temporary Supabase workdir and run a dry run followed by migration up against the target database URL:
 
@@ -379,11 +493,26 @@ Copy exactly these files to a protected temporary Supabase workdir and run a dry
 20260720225347_harden_website_cms_integration.sql
 20260721035032_add_website_page_publishing.sql
 20260721100403_switch_tracking_to_google.sql
-20260721170000_create_general_website_page_rpc.sql
 20260721162256_restore_staff_messages.sql
+20260721170000_create_general_website_page_rpc.sql
+20260721174422_preserve_source_cutover_fields.sql
 ```
 
-Expected: dry run lists only those seven; apply succeeds; each is recorded once; the three target hardening migrations already represented as `20260718093731`, `20260718102253`, and `20260718110721` are not replayed.
+Expected: dry run lists only those eight; apply succeeds; each is recorded once; the three target hardening migrations already represented as `20260718093731`, `20260718102253`, and `20260718110721` are not replayed.
+
+- [ ] **Step 3: Import public data in a single guarded transaction**
+
+The import truncates only source-owned application tables represented in the approved archive, never managed schemas or `supabase_migrations`. It disables user triggers only within the controlled import transaction where necessary, restores table data in dependency order, resets sequences from `max(id)`, reenables triggers, and validates foreign keys before commit. `public.staff_messages` data is held until its hardened schema exists.
+
+Run: `powershell -File scripts/cutover/database-reconcile.ps1 -Phase Import`
+
+Expected: transaction commits once; no managed schema definition is replaced; no constraint failure; row-count report is written outside Git.
+
+- [ ] **Step 4: Import only portable Auth users and identities**
+
+The generated Auth SQL inserts the 11 source `auth.users` rows and 11 `auth.identities` rows with source UUIDs, encrypted password hashes, confirmation state, `raw_app_meta_data`, and provider linkage. It excludes `auth.sessions`, `auth.refresh_tokens`, one-time tokens, audit logs, MFA challenges, and instance settings.
+
+Expected queries: `select count(*) from auth.users` returns `11`; `select count(*) from auth.identities` returns `11`; no source session or refresh-token row was inserted. Existing target count was zero, so UUID conflicts must be zero.
 
 - [ ] **Step 5: Restore `staff_messages` data and run integrity checks**
 
@@ -614,4 +743,3 @@ Verify desktop and mobile homepage, direct routes, all service routes, gallery/m
 - [ ] **Step 8: Close or roll back**
 
 Success requires all live checks, Storage counts/privacy, Auth/RLS boundaries, and function probes to pass. On failure, immediately restore the three old GitHub frontend values and redeploy the previous live commit; restore the target pre-cutover backup only if target data integrity was affected. Keep the Lovable Cloud source untouched throughout the verification window.
-
