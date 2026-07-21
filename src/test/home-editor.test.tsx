@@ -90,6 +90,16 @@ async function loadEditor() {
   await screen.findByRole("heading", { name: "Home page" });
 }
 
+function withinPreviewFrame() {
+  const frame = screen.getByTestId("live-preview-frame") as HTMLIFrameElement;
+  fireEvent.load(frame);
+
+  const previewDocument = frame.contentDocument;
+  if (!previewDocument) throw new Error("Expected the live-preview iframe document");
+
+  return within(previewDocument.body);
+}
+
 beforeEach(() => {
   localStorage.clear();
   pageApi.fetchEditorPage.mockReset().mockResolvedValue(editorResult());
@@ -113,10 +123,15 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  document.querySelectorAll("[data-live-preview-test-style]").forEach((node) =>
+    node.remove(),
+  );
+  document.documentElement.className = "";
+  document.documentElement.removeAttribute("data-theme");
 });
 
 describe("LivePreview", () => {
-  it("switches between exact desktop and mobile frames with accessible controls", () => {
+  it("portals into a scriptless sandboxed browsing context with exact viewport controls", async () => {
     render(
       <LivePreview title="Live Preview">
         <p>Preview content</p>
@@ -124,11 +139,26 @@ describe("LivePreview", () => {
     );
 
     const frame = screen.getByTestId("live-preview-frame");
+    expect(frame).toBeInstanceOf(HTMLIFrameElement);
+    expect(frame).toHaveAttribute("sandbox", "allow-same-origin");
+    expect(frame.getAttribute("sandbox")).not.toContain("allow-scripts");
+    expect(frame).toHaveAttribute("srcdoc");
+    expect(frame).toHaveAttribute("tabindex", "-1");
     expect(frame).toHaveStyle({ width: "1280px" });
     expect(screen.getByRole("button", { name: "Desktop 1280 px" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
+
+    fireEvent.load(frame);
+    const previewDocument = (frame as HTMLIFrameElement).contentDocument!;
+    await waitFor(() =>
+      expect(previewDocument.getElementById("live-preview-root")).toHaveTextContent(
+        "Preview content",
+      ),
+    );
+    const previewRoot = previewDocument.getElementById("live-preview-root")!;
+    expect(previewRoot).toHaveAttribute("inert");
 
     fireEvent.click(screen.getByRole("button", { name: "Mobile 390 px" }));
 
@@ -137,6 +167,59 @@ describe("LivePreview", () => {
       "aria-pressed",
       "true",
     );
+  });
+
+  it("mirrors stylesheet nodes and document theme attributes, then cleans up observers", async () => {
+    const sourceStyle = document.createElement("style");
+    sourceStyle.setAttribute("data-live-preview-test-style", "true");
+    sourceStyle.textContent = ".preview-probe { color: rgb(1, 2, 3); }";
+    document.head.append(sourceStyle);
+    document.documentElement.className = "dark test-theme";
+    document.documentElement.setAttribute("data-theme", "clinic");
+
+    const { unmount } = render(
+      <LivePreview title="Live Preview">
+        <p className="preview-probe">Preview content</p>
+      </LivePreview>,
+    );
+    const frame = screen.getByTestId("live-preview-frame") as HTMLIFrameElement;
+    fireEvent.load(frame);
+    const previewDocument = frame.contentDocument!;
+
+    await waitFor(() => {
+      expect(
+        previewDocument.head.querySelector(
+          '[data-live-preview-style="true"]',
+        )?.textContent,
+      ).toContain("rgb(1, 2, 3)");
+      expect(previewDocument.documentElement).toHaveClass("dark", "test-theme");
+      expect(previewDocument.documentElement).toHaveAttribute(
+        "data-theme",
+        "clinic",
+      );
+    });
+
+    sourceStyle.textContent = ".preview-probe { color: rgb(4, 5, 6); }";
+    document.documentElement.setAttribute("data-theme", "updated");
+    await waitFor(() => {
+      expect(
+        previewDocument.head.querySelector(
+          '[data-live-preview-style="true"]',
+        )?.textContent,
+      ).toContain("rgb(4, 5, 6)");
+      expect(previewDocument.documentElement).toHaveAttribute(
+        "data-theme",
+        "updated",
+      );
+    });
+
+    unmount();
+    expect(
+      previewDocument.head.querySelector('[data-live-preview-style="true"]'),
+    ).not.toBeInTheDocument();
+    sourceStyle.remove();
+    document.documentElement.className = "";
+    document.documentElement.removeAttribute("data-theme");
   });
 
   it("blocks preview navigation, submissions, iframe focus, and iframe capabilities", async () => {
@@ -155,15 +238,25 @@ describe("LivePreview", () => {
       </LivePreview>,
     );
 
-    expect(fireEvent.click(screen.getByRole("link", { name: "Services" }))).toBe(false);
+    const frame = screen.getByTestId("live-preview-frame") as HTMLIFrameElement;
+    fireEvent.load(frame);
+    const previewDocument = frame.contentDocument!;
+    await waitFor(() =>
+      expect(
+        within(previewDocument.body).getByRole("link", { name: "Services" }),
+      ).toBeInTheDocument(),
+    );
+    const preview = within(previewDocument.body);
+
+    expect(fireEvent.click(preview.getByRole("link", { name: "Services" }))).toBe(false);
     expect(
-      fireEvent.click(screen.getByRole("button", { name: "Analytics action" })),
+      fireEvent.click(preview.getByRole("button", { name: "Analytics action" })),
     ).toBe(false);
     expect(analyticsAction).not.toHaveBeenCalled();
-    fireEvent.submit(screen.getByRole("button", { name: "Send" }).closest("form")!);
+    fireEvent.submit(preview.getByRole("button", { name: "Send" }).closest("form")!);
     expect(submitted).not.toHaveBeenCalled();
 
-    const iframe = screen.getByTitle("Map");
+    const iframe = preview.getByTitle("Map");
     await waitFor(() => expect(iframe).toHaveAttribute("sandbox", ""));
     expect(iframe).toHaveAttribute("tabindex", "-1");
   });
@@ -179,7 +272,11 @@ describe("HomeEditor", { timeout: 30_000 }, () => {
     fireEvent.change(input, { target: { value: "Rawatan dekat dengan anda" } });
 
     const preview = screen.getByRole("region", { name: "Pratonton Langsung" });
-    expect(within(preview).getByRole("heading", { name: "Rawatan dekat dengan anda" })).toBeInTheDocument();
+    expect(
+      withinPreviewFrame().getByRole("heading", {
+        name: "Rawatan dekat dengan anda",
+      }),
+    ).toBeInTheDocument();
     expect(pageApi.savePageDraft).not.toHaveBeenCalled();
     expect(preview.parentElement).toBe(preview.parentElement?.parentElement?.lastElementChild);
   });
@@ -240,8 +337,9 @@ describe("HomeEditor", { timeout: 30_000 }, () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Preview in English" }));
 
-    const preview = screen.getByRole("region", { name: "Live Preview" });
-    expect(within(preview).getByRole("heading", { name: "Care close to home" })).toBeInTheDocument();
+    expect(
+      withinPreviewFrame().getByRole("heading", { name: "Care close to home" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Preview in English" })).toHaveAttribute(
       "aria-pressed",
       "true",

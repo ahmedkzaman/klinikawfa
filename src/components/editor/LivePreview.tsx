@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -6,6 +7,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { Monitor, Smartphone } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -18,34 +20,113 @@ const PREVIEW_WIDTHS: Record<PreviewMode, number> = {
   mobile: 390,
 };
 
+const PREVIEW_DOCUMENT = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>html, body, #live-preview-root { min-height: 100%; margin: 0; }</style>
+  </head>
+  <body><div id="live-preview-root"></div></body>
+</html>`;
+
 interface LivePreviewProps {
   children: ReactNode;
   title: string;
 }
 
+function ensurePreviewRoot(frame: HTMLIFrameElement) {
+  const previewDocument = frame.contentDocument;
+  if (!previewDocument) return null;
+
+  let root = previewDocument.getElementById("live-preview-root");
+  if (!root) {
+    root = previewDocument.createElement("div");
+    root.id = "live-preview-root";
+    previewDocument.body.append(root);
+  }
+
+  root.setAttribute("inert", "");
+  (root as HTMLElement & { inert: boolean }).inert = true;
+  return root;
+}
+
+function syncThemeAttributes(target: HTMLElement) {
+  const source = document.documentElement;
+  const sourceNames = new Set(source.getAttributeNames());
+
+  target.getAttributeNames().forEach((name) => {
+    if (!sourceNames.has(name)) target.removeAttribute(name);
+  });
+  sourceNames.forEach((name) => {
+    target.setAttribute(name, source.getAttribute(name) ?? "");
+  });
+}
+
+function syncStyleNodes(previewDocument: Document) {
+  previewDocument.head
+    .querySelectorAll('[data-live-preview-style="true"]')
+    .forEach((node) => node.remove());
+
+  document.head
+    .querySelectorAll('link[rel="stylesheet"], style')
+    .forEach((source) => {
+      const clone = source.cloneNode(true) as Element;
+      clone.setAttribute("data-live-preview-style", "true");
+      previewDocument.head.append(clone);
+    });
+}
+
 export function LivePreview({ children, title }: LivePreviewProps) {
   const [mode, setMode] = useState<PreviewMode>("desktop");
-  const frameRef = useRef<HTMLDivElement>(null);
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
 
-  useEffect(() => {
+  const handleFrameLoad = useCallback(() => {
     const frame = frameRef.current;
     if (!frame) return;
+    setPortalRoot(ensurePreviewRoot(frame));
+  }, []);
 
-    (frame as HTMLDivElement & { inert: boolean }).inert = true;
+  useEffect(() => {
+    if (!portalRoot) return;
+    const previewDocument = portalRoot.ownerDocument;
 
     const secureEmbeddedContent = () => {
-      frame.querySelectorAll("iframe").forEach((iframe) => {
+      portalRoot.querySelectorAll("iframe").forEach((iframe) => {
         iframe.setAttribute("sandbox", "");
         iframe.setAttribute("tabindex", "-1");
         iframe.style.pointerEvents = "none";
       });
     };
+    const mirrorStyles = () => syncStyleNodes(previewDocument);
+    const mirrorTheme = () => syncThemeAttributes(previewDocument.documentElement);
 
+    mirrorStyles();
+    mirrorTheme();
     secureEmbeddedContent();
-    const observer = new MutationObserver(secureEmbeddedContent);
-    observer.observe(frame, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, [children]);
+
+    const styleObserver = new MutationObserver(mirrorStyles);
+    styleObserver.observe(document.head, {
+      attributes: true,
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+    const themeObserver = new MutationObserver(mirrorTheme);
+    themeObserver.observe(document.documentElement, { attributes: true });
+    const contentObserver = new MutationObserver(secureEmbeddedContent);
+    contentObserver.observe(portalRoot, { childList: true, subtree: true });
+
+    return () => {
+      styleObserver.disconnect();
+      themeObserver.disconnect();
+      contentObserver.disconnect();
+      previewDocument.head
+        .querySelectorAll('[data-live-preview-style="true"]')
+        .forEach((node) => node.remove());
+    };
+  }, [portalRoot]);
 
   const blockMouseInteraction = (event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -112,20 +193,34 @@ export function LivePreview({ children, title }: LivePreviewProps) {
       </div>
 
       <div className="max-h-[75vh] overflow-auto rounded-xl border border-slate-300 bg-white">
-        <div
+        <iframe
           aria-label={`${mode === "desktop" ? "Desktop" : "Mobile"} preview canvas`}
-          className="min-h-[720px] origin-top-left bg-background transition-[width] duration-200 [&_iframe]:pointer-events-none"
+          className="block min-h-[720px] border-0 bg-white transition-[width] duration-200"
           data-preview-mode={mode}
           data-preview-width={width}
           data-testid="live-preview-frame"
-          onAuxClickCapture={blockMouseInteraction}
-          onClickCapture={blockMouseInteraction}
-          onSubmitCapture={blockSubmission}
+          onLoad={handleFrameLoad}
           ref={frameRef}
+          referrerPolicy="no-referrer"
+          sandbox="allow-same-origin"
+          srcDoc={PREVIEW_DOCUMENT}
           style={{ width: `${width}px` }}
-        >
-          {children}
-        </div>
+          tabIndex={-1}
+          title={`${title} viewport`}
+        />
+        {portalRoot &&
+          createPortal(
+            <div
+              className="min-h-[720px] bg-background [&_iframe]:pointer-events-none"
+              data-live-preview-content="true"
+              onAuxClickCapture={blockMouseInteraction}
+              onClickCapture={blockMouseInteraction}
+              onSubmitCapture={blockSubmission}
+            >
+              {children}
+            </div>,
+            portalRoot,
+          )}
       </div>
     </div>
   );
