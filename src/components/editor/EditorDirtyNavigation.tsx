@@ -7,7 +7,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import {
+  useLocation,
+  useNavigate,
+  type NavigateOptions,
+  type To,
+} from "react-router-dom";
 
 import {
   EditorDirtyNavigationContext,
@@ -26,6 +31,26 @@ function historyIndex(state: unknown) {
   return typeof index === "number" && Number.isFinite(index) ? index : null;
 }
 
+type NavigationApi = {
+  currentEntry?: { key?: unknown } | null;
+  traverseTo?: (key: string) => { finished?: PromiseLike<unknown> } | undefined;
+};
+
+function browserNavigation() {
+  const navigation = (window as unknown as { navigation?: NavigationApi })
+    .navigation;
+  return navigation && typeof navigation === "object" ? navigation : null;
+}
+
+function navigationEntryKey() {
+  const key = browserNavigation()?.currentEntry?.key;
+  return typeof key === "string" && key.length > 0 ? key : null;
+}
+
+function currentRoute() {
+  return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+}
+
 export function EditorDirtyNavigationProvider({
   children,
 }: {
@@ -38,7 +63,10 @@ export function EditorDirtyNavigationProvider({
   const acceptedIndexRef = useRef<number | null>(
     historyIndex(window.history.state),
   );
+  const acceptedNavigationKeyRef = useRef<string | null>(navigationEntryKey());
+  const acceptedRouteRef = useRef(currentRoute());
   const expectedCorrectionIndexRef = useRef<number | null>(null);
+  const expectedCorrectionKeyRef = useRef<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
 
   const refreshDirtyState = useCallback(() => {
@@ -78,9 +106,15 @@ export function EditorDirtyNavigationProvider({
   );
 
   useEffect(() => {
-    if (expectedCorrectionIndexRef.current !== null) return;
-    const index = historyIndex(window.history.state);
-    if (index !== null) acceptedIndexRef.current = index;
+    if (
+      expectedCorrectionIndexRef.current !== null ||
+      expectedCorrectionKeyRef.current !== null
+    ) {
+      return;
+    }
+    acceptedIndexRef.current = historyIndex(window.history.state);
+    acceptedNavigationKeyRef.current = navigationEntryKey();
+    acceptedRouteRef.current = currentRoute();
   }, [location.hash, location.key, location.pathname, location.search]);
 
   useLayoutEffect(() => {
@@ -123,39 +157,99 @@ export function EditorDirtyNavigationProvider({
 
     const guardPop = (event: PopStateEvent) => {
       const targetIndex = historyIndex(event.state);
+      const targetNavigationKey = navigationEntryKey();
       const expectedCorrectionIndex = expectedCorrectionIndexRef.current;
-      if (
-        targetIndex !== null &&
-        expectedCorrectionIndex !== null &&
-        targetIndex === expectedCorrectionIndex
-      ) {
+      const expectedCorrectionKey = expectedCorrectionKeyRef.current;
+      const correctionPending =
+        expectedCorrectionIndex !== null || expectedCorrectionKey !== null;
+      const correctionIndexMatches =
+        expectedCorrectionIndex === null
+          ? targetIndex === null
+          : targetIndex === expectedCorrectionIndex;
+      const correctionKeyMatches =
+        expectedCorrectionKey === null ||
+        targetNavigationKey === expectedCorrectionKey;
+
+      const clearExpectedCorrection = () => {
         expectedCorrectionIndexRef.current = null;
+        expectedCorrectionKeyRef.current = null;
+      };
+
+      const acceptCurrentEntry = () => {
+        clearExpectedCorrection();
         acceptedIndexRef.current = targetIndex;
+        acceptedNavigationKeyRef.current = targetNavigationKey;
+        acceptedRouteRef.current = currentRoute();
+      };
+
+      const failClosedToAcceptedRoute = () => {
+        clearExpectedCorrection();
+        navigate(acceptedRouteRef.current, { replace: true });
+      };
+
+      const traverseToAcceptedKey = (key: string) => {
+        const navigation = browserNavigation();
+        if (typeof navigation?.traverseTo !== "function") return false;
+        try {
+          const result = navigation.traverseTo(key);
+          if (result?.finished) {
+            void Promise.resolve(result.finished).catch(
+              failClosedToAcceptedRoute,
+            );
+          }
+          return true;
+        } catch {
+          return false;
+        }
+      };
+
+      if (
+        correctionPending &&
+        correctionIndexMatches &&
+        correctionKeyMatches
+      ) {
+        acceptCurrentEntry();
         return;
       }
 
       if (!dirtyRef.current || confirmDeparture()) {
-        expectedCorrectionIndexRef.current = null;
-        acceptedIndexRef.current = targetIndex;
+        acceptCurrentEntry();
         return;
       }
 
       event.stopImmediatePropagation();
       event.stopPropagation();
       const acceptedIndex = acceptedIndexRef.current;
+      const acceptedNavigationKey = acceptedNavigationKeyRef.current;
+      expectedCorrectionIndexRef.current = acceptedIndex;
+      expectedCorrectionKeyRef.current = acceptedNavigationKey;
+
       if (acceptedIndex === null || targetIndex === null) {
-        expectedCorrectionIndexRef.current = acceptedIndex;
-        window.history.forward();
+        if (
+          acceptedNavigationKey !== null &&
+          traverseToAcceptedKey(acceptedNavigationKey)
+        ) {
+          return;
+        }
+        failClosedToAcceptedRoute();
         return;
       }
 
       const correction = acceptedIndex - targetIndex;
       if (correction !== 0) {
-        expectedCorrectionIndexRef.current = acceptedIndex;
         window.history.go(correction);
-      } else {
-        expectedCorrectionIndexRef.current = null;
+        return;
       }
+
+      if (
+        acceptedNavigationKey !== null &&
+        targetNavigationKey !== acceptedNavigationKey &&
+        traverseToAcceptedKey(acceptedNavigationKey)
+      ) {
+        return;
+      }
+
+      failClosedToAcceptedRoute();
     };
 
     window.addEventListener("beforeunload", beforeUnload);
@@ -166,7 +260,7 @@ export function EditorDirtyNavigationProvider({
       document.removeEventListener("click", guardAnchor, true);
       window.removeEventListener("popstate", guardPop, true);
     };
-  }, [confirmDeparture]);
+  }, [confirmDeparture, navigate]);
 
   const value = useMemo<EditorDirtyNavigationValue>(
     () => ({

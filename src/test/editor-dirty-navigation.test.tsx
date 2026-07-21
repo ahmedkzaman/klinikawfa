@@ -14,6 +14,22 @@ const authState = vi.hoisted(() => ({
   signOut: vi.fn(),
 }));
 const dirtyHomeUnmount = vi.fn();
+const originalNavigationDescriptor = Object.getOwnPropertyDescriptor(
+  window,
+  "navigation",
+);
+
+function installNavigationStub(key: string) {
+  const navigation = {
+    currentEntry: { key },
+    traverseTo: vi.fn(),
+  };
+  Object.defineProperty(window, "navigation", {
+    configurable: true,
+    value: navigation,
+  });
+  return navigation;
+}
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => authState,
@@ -108,6 +124,11 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  if (originalNavigationDescriptor) {
+    Object.defineProperty(window, "navigation", originalNavigationDescriptor);
+  } else {
+    Reflect.deleteProperty(window, "navigation");
+  }
 });
 
 describe("Editor dirty navigation", () => {
@@ -184,7 +205,7 @@ describe("Editor dirty navigation", () => {
     expect(dirtyHomeUnmount).not.toHaveBeenCalled();
   });
 
-  it("guards rapid intervening and invalid POP targets before the exact correction", () => {
+  it("guards rapid intervening POP targets before the exact correction", () => {
     window.history.replaceState(
       { idx: 2, key: "editor-home", usr: null },
       "",
@@ -192,9 +213,6 @@ describe("Editor dirty navigation", () => {
     );
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
-    const forward = vi
-      .spyOn(window.history, "forward")
-      .mockImplementation(() => {});
     renderEditorRouter();
 
     act(() => {
@@ -228,16 +246,98 @@ describe("Editor dirty navigation", () => {
     });
     expect(confirm).toHaveBeenCalledTimes(2);
 
+    expect(screen.getByTestId("location")).toHaveTextContent("/editor/home");
+    expect(dirtyHomeUnmount).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["Back", { idx: "1", key: "legacy-back", usr: null }, "legacy-back"],
+    ["Forward", null, "legacy-forward"],
+  ])(
+    "returns a cancelled invalid-index %s POP to the exact accepted entry",
+    (_direction, state, targetKey) => {
+      window.history.replaceState(
+        { idx: 2, key: "editor-home", usr: null },
+        "",
+        "/editor/home",
+      );
+      const navigation = installNavigationStub("accepted-editor-entry");
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+      const forward = vi
+        .spyOn(window.history, "forward")
+        .mockImplementation(() => {});
+      renderEditorRouter();
+
+      navigation.currentEntry = { key: targetKey };
+      act(() => {
+        window.dispatchEvent(new PopStateEvent("popstate", { state }));
+      });
+
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(navigation.traverseTo).toHaveBeenCalledOnce();
+      expect(navigation.traverseTo).toHaveBeenCalledWith(
+        "accepted-editor-entry",
+      );
+      expect(forward).not.toHaveBeenCalled();
+      expect(screen.getByTestId("location")).toHaveTextContent("/editor/home");
+      expect(dirtyHomeUnmount).not.toHaveBeenCalled();
+    },
+  );
+
+  it("requires the exact accepted key as well as the accepted index for a correction", () => {
+    window.history.replaceState(
+      { idx: 2, key: "editor-home", usr: null },
+      "",
+      "/editor/home",
+    );
+    const navigation = installNavigationStub("accepted-editor-entry");
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    vi.spyOn(window.history, "go").mockImplementation(() => {});
+    renderEditorRouter();
+
+    navigation.currentEntry = { key: "legacy-forward" };
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+    });
+    expect(confirm).toHaveBeenCalledTimes(1);
+
+    navigation.currentEntry = { key: "intervening-entry" };
     act(() => {
       window.dispatchEvent(
         new PopStateEvent("popstate", {
-          state: { idx: "2", key: "invalid-index", usr: null },
+          state: { idx: 2, key: "same-index-wrong-entry", usr: null },
         }),
       );
+    });
+    expect(confirm).toHaveBeenCalledTimes(2);
+
+    navigation.currentEntry = { key: "accepted-editor-entry" };
+    act(() => {
+      window.dispatchEvent(
+        new PopStateEvent("popstate", {
+          state: { idx: 2, key: "editor-home", usr: null },
+        }),
+      );
+    });
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(dirtyHomeUnmount).not.toHaveBeenCalled();
+  });
+
+  it("fails closed to the accepted editor route when exact traversal is unavailable", () => {
+    Reflect.deleteProperty(window, "navigation");
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const forward = vi
+      .spyOn(window.history, "forward")
+      .mockImplementation(() => {});
+    renderEditorRouter();
+
+    act(() => {
       window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
     });
-    expect(confirm).toHaveBeenCalledTimes(4);
-    expect(forward).toHaveBeenCalledTimes(2);
+
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(forward).not.toHaveBeenCalled();
+    expect(window.location.pathname).toBe("/editor/home");
     expect(screen.getByTestId("location")).toHaveTextContent("/editor/home");
     expect(dirtyHomeUnmount).not.toHaveBeenCalled();
   });

@@ -12,7 +12,10 @@ const repositoryRoot = path.resolve(
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: "live-preview-breakpoints.spec.ts",
+  testMatch: [
+    "live-preview-breakpoints.spec.ts",
+    "editor-dirty-navigation-history.spec.ts",
+  ],
   timeout: 30_000,
   fullyParallel: false,
   workers: 1,
