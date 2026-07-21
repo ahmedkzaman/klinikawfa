@@ -4,7 +4,6 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { CLINIC_INFO } from '@/lib/constants';
 import { ArrowRight, MapPin, Clock, Phone, Navigation } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import type { HomeContent } from '@/features/website-cms/schemas/home';
 
 interface MapSectionProps {
@@ -157,21 +156,30 @@ export function MapSection({ content, preview = false }: MapSectionProps) {
           >
             {/* Decorative border gradient */}
             <div className="absolute inset-0 rounded-3xl border-gradient pointer-events-none z-10" />
-            <iframe
-              src={content.embedUrl}
-              width="100%"
-              height="450"
-              style={{ border: 0, display: 'block' }}
-              allowFullScreen
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
-              title={localized(content.embedTitle)}
-              tabIndex={preview ? -1 : undefined}
-              className={cn(
-                'w-full min-h-[400px] lg:min-h-[500px]',
-                preview && 'pointer-events-none',
-              )}
-            />
+            {preview ? (
+              <div
+                aria-label={`${localized(content.embedTitle)} preview`}
+                className="flex min-h-[400px] w-full flex-col items-center justify-center gap-4 bg-gradient-to-br from-primary/10 to-accent/10 px-6 text-center lg:min-h-[500px]"
+                role="img"
+              >
+                <MapPin aria-hidden="true" className="h-14 w-14 text-primary" />
+                <p className="text-lg font-semibold text-foreground">
+                  {localized(content.embedTitle)}
+                </p>
+              </div>
+            ) : (
+              <iframe
+                src={content.embedUrl}
+                width="100%"
+                height="450"
+                style={{ border: 0, display: 'block' }}
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                title={localized(content.embedTitle)}
+                className="w-full min-h-[400px] lg:min-h-[500px]"
+              />
+            )}
           </motion.div>
         </div>
       </div>

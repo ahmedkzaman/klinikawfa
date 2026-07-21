@@ -46,6 +46,7 @@ vi.stubGlobal(
 const testState = vi.hoisted(() => ({
   indexSections: [] as Array<{ id: string; content: unknown; preview?: boolean }>,
   galleryLightboxLabels: vi.fn(),
+  videoSettingsData: [] as Array<{ key: string; value: string }>,
   videoSettingKeys: vi.fn(),
 }));
 
@@ -110,7 +111,7 @@ vi.mock("@/integrations/supabase/client", () => ({
       select: () => ({
         in: (_column: string, keys: string[]) => {
           testState.videoSettingKeys(keys);
-          return Promise.resolve({ data: [], error: null });
+          return Promise.resolve({ data: testState.videoSettingsData, error: null });
         },
       }),
     }),
@@ -168,6 +169,7 @@ afterEach(() => {
   localStorage.clear();
   testState.indexSections.length = 0;
   testState.galleryLightboxLabels.mockClear();
+  testState.videoSettingsData.length = 0;
   testState.videoSettingKeys.mockClear();
 });
 
@@ -479,19 +481,62 @@ describe("data-driven Home renderer", () => {
     expect(screen.queryByText("Buka Setiap Hari")).not.toBeInTheDocument();
   });
 
-  it("renders custom Video copy and reads only its typed setting keys", async () => {
+  it("renders a side-effect-free Video placeholder in preview mode", async () => {
     const content = structuredClone(DEFAULT_HOME_CONTENT.video);
     content.title.ms = "Video tersuai";
+    content.placeholder.ms = "Video pratonton selamat";
+    testState.videoSettingsData.push(
+      { key: content.videoUrlSettingKey, value: "/clinic.mp4" },
+      { key: content.posterSettingKey, value: "/clinic.webp" },
+    );
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockResolvedValue(undefined);
+    const pause = vi
+      .spyOn(HTMLMediaElement.prototype, "pause")
+      .mockImplementation(() => undefined);
 
-    renderSection(createElement(VideoSection, { content, preview: true }));
+    const { container } = renderSection(
+      createElement(VideoSection, { content, preview: true }),
+    );
 
     expect(screen.getByRole("heading", { name: "Video tersuai" })).toBeVisible();
+    expect(screen.getByText("Video pratonton selamat")).toBeVisible();
+    expect(container.querySelector("video")).not.toBeInTheDocument();
+    await act(async () => undefined);
+    expect(testState.videoSettingKeys).not.toHaveBeenCalled();
+    expect(play).not.toHaveBeenCalled();
+    expect(pause).not.toHaveBeenCalled();
+  });
+
+  it("retains configured Video settings and playback in public mode", async () => {
+    const content = structuredClone(DEFAULT_HOME_CONTENT.video);
+    testState.videoSettingsData.push(
+      { key: content.videoUrlSettingKey, value: "/clinic.mp4" },
+      { key: content.posterSettingKey, value: "/clinic.webp" },
+    );
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockResolvedValue(undefined);
+
+    const { container } = renderSection(
+      createElement(VideoSection, { content, preview: false }),
+    );
+
     await waitFor(() => {
       expect(testState.videoSettingKeys).toHaveBeenCalledWith([
         content.videoUrlSettingKey,
         content.posterSettingKey,
       ]);
     });
+    const video = await waitFor(() => {
+      const element = container.querySelector("video");
+      expect(element).toBeInTheDocument();
+      return element!;
+    });
+    expect(video).toHaveAttribute("src", "/clinic.mp4");
+    expect(video).toHaveAttribute("poster", "/clinic.webp");
+    expect(play).toHaveBeenCalledTimes(1);
   });
 
   it("renders the configured Services limit and blocks preview links", () => {
@@ -667,7 +712,7 @@ describe("data-driven Home renderer", () => {
     expect(screen.getByText("Leret sebenar")).toBeVisible();
   });
 
-  it("renders configured Map content and blocks preview navigation", () => {
+  it("renders a side-effect-free Map placeholder and blocks preview navigation", () => {
     const content = structuredClone(DEFAULT_HOME_CONTENT.map);
     content.title.ms = "Peta tersuai";
     content.directionsCta.label.ms = "Arah tersuai";
@@ -677,17 +722,27 @@ describe("data-driven Home renderer", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Peta tersuai" })).toBeVisible();
-    expect(screen.getByTitle("Klinik Awfa Location")).toHaveAttribute(
-      "src",
-      content.embedUrl,
-    );
+    expect(container.querySelector("iframe")).not.toBeInTheDocument();
+    expect(screen.getByText("Klinik Awfa Location")).toBeVisible();
     expect(fireEvent.click(screen.getByRole("link", { name: /Arah tersuai/ }))).toBe(
       false,
     );
     expect(fireEvent.click(container.querySelector('a[href^="tel:"]')!)).toBe(
       false,
     );
-    expect(container.querySelector("iframe")).toHaveClass("pointer-events-none");
+  });
+
+  it("retains the configured live Map embed in public mode", () => {
+    const content = structuredClone(DEFAULT_HOME_CONTENT.map);
+
+    const { container } = renderSection(
+      createElement(MapSection, { content, preview: false }),
+    );
+
+    expect(container.querySelector("iframe")).toHaveAttribute(
+      "src",
+      content.embedUrl,
+    );
   });
 
   it("renders the fixed allowlisted sections in configured order through the shared public renderer", async () => {
