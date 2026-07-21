@@ -11,7 +11,7 @@ import {
 } from "@/features/website-cms/schemas/home";
 import type { GeneralPageContent } from "@/features/website-cms/schemas/page";
 
-type QueryError = { message: string };
+type QueryError = { code?: string; message: string };
 type QueryResult = { data: unknown; error: QueryError | null };
 
 type QueryCall = {
@@ -19,6 +19,8 @@ type QueryCall = {
   operation: "insert" | "select" | "update";
   columns?: string;
   filters: Array<{ column: string; value: unknown }>;
+  limit?: number;
+  order?: { ascending: boolean; column: string };
   payload?: unknown;
 };
 
@@ -29,6 +31,14 @@ const {
 } = pagesApi;
 
 const publishingApi = pagesApi as typeof pagesApi & {
+  fetchPageVersions(pageId: string): Promise<
+    Array<{
+      id: string;
+      publishedAt: string;
+      publishedBy: string;
+      revision: number;
+    }>
+  >;
   publishPageDraft(input: {
     expectedRevision: number;
     pageId: string;
@@ -64,6 +74,12 @@ vi.mock("@/integrations/supabase/client", () => ({
           call.payload = payload;
           return builder;
         },
+        limit(value: number) {
+          call.limit = value;
+          return Promise.resolve(
+            supabaseState.responses.shift() ?? { data: null, error: null },
+          );
+        },
         eq(column: string, value: unknown) {
           call.filters.push({ column, value });
           return builder;
@@ -72,6 +88,10 @@ vi.mock("@/integrations/supabase/client", () => ({
           return Promise.resolve(
             supabaseState.responses.shift() ?? { data: null, error: null },
           );
+        },
+        order(column: string, options: { ascending: boolean }) {
+          call.order = { column, ascending: options.ascending };
+          return builder;
         },
         select(columns: string) {
           call.columns = columns;
@@ -549,6 +569,66 @@ describe("publishPageDraft", () => {
       ),
     ).toBe(false);
   });
+
+  it.each([
+    ["an optimistic update matches no draft row", { data: null, error: null }],
+    [
+      "the publishing trigger reports a serialization conflict",
+      {
+        data: null,
+        error: {
+          code: "40001",
+          message: "website page revision conflict: backend detail must stay private",
+        },
+      },
+    ],
+  ])("classifies stale revisions when %s", async (_reason, response) => {
+    setSession(createSession());
+    supabaseState.responses.push(
+      { data: { role: "website_editor" }, error: null },
+      response,
+    );
+
+    const rejection = publishingApi.publishPageDraft({
+      expectedRevision: 8,
+      pageId: "page-home",
+    });
+
+    await expect(rejection).rejects.toBeInstanceOf(
+      pagesApi.StaleWebsitePageDraftError,
+    );
+    await expect(rejection).rejects.toThrow(
+      "Website page draft is based on a stale revision",
+    );
+    await expect(rejection).rejects.not.toThrow(/backend detail/i);
+  });
+
+  it("keeps non-conflict backend failures generic and redacted", async () => {
+    setSession(createSession());
+    supabaseState.responses.push(
+      { data: { role: "admin" }, error: null },
+      {
+        data: null,
+        error: {
+          code: "42501",
+          message: "permission denied for private.website_page_drafts",
+        },
+      },
+    );
+
+    const rejection = publishingApi.publishPageDraft({
+      expectedRevision: 8,
+      pageId: "page-home",
+    });
+
+    await expect(rejection).rejects.not.toBeInstanceOf(
+      pagesApi.StaleWebsitePageDraftError,
+    );
+    await expect(rejection).rejects.toThrow(
+      "Website page draft could not be published",
+    );
+    await expect(rejection).rejects.not.toThrow(/permission denied|private\./i);
+  });
 });
 
 describe("restorePageVersionToDraft", () => {
@@ -606,6 +686,87 @@ describe("restorePageVersionToDraft", () => {
           table === "website_pages" && operation !== "select",
       ),
     ).toBe(false);
+  });
+});
+
+describe("fetchPageVersions", () => {
+  it("rejects an anonymous session before reading version metadata", async () => {
+    await expect(
+      publishingApi.fetchPageVersions("page-home"),
+    ).rejects.toThrow("Website editor authorization required");
+    expect(supabaseState.calls).toHaveLength(0);
+  });
+
+  it("returns only the latest 20 page version metadata rows in newest-first order", async () => {
+    setSession(createSession());
+    supabaseState.responses.push(
+      { data: { role: "website_editor" }, error: null },
+      {
+        data: [
+          {
+            id: "version-7",
+            published_at: "2026-07-21T09:00:00.000Z",
+            published_by: "manager-user",
+            revision: 7,
+          },
+          {
+            id: "version-6",
+            published_at: "2026-07-20T09:00:00.000Z",
+            published_by: "editor-user",
+            revision: 6,
+          },
+        ],
+        error: null,
+      },
+    );
+
+    await expect(
+      publishingApi.fetchPageVersions("page-home"),
+    ).resolves.toEqual([
+      {
+        id: "version-7",
+        publishedAt: "2026-07-21T09:00:00.000Z",
+        publishedBy: "manager-user",
+        revision: 7,
+      },
+      {
+        id: "version-6",
+        publishedAt: "2026-07-20T09:00:00.000Z",
+        publishedBy: "editor-user",
+        revision: 6,
+      },
+    ]);
+    expect(supabaseState.calls).toEqual([
+      {
+        table: "user_roles",
+        operation: "select",
+        columns: "role",
+        filters: [{ column: "user_id", value: "manager-user" }],
+      },
+      {
+        table: "website_content_versions",
+        operation: "select",
+        columns: "id,revision,published_at,published_by",
+        filters: [
+          { column: "resource_type", value: "page" },
+          { column: "resource_id", value: "page-home" },
+        ],
+        order: { column: "published_at", ascending: false },
+        limit: 20,
+      },
+    ]);
+  });
+
+  it("reports a safe error when version metadata cannot be read", async () => {
+    setSession(createSession());
+    supabaseState.responses.push(
+      { data: { role: "admin" }, error: null },
+      { data: null, error: { message: "read denied" } },
+    );
+
+    await expect(
+      publishingApi.fetchPageVersions("page-home"),
+    ).rejects.toThrow("Website page versions could not be loaded");
   });
 });
 

@@ -129,6 +129,20 @@ export interface RestorePageVersionToDraftInput {
   versionId: string;
 }
 
+export interface WebsitePageVersionSummary {
+  id: string;
+  publishedAt: string;
+  publishedBy: string;
+  revision: number;
+}
+
+export class StaleWebsitePageDraftError extends Error {
+  constructor() {
+    super("Website page draft is based on a stale revision");
+    this.name = "StaleWebsitePageDraftError";
+  }
+}
+
 function schemaForSlug(
   slug: string,
 ): z.ZodType<HomeContent> | z.ZodType<GeneralPageContent> {
@@ -322,9 +336,38 @@ export async function publishPageDraft(
     .select("page_id")
     .maybeSingle();
 
+  if (error?.code === "40001" || (!error && !data)) {
+    throw new StaleWebsitePageDraftError();
+  }
+
   if (error || !data) {
     throw new Error("Website page draft could not be published");
   }
+}
+
+export async function fetchPageVersions(
+  pageId: string,
+): Promise<WebsitePageVersionSummary[]> {
+  await requireWebsiteManagerSession();
+
+  const { data, error } = await cmsSupabase
+    .from("website_content_versions")
+    .select("id,revision,published_at,published_by")
+    .eq("resource_type", "page")
+    .eq("resource_id", pageId)
+    .order("published_at", { ascending: false })
+    .limit(20);
+
+  if (error || !data) {
+    throw new Error("Website page versions could not be loaded");
+  }
+
+  return data.map((version) => ({
+    id: version.id,
+    publishedAt: version.published_at,
+    publishedBy: version.published_by,
+    revision: version.revision,
+  }));
 }
 
 export async function restorePageVersionToDraft(

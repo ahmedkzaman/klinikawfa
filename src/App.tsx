@@ -106,7 +106,7 @@ import ReviewsManagement from "./pages/admin/ReviewsManagement";
 import AdminSettings from "./pages/admin/Settings";
 import { EditorProtectedRoute } from "./components/editor/EditorProtectedRoute";
 import { EditorLayout } from "./components/editor/EditorLayout";
-import EditorDashboard from "./pages/editor/Dashboard";
+import { HomeEditor } from "./pages/editor/HomeEditor";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -162,7 +162,7 @@ const App = () => (
                 }
               >
                 <Route index element={<Navigate to="home" replace />} />
-                <Route path="home" element={<EditorDashboard />} />
+                <Route path="home" element={<HomeEditor />} />
                 <Route path="pages" element={<EditorUnavailableState />} />
                 <Route path="services" element={<EditorUnavailableState />} />
                 <Route path="team" element={<EditorUnavailableState />} />

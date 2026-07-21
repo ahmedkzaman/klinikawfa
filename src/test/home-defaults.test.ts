@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -125,7 +125,10 @@ vi.mock("@/components/seo", () => ({
   SEOHead: () => null,
 }));
 
-vi.mock("@/components/home", () => {
+vi.mock("@/components/home", async () => {
+  const { HomeRenderer } = await vi.importActual<
+    typeof import("@/components/home/HomeRenderer")
+  >("@/components/home/HomeRenderer");
   const section = (id: string) =>
     function MockHomeSection({
       content,
@@ -139,6 +142,7 @@ vi.mock("@/components/home", () => {
     };
 
   return {
+    HomeRenderer,
     HeroCarousel: section("hero"),
     WhySection: section("why"),
     VideoSection: section("video"),
@@ -686,15 +690,34 @@ describe("data-driven Home renderer", () => {
     expect(container.querySelector("iframe")).toHaveClass("pointer-events-none");
   });
 
-  it("renders the fixed allowlisted sections in configured order with exact slices", () => {
-    render(createElement(MemoryRouter, null, createElement(Index)));
-
-    expect(testState.indexSections).toEqual(
-      DEFAULT_HOME_CONTENT.sectionOrder.map((id) => ({
-        id,
-        content: DEFAULT_HOME_CONTENT[id],
-        preview: undefined,
-      })),
+  it("renders the fixed allowlisted sections in configured order through the shared public renderer", async () => {
+    let rendered: ReturnType<typeof render> | undefined;
+    await act(async () => {
+      rendered = render(
+        createElement(
+          MemoryRouter,
+          null,
+          createElement(LanguageProvider, null, createElement(Index)),
+        ),
+      );
+    });
+    const { container } = rendered!;
+    const sections = Array.from(container.children).filter(
+      (element) => element.tagName === "SECTION",
     );
+    const expectedHeadings = DEFAULT_HOME_CONTENT.sectionOrder.map((id) =>
+      id === "hero"
+        ? DEFAULT_HOME_CONTENT.hero.slides[0].title.ms
+        : DEFAULT_HOME_CONTENT[id].title.ms,
+    );
+
+    expect(sections).toHaveLength(expectedHeadings.length);
+    sections.forEach((section, index) => {
+      expect(
+        within(section as HTMLElement).getByRole("heading", {
+          name: expectedHeadings[index],
+        }),
+      ).toBeInTheDocument();
+    });
   });
 });

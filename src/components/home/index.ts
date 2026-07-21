@@ -5,3 +5,4 @@ export { ServicesPreview } from './ServicesPreview';
 export { GalleryStrip } from './GalleryStrip';
 export { TestimonialsSection } from './TestimonialsSection';
 export { MapSection } from './MapSection';
+export { HomeRenderer } from './HomeRenderer';
