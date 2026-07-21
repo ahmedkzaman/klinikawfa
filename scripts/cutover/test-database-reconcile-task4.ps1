@@ -162,6 +162,7 @@ Import-RunnerFunction Get-Task4AuthAggregateSql
 Import-RunnerFunction Get-TargetPostImportMetrics
 Import-RunnerFunction Get-Task4SqlCsv
 Import-RunnerFunction Get-Task4SqlStatements
+Import-RunnerFunction Add-PortableAuthBodyToPgDump
 Import-RunnerFunction Assert-PortableAuthBoundary
 Import-RunnerFunction Assert-Task4AuthAggregate
 
@@ -184,12 +185,18 @@ $authExportSql=Get-PortableAuthExportSql
 foreach($marker in @('insert into auth.users','insert into auth.identities','confirmation_token','email_change_confirm_status','order by import_order, sort_id')){if(-not $authExportSql.Contains($marker)){throw "Portable Auth export SQL is missing marker: $marker"}}
 foreach($forbiddenSourceField in @('confirmed_at','auth.identities.email')){if($authExportSql -match ('(?i)\b'+[regex]::Escape($forbiddenSourceField)+'\b')){throw "Portable Auth export SQL reads generated field: $forbiddenSourceField"}}
 $authAggregateSql=Get-Task4AuthAggregateSql
-foreach($marker in @('quote_nullable(instance_id::text)','quote_nullable(invited_at::text)','quote_nullable(provider_id::text)','forbiddenState','extensions.digest','email_change_confirm_status is distinct from 0','--ROW--')){if(-not $authAggregateSql.Contains($marker)){throw "Portable Auth aggregate SQL is missing marker: $marker"}}
-$emailConfirmedIndex=$authAggregateSql.IndexOf('quote_nullable(email_confirmed_at::text)',[StringComparison]::Ordinal)
-$invitedIndex=$authAggregateSql.IndexOf('quote_nullable(invited_at::text)',[StringComparison]::Ordinal)
-$lastSignInIndex=$authAggregateSql.IndexOf('quote_nullable(last_sign_in_at::text)',[StringComparison]::Ordinal)
+foreach($marker in @('quote_nullable(instance_id::text)','quote_nullable(provider_id::text)','forbiddenState','extensions.digest','email_change_confirm_status is distinct from 0','--ROW--')){if(-not $authAggregateSql.Contains($marker)){throw "Portable Auth aggregate SQL is missing marker: $marker"}}
+$emailConfirmedIndex=$authAggregateSql.IndexOf('to_char(email_confirmed_at at time zone ''UTC''',[StringComparison]::Ordinal)
+$invitedIndex=$authAggregateSql.IndexOf('to_char(invited_at at time zone ''UTC''',[StringComparison]::Ordinal)
+$lastSignInIndex=$authAggregateSql.IndexOf('to_char(last_sign_in_at at time zone ''UTC''',[StringComparison]::Ordinal)
 if($emailConfirmedIndex -lt 0 -or $invitedIndex -le $emailConfirmedIndex -or $lastSignInIndex -le $invitedIndex){throw 'Portable Auth aggregate canonical field order changed.'}
 foreach($tokenColumn in @('confirmation_token','recovery_token','email_change_token_new','email_change_token_current','phone_change_token','reauthentication_token','email_change','phone_change')){if(-not $authAggregateSql.Contains("$tokenColumn is distinct from ''")){throw "Portable Auth aggregate SQL allows NULL bypass for $tokenColumn"}}
+$authTimestamptzOccurrences=[ordered]@{email_confirmed_at=1;invited_at=1;last_sign_in_at=2;created_at=2;updated_at=2;phone_confirmed_at=1;banned_until=1;deleted_at=1}
+foreach($entry in $authTimestamptzOccurrences.GetEnumerator()){
+  $utcExpression="quote_nullable(to_char($($entry.Key) at time zone 'UTC','YYYY-MM-DD`"T`"HH24:MI:SS.US`"Z`"'))"
+  if([regex]::Matches($authAggregateSql,[regex]::Escape($utcExpression)).Count -ne $entry.Value){throw "Portable Auth aggregate lacks exact UTC canonicalization for $($entry.Key)."}
+  if($authAggregateSql.Contains("quote_nullable($($entry.Key)::text)")){throw "Portable Auth aggregate still uses session-dependent text serialization for $($entry.Key)."}
+}
 $savedTargetQuery=(Get-Command Invoke-TargetQuery -ErrorAction SilentlyContinue)
 function global:Invoke-TargetQuery {param([string]$Sql,[string]$Label)if($Label -eq 'post-import portable Auth aggregate metrics'){return '{"users":11,"identities":11,"forbiddenState":0,"invitedAtNonNull":0,"allowedUsersSha256":"A","identitiesSha256":"B","userIdSetSha256":"C","identityIdUserIdSetSha256":"D"}'};if($Label -eq 'post-import Auth and profile integrity metrics'){return '{"sessions":0,"refreshTokens":0,"profilesMapped":11,"authWithoutProfile":0,"identitiesWithoutUser":0}'};throw "Unexpected target query label: $Label"}
 try{
@@ -231,6 +238,36 @@ commit;
   $safeAuthLoader=$safeAuthLoader.Replace(', 3);',', 0);')
   [IO.File]::WriteAllText($authLoader,$safeAuthLoader,(New-Object Text.UTF8Encoding($false)))
   Assert-PortableAuthBoundary -LoaderPath $authLoader
+  $portableAuthSql=([regex]::Matches($safeAuthLoader,'(?im)^insert\s+into\s+auth\.(?:users|identities)\b.*;\s*$')|ForEach-Object{$_.Value}) -join "`n"
+  if([regex]::Matches($portableAuthSql,'(?im)^insert\s+into\s+auth\.(?:users|identities)').Count -ne 2){throw 'Portable Auth trailer fixture lacks both Auth INSERTs.'}
+  $pgDumpBody=@"
+\restrict fixture_dump_token
+
+insert into public.example (id) values (1);
+
+--
+-- PostgreSQL database dump complete
+--
+
+\unrestrict fixture_dump_token
+"@
+  $combinedBody=Add-PortableAuthBodyToPgDump -PgDumpSql $pgDumpBody -PortableAuthSql $portableAuthSql
+  $trailerIndex=$combinedBody.IndexOf('-- PostgreSQL database dump complete',[StringComparison]::Ordinal)
+  $combinedUserIndex=$combinedBody.IndexOf('insert into auth.users',[StringComparison]::OrdinalIgnoreCase)
+  $combinedIdentityIndex=$combinedBody.IndexOf('insert into auth.identities',[StringComparison]::OrdinalIgnoreCase)
+  if($trailerIndex -lt 0 -or $combinedUserIndex -lt 0 -or $combinedIdentityIndex -lt 0 -or $combinedUserIndex -ge $trailerIndex -or $combinedIdentityIndex -ge $trailerIndex){throw 'Portable Auth SQL was not inserted before the exact pg_dump trailer.'}
+  $combinedLoader=@"
+begin;
+set local statement_timeout = 0;
+set local lock_timeout = '30s';
+set local session_replication_role = replica;
+$combinedBody
+set local session_replication_role = origin;
+do `$foreign_key_audit`$ begin null; end `$foreign_key_audit`$;
+commit;
+"@
+  [IO.File]::WriteAllText($authLoader,$combinedLoader,(New-Object Text.UTF8Encoding($false)))
+  Assert-PortableAuthBoundary -LoaderPath $authLoader
   $fixtureJsonLiteral='''{"provider":"email"}'''
   $escapedSqlLiteral='E''provider; escaped \'' quote'''
   $escapedLiteralLoader=$safeAuthLoader.Replace($fixtureJsonLiteral,$escapedSqlLiteral)
@@ -253,13 +290,18 @@ commit;
   }
 
   $baseline=Get-Task4AuthAggregateBaseline
-  Assert-EqualJson -Expected ([ordered]@{users=11;identities=11;allowedUsersSha256='236920E2CE668364F8BF8D2B7DBD425557BE9A48F7A630DD01887A23479FB9F5';identitiesSha256='77EDEA6492557383F89024C67BE9F33F15B58D15FC27E04AA788411E07F578F6';userIdSetSha256='EEBBE2CDA9E327643A280392DB9250EA50174EA665EA81C79217814B4D7E0562';identityIdUserIdSetSha256='63B3F8797C47A342BB44C059FFE5D15481CB4513600266F91D74FD4AECF20BAE'}) -Actual $baseline -Label 'Portable Auth opaque aggregate baseline changed.'
+  Assert-EqualJson -Expected ([ordered]@{users=11;identities=11;allowedUsersSha256='C8FE0983897241106A2D48EBECBF6668D3090D37C5503127F1A2E10F4596F1A2';identitiesSha256='131A0B1D86D14333F4F9BA21C55E89C97DC0531CA516744E0AD7597F9804AFA4';userIdSetSha256='9CC534CF8C91698637DD1B346A4B9EC4E15D3F8D54E9D546AD4944081A6D9113';identityIdUserIdSetSha256='E6899536EDEA0C7BDC092D349DDC556FF909CCC61C41CA419F680833C60ACEE7'}) -Actual $baseline -Label 'Portable Auth opaque aggregate baseline changed.'
   $targetAggregate=[ordered]@{users=11;identities=11;forbiddenState=0;invitedAtNonNull=0;allowedUsersSha256=$baseline.allowedUsersSha256;identitiesSha256=$baseline.identitiesSha256;userIdSetSha256=$baseline.userIdSetSha256;identityIdUserIdSetSha256=$baseline.identityIdUserIdSetSha256}
   [void](Assert-Task4AuthAggregate -Actual $targetAggregate -Baseline $baseline -RequireNeutralized)
   foreach($mutation in @('users','identities','forbiddenState','invitedAtNonNull','allowedUsersSha256','identitiesSha256','userIdSetSha256','identityIdUserIdSetSha256')){
     $changed=$targetAggregate|ConvertTo-Json -Depth 20|ConvertFrom-Json
     if($mutation -in @('forbiddenState','invitedAtNonNull')){$changed.$mutation=1}elseif($mutation -in @('users','identities')){$changed.$mutation=10}else{$changed.$mutation=('0'*64)}
     Assert-Rejected -Label "Portable Auth aggregate comparison accepted mutation: $mutation" -Action {Assert-Task4AuthAggregate -Actual $changed -Baseline $baseline -RequireNeutralized}
+  }
+  foreach($missingProperty in @('users','identities','forbiddenState','invitedAtNonNull','allowedUsersSha256','identitiesSha256','userIdSetSha256','identityIdUserIdSetSha256')){
+    $changed=$targetAggregate|ConvertTo-Json -Depth 20|ConvertFrom-Json
+    $changed.PSObject.Properties.Remove($missingProperty)
+    Assert-Rejected -Label "Portable Auth aggregate accepted missing property: $missingProperty" -Action {Assert-Task4AuthAggregate -Actual $changed -Baseline $baseline -RequireNeutralized}
   }
 }finally{if(Test-Path $authFixtureRoot){Remove-Item $authFixtureRoot -Recurse -Force}}
 

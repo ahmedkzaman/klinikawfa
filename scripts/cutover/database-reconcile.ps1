@@ -1466,10 +1466,10 @@ function Get-Task4AuthAggregateBaseline {
   return [ordered]@{
     users = 11
     identities = 11
-    allowedUsersSha256 = '236920E2CE668364F8BF8D2B7DBD425557BE9A48F7A630DD01887A23479FB9F5'
-    identitiesSha256 = '77EDEA6492557383F89024C67BE9F33F15B58D15FC27E04AA788411E07F578F6'
-    userIdSetSha256 = 'EEBBE2CDA9E327643A280392DB9250EA50174EA665EA81C79217814B4D7E0562'
-    identityIdUserIdSetSha256 = '63B3F8797C47A342BB44C059FFE5D15481CB4513600266F91D74FD4AECF20BAE'
+    allowedUsersSha256 = 'C8FE0983897241106A2D48EBECBF6668D3090D37C5503127F1A2E10F4596F1A2'
+    identitiesSha256 = '131A0B1D86D14333F4F9BA21C55E89C97DC0531CA516744E0AD7597F9804AFA4'
+    userIdSetSha256 = '9CC534CF8C91698637DD1B346A4B9EC4E15D3F8D54E9D546AD4944081A6D9113'
+    identityIdUserIdSetSha256 = 'E6899536EDEA0C7BDC092D349DDC556FF909CCC61C41CA419F680833C60ACEE7'
   }
 }
 
@@ -1515,8 +1515,13 @@ function Get-Task4AuthAggregateSql {
   # invited_at is deliberately part of the opaque digest because the approved source has 0/11 non-NULL values;
   # it binds that neutral pending-invitation state without treating it as a preserved import field.
   $digestUserFields = @('instance_id','id','aud','role','email','encrypted_password','email_confirmed_at','invited_at','last_sign_in_at','raw_app_meta_data','raw_user_meta_data','is_super_admin','created_at','updated_at','phone','phone_confirmed_at','banned_until','is_sso_user','deleted_at','is_anonymous')
-  $userFields = @($digestUserFields | ForEach-Object { "quote_nullable($_`::text)" }) -join ",`n      "
-  $identityFields = @($identities.columns | ForEach-Object { "quote_nullable($_`::text)" }) -join ",`n      "
+  $timestamptzFields = @('email_confirmed_at','invited_at','last_sign_in_at','created_at','updated_at','phone_confirmed_at','banned_until','deleted_at')
+  $userFields = @($digestUserFields | ForEach-Object {
+    if ($_ -in $timestamptzFields) { "quote_nullable(to_char($_ at time zone 'UTC','YYYY-MM-DD`"T`"HH24:MI:SS.US`"Z`"'))" } else { "quote_nullable($_`::text)" }
+  }) -join ",`n      "
+  $identityFields = @($identities.columns | ForEach-Object {
+    if ($_ -in $timestamptzFields) { "quote_nullable(to_char($_ at time zone 'UTC','YYYY-MM-DD`"T`"HH24:MI:SS.US`"Z`"'))" } else { "quote_nullable($_`::text)" }
+  }) -join ",`n      "
   @"
 with user_rows as (
   select id::text as sort_id,
@@ -1553,7 +1558,15 @@ function Get-LocalTask4AuthAggregate {
 function Assert-Task4AuthAggregate {
   param([Parameter(Mandatory)]$Actual,[Parameter(Mandatory)]$Baseline,[switch]$RequireNeutralized)
   foreach ($field in @('users','identities','allowedUsersSha256','identitiesSha256','userIdSetSha256','identityIdUserIdSetSha256')) {
+    $actualHasField = if ($Actual -is [Collections.IDictionary]) { $Actual.Contains($field) } else { $null -ne $Actual.PSObject.Properties[$field] }
+    $baselineHasField = if ($Baseline -is [Collections.IDictionary]) { $Baseline.Contains($field) } else { $null -ne $Baseline.PSObject.Properties[$field] }
+    if (-not $actualHasField) { throw "Portable Auth aggregate is missing required property: $field" }
+    if (-not $baselineHasField) { throw "Portable Auth baseline is missing required property: $field" }
     if ([string]$Actual.$field -cne [string]$Baseline.$field) { throw "Portable Auth aggregate mismatch: $field" }
+  }
+  foreach ($field in @('forbiddenState','invitedAtNonNull')) {
+    $actualHasField = if ($Actual -is [Collections.IDictionary]) { $Actual.Contains($field) } else { $null -ne $Actual.PSObject.Properties[$field] }
+    if (-not $actualHasField) { throw "Portable Auth aggregate is missing required property: $field" }
   }
   if ([int]$Actual.invitedAtNonNull -ne 0) { throw 'Portable Auth source or import contains a pending invitation timestamp.' }
   if ($RequireNeutralized -and [int]$Actual.forbiddenState -ne 0) { throw 'Portable Auth import retains one-time-token or pending-workflow state.' }
@@ -1642,6 +1655,23 @@ function Get-Task4SqlStatements {
   return @($statements)
 }
 
+function Add-PortableAuthBodyToPgDump {
+  param(
+    [Parameter(Mandatory)][string]$PgDumpSql,
+    [Parameter(Mandatory)][string]$PortableAuthSql
+  )
+  if ([string]::IsNullOrWhiteSpace($PortableAuthSql)) { throw 'Portable Auth SQL body is empty.' }
+  $completeMarkers = [regex]::Matches($PgDumpSql,'(?m)^-- PostgreSQL database dump complete\r?$')
+  $unrestrictMarkers = [regex]::Matches($PgDumpSql,'(?m)^\\unrestrict[ \t]+\S+[ \t]*\r?$')
+  $trailerPattern = '(?ms)^--\r?\n-- PostgreSQL database dump complete\r?\n--\r?\n(?:\r?\n)?\\unrestrict[ \t]+\S+[ \t]*(?:\r?\n[ \t]*)*\z'
+  $trailers = [regex]::Matches($PgDumpSql,$trailerPattern)
+  if ($completeMarkers.Count -ne 1 -or $unrestrictMarkers.Count -ne 1 -or $trailers.Count -ne 1) {
+    throw 'Selective pg_dump SQL does not contain exactly one complete PostgreSQL trailer.'
+  }
+  $newline = if ($PgDumpSql.Contains("`r`n")) { "`r`n" } else { "`n" }
+  return $PgDumpSql.Insert($trailers[0].Index,$PortableAuthSql.Trim() + $newline + $newline)
+}
+
 function New-SelectiveLoader {
   param([string]$SourceDatabase, [string[]]$PublicTables, [string]$OutputPath, [switch]$StaffOnly, [switch]$AuthOnly)
   $rawPath = "$OutputPath.raw"
@@ -1672,7 +1702,7 @@ function New-SelectiveLoader {
       if (-not $StaffOnly) {
         $body = Convert-AppointmentInsertColumns -Sql $body
         New-PortableAuthLoaderBody -SourceDatabase $SourceDatabase -OutputPath $portableAuthPath
-        $body += "`n" + (Get-Content -LiteralPath $portableAuthPath -Raw)
+        $body = Add-PortableAuthBodyToPgDump -PgDumpSql $body -PortableAuthSql (Get-Content -LiteralPath $portableAuthPath -Raw)
       }
     }
   } finally {
