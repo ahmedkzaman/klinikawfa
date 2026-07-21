@@ -105,6 +105,7 @@ export function TestimonialsSection({ content, preview = false }: TestimonialsSe
             className="mx-auto max-w-6xl px-10"
           >
             <Carousel
+              aria-roledescription={localized(content.carouselRoleDescription)}
               setApi={setApi}
               plugins={[autoplayPlugin.current]}
               opts={{
@@ -119,6 +120,7 @@ export function TestimonialsSection({ content, preview = false }: TestimonialsSe
                 {reviews?.map((review, index) => (
                   <CarouselItem
                     key={review.id}
+                    aria-roledescription={localized(content.slideRoleDescription)}
                     className="pl-6 basis-full md:basis-1/2 lg:basis-1/3"
                   >
                     <Card className="group h-full glass-card border-border/30 rounded-2xl overflow-hidden transition-all duration-500 hover:shadow-elevated hover:-translate-y-2">

@@ -164,6 +164,8 @@ export const homeTestimonialsSchema = homeSectionCopySchema
     goToSlideLabel: requiredBilingualTextSchema,
     previousSlideLabel: requiredBilingualTextSchema,
     nextSlideLabel: requiredBilingualTextSchema,
+    carouselRoleDescription: requiredBilingualTextSchema,
+    slideRoleDescription: requiredBilingualTextSchema,
   })
   .strict();
 

@@ -186,7 +186,7 @@ export const HOME_JSON_SCHEMA = {
     testimonials: {
       type: "object",
       additionalProperties: false,
-      required: ["eyebrow", "title", "description", "patientLabel", "goToSlideLabel", "previousSlideLabel", "nextSlideLabel"],
+      required: ["eyebrow", "title", "description", "patientLabel", "goToSlideLabel", "previousSlideLabel", "nextSlideLabel", "carouselRoleDescription", "slideRoleDescription"],
       properties: {
         eyebrow: BILINGUAL_TEXT_JSON_SCHEMA,
         title: BILINGUAL_TEXT_JSON_SCHEMA,
@@ -195,6 +195,8 @@ export const HOME_JSON_SCHEMA = {
         goToSlideLabel: BILINGUAL_TEXT_JSON_SCHEMA,
         previousSlideLabel: BILINGUAL_TEXT_JSON_SCHEMA,
         nextSlideLabel: BILINGUAL_TEXT_JSON_SCHEMA,
+        carouselRoleDescription: BILINGUAL_TEXT_JSON_SCHEMA,
+        slideRoleDescription: BILINGUAL_TEXT_JSON_SCHEMA,
       },
     },
     map: {

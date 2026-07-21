@@ -12,6 +12,11 @@ import { ServicesPreview } from "@/components/home/ServicesPreview";
 import { TestimonialsSection } from "@/components/home/TestimonialsSection";
 import { VideoSection } from "@/components/home/VideoSection";
 import { WhySection } from "@/components/home/WhySection";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+} from "@/components/ui/carousel";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { DEFAULT_HOME_CONTENT } from "@/features/website-cms/home/homeDefaults";
 import { homeContentSchema } from "@/features/website-cms/schemas/home";
@@ -359,6 +364,8 @@ describe("DEFAULT_HOME_CONTENT", () => {
         goToSlideLabel: { ms: "Go to slide", en: "Go to slide" },
         previousSlideLabel: { ms: "Previous slide", en: "Previous slide" },
         nextSlideLabel: { ms: "Next slide", en: "Next slide" },
+        carouselRoleDescription: { ms: "carousel", en: "carousel" },
+        slideRoleDescription: { ms: "slide", en: "slide" },
       },
       map: {
         eyebrow: { ms: "Cari Kami", en: "Find Us" },
@@ -537,6 +544,16 @@ describe("data-driven Home renderer", () => {
     content.title.ms = "Testimoni tersuai";
     content.previousSlideLabel.ms = "Testimoni sebelumnya";
     content.nextSlideLabel.ms = "Testimoni seterusnya";
+    Object.assign(content, {
+      carouselRoleDescription: {
+        ms: "Karusel testimoni tersuai",
+        en: "Custom testimonial carousel",
+      },
+      slideRoleDescription: {
+        ms: "Slaid testimoni tersuai",
+        en: "Custom testimonial slide",
+      },
+    });
 
     renderSection(
       createElement(TestimonialsSection, { content, preview: true }),
@@ -553,6 +570,37 @@ describe("data-driven Home renderer", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Previous slide")).not.toBeInTheDocument();
     expect(screen.queryByText("Next slide")).not.toBeInTheDocument();
+    expect(screen.getByRole("region")).toHaveAttribute(
+      "aria-roledescription",
+      "Karusel testimoni tersuai",
+    );
+    expect(screen.getByRole("group")).toHaveAttribute(
+      "aria-roledescription",
+      "Slaid testimoni tersuai",
+    );
+  });
+
+  it("retains the shared Carousel role-description defaults for unrelated consumers", () => {
+    const { container } = render(
+      createElement(
+        Carousel,
+        null,
+        createElement(
+          CarouselContent,
+          null,
+          createElement(CarouselItem, null, "Unrelated slide"),
+        ),
+      ),
+    );
+
+    expect(screen.getByRole("region")).toHaveAttribute(
+      "aria-roledescription",
+      "carousel",
+    );
+    expect(container.querySelector('[role="group"]')).toHaveAttribute(
+      "aria-roledescription",
+      "slide",
+    );
   });
 
   it("renders custom GalleryLightbox labels while retaining exact legacy defaults", () => {

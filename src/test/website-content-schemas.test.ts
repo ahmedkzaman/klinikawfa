@@ -105,6 +105,8 @@ const validHome = {
     goToSlideLabel: { ms: "Go to slide" },
     previousSlideLabel: { ms: "Previous slide" },
     nextSlideLabel: { ms: "Next slide" },
+    carouselRoleDescription: { ms: "carousel" },
+    slideRoleDescription: { ms: "slide" },
   },
   map: {
     eyebrow: { ms: "Cari kami" },
@@ -244,6 +246,8 @@ describe("website content schemas", () => {
     ["testimonials", "goToSlideLabel"],
     ["testimonials", "previousSlideLabel"],
     ["testimonials", "nextSlideLabel"],
+    ["testimonials", "carouselRoleDescription"],
+    ["testimonials", "slideRoleDescription"],
     ["map", "hoursLabel"],
     ["map", "everydayLabel"],
     ["map", "callLabel"],

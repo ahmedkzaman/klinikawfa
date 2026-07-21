@@ -193,6 +193,8 @@ export const DEFAULT_HOME_CONTENT: HomeContent = {
     goToSlideLabel: { ms: "Go to slide", en: "Go to slide" },
     previousSlideLabel: { ms: "Previous slide", en: "Previous slide" },
     nextSlideLabel: { ms: "Next slide", en: "Next slide" },
+    carouselRoleDescription: { ms: "carousel", en: "carousel" },
+    slideRoleDescription: { ms: "slide", en: "slide" },
   },
   map: {
     eyebrow: { ms: "Cari Kami", en: "Find Us" },
