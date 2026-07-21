@@ -14,7 +14,11 @@ SECURITY INVOKER
 SET search_path = pg_catalog
 AS $creator$
 DECLARE
-  v_page public.website_pages%ROWTYPE;
+  v_page_id uuid;
+  v_page_kind text;
+  v_page_slug text;
+  v_page_status text;
+  v_page_revision integer;
 BEGIN
   IF (SELECT auth.uid()) IS NULL
     OR NOT (SELECT private.can_manage_website())
@@ -44,15 +48,31 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
-  INSERT INTO public.website_pages (kind, slug)
+  INSERT INTO public.website_pages AS created_page (kind, slug)
   VALUES ('content', p_slug)
-  RETURNING * INTO v_page;
+  RETURNING
+    created_page.id,
+    created_page.kind,
+    created_page.slug,
+    created_page.status,
+    created_page.revision
+  INTO
+    v_page_id,
+    v_page_kind,
+    v_page_slug,
+    v_page_status,
+    v_page_revision;
 
   INSERT INTO public.website_page_drafts (page_id, draft_content, base_revision)
-  VALUES (v_page.id, p_draft_content, v_page.revision);
+  VALUES (v_page_id, p_draft_content, v_page_revision);
 
   RETURN QUERY
-  SELECT v_page.id, v_page.kind, v_page.slug, v_page.status, v_page.revision;
+  SELECT
+    v_page_id,
+    v_page_kind,
+    v_page_slug,
+    v_page_status,
+    v_page_revision;
 END;
 $creator$;
 

@@ -20,6 +20,7 @@ const migrationSql = existsSync(migrationPath)
   ? readFileSync(migrationPath, "utf8")
   : "";
 const foundationSql = readFileSync(foundationPath, "utf8");
+const CREATION_OUTPUT_COLUMNS = ["id", "kind", "slug", "status", "revision"];
 
 function quotedValues(input: string): string[] {
   return Array.from(input.matchAll(/'([^']+)'/g), (match) => match[1]);
@@ -48,7 +49,7 @@ describe("general-page creation migration contract", () => {
     expect(migrationSql).not.toMatch(/service_role/i);
 
     const pageInsert = migrationSql.search(
-      /INSERT INTO public\.website_pages\s*\(kind, slug\)/i,
+      /INSERT INTO public\.website_pages(?:\s+AS\s+created_page)?\s*\(kind, slug\)/i,
     );
     const draftInsert = migrationSql.search(
       /INSERT INTO public\.website_page_drafts\s*\(page_id, draft_content, base_revision\)/i,
@@ -76,6 +77,35 @@ describe("general-page creation migration contract", () => {
     );
     expect(rpcReserved).toEqual([...RESERVED_PAGE_SLUGS]);
     expect(foundationReserved).toEqual([...RESERVED_PAGE_SLUGS]);
+  });
+
+  it("captures only creation outputs that authenticated callers may select", () => {
+    const returning = migrationSql.match(
+      /INSERT INTO public\.website_pages[\s\S]*?RETURNING\s+([\s\S]*?)\s+INTO/i,
+    );
+    const selectGrant = foundationSql.match(
+      /GRANT SELECT\s*\(([\s\S]*?)\)\s+ON TABLE public\.website_pages TO anon, authenticated/i,
+    );
+    const returnedColumns = returning
+      ? returning[1]
+          .split(",")
+          .map((column) => column.trim().replace(/^created_page\./i, ""))
+      : [];
+    const grantedColumns = selectGrant
+      ? selectGrant[1].split(",").map((column) => column.trim())
+      : [];
+
+    expect(migrationSql).not.toMatch(/RETURNING\s+\*/i);
+    expect(migrationSql).not.toMatch(/%ROWTYPE/i);
+    expect(migrationSql).not.toMatch(/\bpublished_by\b/i);
+    expect(returnedColumns).toEqual(CREATION_OUTPUT_COLUMNS);
+    expect(
+      CREATION_OUTPUT_COLUMNS.every((column) => grantedColumns.includes(column)),
+    ).toBe(true);
+    expect(grantedColumns).not.toContain("published_by");
+    expect(migrationSql).toMatch(
+      /RETURNS TABLE\s*\(\s*id uuid,\s*kind text,\s*slug text,\s*status text,\s*revision integer\s*\)/i,
+    );
   });
 
   it("exposes only execute access to authenticated callers", () => {
