@@ -95,10 +95,26 @@ function Assert-NotReparsePoint {
   }
 }
 
+function Assert-NoReparsePointInPath {
+  param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Label)
+  $fullPath = [IO.Path]::GetFullPath($Path)
+  $root = [IO.Path]::GetPathRoot($fullPath)
+  if ([string]::IsNullOrWhiteSpace($root)) { throw "Refusing $Label with an invalid path root." }
+  $current = $root
+  if (Test-Path -LiteralPath $current) { Assert-NotReparsePoint -Path $current -Label $Label }
+  $relative = $fullPath.Substring($root.Length).Trim('\')
+  foreach ($component in @($relative -split '\\' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+    $current = Join-Path $current $component
+    if (-not (Test-Path -LiteralPath $current)) { break }
+    Assert-NotReparsePoint -Path $current -Label $Label
+  }
+}
+
 Assert-ExactProtectedPath -Actual $ProtectedEnv -Expected $ExpectedEnv -Label 'environment'
 Assert-ExactProtectedPath -Actual $ArtifactRoot -Expected $ExpectedArtifactRoot -Label 'artifact root'
+Assert-NoReparsePointInPath -Path $ArtifactRoot -Label 'protected artifact root'
 New-Item -ItemType Directory -Path $ArtifactRoot -Force | Out-Null
-Assert-NotReparsePoint -Path $ArtifactRoot -Label 'protected artifact root'
+Assert-NoReparsePointInPath -Path $ArtifactRoot -Label 'protected artifact root'
 
 $script:LogPath = Join-Path $ArtifactRoot ('database-reconcile-{0}-{1}.log' -f $Phase.ToLowerInvariant(), (Get-Date -Format 'yyyyMMdd-HHmmss'))
 $script:LocalPort = $null
@@ -292,19 +308,19 @@ function Get-Task4MigrationHistoryRows {
 
 function Get-Task4MigrationWorkdirInventory {
   param([Parameter(Mandatory)][string]$Workdir)
-  Assert-NotReparsePoint -Path $Workdir -Label 'Task 4 migration workdir'
+  Assert-NoReparsePointInPath -Path $Workdir -Label 'Task 4 migration workdir'
   $workdirFull = [IO.Path]::GetFullPath($Workdir).TrimEnd('\')
   $supabaseDirectory = Join-Path $workdirFull 'supabase'
   if (-not (Test-Path -LiteralPath $supabaseDirectory -PathType Container)) { throw 'Task 4 migration workdir does not contain supabase.' }
-  Assert-NotReparsePoint -Path $supabaseDirectory -Label 'Task 4 migration workdir supabase directory'
+  Assert-NoReparsePointInPath -Path $supabaseDirectory -Label 'Task 4 migration workdir supabase directory'
   $migrationDirectory = Join-Path $supabaseDirectory 'migrations'
   if (-not (Test-Path -LiteralPath $migrationDirectory -PathType Container)) { throw 'Task 4 migration workdir does not contain supabase/migrations.' }
-  Assert-NotReparsePoint -Path $migrationDirectory -Label 'Task 4 migration workdir directory'
+  Assert-NoReparsePointInPath -Path $migrationDirectory -Label 'Task 4 migration workdir directory'
   $migrationDirectoryFull = [IO.Path]::GetFullPath($migrationDirectory).TrimEnd('\')
   $entries = @()
   foreach ($item in @(Get-ChildItem -LiteralPath $migrationDirectory -Force | Sort-Object Name)) {
     if (-not [IO.Path]::GetFullPath($item.FullName).StartsWith(($migrationDirectoryFull + '\'),[StringComparison]::OrdinalIgnoreCase)) { throw 'Task 4 migration workdir entry escapes its migration directory.' }
-    Assert-NotReparsePoint -Path $item.FullName -Label 'Task 4 migration workdir entry'
+    Assert-NoReparsePointInPath -Path $item.FullName -Label 'Task 4 migration workdir entry'
     if ($item.PSIsContainer) { throw 'Task 4 migration workdir contains a non-file entry.' }
     $entries += [ordered]@{ filename=[string]$item.Name; bytes=[int64]$item.Length; sha256=(Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToUpperInvariant() }
   }
@@ -2615,7 +2631,7 @@ function Assert-Task4MigrationWorkdirLayout {
   $supabaseDirectory = Join-Path $Workdir 'supabase'
   $tempDirectory = Join-Path $supabaseDirectory '.temp'
   $cliLatest = Join-Path $tempDirectory 'cli-latest'
-  foreach ($path in @($Workdir,$supabaseDirectory,(Join-Path $supabaseDirectory 'migrations'),(Join-Path $supabaseDirectory 'config.toml'),$tempDirectory,$cliLatest)) { Assert-NotReparsePoint -Path $path -Label 'protected Task 4 migration workdir layout' }
+  foreach ($path in @($Workdir,$supabaseDirectory,(Join-Path $supabaseDirectory 'migrations'),(Join-Path $supabaseDirectory 'config.toml'),$tempDirectory,$cliLatest)) { Assert-NoReparsePointInPath -Path $path -Label 'protected Task 4 migration workdir layout' }
   $rootEntries = @(Get-ChildItem -LiteralPath $Workdir -Force | ForEach-Object Name)
   if ($rootEntries.Count -ne 1 -or $rootEntries[0] -cne 'supabase') { throw 'Protected Task 4 migration workdir contains an unexpected root entry.' }
   $supabaseEntries = @(Get-ChildItem -LiteralPath $supabaseDirectory -Force | ForEach-Object Name | Sort-Object)
@@ -2624,34 +2640,46 @@ function Assert-Task4MigrationWorkdirLayout {
   if ((Get-ChildItem -LiteralPath $tempDirectory -Force | ForEach-Object Name) -cne 'cli-latest' -or (Get-Item -LiteralPath $cliLatest).Length -ne 8 -or (Get-FileHash -LiteralPath $cliLatest -Algorithm SHA256).Hash.ToUpperInvariant() -cne '0DAAAC4EB443724F347B3D1DF0DBACFFB1E0755F345412D1F9032EB664AA9B18') { throw 'Protected Task 4 CLI state file is invalid.' }
 }
 
-function Assert-Task4TranscriptSecretFree {
-  param([Parameter(Mandatory)][AllowEmptyString()][string]$Content)
-  $password = [string]$script:Target.Password
-  if ((-not [string]::IsNullOrEmpty($password) -and $Content.IndexOf($password,[StringComparison]::Ordinal) -ge 0) -or
-      $Content -match '(?i)postgres(?:ql)?://|\b(?:password|pgpassword)\s*=' -or
-      $Content -match '(?im)^\s*(?:select|insert|update|delete|create|alter|drop|grant|revoke|do)\b') {
-    throw 'Task 4 CLI transcript contains prohibited secret or SQL content.'
+function Get-Task4SanitizedCliTranscript {
+  param(
+    [Parameter(Mandatory)][ValidateSet('DryRun','Push')][string]$Phase,
+    [Parameter(Mandatory)]$Migrations,
+    $PostHistory
+  )
+  $portable = @(Get-PortableTask4MigrationBindings -Migrations $Migrations)
+  if ($portable.Count -ne 8 -or (Get-JsonSha256 -Value $portable) -cne $Task4MigrationHistoryBindingSha256) { throw 'Task 4 sanitized CLI transcript has an invalid migration binding.' }
+  $lines = @('TASK4 SANITIZED CLI TRANSCRIPT',("phase=$Phase"),'status=validated',("migrationsSha256=$Task4MigrationHistoryBindingSha256"))
+  if ($Phase -eq 'Push') {
+    if ($null -eq $PostHistory -or (Get-JsonSha256 -Value @($PostHistory)) -cne $Task4MigrationHistoryBindingSha256) { throw 'Task 4 sanitized Push transcript has an invalid exact post-write history.' }
+    $lines += "postHistorySha256=$Task4MigrationHistoryBindingSha256"
   }
+  $lines += @($portable | ForEach-Object { "migration=$([string]$_.file)" })
+  return (($lines -join "`n") + "`n")
 }
 
-function Write-Task4PushTranscript {
-  param([Parameter(Mandatory)][string]$Name,[Parameter(Mandatory)]$Lines)
+function Write-Task4SanitizedCliTranscript {
+  param(
+    [Parameter(Mandatory)][string]$Name,
+    [Parameter(Mandatory)][ValidateSet('DryRun','Push')][string]$Phase,
+    [Parameter(Mandatory)]$Migrations,
+    $PostHistory
+  )
   $artifactRootPath = Get-NormalizedPath $ArtifactRoot
   $path = Get-NormalizedPath (Join-Path $ArtifactRoot $Name)
   if (-not $path.StartsWith(($artifactRootPath + '\'),[StringComparison]::OrdinalIgnoreCase)) { throw 'Task 4 CLI transcript destination escapes the protected artifact root.' }
-  Assert-NotReparsePoint -Path $artifactRootPath -Label 'protected artifact root'
-  if (Test-Path -LiteralPath $path) { Assert-NotReparsePoint -Path $path -Label 'Task 4 CLI transcript destination' }
+  Assert-NoReparsePointInPath -Path $artifactRootPath -Label 'protected artifact root'
+  Assert-NoReparsePointInPath -Path $path -Label 'Task 4 CLI transcript destination'
   $temporary = "$path.$PID.tmp"
   if (Test-Path -LiteralPath $temporary) {
-    Assert-NotReparsePoint -Path $temporary -Label 'Task 4 CLI transcript temporary destination'
+    Assert-NoReparsePointInPath -Path $temporary -Label 'Task 4 CLI transcript temporary destination'
     throw 'Task 4 CLI transcript temporary destination already exists.'
   }
-  $content = (@($Lines) -join "`n")
-  Assert-Task4TranscriptSecretFree -Content $content
-  Write-Utf8NoBom -Path $temporary -Content ($content + "`n")
-  if (Test-Path -LiteralPath $path) { Assert-NotReparsePoint -Path $path -Label 'Task 4 CLI transcript destination' }
+  $content = Get-Task4SanitizedCliTranscript -Phase $Phase -Migrations $Migrations -PostHistory $PostHistory
+  Write-Utf8NoBom -Path $temporary -Content $content
+  Assert-NoReparsePointInPath -Path $temporary -Label 'Task 4 CLI transcript temporary destination'
+  Assert-NoReparsePointInPath -Path $path -Label 'Task 4 CLI transcript destination'
   Move-Item -LiteralPath $temporary -Destination $path -Force
-  Assert-NotReparsePoint -Path $path -Label 'Task 4 CLI transcript'
+  Assert-NoReparsePointInPath -Path $path -Label 'Task 4 CLI transcript'
   return [ordered]@{ file=$Name; bytes=[int64](Get-Item -LiteralPath $path).Length; sha256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToUpperInvariant() }
 }
 
@@ -2671,12 +2699,18 @@ function Assert-Task4CliDryRunOutput {
 }
 
 function Assert-Task4TranscriptBinding {
-  param([Parameter(Mandatory)]$Binding,[Parameter(Mandatory)][string]$ExpectedName)
+  param(
+    [Parameter(Mandatory)]$Binding,
+    [Parameter(Mandatory)][string]$ExpectedName,
+    [Parameter(Mandatory)][ValidateSet('DryRun','Push')][string]$Phase,
+    [Parameter(Mandatory)]$Migrations,
+    $PostHistory
+  )
   if ([string]$Binding.file -cne $ExpectedName -or [int64]$Binding.bytes -le 0 -or [string]$Binding.sha256 -notmatch '^[A-F0-9]{64}$') { throw 'Task 4 CLI transcript binding is invalid.' }
   $path = Join-Path $ArtifactRoot $ExpectedName
   if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Task 4 CLI transcript is missing.' }
-  Assert-NotReparsePoint -Path $path -Label 'Task 4 CLI transcript'
-  Assert-Task4TranscriptSecretFree -Content (Get-Content -LiteralPath $path -Raw)
+  Assert-NoReparsePointInPath -Path $path -Label 'Task 4 CLI transcript'
+  if ((Get-Content -LiteralPath $path -Raw) -cne (Get-Task4SanitizedCliTranscript -Phase $Phase -Migrations $Migrations -PostHistory $PostHistory)) { throw 'Task 4 CLI transcript content is not the exact sanitized binding.' }
   if ([int64](Get-Item -LiteralPath $path).Length -ne [int64]$Binding.bytes -or (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToUpperInvariant() -cne [string]$Binding.sha256) { throw 'Task 4 CLI transcript changed after Push evidence was written.' }
 }
 
@@ -2698,7 +2732,7 @@ function New-Task4MigrationWorkdir {
   }
   foreach ($path in @($workdir,$supabaseDirectory,$migrationDirectory,$configPath,$tempDirectory,$cliLatest)) {
     if (-not (Test-Path -LiteralPath $path)) { throw 'Protected Task 4 migration workdir is incomplete.' }
-    Assert-NotReparsePoint -Path $path -Label 'protected Task 4 migration workdir'
+    Assert-NoReparsePointInPath -Path $path -Label 'protected Task 4 migration workdir'
   }
   if ((Get-Content -LiteralPath $configPath -Raw).Trim() -cne ("project_id = `"$ExpectedRef`"")) { throw 'Protected Task 4 migration workdir config is not bound to the exact target identity.' }
   Assert-Task4MigrationWorkdirLayout -Workdir $workdir
@@ -2711,7 +2745,7 @@ function Invoke-Task4PinnedCliDryRun {
   param([Parameter(Mandatory)][string]$Workdir)
   $arguments = @('db','push','--db-url',(Get-Task4TlsDatabaseUrl),'--workdir',$Workdir,'--include-all','--dry-run','--yes')
   $output = @(Invoke-WithTargetEnvironment -Action { Invoke-External -File $SupabaseCli -Arguments $arguments -Label 'Task 4 exact migration push dry run' -NoOutputLog })
-  return [ordered]@{ log=$output; transcript=(Write-Task4PushTranscript -Name 'task4-migration-dry-run-transcript.log' -Lines $output) }
+  return [ordered]@{ log=$output }
 }
 
 function Assert-Task4FinalPushWorkdir {
@@ -2725,12 +2759,21 @@ function Invoke-Task4PinnedCliPush {
   param([Parameter(Mandatory)][string]$Workdir,[Parameter(Mandatory)]$Migrations)
   $dbUrl = Get-Task4TlsDatabaseUrl
   $execution = Invoke-WithTargetEnvironment -Action {
-    Assert-Task4PinnedSupabaseCli
-    $finalWorkdir = Assert-Task4FinalPushWorkdir -Workdir $Workdir -Migrations $Migrations
-    $pushLog = Invoke-External -File $SupabaseCli -Arguments @('db','push','--db-url',$dbUrl,'--workdir',$Workdir,'--include-all','--yes') -Label 'Task 4 exact migration push' -NoOutputLog
+    $arguments = @('db','push','--db-url',$dbUrl,'--workdir',$Workdir,'--include-all','--yes')
+    $priorErrorActionPreference = $ErrorActionPreference
+    try {
+      $ErrorActionPreference = 'Continue'
+      Assert-Task4PinnedSupabaseCli
+      $finalWorkdir = Assert-Task4FinalPushWorkdir -Workdir $Workdir -Migrations $Migrations
+      $pushLog = @(& $SupabaseCli @arguments 2>&1)
+      $exitCode = $LASTEXITCODE
+    } finally {
+      $ErrorActionPreference = $priorErrorActionPreference
+    }
+    if ($exitCode -ne 0) { throw "Task 4 exact migration push failed with exit code $exitCode." }
     return [pscustomobject]@{ inventory=$finalWorkdir; log=@($pushLog) }
   }
-  return [ordered]@{ inventory=$execution.inventory; log=@($execution.log); transcript=(Write-Task4PushTranscript -Name 'task4-migration-push-transcript.log' -Lines @($execution.log)) }
+  return [ordered]@{ inventory=$execution.inventory; log=@($execution.log) }
 }
 
 function Assert-Task4MigrationPushEvidence {
@@ -2739,7 +2782,7 @@ function Assert-Task4MigrationPushEvidence {
   if (-not $SkipIndependentPin -and [string]$Task4MigrationPushProducerRunnerSha256 -notmatch '^[A-F0-9]{64}$') { throw 'Task 4 migration Push producer runner has not been independently pinned.' }
   $evidencePath = Join-Path $ArtifactRoot $Task4MigrationPushEvidenceName
   if (-not (Test-Path -LiteralPath $evidencePath -PathType Leaf)) { throw 'Completed Task 4 migration Push evidence is required before import.' }
-  Assert-NotReparsePoint -Path $evidencePath -Label 'Task 4 migration Push evidence'
+  Assert-NoReparsePointInPath -Path $evidencePath -Label 'Task 4 migration Push evidence'
   if (-not $SkipIndependentPin -and (Get-FileHash -LiteralPath $evidencePath -Algorithm SHA256).Hash.ToUpperInvariant() -cne $Task4MigrationPushEvidenceSha256) { throw 'Task 4 migration Push evidence does not match its independent pin.' }
   try { $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json } catch { throw 'Task 4 migration Push evidence is invalid JSON.' }
   if ($null -eq $evidence.payload -or ([string]$evidence.payloadSha256).ToUpperInvariant() -cne (Get-JsonSha256 -Value $evidence.payload)) { throw 'Task 4 migration Push evidence self-hash is invalid.' }
@@ -2760,12 +2803,10 @@ function Assert-Task4MigrationPushEvidence {
   if ((Get-JsonSha256 -Value @($payload.migrations)) -cne (Get-JsonSha256 -Value $portable) -or
       (Get-JsonSha256 -Value @($payload.listedPendingMigrations)) -cne (Get-JsonSha256 -Value @($portable.file)) -or [string]$payload.migrationsSha256 -cne $Task4MigrationHistoryBindingSha256 -or
       (Get-JsonSha256 -Value @($payload.postHistory)) -cne (Get-JsonSha256 -Value $portable) -or [string]$payload.postHistorySha256 -cne $Task4MigrationHistoryBindingSha256 -or
-      [string]$payload.dryRunLogSha256 -notmatch '^[A-F0-9]{64}$' -or [string]$payload.pushLogSha256 -notmatch '^[A-F0-9]{64}$') { throw 'Task 4 migration Push evidence does not bind the exact migration history and CLI logs.' }
-  Assert-Task4TranscriptBinding -Binding $payload.dryRunTranscript -ExpectedName 'task4-migration-dry-run-transcript.log'
-  Assert-Task4TranscriptBinding -Binding $payload.pushTranscript -ExpectedName 'task4-migration-push-transcript.log'
-  if ([string]$payload.dryRunLogSha256 -cne [string]$payload.dryRunTranscript.sha256 -or [string]$payload.pushLogSha256 -cne [string]$payload.pushTranscript.sha256) { throw 'Task 4 migration Push evidence transcript hashes are inconsistent.' }
-  $revalidatedPending = @(Assert-Task4CliDryRunOutput -Lines @(Get-Content -LiteralPath (Join-Path $ArtifactRoot 'task4-migration-dry-run-transcript.log')) -Migrations $Migrations)
-  if ((Get-JsonSha256 -Value $revalidatedPending) -cne (Get-JsonSha256 -Value @($payload.listedPendingMigrations))) { throw 'Task 4 migration Push evidence dry-run transcript does not list the exact approved migrations.' }
+      [string]$payload.dryRunTranscriptSha256 -notmatch '^[A-F0-9]{64}$' -or [string]$payload.pushTranscriptSha256 -notmatch '^[A-F0-9]{64}$') { throw 'Task 4 migration Push evidence does not bind the exact migration history and sanitized transcript hashes.' }
+  Assert-Task4TranscriptBinding -Binding $payload.dryRunTranscript -ExpectedName 'task4-migration-dry-run-transcript.log' -Phase DryRun -Migrations $Migrations
+  Assert-Task4TranscriptBinding -Binding $payload.pushTranscript -ExpectedName 'task4-migration-push-transcript.log' -Phase Push -Migrations $Migrations -PostHistory @($payload.postHistory)
+  if ([string]$payload.dryRunTranscriptSha256 -cne [string]$payload.dryRunTranscript.sha256 -or [string]$payload.pushTranscriptSha256 -cne [string]$payload.pushTranscript.sha256) { throw 'Task 4 migration Push evidence sanitized transcript hashes are inconsistent.' }
   if ($null -ne $Authorization -and (Get-JsonSha256 -Value $payload.postTargetState) -cne (Get-JsonSha256 -Value $Authorization.expectedPersistentPost)) { throw 'Task 4 migration Push evidence post-write target state differs from the authorized exact state.' }
   return $payload
 }
@@ -2784,12 +2825,14 @@ function Invoke-PushPhase {
   $workdir = New-Task4MigrationWorkdir -Migrations $task4Migrations
   $dryRun = Invoke-Task4PinnedCliDryRun -Workdir $workdir.path
   $listedPendingMigrations = @(Assert-Task4CliDryRunOutput -Lines $dryRun.log -Migrations $task4Migrations)
+  $dryRunTranscript = Write-Task4SanitizedCliTranscript -Name 'task4-migration-dry-run-transcript.log' -Phase DryRun -Migrations $task4Migrations
   $pushResult = Invoke-Task4PinnedCliPush -Workdir $workdir.path -Migrations $task4Migrations
   $historyRows = Get-Task4MigrationHistoryRows -Migrations $task4Migrations -Label 'post-Push exact Task 4 migration history'
   $postHistory = @(Assert-Task4MigrationHistoryBindings -Migrations $task4Migrations -Rows $historyRows)
   $actualPostState = Get-TargetInventory -IncludeTask4Contract
   [void](Assert-PostMigrationTargetState -Expected $authorization.expectedPersistentPost -Actual $actualPostState)
   [void](Assert-Task4SchemaAndDependencies)
+  $pushTranscript = Write-Task4SanitizedCliTranscript -Name 'task4-migration-push-transcript.log' -Phase Push -Migrations $task4Migrations -PostHistory $postHistory
   $payload = [ordered]@{
     formatVersion = 2
     status = 'completed'
@@ -2804,10 +2847,10 @@ function Invoke-PushPhase {
     migrations = @(Get-PortableTask4MigrationBindings -Migrations $task4Migrations)
     migrationsSha256 = $Task4MigrationHistoryBindingSha256
     listedPendingMigrations = $listedPendingMigrations
-    dryRunTranscript = $dryRun.transcript
-    dryRunLogSha256 = [string]$dryRun.transcript.sha256
-    pushTranscript = $pushResult.transcript
-    pushLogSha256 = [string]$pushResult.transcript.sha256
+    dryRunTranscript = $dryRunTranscript
+    dryRunTranscriptSha256 = [string]$dryRunTranscript.sha256
+    pushTranscript = $pushTranscript
+    pushTranscriptSha256 = [string]$pushTranscript.sha256
     postHistory = $postHistory
     postHistorySha256 = $Task4MigrationHistoryBindingSha256
     postTargetState = $actualPostState
@@ -2815,7 +2858,7 @@ function Invoke-PushPhase {
   $manifest = [ordered]@{ payload=$payload; payloadSha256=Get-JsonSha256 -Value $payload }
   $evidencePath = Join-Path $ArtifactRoot $Task4MigrationPushEvidenceName
   Write-ProtectedJson -Path $evidencePath -Value $manifest
-  Assert-NotReparsePoint -Path $evidencePath -Label 'Task 4 migration Push evidence'
+  Assert-NoReparsePointInPath -Path $evidencePath -Label 'Task 4 migration Push evidence'
   [void](Assert-Task4MigrationPushEvidence -VerifiedBackup $verifiedBackup -Migrations $task4Migrations -Authorization $authorization -SkipIndependentPin)
   Write-Summary 'Push completed exact migrations and evidence validation; Import remains blocked pending independent evidence and producer-runner pins.'
 }

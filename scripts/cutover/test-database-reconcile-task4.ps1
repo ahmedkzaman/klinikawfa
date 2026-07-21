@@ -43,6 +43,7 @@ $expectedMigrations=@(
 Import-RunnerFunction Get-StringSha256
 Import-RunnerFunction Get-JsonSha256
 Import-RunnerFunction Assert-NotReparsePoint
+Import-RunnerFunction Assert-NoReparsePointInPath
 Import-RunnerFunction Get-Task4MigrationBindings
 $global:RepositoryRoot=$repositoryRoot
 $global:ExpectedRef='nhjbqdiyptjqherdfbqk'
@@ -117,6 +118,8 @@ try{
   $reordered=$workdirInventory|ConvertTo-Json -Depth 100|ConvertFrom-Json;$swap=$reordered.files[0];$reordered.files[0]=$reordered.files[1];$reordered.files[1]=$swap;Assert-Rejected -Label 'Reordered inventory was accepted.' -Action {[void](Assert-Task4MigrationWorkdirInventory -Inventory $reordered -Migrations $bindings)}
   $wrongDigest=$workdirInventory|ConvertTo-Json -Depth 100|ConvertFrom-Json;$wrongDigest.sha256=('0'*64);Assert-Rejected -Label 'Wrong whole-inventory digest was accepted.' -Action {[void](Assert-Task4MigrationWorkdirInventory -Inventory $wrongDigest -Migrations $bindings)}
   $reparseRoot=Join-Path ([IO.Path]::GetTempPath()) ('task4-workdir-reparse-'+[Guid]::NewGuid().ToString('N'));New-Item -ItemType Directory -Path $reparseRoot|Out-Null;New-Item -ItemType Junction -Path (Join-Path $reparseRoot 'supabase') -Value (Join-Path $workdirRoot 'supabase')|Out-Null;Assert-Rejected -Label 'Reparse-point supabase ancestor was accepted.' -Action {[void](Get-Task4MigrationWorkdirInventory -Workdir $reparseRoot)};Remove-Item -LiteralPath $reparseRoot -Recurse -Force
+  $ancestorTarget=Join-Path ([IO.Path]::GetTempPath()) ('task4-ancestor-target-'+[Guid]::NewGuid().ToString('N'));$ancestorLink=Join-Path ([IO.Path]::GetTempPath()) ('task4-ancestor-link-'+[Guid]::NewGuid().ToString('N'))
+  try{New-Item -ItemType Directory -Path $ancestorTarget|Out-Null;New-Item -ItemType Junction -Path $ancestorLink -Value $ancestorTarget|Out-Null;$ancestorChild=Join-Path $ancestorLink 'artifact';New-Item -ItemType Directory -Path $ancestorChild|Out-Null;Assert-Rejected -Label 'A junction in a protected-path ancestor was accepted.' -Action {Assert-NoReparsePointInPath -Path $ancestorChild -Label 'ancestor junction regression'}}finally{if(Test-Path -LiteralPath $ancestorLink){[IO.Directory]::Delete($ancestorLink)};if(Test-Path -LiteralPath $ancestorTarget){[IO.Directory]::Delete($ancestorTarget,$true)}}
 }finally{if(Test-Path -LiteralPath $workdirRoot){Remove-Item -LiteralPath $workdirRoot -Recurse -Force}}
 
 Import-RunnerFunction Get-Task4StandaloneSequenceSpecifications
@@ -465,9 +468,9 @@ Import-RunnerFunction Assert-Task4MigrationPushEvidence
 $pushEvidenceDefinition=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Assert-Task4MigrationPushEvidence'},$true)
 if(-not $pushEvidenceDefinition){throw 'Push evidence authorization gate is missing.'}
 $pushEvidenceText=$pushEvidenceDefinition.Extent.Text.ToLowerInvariant()
-foreach($marker in @('[parameter(mandatory)]$authorization','$currentrunnersha256','task4migrationpushproducerrunnersha256 -notmatch','listedpendingmigrations','assert-task4clidryrunoutput','$payload.connection','expectedpersistentpost')){if(-not $pushEvidenceText.Contains($marker)){throw "Push evidence hardening is missing marker: $marker"}}
+foreach($marker in @('[parameter(mandatory)]$authorization','$currentrunnersha256','task4migrationpushproducerrunnersha256 -notmatch','listedpendingmigrations','assert-task4transcriptbinding','$payload.connection','expectedpersistentpost')){if(-not $pushEvidenceText.Contains($marker)){throw "Push evidence hardening is missing marker: $marker"}}
 $transcriptBindingDefinition=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Assert-Task4TranscriptBinding'},$true)
-if(-not $transcriptBindingDefinition -or -not $transcriptBindingDefinition.Extent.Text.ToLowerInvariant().Contains('assert-task4transcriptsecretfree')){throw 'Transcript validation does not re-scan prohibited secrets and SQL text.'}
+if(-not $transcriptBindingDefinition -or -not $transcriptBindingDefinition.Extent.Text.ToLowerInvariant().Contains('get-task4sanitizedclitranscript')){throw 'Transcript validation does not recompute the exact sanitized transcript content.'}
 $global:Task4MigrationPushEvidenceSha256=''
 Assert-Rejected -Label 'An empty independent push-evidence pin did not fail closed.' -Action {[void](Assert-Task4MigrationPushEvidence -VerifiedBackup ([ordered]@{}) -Migrations $bindings -Authorization ([ordered]@{}))}
 
@@ -475,7 +478,7 @@ Import-RunnerFunction Get-NormalizedPath
 Import-RunnerFunction Get-Task4TlsDatabaseUrl
 Import-RunnerFunction Assert-Task4BaselinePlaceholderBinding
 Import-RunnerFunction Assert-Task4CliDryRunOutput
-Import-RunnerFunction Assert-Task4TranscriptSecretFree
+Import-RunnerFunction Get-Task4SanitizedCliTranscript
 Import-RunnerFunction Assert-Task4TranscriptBinding
 $pushEvidenceTestRoot=Join-Path ([IO.Path]::GetTempPath()) ('task4-push-evidence-'+[Guid]::NewGuid().ToString('N'))
 try{
@@ -492,11 +495,13 @@ try{
   Assert-EqualJson -Expected @($bindings.file) -Actual @(Assert-Task4CliDryRunOutput -Lines $dryRunLines -Migrations $bindings) -Label 'Dry run did not bind the exact ordered eight-file list.'
   $wrongDryRun=@($dryRunLines);$wrongDryRun[2]=$bindings[2].file
   Assert-Rejected -Label 'Reordered dry-run pending migrations were accepted.' -Action {[void](Assert-Task4CliDryRunOutput -Lines $wrongDryRun -Migrations $bindings)}
-  $transcriptPath=Join-Path $pushEvidenceTestRoot 'task4-migration-dry-run-transcript.log';[IO.File]::WriteAllText($transcriptPath,"Dry run exact pending migrations.`n",[Text.UTF8Encoding]::new($false))
+  $transcriptPath=Join-Path $pushEvidenceTestRoot 'task4-migration-dry-run-transcript.log';$sanitizedDryRun=Get-Task4SanitizedCliTranscript -Phase DryRun -Migrations $bindings;[IO.File]::WriteAllText($transcriptPath,$sanitizedDryRun,[Text.UTF8Encoding]::new($false))
   $transcriptBinding=[ordered]@{file='task4-migration-dry-run-transcript.log';bytes=[int64](Get-Item -LiteralPath $transcriptPath).Length;sha256=(Get-FileHash -LiteralPath $transcriptPath -Algorithm SHA256).Hash.ToUpperInvariant()}
-  [void](Assert-Task4TranscriptBinding -Binding $transcriptBinding -ExpectedName 'task4-migration-dry-run-transcript.log')
+  [void](Assert-Task4TranscriptBinding -Binding $transcriptBinding -ExpectedName 'task4-migration-dry-run-transcript.log' -Phase DryRun -Migrations $bindings)
+  [IO.File]::WriteAllText($transcriptPath,"BEGIN;`n",[Text.UTF8Encoding]::new($false));Assert-Rejected -Label 'Raw SQL-shaped CLI output was accepted as a sanitized transcript.' -Action {[void](Assert-Task4TranscriptBinding -Binding $transcriptBinding -ExpectedName 'task4-migration-dry-run-transcript.log' -Phase DryRun -Migrations $bindings)}
+  [IO.File]::WriteAllText($transcriptPath,$sanitizedDryRun,[Text.UTF8Encoding]::new($false))
   Add-Content -LiteralPath $transcriptPath -Value 'tampered'
-  Assert-Rejected -Label 'A rehashed transcript binding accepted changed bytes.' -Action {[void](Assert-Task4TranscriptBinding -Binding $transcriptBinding -ExpectedName 'task4-migration-dry-run-transcript.log')}
+  Assert-Rejected -Label 'A rehashed transcript binding accepted changed bytes.' -Action {[void](Assert-Task4TranscriptBinding -Binding $transcriptBinding -ExpectedName 'task4-migration-dry-run-transcript.log' -Phase DryRun -Migrations $bindings)}
 }finally{if(Test-Path -LiteralPath $pushEvidenceTestRoot){Remove-Item -LiteralPath $pushEvidenceTestRoot -Recurse -Force}}
 
 Import-RunnerFunction Invoke-Task4PinnedCliPush
@@ -505,8 +510,11 @@ function global:Get-Task4TlsDatabaseUrl {$script:mockPushEvents.Add('url');retur
 function global:Invoke-WithTargetEnvironment {param([scriptblock]$Action)& $Action}
 function global:Assert-Task4PinnedSupabaseCli {$script:mockPushEvents.Add('cli')}
 function global:Assert-Task4FinalPushWorkdir {param($Workdir,$Migrations)$script:mockPushEvents.Add('rehash');return [ordered]@{sha256=('A'*64)}}
-function global:Invoke-External {param($File,$Arguments,$Label,[switch]$NoOutputLog)$script:mockPushEvents.Add('live');if(-not $NoOutputLog -or $Arguments[0] -cne 'db' -or $Arguments[1] -cne 'push'){throw 'Live Push did not use the dedicated no-output capture.'};throw 'mocked live Push failure'}
-Assert-Rejected -Label 'A mocked live Push failure was not surfaced.' -Action {[void](Invoke-Task4PinnedCliPush -Workdir 'mock-workdir' -Migrations $bindings)}
+function global:Invoke-MockedSupabaseCli {param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Arguments)$script:mockPushEvents.Add('live');if($Arguments[0] -cne 'db' -or $Arguments[1] -cne 'push'){throw 'Live Push native arguments changed.'};$global:LASTEXITCODE=19;Write-Output 'mocked native failure'}
+function global:Invoke-External {$script:mockPushEvents.Add('helper');throw 'Live Push incorrectly delegated to Invoke-External.'}
+$global:SupabaseCli='Invoke-MockedSupabaseCli'
+$mockFailure=$null;try{[void](Invoke-Task4PinnedCliPush -Workdir 'mock-workdir' -Migrations $bindings)}catch{$mockFailure=$_.Exception.Message}
+if($mockFailure -cne 'Task 4 exact migration push failed with exit code 19.'){throw 'Mocked native Push failure was not surfaced with a sanitized error.'}
 Assert-EqualJson -Expected @('url','cli','rehash','live') -Actual @($script:mockPushEvents) -Label 'Live Push did not rehash immediately before the sole mocked db push call.'
 
 $historyReader=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Get-Task4MigrationHistoryRows'},$true)
@@ -520,11 +528,14 @@ $pushWrapperStart=$lowerRunner.IndexOf('function invoke-task4pinnedclipush')
 if($pushStart -lt 0 -or $pushWrapperStart -lt 0){throw 'Non-bypassable Push phase/wrapper is missing.'}
 $pushWrapperEnd=$lowerRunner.IndexOf('function ',($pushWrapperStart+10));if($pushWrapperEnd -lt 0){$pushWrapperEnd=$lowerRunner.Length}
 $pushWrapper=$lowerRunner.Substring($pushWrapperStart,$pushWrapperEnd-$pushWrapperStart)
-$finalPushPattern='(?s)\$finalworkdir\s*=\s*assert-task4finalpushworkdir[^\r\n]*\r?\n\s*\$pushlog\s*=\s*invoke-external\s+-file\s+\$supabasecli\s+-arguments\s+@\(.*?db.*?push.*?--db-url'
+$finalPushPattern='(?s)\$finalworkdir\s*=\s*assert-task4finalpushworkdir[^\r\n]*\r?\n\s*\$pushlog\s*=\s*@\(\s*&\s+\$supabasecli\s+@arguments\s+2>&1\s*\)'
 if(-not [regex]::IsMatch($pushWrapper,$finalPushPattern)){throw 'Final exact workdir rehash/assert is not immediately adjacent to the live Supabase db push call.'}
+if($pushWrapper.Contains('invoke-external') -or $pushWrapper.Contains('write-task4sanitizedclitranscript')){throw 'Live Push wrapper delegates or persists a transcript before post-write validation.'}
 if($pushWrapper.Contains('--dry-run')){throw 'Live Push wrapper contains a dry-run bypass.'}
 $pushBlockEnd=$lowerRunner.IndexOf('function invoke-postmigrationphase');$pushBlock=$lowerRunner.Substring($pushStart,$pushBlockEnd-$pushStart)
-$pushOrder=@('assert-task4pinnedsupabasecli','new-task4migrationworkdir','invoke-task4pinnedclidryrun','invoke-task4pinnedclipush','get-task4migrationhistoryrows','assert-task4migrationhistorybindings','get-targetinventory','assert-postmigrationtargetstate','write-protectedjson')
+$pushPostLivePattern='(?s)\$pushresult\s*=\s*invoke-task4pinnedclipush[^\r\n]*\r?\n\s*\$historyrows\s*=\s*get-task4migrationhistoryrows[^\r\n]*\r?\n\s*\$posthistory\s*=\s*@\(assert-task4migrationhistorybindings'
+if(-not [regex]::IsMatch($pushBlock,$pushPostLivePattern)){throw 'Push does not validate exact history immediately after the native Push call.'}
+$pushOrder=@('assert-task4pinnedsupabasecli','new-task4migrationworkdir','invoke-task4pinnedclidryrun','assert-task4clidryrunoutput','write-task4sanitizedclitranscript','invoke-task4pinnedclipush','get-task4migrationhistoryrows','assert-task4migrationhistorybindings','get-targetinventory','assert-postmigrationtargetstate','assert-task4schemaanddependencies','write-task4sanitizedclitranscript','write-protectedjson')
 $prior=-1;foreach($marker in $pushOrder){$index=$pushBlock.IndexOf($marker,$prior+1);if($index -le $prior){throw "Push authorization/evidence chain is incomplete or reordered at $marker"};$prior=$index}
 if($pushBlock.Contains('invoke-postmigrationphase')){throw 'Push phase delegates or bypasses through PostMigration.'}
 $pushInvalidation=$lowerRunner.IndexOf(("if ("+'$phase'+" -eq 'push')"));$pushEvidenceInvalidation=$lowerRunner.IndexOf('task4migrationpushevidencename',$pushInvalidation);$toolPreflight=$lowerRunner.LastIndexOf('assert-requiredtools');if($pushInvalidation -lt 0 -or $pushEvidenceInvalidation -le $pushInvalidation -or $pushEvidenceInvalidation -ge $toolPreflight){throw 'Push does not invalidate stale push evidence before fallible preflight.'}
