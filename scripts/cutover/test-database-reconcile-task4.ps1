@@ -9,6 +9,17 @@ $parseErrors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile($runnerPath,[ref]$tokens,[ref]$parseErrors)
 if($parseErrors.Count -ne 0){throw 'Runner does not parse.'}
 
+foreach($forbiddenRestoreFlag in @('--no-owner','--no-privileges')){
+  if($lowerRunner.Contains($forbiddenRestoreFlag)){throw "Rollback fidelity contract still suppresses archive metadata: $forbiddenRestoreFlag"}
+}
+foreach($rollbackBinding in @(
+  "`$Task4RollbackRestoreEvidenceName = 'task4-rollback-restore-evidence.json'",
+  "`$Task4RollbackRestoreEvidenceSha256 = ''",
+  "`$Task4RollbackExtendedCatalogSha256 = '1B4E08D71B3FAE4824A90F0A361826638B2F2EE2EFABEA360BF157BDEB931393'"
+)){
+  if(-not $runner.Contains($rollbackBinding)){throw "Rollback readiness binding is missing: $rollbackBinding"}
+}
+
 function Import-RunnerFunction {
   param([Parameter(Mandatory)][string]$Name)
   $definition=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $Name},$true)
@@ -516,6 +527,116 @@ $global:SupabaseCli='Invoke-MockedSupabaseCli'
 $mockFailure=$null;try{[void](Invoke-Task4PinnedCliPush -Workdir 'mock-workdir' -Migrations $bindings)}catch{$mockFailure=$_.Exception.Message}
 if($mockFailure -cne 'Task 4 exact migration push failed with exit code 19.'){throw 'Mocked native Push failure was not surfaced with a sanitized error.'}
 Assert-EqualJson -Expected @('url','cli','rehash','live') -Actual @($script:mockPushEvents) -Label 'Live Push did not rehash immediately before the sole mocked db push call.'
+
+$rollbackGateDefinition=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Assert-RollbackRestoreReadiness'},$true)
+$rollbackPhaseDefinition=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-RollbackPhase'},$true)
+if(-not $rollbackGateDefinition -or -not $rollbackPhaseDefinition){throw 'Rollback readiness gate or phase is missing.'}
+$rollbackGateText=$rollbackGateDefinition.Extent.Text.ToLowerInvariant()
+$rollbackPhaseText=$rollbackPhaseDefinition.Extent.Text.ToLowerInvariant()
+foreach($marker in @('task4rollbackrestoreevidencesha256','payloadsha256','producerrunnersha256','toc','categorycounts','platform','startingstate','postbackupobjects','migrationhistory','tablecounts','storagebytes','exactpostrestorematch')){
+  if(-not $rollbackGateText.Contains($marker)){throw "Rollback readiness schema is missing marker: $marker"}
+}
+if(-not $rollbackPhaseText.Contains('assert-rollbackrestorereadiness')){throw 'Rollback does not call the readiness gate first.'}
+foreach($forbiddenRollbackOperation in @('invoke-targetfile','invoke-external','pg_restore','write-summary','--clean')){
+  if($rollbackPhaseText.Contains($forbiddenRollbackOperation)){throw "Rollback exposes an unproven restore or success path: $forbiddenRollbackOperation"}
+}
+
+Import-RunnerFunction Assert-Task4ExactEvidenceProperties
+Import-RunnerFunction Assert-Task4EvidenceSha256
+Import-RunnerFunction Assert-RollbackRestoreReadiness
+Import-RunnerFunction Invoke-RollbackPhase
+$rollbackEvidenceRoot=Join-Path ([IO.Path]::GetTempPath()) ('task4-rollback-evidence-'+[Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $rollbackEvidenceRoot|Out-Null
+$global:ArtifactRoot=$rollbackEvidenceRoot
+$global:Task4RollbackRestoreEvidenceName='task4-rollback-restore-evidence.json'
+$global:Task4RollbackRestoreEvidenceSha256=''
+$global:Task4RunnerPath=$runnerPath
+$global:Task4RollbackBackupBytes=1070000L
+$global:Task4RollbackBackupSha256='9080050ADC9D98FAF2E3B381F77717393DBBCDA9C0A7E68BBED83DDAFE4DF13E'
+$global:Task4RollbackBackupManifestSha256='37885917F0239FAEBB9E86538562E6F6D5329DA06F3F505492D5C946F8C3A92C'
+$global:Task4RollbackTargetBaselineSha256='E8A0768E01CE84522BB0CADAB78B6AC01F9BD65FAB3360C992FB8EBAA67262B2'
+$global:Task4RollbackExtendedCatalogSha256='1B4E08D71B3FAE4824A90F0A361826638B2F2EE2EFABEA360BF157BDEB931393'
+$global:Task4RollbackTocSha256='D1C944F8DA8378AE8DC523A9AD48083501DDFA65CFF90CF7F5E2B83456D5011C'
+$global:Task4RollbackTocEntries=1888
+$global:Task4RollbackPgRestoreVersion='pg_restore (PostgreSQL) 17.10'
+$global:Task4RollbackPgRestoreSha256='6ECDBC31B75E10D36F3FBA699EDDE4E1350B54AEB74430350CACE7334AA6C832'
+$global:PostgresBin='C:\Users\ahmed\Documents\Codex\tools\postgresql\17.10\pgsql\bin'
+$global:BackupName='target-before-cutover.backup'
+$global:BackupManifestName='target-before-cutover.manifest.json'
+$global:Task4PostBackupObjects=@('public.staff_messages','public.website_content_drafts','public.website_content_versions','public.website_navigation_drafts','public.website_navigation_items','public.website_page_drafts','public.website_pages','public.website_review_presentations','public.website_tracking_settings')
+$script:rollbackSentinelEvents=New-Object 'System.Collections.Generic.List[string]'
+function global:Invoke-External {$script:rollbackSentinelEvents.Add('Invoke-External');throw 'Rollback reached Invoke-External.'}
+function global:Invoke-TargetFile {$script:rollbackSentinelEvents.Add('Invoke-TargetFile');throw 'Rollback reached Invoke-TargetFile.'}
+Set-Item -Path function:\pg_restore.exe -Value {$script:rollbackSentinelEvents.Add('pg_restore');throw 'Rollback reached pg_restore.'}
+$missingPinError=$null
+try{Invoke-RollbackPhase}catch{$missingPinError=$_.Exception.Message}
+if($missingPinError -cne 'Task 4 rollback restore evidence has not been independently pinned.'){throw 'Rollback did not fail closed on its intentionally empty independent pin.'}
+if($script:rollbackSentinelEvents.Count -ne 0){throw 'Rollback reached a write/restore sentinel before rejecting its missing pin.'}
+
+try{
+  $global:Task4RollbackRestoreEvidenceSha256=('A'*64)
+  Assert-Rejected -Label 'A missing rollback restore evidence file was accepted.' -Action {[void](Assert-RollbackRestoreReadiness)}
+  if($script:rollbackSentinelEvents.Count -ne 0){throw 'Missing rollback evidence reached a write/restore sentinel.'}
+
+  $rollbackBaselineVersions=@(Get-Task4BaselineMigrationFiles|ForEach-Object{$_.Substring(0,14)})
+  $rollbackBaseline=[ordered]@{projectRef='nhjbqdiyptjqherdfbqk';publicTables=93;authUsers=0;authIdentities=0;migrationRows=153;migrationIdentities=$rollbackBaselineVersions;migrationIdentitiesSha256='5EE4FF324B59CA8775A18D9F4674F6A72AA64CDC782DF640ECC67B3BAE59F9DB';schemaSha256='A01DD4E5B0EB41B6DC67B5F43D9A6548EFFC20C8A94DF511CA66E8D53E7DAAC1'}
+  if((Get-JsonSha256 -Value $rollbackBaseline) -cne $global:Task4RollbackTargetBaselineSha256){throw 'Rollback baseline fixture no longer matches the protected manifest.'}
+  $script:rollbackVerifiedBackup=[ordered]@{path=(Join-Path $rollbackEvidenceRoot 'target-before-cutover.backup');sha256=$global:Task4RollbackBackupSha256;bytes=$global:Task4RollbackBackupBytes;manifestSha256=$global:Task4RollbackBackupManifestSha256;manifest=[ordered]@{targetBaseline=$rollbackBaseline;targetBaselineSha256=$global:Task4RollbackTargetBaselineSha256}}
+  $postVersions=@($rollbackBaselineVersions)+@($expectedMigrations.version)
+  $script:rollbackCurrentStart=[ordered]@{projectRef='nhjbqdiyptjqherdfbqk';publicTables=102;authUsers=11;authIdentities=11;migrationRows=161;migrationIdentities=$postVersions;migrationIdentitiesSha256=Get-StringSha256 -Value ($postVersions -join "`n");schemaSha256=('B'*64);extendedSchemaSha256=('C'*64)}
+  function global:Assert-VerifiedBackup {return $script:rollbackVerifiedBackup}
+  function global:Get-TargetInventory {param([switch]$IncludeTask4Contract);return ($script:rollbackCurrentStart|ConvertTo-Json -Depth 100|ConvertFrom-Json)}
+
+  $migrationHistory=@(for($index=0;$index -lt $rollbackBaselineVersions.Count;$index++){[ordered]@{version=$rollbackBaselineVersions[$index];name=('baseline_'+$index);statements=@("select $index")}})
+  $tableDataRelations=@('auth.identities','auth.users','public.example','storage.buckets','storage.objects')
+  $tableCounts=@($tableDataRelations|ForEach-Object{[ordered]@{relation=$_;rows=0L}})
+  $tocCategoryCounts=[ordered]@{'ACL'=339;'DEFAULT ACL'=27;'EXTENSION'=6;'PUBLICATION'=14;'TABLE DATA'=5;'OTHER'=1497}
+  $roles=@('anon','authenticated','authenticator','postgres','service_role','supabase_auth_admin','supabase_storage_admin')
+  $extensions=@([ordered]@{name='pgcrypto';version='1.3'},[ordered]@{name='uuid-ossp';version='1.1'})
+  $platformBinding=[ordered]@{provider='Supabase';postgresMajor=17;rolesSha256=Get-JsonSha256 -Value $roles;extensionsSha256=Get-JsonSha256 -Value $extensions}
+  $catalogComponents=[ordered]@{schemaRelationsRoutinesTypesSequencesPoliciesOwnersAcls=('1'*64);defaultAcls=('2'*64);extensionOwnersVersionsMembership=('3'*64);publicationOwnersOptionsMembership=('4'*64);eventTriggerOwners=('5'*64)}
+  $storageMetadata=[ordered]@{buckets=0;objects=0;canonicalSha256=('6'*64)}
+  $storageBytes=[ordered]@{separateFromDatabaseRestore=$true;beforeInventorySha256=('7'*64);afterInventorySha256=('7'*64);cleanupProofSha256=('8'*64);restoreProofSha256=('9'*64);exactByteFidelity=$true}
+  $restoreArguments=@('--clean','--if-exists','--exit-on-error','--single-transaction','--host','matching-disposable.supabase.test','--port','5432','--username','postgres.matching','--dbname','postgres','target-before-cutover.backup')
+  $cleanupOperations=@('drop allowlisted post-backup objects','restore exact platform backup','verify no post-backup objects remain')
+  $rollbackPayload=[ordered]@{
+    formatVersion=1;status='matching-disposable-restore-passed';completedAtUtc='2026-07-21T00:00:00.0000000Z';targetRef='nhjbqdiyptjqherdfbqk';producerRunnerSha256=(Get-FileHash -LiteralPath $runnerPath -Algorithm SHA256).Hash.ToUpperInvariant()
+    restore=[ordered]@{environment='matching-disposable-supabase';productionTargetWrites=0;executable=[ordered]@{file='pg_restore.exe';version=$global:Task4RollbackPgRestoreVersion;sha256=$global:Task4RollbackPgRestoreSha256};arguments=$restoreArguments;argumentsSha256=Get-JsonSha256 -Value $restoreArguments;ownerReplay=$true;privilegeReplay=$true}
+    backup=[ordered]@{file='target-before-cutover.backup';bytes=$global:Task4RollbackBackupBytes;sha256=$global:Task4RollbackBackupSha256;manifest=[ordered]@{file='target-before-cutover.manifest.json';sha256=$global:Task4RollbackBackupManifestSha256;targetBaselineSha256=$global:Task4RollbackTargetBaselineSha256};toc=[ordered]@{sha256=$global:Task4RollbackTocSha256;entries=$global:Task4RollbackTocEntries;aclEntries=339;defaultAclEntries=27;extensionEntries=6;publicationEntries=14;categoryCounts=$tocCategoryCounts;categoryCountsSha256=Get-JsonSha256 -Value $tocCategoryCounts;tableDataRelations=$tableDataRelations;tableDataRelationsSha256=Get-JsonSha256 -Value $tableDataRelations}}
+    platform=[ordered]@{provider='Supabase';postgresMajor=17;roles=$roles;rolesSha256=$platformBinding.rolesSha256;extensions=$extensions;extensionsSha256=$platformBinding.extensionsSha256;capabilitiesSha256=Get-JsonSha256 -Value $platformBinding}
+    startingState=[ordered]@{inventory=$script:rollbackCurrentStart;sha256=Get-JsonSha256 -Value $script:rollbackCurrentStart}
+    cleanup=[ordered]@{strategy='strict-allowlist-recreate';strictAllowlist=$true;removesAllPostBackupObjects=$true;postBackupObjects=$global:Task4PostBackupObjects;postBackupObjectsSha256=Get-JsonSha256 -Value $global:Task4PostBackupObjects;allowlistedOperations=$cleanupOperations;allowlistedOperationsSha256=Get-JsonSha256 -Value $cleanupOperations;postCleanupObjectAbsenceVerified=$true}
+    baseline=[ordered]@{ordinaryCatalogSha256=$rollbackBaseline.schemaSha256;extendedCatalogSha256=$global:Task4RollbackExtendedCatalogSha256;catalogComponents=$catalogComponents;catalogComponentsSha256=Get-JsonSha256 -Value $catalogComponents;migrationHistory=[ordered]@{fields=@('version','name','statements');records=$migrationHistory;recordsSha256=Get-JsonSha256 -Value $migrationHistory};tableData=[ordered]@{counts=$tableCounts;countsSha256=Get-JsonSha256 -Value $tableCounts};auth=[ordered]@{users=0;identities=0;sessions=0;refreshTokens=0};storageMetadata=$storageMetadata;storageBytes=$storageBytes}
+    postRestore=[ordered]@{exactPostRestoreMatch=$true;ordinaryCatalogSha256=$rollbackBaseline.schemaSha256;extendedCatalogSha256=$global:Task4RollbackExtendedCatalogSha256;catalogComponentsSha256=Get-JsonSha256 -Value $catalogComponents;migrationHistorySha256=Get-JsonSha256 -Value $migrationHistory;tableCountsSha256=Get-JsonSha256 -Value $tableCounts;auth=[ordered]@{users=0;identities=0;sessions=0;refreshTokens=0};storageMetadataSha256=Get-JsonSha256 -Value $storageMetadata;storageByteInventorySha256=$storageBytes.afterInventorySha256}
+  }
+  $rollbackDocument=[ordered]@{payload=$rollbackPayload;payloadSha256=Get-JsonSha256 -Value $rollbackPayload}
+  $rollbackEvidencePath=Join-Path $rollbackEvidenceRoot $global:Task4RollbackRestoreEvidenceName
+  function Write-RollbackFixture([Parameter(Mandatory)]$Document){[IO.File]::WriteAllText($rollbackEvidencePath,(ConvertTo-Json -InputObject $Document -Depth 100)+"`n",[Text.UTF8Encoding]::new($false));$global:Task4RollbackRestoreEvidenceSha256=(Get-FileHash -LiteralPath $rollbackEvidencePath -Algorithm SHA256).Hash.ToUpperInvariant()}
+
+  [IO.File]::WriteAllText($rollbackEvidencePath,'{malformed rollback evidence',[Text.UTF8Encoding]::new($false));$global:Task4RollbackRestoreEvidenceSha256=(Get-FileHash -LiteralPath $rollbackEvidencePath -Algorithm SHA256).Hash.ToUpperInvariant()
+  Assert-Rejected -Label 'Malformed independently pinned rollback evidence was accepted.' -Action {[void](Assert-RollbackRestoreReadiness)}
+
+  $incomplete=$rollbackDocument|ConvertTo-Json -Depth 100|ConvertFrom-Json;$incomplete.payload.baseline.storageBytes.PSObject.Properties.Remove('restoreProofSha256');$incomplete.payloadSha256=Get-JsonSha256 -Value $incomplete.payload;Write-RollbackFixture $incomplete
+  Assert-Rejected -Label 'Incomplete rollback Storage-byte evidence was accepted.' -Action {[void](Assert-RollbackRestoreReadiness)}
+
+  Write-RollbackFixture $rollbackDocument;$pinnedBeforeTamper=$global:Task4RollbackRestoreEvidenceSha256;Add-Content -LiteralPath $rollbackEvidencePath -Value 'tampered';$global:Task4RollbackRestoreEvidenceSha256=$pinnedBeforeTamper
+  Assert-Rejected -Label 'Tampered rollback evidence bytes were accepted.' -Action {[void](Assert-RollbackRestoreReadiness)}
+
+  $stale=$rollbackDocument|ConvertTo-Json -Depth 100|ConvertFrom-Json;$stale.payload.startingState.inventory.schemaSha256=('D'*64);$stale.payload.startingState.sha256=Get-JsonSha256 -Value $stale.payload.startingState.inventory;$stale.payloadSha256=Get-JsonSha256 -Value $stale.payload;Write-RollbackFixture $stale
+  Assert-Rejected -Label 'Self-consistent stale starting-state evidence was accepted.' -Action {[void](Assert-RollbackRestoreReadiness)}
+
+  $wrongExtended=$rollbackDocument|ConvertTo-Json -Depth 100|ConvertFrom-Json;$wrongExtended.payload.baseline.extendedCatalogSha256=('D'*64);$wrongExtended.payload.postRestore.extendedCatalogSha256=('D'*64);$wrongExtended.payloadSha256=Get-JsonSha256 -Value $wrongExtended.payload;Write-RollbackFixture $wrongExtended
+  Assert-Rejected -Label 'A self-consistent non-baseline extended catalog digest was accepted.' -Action {[void](Assert-RollbackRestoreReadiness)}
+
+  Write-RollbackFixture $rollbackDocument
+  $readiness=Assert-RollbackRestoreReadiness
+  if($readiness.status -cne 'matching-disposable-restore-passed'){throw 'Complete matching-disposable restore evidence did not satisfy the readiness contract.'}
+  if($script:rollbackSentinelEvents.Count -ne 0){throw 'Rollback readiness validation reached a write/restore sentinel.'}
+}finally{
+  $global:Task4RollbackRestoreEvidenceSha256=''
+  if(Test-Path -LiteralPath $rollbackEvidenceRoot){Remove-Item -LiteralPath $rollbackEvidenceRoot -Recurse -Force}
+  Remove-Item function:\pg_restore.exe -Force -ErrorAction SilentlyContinue
+}
 
 $historyReader=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Get-Task4MigrationHistoryRows'},$true)
 if(-not $historyReader){throw 'Exact migration history reader is missing.'}
