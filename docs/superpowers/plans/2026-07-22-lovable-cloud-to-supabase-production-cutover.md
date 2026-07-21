@@ -347,8 +347,8 @@ git commit -m "chore: add guarded database cutover runner"
 - Modify: `scripts/cutover/database-reconcile.ps1`
 
 **Interfaces:**
-- Consumes: the fail-closed Task 3 report identifying two incompatible tables, eight populated source-only columns, and four lossless appointment renames.
-- Produces: additive target compatibility columns and constraints plus a loader transform that maps the renamed appointment fields; a new protected rehearsal report with `pass=true`.
+- Consumes: the fail-closed Task 3 report identifying two incompatible tables, eight populated source-only columns, four lossless appointment renames, and the rehearsal-discovered source enum member `public.clinic_status = 'cancelled'` that is absent from target.
+- Produces: additive target compatibility columns, constraints, and enum member plus a loader transform that maps the renamed appointment fields; a new protected rehearsal report with `pass=true`.
 
 - [ ] **Step 1: Write the failing compatibility contract test**
 
@@ -385,6 +385,10 @@ describe("source cutover compatibility migration", () => {
     expect(sql).toContain("foreign key (cancelled_by) references auth.users(id)");
   });
 
+  it("preserves the source queue cancellation status", () => {
+    expect(sql).toContain("alter type public.clinic_status add value if not exists 'cancelled'");
+  });
+
   it("does not replace the authoritative target appointment columns or default", () => {
     expect(sql).not.toMatch(/drop\s+column/);
     expect(sql).not.toContain("alter column status set default");
@@ -403,6 +407,8 @@ Expected: FAIL because none of the columns or constraints exist in the empty mig
 - [ ] **Step 3: Implement the additive compatibility migration**
 
 ```sql
+alter type public.clinic_status add value if not exists 'cancelled';
+
 alter table public.appointments
   add column if not exists patient_ic text,
   add column if not exists service_slug text,
@@ -442,7 +448,7 @@ $$;
 
 - [ ] **Step 4: Add the explicit lossless appointment rename map to the loader**
 
-The generated `INSERT ... SELECT` for `public.appointments` must map source `patient_name` to target `name`, `patient_phone` to `phone`, `appointment_date` to `preferred_date`, and `appointment_time` to `preferred_time`. It must copy the eight newly represented fields by identical name. All other tables continue through the intersection-based mapping. The target `status` default remains `'pending'`, but every imported source row copies its explicit source status value.
+The generated `INSERT ... SELECT` for `public.appointments` must map source `patient_name` to target `name`, `patient_phone` to `phone`, `appointment_date` to `preferred_date`, and `appointment_time` to `preferred_time`. It must copy the eight newly represented fields by identical name. All other tables continue through the intersection-based mapping. The target `status` default remains `'pending'`, but every imported source row copies its explicit source status value. Queue rows retain the source `clinic_status = 'cancelled'` value through the additive enum member; do not remap it.
 
 - [ ] **Step 5: Apply the migration only to target scratch and rerun the full rehearsal**
 
