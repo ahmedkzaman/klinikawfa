@@ -5661,7 +5661,6 @@ export type Database = {
         | "locum"
         | "resident_doctor"
         | "ops_staff"
-        | "website_editor"
       clinic_appointment_status:
         | "scheduled"
         | "confirmed"
@@ -5823,7 +5822,6 @@ export const Constants = {
         "locum",
         "resident_doctor",
         "ops_staff",
-        "website_editor",
       ],
       clinic_appointment_status: [
         "scheduled",
