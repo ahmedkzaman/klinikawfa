@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { HelmetProvider } from "react-helmet-async";
@@ -358,10 +358,12 @@ describe("GeneralPage public route", () => {
       renderPublic(`/pages/${slug}`);
 
       expect(await screen.findByRole("heading", { name: "404" })).toBeInTheDocument();
-      expect(document.head.querySelector('meta[name="robots"]')).toHaveAttribute(
-        "content",
-        "noindex, nofollow",
-      );
+      await waitFor(() => {
+        expect(document.head.querySelector('meta[name="robots"]')).toHaveAttribute(
+          "content",
+          "noindex, nofollow",
+        );
+      });
     },
   );
 });
