@@ -1293,10 +1293,11 @@ function Get-TargetSequenceChecks {
 }
 
 function Get-TargetPostImportMetrics {
+  $metrics = (Invoke-TargetQuery -Sql (Get-Task4AuthAggregateSql) -Label 'post-import portable Auth aggregate metrics') | ConvertFrom-Json
+  $metrics | Add-Member -MemberType NoteProperty -Name authUsers -Value $metrics.users -Force
+  $metrics | Add-Member -MemberType NoteProperty -Name authIdentities -Value $metrics.identities -Force
   $sql = @'
 select jsonb_build_object(
-  'authUsers',(select count(*) from auth.users),
-  'authIdentities',(select count(*) from auth.identities),
   'sessions',(select count(*) from auth.sessions),
   'refreshTokens',(select count(*) from auth.refresh_tokens),
   'profilesMapped',(select count(*) from auth.users u join public.profiles p on p.id=u.id),
@@ -1304,7 +1305,9 @@ select jsonb_build_object(
   'identitiesWithoutUser',(select count(*) from auth.identities i where not exists(select 1 from auth.users u where u.id=i.user_id))
 )::text;
 '@
-  return (Invoke-TargetQuery -Sql $sql -Label 'post-import Auth and profile integrity metrics') | ConvertFrom-Json
+  $profileMetrics = (Invoke-TargetQuery -Sql $sql -Label 'post-import Auth and profile integrity metrics') | ConvertFrom-Json
+  foreach ($property in $profileMetrics.PSObject.Properties) { $metrics | Add-Member -MemberType NoteProperty -Name $property.Name -Value $property.Value -Force }
+  return $metrics
 }
 
 function Get-TargetApprovedServiceLists {
@@ -1319,6 +1322,7 @@ function Assert-Task4PostImportResult {
     [Parameter(Mandatory)]$ExpectedTableCounts,
     [Parameter(Mandatory)]$ActualTableCounts,
     [Parameter(Mandatory)]$Metrics,
+    [Parameter(Mandatory)]$AuthBaseline,
     [Parameter(Mandatory)]$SequenceChecks,
     [Parameter(Mandatory)]$ServiceLists,
     [Parameter(Mandatory)][int]$ForeignKeyCount
@@ -1334,6 +1338,7 @@ function Assert-Task4PostImportResult {
       [int]$Metrics.profilesMapped -ne 11 -or [int]$Metrics.authWithoutProfile -ne 0 -or [int]$Metrics.identitiesWithoutUser -ne 0) {
     throw 'Post-import portable Auth/profile counts are not exactly 11/11 with zero managed-token rows and complete profile mapping.'
   }
+  [void](Assert-Task4AuthAggregate -Actual $Metrics -Baseline $AuthBaseline -RequireNeutralized)
   $countDifferences = New-Object 'System.Collections.Generic.List[string]'
   foreach ($property in $ExpectedTableCounts.PSObject.Properties) {
     $actualProperty = $ActualTableCounts.PSObject.Properties[$property.Name]
@@ -1445,13 +1450,205 @@ where con.contype = 'f'
   return [int](Invoke-LocalQuery -Database $Database -Label 'foreign key audit coverage count' -Sql $sql)
 }
 
+function Get-Task4AuthUsersColumnContract {
+  $preserved = @('instance_id','id','aud','role','email','encrypted_password','email_confirmed_at','last_sign_in_at','raw_app_meta_data','raw_user_meta_data','is_super_admin','created_at','updated_at','phone','phone_confirmed_at','banned_until','is_sso_user','deleted_at','is_anonymous')
+  $emptyString = @('confirmation_token','recovery_token','email_change_token_new','email_change_token_current','phone_change_token','reauthentication_token','email_change','phone_change')
+  $nullValue = @('invited_at','confirmation_sent_at','recovery_sent_at','email_change_sent_at','phone_change_sent_at','reauthentication_sent_at')
+  $zeroValue = @('email_change_confirm_status')
+  return [ordered]@{ preserved=$preserved; emptyString=$emptyString; nullValue=$nullValue; zeroValue=$zeroValue; columns=@($preserved + $emptyString + $nullValue + $zeroValue) }
+}
+
+function Get-Task4AuthIdentitiesColumnContract {
+  return [ordered]@{ columns=@('provider_id','user_id','identity_data','provider','last_sign_in_at','created_at','updated_at','id') }
+}
+
+function Get-Task4AuthAggregateBaseline {
+  return [ordered]@{
+    users = 11
+    identities = 11
+    allowedUsersSha256 = '236920E2CE668364F8BF8D2B7DBD425557BE9A48F7A630DD01887A23479FB9F5'
+    identitiesSha256 = '77EDEA6492557383F89024C67BE9F33F15B58D15FC27E04AA788411E07F578F6'
+    userIdSetSha256 = 'EEBBE2CDA9E327643A280392DB9250EA50174EA665EA81C79217814B4D7E0562'
+    identityIdUserIdSetSha256 = '63B3F8797C47A342BB44C059FFE5D15481CB4513600266F91D74FD4AECF20BAE'
+  }
+}
+
+function Get-PortableAuthExportSql {
+  $users = Get-Task4AuthUsersColumnContract
+  $identities = Get-Task4AuthIdentitiesColumnContract
+  $userValues = @($users.preserved | ForEach-Object { '%L' }) + @($users.emptyString | ForEach-Object { "''" }) + @($users.nullValue | ForEach-Object { 'NULL' }) + @($users.zeroValue | ForEach-Object { '0' })
+  $userStatement = 'insert into auth.users (' + ($users.columns -join ', ') + ') values (' + ($userValues -join ', ') + ');'
+  $identityStatement = 'insert into auth.identities (' + ($identities.columns -join ', ') + ') values (' + ((@($identities.columns | ForEach-Object { '%L' }) -join ', ')) + ');'
+  $userFormatLiteral = "'" + $userStatement.Replace("'","''") + "'"
+  $identityFormatLiteral = "'" + $identityStatement.Replace("'","''") + "'"
+  @"
+with portable_auth_statements as (
+  select 1 as import_order, id::text as sort_id,
+    format($userFormatLiteral, $($users.preserved -join ', ')) as statement
+  from auth.users
+  union all
+  select 2 as import_order, id::text as sort_id,
+    format($identityFormatLiteral, $($identities.columns -join ', ')) as statement
+  from auth.identities
+)
+select statement
+from portable_auth_statements
+order by import_order, sort_id;
+"@
+}
+
+function New-PortableAuthLoaderBody {
+  param([Parameter(Mandatory)][string]$SourceDatabase,[Parameter(Mandatory)][string]$OutputPath)
+  $psql = Join-Path $PostgresBin 'psql.exe'
+  $queryPath = New-ProtectedSqlFile -Sql (Get-PortableAuthExportSql)
+  try {
+    Invoke-External -File $psql -Arguments @('-X','-A','-t','-q','-v','ON_ERROR_STOP=1','--host','127.0.0.1','--port',[string]$script:LocalPort,'--username','postgres','--dbname',$SourceDatabase,'--file',$queryPath,'--output',$OutputPath) -Label 'generate transformed portable Auth SQL' | Out-Null
+  } finally {
+    if (Test-Path -LiteralPath $queryPath) { Remove-Item -LiteralPath $queryPath -Force }
+  }
+  if (-not (Test-Path -LiteralPath $OutputPath -PathType Leaf)) { throw 'Transformed portable Auth SQL was not created.' }
+}
+
+function Get-Task4AuthAggregateSql {
+  $users = Get-Task4AuthUsersColumnContract
+  $identities = Get-Task4AuthIdentitiesColumnContract
+  # invited_at is deliberately part of the opaque digest because the approved source has 0/11 non-NULL values;
+  # it binds that neutral pending-invitation state without treating it as a preserved import field.
+  $digestUserFields = @('instance_id','id','aud','role','email','encrypted_password','email_confirmed_at','invited_at','last_sign_in_at','raw_app_meta_data','raw_user_meta_data','is_super_admin','created_at','updated_at','phone','phone_confirmed_at','banned_until','is_sso_user','deleted_at','is_anonymous')
+  $userFields = @($digestUserFields | ForEach-Object { "quote_nullable($_`::text)" }) -join ",`n      "
+  $identityFields = @($identities.columns | ForEach-Object { "quote_nullable($_`::text)" }) -join ",`n      "
+  @"
+with user_rows as (
+  select id::text as sort_id,
+    concat_ws(E'\n',
+      $userFields
+    ) as canonical_row
+  from auth.users
+), identity_rows as (
+  select id::text as sort_id,
+    concat_ws(E'\n',
+      $identityFields
+    ) as canonical_row,
+    concat_ws(E'\n', quote_nullable(id::text), quote_nullable(user_id::text)) as canonical_id_set_row
+  from auth.identities
+)
+select jsonb_build_object(
+  'users',(select count(*) from auth.users),
+  'identities',(select count(*) from auth.identities),
+  'forbiddenState',(select count(*) from auth.users where confirmation_token is distinct from '' or recovery_token is distinct from '' or email_change_token_new is distinct from '' or email_change_token_current is distinct from '' or phone_change_token is distinct from '' or reauthentication_token is distinct from '' or email_change is distinct from '' or phone_change is distinct from '' or invited_at is not null or confirmation_sent_at is not null or recovery_sent_at is not null or email_change_sent_at is not null or phone_change_sent_at is not null or reauthentication_sent_at is not null or email_change_confirm_status is distinct from 0),
+  'invitedAtNonNull',(select count(*) from auth.users where invited_at is not null),
+  'allowedUsersSha256',(select upper(encode(extensions.digest(coalesce(string_agg(canonical_row,E'\n--ROW--\n' order by sort_id),''),'sha256'),'hex')) from user_rows),
+  'identitiesSha256',(select upper(encode(extensions.digest(coalesce(string_agg(canonical_row,E'\n--ROW--\n' order by sort_id),''),'sha256'),'hex')) from identity_rows),
+  'userIdSetSha256',(select upper(encode(extensions.digest(coalesce(string_agg(quote_nullable(id::text),E'\n--ROW--\n' order by id::text),''),'sha256'),'hex')) from auth.users),
+  'identityIdUserIdSetSha256',(select upper(encode(extensions.digest(coalesce(string_agg(canonical_id_set_row,E'\n--ROW--\n' order by sort_id),''),'sha256'),'hex')) from identity_rows)
+)::text;
+"@
+}
+
+function Get-LocalTask4AuthAggregate {
+  param([Parameter(Mandatory)][string]$Database,[Parameter(Mandatory)][string]$Label)
+  return (Invoke-LocalQuery -Database $Database -Sql (Get-Task4AuthAggregateSql) -Label $Label) | ConvertFrom-Json
+}
+
+function Assert-Task4AuthAggregate {
+  param([Parameter(Mandatory)]$Actual,[Parameter(Mandatory)]$Baseline,[switch]$RequireNeutralized)
+  foreach ($field in @('users','identities','allowedUsersSha256','identitiesSha256','userIdSetSha256','identityIdUserIdSetSha256')) {
+    if ([string]$Actual.$field -cne [string]$Baseline.$field) { throw "Portable Auth aggregate mismatch: $field" }
+  }
+  if ([int]$Actual.invitedAtNonNull -ne 0) { throw 'Portable Auth source or import contains a pending invitation timestamp.' }
+  if ($RequireNeutralized -and [int]$Actual.forbiddenState -ne 0) { throw 'Portable Auth import retains one-time-token or pending-workflow state.' }
+  return $Actual
+}
+
+function Get-Task4SqlCsv {
+  param([Parameter(Mandatory)][string]$Text)
+  $values = New-Object 'System.Collections.Generic.List[string]'
+  $start = 0
+  $inSingle = $false
+  $singleEscapes = $false
+  $inDouble = $false
+  for ($index = 0; $index -lt $Text.Length; $index++) {
+    $character = $Text[$index]
+    if ($inSingle) {
+      if ($singleEscapes -and $character -eq '\' -and $index + 1 -lt $Text.Length) { $index++; continue }
+      if ($character -eq "'") {
+        if ($index + 1 -lt $Text.Length -and $Text[$index + 1] -eq "'") { $index++; continue }
+        $inSingle = $false
+        $singleEscapes = $false
+      }
+      continue
+    }
+    if ($inDouble) {
+      if ($character -eq '"') {
+        if ($index + 1 -lt $Text.Length -and $Text[$index + 1] -eq '"') { $index++; continue }
+        $inDouble = $false
+      }
+      continue
+    }
+    if ($character -eq "'") {
+      $inSingle = $true
+      $singleEscapes = $index -gt 0 -and ($Text[$index - 1] -eq 'E' -or $Text[$index - 1] -eq 'e') -and ($index -eq 1 -or $Text[$index - 2] -notmatch '[A-Za-z0-9_]')
+      continue
+    }
+    if ($character -eq '"') { $inDouble = $true; continue }
+    if ($character -eq ',') {
+      $values.Add($Text.Substring($start,$index - $start).Trim())
+      $start = $index + 1
+    }
+  }
+  if ($inSingle -or $inDouble) { throw 'Portable Auth loader contains an unterminated SQL literal.' }
+  $values.Add($Text.Substring($start).Trim())
+  return @($values)
+}
+
+function Get-Task4SqlStatements {
+  param([Parameter(Mandatory)][string]$Text)
+  $statements = New-Object 'System.Collections.Generic.List[string]'
+  $start = 0
+  $inSingle = $false
+  $singleEscapes = $false
+  $inDouble = $false
+  for ($index = 0; $index -lt $Text.Length; $index++) {
+    $character = $Text[$index]
+    if ($inSingle) {
+      if ($singleEscapes -and $character -eq '\' -and $index + 1 -lt $Text.Length) { $index++; continue }
+      if ($character -eq "'") {
+        if ($index + 1 -lt $Text.Length -and $Text[$index + 1] -eq "'") { $index++; continue }
+        $inSingle = $false
+        $singleEscapes = $false
+      }
+      continue
+    }
+    if ($inDouble) {
+      if ($character -eq '"') {
+        if ($index + 1 -lt $Text.Length -and $Text[$index + 1] -eq '"') { $index++; continue }
+        $inDouble = $false
+      }
+      continue
+    }
+    if ($character -eq "'") {
+      $inSingle = $true
+      $singleEscapes = $index -gt 0 -and ($Text[$index - 1] -eq 'E' -or $Text[$index - 1] -eq 'e') -and ($index -eq 1 -or $Text[$index - 2] -notmatch '[A-Za-z0-9_]')
+      continue
+    }
+    if ($character -eq '"') { $inDouble = $true; continue }
+    if ($character -eq ';') {
+      $statements.Add($Text.Substring($start,$index - $start + 1))
+      $start = $index + 1
+    }
+  }
+  if ($inSingle -or $inDouble) { throw 'Portable Auth loader contains an unterminated SQL literal.' }
+  if (-not [string]::IsNullOrWhiteSpace($Text.Substring($start))) { throw 'Portable Auth loader contains an unterminated SQL statement.' }
+  return @($statements)
+}
+
 function New-SelectiveLoader {
   param([string]$SourceDatabase, [string[]]$PublicTables, [string]$OutputPath, [switch]$StaffOnly, [switch]$AuthOnly)
   $rawPath = "$OutputPath.raw"
+  $portableAuthPath = "$OutputPath.auth"
   $dump = Join-Path $PostgresBin 'pg_dump.exe'
   $args = @('--data-only','--column-inserts','--no-owner','--no-privileges','--host','127.0.0.1','--port',[string]$script:LocalPort,'--username','postgres','--dbname',$SourceDatabase,'--file',$rawPath)
   if ($AuthOnly) {
-    $args += @('--table','auth.users','--table','auth.identities')
     $truncate = 'truncate table auth.identities, auth.users restart identity cascade;'
   } elseif ($StaffOnly) {
     $args += @('--table','public.staff_messages')
@@ -1460,17 +1657,28 @@ function New-SelectiveLoader {
     foreach ($table in @($PublicTables | Where-Object { $_ -ne 'public.staff_messages' })) {
       $args += @('--table',$table)
     }
-    $args += @('--table','auth.users','--table','auth.identities')
     $quotedTables = @($PublicTables | Where-Object { $_ -ne 'public.staff_messages' } | ForEach-Object {
       $parts = $_.Split('.', 2); '"{0}"."{1}"' -f $parts[0].Replace('"','""'), $parts[1].Replace('"','""')
     })
     $truncate = 'truncate table auth.identities, auth.users, ' + ($quotedTables -join ', ') + ' restart identity cascade;'
   }
-  Invoke-External -File $dump -Arguments $args -Label 'generate protected selective data SQL' | Out-Null
-  $body = Get-Content -LiteralPath $rawPath -Raw
-  Remove-Item -LiteralPath $rawPath -Force
-  if (-not $StaffOnly -and -not $AuthOnly) {
-    $body = Convert-AppointmentInsertColumns -Sql $body
+  try {
+    if ($AuthOnly) {
+      New-PortableAuthLoaderBody -SourceDatabase $SourceDatabase -OutputPath $portableAuthPath
+      $body = Get-Content -LiteralPath $portableAuthPath -Raw
+    } else {
+      Invoke-External -File $dump -Arguments $args -Label 'generate protected selective public-data SQL' | Out-Null
+      $body = Get-Content -LiteralPath $rawPath -Raw
+      if (-not $StaffOnly) {
+        $body = Convert-AppointmentInsertColumns -Sql $body
+        New-PortableAuthLoaderBody -SourceDatabase $SourceDatabase -OutputPath $portableAuthPath
+        $body += "`n" + (Get-Content -LiteralPath $portableAuthPath -Raw)
+      }
+    }
+  } finally {
+    foreach ($path in @($rawPath,$portableAuthPath)) {
+      if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+    }
   }
   $header = @"
 \set ON_ERROR_STOP on
@@ -1511,6 +1719,38 @@ function Assert-PortableAuthBoundary {
   $users = [regex]::Matches($loaderText,'(?i)insert\s+into\s+(?:"auth"|auth)\.(?:"users"|users)').Count
   $identities = [regex]::Matches($loaderText,'(?i)insert\s+into\s+(?:"auth"|auth)\.(?:"identities"|identities)').Count
   if (($users -eq 0) -xor ($identities -eq 0)) { throw 'Selective loader must carry Auth users and identities together.' }
+  if ($users -eq 0) { return }
+  $userContract = Get-Task4AuthUsersColumnContract
+  $identityContract = Get-Task4AuthIdentitiesColumnContract
+  $validatedUsers = 0
+  $validatedIdentities = 0
+  foreach ($statement in Get-Task4SqlStatements -Text $loaderText) {
+    $authInsert = [regex]::Match($statement,'(?is)^\s*insert\s+into\s+(?:"?auth"?)\.(?<table>"?(?:users|identities)"?)(?=\s|\(|$)')
+    if (-not $authInsert.Success) { continue }
+    $match = [regex]::Match($statement,'(?is)^\s*insert\s+into\s+(?<schema>"?auth"?)\.(?<table>"?(?:users|identities)"?)\s*\((?<columns>[^)]*)\)\s*values\s*\((?<values>.*)\)\s*;\s*$')
+    if (-not $match.Success) { throw 'Portable Auth INSERT is not an explicit column/value statement.' }
+    $table = $match.Groups['table'].Value.Replace('"','').ToLowerInvariant()
+    if ($table -eq 'users') { $validatedUsers++ } else { $validatedIdentities++ }
+    $columns = @(Get-Task4SqlCsv -Text $match.Groups['columns'].Value | ForEach-Object { $_.Trim().Replace('"','') })
+    $values = @(Get-Task4SqlCsv -Text $match.Groups['values'].Value)
+    $expectedColumns = if ($table -eq 'users') { @($userContract.columns) } else { @($identityContract.columns) }
+    if ($columns.Count -ne $expectedColumns.Count -or $values.Count -ne $expectedColumns.Count -or ($columns -join "`n") -cne ($expectedColumns -join "`n")) {
+      throw "Portable Auth $table INSERT does not use the exact destination column contract."
+    }
+    if ($table -eq 'users') {
+      foreach ($column in $userContract.emptyString) {
+        $index = [array]::IndexOf($expectedColumns,$column)
+        if ($values[$index].Trim() -cne "''") { throw "Portable Auth users INSERT retains forbidden value in $column." }
+      }
+      foreach ($column in $userContract.nullValue) {
+        $index = [array]::IndexOf($expectedColumns,$column)
+        if ($values[$index].Trim() -cne 'NULL') { throw "Portable Auth users INSERT retains pending workflow state in $column." }
+      }
+      $zeroIndex = [array]::IndexOf($expectedColumns,'email_change_confirm_status')
+      if ($values[$zeroIndex].Trim() -cne '0') { throw 'Portable Auth users INSERT retains email-change confirmation state.' }
+    }
+  }
+  if ($validatedUsers -ne $users -or $validatedIdentities -ne $identities) { throw 'Portable Auth boundary did not validate every Auth INSERT.' }
 }
 
 function New-InTransactionAuthZeroLoader {
@@ -1918,6 +2158,9 @@ from public.appointments;
     $mainLoader = Join-Path $ArtifactRoot $LoaderName
     $staffLoader = Join-Path $ArtifactRoot $HeldStaffLoaderName
     $authLoader = Join-Path $ArtifactRoot $AuthLoaderName
+    $authBaseline = Get-Task4AuthAggregateBaseline
+    $sourceAuthAggregate = Get-LocalTask4AuthAggregate -Database $sourceDatabase -Label 'source portable Auth preservation aggregate'
+    [void](Assert-Task4AuthAggregate -Actual $sourceAuthAggregate -Baseline $authBaseline)
     New-SelectiveLoader -SourceDatabase $sourceDatabase -PublicTables $sourcePublicTables -OutputPath $mainLoader
     New-SelectiveLoader -SourceDatabase $sourceDatabase -PublicTables $sourcePublicTables -OutputPath $staffLoader -StaffOnly
     New-SelectiveLoader -SourceDatabase $sourceDatabase -PublicTables $sourcePublicTables -OutputPath $authLoader -AuthOnly
@@ -1938,6 +2181,8 @@ from public.appointments;
       $sourceIdentities = [int](Invoke-LocalQuery -Database $sourceDatabase -Sql 'select count(*) from auth.identities;' -Label 'source rehearsal Auth identity count')
       $targetUsers = [int](Invoke-LocalQuery -Database $targetDatabase -Sql 'select count(*) from auth.users;' -Label 'target rehearsal Auth user count')
       $targetIdentities = [int](Invoke-LocalQuery -Database $targetDatabase -Sql 'select count(*) from auth.identities;' -Label 'target rehearsal Auth identity count')
+      $targetAuthAggregate = Get-LocalTask4AuthAggregate -Database $targetDatabase -Label 'target rehearsal portable Auth aggregate'
+      [void](Assert-Task4AuthAggregate -Actual $targetAuthAggregate -Baseline $authBaseline -RequireNeutralized)
       $sourceMigrationText = Invoke-LocalQuery -Database $sourceDatabase -Sql "select coalesce(jsonb_agg(version order by version),'[]'::jsonb)::text from supabase_migrations.schema_migrations;" -Label 'source rehearsal migration identities'
       $sourceMigrations = @(ConvertFrom-JsonArray -Text $sourceMigrationText)
       $targetInventoryPath = Join-Path $ArtifactRoot $InventoryName
@@ -1971,7 +2216,7 @@ from public.appointments;
         rowCountDifferences = @()
         rowCountComparisonStatus = 'not-run-public-import-blocked-by-schema'
         sequenceChecks = $sequenceChecks
-        auth = [ordered]@{ sourceUsers = $sourceUsers; sourceIdentities = $sourceIdentities; importedUsers = $targetUsers; importedIdentities = $targetIdentities; sessions = 0; refreshTokens = 0 }
+        auth = [ordered]@{ sourceUsers = $sourceUsers; sourceIdentities = $sourceIdentities; importedUsers = $targetUsers; importedIdentities = $targetIdentities; sessions = 0; refreshTokens = 0; aggregate = $sourceAuthAggregate; importedAggregate = $targetAuthAggregate }
         loader = [ordered]@{ main = $LoaderName; heldStaffMessages = $HeldStaffLoaderName; portableAuth = $AuthLoaderName; publicDataExecuted = $false; productionTargetUsed = $false }
       }
       Write-ProtectedJson -Path (Join-Path $ArtifactRoot 'rehearsal-failure-report.json') -Value $report
@@ -1995,6 +2240,8 @@ from public.appointments;
     $sourceIdentities = [int](Invoke-LocalQuery -Database $sourceDatabase -Sql 'select count(*) from auth.identities;' -Label 'source rehearsal Auth identity count')
     $targetUsers = [int](Invoke-LocalQuery -Database $targetDatabase -Sql 'select count(*) from auth.users;' -Label 'target rehearsal Auth user count')
     $targetIdentities = [int](Invoke-LocalQuery -Database $targetDatabase -Sql 'select count(*) from auth.identities;' -Label 'target rehearsal Auth identity count')
+    $targetAuthAggregate = Get-LocalTask4AuthAggregate -Database $targetDatabase -Label 'target rehearsal portable Auth aggregate'
+    [void](Assert-Task4AuthAggregate -Actual $targetAuthAggregate -Baseline $authBaseline -RequireNeutralized)
     $sourceMigrationText = Invoke-LocalQuery -Database $sourceDatabase -Sql "select coalesce(jsonb_agg(version order by version),'[]'::jsonb)::text from supabase_migrations.schema_migrations;" -Label 'source rehearsal migration identities'
     $sourceMigrations = @(ConvertFrom-JsonArray -Text $sourceMigrationText)
     $targetInventoryPath = Join-Path $ArtifactRoot $InventoryName
@@ -2035,7 +2282,7 @@ from public.appointments;
       functionDiff = $functionDiff
       rowCountDifferences = $countDifferences
       sequenceChecks = $sequenceChecks
-      auth = [ordered]@{ sourceUsers = $sourceUsers; sourceIdentities = $sourceIdentities; importedUsers = $targetUsers; importedIdentities = $targetIdentities; sessions = 0; refreshTokens = 0 }
+      auth = [ordered]@{ sourceUsers = $sourceUsers; sourceIdentities = $sourceIdentities; importedUsers = $targetUsers; importedIdentities = $targetIdentities; sessions = 0; refreshTokens = 0; aggregate = $sourceAuthAggregate; importedAggregate = $targetAuthAggregate }
       loader = [ordered]@{ main = $LoaderName; heldStaffMessages = $HeldStaffLoaderName; productionTargetUsed = $false }
       binding = $binding
       bindingSha256 = Get-JsonSha256 -Value $binding
@@ -2059,6 +2306,9 @@ function Assert-RehearsalReport {
       $report.foreignKeyAudit.failures -ne 0 -or -not $report.foreignKeyAudit.enforcedBeforeLoaderCommit) {
     throw 'Rehearsal report does not pass the required Auth and referential-integrity gates.'
   }
+  $authBaseline = Get-Task4AuthAggregateBaseline
+  [void](Assert-Task4AuthAggregate -Actual $report.auth.aggregate -Baseline $authBaseline)
+  [void](Assert-Task4AuthAggregate -Actual $report.auth.importedAggregate -Baseline $authBaseline -RequireNeutralized)
   if ((Get-JsonSha256 -Value $report.binding) -ne ([string]$report.bindingSha256).ToUpperInvariant()) {
     throw 'Rehearsal report binding digest is invalid.'
   }
@@ -2160,7 +2410,7 @@ function Invoke-ImportPhase {
     $metrics = Get-TargetPostImportMetrics
     $sequenceChecks = @(Get-TargetSequenceChecks)
     $serviceLists = Get-TargetApprovedServiceLists
-    $integrity = Assert-Task4PostImportResult -ExpectedPost $expectedPostState -ActualInventory $actualInventory -ExpectedTableCounts $rehearsalReport.source.tableCounts -ActualTableCounts $actualTableCounts -Metrics $metrics -SequenceChecks $sequenceChecks -ServiceLists $serviceLists -ForeignKeyCount $foreignKeyCount
+    $integrity = Assert-Task4PostImportResult -ExpectedPost $expectedPostState -ActualInventory $actualInventory -ExpectedTableCounts $rehearsalReport.source.tableCounts -ActualTableCounts $actualTableCounts -Metrics $metrics -AuthBaseline $rehearsalReport.auth.aggregate -SequenceChecks $sequenceChecks -ServiceLists $serviceLists -ForeignKeyCount $foreignKeyCount
     $reportPayload = [ordered]@{
       formatVersion = 1
       pass = $true

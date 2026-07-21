@@ -154,6 +154,115 @@ foreach($mutation in @('selfConsistentRunner','head','historicalMigrations','val
   Assert-Rejected -Label "Composite legacy rehearsal tamper was accepted: $mutation" -Action {Assert-RehearsalArtifactBinding -Current $changedCurrent -Recorded $changedRecorded -Task4Authorization $changedAuthorization -RecordedReportSha256 $reportDigest}
 }
 
+Import-RunnerFunction Get-Task4AuthUsersColumnContract
+Import-RunnerFunction Get-Task4AuthIdentitiesColumnContract
+Import-RunnerFunction Get-Task4AuthAggregateBaseline
+Import-RunnerFunction Get-PortableAuthExportSql
+Import-RunnerFunction Get-Task4AuthAggregateSql
+Import-RunnerFunction Get-TargetPostImportMetrics
+Import-RunnerFunction Get-Task4SqlCsv
+Import-RunnerFunction Get-Task4SqlStatements
+Import-RunnerFunction Assert-PortableAuthBoundary
+Import-RunnerFunction Assert-Task4AuthAggregate
+
+$expectedAuthUserColumns=@(
+  'instance_id','id','aud','role','email','encrypted_password','email_confirmed_at','last_sign_in_at','raw_app_meta_data','raw_user_meta_data','is_super_admin','created_at','updated_at','phone','phone_confirmed_at','banned_until','is_sso_user','deleted_at','is_anonymous',
+  'confirmation_token','recovery_token','email_change_token_new','email_change_token_current','phone_change_token','reauthentication_token','email_change','phone_change',
+  'invited_at','confirmation_sent_at','recovery_sent_at','email_change_sent_at','phone_change_sent_at','reauthentication_sent_at','email_change_confirm_status'
+)
+$expectedAuthIdentityColumns=@('provider_id','user_id','identity_data','provider','last_sign_in_at','created_at','updated_at','id')
+$usersContract=Get-Task4AuthUsersColumnContract
+$identitiesContract=Get-Task4AuthIdentitiesColumnContract
+Assert-EqualJson -Expected $expectedAuthUserColumns -Actual @($usersContract.columns) -Label 'Auth users destination contract is not the exact ordered 34-column contract.'
+Assert-EqualJson -Expected @('instance_id','id','aud','role','email','encrypted_password','email_confirmed_at','last_sign_in_at','raw_app_meta_data','raw_user_meta_data','is_super_admin','created_at','updated_at','phone','phone_confirmed_at','banned_until','is_sso_user','deleted_at','is_anonymous') -Actual @($usersContract.preserved) -Label 'Auth users preserved-field contract changed.'
+Assert-EqualJson -Expected @('confirmation_token','recovery_token','email_change_token_new','email_change_token_current','phone_change_token','reauthentication_token','email_change','phone_change') -Actual @($usersContract.emptyString) -Label 'Auth users empty-string neutralization contract changed.'
+Assert-EqualJson -Expected @('invited_at','confirmation_sent_at','recovery_sent_at','email_change_sent_at','phone_change_sent_at','reauthentication_sent_at') -Actual @($usersContract.nullValue) -Label 'Auth users NULL neutralization contract changed.'
+Assert-EqualJson -Expected @('email_change_confirm_status') -Actual @($usersContract.zeroValue) -Label 'Auth users zero neutralization contract changed.'
+Assert-EqualJson -Expected $expectedAuthIdentityColumns -Actual @($identitiesContract.columns) -Label 'Auth identities destination contract is not the exact ordered eight-column contract.'
+
+$authExportSql=Get-PortableAuthExportSql
+foreach($marker in @('insert into auth.users','insert into auth.identities','confirmation_token','email_change_confirm_status','order by import_order, sort_id')){if(-not $authExportSql.Contains($marker)){throw "Portable Auth export SQL is missing marker: $marker"}}
+foreach($forbiddenSourceField in @('confirmed_at','auth.identities.email')){if($authExportSql -match ('(?i)\b'+[regex]::Escape($forbiddenSourceField)+'\b')){throw "Portable Auth export SQL reads generated field: $forbiddenSourceField"}}
+$authAggregateSql=Get-Task4AuthAggregateSql
+foreach($marker in @('quote_nullable(instance_id::text)','quote_nullable(invited_at::text)','quote_nullable(provider_id::text)','forbiddenState','extensions.digest','email_change_confirm_status is distinct from 0','--ROW--')){if(-not $authAggregateSql.Contains($marker)){throw "Portable Auth aggregate SQL is missing marker: $marker"}}
+$emailConfirmedIndex=$authAggregateSql.IndexOf('quote_nullable(email_confirmed_at::text)',[StringComparison]::Ordinal)
+$invitedIndex=$authAggregateSql.IndexOf('quote_nullable(invited_at::text)',[StringComparison]::Ordinal)
+$lastSignInIndex=$authAggregateSql.IndexOf('quote_nullable(last_sign_in_at::text)',[StringComparison]::Ordinal)
+if($emailConfirmedIndex -lt 0 -or $invitedIndex -le $emailConfirmedIndex -or $lastSignInIndex -le $invitedIndex){throw 'Portable Auth aggregate canonical field order changed.'}
+foreach($tokenColumn in @('confirmation_token','recovery_token','email_change_token_new','email_change_token_current','phone_change_token','reauthentication_token','email_change','phone_change')){if(-not $authAggregateSql.Contains("$tokenColumn is distinct from ''")){throw "Portable Auth aggregate SQL allows NULL bypass for $tokenColumn"}}
+$savedTargetQuery=(Get-Command Invoke-TargetQuery -ErrorAction SilentlyContinue)
+function global:Invoke-TargetQuery {param([string]$Sql,[string]$Label)if($Label -eq 'post-import portable Auth aggregate metrics'){return '{"users":11,"identities":11,"forbiddenState":0,"invitedAtNonNull":0,"allowedUsersSha256":"A","identitiesSha256":"B","userIdSetSha256":"C","identityIdUserIdSetSha256":"D"}'};if($Label -eq 'post-import Auth and profile integrity metrics'){return '{"sessions":0,"refreshTokens":0,"profilesMapped":11,"authWithoutProfile":0,"identitiesWithoutUser":0}'};throw "Unexpected target query label: $Label"}
+try{
+  $postImportMetrics=Get-TargetPostImportMetrics
+  if($postImportMetrics.authUsers -ne 11 -or $postImportMetrics.authIdentities -ne 11){throw 'Post-import metrics no longer expose Auth count aliases.'}
+}finally{
+  Remove-Item function:\Invoke-TargetQuery -Force
+  if($savedTargetQuery){Set-Item -Path function:\Invoke-TargetQuery -Value $savedTargetQuery.ScriptBlock}
+}
+
+$authFixtureRoot=Join-Path ([IO.Path]::GetTempPath()) ('task4-auth-contract-'+[Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $authFixtureRoot|Out-Null
+try{
+  $authLoader=Join-Path $authFixtureRoot 'portable-auth.sql'
+  $userValues=@(
+    "'00000000-0000-0000-0000-000000000001'","'00000000-0000-0000-0000-000000000011'","'authenticated'","'authenticated'","'fixture@example.invalid'","'fixture-password-hash'","'2026-07-01T00:00:00Z'","'2026-07-02T00:00:00Z'",'''{"provider":"email"}''','''{"display_name":"fixture"}''','false',"'2026-06-01T00:00:00Z'","'2026-07-03T00:00:00Z'","'+60000000000'","'2026-07-01T00:00:00Z'","'2027-01-01T00:00:00Z'",'false',"'2028-01-01T00:00:00Z'",'false',
+    "'confirm-token'","'recovery-token'","'email-new-token'","'email-current-token'","'phone-token'","'reauth-token'","'new@example.invalid'","'+61111111111'",
+    "'2026-07-04T00:00:00Z'","'2026-07-05T00:00:00Z'","'2026-07-06T00:00:00Z'","'2026-07-07T00:00:00Z'","'2026-07-08T00:00:00Z'","'2026-07-09T00:00:00Z'",'3'
+  )
+  if($userValues.Count -ne 34){throw 'Auth users fixture does not contain exactly 34 values.'}
+  $identityValues=@("'email:fixture@example.invalid'","'00000000-0000-0000-0000-000000000011'",'''{"sub":"fixture"}''',"'email'","'2026-07-02T00:00:00Z'","'2026-06-01T00:00:00Z'","'2026-07-03T00:00:00Z'","'00000000-0000-0000-0000-000000000021'")
+  $unsafeAuthLoader=@"
+begin;
+set local statement_timeout = 0;
+set local lock_timeout = '30s';
+set local session_replication_role = replica;
+insert into auth.users ($($expectedAuthUserColumns -join ', ')) values ($($userValues -join ', '));
+insert into auth.identities ($($expectedAuthIdentityColumns -join ', ')) values ($($identityValues -join ', '));
+set local session_replication_role = origin;
+do `$foreign_key_audit`$ begin null; end `$foreign_key_audit`$;
+commit;
+"@
+  [IO.File]::WriteAllText($authLoader,$unsafeAuthLoader,(New-Object Text.UTF8Encoding($false)))
+  Assert-Rejected -Label 'Portable Auth boundary accepted non-neutral one-time-token or pending-workflow state.' -Action {Assert-PortableAuthBoundary -LoaderPath $authLoader}
+
+  $safeAuthLoader=$unsafeAuthLoader
+  foreach($value in @("'confirm-token'","'recovery-token'","'email-new-token'","'email-current-token'","'phone-token'","'reauth-token'","'new@example.invalid'","'+61111111111'")){$safeAuthLoader=$safeAuthLoader.Replace($value,"''")}
+  foreach($value in @("'2026-07-04T00:00:00Z'","'2026-07-05T00:00:00Z'","'2026-07-06T00:00:00Z'","'2026-07-07T00:00:00Z'","'2026-07-08T00:00:00Z'","'2026-07-09T00:00:00Z'")){$safeAuthLoader=$safeAuthLoader.Replace($value,'NULL')}
+  $safeAuthLoader=$safeAuthLoader.Replace(', 3);',', 0);')
+  [IO.File]::WriteAllText($authLoader,$safeAuthLoader,(New-Object Text.UTF8Encoding($false)))
+  Assert-PortableAuthBoundary -LoaderPath $authLoader
+  $fixtureJsonLiteral='''{"provider":"email"}'''
+  $escapedSqlLiteral='E''provider; escaped \'' quote'''
+  $escapedLiteralLoader=$safeAuthLoader.Replace($fixtureJsonLiteral,$escapedSqlLiteral)
+  [IO.File]::WriteAllText($authLoader,$escapedLiteralLoader,(New-Object Text.UTF8Encoding($false)))
+  Assert-PortableAuthBoundary -LoaderPath $authLoader
+  $unvalidatedAuthInsert=$safeAuthLoader.Replace('insert into auth.identities (','insert into auth.users values (''unsafe'');' + "`n" + 'insert into auth.identities (')
+  [IO.File]::WriteAllText($authLoader,$unvalidatedAuthInsert,(New-Object Text.UTF8Encoding($false)))
+  Assert-Rejected -Label 'Portable Auth boundary skipped an unvalidated Auth INSERT.' -Action {Assert-PortableAuthBoundary -LoaderPath $authLoader}
+  foreach($mutation in @('missing','extra','reordered','confirmedAt','identityEmail')){
+    $changed=$safeAuthLoader
+    switch($mutation){
+      'missing'{$changed=$changed.Replace('confirmation_token, ','')}
+      'extra'{$changed=$changed.Replace('email_change_confirm_status)', 'email_change_confirm_status, unexpected_column)')}
+      'reordered'{$changed=$changed.Replace('instance_id, id, aud', 'id, instance_id, aud')}
+      'confirmedAt'{$changed=$changed.Replace('email_change_confirm_status)', 'email_change_confirm_status, confirmed_at)')}
+      'identityEmail'{$changed=$changed.Replace('updated_at, id) values', 'updated_at, id, email) values')}
+    }
+    [IO.File]::WriteAllText($authLoader,$changed,(New-Object Text.UTF8Encoding($false)))
+    Assert-Rejected -Label "Portable Auth boundary accepted invalid destination contract: $mutation" -Action {Assert-PortableAuthBoundary -LoaderPath $authLoader}
+  }
+
+  $baseline=Get-Task4AuthAggregateBaseline
+  Assert-EqualJson -Expected ([ordered]@{users=11;identities=11;allowedUsersSha256='236920E2CE668364F8BF8D2B7DBD425557BE9A48F7A630DD01887A23479FB9F5';identitiesSha256='77EDEA6492557383F89024C67BE9F33F15B58D15FC27E04AA788411E07F578F6';userIdSetSha256='EEBBE2CDA9E327643A280392DB9250EA50174EA665EA81C79217814B4D7E0562';identityIdUserIdSetSha256='63B3F8797C47A342BB44C059FFE5D15481CB4513600266F91D74FD4AECF20BAE'}) -Actual $baseline -Label 'Portable Auth opaque aggregate baseline changed.'
+  $targetAggregate=[ordered]@{users=11;identities=11;forbiddenState=0;invitedAtNonNull=0;allowedUsersSha256=$baseline.allowedUsersSha256;identitiesSha256=$baseline.identitiesSha256;userIdSetSha256=$baseline.userIdSetSha256;identityIdUserIdSetSha256=$baseline.identityIdUserIdSetSha256}
+  [void](Assert-Task4AuthAggregate -Actual $targetAggregate -Baseline $baseline -RequireNeutralized)
+  foreach($mutation in @('users','identities','forbiddenState','invitedAtNonNull','allowedUsersSha256','identitiesSha256','userIdSetSha256','identityIdUserIdSetSha256')){
+    $changed=$targetAggregate|ConvertTo-Json -Depth 20|ConvertFrom-Json
+    if($mutation -in @('forbiddenState','invitedAtNonNull')){$changed.$mutation=1}elseif($mutation -in @('users','identities')){$changed.$mutation=10}else{$changed.$mutation=('0'*64)}
+    Assert-Rejected -Label "Portable Auth aggregate comparison accepted mutation: $mutation" -Action {Assert-Task4AuthAggregate -Actual $changed -Baseline $baseline -RequireNeutralized}
+  }
+}finally{if(Test-Path $authFixtureRoot){Remove-Item $authFixtureRoot -Recurse -Force}}
+
 Import-RunnerFunction Get-NormalizedPath
 Import-RunnerFunction Write-Utf8NoBom
 Import-RunnerFunction Assert-PortableAuthBoundary
@@ -171,8 +280,6 @@ set local statement_timeout = 0;
 set local lock_timeout = '30s';
 set local session_replication_role = replica;
 truncate table auth.identities, auth.users, $($fixtureTables -join ', ') restart identity cascade;
-insert into auth.users(id) values ('00000000-0000-0000-0000-000000000001');
-insert into auth.identities(id) values ('00000000-0000-0000-0000-000000000002');
 set local session_replication_role = origin;
 do `$foreign_key_audit`$ begin null; end `$foreign_key_audit`$;
 commit;
@@ -195,17 +302,17 @@ $global:Task4ApprovedServiceLists=[ordered]@{'pemeriksaan-kesihatan'=@('a','b','
 $postExpected=[ordered]@{projectRef='nhjbqdiyptjqherdfbqk';publicTables=102;authUsers=0;authIdentities=0;migrationRows=161;migrationIdentities=@('one','two');migrationIdentitiesSha256=('2'*64);schemaSha256=('3'*64);extendedSchemaSha256=('4'*64)}
 $postActual=$postExpected|ConvertTo-Json -Depth 20|ConvertFrom-Json;$postActual.authUsers=11;$postActual.authIdentities=11
 $expectedCounts=[pscustomobject]@{profiles=11;staff_messages=24};$actualCounts=[pscustomobject]@{profiles=11;staff_messages=24;website_pages=1}
-$metrics=[pscustomobject]@{authUsers=11;authIdentities=11;sessions=0;refreshTokens=0;profilesMapped=11;authWithoutProfile=0;identitiesWithoutUser=0}
+$metrics=[pscustomobject]@{authUsers=11;authIdentities=11;users=11;identities=11;sessions=0;refreshTokens=0;profilesMapped=11;authWithoutProfile=0;identitiesWithoutUser=0;forbiddenState=0;invitedAtNonNull=0;allowedUsersSha256=$baseline.allowedUsersSha256;identitiesSha256=$baseline.identitiesSha256;userIdSetSha256=$baseline.userIdSetSha256;identityIdUserIdSetSha256=$baseline.identityIdUserIdSetSha256}
 $serviceLists=[pscustomobject]@{'pemeriksaan-kesihatan'=@('a','b','c','d');'prosedur-minor'=@('e','f','g','h');'rawatan-am'=@('i','j','k','l','m')}
 $validSequenceChecks=@($expectedStandaloneSequences|ForEach-Object{[pscustomobject]@{sequence_identity=$_.identity;actual_last_value=$_.lastValue;actual_is_called=$_.isCalled;passed=$true}})
-[void](Assert-Task4PostImportResult -ExpectedPost $postExpected -ActualInventory $postActual -ExpectedTableCounts $expectedCounts -ActualTableCounts $actualCounts -Metrics $metrics -SequenceChecks $validSequenceChecks -ServiceLists $serviceLists -ForeignKeyCount 111)
+[void](Assert-Task4PostImportResult -ExpectedPost $postExpected -ActualInventory $postActual -ExpectedTableCounts $expectedCounts -ActualTableCounts $actualCounts -Metrics $metrics -AuthBaseline $baseline -SequenceChecks $validSequenceChecks -ServiceLists $serviceLists -ForeignKeyCount 111)
 foreach($mutation in @('auth','count','service','migration','sequence','foreignKeys')){
   $a=$postActual|ConvertTo-Json -Depth 20|ConvertFrom-Json;$c=$actualCounts|ConvertTo-Json|ConvertFrom-Json;$m=$metrics|ConvertTo-Json|ConvertFrom-Json;$s=$serviceLists|ConvertTo-Json -Depth 20|ConvertFrom-Json;$q=@($validSequenceChecks|ForEach-Object{$_|ConvertTo-Json -Depth 20|ConvertFrom-Json});$fk=111
   switch($mutation){'auth'{$m.sessions=1};'count'{$c.profiles=10};'service'{$s.'rawatan-am'[4]='wrong'};'migration'{$a.migrationRows=160};'sequence'{$q[1].passed=$false};'foreignKeys'{$fk=0}}
-  Assert-Rejected -Label "Post-import mutation was accepted: $mutation" -Action {[void](Assert-Task4PostImportResult -ExpectedPost $postExpected -ActualInventory $a -ExpectedTableCounts $expectedCounts -ActualTableCounts $c -Metrics $m -SequenceChecks $q -ServiceLists $s -ForeignKeyCount $fk)}
+  Assert-Rejected -Label "Post-import mutation was accepted: $mutation" -Action {[void](Assert-Task4PostImportResult -ExpectedPost $postExpected -ActualInventory $a -ExpectedTableCounts $expectedCounts -ActualTableCounts $c -Metrics $m -AuthBaseline $baseline -SequenceChecks $q -ServiceLists $s -ForeignKeyCount $fk)}
 }
-Assert-Rejected -Label 'Missing standalone sequence check was accepted.' -Action {[void](Assert-Task4PostImportResult -ExpectedPost $postExpected -ActualInventory $postActual -ExpectedTableCounts $expectedCounts -ActualTableCounts $actualCounts -Metrics $metrics -SequenceChecks @($validSequenceChecks|Select-Object -First 2) -ServiceLists $serviceLists -ForeignKeyCount 111)}
-Assert-Rejected -Label 'Extra standalone sequence check was accepted.' -Action {[void](Assert-Task4PostImportResult -ExpectedPost $postExpected -ActualInventory $postActual -ExpectedTableCounts $expectedCounts -ActualTableCounts $actualCounts -Metrics $metrics -SequenceChecks @($validSequenceChecks+[pscustomobject]@{sequence_identity='public.extra_seq';passed=$true}) -ServiceLists $serviceLists -ForeignKeyCount 111)}
+Assert-Rejected -Label 'Missing standalone sequence check was accepted.' -Action {[void](Assert-Task4PostImportResult -ExpectedPost $postExpected -ActualInventory $postActual -ExpectedTableCounts $expectedCounts -ActualTableCounts $actualCounts -Metrics $metrics -AuthBaseline $baseline -SequenceChecks @($validSequenceChecks|Select-Object -First 2) -ServiceLists $serviceLists -ForeignKeyCount 111)}
+Assert-Rejected -Label 'Extra standalone sequence check was accepted.' -Action {[void](Assert-Task4PostImportResult -ExpectedPost $postExpected -ActualInventory $postActual -ExpectedTableCounts $expectedCounts -ActualTableCounts $actualCounts -Metrics $metrics -AuthBaseline $baseline -SequenceChecks @($validSequenceChecks+[pscustomobject]@{sequence_identity='public.extra_seq';passed=$true}) -ServiceLists $serviceLists -ForeignKeyCount 111)}
 
 $importStart=$lowerRunner.IndexOf('function invoke-importphase')
 $rollbackStart=$lowerRunner.IndexOf('function invoke-rollbackphase')
