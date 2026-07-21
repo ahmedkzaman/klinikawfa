@@ -1,6 +1,8 @@
 import Ajv from "ajv";
 import { describe, expect, it } from "vitest";
 
+import clinicExterior from "@/assets/klinik-awfa-exterior.webp";
+
 import {
   homeAutoplayMsSchema,
   homeBackgroundOpacitySchema,
@@ -240,6 +242,8 @@ describe("website content schemas", () => {
       `/${segment}?source=editor`,
       `https://klinikawfa.com/${segment}/nested`,
       `https://www.klinikawfa.com/${segment}#preview`,
+      `https://klinikawfa.com/${segment.toUpperCase()}?source=editor`,
+      `https://www.klinikawfa.com/${segment.toUpperCase()}#preview`,
       `/public/../${segment}`,
       `/public/%2e%2e/${segment}`,
     ];
@@ -260,6 +264,35 @@ describe("website content schemas", () => {
       ...validGeneralPage,
       cta: { label: { ms: "Laman luar" }, href },
     }, true);
+  });
+
+  it.each([
+    [clinicExterior, true],
+    ["/assets/klinik-awfa-exterior-Dc7a8_Bf.webp", true],
+    ["/images/clinic-photo.jpeg", true],
+    ["/src/assets/../klinik-awfa-exterior.webp", false],
+    ["/src/assets/klinik-awfa-exterior%2ewebp", false],
+    ["/src/assets/klinik-awfa-exterior.webp?cache=1", false],
+    ["/src/assets/klinik-awfa-exterior.webp#preview", false],
+    ["/src/assets/klinik-awfa-exterior.js", false],
+    ["/src/assets/klinik-awfa-exterior.webp ", false],
+    ["/src\\assets\\klinik-awfa-exterior.webp", false],
+  ])("validates Home asset path %j with Zod and Draft 7", (href, accepted) => {
+    expect(safeHrefSchema.safeParse(href).success).toBe(accepted);
+    expectPairedResult(generalPageContentSchema, validateGeneralPage, {
+      ...validGeneralPage,
+      heroImage: href,
+    }, accepted);
+  });
+
+  it("does not treat an asset path as a managed CTA link", () => {
+    const href = "/assets/klinik-awfa-exterior-Dc7a8_Bf.webp";
+    expect(safeHrefSchema.safeParse(href).success).toBe(true);
+    expect(websiteCtaHrefSchema.safeParse(href).success).toBe(false);
+    expectPairedResult(generalPageContentSchema, validateGeneralPage, {
+      ...validGeneralPage,
+      cta: { label: { ms: "Imej" }, href },
+    }, false);
   });
 
   it.each(RESERVED_PAGE_SLUGS)("rejects reserved slug %s", (slug) => {

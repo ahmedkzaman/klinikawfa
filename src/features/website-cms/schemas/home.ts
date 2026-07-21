@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   bilingualTextSchema,
+  managedLinkHrefSchema,
   requiredBilingualTextSchema,
   safeHrefSchema,
 } from "./common";
@@ -57,7 +58,7 @@ const homeLinkSchema = z
     label: requiredBilingualTextSchema,
     // Existing public Home links include appointment and telephone routes. Those
     // stay safe, while the stricter managed-page CTA restriction lives in page.ts.
-    href: safeHrefSchema,
+    href: managedLinkHrefSchema,
   })
   .strict();
 
