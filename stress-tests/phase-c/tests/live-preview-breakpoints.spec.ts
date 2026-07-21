@@ -1,50 +1,81 @@
 import { expect, test } from "@playwright/test";
 
-const previewDocument = `<!doctype html>
-<html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style>
-      #probe { background-color: rgb(220, 38, 38); }
-      @media (min-width: 768px) {
-        #probe { background-color: rgb(37, 99, 235); }
-      }
-    </style>
-  </head>
-  <body><div id="probe">breakpoint probe</div></body>
-</html>`;
-
-test("390 and 1280 preview frames evaluate their own viewport breakpoints", async ({
+test("the production LivePreview owns its viewport, styles, and theme", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.setContent(
-    '<iframe id="preview" sandbox="allow-same-origin" style="border:0;width:390px;height:400px"></iframe>',
+  await page.goto(
+    "/stress-tests/phase-c/fixtures/live-preview/index.html",
+    { waitUntil: "domcontentloaded" },
   );
+  await expect(
+    page.getByRole("heading", { name: "LivePreview production harness" }),
+  ).toBeVisible();
 
-  const preview = page.locator("#preview");
-  await preview.evaluate((node, srcDoc) => {
-    (node as HTMLIFrameElement).srcdoc = srcDoc;
-  }, previewDocument);
+  const preview = page.getByTestId("live-preview-frame");
+  await expect(preview).toHaveAttribute("data-preview-mode", "desktop");
   const handle = await preview.elementHandle();
   const frame = await handle?.contentFrame();
   expect(frame).not.toBeNull();
 
-  await expect.poll(() => frame!.evaluate(() => window.innerWidth)).toBe(390);
-  await expect
-    .poll(() =>
-      frame!.locator("#probe").evaluate((node) => getComputedStyle(node).backgroundColor),
-    )
-    .toBe("rgb(220, 38, 38)");
-
-  await preview.evaluate((node) => {
-    (node as HTMLIFrameElement).style.width = "1280px";
-  });
-
   await expect.poll(() => frame!.evaluate(() => window.innerWidth)).toBe(1280);
   await expect
     .poll(() =>
-      frame!.locator("#probe").evaluate((node) => getComputedStyle(node).backgroundColor),
+      frame!
+        .locator("#tailwind-breakpoint-probe")
+        .evaluate((node) => getComputedStyle(node).display),
     )
-    .toBe("rgb(37, 99, 235)");
+    .toBe("block");
+  await expect
+    .poll(() =>
+      frame!
+        .locator("#cloned-style-probe")
+        .evaluate((node) => getComputedStyle(node).borderTopColor),
+    )
+    .toBe("rgb(12, 34, 56)");
+  await expect
+    .poll(() =>
+      frame!
+        .locator('style[data-live-preview-style="true"]')
+        .count(),
+    )
+    .toBeGreaterThan(0);
+  await expect
+    .poll(() =>
+      frame!.evaluate(() =>
+        document.documentElement.getAttribute("data-harness-theme"),
+      ),
+    )
+    .toBe("clinic");
+
+  await page.getByRole("button", { name: "Mobile 390 px" }).click();
+  await expect(preview).toHaveAttribute("data-preview-mode", "mobile");
+  await expect.poll(() => frame!.evaluate(() => window.innerWidth)).toBe(390);
+  await expect
+    .poll(() =>
+      frame!
+        .locator("#tailwind-breakpoint-probe")
+        .evaluate((node) => getComputedStyle(node).display),
+    )
+    .toBe("none");
+
+  await page.getByRole("button", { name: "Update parent theme" }).click();
+  await expect
+    .poll(() =>
+      frame!.evaluate(() =>
+        document.documentElement.getAttribute("data-harness-theme"),
+      ),
+    )
+    .toBe("night");
+
+  await page.getByRole("button", { name: "Desktop 1280 px" }).click();
+  await expect(preview).toHaveAttribute("data-preview-mode", "desktop");
+  await expect.poll(() => frame!.evaluate(() => window.innerWidth)).toBe(1280);
+  await expect
+    .poll(() =>
+      frame!
+        .locator("#tailwind-breakpoint-probe")
+        .evaluate((node) => getComputedStyle(node).display),
+    )
+    .toBe("block");
 });
