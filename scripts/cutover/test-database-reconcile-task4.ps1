@@ -30,14 +30,14 @@ function Assert-Rejected {
 }
 
 $expectedMigrations=@(
-  [ordered]@{version='20260720111916';file='20260720111916_add_website_editor_role.sql';sha256='87F0EEA795BC99CE1CBA8BB799B6E25D7C3A313A54E309425FC47165B5125618'},
-  [ordered]@{version='20260720115031';file='20260720115031_create_website_cms_foundation.sql';sha256='A86DA7A8824CCF5BEF9033D9DC525C37D50AE6281AF0C060ED031995459E5D30'},
-  [ordered]@{version='20260720225347';file='20260720225347_harden_website_cms_integration.sql';sha256='E4987CFCBD91251FE6EE10881D7F67858265C735DD7FDFCE31E49FBF63ECB8EC'},
-  [ordered]@{version='20260721035032';file='20260721035032_add_website_page_publishing.sql';sha256='88BE2091198AECA44A556DF3A0C76C6AB6018FBA8149A0EE13F79C4AC92D4C39'},
-  [ordered]@{version='20260721100403';file='20260721100403_switch_tracking_to_google.sql';sha256='EB84C03BD376D0B9E5AE2A7E1A14B7E41F9AA04B54D663793DCC79EF987E37A1'},
-  [ordered]@{version='20260721162256';file='20260721162256_restore_staff_messages.sql';sha256='4E0C335C855C1338EDAB28429B7377DAC7768D796666B3FF315FF1B4A55C9FB0'},
-  [ordered]@{version='20260721170000';file='20260721170000_create_general_website_page_rpc.sql';sha256='4762C9B6791AB4C5E95FBFCC1F05F6BB703911D2D2DCE9DDDFD89456D2B922A4'},
-  [ordered]@{version='20260721174422';file='20260721174422_preserve_source_cutover_fields.sql';sha256='ECEBAE8DFB0CED17B2C0A1332E627846844C439DB945A5C705C95B53E3611217'}
+  [ordered]@{version='20260720111916';file='20260720111916_add_website_editor_role.sql';sha256='87F0EEA795BC99CE1CBA8BB799B6E25D7C3A313A54E309425FC47165B5125618';name='add_website_editor_role';statementCount=1;statementsSha256='4D4725CED6EBE42B31FB282909DA9FBD2A6E697D4770C04DE4479B85FC49B985'},
+  [ordered]@{version='20260720115031';file='20260720115031_create_website_cms_foundation.sql';sha256='A86DA7A8824CCF5BEF9033D9DC525C37D50AE6281AF0C060ED031995459E5D30';name='create_website_cms_foundation';statementCount=91;statementsSha256='B2B9C9017EF44E8DD95E82A0666DC11494A1BCF91D9F6250E123FCE927B5E8F7'},
+  [ordered]@{version='20260720225347';file='20260720225347_harden_website_cms_integration.sql';sha256='E4987CFCBD91251FE6EE10881D7F67858265C735DD7FDFCE31E49FBF63ECB8EC';name='harden_website_cms_integration';statementCount=31;statementsSha256='F24219DDADF3336C300153EDB521BC5A07807246707400E6A5489DC46298FAC2'},
+  [ordered]@{version='20260721035032';file='20260721035032_add_website_page_publishing.sql';sha256='88BE2091198AECA44A556DF3A0C76C6AB6018FBA8149A0EE13F79C4AC92D4C39';name='add_website_page_publishing';statementCount=15;statementsSha256='B4536DDBADF2D0C266BE5BFE8B487CAA772B2E2452D90C3EED332B2AA7AC9067'},
+  [ordered]@{version='20260721100403';file='20260721100403_switch_tracking_to_google.sql';sha256='EB84C03BD376D0B9E5AE2A7E1A14B7E41F9AA04B54D663793DCC79EF987E37A1';name='switch_tracking_to_google';statementCount=22;statementsSha256='8EA9689C0A8C7DB0BC5A1E40E771A747924B648CAE86BC016985299EE89BC672'},
+  [ordered]@{version='20260721162256';file='20260721162256_restore_staff_messages.sql';sha256='4E0C335C855C1338EDAB28429B7377DAC7768D796666B3FF315FF1B4A55C9FB0';name='restore_staff_messages';statementCount=10;statementsSha256='82E015F8BC3DA792E95269F397F266D5A0A3C4AFF086DA6969183491A5727552'},
+  [ordered]@{version='20260721170000';file='20260721170000_create_general_website_page_rpc.sql';sha256='4762C9B6791AB4C5E95FBFCC1F05F6BB703911D2D2DCE9DDDFD89456D2B922A4';name='create_general_website_page_rpc';statementCount=4;statementsSha256='E82EBA8A2674451B29885BDEC6D7F983C0CDAA2F4DDC3DA7162C98F14573EED1'},
+  [ordered]@{version='20260721174422';file='20260721174422_preserve_source_cutover_fields.sql';sha256='ECEBAE8DFB0CED17B2C0A1332E627846844C439DB945A5C705C95B53E3611217';name='preserve_source_cutover_fields';statementCount=4;statementsSha256='9F380B05DEEA92BABC7AC0076963B81648FBC3ABF8734C0820F21E38B784FD7C'}
 )
 
 Import-RunnerFunction Get-StringSha256
@@ -47,11 +47,77 @@ Import-RunnerFunction Get-Task4MigrationBindings
 $global:RepositoryRoot=$repositoryRoot
 $global:ExpectedRef='nhjbqdiyptjqherdfbqk'
 $global:Task4MigrationSpecifications=$expectedMigrations
+$global:Task4MigrationHistoryBindingSha256='6612F6D16FECB390A6EC3BE870AC82C04866CFACF2788C1619878B39657BA2F0'
+$global:Task4MigrationWorkdirDigest='55C3967A81AA832509B923E1062CDAE34C55E38D076006E3E8156FDE3C91149D'
 foreach($migration in $expectedMigrations){if(-not $runner.Contains($migration.version) -or -not $runner.Contains($migration.file) -or -not $runner.Contains($migration.sha256)){throw "Runner source is missing exact migration binding: $($migration.file)"}}
 $bindings=@(Get-Task4MigrationBindings)
 if($bindings.Count -ne 8){throw 'Runtime binding is not exactly eight migrations.'}
 Assert-EqualJson -Expected @($expectedMigrations.file) -Actual @($bindings.file) -Label 'Runtime migration order is not exact.'
 Assert-EqualJson -Expected @($expectedMigrations.sha256) -Actual @($bindings.sha256) -Label 'Runtime migration hashes are not exact.'
+
+Import-RunnerFunction Get-Task4MigrationStatements
+Import-RunnerFunction Get-Task4MigrationHistorySummary
+Import-RunnerFunction Get-PortableTask4MigrationBindings
+Import-RunnerFunction Get-Task4LegacyMigrationBindings
+Import-RunnerFunction Assert-Task4MigrationHistoryBindings
+Import-RunnerFunction Get-Task4MigrationHistoryRows
+$historyRows=@($bindings|ForEach-Object{
+  [ordered]@{version=$_.version;name=$_.name;statements=@(Get-Task4MigrationStatements -Sql (Get-Content -LiteralPath $_.path -Raw))}
+})
+$historySummary=@(Get-Task4MigrationHistorySummary -Rows $historyRows)
+$historyBinding=@(Assert-Task4MigrationHistoryBindings -Migrations $bindings -Rows $historyRows)
+Assert-EqualJson -Expected $expectedMigrations -Actual $historyBinding -Label 'Exact six-field migration history binding is not canonical.'
+if((Get-JsonSha256 -Value $historyBinding) -cne '6612F6D16FECB390A6EC3BE870AC82C04866CFACF2788C1619878B39657BA2F0'){throw 'Ordered eight-summary binding digest changed.'}
+Assert-EqualJson -Expected @($expectedMigrations|ForEach-Object{[ordered]@{version=$_.version;file=$_.file;sha256=$_.sha256}}) -Actual @(Get-Task4LegacyMigrationBindings -Migrations $bindings) -Label 'Pinned v1 evidence legacy migration projection changed.'
+foreach($mutation in @('version','name','statementBytes','statementOrder','statementCount','duplicate','missing','extra','scalarStatements','nullStatements','numericVersion','missingStatements')){
+  $changed=@((ConvertTo-Json -InputObject $historyRows -Depth 100|ConvertFrom-Json))
+  switch($mutation){
+    'version'{$changed[0].version='20990101000000'}
+    'name'{$changed[0].name='wrong_name'}
+    'statementBytes'{$changed[0].statements[0]=[string]$changed[0].statements[0]+'x'}
+    'statementOrder'{$swap=[string]$changed[1].statements[0];$changed[1].statements[0]=$changed[1].statements[1];$changed[1].statements[1]=$swap}
+    'statementCount'{$changed[1].statements=@($changed[1].statements|Select-Object -Skip 1)}
+    'duplicate'{$changed+=($changed[0]|ConvertTo-Json -Depth 100|ConvertFrom-Json)}
+    'missing'{$changed=@($changed|Select-Object -Skip 1)}
+    'extra'{$changed+=[pscustomobject]@{version='20990101000000';name='extra';statements=@('select 1')}}
+    'scalarStatements'{$changed[0].statements='select 1'}
+    'nullStatements'{$changed[0].statements=$null}
+    'numericVersion'{$changed[0].version=20260720111916}
+    'missingStatements'{$changed[0].PSObject.Properties.Remove('statements')}
+  }
+  Assert-Rejected -Label "Exact history binding accepted mutation: $mutation" -Action {[void](Assert-Task4MigrationHistoryBindings -Migrations $bindings -Rows $changed)}
+}
+$script:historyQueryText=$null;$script:historyQueryResult=(ConvertTo-Json -InputObject $historyRows -Depth 100 -Compress)
+function global:Invoke-TargetQueryWithoutOutputLog {param($Sql,$Label)$script:historyQueryText=$Sql;return $script:historyQueryResult}
+function global:Invoke-TargetQuery {throw 'Exact migration history reader used the general captured-output query helper.'}
+$queriedHistory=@(Get-Task4MigrationHistoryRows -Migrations $bindings -Label 'focused exact history query')
+Assert-EqualJson -Expected $historySummary -Actual @(Get-Task4MigrationHistorySummary -Rows $queriedHistory) -Label 'Exact history reader did not preserve target text-array data.'
+foreach($version in $expectedMigrations.version){if(-not $script:historyQueryText.Contains("'$version'")){throw "Exact history query omitted version: $version"}}
+if(([regex]::Matches($script:historyQueryText,"'\d{14}'")).Count -ne 8 -or -not $script:historyQueryText.Contains('select version,name,to_jsonb(statements) as statements') -or -not $script:historyQueryText.Contains('where version in (') -or -not $script:historyQueryText.Contains('order by version')){throw 'Exact history query is not constrained to the ordered eight-row contract.'}
+$script:historyQueryResult='{malformed statement payload'
+try{[void](Get-Task4MigrationHistoryRows -Migrations $bindings -Label 'malformed exact history query');throw 'Malformed exact history JSON was accepted.'}catch{if($_.Exception.Message -ne 'Task 4 exact migration history query returned invalid JSON.'){throw 'Malformed exact history JSON was not rejected with a sanitized error.'}}
+
+Import-RunnerFunction Get-Task4BaselineMigrationFiles
+Import-RunnerFunction Get-Task4MigrationWorkdirInventory
+Import-RunnerFunction Assert-Task4MigrationWorkdirInventory
+$baselineFiles=@(Get-Task4BaselineMigrationFiles)
+if($baselineFiles.Count -ne 153 -or @($baselineFiles|Sort-Object -Unique).Count -ne 153){throw 'Exact remote baseline file binding is not 153 unique entries.'}
+$workdirRoot=Join-Path ([IO.Path]::GetTempPath()) ('task4-workdir-'+[Guid]::NewGuid().ToString('N'))
+try{
+  $workdirMigrations=Join-Path $workdirRoot 'supabase\migrations';New-Item -ItemType Directory -Path $workdirMigrations -Force|Out-Null
+  foreach($file in $baselineFiles){[IO.File]::WriteAllBytes((Join-Path $workdirMigrations $file),[byte[]]@())}
+  foreach($migration in $bindings){Copy-Item -LiteralPath $migration.path -Destination (Join-Path $workdirMigrations $migration.file)}
+  $workdirInventory=Get-Task4MigrationWorkdirInventory -Workdir $workdirRoot
+  if($workdirInventory.files.Count -ne 161 -or $workdirInventory.sha256 -cne '55C3967A81AA832509B923E1062CDAE34C55E38D076006E3E8156FDE3C91149D'){throw 'Exact sorted 161-file workdir inventory/digest changed.'}
+  [void](Assert-Task4MigrationWorkdirInventory -Inventory $workdirInventory -Migrations $bindings)
+  $placeholderPath=Join-Path $workdirMigrations $baselineFiles[0];[IO.File]::WriteAllBytes($placeholderPath,[byte[]](1));Assert-Rejected -Label 'Nonzero baseline placeholder was accepted.' -Action {[void](Assert-Task4MigrationWorkdirInventory -Inventory (Get-Task4MigrationWorkdirInventory -Workdir $workdirRoot) -Migrations $bindings)};[IO.File]::WriteAllBytes($placeholderPath,[byte[]]@())
+  $pendingPath=Join-Path $workdirMigrations $bindings[0].file;Add-Content -LiteralPath $pendingPath -Value 'x';Assert-Rejected -Label 'Altered pending migration was accepted.' -Action {[void](Assert-Task4MigrationWorkdirInventory -Inventory (Get-Task4MigrationWorkdirInventory -Workdir $workdirRoot) -Migrations $bindings)};Copy-Item -LiteralPath $bindings[0].path -Destination $pendingPath -Force
+  Remove-Item -LiteralPath (Join-Path $workdirMigrations $baselineFiles[1]) -Force;Assert-Rejected -Label 'Missing baseline file was accepted.' -Action {[void](Assert-Task4MigrationWorkdirInventory -Inventory (Get-Task4MigrationWorkdirInventory -Workdir $workdirRoot) -Migrations $bindings)};[IO.File]::WriteAllBytes((Join-Path $workdirMigrations $baselineFiles[1]),[byte[]]@())
+  [IO.File]::WriteAllBytes((Join-Path $workdirMigrations '20990101000000_extra.sql'),[byte[]]@());Assert-Rejected -Label 'Extra workdir file was accepted.' -Action {[void](Assert-Task4MigrationWorkdirInventory -Inventory (Get-Task4MigrationWorkdirInventory -Workdir $workdirRoot) -Migrations $bindings)};Remove-Item -LiteralPath (Join-Path $workdirMigrations '20990101000000_extra.sql') -Force
+  $reordered=$workdirInventory|ConvertTo-Json -Depth 100|ConvertFrom-Json;$swap=$reordered.files[0];$reordered.files[0]=$reordered.files[1];$reordered.files[1]=$swap;Assert-Rejected -Label 'Reordered inventory was accepted.' -Action {[void](Assert-Task4MigrationWorkdirInventory -Inventory $reordered -Migrations $bindings)}
+  $wrongDigest=$workdirInventory|ConvertTo-Json -Depth 100|ConvertFrom-Json;$wrongDigest.sha256=('0'*64);Assert-Rejected -Label 'Wrong whole-inventory digest was accepted.' -Action {[void](Assert-Task4MigrationWorkdirInventory -Inventory $wrongDigest -Migrations $bindings)}
+  $reparseRoot=Join-Path ([IO.Path]::GetTempPath()) ('task4-workdir-reparse-'+[Guid]::NewGuid().ToString('N'));New-Item -ItemType Directory -Path $reparseRoot|Out-Null;New-Item -ItemType Junction -Path (Join-Path $reparseRoot 'supabase') -Value (Join-Path $workdirRoot 'supabase')|Out-Null;Assert-Rejected -Label 'Reparse-point supabase ancestor was accepted.' -Action {[void](Get-Task4MigrationWorkdirInventory -Workdir $reparseRoot)};Remove-Item -LiteralPath $reparseRoot -Recurse -Force
+}finally{if(Test-Path -LiteralPath $workdirRoot){Remove-Item -LiteralPath $workdirRoot -Recurse -Force}}
 
 Import-RunnerFunction Get-Task4StandaloneSequenceSpecifications
 $standaloneSequences=@(Get-Task4StandaloneSequenceSpecifications)
@@ -367,7 +433,7 @@ $importStart=$lowerRunner.IndexOf('function invoke-importphase')
 $rollbackStart=$lowerRunner.IndexOf('function invoke-rollbackphase')
 if($importStart -lt 0 -or $rollbackStart -le $importStart){throw 'Import function block is missing.'}
 $importBlock=$lowerRunner.Substring($importStart,$rollbackStart-$importStart)
-$authorizationOrder=@('assert-approvedarchive','assert-verifiedbackup','assert-rehearsalreport','assert-postmigrationtransitionmanifest','get-targetinventory','assert-postmigrationtargetstate','assert-task4schemaanddependencies','invoke-targetfile')
+$authorizationOrder=@('assert-approvedarchive','assert-verifiedbackup','assert-rehearsalreport','assert-task4migrationpushevidence','get-task4migrationhistoryrows','assert-task4migrationhistorybindings','assert-postmigrationtransitionmanifest','get-targetinventory','assert-postmigrationtargetstate','assert-task4schemaanddependencies','invoke-targetfile')
 $prior=-1
 foreach($marker in $authorizationOrder){$index=$importBlock.IndexOf($marker);if($index -le $prior){throw "Import authorization chain is incomplete or reordered at $marker"};$prior=$index}
 if($importBlock.Contains('invoke-verifyphase')){throw 'Import still verifies the pre-migration state.'}
@@ -379,6 +445,7 @@ $postMigrationOrder=@('assert-approvedarchive','assert-verifiedbackup','assert-t
 $prior=-1
 foreach($marker in $postMigrationOrder){$index=$postMigrationBlock.IndexOf($marker);if($index -le $prior){throw "PostMigration chain is incomplete or reordered at $marker"};$prior=$index}
 if($postMigrationBlock.Contains('invoke-targetfile')){throw 'PostMigration contains a target write primitive.'}
+if($postMigrationBlock.Contains('task4migrationpushevidence')){throw 'PostMigration can mint or accept push evidence.'}
 $postInvalidation=$lowerRunner.IndexOf("if (`$phase -eq 'postmigration') { invalidate-evidencefile")
 $toolPreflight=$lowerRunner.LastIndexOf('assert-requiredtools')
 if($postInvalidation -lt 0 -or $postInvalidation -ge $toolPreflight){throw 'PostMigration does not invalidate stale manifest before fallible preflight.'}
@@ -393,6 +460,75 @@ foreach($marker in $rehearseOrder){$index=$rehearseBlock.IndexOf($marker);if($in
 foreach($marker in @('pg_jsonschema','clinic_services','is_staff_or_admin','is_clinical','is_staff_or_clinical','supabase_realtime','has_schema_privilege','appointments_service_slug_fkey','queue_entries_cancelled_by_fkey','information_schema.columns','pg_get_constraintdef','storage.buckets','storage.foldername','allowed_mime_types','daily-reports','google_tag','private')){if(-not $lowerRunner.Contains($marker)){throw "Exact Task 4 schema/dependency gate is missing marker: $marker"}}
 foreach($marker in @('set local session_replication_role = replica','set local session_replication_role = origin','foreign_key_audit','commit;')){if(-not $lowerRunner.Contains($marker)){throw "FK-safe loader contract is missing marker: $marker"}}
 foreach($marker in @('new-boundloadersnapshot','new-intransactionauthzeroloader','post-import whole-target foreign-key audit','assert-task4postimportresult','task4-import-integrity-report.json')){if(-not $lowerRunner.Contains($marker)){throw "Import integrity chain is missing marker: $marker"}}
+
+Import-RunnerFunction Assert-Task4MigrationPushEvidence
+$pushEvidenceDefinition=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Assert-Task4MigrationPushEvidence'},$true)
+if(-not $pushEvidenceDefinition){throw 'Push evidence authorization gate is missing.'}
+$pushEvidenceText=$pushEvidenceDefinition.Extent.Text.ToLowerInvariant()
+foreach($marker in @('[parameter(mandatory)]$authorization','$currentrunnersha256','task4migrationpushproducerrunnersha256 -notmatch','listedpendingmigrations','assert-task4clidryrunoutput','$payload.connection','expectedpersistentpost')){if(-not $pushEvidenceText.Contains($marker)){throw "Push evidence hardening is missing marker: $marker"}}
+$transcriptBindingDefinition=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Assert-Task4TranscriptBinding'},$true)
+if(-not $transcriptBindingDefinition -or -not $transcriptBindingDefinition.Extent.Text.ToLowerInvariant().Contains('assert-task4transcriptsecretfree')){throw 'Transcript validation does not re-scan prohibited secrets and SQL text.'}
+$global:Task4MigrationPushEvidenceSha256=''
+Assert-Rejected -Label 'An empty independent push-evidence pin did not fail closed.' -Action {[void](Assert-Task4MigrationPushEvidence -VerifiedBackup ([ordered]@{}) -Migrations $bindings -Authorization ([ordered]@{}))}
+
+Import-RunnerFunction Get-NormalizedPath
+Import-RunnerFunction Get-Task4TlsDatabaseUrl
+Import-RunnerFunction Assert-Task4BaselinePlaceholderBinding
+Import-RunnerFunction Assert-Task4CliDryRunOutput
+Import-RunnerFunction Assert-Task4TranscriptSecretFree
+Import-RunnerFunction Assert-Task4TranscriptBinding
+$pushEvidenceTestRoot=Join-Path ([IO.Path]::GetTempPath()) ('task4-push-evidence-'+[Guid]::NewGuid().ToString('N'))
+try{
+  New-Item -ItemType Directory -Path $pushEvidenceTestRoot|Out-Null
+  $global:ArtifactRoot=$pushEvidenceTestRoot
+  $script:Target=[pscustomobject]@{Host='db.example.test';Port=5432;Username='cutover user';Database='target/db';Password='task4-test-password'}
+  if((Get-Task4TlsDatabaseUrl) -cne 'postgresql://cutover%20user@db.example.test:5432/target%2Fdb?sslmode=require'){throw 'Task 4 TLS URL is not credentialless and exactly escaped.'}
+  $baselineVersions=@(Get-Task4BaselineMigrationFiles|ForEach-Object{$_.Substring(0,14)})
+  $placeholderBackup=[ordered]@{manifest=[ordered]@{targetBaseline=[ordered]@{migrationIdentities=$baselineVersions}}}
+  [void](Assert-Task4BaselinePlaceholderBinding -VerifiedBackup $placeholderBackup)
+  $placeholderBackup.manifest.targetBaseline.migrationIdentities[0]='20990101000000'
+  Assert-Rejected -Label 'A non-matching 153-placeholder history was accepted.' -Action {[void](Assert-Task4BaselinePlaceholderBinding -VerifiedBackup $placeholderBackup)}
+  $dryRunLines=@('Dry run exact pending migrations:')+@($bindings.file)
+  Assert-EqualJson -Expected @($bindings.file) -Actual @(Assert-Task4CliDryRunOutput -Lines $dryRunLines -Migrations $bindings) -Label 'Dry run did not bind the exact ordered eight-file list.'
+  $wrongDryRun=@($dryRunLines);$wrongDryRun[2]=$bindings[2].file
+  Assert-Rejected -Label 'Reordered dry-run pending migrations were accepted.' -Action {[void](Assert-Task4CliDryRunOutput -Lines $wrongDryRun -Migrations $bindings)}
+  $transcriptPath=Join-Path $pushEvidenceTestRoot 'task4-migration-dry-run-transcript.log';[IO.File]::WriteAllText($transcriptPath,"Dry run exact pending migrations.`n",[Text.UTF8Encoding]::new($false))
+  $transcriptBinding=[ordered]@{file='task4-migration-dry-run-transcript.log';bytes=[int64](Get-Item -LiteralPath $transcriptPath).Length;sha256=(Get-FileHash -LiteralPath $transcriptPath -Algorithm SHA256).Hash.ToUpperInvariant()}
+  [void](Assert-Task4TranscriptBinding -Binding $transcriptBinding -ExpectedName 'task4-migration-dry-run-transcript.log')
+  Add-Content -LiteralPath $transcriptPath -Value 'tampered'
+  Assert-Rejected -Label 'A rehashed transcript binding accepted changed bytes.' -Action {[void](Assert-Task4TranscriptBinding -Binding $transcriptBinding -ExpectedName 'task4-migration-dry-run-transcript.log')}
+}finally{if(Test-Path -LiteralPath $pushEvidenceTestRoot){Remove-Item -LiteralPath $pushEvidenceTestRoot -Recurse -Force}}
+
+Import-RunnerFunction Invoke-Task4PinnedCliPush
+$script:mockPushEvents=New-Object 'System.Collections.Generic.List[string]'
+function global:Get-Task4TlsDatabaseUrl {$script:mockPushEvents.Add('url');return 'postgresql://user@host:5432/db?sslmode=require'}
+function global:Invoke-WithTargetEnvironment {param([scriptblock]$Action)& $Action}
+function global:Assert-Task4PinnedSupabaseCli {$script:mockPushEvents.Add('cli')}
+function global:Assert-Task4FinalPushWorkdir {param($Workdir,$Migrations)$script:mockPushEvents.Add('rehash');return [ordered]@{sha256=('A'*64)}}
+function global:Invoke-External {param($File,$Arguments,$Label,[switch]$NoOutputLog)$script:mockPushEvents.Add('live');if(-not $NoOutputLog -or $Arguments[0] -cne 'db' -or $Arguments[1] -cne 'push'){throw 'Live Push did not use the dedicated no-output capture.'};throw 'mocked live Push failure'}
+Assert-Rejected -Label 'A mocked live Push failure was not surfaced.' -Action {[void](Invoke-Task4PinnedCliPush -Workdir 'mock-workdir' -Migrations $bindings)}
+Assert-EqualJson -Expected @('url','cli','rehash','live') -Actual @($script:mockPushEvents) -Label 'Live Push did not rehash immediately before the sole mocked db push call.'
+
+$historyReader=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Get-Task4MigrationHistoryRows'},$true)
+if(-not $historyReader){throw 'Exact migration history reader is missing.'}
+$historyReaderText=$historyReader.Extent.Text.ToLowerInvariant()
+if($historyReaderText -match '(?<!withoutoutputlog)invoke-targetquery\b' -or -not $historyReaderText.Contains('invoke-targetquerywithoutoutputlog')){throw 'Exact history reader can send statement bodies through the general captured-output logger.'}
+foreach($marker in @('select version,name,to_jsonb(statements) as statements','where version in (','order by version')){if(-not $historyReaderText.Contains($marker)){throw "Exact history reader is missing constrained query marker: $marker"}}
+
+$pushStart=$lowerRunner.IndexOf('function invoke-pushphase')
+$pushWrapperStart=$lowerRunner.IndexOf('function invoke-task4pinnedclipush')
+if($pushStart -lt 0 -or $pushWrapperStart -lt 0){throw 'Non-bypassable Push phase/wrapper is missing.'}
+$pushWrapperEnd=$lowerRunner.IndexOf('function ',($pushWrapperStart+10));if($pushWrapperEnd -lt 0){$pushWrapperEnd=$lowerRunner.Length}
+$pushWrapper=$lowerRunner.Substring($pushWrapperStart,$pushWrapperEnd-$pushWrapperStart)
+$finalPushPattern='(?s)\$finalworkdir\s*=\s*assert-task4finalpushworkdir[^\r\n]*\r?\n\s*\$pushlog\s*=\s*invoke-external\s+-file\s+\$supabasecli\s+-arguments\s+@\(.*?db.*?push.*?--db-url'
+if(-not [regex]::IsMatch($pushWrapper,$finalPushPattern)){throw 'Final exact workdir rehash/assert is not immediately adjacent to the live Supabase db push call.'}
+if($pushWrapper.Contains('--dry-run')){throw 'Live Push wrapper contains a dry-run bypass.'}
+$pushBlockEnd=$lowerRunner.IndexOf('function invoke-postmigrationphase');$pushBlock=$lowerRunner.Substring($pushStart,$pushBlockEnd-$pushStart)
+$pushOrder=@('assert-task4pinnedsupabasecli','new-task4migrationworkdir','invoke-task4pinnedclidryrun','invoke-task4pinnedclipush','get-task4migrationhistoryrows','assert-task4migrationhistorybindings','get-targetinventory','assert-postmigrationtargetstate','write-protectedjson')
+$prior=-1;foreach($marker in $pushOrder){$index=$pushBlock.IndexOf($marker,$prior+1);if($index -le $prior){throw "Push authorization/evidence chain is incomplete or reordered at $marker"};$prior=$index}
+if($pushBlock.Contains('invoke-postmigrationphase')){throw 'Push phase delegates or bypasses through PostMigration.'}
+$pushInvalidation=$lowerRunner.IndexOf(("if ("+'$phase'+" -eq 'push')"));$pushEvidenceInvalidation=$lowerRunner.IndexOf('task4migrationpushevidencename',$pushInvalidation);$toolPreflight=$lowerRunner.LastIndexOf('assert-requiredtools');if($pushInvalidation -lt 0 -or $pushEvidenceInvalidation -le $pushInvalidation -or $pushEvidenceInvalidation -ge $toolPreflight){throw 'Push does not invalidate stale push evidence before fallible preflight.'}
+if(-not $lowerRunner.Contains('project_id') -or -not $lowerRunner.Contains('$expectedref')){throw 'Protected Push workdir config is not bound to the exact target identity.'}
 
 Import-RunnerFunction Get-SequenceCheckSql
 $postgresBin='C:\Users\ahmed\Documents\Codex\tools\postgresql\17.10\pgsql\bin'
