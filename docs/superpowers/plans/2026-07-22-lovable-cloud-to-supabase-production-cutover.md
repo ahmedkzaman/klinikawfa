@@ -506,6 +506,17 @@ Copy exactly these files to a protected temporary Supabase workdir and run a dry
 
 Expected: dry run lists only those eight; apply succeeds; each is recorded once; the three target hardening migrations already represented as `20260718093731`, `20260718102253`, and `20260718110721` are not replayed.
 
+If disposable Windows PostgreSQL cannot execute a migration solely because a Supabase-managed extension binary is unavailable locally, use this fail-closed fallback instead of stubbing the extension:
+
+1. Prove read-only that the exact target exposes the required extension and that the missing local binary is the only remaining scratch failure.
+2. Populate the protected CLI workdir with empty placeholders for every exact already-recorded target migration plus the eight real pending migrations; the real-TLS CLI dry run must list exactly those eight in order.
+3. Prove the eight files contain no transaction-incompatible command and no external side-effect primitive such as HTTP, `pg_net`, `dblink`, `COPY PROGRAM`, cron scheduling, or event triggers.
+4. For the two files that contain top-level `BEGIN;`/`COMMIT;`, create protected validation copies that remove only lines matching those exact top-level wrappers; prove normalized-body hashes match the originals after applying the same normalization.
+5. Run all eight validation bodies in one bounded `ON_ERROR_STOP` target session under one controller `BEGIN` and mandatory final `ROLLBACK`. Do not write migration history in this validation transaction.
+6. Re-run the exact pre-migration baseline guard and require byte-identical schema, ordered migration identity, public/Auth counts, extension state, and baseline digest. Any mismatch triggers restore from the verified target backup and blocks import.
+
+This fallback validates the managed extension in its real environment but authorizes no persistent target change.
+
 - [ ] **Step 3: Import public data in a single guarded transaction**
 
 The import truncates only source-owned application tables represented in the approved archive, never managed schemas or `supabase_migrations`. It disables user triggers only within the controlled import transaction where necessary, restores table data in dependency order, resets sequences from `max(id)`, reenables triggers, and validates foreign keys before commit. `public.staff_messages` data is held until its hardened schema exists.
