@@ -16,6 +16,7 @@ import type { Database } from '@/integrations/supabase/types';
 type AppRole = Database['public']['Enums']['app_role'];
 type Scope = 'global' | 'role' | 'shift' | 'role_shift';
 type ShiftKey = 'S1' | 'S2' | 'S3' | 'Hybrid' | 'Night' | 'DOC_S1' | 'DOC_S2' | 'DOC_S3';
+type PunchBufferInsert = Database['public']['Tables']['punch_buffer_settings']['Insert'];
 
 type Row = {
   id: string;
@@ -137,7 +138,7 @@ export default function PunchSettings() {
 
   const addOverride = async () => {
     if (!addOpen) return;
-    const payload: any = { scope: addOpen, ...newValues, updated_by: user?.id };
+    const payload: PunchBufferInsert = { scope: addOpen, ...newValues, updated_by: user?.id };
     if (addOpen === 'role' || addOpen === 'role_shift') {
       if (!newRole) return;
       payload.role = newRole;

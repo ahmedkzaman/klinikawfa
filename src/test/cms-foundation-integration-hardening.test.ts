@@ -235,7 +235,7 @@ describe("dormant staging matrix hardening contracts", () => {
     ]) {
       const operationBody =
         fixture.match(
-          new RegExp(`"${operation.replace(".", "\\.")}":([\\s\\S]*?)(?=\\n  "[^"\\n]+":|\\n};)`),
+          new RegExp(`"${operation.replace(".", "\\.")}":([\\s\\S]*?)(?=\\n {2}"[^"\\n]+":|\\n};)`),
         )?.[1] ?? "";
       expect(operationBody, operation).toContain("attemptAndVerifyDeniedMutation");
     }
@@ -303,7 +303,7 @@ describe("dormant staging matrix hardening contracts", () => {
         ),
       );
     }
-    expect(fixture).toContain("if (false) {");
+    expect(fixture).toContain('process.env.NODE_ENV === "typecheck-only"');
     expect(fixture.match(/@ts-expect-error/g)).toHaveLength(2);
     expect(fixture).toContain(
       'privilegedStorageSnapshot("arbitraryStorageTarget")',
@@ -328,7 +328,7 @@ describe("dormant staging matrix hardening contracts", () => {
     expect(afterAllBody).toContain("cleanupPrivilegedStorageTarget");
     expect(afterAllBody).not.toMatch(/cleanupStoragePath\(clients\.(website_editor|admin|staff)/);
     const websiteDelete =
-      fixture.match(/"website-media\.delete":([\s\S]*?)(?=\n  "[^"\n]+":|\n};)/)?.[1] ?? "";
+      fixture.match(/"website-media\.delete":([\s\S]*?)(?=\n {2}"[^"\n]+":|\n};)/)?.[1] ?? "";
     expect(websiteDelete).toContain("privilegedStorageSnapshot");
   });
 });

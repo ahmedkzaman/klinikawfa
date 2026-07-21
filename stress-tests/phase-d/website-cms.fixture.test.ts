@@ -293,7 +293,7 @@ async function restorePrivilegedStorageSnapshot(
   }
 }
 
-if (false) {
+if (process.env.NODE_ENV === "typecheck-only") {
   // @ts-expect-error Privileged Storage helpers accept only closed target keys.
   void privilegedStorageSnapshot("arbitraryStorageTarget");
   // @ts-expect-error Structural bucket/path objects cannot cross this boundary.

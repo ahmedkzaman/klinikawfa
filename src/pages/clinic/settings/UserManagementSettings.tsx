@@ -108,8 +108,8 @@ export default function UserManagementSettings() {
       if (error) throw error;
       toast.success(`Role updated to ${ROLE_LABEL[newRole]}`);
       qc.invalidateQueries({ queryKey: ['clinic_users'] });
-    } catch (err: any) {
-      const msg = err?.message ?? '';
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '';
       if (msg.includes('NOT_AUTHORIZED')) {
         toast.error('Only special admins can change roles');
       } else if (msg.includes('CANNOT_DEMOTE_SELF')) {

@@ -16,6 +16,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
 import { StaffChat } from '@/components/staff/chat/StaffChat';
+import type { Database } from '@/integrations/supabase/types';
+
+type CircularNotice = Database['public']['Tables']['circular_notices']['Row'];
 
 const staffNavItems = [
   { href: '/staff/dashboard', label: 'Dashboard', icon: Home },
@@ -210,7 +213,7 @@ export function StaffLayout() {
   const { data: onboardingData, isLoading: onboardingLoading, isCompleted: onboardingCompleted, refetch: refetchOnboarding } = useOnboardingStatus(user?.id);
 
   // Circular notice blocking
-  const [unacknowledgedNotices, setUnacknowledgedNotices] = useState<any[]>([]);
+  const [unacknowledgedNotices, setUnacknowledgedNotices] = useState<CircularNotice[]>([]);
   const noticesLoadedRef = useRef(false);
   const [noticesLoading, setNoticesLoading] = useState(true);
   const [acknowledging, setAcknowledging] = useState(false);
@@ -236,8 +239,8 @@ export function StaffLayout() {
       supabase.from('circular_notices').select('*').eq('is_active', true).order('published_at', { ascending: true }),
       supabase.from('circular_notice_acknowledgements').select('notice_id').eq('user_id', user.id),
     ]);
-    const ackedIds = new Set((acksRes.data || []).map((a: any) => a.notice_id));
-    const unacked = ((noticesRes.data as any[]) || []).filter((n: any) => !ackedIds.has(n.id));
+    const ackedIds = new Set((acksRes.data || []).map((a) => a.notice_id));
+    const unacked = ((noticesRes.data as CircularNotice[] | null) || []).filter((n) => !ackedIds.has(n.id));
     setUnacknowledgedNotices(unacked);
     noticesLoadedRef.current = true;
     setNoticesLoading(false);
