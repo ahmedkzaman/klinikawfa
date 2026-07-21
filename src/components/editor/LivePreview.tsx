@@ -25,6 +25,7 @@ const PREVIEW_DOCUMENT = `<!doctype html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
     <style>html, body, #live-preview-root { min-height: 100%; margin: 0; }</style>
   </head>
   <body><div id="live-preview-root"></div></body>
@@ -38,6 +39,16 @@ interface LivePreviewProps {
 function ensurePreviewRoot(frame: HTMLIFrameElement) {
   const previewDocument = frame.contentDocument;
   if (!previewDocument) return null;
+
+  let robots = previewDocument.head.querySelector<HTMLMetaElement>(
+    'meta[name="robots"]',
+  );
+  if (!robots) {
+    robots = previewDocument.createElement("meta");
+    robots.name = "robots";
+    previewDocument.head.append(robots);
+  }
+  robots.content = "noindex, nofollow";
 
   let root = previewDocument.getElementById("live-preview-root");
   if (!root) {

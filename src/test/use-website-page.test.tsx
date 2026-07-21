@@ -25,8 +25,12 @@ type QueryCall = {
 };
 
 const {
+  createGeneralPage,
+  fetchEditorPageById,
   fetchEditorPage,
+  fetchPublishedGeneralPage,
   fetchPublishedPage,
+  listEditorPages,
   savePageDraft,
 } = pagesApi;
 
@@ -84,6 +88,10 @@ vi.mock("@/integrations/supabase/client", () => ({
           call.filters.push({ column, value });
           return builder;
         },
+        in(column: string, value: unknown[]) {
+          call.filters.push({ column, value });
+          return builder;
+        },
         maybeSingle() {
           return Promise.resolve(
             supabaseState.responses.shift() ?? { data: null, error: null },
@@ -106,6 +114,18 @@ vi.mock("@/integrations/supabase/client", () => ({
           call.operation = "update";
           call.payload = payload;
           return builder;
+        },
+        then<TResult1 = QueryResult, TResult2 = never>(
+          onFulfilled?:
+            | ((value: QueryResult) => TResult1 | PromiseLike<TResult1>)
+            | null,
+          onRejected?:
+            | ((reason: unknown) => TResult2 | PromiseLike<TResult2>)
+            | null,
+        ) {
+          return Promise.resolve(
+            supabaseState.responses.shift() ?? { data: null, error: null },
+          ).then(onFulfilled, onRejected);
         },
       };
 
@@ -241,6 +261,226 @@ describe("fetchPublishedPage", () => {
     await expect(
       fetchPublishedPage("home", homeContentSchema, DEFAULT_HOME_CONTENT),
     ).resolves.toBe(DEFAULT_HOME_CONTENT);
+  });
+});
+
+describe("fetchPublishedGeneralPage", () => {
+  it("returns validated published general-page content", async () => {
+    const published = generalPageContent("Penjagaan keluarga");
+    supabaseState.responses.push({
+      data: {
+        published_content: published,
+        revision: 3,
+        slug: "family-care",
+        status: "published",
+      },
+      error: null,
+    });
+
+    await expect(fetchPublishedGeneralPage("family-care")).resolves.toEqual(
+      published,
+    );
+    expect(supabaseState.calls[0]).toMatchObject({
+      table: "website_pages",
+      operation: "select",
+      filters: [
+        { column: "slug", value: "family-care" },
+        { column: "status", value: "published" },
+      ],
+    });
+  });
+
+  it("rejects reserved slugs and invalid payloads without exposing a fallback", async () => {
+    await expect(fetchPublishedGeneralPage("privacy")).resolves.toBeNull();
+    expect(supabaseState.calls).toHaveLength(0);
+
+    supabaseState.responses.push({
+      data: {
+        published_content: { title: { ms: "Tidak lengkap" } },
+        revision: 1,
+        slug: "invalid-page",
+        status: "published",
+      },
+      error: null,
+    });
+    await expect(fetchPublishedGeneralPage("invalid-page")).resolves.toBeNull();
+  });
+});
+
+describe("general-page editor repository", () => {
+  it("lists content and system-content rows after checking the manager role", async () => {
+    setSession(createSession());
+    supabaseState.responses.push(
+      { data: { role: "website_editor" }, error: null },
+      {
+        data: [
+          {
+            created_at: "2026-07-21T01:00:00.000Z",
+            id: "page-content",
+            kind: "content",
+            revision: 2,
+            slug: "family-care",
+            status: "published",
+          },
+          {
+            created_at: "2026-07-20T01:00:00.000Z",
+            id: "page-system",
+            kind: "system_content",
+            revision: 1,
+            slug: "privacy",
+            status: "published",
+          },
+        ],
+        error: null,
+      },
+    );
+
+    await expect(listEditorPages()).resolves.toEqual([
+      {
+        id: "page-content",
+        kind: "content",
+        revision: 2,
+        slug: "family-care",
+        status: "published",
+      },
+      {
+        id: "page-system",
+        kind: "system_content",
+        revision: 1,
+        slug: "privacy",
+        status: "published",
+      },
+    ]);
+    expect(supabaseState.calls[1]).toMatchObject({
+      table: "website_pages",
+      operation: "select",
+      filters: [
+        { column: "kind", value: ["content", "system_content"] },
+      ],
+      order: { ascending: false, column: "created_at" },
+    });
+  });
+
+  it("loads an unpublished skeleton from its private draft by id", async () => {
+    const draft = generalPageContent("Draf peribadi");
+    setSession(createSession());
+    supabaseState.responses.push(
+      { data: { role: "admin" }, error: null },
+      {
+        data: {
+          id: "page-draft",
+          kind: "content",
+          published_content: {},
+          revision: 0,
+          slug: "draft-page",
+          status: "draft",
+        },
+        error: null,
+      },
+      {
+        data: {
+          base_revision: 0,
+          draft_content: draft,
+          page_id: "page-draft",
+        },
+        error: null,
+      },
+    );
+
+    await expect(fetchEditorPageById("page-draft")).resolves.toEqual({
+      page: {
+        id: "page-draft",
+        kind: "content",
+        publishedContent: null,
+        revision: 0,
+        slug: "draft-page",
+        status: "draft",
+      },
+      draft: {
+        baseRevision: 0,
+        content: draft,
+        pageId: "page-draft",
+        persisted: true,
+      },
+    });
+    expect(supabaseState.calls[1].filters).toEqual([
+      { column: "id", value: "page-draft" },
+      { column: "kind", value: ["content", "system_content"] },
+    ]);
+  });
+
+  it("creates only an empty published skeleton followed by a private draft", async () => {
+    const content = generalPageContent("Halaman baharu");
+    setSession(createSession());
+    supabaseState.responses.push(
+      { data: { role: "website_editor" }, error: null },
+      {
+        data: {
+          id: "page-new",
+          kind: "content",
+          published_content: {},
+          revision: 0,
+          slug: "new-page",
+          status: "draft",
+        },
+        error: null,
+      },
+      {
+        data: {
+          base_revision: 0,
+          draft_content: content,
+          page_id: "page-new",
+        },
+        error: null,
+      },
+    );
+
+    await expect(
+      createGeneralPage({ content, slug: "new-page" }),
+    ).resolves.toMatchObject({
+      page: {
+        id: "page-new",
+        kind: "content",
+        publishedContent: null,
+        revision: 0,
+        slug: "new-page",
+        status: "draft",
+      },
+      draft: {
+        baseRevision: 0,
+        content,
+        pageId: "page-new",
+        persisted: true,
+      },
+    });
+
+    expect(supabaseState.calls.slice(1)).toMatchObject([
+      {
+        table: "website_pages",
+        operation: "insert",
+        payload: { kind: "content", slug: "new-page" },
+      },
+      {
+        table: "website_page_drafts",
+        operation: "insert",
+        payload: {
+          base_revision: 0,
+          draft_content: content,
+          page_id: "page-new",
+        },
+      },
+    ]);
+  });
+
+  it("rejects reserved slugs and unknown payload keys before authorization or writes", async () => {
+    await expect(
+      createGeneralPage({
+        content: { ...generalPageContent("Tidak sah"), unknown: true },
+        slug: "privacy",
+      }),
+    ).rejects.toThrow("Invalid general page draft");
+    expect(supabaseState.getSession).not.toHaveBeenCalled();
+    expect(supabaseState.calls).toHaveLength(0);
   });
 });
 

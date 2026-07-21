@@ -4,6 +4,7 @@ import type { z } from "zod";
 import type { AppRole } from "@/contexts/AuthContext";
 import {
   generalPageContentSchema,
+  pageSlugSchema,
   type GeneralPageContent,
 } from "@/features/website-cms/schemas/page";
 import {
@@ -94,7 +95,7 @@ export type WebsitePageContent = HomeContent | GeneralPageContent;
 export interface EditorWebsitePage<T> {
   id: string;
   kind: WebsitePageKind;
-  publishedContent: T;
+  publishedContent: T | null;
   revision: number;
   slug: string;
   status: WebsitePageStatus;
@@ -134,6 +135,19 @@ export interface WebsitePageVersionSummary {
   publishedAt: string;
   publishedBy: string;
   revision: number;
+}
+
+export interface EditorWebsitePageSummary {
+  id: string;
+  kind: Extract<WebsitePageKind, "content" | "system_content">;
+  revision: number;
+  slug: string;
+  status: WebsitePageStatus;
+}
+
+export interface CreateGeneralPageInput {
+  content: unknown;
+  slug: string;
 }
 
 export class StaleWebsitePageDraftError extends Error {
@@ -194,30 +208,55 @@ export async function fetchPublishedPage<T>(
   }
 }
 
-export function fetchEditorPage(
-  slug: "home",
-): Promise<EditorWebsitePageResult<HomeContent>>;
-export function fetchEditorPage(
+export async function fetchPublishedGeneralPage(
   slug: string,
-): Promise<EditorWebsitePageResult<GeneralPageContent>>;
-export async function fetchEditorPage(
-  slug: string,
-): Promise<EditorWebsitePageResult<WebsitePageContent>> {
+): Promise<GeneralPageContent | null> {
+  if (!pageSlugSchema.safeParse(slug).success) return null;
+
+  try {
+    const { data, error } = await cmsSupabase
+      .from("website_pages")
+      .select("slug,published_content,status,revision")
+      .eq("slug", slug)
+      .eq("status", "published")
+      .maybeSingle();
+
+    if (error || !data) return null;
+    const parsed = generalPageContentSchema.safeParse(data.published_content);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function listEditorPages(): Promise<EditorWebsitePageSummary[]> {
   await requireWebsiteManagerSession();
 
-  const { data: pageRow, error: pageError } = await cmsSupabase
+  const { data, error } = await cmsSupabase
     .from("website_pages")
-    .select("id,kind,slug,published_content,status,revision")
-    .eq("slug", slug)
-    .maybeSingle();
+    .select("id,kind,slug,status,revision,created_at")
+    .in("kind", ["content", "system_content"])
+    .order("created_at", { ascending: false });
 
-  if (pageError || !pageRow) {
-    throw new Error("Website page could not be loaded");
+  if (error || !data) {
+    throw new Error("Website pages could not be loaded");
   }
 
-  const schema = schemaForSlug(slug);
+  return data.map((page) => ({
+    id: page.id,
+    kind: page.kind as EditorWebsitePageSummary["kind"],
+    revision: page.revision,
+    slug: page.slug,
+    status: page.status,
+  }));
+}
+
+async function buildEditorPageResult(
+  pageRow: WebsiteCmsDatabase["public"]["Tables"]["website_pages"]["Row"],
+): Promise<EditorWebsitePageResult<WebsitePageContent>> {
+  const schema = schemaForSlug(pageRow.slug);
   const published = schema.safeParse(pageRow.published_content);
-  if (!published.success) {
+  if (pageRow.status === "published" && !published.success) {
     throw new Error("Website page contains invalid published content");
   }
 
@@ -243,29 +282,136 @@ export async function fetchEditorPage(
       pageId: draftRow.page_id,
       persisted: true,
     };
-  } else {
-    const synthesizedContent = schema.safeParse(pageRow.published_content);
-    if (!synthesizedContent.success) {
-      throw new Error("Website page contains invalid published content");
-    }
+  } else if (published.success) {
     draft = {
       baseRevision: pageRow.revision,
-      content: synthesizedContent.data,
+      content: structuredClone(published.data),
       pageId: pageRow.id,
       persisted: false,
     };
+  } else {
+    throw new Error("Website page draft could not be loaded");
   }
 
   return {
     page: {
       id: pageRow.id,
       kind: pageRow.kind,
-      publishedContent: published.data,
+      publishedContent: published.success ? published.data : null,
       revision: pageRow.revision,
       slug: pageRow.slug,
       status: pageRow.status,
     },
     draft,
+  };
+}
+
+export function fetchEditorPage(
+  slug: "home",
+): Promise<EditorWebsitePageResult<HomeContent>>;
+export function fetchEditorPage(
+  slug: string,
+): Promise<EditorWebsitePageResult<GeneralPageContent>>;
+export async function fetchEditorPage(
+  slug: string,
+): Promise<EditorWebsitePageResult<WebsitePageContent>> {
+  await requireWebsiteManagerSession();
+
+  const { data: pageRow, error: pageError } = await cmsSupabase
+    .from("website_pages")
+    .select("id,kind,slug,published_content,status,revision")
+    .eq("slug", slug)
+    .maybeSingle();
+
+  if (pageError || !pageRow) {
+    throw new Error("Website page could not be loaded");
+  }
+
+  return buildEditorPageResult(pageRow);
+}
+
+export async function fetchEditorPageById(
+  pageId: string,
+): Promise<EditorWebsitePageResult<GeneralPageContent>> {
+  await requireWebsiteManagerSession();
+
+  const { data: pageRow, error: pageError } = await cmsSupabase
+    .from("website_pages")
+    .select(
+      "id,kind,slug,published_content,status,revision,published_at,published_by,created_at,updated_at",
+    )
+    .eq("id", pageId)
+    .in("kind", ["content", "system_content"])
+    .maybeSingle();
+
+  if (pageError || !pageRow) {
+    throw new Error("Website page could not be loaded");
+  }
+
+  return buildEditorPageResult(pageRow) as Promise<
+    EditorWebsitePageResult<GeneralPageContent>
+  >;
+}
+
+export async function createGeneralPage(
+  input: CreateGeneralPageInput,
+): Promise<EditorWebsitePageResult<GeneralPageContent>> {
+  const slug = pageSlugSchema.safeParse(input.slug);
+  const content = generalPageContentSchema.safeParse(input.content);
+  if (!slug.success || !content.success) {
+    throw new Error("Invalid general page draft");
+  }
+
+  await requireWebsiteManagerSession();
+
+  const { data: page, error: pageError } = await cmsSupabase
+    .from("website_pages")
+    .insert({ kind: "content", slug: slug.data })
+    .select(
+      "id,kind,slug,published_content,status,revision,published_at,published_by,created_at,updated_at",
+    )
+    .single();
+
+  if (pageError || !page) {
+    throw new Error("Website page could not be created");
+  }
+
+  const { data: draft, error: draftError } = await cmsSupabase
+    .from("website_page_drafts")
+    .insert({
+      base_revision: page.revision,
+      draft_content: content.data as Json,
+      page_id: page.id,
+    })
+    .select("page_id,draft_content,base_revision")
+    .single();
+
+  if (draftError || !draft) {
+    throw new Error("Website page draft could not be created");
+  }
+
+  const persistedContent = generalPageContentSchema.safeParse(
+    draft.draft_content,
+  );
+  if (!persistedContent.success) {
+    throw new Error("Created website page draft is invalid");
+  }
+
+  return {
+    page: {
+      id: page.id,
+      kind: page.kind,
+      publishedContent: null,
+      revision: page.revision,
+      slug: page.slug,
+      status: page.status,
+    },
+    draft: {
+      baseRevision: draft.base_revision,
+      content: persistedContent.data,
+      pageId: draft.page_id,
+      persisted: true,
+    },
   };
 }
 

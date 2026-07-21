@@ -22,6 +22,7 @@ interface VersionsPanelProps {
   isRestoring?: boolean;
   onRestore: (versionId: string) => Promise<boolean>;
   pageId: string;
+  pageLabel?: string;
 }
 
 const versionDateFormatter = new Intl.DateTimeFormat("en-MY", {
@@ -35,6 +36,7 @@ export function VersionsPanel({
   isRestoring = false,
   onRestore,
   pageId,
+  pageLabel = "Home page",
 }: VersionsPanelProps) {
   const [versions, setVersions] = useState<WebsitePageVersionSummary[]>([]);
   const [selected, setSelected] = useState<WebsitePageVersionSummary | null>(null);
@@ -104,7 +106,7 @@ export function VersionsPanel({
             Version history
           </h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            Restoring a published version replaces only the private draft. The live Home page stays unchanged until you publish again.
+            Restoring a published version replaces only the private draft. The live {pageLabel} stays unchanged until you publish again.
           </p>
         </div>
       </div>
@@ -159,7 +161,7 @@ export function VersionsPanel({
           <AlertDialogHeader>
             <AlertDialogTitle>Restore revision {selected?.revision}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This replaces the current private draft with revision {selected?.revision}. It does not change the live Home page. Any unsaved local form changes will be discarded when the restored draft reloads.
+              This replaces the current private draft with revision {selected?.revision}. It does not change the live {pageLabel}. Any unsaved local form changes will be discarded when the restored draft reloads.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

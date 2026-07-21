@@ -107,6 +107,9 @@ import AdminSettings from "./pages/admin/Settings";
 import { EditorProtectedRoute } from "./components/editor/EditorProtectedRoute";
 import { EditorLayout } from "./components/editor/EditorLayout";
 import { HomeEditor } from "./pages/editor/HomeEditor";
+import { PageEditor } from "./pages/editor/PageEditor";
+import { Pages } from "./pages/editor/Pages";
+import GeneralPage from "./pages/GeneralPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -146,6 +149,7 @@ const App = () => (
               <Route path="/gallery" element={<Gallery />} />
               <Route path="/health-tips" element={<HealthTips />} />
               <Route path="/health-tips/:slug" element={<BlogPost />} />
+              <Route path="/pages/:slug" element={<GeneralPage />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/locum-register" element={<LocumRegister />} />
               <Route path="/reset-password" element={<ResetPassword />} />
@@ -163,7 +167,8 @@ const App = () => (
               >
                 <Route index element={<Navigate to="home" replace />} />
                 <Route path="home" element={<HomeEditor />} />
-                <Route path="pages" element={<EditorUnavailableState />} />
+                <Route path="pages" element={<Pages />} />
+                <Route path="pages/:id" element={<PageEditor />} />
                 <Route path="services" element={<EditorUnavailableState />} />
                 <Route path="team" element={<EditorUnavailableState />} />
                 <Route path="blog" element={<EditorUnavailableState />} />
