@@ -20,6 +20,7 @@ import {
 } from "react-hook-form";
 
 import { LivePreview } from "@/components/editor/LivePreview";
+import { useEditorDirtyState } from "@/components/editor/useEditorDirtyNavigation";
 import { HomeRenderer } from "@/components/home";
 import {
   AlertDialog,
@@ -281,6 +282,8 @@ export function HomeEditor() {
   const heroCtas = useFieldArray({ control: form.control, name: "hero.ctas" });
   const whyItems = useFieldArray({ control: form.control, name: "why.items" });
 
+  useEditorDirtyState(isDirty);
+
   const beginMutation = useCallback((kind: EditorMutation) => {
     if (!mountedRef.current || mutationRef.current !== null) return null;
     const generation = mutationGenerationRef.current + 1;
@@ -351,43 +354,6 @@ export function HomeEditor() {
   useEffect(() => {
     void loadPage();
   }, [loadPage]);
-
-  useEffect(() => {
-    if (!isDirty) return;
-
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    const blockEditorNavigation = (event: MouseEvent) => {
-      if (event.defaultPrevented || event.button !== 0) return;
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      const anchor = target.closest("a[href]");
-      if (!(anchor instanceof HTMLAnchorElement)) return;
-
-      const targetUrl = new URL(anchor.href, window.location.href);
-      const isSameOrigin = targetUrl.origin === window.location.origin;
-      const isEditorRoute =
-        targetUrl.pathname === "/editor" || targetUrl.pathname.startsWith("/editor/");
-      if (!isSameOrigin || !isEditorRoute) return;
-
-      const leave = window.confirm(
-        "You have unsaved Home page changes. Leave this editor section and discard them?",
-      );
-      if (!leave) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    };
-
-    window.addEventListener("beforeunload", beforeUnload);
-    document.addEventListener("click", blockEditorNavigation, true);
-    return () => {
-      window.removeEventListener("beforeunload", beforeUnload);
-      document.removeEventListener("click", blockEditorNavigation, true);
-    };
-  }, [isDirty]);
 
   const saveDraft = async (content: HomeContent) => {
     if (!editorPage) return;

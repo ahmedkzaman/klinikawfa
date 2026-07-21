@@ -13,6 +13,8 @@ import {
   Wrench,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { EditorDirtyNavigationProvider } from "@/components/editor/EditorDirtyNavigation";
+import { useEditorDirtyNavigation } from "@/components/editor/useEditorDirtyNavigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -28,10 +30,20 @@ const editorNavItems = [
 ];
 
 export function EditorLayout() {
+  return (
+    <EditorDirtyNavigationProvider>
+      <EditorLayoutContent />
+    </EditorDirtyNavigationProvider>
+  );
+}
+
+function EditorLayoutContent() {
   const { canManageTrackingSettings, signOut } = useAuth();
+  const { confirmDeparture } = useEditorDirtyNavigation();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
+    if (!confirmDeparture()) return;
     await signOut();
     navigate("/auth");
   };

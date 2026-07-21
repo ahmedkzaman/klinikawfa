@@ -4,6 +4,7 @@ import { LanguageProvider } from "@/contexts/LanguageContext";
 import { DEFAULT_HOME_CONTENT } from "@/features/website-cms/home/homeDefaults";
 import type { HomeContent } from "@/features/website-cms/schemas/home";
 import { HomeEditor } from "@/pages/editor/HomeEditor";
+import { EditorDirtyNavigationProvider } from "@/components/editor/EditorDirtyNavigation";
 import { LivePreview } from "@/components/editor/LivePreview";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -79,9 +80,11 @@ function editorResult(content = structuredClone(DEFAULT_HOME_CONTENT)) {
 function renderEditor() {
   return render(
     <MemoryRouter initialEntries={["/editor/home"]}>
-      <LanguageProvider>
-        <HomeEditor />
-      </LanguageProvider>
+      <EditorDirtyNavigationProvider>
+        <LanguageProvider>
+          <HomeEditor />
+        </LanguageProvider>
+      </EditorDirtyNavigationProvider>
     </MemoryRouter>,
   );
 }
@@ -473,9 +476,11 @@ describe("HomeEditor", { timeout: 30_000 }, () => {
     render(
       <StrictMode>
         <MemoryRouter initialEntries={["/editor/home"]}>
-          <LanguageProvider>
-            <HomeEditor />
-          </LanguageProvider>
+          <EditorDirtyNavigationProvider>
+            <LanguageProvider>
+              <HomeEditor />
+            </LanguageProvider>
+          </EditorDirtyNavigationProvider>
         </MemoryRouter>
       </StrictMode>,
     );
@@ -573,7 +578,7 @@ describe("HomeEditor", { timeout: 30_000 }, () => {
     expect(pageApi.publishPageDraft).not.toHaveBeenCalled();
   });
 
-  it("warns before unload and blocks only internal editor links while dirty", async () => {
+  it("warns before unload, guards same-tab anchors, and exempts public new tabs", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     await loadEditor();
 
@@ -594,6 +599,7 @@ describe("HomeEditor", { timeout: 30_000 }, () => {
 
     const publicLink = document.createElement("a");
     publicLink.href = "/services";
+    publicLink.target = "_blank";
     let publicWasBlockedByCapture = false;
     publicLink.addEventListener("click", (event) => {
       publicWasBlockedByCapture = event.defaultPrevented;
