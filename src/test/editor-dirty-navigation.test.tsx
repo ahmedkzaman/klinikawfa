@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import { BrowserRouter, Link, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -181,6 +181,64 @@ describe("Editor dirty navigation", () => {
     await waitFor(() => expect(window.location.pathname).toBe("/editor/home"));
     expect(screen.getByTestId("location")).toHaveTextContent("/editor/home");
     expect(confirm).toHaveBeenCalledTimes(1);
+    expect(dirtyHomeUnmount).not.toHaveBeenCalled();
+  });
+
+  it("guards rapid intervening and invalid POP targets before the exact correction", () => {
+    window.history.replaceState(
+      { idx: 2, key: "editor-home", usr: null },
+      "",
+      "/editor/home",
+    );
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
+    const forward = vi
+      .spyOn(window.history, "forward")
+      .mockImplementation(() => {});
+    renderEditorRouter();
+
+    act(() => {
+      window.dispatchEvent(
+        new PopStateEvent("popstate", {
+          state: { idx: 1, key: "first-back", usr: null },
+        }),
+      );
+    });
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(go).toHaveBeenLastCalledWith(1);
+
+    act(() => {
+      window.dispatchEvent(
+        new PopStateEvent("popstate", {
+          state: { idx: 0, key: "rapid-back", usr: null },
+        }),
+      );
+    });
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(go).toHaveBeenLastCalledWith(2);
+    expect(screen.getByTestId("location")).toHaveTextContent("/editor/home");
+    expect(dirtyHomeUnmount).not.toHaveBeenCalled();
+
+    act(() => {
+      window.dispatchEvent(
+        new PopStateEvent("popstate", {
+          state: { idx: 2, key: "expected-correction", usr: null },
+        }),
+      );
+    });
+    expect(confirm).toHaveBeenCalledTimes(2);
+
+    act(() => {
+      window.dispatchEvent(
+        new PopStateEvent("popstate", {
+          state: { idx: "2", key: "invalid-index", usr: null },
+        }),
+      );
+      window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+    });
+    expect(confirm).toHaveBeenCalledTimes(4);
+    expect(forward).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("location")).toHaveTextContent("/editor/home");
     expect(dirtyHomeUnmount).not.toHaveBeenCalled();
   });
 

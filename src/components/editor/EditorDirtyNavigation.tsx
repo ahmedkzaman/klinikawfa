@@ -38,7 +38,7 @@ export function EditorDirtyNavigationProvider({
   const acceptedIndexRef = useRef<number | null>(
     historyIndex(window.history.state),
   );
-  const correctingPopRef = useRef(false);
+  const expectedCorrectionIndexRef = useRef<number | null>(null);
   const [isDirty, setIsDirty] = useState(false);
 
   const refreshDirtyState = useCallback(() => {
@@ -78,7 +78,7 @@ export function EditorDirtyNavigationProvider({
   );
 
   useEffect(() => {
-    if (correctingPopRef.current) return;
+    if (expectedCorrectionIndexRef.current !== null) return;
     const index = historyIndex(window.history.state);
     if (index !== null) acceptedIndexRef.current = index;
   }, [location.hash, location.key, location.pathname, location.search]);
@@ -123,14 +123,20 @@ export function EditorDirtyNavigationProvider({
 
     const guardPop = (event: PopStateEvent) => {
       const targetIndex = historyIndex(event.state);
-      if (correctingPopRef.current) {
-        correctingPopRef.current = false;
-        if (targetIndex !== null) acceptedIndexRef.current = targetIndex;
+      const expectedCorrectionIndex = expectedCorrectionIndexRef.current;
+      if (
+        targetIndex !== null &&
+        expectedCorrectionIndex !== null &&
+        targetIndex === expectedCorrectionIndex
+      ) {
+        expectedCorrectionIndexRef.current = null;
+        acceptedIndexRef.current = targetIndex;
         return;
       }
 
       if (!dirtyRef.current || confirmDeparture()) {
-        if (targetIndex !== null) acceptedIndexRef.current = targetIndex;
+        expectedCorrectionIndexRef.current = null;
+        acceptedIndexRef.current = targetIndex;
         return;
       }
 
@@ -138,15 +144,17 @@ export function EditorDirtyNavigationProvider({
       event.stopPropagation();
       const acceptedIndex = acceptedIndexRef.current;
       if (acceptedIndex === null || targetIndex === null) {
-        correctingPopRef.current = true;
+        expectedCorrectionIndexRef.current = acceptedIndex;
         window.history.forward();
         return;
       }
 
       const correction = acceptedIndex - targetIndex;
       if (correction !== 0) {
-        correctingPopRef.current = true;
+        expectedCorrectionIndexRef.current = acceptedIndex;
         window.history.go(correction);
+      } else {
+        expectedCorrectionIndexRef.current = null;
       }
     };
 
