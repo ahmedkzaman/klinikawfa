@@ -530,19 +530,25 @@ Assert-EqualJson -Expected @('url','cli','rehash','live') -Actual @($script:mock
 
 $rollbackGateDefinition=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Assert-RollbackRestoreReadiness'},$true)
 $rollbackPhaseDefinition=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-RollbackPhase'},$true)
-if(-not $rollbackGateDefinition -or -not $rollbackPhaseDefinition){throw 'Rollback readiness gate or phase is missing.'}
+$rollbackRequiredDefinition=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Get-Task4RollbackRequiredEvidencePaths'},$true)
+if(-not $rollbackGateDefinition -or -not $rollbackPhaseDefinition -or -not $rollbackRequiredDefinition){throw 'Rollback non-authorizing gate, schema, or phase is missing.'}
 $rollbackGateText=$rollbackGateDefinition.Extent.Text.ToLowerInvariant()
 $rollbackPhaseText=$rollbackPhaseDefinition.Extent.Text.ToLowerInvariant()
-foreach($marker in @('task4rollbackrestoreevidencesha256','payloadsha256','producerrunnersha256','toc','categorycounts','platform','startingstate','postbackupobjects','migrationhistory','tablecounts','storagebytes','exactpostrestorematch')){
-  if(-not $rollbackGateText.Contains($marker)){throw "Rollback readiness schema is missing marker: $marker"}
+$rollbackContractText=($rollbackGateText+"`n"+$rollbackRequiredDefinition.Extent.Text.ToLowerInvariant())
+foreach($marker in @('task4rollbackrestoreevidencesha256','payloadsha256','contractrunnersha256','toc.categorycounts','platform.roles','startingstate','cleanup.postbackupobjects','baseline.migrationhistory.records','baseline.tabledata.counts','baseline.storagebytes.restoreproofsha256','postrestore.exactpostrestorematch','non-authorizing')){
+  if(-not $rollbackContractText.Contains($marker)){throw "Rollback candidate schema is missing marker: $marker"}
 }
-if(-not $rollbackPhaseText.Contains('assert-rollbackrestorereadiness')){throw 'Rollback does not call the readiness gate first.'}
-foreach($forbiddenRollbackOperation in @('invoke-targetfile','invoke-external','pg_restore','write-summary','--clean')){
-  if($rollbackPhaseText.Contains($forbiddenRollbackOperation)){throw "Rollback exposes an unproven restore or success path: $forbiddenRollbackOperation"}
-}
+foreach($forbiddenGateOperation in @('assert-verifiedbackup','get-targetinventory','invoke-targetquery','invoke-targetfile','invoke-external','pg_restore')){if($rollbackGateText.Contains($forbiddenGateOperation)){throw "Rollback candidate gate reaches target or external operation: $forbiddenGateOperation"}}
+if(-not $rollbackPhaseText.Contains('assert-rollbackrestorereadiness')){throw 'Rollback does not call the refusal gate first.'}
+foreach($forbiddenRollbackOperation in @('invoke-targetfile','invoke-external','pg_restore','write-summary','--clean')){if($rollbackPhaseText.Contains($forbiddenRollbackOperation)){throw "Rollback exposes an unproven restore or success path: $forbiddenRollbackOperation"}}
 
 Import-RunnerFunction Assert-Task4ExactEvidenceProperties
 Import-RunnerFunction Assert-Task4EvidenceSha256
+Import-RunnerFunction Assert-Task4EvidenceBoolean
+Import-RunnerFunction Assert-Task4EvidenceInteger
+Import-RunnerFunction Get-Task4RollbackRequiredEvidencePaths
+Import-RunnerFunction Assert-Task4RollbackCandidateField
+Import-RunnerFunction Get-Task4RollbackContractRunnerSha256
 Import-RunnerFunction Assert-RollbackRestoreReadiness
 Import-RunnerFunction Invoke-RollbackPhase
 $rollbackEvidenceRoot=Join-Path ([IO.Path]::GetTempPath()) ('task4-rollback-evidence-'+[Guid]::NewGuid().ToString('N'))
@@ -551,87 +557,56 @@ $global:ArtifactRoot=$rollbackEvidenceRoot
 $global:Task4RollbackRestoreEvidenceName='task4-rollback-restore-evidence.json'
 $global:Task4RollbackRestoreEvidenceSha256=''
 $global:Task4RunnerPath=$runnerPath
-$global:Task4RollbackBackupBytes=1070000L
-$global:Task4RollbackBackupSha256='9080050ADC9D98FAF2E3B381F77717393DBBCDA9C0A7E68BBED83DDAFE4DF13E'
-$global:Task4RollbackBackupManifestSha256='37885917F0239FAEBB9E86538562E6F6D5329DA06F3F505492D5C946F8C3A92C'
-$global:Task4RollbackTargetBaselineSha256='E8A0768E01CE84522BB0CADAB78B6AC01F9BD65FAB3360C992FB8EBAA67262B2'
-$global:Task4RollbackExtendedCatalogSha256='1B4E08D71B3FAE4824A90F0A361826638B2F2EE2EFABEA360BF157BDEB931393'
-$global:Task4RollbackTocSha256='D1C944F8DA8378AE8DC523A9AD48083501DDFA65CFF90CF7F5E2B83456D5011C'
-$global:Task4RollbackTocEntries=1888
-$global:Task4RollbackPgRestoreVersion='pg_restore (PostgreSQL) 17.10'
-$global:Task4RollbackPgRestoreSha256='6ECDBC31B75E10D36F3FBA699EDDE4E1350B54AEB74430350CACE7334AA6C832'
-$global:PostgresBin='C:\Users\ahmed\Documents\Codex\tools\postgresql\17.10\pgsql\bin'
-$global:BackupName='target-before-cutover.backup'
-$global:BackupManifestName='target-before-cutover.manifest.json'
-$global:Task4PostBackupObjects=@('public.staff_messages','public.website_content_drafts','public.website_content_versions','public.website_navigation_drafts','public.website_navigation_items','public.website_page_drafts','public.website_pages','public.website_review_presentations','public.website_tracking_settings')
 $script:rollbackSentinelEvents=New-Object 'System.Collections.Generic.List[string]'
 function global:Invoke-External {$script:rollbackSentinelEvents.Add('Invoke-External');throw 'Rollback reached Invoke-External.'}
 function global:Invoke-TargetFile {$script:rollbackSentinelEvents.Add('Invoke-TargetFile');throw 'Rollback reached Invoke-TargetFile.'}
+function global:Get-TargetInventory {$script:rollbackSentinelEvents.Add('Get-TargetInventory');throw 'Rollback reached a target read.'}
 Set-Item -Path function:\pg_restore.exe -Value {$script:rollbackSentinelEvents.Add('pg_restore');throw 'Rollback reached pg_restore.'}
 $missingPinError=$null
 try{Invoke-RollbackPhase}catch{$missingPinError=$_.Exception.Message}
 if($missingPinError -cne 'Task 4 rollback restore evidence has not been independently pinned.'){throw 'Rollback did not fail closed on its intentionally empty independent pin.'}
-if($script:rollbackSentinelEvents.Count -ne 0){throw 'Rollback reached a write/restore sentinel before rejecting its missing pin.'}
+if($script:rollbackSentinelEvents.Count -ne 0){throw 'Rollback reached a target/external sentinel before rejecting its missing pin.'}
 
 try{
   $global:Task4RollbackRestoreEvidenceSha256=('A'*64)
-  Assert-Rejected -Label 'A missing rollback restore evidence file was accepted.' -Action {[void](Assert-RollbackRestoreReadiness)}
-  if($script:rollbackSentinelEvents.Count -ne 0){throw 'Missing rollback evidence reached a write/restore sentinel.'}
+  Assert-Rejected -Label 'A missing rollback candidate file was accepted.' -Action {[void](Assert-RollbackRestoreReadiness)}
 
-  $rollbackBaselineVersions=@(Get-Task4BaselineMigrationFiles|ForEach-Object{$_.Substring(0,14)})
-  $rollbackBaseline=[ordered]@{projectRef='nhjbqdiyptjqherdfbqk';publicTables=93;authUsers=0;authIdentities=0;migrationRows=153;migrationIdentities=$rollbackBaselineVersions;migrationIdentitiesSha256='5EE4FF324B59CA8775A18D9F4674F6A72AA64CDC782DF640ECC67B3BAE59F9DB';schemaSha256='A01DD4E5B0EB41B6DC67B5F43D9A6548EFFC20C8A94DF511CA66E8D53E7DAAC1'}
-  if((Get-JsonSha256 -Value $rollbackBaseline) -cne $global:Task4RollbackTargetBaselineSha256){throw 'Rollback baseline fixture no longer matches the protected manifest.'}
-  $script:rollbackVerifiedBackup=[ordered]@{path=(Join-Path $rollbackEvidenceRoot 'target-before-cutover.backup');sha256=$global:Task4RollbackBackupSha256;bytes=$global:Task4RollbackBackupBytes;manifestSha256=$global:Task4RollbackBackupManifestSha256;manifest=[ordered]@{targetBaseline=$rollbackBaseline;targetBaselineSha256=$global:Task4RollbackTargetBaselineSha256}}
-  $postVersions=@($rollbackBaselineVersions)+@($expectedMigrations.version)
-  $script:rollbackCurrentStart=[ordered]@{projectRef='nhjbqdiyptjqherdfbqk';publicTables=102;authUsers=11;authIdentities=11;migrationRows=161;migrationIdentities=$postVersions;migrationIdentitiesSha256=Get-StringSha256 -Value ($postVersions -join "`n");schemaSha256=('B'*64);extendedSchemaSha256=('C'*64)}
-  function global:Assert-VerifiedBackup {return $script:rollbackVerifiedBackup}
-  function global:Get-TargetInventory {param([switch]$IncludeTask4Contract);return ($script:rollbackCurrentStart|ConvertTo-Json -Depth 100|ConvertFrom-Json)}
+  $normalizedRunnerSha256=Get-Task4RollbackContractRunnerSha256 -Path $runnerPath
+  $editedRunnerPath=Join-Path $rollbackEvidenceRoot 'runner-with-pin.ps1'
+  $editedRunnerText=(Get-Content -LiteralPath $runnerPath -Raw) -replace "(?m)^\`$Task4RollbackRestoreEvidenceSha256\s*=\s*''\s*$",("`$Task4RollbackRestoreEvidenceSha256 = '"+('A'*64)+"'")
+  [IO.File]::WriteAllText($editedRunnerPath,$editedRunnerText,[Text.UTF8Encoding]::new($false))
+  if((Get-Task4RollbackContractRunnerSha256 -Path $editedRunnerPath) -cne $normalizedRunnerSha256){throw 'Normalized rollback contract runner digest changes when only the on-disk evidence pin changes.'}
 
-  $migrationHistory=@(for($index=0;$index -lt $rollbackBaselineVersions.Count;$index++){[ordered]@{version=$rollbackBaselineVersions[$index];name=('baseline_'+$index);statements=@("select $index")}})
-  $tableDataRelations=@('auth.identities','auth.users','public.example','storage.buckets','storage.objects')
-  $tableCounts=@($tableDataRelations|ForEach-Object{[ordered]@{relation=$_;rows=0L}})
-  $tocCategoryCounts=[ordered]@{'ACL'=339;'DEFAULT ACL'=27;'EXTENSION'=6;'PUBLICATION'=14;'TABLE DATA'=5;'OTHER'=1497}
-  $roles=@('anon','authenticated','authenticator','postgres','service_role','supabase_auth_admin','supabase_storage_admin')
-  $extensions=@([ordered]@{name='pgcrypto';version='1.3'},[ordered]@{name='uuid-ossp';version='1.1'})
-  $platformBinding=[ordered]@{provider='Supabase';postgresMajor=17;rolesSha256=Get-JsonSha256 -Value $roles;extensionsSha256=Get-JsonSha256 -Value $extensions}
-  $catalogComponents=[ordered]@{schemaRelationsRoutinesTypesSequencesPoliciesOwnersAcls=('1'*64);defaultAcls=('2'*64);extensionOwnersVersionsMembership=('3'*64);publicationOwnersOptionsMembership=('4'*64);eventTriggerOwners=('5'*64)}
-  $storageMetadata=[ordered]@{buckets=0;objects=0;canonicalSha256=('6'*64)}
-  $storageBytes=[ordered]@{separateFromDatabaseRestore=$true;beforeInventorySha256=('7'*64);afterInventorySha256=('7'*64);cleanupProofSha256=('8'*64);restoreProofSha256=('9'*64);exactByteFidelity=$true}
-  $restoreArguments=@('--clean','--if-exists','--exit-on-error','--single-transaction','--host','matching-disposable.supabase.test','--port','5432','--username','postgres.matching','--dbname','postgres','target-before-cutover.backup')
-  $cleanupOperations=@('drop allowlisted post-backup objects','restore exact platform backup','verify no post-backup objects remain')
-  $rollbackPayload=[ordered]@{
-    formatVersion=1;status='matching-disposable-restore-passed';completedAtUtc='2026-07-21T00:00:00.0000000Z';targetRef='nhjbqdiyptjqherdfbqk';producerRunnerSha256=(Get-FileHash -LiteralPath $runnerPath -Algorithm SHA256).Hash.ToUpperInvariant()
-    restore=[ordered]@{environment='matching-disposable-supabase';productionTargetWrites=0;executable=[ordered]@{file='pg_restore.exe';version=$global:Task4RollbackPgRestoreVersion;sha256=$global:Task4RollbackPgRestoreSha256};arguments=$restoreArguments;argumentsSha256=Get-JsonSha256 -Value $restoreArguments;ownerReplay=$true;privilegeReplay=$true}
-    backup=[ordered]@{file='target-before-cutover.backup';bytes=$global:Task4RollbackBackupBytes;sha256=$global:Task4RollbackBackupSha256;manifest=[ordered]@{file='target-before-cutover.manifest.json';sha256=$global:Task4RollbackBackupManifestSha256;targetBaselineSha256=$global:Task4RollbackTargetBaselineSha256};toc=[ordered]@{sha256=$global:Task4RollbackTocSha256;entries=$global:Task4RollbackTocEntries;aclEntries=339;defaultAclEntries=27;extensionEntries=6;publicationEntries=14;categoryCounts=$tocCategoryCounts;categoryCountsSha256=Get-JsonSha256 -Value $tocCategoryCounts;tableDataRelations=$tableDataRelations;tableDataRelationsSha256=Get-JsonSha256 -Value $tableDataRelations}}
-    platform=[ordered]@{provider='Supabase';postgresMajor=17;roles=$roles;rolesSha256=$platformBinding.rolesSha256;extensions=$extensions;extensionsSha256=$platformBinding.extensionsSha256;capabilitiesSha256=Get-JsonSha256 -Value $platformBinding}
-    startingState=[ordered]@{inventory=$script:rollbackCurrentStart;sha256=Get-JsonSha256 -Value $script:rollbackCurrentStart}
-    cleanup=[ordered]@{strategy='strict-allowlist-recreate';strictAllowlist=$true;removesAllPostBackupObjects=$true;postBackupObjects=$global:Task4PostBackupObjects;postBackupObjectsSha256=Get-JsonSha256 -Value $global:Task4PostBackupObjects;allowlistedOperations=$cleanupOperations;allowlistedOperationsSha256=Get-JsonSha256 -Value $cleanupOperations;postCleanupObjectAbsenceVerified=$true}
-    baseline=[ordered]@{ordinaryCatalogSha256=$rollbackBaseline.schemaSha256;extendedCatalogSha256=$global:Task4RollbackExtendedCatalogSha256;catalogComponents=$catalogComponents;catalogComponentsSha256=Get-JsonSha256 -Value $catalogComponents;migrationHistory=[ordered]@{fields=@('version','name','statements');records=$migrationHistory;recordsSha256=Get-JsonSha256 -Value $migrationHistory};tableData=[ordered]@{counts=$tableCounts;countsSha256=Get-JsonSha256 -Value $tableCounts};auth=[ordered]@{users=0;identities=0;sessions=0;refreshTokens=0};storageMetadata=$storageMetadata;storageBytes=$storageBytes}
-    postRestore=[ordered]@{exactPostRestoreMatch=$true;ordinaryCatalogSha256=$rollbackBaseline.schemaSha256;extendedCatalogSha256=$global:Task4RollbackExtendedCatalogSha256;catalogComponentsSha256=Get-JsonSha256 -Value $catalogComponents;migrationHistorySha256=Get-JsonSha256 -Value $migrationHistory;tableCountsSha256=Get-JsonSha256 -Value $tableCounts;auth=[ordered]@{users=0;identities=0;sessions=0;refreshTokens=0};storageMetadataSha256=Get-JsonSha256 -Value $storageMetadata;storageByteInventorySha256=$storageBytes.afterInventorySha256}
+  $candidatePayload=[ordered]@{
+    formatVersion=1;status='unreviewed-candidate';completedAtUtc='2026-07-21T00:00:00.0000000Z';targetRef='nhjbqdiyptjqherdfbqk';contractRunnerSha256=$normalizedRunnerSha256
+    restore=[ordered]@{environment='unreviewed-candidate';productionTargetWrites=0;executable=[ordered]@{file='candidate';version='candidate';sha256=('1'*64)};arguments=@('candidate');argumentsSha256=('2'*64);ownerReplay=$true;privilegeReplay=$true}
+    backup=[ordered]@{file='candidate';bytes=1L;sha256=('3'*64);manifest=[ordered]@{file='candidate';sha256=('4'*64);targetBaselineSha256=('5'*64)};toc=[ordered]@{sha256=('6'*64);entries=1;aclEntries=1;defaultAclEntries=1;extensionEntries=1;publicationEntries=1;categoryCounts=[ordered]@{candidate=1};categoryCountsSha256=('7'*64);tableDataRelations=@('candidate');tableDataRelationsSha256=('8'*64)}}
+    platform=[ordered]@{provider='unreviewed-candidate';postgresMajor=17;roles=@('candidate');rolesSha256=('9'*64);extensions=@('candidate');extensionsSha256=('A'*64);capabilitiesSha256=('B'*64)}
+    startingState=[ordered]@{inventory=[ordered]@{candidate='unreviewed'};sha256=('C'*64)}
+    cleanup=[ordered]@{strategy='unreviewed-candidate';strictAllowlist=$true;removesAllPostBackupObjects=$true;postBackupObjects=@('candidate');postBackupObjectsSha256=('D'*64);allowlistedOperations=@('candidate');allowlistedOperationsSha256=('E'*64);postCleanupObjectAbsenceVerified=$true}
+    baseline=[ordered]@{ordinaryCatalogSha256=('F'*64);extendedCatalogSha256=('1'*64);catalogComponents=[ordered]@{candidate=('2'*64)};catalogComponentsSha256=('3'*64);migrationHistory=[ordered]@{fields=@('version','name','statements');records=@([ordered]@{candidate='unreviewed'});recordsSha256=('4'*64)};tableData=[ordered]@{counts=@([ordered]@{candidate='unreviewed'});countsSha256=('5'*64)};auth=[ordered]@{users=0;identities=0;sessions=0;refreshTokens=0};storageMetadata=[ordered]@{buckets=0;objects=0;canonicalSha256=('6'*64)};storageBytes=[ordered]@{separateFromDatabaseRestore=$true;beforeInventorySha256=('7'*64);afterInventorySha256=('8'*64);cleanupProofSha256=('9'*64);restoreProofSha256=('A'*64);exactByteFidelity=$true}}
+    postRestore=[ordered]@{exactPostRestoreMatch=$true;ordinaryCatalogSha256=('B'*64);extendedCatalogSha256=('C'*64);catalogComponentsSha256=('D'*64);migrationHistorySha256=('E'*64);tableCountsSha256=('F'*64);auth=[ordered]@{users=0;identities=0;sessions=0;refreshTokens=0};storageMetadataSha256=('1'*64);storageByteInventorySha256=('2'*64)}
   }
-  $rollbackDocument=[ordered]@{payload=$rollbackPayload;payloadSha256=Get-JsonSha256 -Value $rollbackPayload}
+  $candidateDocument=[ordered]@{payload=$candidatePayload;payloadSha256=Get-JsonSha256 -Value $candidatePayload}
   $rollbackEvidencePath=Join-Path $rollbackEvidenceRoot $global:Task4RollbackRestoreEvidenceName
-  function Write-RollbackFixture([Parameter(Mandatory)]$Document){[IO.File]::WriteAllText($rollbackEvidencePath,(ConvertTo-Json -InputObject $Document -Depth 100)+"`n",[Text.UTF8Encoding]::new($false));$global:Task4RollbackRestoreEvidenceSha256=(Get-FileHash -LiteralPath $rollbackEvidencePath -Algorithm SHA256).Hash.ToUpperInvariant()}
+  function Write-RollbackCandidate([Parameter(Mandatory)]$Document){[IO.File]::WriteAllText($rollbackEvidencePath,(ConvertTo-Json -InputObject $Document -Depth 100)+"`n",[Text.UTF8Encoding]::new($false));$global:Task4RollbackRestoreEvidenceSha256=(Get-FileHash -LiteralPath $rollbackEvidencePath -Algorithm SHA256).Hash.ToUpperInvariant()}
+  function Get-RollbackRejection([Parameter(Mandatory)][scriptblock]$Action){try{& $Action;return $null}catch{return $_.Exception.Message}}
 
-  [IO.File]::WriteAllText($rollbackEvidencePath,'{malformed rollback evidence',[Text.UTF8Encoding]::new($false));$global:Task4RollbackRestoreEvidenceSha256=(Get-FileHash -LiteralPath $rollbackEvidencePath -Algorithm SHA256).Hash.ToUpperInvariant()
-  Assert-Rejected -Label 'Malformed independently pinned rollback evidence was accepted.' -Action {[void](Assert-RollbackRestoreReadiness)}
-
-  $incomplete=$rollbackDocument|ConvertTo-Json -Depth 100|ConvertFrom-Json;$incomplete.payload.baseline.storageBytes.PSObject.Properties.Remove('restoreProofSha256');$incomplete.payloadSha256=Get-JsonSha256 -Value $incomplete.payload;Write-RollbackFixture $incomplete
-  Assert-Rejected -Label 'Incomplete rollback Storage-byte evidence was accepted.' -Action {[void](Assert-RollbackRestoreReadiness)}
-
-  Write-RollbackFixture $rollbackDocument;$pinnedBeforeTamper=$global:Task4RollbackRestoreEvidenceSha256;Add-Content -LiteralPath $rollbackEvidencePath -Value 'tampered';$global:Task4RollbackRestoreEvidenceSha256=$pinnedBeforeTamper
-  Assert-Rejected -Label 'Tampered rollback evidence bytes were accepted.' -Action {[void](Assert-RollbackRestoreReadiness)}
-
-  $stale=$rollbackDocument|ConvertTo-Json -Depth 100|ConvertFrom-Json;$stale.payload.startingState.inventory.schemaSha256=('D'*64);$stale.payload.startingState.sha256=Get-JsonSha256 -Value $stale.payload.startingState.inventory;$stale.payloadSha256=Get-JsonSha256 -Value $stale.payload;Write-RollbackFixture $stale
-  Assert-Rejected -Label 'Self-consistent stale starting-state evidence was accepted.' -Action {[void](Assert-RollbackRestoreReadiness)}
-
-  $wrongExtended=$rollbackDocument|ConvertTo-Json -Depth 100|ConvertFrom-Json;$wrongExtended.payload.baseline.extendedCatalogSha256=('D'*64);$wrongExtended.payload.postRestore.extendedCatalogSha256=('D'*64);$wrongExtended.payloadSha256=Get-JsonSha256 -Value $wrongExtended.payload;Write-RollbackFixture $wrongExtended
-  Assert-Rejected -Label 'A self-consistent non-baseline extended catalog digest was accepted.' -Action {[void](Assert-RollbackRestoreReadiness)}
-
-  Write-RollbackFixture $rollbackDocument
-  $readiness=Assert-RollbackRestoreReadiness
-  if($readiness.status -cne 'matching-disposable-restore-passed'){throw 'Complete matching-disposable restore evidence did not satisfy the readiness contract.'}
-  if($script:rollbackSentinelEvents.Count -ne 0){throw 'Rollback readiness validation reached a write/restore sentinel.'}
+  [IO.File]::WriteAllText($rollbackEvidencePath,'{malformed rollback candidate',[Text.UTF8Encoding]::new($false));$global:Task4RollbackRestoreEvidenceSha256=(Get-FileHash -LiteralPath $rollbackEvidencePath -Algorithm SHA256).Hash.ToUpperInvariant()
+  Assert-Rejected -Label 'Malformed independently pinned rollback candidate was accepted.' -Action {[void](Assert-RollbackRestoreReadiness)}
+  $incomplete=$candidateDocument|ConvertTo-Json -Depth 100|ConvertFrom-Json;$incomplete.payload.baseline.storageBytes.PSObject.Properties.Remove('restoreProofSha256');$incomplete.payloadSha256=Get-JsonSha256 -Value $incomplete.payload;Write-RollbackCandidate $incomplete
+  if((Get-RollbackRejection {[void](Assert-RollbackRestoreReadiness)}) -cne 'Task 4 rollback candidate required field is missing or null: baseline.storageBytes.restoreProofSha256'){throw 'Incomplete rollback candidate was not rejected diagnostically.'}
+  Write-RollbackCandidate $candidateDocument;$pinnedBeforeTamper=$global:Task4RollbackRestoreEvidenceSha256;Add-Content -LiteralPath $rollbackEvidencePath -Value 'tampered';$global:Task4RollbackRestoreEvidenceSha256=$pinnedBeforeTamper
+  Assert-Rejected -Label 'Tampered rollback candidate bytes were accepted.' -Action {[void](Assert-RollbackRestoreReadiness)}
+  $stale=$candidateDocument|ConvertTo-Json -Depth 100|ConvertFrom-Json;$stale.payload.contractRunnerSha256=('0'*64);$stale.payloadSha256=Get-JsonSha256 -Value $stale.payload;Write-RollbackCandidate $stale
+  if((Get-RollbackRejection {[void](Assert-RollbackRestoreReadiness)}) -cne 'Task 4 rollback candidate is stale for the current normalized runner contract.'){throw 'Stale rollback candidate was not rejected diagnostically.'}
+  $stringFalse=$candidateDocument|ConvertTo-Json -Depth 100|ConvertFrom-Json;$stringFalse.payload.restore.ownerReplay='false';$stringFalse.payloadSha256=Get-JsonSha256 -Value $stringFalse.payload;Write-RollbackCandidate $stringFalse
+  if((Get-RollbackRejection {[void](Assert-RollbackRestoreReadiness)}) -cne 'Task 4 rollback candidate field must be a JSON boolean: restore.ownerReplay'){throw 'String false was coerced into rollback authorization.'}
+  $nullInteger=$candidateDocument|ConvertTo-Json -Depth 100|ConvertFrom-Json;$nullInteger.payload.restore.productionTargetWrites=$null;$nullInteger.payloadSha256=Get-JsonSha256 -Value $nullInteger.payload;Write-RollbackCandidate $nullInteger
+  if((Get-RollbackRejection {[void](Assert-RollbackRestoreReadiness)}) -cne 'Task 4 rollback candidate required field is missing or null: restore.productionTargetWrites'){throw 'Null integer was coerced into rollback authorization.'}
+  Write-RollbackCandidate $candidateDocument
+  if((Get-RollbackRejection {[void](Assert-RollbackRestoreReadiness)}) -cne 'Task 4 rollback candidate is non-authorizing; semantic restore validation is not implemented.'){throw 'A fully populated fabricated rollback candidate reached a success path.'}
+  if($script:rollbackSentinelEvents.Count -ne 0){throw 'Rollback candidate validation reached a target read, external process, or restore sentinel.'}
 }finally{
   $global:Task4RollbackRestoreEvidenceSha256=''
   if(Test-Path -LiteralPath $rollbackEvidenceRoot){Remove-Item -LiteralPath $rollbackEvidenceRoot -Recurse -Force}
@@ -662,8 +637,38 @@ if($pushBlock.Contains('invoke-postmigrationphase')){throw 'Push phase delegates
 $pushInvalidation=$lowerRunner.IndexOf(("if ("+'$phase'+" -eq 'push')"));$pushEvidenceInvalidation=$lowerRunner.IndexOf('task4migrationpushevidencename',$pushInvalidation);$toolPreflight=$lowerRunner.LastIndexOf('assert-requiredtools');if($pushInvalidation -lt 0 -or $pushEvidenceInvalidation -le $pushInvalidation -or $pushEvidenceInvalidation -ge $toolPreflight){throw 'Push does not invalidate stale push evidence before fallible preflight.'}
 if(-not $lowerRunner.Contains('project_id') -or -not $lowerRunner.Contains('$expectedref')){throw 'Protected Push workdir config is not bound to the exact target identity.'}
 
-Import-RunnerFunction Get-SequenceCheckSql
+$rehearseDefinition=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-RehearsePhase'},$true)
+if(-not $rehearseDefinition){throw 'Rehearse phase is missing.'}
+$rehearseText=$rehearseDefinition.Extent.Text.ToLowerInvariant()
+$sourceBootstrapIndex=$rehearseText.IndexOf('new-localdatabase -database $sourcedatabase')
+$targetBootstrapIndex=$rehearseText.IndexOf('new-localdatabase -database $targetdatabase')
+$firstRestoreIndex=$rehearseText.IndexOf('restore-tocselection')
+if($sourceBootstrapIndex -lt 0 -or $targetBootstrapIndex -lt 0 -or $firstRestoreIndex -lt 0 -or $sourceBootstrapIndex -ge $firstRestoreIndex -or $targetBootstrapIndex -ge $firstRestoreIndex){throw 'Rehearse does not bootstrap both disposable databases before the first owner-replaying restore.'}
+
 $postgresBin='C:\Users\ahmed\Documents\Codex\tools\postgresql\17.10\pgsql\bin'
+Import-RunnerFunction New-LocalDatabase
+$script:capturedBootstrapSql=$null
+$script:capturedCreateDatabase=$null
+function global:Invoke-External {
+  param([string]$File,[string[]]$Arguments,[string]$Label,[switch]$NoOutputLog)
+  $script:capturedCreateDatabase=[ordered]@{file=$File;arguments=@($Arguments);label=$Label}
+  return @()
+}
+function global:Invoke-LocalQuery {
+  param([string]$Database,[string]$Sql,[string]$Label)
+  $script:capturedBootstrapSql=$Sql
+  return ''
+}
+New-LocalDatabase -Database 'managed_owner_fixture'
+if($null -eq $script:capturedBootstrapSql -or $script:capturedCreateDatabase.arguments[-1] -cne 'managed_owner_fixture'){throw 'Disposable database bootstrap behavior was not captured.'}
+$selectedRestoreOwners=@('postgres','supabase_admin','supabase_auth_admin','supabase_storage_admin')
+foreach($owner in @($selectedRestoreOwners|Where-Object{$_ -ne 'postgres'})){
+  $exactOwnerBootstrap="if not exists (select 1 from pg_roles where rolname = '$owner') then create role $owner nologin; end if;"
+  if(-not $script:capturedBootstrapSql.Contains($exactOwnerBootstrap)){throw "Disposable bootstrap does not create selected archive owner as NOLOGIN: $owner"}
+}
+foreach($owner in $selectedRestoreOwners){if($script:capturedBootstrapSql -match "(?im)create\s+role\s+$([regex]::Escape($owner))\s+login\b"){throw "Disposable bootstrap grants LOGIN to selected archive owner: $owner"}}
+
+Import-RunnerFunction Get-SequenceCheckSql
 $sequenceRoot=Join-Path ([IO.Path]::GetTempPath()) ('task4-sequence-'+[Guid]::NewGuid().ToString('N'));$sequenceData=Join-Path $sequenceRoot 'data';$sequenceLog=Join-Path $sequenceRoot 'postgres.log'
 $listener=New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback,0);$listener.Start();$sequencePort=([Net.IPEndPoint]$listener.LocalEndpoint).Port;$listener.Stop();New-Item -ItemType Directory -Path $sequenceRoot|Out-Null
 function Invoke-SequencePgCtl([string[]]$Arguments){$quoted=@($Arguments|ForEach-Object{if($_ -match '[\s"]'){'"'+$_.Replace('"','\"')+'"'}else{$_}})-join ' ';$process=Start-Process -FilePath (Join-Path $postgresBin 'pg_ctl.exe') -ArgumentList $quoted -PassThru -WindowStyle Hidden;if(-not $process.WaitForExit(30000)){$process.Kill();throw 'Sequence test pg_ctl timed out.'};if($process.ExitCode -ne 0){throw 'Sequence test pg_ctl failed.'}}
@@ -671,6 +676,12 @@ try{
   & (Join-Path $postgresBin 'initdb.exe') --pgdata $sequenceData --username postgres --auth trust --encoding UTF8 --no-locale --no-sync *> $null;if($LASTEXITCODE -ne 0){throw 'Sequence test initdb failed.'}
   Invoke-SequencePgCtl @('--pgdata',$sequenceData,'--log',$sequenceLog,'--options',"-h 127.0.0.1 -p $sequencePort",'--wait','start')
   & (Join-Path $postgresBin 'createdb.exe') --host 127.0.0.1 --port $sequencePort --username postgres sequence_test *> $null;if($LASTEXITCODE -ne 0){throw 'Sequence test createdb failed.'}
+  $bootstrapPath=Join-Path $sequenceRoot 'disposable-bootstrap.sql'
+  [IO.File]::WriteAllText($bootstrapPath,$script:capturedBootstrapSql,[Text.UTF8Encoding]::new($false))
+  & (Join-Path $postgresBin 'psql.exe') -X -q -v ON_ERROR_STOP=1 --host 127.0.0.1 --port $sequencePort --username postgres --dbname sequence_test --file $bootstrapPath *> $null;if($LASTEXITCODE -ne 0){throw 'Disposable managed-owner bootstrap failed against PostgreSQL.'}
+  $managedOwnerState=@(& (Join-Path $postgresBin 'psql.exe') -X -A -t -q -v ON_ERROR_STOP=1 --host 127.0.0.1 --port $sequencePort --username postgres --dbname sequence_test --command "select rolname||'|'||rolcanlogin::text from pg_roles where rolname in ('supabase_admin','supabase_auth_admin','supabase_storage_admin') order by rolname;")
+  if($LASTEXITCODE -ne 0){throw 'Disposable managed-owner role query failed.'}
+  Assert-EqualJson -Expected @('supabase_admin|false','supabase_auth_admin|false','supabase_storage_admin|false') -Actual @($managedOwnerState|ForEach-Object{$_.Trim()}|Where-Object{$_}) -Label 'Disposable PostgreSQL bootstrap did not create the exact selected archive owners as NOLOGIN.'
   $sequenceFixture=@'
 create table public.t001(id bigint primary key);
 create sequence public.t001_id_seq start 1 increment 1 owned by public.t001.id;

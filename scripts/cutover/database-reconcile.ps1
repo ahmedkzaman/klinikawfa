@@ -1122,6 +1122,9 @@ begin
   if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if;
   if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role nologin; end if;
+  if not exists (select 1 from pg_roles where rolname = 'supabase_admin') then create role supabase_admin nologin; end if;
+  if not exists (select 1 from pg_roles where rolname = 'supabase_auth_admin') then create role supabase_auth_admin nologin; end if;
+  if not exists (select 1 from pg_roles where rolname = 'supabase_storage_admin') then create role supabase_storage_admin nologin; end if;
 end
 $$;
 '@
@@ -3009,7 +3012,7 @@ function Invoke-ImportPhase {
 
 function Assert-Task4ExactEvidenceProperties {
   param([Parameter(Mandatory)]$Value,[Parameter(Mandatory)][string[]]$Names,[Parameter(Mandatory)][string]$Label)
-  if ($null -eq $Value -or $null -eq $Value.PSObject) { throw "$Label is missing." }
+  if ($null -eq $Value -or $Value -isnot [pscustomobject]) { throw "$Label must be a JSON object." }
   $actual = @($Value.PSObject.Properties.Name | Sort-Object)
   $expected = @($Names | Sort-Object)
   if (($actual -join "`n") -cne ($expected -join "`n")) { throw "$Label has missing or unexpected fields." }
@@ -3017,11 +3020,54 @@ function Assert-Task4ExactEvidenceProperties {
 
 function Assert-Task4EvidenceSha256 {
   param($Value,[Parameter(Mandatory)][string]$Label)
-  if ([string]$Value -cnotmatch '^[A-F0-9]{64}$') { throw "$Label is not an uppercase SHA-256 digest." }
+  if ($Value -isnot [string] -or $Value -cnotmatch '^[A-F0-9]{64}$') { throw "$Label is not an uppercase SHA-256 digest string." }
+}
+
+function Assert-Task4EvidenceBoolean {
+  param($Value,[Parameter(Mandatory)][string]$Path)
+  if ($Value -isnot [bool]) { throw "Task 4 rollback candidate field must be a JSON boolean: $Path" }
+}
+
+function Assert-Task4EvidenceInteger {
+  param($Value,[Parameter(Mandatory)][string]$Path)
+  if ($Value -isnot [int] -and $Value -isnot [long]) { throw "Task 4 rollback candidate field must be a JSON integer: $Path" }
+}
+
+function Get-Task4RollbackRequiredEvidencePaths {
+  return @(
+    'restore.environment','restore.productionTargetWrites','restore.executable.file','restore.executable.version','restore.executable.sha256','restore.arguments','restore.argumentsSha256','restore.ownerReplay','restore.privilegeReplay',
+    'backup.file','backup.bytes','backup.sha256','backup.manifest.file','backup.manifest.sha256','backup.manifest.targetBaselineSha256','backup.toc.sha256','backup.toc.entries','backup.toc.aclEntries','backup.toc.defaultAclEntries','backup.toc.extensionEntries','backup.toc.publicationEntries','backup.toc.categoryCounts','backup.toc.categoryCountsSha256','backup.toc.tableDataRelations','backup.toc.tableDataRelationsSha256',
+    'platform.provider','platform.postgresMajor','platform.roles','platform.rolesSha256','platform.extensions','platform.extensionsSha256','platform.capabilitiesSha256',
+    'startingState.inventory','startingState.sha256',
+    'cleanup.strategy','cleanup.strictAllowlist','cleanup.removesAllPostBackupObjects','cleanup.postBackupObjects','cleanup.postBackupObjectsSha256','cleanup.allowlistedOperations','cleanup.allowlistedOperationsSha256','cleanup.postCleanupObjectAbsenceVerified',
+    'baseline.ordinaryCatalogSha256','baseline.extendedCatalogSha256','baseline.catalogComponents','baseline.catalogComponentsSha256','baseline.migrationHistory.fields','baseline.migrationHistory.records','baseline.migrationHistory.recordsSha256','baseline.tableData.counts','baseline.tableData.countsSha256','baseline.auth.users','baseline.auth.identities','baseline.auth.sessions','baseline.auth.refreshTokens','baseline.storageMetadata.buckets','baseline.storageMetadata.objects','baseline.storageMetadata.canonicalSha256','baseline.storageBytes.separateFromDatabaseRestore','baseline.storageBytes.beforeInventorySha256','baseline.storageBytes.afterInventorySha256','baseline.storageBytes.cleanupProofSha256','baseline.storageBytes.restoreProofSha256','baseline.storageBytes.exactByteFidelity',
+    'postRestore.exactPostRestoreMatch','postRestore.ordinaryCatalogSha256','postRestore.extendedCatalogSha256','postRestore.catalogComponentsSha256','postRestore.migrationHistorySha256','postRestore.tableCountsSha256','postRestore.auth.users','postRestore.auth.identities','postRestore.auth.sessions','postRestore.auth.refreshTokens','postRestore.storageMetadataSha256','postRestore.storageByteInventorySha256'
+  )
+}
+
+function Assert-Task4RollbackCandidateField {
+  param([Parameter(Mandatory)]$Payload,[Parameter(Mandatory)][string]$Path)
+  $current = $Payload
+  foreach ($segment in $Path.Split('.')) {
+    if ($null -eq $current -or $current -isnot [pscustomobject] -or $null -eq $current.PSObject.Properties[$segment] -or $null -eq $current.$segment) {
+      throw "Task 4 rollback candidate required field is missing or null: $Path"
+    }
+    $current = $current.$segment
+  }
+}
+
+function Get-Task4RollbackContractRunnerSha256 {
+  param([string]$Path = $Task4RunnerPath)
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw 'Task 4 rollback runner contract file is missing.' }
+  $text = Get-Content -LiteralPath $Path -Raw
+  $pattern = '(?m)^\$Task4RollbackRestoreEvidenceSha256\s*=\s*''[^''\r\n]*''\s*$'
+  if ([regex]::Matches($text,$pattern).Count -ne 1) { throw 'Task 4 rollback runner pin assignment is not canonical.' }
+  $normalized = [regex]::Replace($text,$pattern,"`$Task4RollbackRestoreEvidenceSha256 = ''")
+  return Get-StringSha256 -Value $normalized
 }
 
 function Assert-RollbackRestoreReadiness {
-  if ([string]::IsNullOrWhiteSpace($Task4RollbackRestoreEvidenceSha256)) {
+  if ($null -eq $Task4RollbackRestoreEvidenceSha256 -or ($Task4RollbackRestoreEvidenceSha256 -is [string] -and [string]::IsNullOrWhiteSpace($Task4RollbackRestoreEvidenceSha256))) {
     throw 'Task 4 rollback restore evidence has not been independently pinned.'
   }
   Assert-Task4EvidenceSha256 -Value $Task4RollbackRestoreEvidenceSha256 -Label 'Task 4 rollback restore evidence pin'
@@ -3036,128 +3082,31 @@ function Assert-RollbackRestoreReadiness {
   catch { throw 'Task 4 rollback restore evidence is malformed JSON.' }
   Assert-Task4ExactEvidenceProperties -Value $evidence -Names @('payload','payloadSha256') -Label 'Task 4 rollback restore evidence envelope'
   Assert-Task4EvidenceSha256 -Value $evidence.payloadSha256 -Label 'Task 4 rollback restore evidence self-hash'
-  if ([string]$evidence.payloadSha256 -cne (Get-JsonSha256 -Value $evidence.payload)) { throw 'Task 4 rollback restore evidence self-hash is invalid.' }
+  if ($evidence.payloadSha256 -cne (Get-JsonSha256 -Value $evidence.payload)) { throw 'Task 4 rollback restore evidence self-hash is invalid.' }
 
   $payload = $evidence.payload
-  Assert-Task4ExactEvidenceProperties -Value $payload -Names @('formatVersion','status','completedAtUtc','targetRef','producerRunnerSha256','restore','backup','platform','startingState','cleanup','baseline','postRestore') -Label 'Task 4 rollback restore evidence payload'
-  if ($payload.formatVersion -ne 1 -or [string]$payload.status -cne 'matching-disposable-restore-passed' -or [string]$payload.targetRef -cne $ExpectedRef) { throw 'Task 4 rollback restore evidence identity or status is invalid.' }
+  Assert-Task4ExactEvidenceProperties -Value $payload -Names @('formatVersion','status','completedAtUtc','targetRef','contractRunnerSha256','restore','backup','platform','startingState','cleanup','baseline','postRestore') -Label 'Task 4 rollback restore evidence payload'
+  Assert-Task4EvidenceInteger -Value $payload.formatVersion -Path 'formatVersion'
+  if ($payload.formatVersion -ne 1 -or $payload.status -isnot [string] -or $payload.status -cne 'unreviewed-candidate' -or $payload.targetRef -isnot [string] -or $payload.targetRef -cne $ExpectedRef -or $payload.completedAtUtc -isnot [string]) { throw 'Task 4 rollback candidate identity, status, or timestamp type is invalid.' }
   $completedAt = [DateTimeOffset]::MinValue
-  if (-not [DateTimeOffset]::TryParse([string]$payload.completedAtUtc,[ref]$completedAt) -or $completedAt.Offset -ne [TimeSpan]::Zero -or $completedAt.UtcDateTime -gt [DateTime]::UtcNow.AddMinutes(5)) { throw 'Task 4 rollback restore evidence completion time is invalid.' }
-  Assert-Task4EvidenceSha256 -Value $payload.producerRunnerSha256 -Label 'Task 4 rollback restore producer runner digest'
-  if (-not (Test-Path -LiteralPath $Task4RunnerPath -PathType Leaf) -or (Get-FileHash -LiteralPath $Task4RunnerPath -Algorithm SHA256).Hash.ToUpperInvariant() -cne [string]$payload.producerRunnerSha256) { throw 'Task 4 rollback restore evidence is stale for the current runner.' }
+  if (-not [DateTimeOffset]::TryParse($payload.completedAtUtc,[ref]$completedAt) -or $completedAt.Offset -ne [TimeSpan]::Zero -or $completedAt.UtcDateTime -gt [DateTime]::UtcNow.AddMinutes(5)) { throw 'Task 4 rollback candidate completion time is invalid.' }
+  Assert-Task4EvidenceSha256 -Value $payload.contractRunnerSha256 -Label 'Task 4 rollback normalized contract runner digest'
+  if ($payload.contractRunnerSha256 -cne (Get-Task4RollbackContractRunnerSha256)) { throw 'Task 4 rollback candidate is stale for the current normalized runner contract.' }
 
-  $restore = $payload.restore
-  Assert-Task4ExactEvidenceProperties -Value $restore -Names @('environment','productionTargetWrites','executable','arguments','argumentsSha256','ownerReplay','privilegeReplay') -Label 'Task 4 rollback restore executable contract'
-  Assert-Task4ExactEvidenceProperties -Value $restore.executable -Names @('file','version','sha256') -Label 'Task 4 rollback restore executable identity'
-  if ([string]$restore.environment -cne 'matching-disposable-supabase' -or [int]$restore.productionTargetWrites -ne 0 -or -not [bool]$restore.ownerReplay -or -not [bool]$restore.privilegeReplay) { throw 'Task 4 rollback restore proof is not a write-free matching-disposable fidelity run.' }
-  if ([string]$restore.executable.file -cne 'pg_restore.exe' -or [string]$restore.executable.version -cne $Task4RollbackPgRestoreVersion -or [string]$restore.executable.sha256 -cne $Task4RollbackPgRestoreSha256) { throw 'Task 4 rollback restore executable identity differs from the approved tool.' }
-  $restorePath = Join-Path $PostgresBin 'pg_restore.exe'
-  if (-not (Test-Path -LiteralPath $restorePath -PathType Leaf)) { throw 'Task 4 rollback restore executable is missing.' }
-  Assert-NoReparsePointInPath -Path $restorePath -Label 'Task 4 rollback restore executable'
-  if ((Get-FileHash -LiteralPath $restorePath -Algorithm SHA256).Hash.ToUpperInvariant() -cne $Task4RollbackPgRestoreSha256) { throw 'Task 4 rollback restore executable bytes changed.' }
-  if ($restore.arguments -isnot [Array]) { throw 'Task 4 rollback restore arguments are not an exact array.' }
-  $restoreArguments = @($restore.arguments | ForEach-Object { if ($_ -isnot [string]) { throw 'Task 4 rollback restore argument is not text.' }; [string]$_ })
-  Assert-Task4EvidenceSha256 -Value $restore.argumentsSha256 -Label 'Task 4 rollback restore arguments digest'
-  if ((Get-JsonSha256 -Value $restoreArguments) -cne [string]$restore.argumentsSha256 -or $restoreArguments.Count -lt 10) { throw 'Task 4 rollback restore argument vector is incomplete or changed.' }
-  foreach ($requiredArgument in @('--clean','--if-exists','--exit-on-error','--single-transaction','--host','--port','--username','--dbname',$BackupName)) { if ($restoreArguments -cnotcontains $requiredArgument) { throw "Task 4 rollback restore argument vector is missing $requiredArgument." } }
-  if (@($restoreArguments | Where-Object { $_ -match '^--no-(?:owner|privileges)$' }).Count -ne 0 -or ($restoreArguments -join "`n").Contains($ExpectedRef)) { throw 'Task 4 rollback restore argument vector suppresses fidelity or targets production.' }
-
-  $backup = $payload.backup
-  Assert-Task4ExactEvidenceProperties -Value $backup -Names @('file','bytes','sha256','manifest','toc') -Label 'Task 4 rollback backup binding'
-  Assert-Task4ExactEvidenceProperties -Value $backup.manifest -Names @('file','sha256','targetBaselineSha256') -Label 'Task 4 rollback backup manifest binding'
-  if ([string]$backup.file -cne $BackupName -or [int64]$backup.bytes -ne $Task4RollbackBackupBytes -or [string]$backup.sha256 -cne $Task4RollbackBackupSha256 -or
-      [string]$backup.manifest.file -cne $BackupManifestName -or [string]$backup.manifest.sha256 -cne $Task4RollbackBackupManifestSha256 -or [string]$backup.manifest.targetBaselineSha256 -cne $Task4RollbackTargetBaselineSha256) { throw 'Task 4 rollback evidence does not bind the exact protected backup and manifest.' }
-
-  $toc = $backup.toc
-  Assert-Task4ExactEvidenceProperties -Value $toc -Names @('sha256','entries','aclEntries','defaultAclEntries','extensionEntries','publicationEntries','categoryCounts','categoryCountsSha256','tableDataRelations','tableDataRelationsSha256') -Label 'Task 4 rollback backup TOC binding'
-  if ([string]$toc.sha256 -cne $Task4RollbackTocSha256 -or [int]$toc.entries -ne $Task4RollbackTocEntries -or [int]$toc.aclEntries -ne 339 -or [int]$toc.defaultAclEntries -ne 27 -or [int]$toc.extensionEntries -ne 6 -or [int]$toc.publicationEntries -ne 14) { throw 'Task 4 rollback backup TOC identity or required categories changed.' }
-  Assert-Task4EvidenceSha256 -Value $toc.categoryCountsSha256 -Label 'Task 4 rollback TOC category digest'
-  if ((Get-JsonSha256 -Value $toc.categoryCounts) -cne [string]$toc.categoryCountsSha256) { throw 'Task 4 rollback TOC category counts changed.' }
-  foreach ($category in @('ACL','DEFAULT ACL','EXTENSION','PUBLICATION','TABLE DATA')) { if ($null -eq $toc.categoryCounts.PSObject.Properties[$category]) { throw "Task 4 rollback TOC category is missing: $category" } }
-  if ([int]$toc.categoryCounts.ACL -ne 339 -or [int]$toc.categoryCounts.'DEFAULT ACL' -ne 27 -or [int]$toc.categoryCounts.EXTENSION -ne 6 -or [int]$toc.categoryCounts.PUBLICATION -ne 14) { throw 'Task 4 rollback TOC category counts do not preserve ACL, default ACL, extension, and publication entries.' }
-  $tocCategoryTotal = 0L
-  foreach ($property in $toc.categoryCounts.PSObject.Properties) { $categoryCount = 0L; if (-not [long]::TryParse([string]$property.Value,[ref]$categoryCount) -or $categoryCount -lt 0) { throw 'Task 4 rollback TOC category count is invalid.' }; $tocCategoryTotal += $categoryCount }
-  if ($tocCategoryTotal -ne $Task4RollbackTocEntries) { throw 'Task 4 rollback TOC category counts are not complete.' }
-  if ($toc.tableDataRelations -isnot [Array]) { throw 'Task 4 rollback TABLE DATA relation inventory is not an array.' }
-  $tableDataRelations = @($toc.tableDataRelations | ForEach-Object { if ($_ -isnot [string] -or [string]::IsNullOrWhiteSpace($_)) { throw 'Task 4 rollback TABLE DATA relation identity is invalid.' }; [string]$_ })
-  Assert-Task4EvidenceSha256 -Value $toc.tableDataRelationsSha256 -Label 'Task 4 rollback TABLE DATA relation digest'
-  if ((Get-JsonSha256 -Value $tableDataRelations) -cne [string]$toc.tableDataRelationsSha256 -or $tableDataRelations.Count -ne [int]$toc.categoryCounts.'TABLE DATA' -or ($tableDataRelations -join "`n") -cne (($tableDataRelations | Sort-Object -Unique) -join "`n")) { throw 'Task 4 rollback TABLE DATA relation inventory is incomplete, duplicated, or unordered.' }
-
-  $platform = $payload.platform
-  Assert-Task4ExactEvidenceProperties -Value $platform -Names @('provider','postgresMajor','roles','rolesSha256','extensions','extensionsSha256','capabilitiesSha256') -Label 'Task 4 rollback platform capability binding'
-  if ([string]$platform.provider -cne 'Supabase' -or [int]$platform.postgresMajor -ne 17 -or $platform.roles -isnot [Array] -or $platform.extensions -isnot [Array]) { throw 'Task 4 rollback proof did not use a platform-matching Supabase PostgreSQL 17 target.' }
-  $roles = @($platform.roles | ForEach-Object { if ($_ -isnot [string] -or [string]::IsNullOrWhiteSpace($_)) { throw 'Task 4 rollback platform role is invalid.' }; [string]$_ })
-  if ($roles.Count -eq 0 -or ($roles -join "`n") -cne (($roles | Sort-Object -Unique) -join "`n")) { throw 'Task 4 rollback platform roles are empty, duplicated, or unordered.' }
-  $extensions = @($platform.extensions)
-  $extensionNames = @()
-  foreach ($extension in $extensions) { Assert-Task4ExactEvidenceProperties -Value $extension -Names @('name','version') -Label 'Task 4 rollback platform extension'; if ([string]::IsNullOrWhiteSpace([string]$extension.name) -or [string]::IsNullOrWhiteSpace([string]$extension.version)) { throw 'Task 4 rollback platform extension identity is incomplete.' }; $extensionNames += [string]$extension.name }
-  if ($extensions.Count -eq 0 -or ($extensionNames -join "`n") -cne (($extensionNames | Sort-Object -Unique) -join "`n")) { throw 'Task 4 rollback platform extensions are empty, duplicated, or unordered.' }
-  foreach ($entry in @(@($roles,[string]$platform.rolesSha256,'roles'),@($extensions,[string]$platform.extensionsSha256,'extensions'))) { Assert-Task4EvidenceSha256 -Value $entry[1] -Label "Task 4 rollback platform $($entry[2]) digest"; if ((Get-JsonSha256 -Value $entry[0]) -cne $entry[1]) { throw "Task 4 rollback platform $($entry[2]) digest changed." } }
-  $platformBinding = [ordered]@{provider='Supabase';postgresMajor=17;rolesSha256=[string]$platform.rolesSha256;extensionsSha256=[string]$platform.extensionsSha256}
-  Assert-Task4EvidenceSha256 -Value $platform.capabilitiesSha256 -Label 'Task 4 rollback platform capability digest'
-  if ((Get-JsonSha256 -Value $platformBinding) -cne [string]$platform.capabilitiesSha256) { throw 'Task 4 rollback platform capability binding changed.' }
-
-  Assert-Task4ExactEvidenceProperties -Value $payload.startingState -Names @('inventory','sha256') -Label 'Task 4 rollback starting-state binding'
-  Assert-Task4EvidenceSha256 -Value $payload.startingState.sha256 -Label 'Task 4 rollback starting-state digest'
-  if ((Get-JsonSha256 -Value $payload.startingState.inventory) -cne [string]$payload.startingState.sha256 -or [string]$payload.startingState.inventory.projectRef -cne $ExpectedRef) { throw 'Task 4 rollback starting-state evidence is internally inconsistent.' }
-
-  $cleanup = $payload.cleanup
-  Assert-Task4ExactEvidenceProperties -Value $cleanup -Names @('strategy','strictAllowlist','removesAllPostBackupObjects','postBackupObjects','postBackupObjectsSha256','allowlistedOperations','allowlistedOperationsSha256','postCleanupObjectAbsenceVerified') -Label 'Task 4 rollback cleanup strategy'
-  if ([string]$cleanup.strategy -cnotin @('strict-allowlist-recreate','supabase-platform-restore') -or -not [bool]$cleanup.strictAllowlist -or -not [bool]$cleanup.removesAllPostBackupObjects -or -not [bool]$cleanup.postCleanupObjectAbsenceVerified) { throw 'Task 4 rollback cleanup strategy is not strict or complete.' }
-  if ($cleanup.postBackupObjects -isnot [Array] -or $cleanup.allowlistedOperations -isnot [Array]) { throw 'Task 4 rollback cleanup inventories are not arrays.' }
-  $postBackupObjects = @($cleanup.postBackupObjects | ForEach-Object { [string]$_ })
-  $allowlistedOperations = @($cleanup.allowlistedOperations | ForEach-Object { if ($_ -isnot [string] -or [string]::IsNullOrWhiteSpace($_)) { throw 'Task 4 rollback allowlisted cleanup operation is invalid.' }; [string]$_ })
-  foreach ($entry in @(@($postBackupObjects,[string]$cleanup.postBackupObjectsSha256,'post-backup object'),@($allowlistedOperations,[string]$cleanup.allowlistedOperationsSha256,'allowlisted operation'))) { Assert-Task4EvidenceSha256 -Value $entry[1] -Label "Task 4 rollback $($entry[2]) digest"; if ((Get-JsonSha256 -Value $entry[0]) -cne $entry[1]) { throw "Task 4 rollback $($entry[2]) inventory changed." } }
-  if ((Get-JsonSha256 -Value $postBackupObjects) -cne (Get-JsonSha256 -Value $Task4PostBackupObjects) -or $allowlistedOperations.Count -eq 0) { throw 'Task 4 rollback cleanup does not cover the exact nine post-backup objects.' }
-
-  $baseline = $payload.baseline
-  Assert-Task4ExactEvidenceProperties -Value $baseline -Names @('ordinaryCatalogSha256','extendedCatalogSha256','catalogComponents','catalogComponentsSha256','migrationHistory','tableData','auth','storageMetadata','storageBytes') -Label 'Task 4 rollback exact baseline comparison'
-  Assert-Task4EvidenceSha256 -Value $baseline.ordinaryCatalogSha256 -Label 'Task 4 rollback ordinary catalog digest'
-  Assert-Task4EvidenceSha256 -Value $baseline.extendedCatalogSha256 -Label 'Task 4 rollback extended catalog digest'
-  if ([string]$baseline.ordinaryCatalogSha256 -cne 'A01DD4E5B0EB41B6DC67B5F43D9A6548EFFC20C8A94DF511CA66E8D53E7DAAC1' -or [string]$baseline.extendedCatalogSha256 -cne $Task4RollbackExtendedCatalogSha256) { throw 'Task 4 rollback ordinary or extended catalog digest differs from the protected baseline.' }
-  Assert-Task4ExactEvidenceProperties -Value $baseline.catalogComponents -Names @('schemaRelationsRoutinesTypesSequencesPoliciesOwnersAcls','defaultAcls','extensionOwnersVersionsMembership','publicationOwnersOptionsMembership','eventTriggerOwners') -Label 'Task 4 rollback extended catalog components'
-  foreach ($property in $baseline.catalogComponents.PSObject.Properties) { Assert-Task4EvidenceSha256 -Value $property.Value -Label "Task 4 rollback catalog component $($property.Name)" }
-  Assert-Task4EvidenceSha256 -Value $baseline.catalogComponentsSha256 -Label 'Task 4 rollback catalog component digest'
-  if ((Get-JsonSha256 -Value $baseline.catalogComponents) -cne [string]$baseline.catalogComponentsSha256) { throw 'Task 4 rollback catalog component binding changed.' }
-
-  Assert-Task4ExactEvidenceProperties -Value $baseline.migrationHistory -Names @('fields','records','recordsSha256') -Label 'Task 4 rollback migration-history comparison'
-  if ($baseline.migrationHistory.fields -isnot [Array] -or (Get-JsonSha256 -Value @($baseline.migrationHistory.fields)) -cne (Get-JsonSha256 -Value @('version','name','statements')) -or $baseline.migrationHistory.records -isnot [Array]) { throw 'Task 4 rollback migration-history field contract is invalid.' }
-  $migrationRecords = @($baseline.migrationHistory.records)
-  $migrationVersions = @()
-  foreach ($record in $migrationRecords) { Assert-Task4ExactEvidenceProperties -Value $record -Names @('version','name','statements') -Label 'Task 4 rollback migration-history record'; if ([string]$record.version -notmatch '^\d{14}$' -or [string]::IsNullOrWhiteSpace([string]$record.name) -or $record.statements -isnot [Array]) { throw 'Task 4 rollback migration-history record is incomplete.' }; foreach ($statement in @($record.statements)) { if ($statement -isnot [string]) { throw 'Task 4 rollback migration statement is not exact text.' } }; $migrationVersions += [string]$record.version }
-  $expectedBaselineVersions = @(Get-Task4BaselineMigrationFiles | ForEach-Object { $_.Substring(0,14) })
-  Assert-Task4EvidenceSha256 -Value $baseline.migrationHistory.recordsSha256 -Label 'Task 4 rollback ordered migration-history digest'
-  if ($migrationRecords.Count -ne 153 -or (Get-JsonSha256 -Value $migrationRecords) -cne [string]$baseline.migrationHistory.recordsSha256 -or (Get-JsonSha256 -Value $migrationVersions) -cne (Get-JsonSha256 -Value $expectedBaselineVersions)) { throw 'Task 4 rollback ordered version/name/statements history differs from the exact baseline.' }
-
-  Assert-Task4ExactEvidenceProperties -Value $baseline.tableData -Names @('counts','countsSha256') -Label 'Task 4 rollback table-data comparison'
-  if ($baseline.tableData.counts -isnot [Array]) { throw 'Task 4 rollback per-table counts are not an array.' }
-  $tableCounts = @($baseline.tableData.counts); $countRelations = @()
-  foreach ($count in $tableCounts) { Assert-Task4ExactEvidenceProperties -Value $count -Names @('relation','rows') -Label 'Task 4 rollback table count'; $rowCount = 0L; if ([string]::IsNullOrWhiteSpace([string]$count.relation) -or -not [long]::TryParse([string]$count.rows,[ref]$rowCount) -or $rowCount -lt 0) { throw 'Task 4 rollback table count is invalid.' }; $countRelations += [string]$count.relation }
-  Assert-Task4EvidenceSha256 -Value $baseline.tableData.countsSha256 -Label 'Task 4 rollback per-table count digest'
-  if ((Get-JsonSha256 -Value $tableCounts) -cne [string]$baseline.tableData.countsSha256 -or (Get-JsonSha256 -Value $countRelations) -cne (Get-JsonSha256 -Value $tableDataRelations)) { throw 'Task 4 rollback per-table counts do not cover every backup TABLE DATA relation.' }
-
-  Assert-Task4ExactEvidenceProperties -Value $baseline.auth -Names @('users','identities','sessions','refreshTokens') -Label 'Task 4 rollback Auth baseline'
-  foreach ($field in @('users','identities','sessions','refreshTokens')) { if ([int]$baseline.auth.$field -ne 0) { throw "Task 4 rollback Auth baseline is nonzero: $field" } }
-  Assert-Task4ExactEvidenceProperties -Value $baseline.storageMetadata -Names @('buckets','objects','canonicalSha256') -Label 'Task 4 rollback Storage metadata baseline'
-  if ([int64]$baseline.storageMetadata.buckets -lt 0 -or [int64]$baseline.storageMetadata.objects -lt 0) { throw 'Task 4 rollback Storage metadata counts are invalid.' }
-  Assert-Task4EvidenceSha256 -Value $baseline.storageMetadata.canonicalSha256 -Label 'Task 4 rollback Storage metadata digest'
-  Assert-Task4ExactEvidenceProperties -Value $baseline.storageBytes -Names @('separateFromDatabaseRestore','beforeInventorySha256','afterInventorySha256','cleanupProofSha256','restoreProofSha256','exactByteFidelity') -Label 'Task 4 rollback Storage byte proof'
-  if (-not [bool]$baseline.storageBytes.separateFromDatabaseRestore -or -not [bool]$baseline.storageBytes.exactByteFidelity) { throw 'Task 4 rollback lacks separate exact Storage byte cleanup/restore proof.' }
-  foreach ($field in @('beforeInventorySha256','afterInventorySha256','cleanupProofSha256','restoreProofSha256')) { Assert-Task4EvidenceSha256 -Value $baseline.storageBytes.$field -Label "Task 4 rollback Storage byte $field" }
-  if ([string]$baseline.storageBytes.beforeInventorySha256 -cne [string]$baseline.storageBytes.afterInventorySha256) { throw 'Task 4 rollback Storage byte inventories do not match exactly.' }
-
-  $postRestore = $payload.postRestore
-  Assert-Task4ExactEvidenceProperties -Value $postRestore -Names @('exactPostRestoreMatch','ordinaryCatalogSha256','extendedCatalogSha256','catalogComponentsSha256','migrationHistorySha256','tableCountsSha256','auth','storageMetadataSha256','storageByteInventorySha256') -Label 'Task 4 rollback post-restore result'
-  if (-not [bool]$postRestore.exactPostRestoreMatch -or [string]$postRestore.ordinaryCatalogSha256 -cne [string]$baseline.ordinaryCatalogSha256 -or [string]$postRestore.extendedCatalogSha256 -cne [string]$baseline.extendedCatalogSha256 -or [string]$postRestore.catalogComponentsSha256 -cne [string]$baseline.catalogComponentsSha256 -or [string]$postRestore.migrationHistorySha256 -cne [string]$baseline.migrationHistory.recordsSha256 -or [string]$postRestore.tableCountsSha256 -cne [string]$baseline.tableData.countsSha256) { throw 'Task 4 rollback post-restore catalogs, migrations, or table counts are not an exact baseline match.' }
-  Assert-Task4ExactEvidenceProperties -Value $postRestore.auth -Names @('users','identities','sessions','refreshTokens') -Label 'Task 4 rollback post-restore Auth result'
-  foreach ($field in @('users','identities','sessions','refreshTokens')) { if ([int]$postRestore.auth.$field -ne 0) { throw "Task 4 rollback post-restore Auth result is nonzero: $field" } }
-  if ([string]$postRestore.storageMetadataSha256 -cne (Get-JsonSha256 -Value $baseline.storageMetadata) -or [string]$postRestore.storageByteInventorySha256 -cne [string]$baseline.storageBytes.afterInventorySha256) { throw 'Task 4 rollback post-restore Storage metadata or bytes do not match the exact baseline.' }
-
-  $verifiedBackup = Assert-VerifiedBackup
-  if ([int64]$verifiedBackup.bytes -ne $Task4RollbackBackupBytes -or [string]$verifiedBackup.sha256 -cne $Task4RollbackBackupSha256 -or [string]$verifiedBackup.manifestSha256 -cne $Task4RollbackBackupManifestSha256 -or [string]$verifiedBackup.manifest.targetBaselineSha256 -cne $Task4RollbackTargetBaselineSha256 -or (Get-JsonSha256 -Value $verifiedBackup.manifest.targetBaseline) -cne $Task4RollbackTargetBaselineSha256) { throw 'Task 4 rollback protected backup no longer matches the independently reviewed restore proof.' }
-  $currentStartingState = Get-TargetInventory -IncludeTask4Contract
-  if ((Get-JsonSha256 -Value $currentStartingState) -cne [string]$payload.startingState.sha256) { throw 'Task 4 rollback restore evidence is stale for the current target starting state.' }
-  return $payload
+  foreach ($path in Get-Task4RollbackRequiredEvidencePaths) { Assert-Task4RollbackCandidateField -Payload $payload -Path $path }
+  foreach ($path in @('restore.productionTargetWrites','backup.bytes','backup.toc.entries','backup.toc.aclEntries','backup.toc.defaultAclEntries','backup.toc.extensionEntries','backup.toc.publicationEntries','platform.postgresMajor','baseline.auth.users','baseline.auth.identities','baseline.auth.sessions','baseline.auth.refreshTokens','baseline.storageMetadata.buckets','baseline.storageMetadata.objects','postRestore.auth.users','postRestore.auth.identities','postRestore.auth.sessions','postRestore.auth.refreshTokens')) {
+    $value = $payload; foreach ($segment in $path.Split('.')) { $value = $value.$segment }; Assert-Task4EvidenceInteger -Value $value -Path $path
+  }
+  foreach ($path in @('restore.ownerReplay','restore.privilegeReplay','cleanup.strictAllowlist','cleanup.removesAllPostBackupObjects','cleanup.postCleanupObjectAbsenceVerified','baseline.storageBytes.separateFromDatabaseRestore','baseline.storageBytes.exactByteFidelity','postRestore.exactPostRestoreMatch')) {
+    $value = $payload; foreach ($segment in $path.Split('.')) { $value = $value.$segment }; Assert-Task4EvidenceBoolean -Value $value -Path $path
+  }
+  foreach ($path in @('restore.arguments','backup.toc.tableDataRelations','platform.roles','platform.extensions','cleanup.postBackupObjects','cleanup.allowlistedOperations','baseline.migrationHistory.fields','baseline.migrationHistory.records','baseline.tableData.counts')) {
+    $value = $payload; foreach ($segment in $path.Split('.')) { $value = $value.$segment }; if ($value -isnot [Array]) { throw "Task 4 rollback candidate field must be a JSON array: $path" }
+  }
+  foreach ($path in @('restore.executable.sha256','restore.argumentsSha256','backup.sha256','backup.manifest.sha256','backup.manifest.targetBaselineSha256','backup.toc.sha256','backup.toc.categoryCountsSha256','backup.toc.tableDataRelationsSha256','platform.rolesSha256','platform.extensionsSha256','platform.capabilitiesSha256','startingState.sha256','cleanup.postBackupObjectsSha256','cleanup.allowlistedOperationsSha256','baseline.ordinaryCatalogSha256','baseline.extendedCatalogSha256','baseline.catalogComponentsSha256','baseline.migrationHistory.recordsSha256','baseline.tableData.countsSha256','baseline.storageMetadata.canonicalSha256','baseline.storageBytes.beforeInventorySha256','baseline.storageBytes.afterInventorySha256','baseline.storageBytes.cleanupProofSha256','baseline.storageBytes.restoreProofSha256','postRestore.ordinaryCatalogSha256','postRestore.extendedCatalogSha256','postRestore.catalogComponentsSha256','postRestore.migrationHistorySha256','postRestore.tableCountsSha256','postRestore.storageMetadataSha256','postRestore.storageByteInventorySha256')) {
+    $value = $payload; foreach ($segment in $path.Split('.')) { $value = $value.$segment }; Assert-Task4EvidenceSha256 -Value $value -Label "Task 4 rollback candidate $path"
+  }
+  throw 'Task 4 rollback candidate is non-authorizing; semantic restore validation is not implemented.'
 }
 
 function Invoke-RollbackPhase {
