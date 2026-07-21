@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "lint:changed": "node scripts/lint-changed.mjs",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run --pool=forks --fileParallelism=false",
     "test:watch": "vitest"
   },
   "dependencies": {
