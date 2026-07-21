@@ -465,6 +465,106 @@ describe("HomeEditor", { timeout: 30_000 }, () => {
     expect(pageApi.fetchEditorPage).toHaveBeenCalledTimes(1);
   });
 
+  it("reports publish partial success and retries only the failed refresh", async () => {
+    const pendingPublish = deferred<void>();
+    pageApi.publishPageDraft.mockReturnValue(pendingPublish.promise);
+    await loadEditor();
+    pageApi.fetchEditorPage.mockRejectedValueOnce(
+      new Error("sensitive private refresh detail"),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(screen.getByRole("button", { name: "Publish now" }));
+    expect(pageApi.publishPageDraft).toHaveBeenCalledTimes(1);
+
+    await act(async () => pendingPublish.resolve());
+
+    expect(
+      await screen.findByText(
+        "Published successfully, but the editor could not refresh. Reload before further edits.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/could not be published/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/sensitive private/i)).not.toBeInTheDocument();
+    const editableFields = screen.getByRole("group", {
+      name: "Home page editable fields",
+    });
+    expect(editableFields).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
+    expect(
+      await screen.findByRole("button", { name: "Restore revision 6 to draft" }),
+    ).toBeDisabled();
+
+    pageApi.fetchEditorPage.mockRejectedValueOnce(
+      new Error("another sensitive refresh detail"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Reload editor" }));
+    await waitFor(() => expect(pageApi.fetchEditorPage).toHaveBeenCalledTimes(3));
+    expect(pageApi.publishPageDraft).toHaveBeenCalledTimes(1);
+    expect(editableFields).toBeDisabled();
+    expect(
+      screen.getByText(
+        "Published successfully, but the editor could not refresh. Reload before further edits.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/another sensitive/i)).not.toBeInTheDocument();
+
+    pageApi.fetchEditorPage.mockResolvedValueOnce(editorResult());
+    fireEvent.click(screen.getByRole("button", { name: "Reload editor" }));
+    await waitFor(() => expect(pageApi.fetchEditorPage).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(editableFields).not.toBeDisabled());
+    expect(pageApi.publishPageDraft).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByText(
+        "Published successfully, but the editor could not refresh. Reload before further edits.",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it("reports restore partial success without claiming the draft was unchanged", async () => {
+    const pendingRestore = deferred<void>();
+    pageApi.restorePageVersionToDraft.mockReturnValue(pendingRestore.promise);
+    await loadEditor();
+    pageApi.fetchEditorPage.mockRejectedValueOnce(
+      new Error("sensitive restored draft detail"),
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Restore revision 6 to draft",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Restore revision 6" }));
+    expect(pageApi.restorePageVersionToDraft).toHaveBeenCalledTimes(1);
+
+    await act(async () => pendingRestore.resolve());
+
+    expect(
+      await screen.findByText(
+        "Version restored to draft, but refresh failed. Reload before editing.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/current draft was not changed/i),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/sensitive restored/i)).not.toBeInTheDocument();
+    const editableFields = screen.getByRole("group", {
+      name: "Home page editable fields",
+    });
+    expect(editableFields).toBeDisabled();
+
+    pageApi.fetchEditorPage.mockResolvedValueOnce(editorResult());
+    fireEvent.click(screen.getByRole("button", { name: "Reload editor" }));
+    await waitFor(() => expect(pageApi.fetchEditorPage).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(editableFields).not.toBeDisabled());
+    expect(pageApi.restorePageVersionToDraft).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByText(
+        "Version restored to draft, but refresh failed. Reload before editing.",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
   it("ignores an older load generation after a newer draft becomes dirty", async () => {
     const firstLoad = deferred<ReturnType<typeof editorResult>>();
     const secondLoad = deferred<ReturnType<typeof editorResult>>();

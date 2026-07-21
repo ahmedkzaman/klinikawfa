@@ -260,6 +260,8 @@ type EditorMutation =
   | "restoring"
   | "saving";
 
+type RefreshRequired = "publish" | "restore";
+
 export function HomeEditor() {
   const { language, setLanguage } = useLanguage();
   const form = useForm<HomeContent>({
@@ -273,6 +275,7 @@ export function HomeEditor() {
   const [mutation, setMutation] = useState<EditorMutation | null>(null);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [conflict, setConflict] = useState(false);
+  const [refreshRequired, setRefreshRequired] = useState<RefreshRequired | null>(null);
   const [notice, setNotice] = useState<{ message: string; tone: "error" | "success" } | null>(null);
   const mutationRef = useRef<EditorMutation | null>(null);
   const mutationGenerationRef = useRef(0);
@@ -317,6 +320,7 @@ export function HomeEditor() {
       setEditorPage(result);
       form.reset(result.draft.content);
       setConflict(false);
+      setRefreshRequired(null);
       return true;
     },
     [form, isCurrentMutation],
@@ -390,27 +394,37 @@ export function HomeEditor() {
     if (generation === null) return;
     setNotice(null);
     try {
-      await publishPageDraft({
-        expectedRevision: editorPage.draft.baseRevision,
-        pageId: editorPage.page.id,
-      });
-      if (!isCurrentMutation(generation)) return;
-      setPublishDialogOpen(false);
-      const result = await fetchEditorPage("home");
-      if (!applyLoadedPage(result, generation)) return;
-      setNotice({ message: "Home page published.", tone: "success" });
-    } catch (error) {
-      if (!isCurrentMutation(generation)) return;
-      setPublishDialogOpen(false);
-      if (error instanceof StaleWebsitePageDraftError) {
-        setConflict(true);
-      } else {
-        setConflict(false);
-        setNotice({
-          message:
-            "Home page could not be published. The saved draft is unchanged. Try again.",
-          tone: "error",
+      try {
+        await publishPageDraft({
+          expectedRevision: editorPage.draft.baseRevision,
+          pageId: editorPage.page.id,
         });
+      } catch (error) {
+        if (!isCurrentMutation(generation)) return;
+        setPublishDialogOpen(false);
+        if (error instanceof StaleWebsitePageDraftError) {
+          setConflict(true);
+        } else {
+          setConflict(false);
+          setNotice({
+            message:
+              "Home page could not be published. The saved draft is unchanged. Try again.",
+            tone: "error",
+          });
+        }
+        return;
+      }
+
+      if (!isCurrentMutation(generation)) return;
+      setPublishDialogOpen(false);
+      try {
+        const result = await fetchEditorPage("home");
+        if (!applyLoadedPage(result, generation)) return;
+        setNotice({ message: "Home page published.", tone: "success" });
+      } catch {
+        if (!isCurrentMutation(generation)) return;
+        setConflict(false);
+        setRefreshRequired("publish");
       }
     } finally {
       finishMutation(generation);
@@ -447,20 +461,51 @@ export function HomeEditor() {
     if (generation === null) return false;
     setNotice(null);
     try {
-      await restorePageVersionToDraft({
-        pageId: editorPage.page.id,
-        versionId,
-      });
+      try {
+        await restorePageVersionToDraft({
+          pageId: editorPage.page.id,
+          versionId,
+        });
+      } catch {
+        return false;
+      }
+
       if (!isCurrentMutation(generation)) return false;
+      try {
+        const result = await fetchEditorPage("home");
+        if (!applyLoadedPage(result, generation)) return false;
+        setNotice({
+          message: "Version restored to the private draft. Review it before publishing.",
+          tone: "success",
+        });
+      } catch {
+        if (!isCurrentMutation(generation)) return false;
+        setRefreshRequired("restore");
+      }
+      return true;
+    } finally {
+      finishMutation(generation);
+    }
+  };
+
+  const refreshAfterPartialSuccess = async () => {
+    if (!refreshRequired) return;
+    const completedOperation = refreshRequired;
+    const generation = beginMutation("reloading");
+    if (generation === null) return;
+    setNotice(null);
+    try {
       const result = await fetchEditorPage("home");
-      if (!applyLoadedPage(result, generation)) return false;
+      if (!applyLoadedPage(result, generation)) return;
       setNotice({
-        message: "Version restored to the private draft. Review it before publishing.",
+        message:
+          completedOperation === "publish"
+            ? "Home page published. The editor is refreshed."
+            : "Version restored to the private draft. Review it before publishing.",
         tone: "success",
       });
-      return true;
     } catch {
-      return false;
+      // Keep the operation-specific partial-success guidance and safety lock.
     } finally {
       finishMutation(generation);
     }
@@ -493,10 +538,11 @@ export function HomeEditor() {
   const previewContent = projectHomePreview(currentContent);
   const sectionOrder = form.watch("sectionOrder");
   const isBusy = mutation !== null;
+  const editorLocked = isBusy || refreshRequired !== null;
   const isSaving = mutation === "saving";
   const isPublishing = mutation === "publishing";
   const publishDisabled =
-    isDirty || !editorPage.draft.persisted || isBusy;
+    isDirty || !editorPage.draft.persisted || editorLocked;
 
   const toggleSection = (section: HomeSectionId, visible: boolean) => {
     const nextOrder = visible
@@ -561,6 +607,29 @@ export function HomeEditor() {
         </div>
       )}
 
+      {refreshRequired && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
+          <p className="font-semibold">
+            {refreshRequired === "publish"
+              ? "Published successfully, but the editor could not refresh. Reload before further edits."
+              : "Version restored to draft, but refresh failed. Reload before editing."}
+          </p>
+          <Button
+            className="mt-3"
+            disabled={isBusy}
+            onClick={() => void refreshAfterPartialSuccess()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {mutation === "reloading" && (
+              <Loader2 aria-hidden="true" className="mr-2 h-4 w-4 animate-spin" />
+            )}
+            Reload editor
+          </Button>
+        </div>
+      )}
+
       {conflict && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
           <p className="font-semibold">The live page changed before this draft could publish.</p>
@@ -593,7 +662,7 @@ export function HomeEditor() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button disabled={!isDirty || isBusy} type="submit" variant="outline">
+            <Button disabled={!isDirty || editorLocked} type="submit" variant="outline">
               {isSaving ? <Loader2 aria-hidden="true" className="mr-2 h-4 w-4 animate-spin" /> : <Save aria-hidden="true" className="mr-2 h-4 w-4" />}
               Save Draft
             </Button>
@@ -612,7 +681,7 @@ export function HomeEditor() {
         <fieldset
           aria-label="Home page editable fields"
           className="contents"
-          disabled={isBusy}
+          disabled={editorLocked}
         >
         <EditorSection description="Background, carousel timing, slides, calls to action, and accessible carousel labels." initiallyOpen title="Hero">
           <EditorField errors={errors} label="Hero background image URL" name="hero.backgroundImage" register={form.register} />
@@ -783,7 +852,7 @@ export function HomeEditor() {
         </fieldset>
 
         <VersionsPanel
-          disabled={isBusy}
+          disabled={editorLocked}
           isRestoring={mutation === "restoring"}
           onRestore={restoreVersion}
           pageId={editorPage.page.id}
