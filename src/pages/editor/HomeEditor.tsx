@@ -9,7 +9,7 @@ import {
   Send,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   get,
   useFieldArray,
@@ -39,6 +39,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import {
   fetchEditorPage,
   publishPageDraft,
+  restorePageVersionToDraft,
   savePageDraft,
   StaleWebsitePageDraftError,
   type EditorWebsitePageResult,
@@ -251,6 +252,13 @@ const SECTION_LABELS: Record<HomeSectionId, string> = {
   map: "Map",
 };
 
+type EditorMutation =
+  | "loading"
+  | "publishing"
+  | "reloading"
+  | "restoring"
+  | "saving";
+
 export function HomeEditor() {
   const { language, setLanguage } = useLanguage();
   const form = useForm<HomeContent>({
@@ -260,37 +268,85 @@ export function HomeEditor() {
   });
   const { errors, isDirty } = form.formState;
   const [editorPage, setEditorPage] = useState<EditorWebsitePageResult<HomeContent> | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isPublishing, setIsPublishing] = useState(false);
+  const [mutation, setMutation] = useState<EditorMutation | null>(null);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [notice, setNotice] = useState<{ message: string; tone: "error" | "success" } | null>(null);
+  const mutationRef = useRef<EditorMutation | null>(null);
+  const mutationGenerationRef = useRef(0);
+  const mountedRef = useRef(true);
 
   const slides = useFieldArray({ control: form.control, name: "hero.slides" });
   const heroCtas = useFieldArray({ control: form.control, name: "hero.ctas" });
   const whyItems = useFieldArray({ control: form.control, name: "why.items" });
 
+  const beginMutation = useCallback((kind: EditorMutation) => {
+    if (!mountedRef.current || mutationRef.current !== null) return null;
+    const generation = mutationGenerationRef.current + 1;
+    mutationGenerationRef.current = generation;
+    mutationRef.current = kind;
+    setMutation(kind);
+    return generation;
+  }, []);
+
+  const isCurrentMutation = useCallback(
+    (generation: number) =>
+      mountedRef.current && mutationGenerationRef.current === generation,
+    [],
+  );
+
+  const finishMutation = useCallback(
+    (generation: number) => {
+      if (!isCurrentMutation(generation)) return;
+      mutationRef.current = null;
+      setMutation(null);
+    },
+    [isCurrentMutation],
+  );
+
+  const applyLoadedPage = useCallback(
+    (
+      result: EditorWebsitePageResult<HomeContent>,
+      generation: number,
+    ) => {
+      if (!isCurrentMutation(generation)) return false;
+      setEditorPage(result);
+      form.reset(result.draft.content);
+      setConflict(false);
+      return true;
+    },
+    [form, isCurrentMutation],
+  );
+
   const loadPage = useCallback(
-    async (showLoading = true) => {
-      if (showLoading) setIsLoading(true);
+    async () => {
+      const generation = beginMutation("loading");
+      if (generation === null) return false;
       setLoadError(null);
       try {
         const result = await fetchEditorPage("home");
-        setEditorPage(result);
-        form.reset(result.draft.content);
-        setConflict(false);
-        return true;
+        return applyLoadedPage(result, generation);
       } catch {
-        setLoadError("The Home draft could not be loaded. Check your connection and try again.");
+        if (isCurrentMutation(generation)) {
+          setLoadError("The Home draft could not be loaded. Check your connection and try again.");
+        }
         return false;
       } finally {
-        if (showLoading) setIsLoading(false);
+        finishMutation(generation);
       }
     },
-    [form],
+    [applyLoadedPage, beginMutation, finishMutation, isCurrentMutation],
   );
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      mutationGenerationRef.current += 1;
+      mutationRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     void loadPage();
@@ -335,7 +391,8 @@ export function HomeEditor() {
 
   const saveDraft = async (content: HomeContent) => {
     if (!editorPage) return;
-    setIsSaving(true);
+    const generation = beginMutation("saving");
+    if (generation === null) return;
     setNotice(null);
     try {
       const saved = await savePageDraft({
@@ -344,33 +401,40 @@ export function HomeEditor() {
         pageId: editorPage.page.id,
         slug: "home",
       });
+      if (!isCurrentMutation(generation)) return;
       setEditorPage((current) => (current ? { ...current, draft: saved as typeof current.draft } : current));
       form.reset(saved.content as HomeContent);
       setNotice({ message: "Draft saved privately.", tone: "success" });
       setConflict(false);
     } catch {
-      setNotice({
-        message: "Draft could not be saved. Your local changes are still in this form.",
-        tone: "error",
-      });
+      if (isCurrentMutation(generation)) {
+        setNotice({
+          message: "Draft could not be saved. Your local changes are still in this form.",
+          tone: "error",
+        });
+      }
     } finally {
-      setIsSaving(false);
+      finishMutation(generation);
     }
   };
 
   const publishDraft = async () => {
     if (!editorPage) return;
-    setIsPublishing(true);
+    const generation = beginMutation("publishing");
+    if (generation === null) return;
     setNotice(null);
     try {
       await publishPageDraft({
         expectedRevision: editorPage.draft.baseRevision,
         pageId: editorPage.page.id,
       });
+      if (!isCurrentMutation(generation)) return;
       setPublishDialogOpen(false);
-      await loadPage(false);
+      const result = await fetchEditorPage("home");
+      if (!applyLoadedPage(result, generation)) return;
       setNotice({ message: "Home page published.", tone: "success" });
     } catch (error) {
+      if (!isCurrentMutation(generation)) return;
       setPublishDialogOpen(false);
       if (error instanceof StaleWebsitePageDraftError) {
         setConflict(true);
@@ -383,7 +447,7 @@ export function HomeEditor() {
         });
       }
     } finally {
-      setIsPublishing(false);
+      finishMutation(generation);
     }
   };
 
@@ -392,21 +456,51 @@ export function HomeEditor() {
       "Reload the latest private draft and discard any local form changes?",
     );
     if (!discard) return;
+    const generation = beginMutation("reloading");
+    if (generation === null) return;
     setNotice(null);
-    await loadPage(false);
+    setLoadError(null);
+    try {
+      const result = await fetchEditorPage("home");
+      applyLoadedPage(result, generation);
+    } catch {
+      if (isCurrentMutation(generation)) {
+        setNotice({
+          message: "The latest draft could not be loaded. Your local changes are still in this form.",
+          tone: "error",
+        });
+      }
+    } finally {
+      finishMutation(generation);
+    }
   };
 
-  const restoreComplete = async () => {
-    const loaded = await loadPage(false);
-    if (loaded) {
+  const restoreVersion = async (versionId: string) => {
+    if (!editorPage) return false;
+    const generation = beginMutation("restoring");
+    if (generation === null) return false;
+    setNotice(null);
+    try {
+      await restorePageVersionToDraft({
+        pageId: editorPage.page.id,
+        versionId,
+      });
+      if (!isCurrentMutation(generation)) return false;
+      const result = await fetchEditorPage("home");
+      if (!applyLoadedPage(result, generation)) return false;
       setNotice({
         message: "Version restored to the private draft. Review it before publishing.",
         tone: "success",
       });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      finishMutation(generation);
     }
   };
 
-  if (isLoading) {
+  if (!editorPage && !loadError) {
     return (
       <div className="flex min-h-64 items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white text-sm text-slate-600" role="status">
         <Loader2 aria-hidden="true" className="h-5 w-5 animate-spin text-blue-600" />
@@ -422,7 +516,7 @@ export function HomeEditor() {
           Home editor unavailable
         </h1>
         <p className="mt-2 text-sm text-red-800">{loadError}</p>
-        <Button className="mt-4" onClick={() => void loadPage()} type="button" variant="outline">
+        <Button className="mt-4" disabled={mutation !== null} onClick={() => void loadPage()} type="button" variant="outline">
           Retry
         </Button>
       </section>
@@ -432,8 +526,11 @@ export function HomeEditor() {
   const currentContent = form.watch();
   const previewContent = projectHomePreview(currentContent);
   const sectionOrder = form.watch("sectionOrder");
+  const isBusy = mutation !== null;
+  const isSaving = mutation === "saving";
+  const isPublishing = mutation === "publishing";
   const publishDisabled =
-    isDirty || !editorPage.draft.persisted || isSaving || isPublishing;
+    isDirty || !editorPage.draft.persisted || isBusy;
 
   const toggleSection = (section: HomeSectionId, visible: boolean) => {
     const nextOrder = visible
@@ -504,7 +601,7 @@ export function HomeEditor() {
           <p className="mt-1 leading-6">
             Reload the latest draft, then merge your local edits before publishing again. Copy any local text you need before reloading.
           </p>
-          <Button className="mt-3" onClick={() => void reloadLatestDraft()} size="sm" type="button" variant="outline">
+          <Button className="mt-3" disabled={isBusy} onClick={() => void reloadLatestDraft()} size="sm" type="button" variant="outline">
             Reload latest draft
           </Button>
         </div>
@@ -530,7 +627,7 @@ export function HomeEditor() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button disabled={!isDirty || isSaving || isPublishing} type="submit" variant="outline">
+            <Button disabled={!isDirty || isBusy} type="submit" variant="outline">
               {isSaving ? <Loader2 aria-hidden="true" className="mr-2 h-4 w-4 animate-spin" /> : <Save aria-hidden="true" className="mr-2 h-4 w-4" />}
               Save Draft
             </Button>
@@ -546,6 +643,11 @@ export function HomeEditor() {
           </div>
         </div>
 
+        <fieldset
+          aria-label="Home page editable fields"
+          className="contents"
+          disabled={isBusy}
+        >
         <EditorSection description="Background, carousel timing, slides, calls to action, and accessible carousel labels." initiallyOpen title="Hero">
           <EditorField errors={errors} label="Hero background image URL" name="hero.backgroundImage" register={form.register} />
           <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4">
@@ -712,8 +814,14 @@ export function HomeEditor() {
             })}
           </ol>
         </EditorSection>
+        </fieldset>
 
-        <VersionsPanel onRestored={restoreComplete} pageId={editorPage.page.id} />
+        <VersionsPanel
+          disabled={isBusy}
+          isRestoring={mutation === "restoring"}
+          onRestore={restoreVersion}
+          pageId={editorPage.page.id}
+        />
       </form>
 
       <section aria-labelledby="live-preview-title" className="mt-12 border-t border-slate-200 pt-10">

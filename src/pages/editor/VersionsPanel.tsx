@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { History, Loader2, RotateCcw } from "lucide-react";
 
 import {
@@ -14,12 +14,13 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   fetchPageVersions,
-  restorePageVersionToDraft,
   type WebsitePageVersionSummary,
 } from "@/features/website-cms/api/pages";
 
 interface VersionsPanelProps {
-  onRestored: () => Promise<void> | void;
+  disabled?: boolean;
+  isRestoring?: boolean;
+  onRestore: (versionId: string) => Promise<boolean>;
   pageId: string;
 }
 
@@ -29,45 +30,63 @@ const versionDateFormatter = new Intl.DateTimeFormat("en-MY", {
   timeZone: "Asia/Kuala_Lumpur",
 });
 
-export function VersionsPanel({ onRestored, pageId }: VersionsPanelProps) {
+export function VersionsPanel({
+  disabled = false,
+  isRestoring = false,
+  onRestore,
+  pageId,
+}: VersionsPanelProps) {
   const [versions, setVersions] = useState<WebsitePageVersionSummary[]>([]);
   const [selected, setSelected] = useState<WebsitePageVersionSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRestoring, setIsRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  const restoreRequestRef = useRef(false);
 
   const loadVersions = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+    if (mountedRef.current) {
+      setIsLoading(true);
+      setError(null);
+    }
     try {
-      setVersions(await fetchPageVersions(pageId));
+      const nextVersions = await fetchPageVersions(pageId);
+      if (mountedRef.current) setVersions(nextVersions);
     } catch {
-      setError("Version history could not be loaded. Try again.");
+      if (mountedRef.current) {
+        setError("Version history could not be loaded. Try again.");
+      }
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current) setIsLoading(false);
     }
   }, [pageId]);
 
   useEffect(() => {
+    mountedRef.current = true;
     void loadVersions();
+    return () => {
+      mountedRef.current = false;
+    };
   }, [loadVersions]);
 
   const restoreSelectedVersion = async () => {
-    if (!selected) return;
-    setIsRestoring(true);
+    if (!selected || disabled || restoreRequestRef.current) return;
+    restoreRequestRef.current = true;
     setError(null);
     try {
-      await restorePageVersionToDraft({
-        pageId,
-        versionId: selected.id,
-      });
+      const restored = await onRestore(selected.id);
+      if (!mountedRef.current) return;
+      if (!restored) {
+        setError("That version could not be restored. The current draft was not changed.");
+        return;
+      }
       setSelected(null);
-      await onRestored();
       await loadVersions();
     } catch {
-      setError("That version could not be restored. The current draft was not changed.");
+      if (mountedRef.current) {
+        setError("That version could not be restored. The current draft was not changed.");
+      }
     } finally {
-      setIsRestoring(false);
+      restoreRequestRef.current = false;
     }
   };
 
@@ -121,6 +140,7 @@ export function VersionsPanel({ onRestored, pageId }: VersionsPanelProps) {
               <Button
                 aria-label={`Restore revision ${version.revision} to draft`}
                 className="gap-2"
+                disabled={disabled}
                 onClick={() => setSelected(version)}
                 size="sm"
                 type="button"
@@ -134,7 +154,7 @@ export function VersionsPanel({ onRestored, pageId }: VersionsPanelProps) {
         </ol>
       )}
 
-      <AlertDialog open={selected !== null} onOpenChange={(open) => !open && setSelected(null)}>
+      <AlertDialog open={selected !== null} onOpenChange={(open) => !open && !isRestoring && setSelected(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Restore revision {selected?.revision}?</AlertDialogTitle>
@@ -143,10 +163,10 @@ export function VersionsPanel({ onRestored, pageId }: VersionsPanelProps) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isRestoring}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={disabled || isRestoring}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               aria-label={`Restore revision ${selected?.revision ?? ""}`.trim()}
-              disabled={isRestoring}
+              disabled={disabled || isRestoring}
               onClick={(event) => {
                 event.preventDefault();
                 void restoreSelectedVersion();

@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { StrictMode } from "react";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { DEFAULT_HOME_CONTENT } from "@/features/website-cms/home/homeDefaults";
 import type { HomeContent } from "@/features/website-cms/schemas/home";
@@ -88,6 +89,16 @@ function renderEditor() {
 async function loadEditor() {
   renderEditor();
   await screen.findByRole("heading", { name: "Home page" });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
 }
 
 function withinPreviewFrame() {
@@ -375,6 +386,114 @@ describe("HomeEditor", { timeout: 30_000 }, () => {
     );
     expect(pageApi.publishPageDraft).not.toHaveBeenCalled();
     expect(await screen.findByText("Draft saved privately.")).toBeInTheDocument();
+  });
+
+  it("locks the whole editable fieldset while a save is in flight", async () => {
+    const pendingSave = deferred<ReturnType<typeof editorResult>["draft"]>();
+    pageApi.savePageDraft.mockReturnValue(pendingSave.promise);
+    await loadEditor();
+    const title = screen.getByRole("textbox", {
+      name: "Hero slide 1 title (Malay)",
+    });
+    fireEvent.change(title, { target: { value: "Draf terkunci" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Draft" }));
+
+    const editableFields = screen.getByRole("group", {
+      name: "Home page editable fields",
+    });
+    await waitFor(() => expect(editableFields).toBeDisabled());
+    expect(title).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save Draft" })).toBeDisabled();
+    expect(pageApi.savePageDraft).toHaveBeenCalledTimes(1);
+
+    const saved = editorResult().draft;
+    saved.content.hero.slides[0].title.ms = "Draf terkunci";
+    await act(async () => pendingSave.resolve(saved));
+
+    expect(await screen.findByText("Draft saved privately.")).toBeInTheDocument();
+    expect(editableFields).not.toBeDisabled();
+  });
+
+  it("coordinates delegated restore so batched confirmations cannot overlap", async () => {
+    const pendingRestore = deferred<void>();
+    pageApi.restorePageVersionToDraft.mockReturnValue(pendingRestore.promise);
+    await loadEditor();
+    const restoreChoice = await screen.findByRole("button", {
+      name: "Restore revision 6 to draft",
+    });
+    const title = screen.getByRole("textbox", {
+      name: "Hero slide 1 title (Malay)",
+    });
+    fireEvent.click(restoreChoice);
+    const confirmRestore = screen.getByRole("button", {
+      name: "Restore revision 6",
+    });
+
+    act(() => {
+      confirmRestore.click();
+      confirmRestore.click();
+    });
+
+    expect(pageApi.restorePageVersionToDraft).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(title).toBeDisabled());
+
+    await act(async () => pendingRestore.resolve());
+    expect(
+      await screen.findByText(
+        "Version restored to the private draft. Review it before publishing.",
+      ),
+    ).toBeInTheDocument();
+    expect(pageApi.fetchEditorPage).toHaveBeenCalledTimes(2);
+  });
+
+  it("does no follow-up load when publish resolves after unmount", async () => {
+    const pendingPublish = deferred<void>();
+    pageApi.publishPageDraft.mockReturnValue(pendingPublish.promise);
+    const rendered = renderEditor();
+    await screen.findByRole("heading", { name: "Home page" });
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(screen.getByRole("button", { name: "Publish now" }));
+    expect(pageApi.publishPageDraft).toHaveBeenCalledTimes(1);
+
+    rendered.unmount();
+    await act(async () => pendingPublish.resolve());
+
+    expect(pageApi.fetchEditorPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores an older load generation after a newer draft becomes dirty", async () => {
+    const firstLoad = deferred<ReturnType<typeof editorResult>>();
+    const secondLoad = deferred<ReturnType<typeof editorResult>>();
+    pageApi.fetchEditorPage
+      .mockReset()
+      .mockReturnValueOnce(firstLoad.promise)
+      .mockReturnValueOnce(secondLoad.promise);
+
+    render(
+      <StrictMode>
+        <MemoryRouter initialEntries={["/editor/home"]}>
+          <LanguageProvider>
+            <HomeEditor />
+          </LanguageProvider>
+        </MemoryRouter>
+      </StrictMode>,
+    );
+    await waitFor(() => expect(pageApi.fetchEditorPage).toHaveBeenCalledTimes(2));
+    const newer = editorResult();
+    newer.draft.content.hero.slides[0].title.ms = "Draf lebih baharu";
+    await act(async () => secondLoad.resolve(newer));
+    const title = await screen.findByRole("textbox", {
+      name: "Hero slide 1 title (Malay)",
+    });
+    fireEvent.change(title, { target: { value: "Perubahan tempatan" } });
+
+    await act(async () => firstLoad.resolve(editorResult()));
+
+    expect(
+      screen.getByRole("textbox", { name: "Hero slide 1 title (Malay)" }),
+    ).toHaveValue("Perubahan tempatan");
+    expect(screen.getByText("Unsaved local changes")).toBeInTheDocument();
   });
 
   it("requires explicit confirmation before using the atomic publish API", async () => {
