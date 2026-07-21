@@ -50,6 +50,11 @@ const validHome = {
     autoplayMs: 5000,
     slides: [{ title: { ms: "Klinik" }, subtitle: { ms: "Rawatan" } }],
     ctas: [{ label: { ms: "Hubungi" }, href: "/appointment" }],
+    carouselLabels: {
+      previous: { ms: "Previous slide" },
+      next: { ms: "Next slide" },
+      goTo: { ms: "Go to slide" },
+    },
   },
   why: {
     eyebrow: { ms: "Mengapa" },
@@ -61,6 +66,8 @@ const validHome = {
     eyebrow: { ms: "Video" },
     title: { ms: "Klinik" },
     description: { ms: "Lawati kami" },
+    placeholder: { ms: "Video akan ditambah" },
+    unsupportedMessage: { ms: "Video tidak disokong" },
     videoUrlSettingKey: "homepage_video_url",
     posterSettingKey: "homepage_video_poster",
   },
@@ -69,6 +76,7 @@ const validHome = {
     title: { ms: "Rawatan" },
     description: { ms: "Untuk anda" },
     cta: { label: { ms: "Lihat semua" }, href: "/services" },
+    learnMoreLabel: { ms: "Ketahui lebih" },
     itemLimit: 6,
   },
   gallery: {
@@ -76,19 +84,36 @@ const validHome = {
     title: { ms: "Klinik kami" },
     description: { ms: "Suasana" },
     cta: { label: { ms: "Lihat semua" }, href: "/gallery" },
+    emptyMessage: { ms: "Tiada gambar" },
+    moreLabel: { ms: "lagi" },
+    carouselLabels: {
+      previous: { ms: "Previous slide" },
+      next: { ms: "Next slide" },
+      goTo: { ms: "Go to slide" },
+    },
     itemLimit: 8,
   },
   testimonials: {
     eyebrow: { ms: "Testimoni" },
     title: { ms: "Pesakit" },
     description: { ms: "Keutamaan" },
+    patientLabel: { ms: "Pesakit Klinik" },
+    goToSlideLabel: { ms: "Go to slide" },
   },
   map: {
     eyebrow: { ms: "Cari kami" },
     title: { ms: "Lokasi" },
     description: { ms: "Kuantan" },
+    hoursLabel: { ms: "Waktu Operasi" },
+    everydayLabel: { ms: "Setiap Hari" },
+    callLabel: { ms: "Hubungi" },
     directionsCta: { label: { ms: "Arah" }, href: "https://maps.example/directions" },
     embedUrl: "https://maps.example/embed",
+    embedTitle: { ms: "Lokasi Klinik" },
+  },
+  seo: {
+    title: { ms: "Klinik Keluarga" },
+    description: { ms: "Rawatan keluarga" },
   },
   sectionOrder: ["hero", "why", "video", "services", "gallery", "testimonials", "map"],
 };
@@ -195,6 +220,32 @@ describe("website content schemas", () => {
     expect(homeContentSchema.safeParse(validHome).success).toBe(true);
     expect(validateHome(validHome)).toBe(true);
     expectPairedResult(homeContentSchema, validateHome, { ...validHome, testimonials: { ...validHome.testimonials, itemLimit: 3 } }, false);
+  });
+
+  it.each([
+    ["hero", "carouselLabels"],
+    ["video", "placeholder"],
+    ["video", "unsupportedMessage"],
+    ["services", "learnMoreLabel"],
+    ["gallery", "emptyMessage"],
+    ["gallery", "moreLabel"],
+    ["gallery", "carouselLabels"],
+    ["testimonials", "patientLabel"],
+    ["testimonials", "goToSlideLabel"],
+    ["map", "hoursLabel"],
+    ["map", "everydayLabel"],
+    ["map", "callLabel"],
+    ["map", "embedTitle"],
+  ])("requires Home presentation copy %s.%s in Zod and Draft 7", (section, key) => {
+    const value = structuredClone(validHome);
+    delete value[section][key];
+    expectPairedResult(homeContentSchema, validateHome, value, false);
+  });
+
+  it("requires Home SEO copy in Zod and Draft 7", () => {
+    const value = structuredClone(validHome);
+    delete value.seo;
+    expectPairedResult(homeContentSchema, validateHome, value, false);
   });
 
   it.each([

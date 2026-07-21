@@ -70,6 +70,21 @@ const homeSectionCopySchema = z
   })
   .strict();
 
+const homeCarouselLabelsSchema = z
+  .object({
+    previous: requiredBilingualTextSchema,
+    next: requiredBilingualTextSchema,
+    goTo: requiredBilingualTextSchema,
+  })
+  .strict();
+
+const homeSeoSchema = z
+  .object({
+    title: requiredBilingualTextSchema,
+    description: requiredBilingualTextSchema,
+  })
+  .strict();
+
 export const homeHeroSchema = z
   .object({
     backgroundImage: safeHrefSchema,
@@ -88,6 +103,7 @@ export const homeHeroSchema = z
       .min(1)
       .max(12),
     ctas: z.array(homeLinkSchema).min(1).max(12),
+    carouselLabels: homeCarouselLabelsSchema,
   })
   .strict();
 
@@ -110,6 +126,8 @@ export const homeWhySchema = homeSectionCopySchema
 
 export const homeVideoSchema = homeSectionCopySchema
   .extend({
+    placeholder: requiredBilingualTextSchema,
+    unsupportedMessage: requiredBilingualTextSchema,
     videoUrlSettingKey: z.enum(HOME_VIDEO_URL_SETTING_KEYS),
     posterSettingKey: z.enum(HOME_VIDEO_POSTER_SETTING_KEYS),
   })
@@ -122,14 +140,35 @@ const homePreviewSchema = homeSectionCopySchema
   })
   .strict();
 
-export const homeServicesSchema = homePreviewSchema;
-export const homeGallerySchema = homePreviewSchema;
-export const homeTestimonialsSchema = homeSectionCopySchema;
+export const homeServicesSchema = homePreviewSchema
+  .extend({
+    learnMoreLabel: requiredBilingualTextSchema,
+  })
+  .strict();
+
+export const homeGallerySchema = homePreviewSchema
+  .extend({
+    emptyMessage: requiredBilingualTextSchema,
+    moreLabel: requiredBilingualTextSchema,
+    carouselLabels: homeCarouselLabelsSchema,
+  })
+  .strict();
+
+export const homeTestimonialsSchema = homeSectionCopySchema
+  .extend({
+    patientLabel: requiredBilingualTextSchema,
+    goToSlideLabel: requiredBilingualTextSchema,
+  })
+  .strict();
 
 export const homeMapSchema = homeSectionCopySchema
   .extend({
+    hoursLabel: requiredBilingualTextSchema,
+    everydayLabel: requiredBilingualTextSchema,
+    callLabel: requiredBilingualTextSchema,
     directionsCta: homeLinkSchema,
     embedUrl: safeHrefSchema,
+    embedTitle: requiredBilingualTextSchema,
   })
   .strict();
 
@@ -142,6 +181,7 @@ export const homeContentSchema = z
     gallery: homeGallerySchema,
     testimonials: homeTestimonialsSchema,
     map: homeMapSchema,
+    seo: homeSeoSchema,
     sectionOrder: homeSectionOrderSchema,
   })
   .strict();

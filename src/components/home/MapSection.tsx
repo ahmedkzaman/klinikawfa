@@ -1,11 +1,24 @@
 import { motion } from 'framer-motion';
+import type { MouseEvent } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { CLINIC_INFO } from '@/lib/constants';
 import { ArrowRight, MapPin, Clock, Phone, Navigation } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import type { HomeContent } from '@/features/website-cms/schemas/home';
 
-export function MapSection() {
-  const { language, t } = useLanguage();
+interface MapSectionProps {
+  content: HomeContent['map'];
+  preview?: boolean;
+}
+
+export function MapSection({ content, preview = false }: MapSectionProps) {
+  const { language } = useLanguage();
+  const localized = (copy: { ms: string; en: string }) =>
+    language === 'ms' ? copy.ms : copy.en || copy.ms;
+  const preventPreviewNavigation = (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+  };
 
   return (
     <section className="relative py-20 md:py-28 overflow-hidden gradient-section">
@@ -31,16 +44,14 @@ export function MapSection() {
               className="inline-flex items-center gap-2 mb-4 w-fit px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium border border-primary/20"
             >
               <Navigation className="h-4 w-4" />
-              {language === 'ms' ? 'Cari Kami' : 'Find Us'}
+              {localized(content.eyebrow)}
             </motion.span>
             
             <h2 className="mb-4">
-              {language === 'ms' ? 'Lokasi Kami' : 'Our Location'}
+              {localized(content.title)}
             </h2>
             <p className="mb-10 text-muted-foreground text-lg">
-              {language === 'ms'
-                ? 'Mudah diakses di KotaSAS Avenue, Kuantan. Kami sedia menerima kunjungan anda.'
-                : 'Easily accessible at KotaSAS Avenue, Kuantan. We are ready to welcome your visit.'}
+              {localized(content.description)}
             </p>
             
             <div className="space-y-6">
@@ -79,9 +90,9 @@ export function MapSection() {
                   <Clock className="h-6 w-6" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-lg mb-1">{t('footer.hours')}</h4>
+                  <h4 className="font-bold text-lg mb-1">{localized(content.hoursLabel)}</h4>
                   <p className="text-muted-foreground">
-                    {t('footer.everyday')}
+                    {localized(content.everydayLabel)}
                     <br />
                     {language === 'ms' ? CLINIC_INFO.hours.timeMalay : CLINIC_INFO.hours.time}
                   </p>
@@ -100,10 +111,11 @@ export function MapSection() {
                   <Phone className="h-6 w-6" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-lg mb-1">{t('cta.call')}</h4>
+                  <h4 className="font-bold text-lg mb-1">{localized(content.callLabel)}</h4>
                   <a 
                     href={CLINIC_INFO.phoneLink} 
                     className="text-muted-foreground hover:text-primary transition-colors font-medium"
+                    onClick={preview ? preventPreviewNavigation : undefined}
                   >
                     {CLINIC_INFO.phone}
                   </a>
@@ -122,8 +134,13 @@ export function MapSection() {
                 size="lg"
                 asChild
               >
-                <a href={CLINIC_INFO.googleMapsUrl} target="_blank" rel="noopener noreferrer">
-                  {t('cta.getDirections')}
+                <a
+                  href={content.directionsCta.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={preview ? preventPreviewNavigation : undefined}
+                >
+                  {localized(content.directionsCta.label)}
                   <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
                 </a>
               </Button>
@@ -141,15 +158,19 @@ export function MapSection() {
             {/* Decorative border gradient */}
             <div className="absolute inset-0 rounded-3xl border-gradient pointer-events-none z-10" />
             <iframe
-              src={CLINIC_INFO.googleMapsEmbed}
+              src={content.embedUrl}
               width="100%"
               height="450"
               style={{ border: 0, display: 'block' }}
               allowFullScreen
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
-              title="Klinik Awfa Location"
-              className="w-full min-h-[400px] lg:min-h-[500px]"
+              title={localized(content.embedTitle)}
+              tabIndex={preview ? -1 : undefined}
+              className={cn(
+                'w-full min-h-[400px] lg:min-h-[500px]',
+                preview && 'pointer-events-none',
+              )}
             />
           </motion.div>
         </div>

@@ -5,8 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Play, Pause, Volume2, VolumeX, Film } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import type { HomeContent } from '@/features/website-cms/schemas/home';
 
-export function VideoSection() {
+interface VideoSectionProps {
+  content: HomeContent['video'];
+  preview?: boolean;
+}
+
+export function VideoSection({ content, preview = false }: VideoSectionProps) {
   const { language } = useLanguage();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -22,14 +28,14 @@ export function VideoSection() {
         const { data, error } = await supabase
           .from('app_settings')
           .select('key, value')
-          .in('key', ['homepage_video_url', 'homepage_video_poster']);
+          .in('key', [content.videoUrlSettingKey, content.posterSettingKey]);
 
         if (error) throw error;
 
         data?.forEach((setting) => {
-          if (setting.key === 'homepage_video_url' && setting.value) {
+          if (setting.key === content.videoUrlSettingKey && setting.value) {
             setVideoUrl(setting.value);
-          } else if (setting.key === 'homepage_video_poster' && setting.value) {
+          } else if (setting.key === content.posterSettingKey && setting.value) {
             setPosterUrl(setting.value);
           }
         });
@@ -41,7 +47,7 @@ export function VideoSection() {
     };
 
     fetchVideoSettings();
-  }, []);
+  }, [content.posterSettingKey, content.videoUrlSettingKey]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -75,6 +81,8 @@ export function VideoSection() {
   };
 
   const hasVideo = !!videoUrl;
+  const localized = (copy: { ms: string; en: string }) =>
+    language === 'ms' ? copy.ms : copy.en || copy.ms;
 
   return (
     <section className="relative py-20 md:py-28 bg-gradient-to-br from-foreground via-foreground to-foreground/95 overflow-hidden">
@@ -99,15 +107,13 @@ export function VideoSection() {
             className="inline-flex items-center gap-2 mb-4 px-4 py-1.5 rounded-full bg-white/10 text-white/90 text-sm font-medium border border-white/20 backdrop-blur-sm"
           >
             <Film className="h-4 w-4" />
-            {language === 'ms' ? 'Video Klinik' : 'Clinic Video'}
+            {localized(content.eyebrow)}
           </motion.span>
           <h2 className="mb-4 text-background">
-            {language === 'ms' ? 'Lawat Klinik Kami' : 'Visit Our Clinic'}
+            {localized(content.title)}
           </h2>
           <p className="mx-auto max-w-2xl text-background/70 text-lg">
-            {language === 'ms'
-              ? 'Lihat suasana mesra dan selesa di Klinik Awfa.'
-              : 'See the friendly and comfortable atmosphere at Klinik Awfa.'}
+            {localized(content.description)}
           </p>
         </motion.div>
 
@@ -134,7 +140,7 @@ export function VideoSection() {
                   poster={posterUrl || undefined}
                   src={videoUrl}
                 >
-                  Your browser does not support the video tag.
+                  {localized(content.unsupportedMessage)}
                 </video>
 
                 {/* Controls overlay */}
@@ -185,9 +191,7 @@ export function VideoSection() {
                   <Play className="h-12 w-12" />
                 </motion.div>
                 <p className="text-white/80 text-lg">
-                  {language === 'ms' 
-                    ? '📹 Video klinik akan ditambah di sini' 
-                    : '📹 Clinic video will be added here'}
+                  {localized(content.placeholder)}
                 </p>
               </div>
             )}

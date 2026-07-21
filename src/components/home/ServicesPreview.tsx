@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import type { MouseEvent } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ import { KaabaIcon } from '@/components/icons/KaabaIcon';
 import { MosquitoIcon } from '@/components/icons/MosquitoIcon';
 import { CoughingBabyIcon } from '@/components/icons/CoughingBabyIcon';
 import { BananaIcon } from '@/components/icons/BananaIcon';
+import type { HomeContent } from '@/features/website-cms/schemas/home';
 
 const iconMap: Record<string, React.ElementType> = {
   Stethoscope,
@@ -42,8 +44,6 @@ const iconMap: Record<string, React.ElementType> = {
   CoughingBaby: CoughingBabyIcon,
   Banana: BananaIcon,
 };
-
-const featuredServices = SERVICES.slice(0, 6);
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -69,8 +69,49 @@ const itemVariants = {
   },
 };
 
-export function ServicesPreview() {
-  const { language, t } = useLanguage();
+interface ServicesPreviewProps {
+  content: HomeContent['services'];
+  preview?: boolean;
+}
+
+export function ServicesPreview({ content, preview = false }: ServicesPreviewProps) {
+  const { language } = useLanguage();
+  const featuredServices = SERVICES.slice(0, content.itemLimit);
+  const localized = (copy: { ms: string; en: string }) =>
+    language === 'ms' ? copy.ms : copy.en || copy.ms;
+  const preventPreviewNavigation = (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+  };
+  const renderCta = (animated: boolean) => {
+    const children = (
+      <>
+        {localized(content.cta.label)}
+        <ArrowRight
+          className={animated
+            ? 'ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform'
+            : 'ml-2 h-4 w-4'}
+        />
+      </>
+    );
+
+    return content.cta.href.startsWith('/') ? (
+      <Link
+        to={content.cta.href}
+        onClick={preview ? preventPreviewNavigation : undefined}
+      >
+        {children}
+      </Link>
+    ) : (
+      <a
+        href={content.cta.href}
+        target={content.cta.href.startsWith('http') ? '_blank' : undefined}
+        rel={content.cta.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+        onClick={preview ? preventPreviewNavigation : undefined}
+      >
+        {children}
+      </a>
+    );
+  };
 
   return (
     <section className="relative py-20 md:py-28 overflow-hidden gradient-section-alt">
@@ -95,13 +136,11 @@ export function ServicesPreview() {
               viewport={{ once: true }}
               className="inline-block mb-4 px-4 py-1.5 rounded-full bg-accent/10 text-accent text-sm font-medium border border-accent/20"
             >
-              {language === 'ms' ? 'Perkhidmatan Kami' : 'Our Services'}
+              {localized(content.eyebrow)}
             </motion.span>
-            <h2 className="mb-4">{t('services.title')}</h2>
+            <h2 className="mb-4">{localized(content.title)}</h2>
             <p className="max-w-2xl text-muted-foreground text-lg">
-              {language === 'ms'
-                ? 'Pelbagai perkhidmatan kesihatan untuk memenuhi keperluan anda.'
-                : 'A wide range of health services to meet your needs.'}
+              {localized(content.description)}
             </p>
           </div>
           <motion.div
@@ -115,10 +154,7 @@ export function ServicesPreview() {
               className="hidden sm:flex group border-2 hover:border-primary/50 hover:bg-primary/5 transition-all duration-300" 
               asChild
             >
-              <Link to="/services">
-                {t('cta.viewAll')}
-                <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
-              </Link>
+              {renderCta(true)}
             </Button>
           </motion.div>
         </motion.div>
@@ -134,7 +170,10 @@ export function ServicesPreview() {
             const IconComponent = iconMap[service.icon] || Stethoscope;
             return (
               <motion.div key={service.id} variants={itemVariants}>
-                <Link to={`/services/${service.slug}`}>
+                <Link
+                  to={`/services/${service.slug}`}
+                  onClick={preview ? preventPreviewNavigation : undefined}
+                >
                   <Card className="group h-full interactive-card border-border/50 shadow-soft rounded-2xl overflow-hidden">
                     <CardContent className="flex items-start gap-5 p-6">
                       <div className="icon-gradient h-14 w-14 shrink-0 text-primary relative z-10">
@@ -145,7 +184,7 @@ export function ServicesPreview() {
                           {language === 'ms' ? service.titleMs : service.titleEn}
                         </h4>
                         <p className="text-sm text-muted-foreground flex items-center gap-1 group-hover:text-primary/80 transition-colors">
-                          {t('cta.learnMore')}
+                          {localized(content.learnMoreLabel)}
                           <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
                         </p>
                       </div>
@@ -165,10 +204,7 @@ export function ServicesPreview() {
           className="mt-10 text-center sm:hidden"
         >
           <Button variant="outline" className="border-2" asChild>
-            <Link to="/services">
-              {t('cta.viewAll')}
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
+            {renderCta(false)}
           </Button>
         </motion.div>
       </div>

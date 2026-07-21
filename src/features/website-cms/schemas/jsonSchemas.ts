@@ -61,6 +61,17 @@ const HOME_LINK_JSON_SCHEMA = {
   },
 } as const;
 
+const HOME_CAROUSEL_LABELS_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["previous", "next", "goTo"],
+  properties: {
+    previous: BILINGUAL_TEXT_JSON_SCHEMA,
+    next: BILINGUAL_TEXT_JSON_SCHEMA,
+    goTo: BILINGUAL_TEXT_JSON_SCHEMA,
+  },
+} as const;
+
 const HOME_SECTION_IDS = [
   "hero",
   "why",
@@ -75,12 +86,12 @@ export const HOME_JSON_SCHEMA = {
   $schema: DRAFT_7,
   type: "object",
   additionalProperties: false,
-  required: ["hero", "why", "video", "services", "gallery", "testimonials", "map", "sectionOrder"],
+  required: ["hero", "why", "video", "services", "gallery", "testimonials", "map", "seo", "sectionOrder"],
   properties: {
     hero: {
       type: "object",
       additionalProperties: false,
-      required: ["backgroundImage", "backgroundAlt", "backgroundOpacity", "autoplayMs", "slides", "ctas"],
+      required: ["backgroundImage", "backgroundAlt", "backgroundOpacity", "autoplayMs", "slides", "ctas", "carouselLabels"],
       properties: {
         backgroundImage: SAFE_HREF_JSON_SCHEMA,
         backgroundAlt: OPTIONAL_BILINGUAL_TEXT_JSON_SCHEMA,
@@ -98,6 +109,7 @@ export const HOME_JSON_SCHEMA = {
           },
         },
         ctas: { type: "array", minItems: 1, maxItems: 12, items: HOME_LINK_JSON_SCHEMA },
+        carouselLabels: HOME_CAROUSEL_LABELS_JSON_SCHEMA,
       },
     },
     why: {
@@ -128,11 +140,13 @@ export const HOME_JSON_SCHEMA = {
     video: {
       type: "object",
       additionalProperties: false,
-      required: ["eyebrow", "title", "description", "videoUrlSettingKey", "posterSettingKey"],
+      required: ["eyebrow", "title", "description", "placeholder", "unsupportedMessage", "videoUrlSettingKey", "posterSettingKey"],
       properties: {
         eyebrow: BILINGUAL_TEXT_JSON_SCHEMA,
         title: BILINGUAL_TEXT_JSON_SCHEMA,
         description: BILINGUAL_TEXT_JSON_SCHEMA,
+        placeholder: BILINGUAL_TEXT_JSON_SCHEMA,
+        unsupportedMessage: BILINGUAL_TEXT_JSON_SCHEMA,
         videoUrlSettingKey: { enum: ["homepage_video_url"] },
         posterSettingKey: { enum: ["homepage_video_poster"] },
       },
@@ -140,47 +154,66 @@ export const HOME_JSON_SCHEMA = {
     services: {
       type: "object",
       additionalProperties: false,
-      required: ["eyebrow", "title", "description", "cta", "itemLimit"],
+      required: ["eyebrow", "title", "description", "cta", "learnMoreLabel", "itemLimit"],
       properties: {
         eyebrow: BILINGUAL_TEXT_JSON_SCHEMA,
         title: BILINGUAL_TEXT_JSON_SCHEMA,
         description: BILINGUAL_TEXT_JSON_SCHEMA,
         cta: HOME_LINK_JSON_SCHEMA,
+        learnMoreLabel: BILINGUAL_TEXT_JSON_SCHEMA,
         itemLimit: { type: "integer", minimum: 1, maximum: 12 },
       },
     },
     gallery: {
       type: "object",
       additionalProperties: false,
-      required: ["eyebrow", "title", "description", "cta", "itemLimit"],
+      required: ["eyebrow", "title", "description", "cta", "emptyMessage", "moreLabel", "carouselLabels", "itemLimit"],
       properties: {
         eyebrow: BILINGUAL_TEXT_JSON_SCHEMA,
         title: BILINGUAL_TEXT_JSON_SCHEMA,
         description: BILINGUAL_TEXT_JSON_SCHEMA,
         cta: HOME_LINK_JSON_SCHEMA,
+        emptyMessage: BILINGUAL_TEXT_JSON_SCHEMA,
+        moreLabel: BILINGUAL_TEXT_JSON_SCHEMA,
+        carouselLabels: HOME_CAROUSEL_LABELS_JSON_SCHEMA,
         itemLimit: { type: "integer", minimum: 1, maximum: 12 },
       },
     },
     testimonials: {
       type: "object",
       additionalProperties: false,
-      required: ["eyebrow", "title", "description"],
+      required: ["eyebrow", "title", "description", "patientLabel", "goToSlideLabel"],
       properties: {
         eyebrow: BILINGUAL_TEXT_JSON_SCHEMA,
         title: BILINGUAL_TEXT_JSON_SCHEMA,
         description: BILINGUAL_TEXT_JSON_SCHEMA,
+        patientLabel: BILINGUAL_TEXT_JSON_SCHEMA,
+        goToSlideLabel: BILINGUAL_TEXT_JSON_SCHEMA,
       },
     },
     map: {
       type: "object",
       additionalProperties: false,
-      required: ["eyebrow", "title", "description", "directionsCta", "embedUrl"],
+      required: ["eyebrow", "title", "description", "hoursLabel", "everydayLabel", "callLabel", "directionsCta", "embedUrl", "embedTitle"],
       properties: {
         eyebrow: BILINGUAL_TEXT_JSON_SCHEMA,
         title: BILINGUAL_TEXT_JSON_SCHEMA,
         description: BILINGUAL_TEXT_JSON_SCHEMA,
+        hoursLabel: BILINGUAL_TEXT_JSON_SCHEMA,
+        everydayLabel: BILINGUAL_TEXT_JSON_SCHEMA,
+        callLabel: BILINGUAL_TEXT_JSON_SCHEMA,
         directionsCta: HOME_LINK_JSON_SCHEMA,
         embedUrl: SAFE_HREF_JSON_SCHEMA,
+        embedTitle: BILINGUAL_TEXT_JSON_SCHEMA,
+      },
+    },
+    seo: {
+      type: "object",
+      additionalProperties: false,
+      required: ["title", "description"],
+      properties: {
+        title: BILINGUAL_TEXT_JSON_SCHEMA,
+        description: BILINGUAL_TEXT_JSON_SCHEMA,
       },
     },
     sectionOrder: {

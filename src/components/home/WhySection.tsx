@@ -1,6 +1,8 @@
 import { motion } from 'framer-motion';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Card, CardContent } from '@/components/ui/card';
+import type { HomeContent } from '@/features/website-cms/schemas/home';
+import type { ElementType } from 'react';
 import { 
   Clock, 
   Sofa, 
@@ -10,14 +12,14 @@ import {
   Ear 
 } from 'lucide-react';
 
-const whyCards = [
-  { icon: Clock, titleKey: 'why.openDaily', descKey: 'why.openDailyDesc' },
-  { icon: Sofa, titleKey: 'why.comfortable', descKey: 'why.comfortableDesc' },
-  { icon: Users, titleKey: 'why.familyClinic', descKey: 'why.familyClinicDesc' },
-  { icon: UserCheck, titleKey: 'why.experienced', descKey: 'why.experiencedDesc' },
-  { icon: Scissors, titleKey: 'why.minorSurgery', descKey: 'why.minorSurgeryDesc' },
-  { icon: Ear, titleKey: 'why.ent', descKey: 'why.entDesc' },
-];
+const iconMap: Record<HomeContent['why']['items'][number]['icon'], ElementType> = {
+  clock: Clock,
+  sofa: Sofa,
+  users: Users,
+  'user-check': UserCheck,
+  scissors: Scissors,
+  ear: Ear,
+};
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -42,8 +44,15 @@ const itemVariants = {
   },
 };
 
-export function WhySection() {
-  const { language, t } = useLanguage();
+interface WhySectionProps {
+  content: HomeContent['why'];
+  preview?: boolean;
+}
+
+export function WhySection({ content, preview = false }: WhySectionProps) {
+  const { language } = useLanguage();
+  const localized = (copy: { ms: string; en: string }) =>
+    language === 'ms' ? copy.ms : copy.en || copy.ms;
 
   return (
     <section className="relative py-20 md:py-28 overflow-hidden">
@@ -61,13 +70,11 @@ export function WhySection() {
             viewport={{ once: true }}
             className="inline-block mb-4 border-b border-primary pb-1 text-primary text-sm font-semibold uppercase tracking-[0.12em]"
           >
-            {language === 'ms' ? 'Mengapa Pilih Kami' : 'Why Choose Us'}
+            {localized(content.eyebrow)}
           </motion.span>
-          <h2 className="mb-4 gradient-text">{t('why.title')}</h2>
+          <h2 className="mb-4 gradient-text">{localized(content.title)}</h2>
           <p className="mx-auto max-w-2xl text-muted-foreground text-lg">
-            {language === 'ms' 
-              ? 'Kami komited untuk menyediakan perkhidmatan kesihatan yang terbaik untuk anda dan keluarga.'
-              : 'We are committed to providing the best healthcare services for you and your family.'}
+            {localized(content.description)}
           </p>
         </motion.div>
 
@@ -78,25 +85,28 @@ export function WhySection() {
           viewport={{ once: true, margin: "-50px" }}
           className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
         >
-          {whyCards.map((card, index) => (
-            <motion.div key={card.titleKey} variants={itemVariants}>
-              <Card className="group h-full interactive-card border-border shadow-soft rounded-lg overflow-hidden hover:border-primary/30">
-                <CardContent className="flex items-start gap-5 p-6">
-                  <div className="icon-gradient h-14 w-14 shrink-0 text-primary relative z-10">
-                    <card.icon className="h-7 w-7 relative z-10" />
-                  </div>
-                  <div>
-                    <h3 className="mb-2 text-lg font-bold group-hover:text-primary transition-colors duration-300">
-                      {t(card.titleKey)}
-                    </h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {t(card.descKey)}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
+          {content.items.map((card, index) => {
+            const Icon = iconMap[card.icon];
+            return (
+              <motion.div key={`${card.icon}-${index}`} variants={itemVariants}>
+                <Card className="group h-full interactive-card border-border shadow-soft rounded-lg overflow-hidden hover:border-primary/30">
+                  <CardContent className="flex items-start gap-5 p-6">
+                    <div className="icon-gradient h-14 w-14 shrink-0 text-primary relative z-10">
+                      <Icon className="h-7 w-7 relative z-10" />
+                    </div>
+                    <div>
+                      <h3 className="mb-2 text-lg font-bold group-hover:text-primary transition-colors duration-300">
+                        {localized(card.title)}
+                      </h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        {localized(card.description)}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            );
+          })}
         </motion.div>
       </div>
     </section>

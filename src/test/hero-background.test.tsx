@@ -4,13 +4,18 @@ import { describe, expect, it } from "vitest";
 
 import { HeroCarousel } from "@/components/home/HeroCarousel";
 import { LanguageProvider } from "@/contexts/LanguageContext";
+import { DEFAULT_HOME_CONTENT } from "@/features/website-cms/home/homeDefaults";
 
 describe("HeroCarousel clinic background", () => {
   it("renders the clinic photograph as a faint decorative image", () => {
+    const content = {
+      ...DEFAULT_HOME_CONTENT.hero,
+      autoplayMs: 60_000,
+    };
     const { container } = render(
       <MemoryRouter>
         <LanguageProvider>
-          <HeroCarousel autoPlayInterval={60_000} />
+          <HeroCarousel content={content} />
         </LanguageProvider>
       </MemoryRouter>,
     );

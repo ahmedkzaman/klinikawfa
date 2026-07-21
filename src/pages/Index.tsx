@@ -1,3 +1,4 @@
+import { Fragment, type ReactNode } from 'react';
 import { MainLayout } from '@/components/layout';
 import { SEOHead } from '@/components/seo';
 import {
@@ -9,36 +10,32 @@ import {
   TestimonialsSection,
   MapSection,
 } from '@/components/home';
+import { DEFAULT_HOME_CONTENT } from '@/features/website-cms/home/homeDefaults';
+import type { HomeSectionId } from '@/features/website-cms/schemas/home';
 
 export default function Index() {
+  const content = DEFAULT_HOME_CONTENT;
+  const HOME_SECTION_RENDERERS: Record<HomeSectionId, () => ReactNode> = {
+    hero: () => <HeroCarousel content={content.hero} />,
+    why: () => <WhySection content={content.why} />,
+    video: () => <VideoSection content={content.video} />,
+    services: () => <ServicesPreview content={content.services} />,
+    gallery: () => <GalleryStrip content={content.gallery} />,
+    testimonials: () => <TestimonialsSection content={content.testimonials} />,
+    map: () => <MapSection content={content.map} />,
+  };
+
   return (
     <MainLayout>
       <SEOHead
-        title="Klinik Keluarga Anda"
-        description="Klinik Awfa menawarkan rawatan kesihatan berkualiti untuk keluarga anda di KotaSAS, Kuantan. Buka setiap hari 8 pagi - 12 tengah malam."
+        title={content.seo.title.ms}
+        description={content.seo.description.ms}
         url="/"
       />
 
-      {/* Hero Carousel with auto-rotation */}
-      <HeroCarousel autoPlayInterval={5000} />
-
-      {/* Why Klinik Awfa - 6 key highlights */}
-      <WhySection />
-
-      {/* Autoplay Video Section */}
-      <VideoSection />
-
-      {/* Services Preview Grid */}
-      <ServicesPreview />
-
-      {/* Photo Gallery Strip - horizontal scroll */}
-      <GalleryStrip />
-
-      {/* Patient Testimonials */}
-      <TestimonialsSection />
-
-      {/* Map & Location */}
-      <MapSection />
+      {content.sectionOrder.map((section) => (
+        <Fragment key={section}>{HOME_SECTION_RENDERERS[section]()}</Fragment>
+      ))}
     </MainLayout>
   );
 }
