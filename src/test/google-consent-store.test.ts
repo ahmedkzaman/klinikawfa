@@ -2,19 +2,29 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ConsentBanner } from "@/components/consent/ConsentBanner";
-import {
-  CONSENT_STORAGE_KEY,
-  readMarketingConsent,
-  withdrawMarketingConsent,
-  writeMarketingConsent,
-} from "@/features/consent/consentStore";
+type ConsentBannerModule = typeof import("@/components/consent/ConsentBanner");
+type ConsentStoreModule = typeof import("@/features/consent/consentStore");
+
+let CONSENT_STORAGE_KEY: ConsentStoreModule["CONSENT_STORAGE_KEY"];
+let ConsentBanner: ConsentBannerModule["ConsentBanner"];
+let readMarketingConsent: ConsentStoreModule["readMarketingConsent"];
+let withdrawMarketingConsent: ConsentStoreModule["withdrawMarketingConsent"];
+let writeMarketingConsent: ConsentStoreModule["writeMarketingConsent"];
 
 describe("versioned Google marketing consent", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.resetModules();
     window.localStorage.clear();
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-21T08:30:00.000Z"));
+
+    const consentStore = await import("@/features/consent/consentStore");
+    const consentBanner = await import("@/components/consent/ConsentBanner");
+    CONSENT_STORAGE_KEY = consentStore.CONSENT_STORAGE_KEY;
+    ConsentBanner = consentBanner.ConsentBanner;
+    readMarketingConsent = consentStore.readMarketingConsent;
+    withdrawMarketingConsent = consentStore.withdrawMarketingConsent;
+    writeMarketingConsent = consentStore.writeMarketingConsent;
   });
 
   afterEach(() => {
@@ -116,10 +126,11 @@ describe("versioned Google marketing consent", () => {
   });
 
   it("fails closed without throwing when browser storage is unavailable", () => {
-    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+    const getItem = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("storage unavailable");
     });
     expect(readMarketingConsent(1)).toEqual({ status: "unknown" });
+    expect(getItem).toHaveBeenCalledTimes(1);
 
     vi.restoreAllMocks();
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
@@ -145,6 +156,37 @@ describe("versioned Google marketing consent", () => {
     withdrawMarketingConsent();
 
     expect(readMarketingConsent(1)).toEqual({ status: "unknown" });
+  });
+
+  it("keeps a failed rejection fail-closed until a choice persists", () => {
+    window.localStorage.setItem(
+      CONSENT_STORAGE_KEY,
+      JSON.stringify({
+        marketing: "accepted",
+        updatedAt: "2026-07-21T08:00:00.000Z",
+        version: 1,
+      }),
+    );
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("storage unavailable");
+      });
+
+    expect(
+      writeMarketingConsent({ marketing: "rejected", version: 1 }),
+    ).toEqual({ status: "unknown" });
+    setItem.mockRestore();
+
+    expect(readMarketingConsent(1)).toEqual({ status: "unknown" });
+    expect(
+      writeMarketingConsent({ marketing: "rejected", version: 1 }),
+    ).toMatchObject({ marketing: "rejected", status: "known", version: 1 });
+    expect(readMarketingConsent(1)).toMatchObject({
+      marketing: "rejected",
+      status: "known",
+      version: 1,
+    });
   });
 
   it("offers equally clear BM and English accept, reject, and settings actions", () => {

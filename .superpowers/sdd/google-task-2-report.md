@@ -62,3 +62,31 @@ Coverage includes missing, malformed, identity-bearing, and stale records; accep
 - Vitest emits the repository's existing React-SWC performance recommendation; the focused suite exits successfully.
 
 Commit message: `Add versioned Google marketing consent`.
+
+## Review-fix addendum
+
+### Findings and root cause
+
+- **P1 failed rejection:** `writeMarketingConsent()` previously raised the session tombstone only through withdrawal. If an accepted record already existed and persisting a later explicit rejection threw, restoring storage allowed `readMarketingConsent()` to return the old acceptance. The rejection path now marks the session fail-closed before `setItem`; the tombstone is cleared only after that explicit choice persists successfully.
+- **P2 shared test state:** the focused test statically imported the store singleton, so `withdrawnForSession` could leak between cases and let the unavailable-read test return early without touching mocked storage. Every test now resets the module registry and dynamically imports a fresh store and banner instance. The unavailable-read test also asserts that `localStorage.getItem` was called once.
+
+### TDD evidence
+
+The new regression preloads a valid accepted record, forces an explicit rejected write to fail, restores storage, and requires reads to remain `unknown` until a later explicit rejection persists.
+
+- RED: the focused suite collected 11 tests; 10 passed and only the new regression failed because the old accepted record was returned.
+- GREEN: the same required focused command passed 1/1 file and 11/11 tests after the one-line production fix.
+
+```text
+npx vitest run --pool=forks --maxWorkers=1 src/test/google-consent-store.test.ts
+```
+
+### Review-fix verification and scope
+
+- Exact CI TypeScript command `tsc --noEmit`: PASS, no diagnostics.
+- Scoped ESLint over the modified store and focused test: PASS, 0 errors and 0 warnings.
+- Scoped privacy/security and diff whitespace scans: PASS; no analytics, network, database, secret, deployment, identifier, Meta, or healthcare-data behavior was added.
+- The review fix changes only this report, `src/features/consent/consentStore.ts`, and `src/test/google-consent-store.test.ts`.
+- No dependency, production database, Supabase API, network, analytics, secret, deployment, publication, or user-data action occurred.
+
+Review-fix commit message: `Harden rejected consent storage fallback`.

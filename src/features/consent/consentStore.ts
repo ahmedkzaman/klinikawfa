@@ -86,6 +86,7 @@ export function writeMarketingConsent(
     version: choice.version,
   };
 
+  if (choice.marketing === "rejected") withdrawnForSession = true;
   try {
     window.localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(stored));
     withdrawnForSession = false;
