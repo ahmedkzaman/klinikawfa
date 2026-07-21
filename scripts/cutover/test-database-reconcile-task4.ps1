@@ -303,6 +303,13 @@ commit;
     $changed.PSObject.Properties.Remove($missingProperty)
     Assert-Rejected -Label "Portable Auth aggregate accepted missing property: $missingProperty" -Action {Assert-Task4AuthAggregate -Actual $changed -Baseline $baseline -RequireNeutralized}
   }
+  foreach($metric in @('forbiddenState','invitedAtNonNull')){
+    foreach($invalidValue in @($null,'not-a-number',0.5,$false)){
+      $changed=$targetAggregate|ConvertTo-Json -Depth 20|ConvertFrom-Json
+      $changed.$metric=$invalidValue
+      Assert-Rejected -Label "Portable Auth aggregate accepted invalid zero metric: $metric=$invalidValue" -Action {Assert-Task4AuthAggregate -Actual $changed -Baseline $baseline -RequireNeutralized}
+    }
+  }
 }finally{if(Test-Path $authFixtureRoot){Remove-Item $authFixtureRoot -Recurse -Force}}
 
 Import-RunnerFunction Get-NormalizedPath

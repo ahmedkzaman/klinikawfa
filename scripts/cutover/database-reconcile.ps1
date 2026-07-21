@@ -1567,9 +1567,17 @@ function Assert-Task4AuthAggregate {
   foreach ($field in @('forbiddenState','invitedAtNonNull')) {
     $actualHasField = if ($Actual -is [Collections.IDictionary]) { $Actual.Contains($field) } else { $null -ne $Actual.PSObject.Properties[$field] }
     if (-not $actualHasField) { throw "Portable Auth aggregate is missing required property: $field" }
+    $actualValue = if ($Actual -is [Collections.IDictionary]) { $Actual[$field] } else { $Actual.$field }
+    $isInteger = $false
+    if ($null -ne $actualValue) {
+      foreach ($integerType in @([byte],[sbyte],[int16],[uint16],[int32],[uint32],[int64],[uint64])) {
+        if ($actualValue -is $integerType) { $isInteger = $true; break }
+      }
+    }
+    if (-not $isInteger) { throw "Portable Auth aggregate property must be a non-null integer: $field" }
   }
-  if ([int]$Actual.invitedAtNonNull -ne 0) { throw 'Portable Auth source or import contains a pending invitation timestamp.' }
-  if ($RequireNeutralized -and [int]$Actual.forbiddenState -ne 0) { throw 'Portable Auth import retains one-time-token or pending-workflow state.' }
+  if ($Actual.invitedAtNonNull -ne 0) { throw 'Portable Auth source or import contains a pending invitation timestamp.' }
+  if ($RequireNeutralized -and $Actual.forbiddenState -ne 0) { throw 'Portable Auth import retains one-time-token or pending-workflow state.' }
   return $Actual
 }
 
