@@ -25,6 +25,15 @@ $InventoryName = 'target-inventory.json'
 $LoaderName = 'selective-data-loader.sql'
 $HeldStaffLoaderName = 'staff-messages-loader.sql'
 $AuthLoaderName = 'portable-auth-loader.sql'
+$RepositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$StaffMessagesMigration = Join-Path $RepositoryRoot 'supabase\migrations\20260721162256_restore_staff_messages.sql'
+$CompatibilityMigration = Join-Path $RepositoryRoot 'supabase\migrations\20260721174422_preserve_source_cutover_fields.sql'
+$AppointmentColumnMap = [ordered]@{
+  'patient_name' = 'name'
+  'patient_phone' = 'phone'
+  'appointment_date' = 'preferred_date'
+  'appointment_time' = 'preferred_time'
+}
 
 function Get-NormalizedPath {
   param([Parameter(Mandatory)][string]$Path)
@@ -524,6 +533,21 @@ function Write-TocSelection {
   return $selected.Count
 }
 
+function Write-TocPatternSelection {
+  param(
+    [Parameter(Mandatory)][string[]]$Toc,
+    [Parameter(Mandatory)][string]$Path,
+    [Parameter(Mandatory)][string[]]$Patterns
+  )
+  $selected = New-Object 'System.Collections.Generic.List[string]'
+  foreach ($pattern in $Patterns) {
+    $matches = @($Toc | Where-Object { (Get-TocDescriptor $_) -match $pattern })
+    if ($matches.Count -ne 1) { throw "Archive prerequisite pattern must match exactly once: $pattern" }
+    $selected.Add($matches[0])
+  }
+  Write-Utf8NoBom -Path $Path -Content (($selected -join "`n") + "`n")
+}
+
 function Restore-TocSelection {
   param([string]$Archive, [string]$Database, [string]$ListPath, [string]$Label)
   $restore = Join-Path $PostgresBin 'pg_restore.exe'
@@ -578,26 +602,36 @@ function Compare-ColumnMetadata {
   $targetRequiredOnlyDetails = @()
   $typeDifferenceDetails = @()
   $defaultDifferenceDetails = @()
+  $matchedTargetKeys = @{}
   foreach ($key in @($sourceMap.Keys | Sort-Object)) {
-    if (-not $targetMap.ContainsKey($key)) {
+    $targetKey = $key
+    if (-not $targetMap.ContainsKey($targetKey) -and $key.StartsWith('public.appointments.', [StringComparison]::Ordinal)) {
+      $sourceColumn = $key.Substring('public.appointments.'.Length)
+      if ($AppointmentColumnMap.Contains($sourceColumn)) {
+        $targetKey = 'public.appointments.' + $AppointmentColumnMap[$sourceColumn]
+      }
+    }
+    if (-not $targetMap.ContainsKey($targetKey)) {
       $left = $sourceMap[$key]
       $sourceOnly += $key
       $sourceOnlyDetails += [ordered]@{ identity = $key; dataType = $left.data_type; udtSchema = $left.udt_schema; udtName = $left.udt_name; nullable = $left.is_nullable; default = $left.column_default; identityColumn = $left.is_identity; generated = $left.is_generated }
       continue
     }
+    $matchedTargetKeys[$targetKey] = $true
     $left = $sourceMap[$key]
-    $right = $targetMap[$key]
+    $right = $targetMap[$targetKey]
+    $comparisonIdentity = if ($targetKey -eq $key) { $key } else { "$key -> $targetKey" }
     if ($left.data_type -ne $right.data_type -or $left.udt_schema -ne $right.udt_schema -or $left.udt_name -ne $right.udt_name) {
-      $typeDifferences += $key
-      $typeDifferenceDetails += [ordered]@{ identity = $key; source = [ordered]@{ dataType = $left.data_type; udtSchema = $left.udt_schema; udtName = $left.udt_name }; target = [ordered]@{ dataType = $right.data_type; udtSchema = $right.udt_schema; udtName = $right.udt_name } }
+      $typeDifferences += $comparisonIdentity
+      $typeDifferenceDetails += [ordered]@{ identity = $comparisonIdentity; source = [ordered]@{ dataType = $left.data_type; udtSchema = $left.udt_schema; udtName = $left.udt_name }; target = [ordered]@{ dataType = $right.data_type; udtSchema = $right.udt_schema; udtName = $right.udt_name } }
     }
     if ([string]$left.column_default -ne [string]$right.column_default) {
-      $defaultDifferences += $key
-      $defaultDifferenceDetails += [ordered]@{ identity = $key; sourceDefault = $left.column_default; targetDefault = $right.column_default }
+      $defaultDifferences += $comparisonIdentity
+      $defaultDifferenceDetails += [ordered]@{ identity = $comparisonIdentity; sourceDefault = $left.column_default; targetDefault = $right.column_default }
     }
   }
   foreach ($key in @($targetMap.Keys | Sort-Object)) {
-    if ($sourceMap.ContainsKey($key)) { continue }
+    if ($matchedTargetKeys.ContainsKey($key)) { continue }
     $column = $targetMap[$key]
     if ($column.is_nullable -eq 'NO' -and [string]::IsNullOrEmpty([string]$column.column_default) -and $column.is_identity -ne 'YES' -and $column.is_generated -ne 'ALWAYS') {
       $targetRequiredOnly += $key
@@ -685,6 +719,24 @@ from (
   return @(Get-JsonQueryResult -Database $Database -Sql $sql -Label "sequence checks from $Database")
 }
 
+function Convert-AppointmentInsertColumns {
+  param([Parameter(Mandatory)][string]$Sql)
+  $pattern = '(?im)^(INSERT INTO public\.appointments \()([^)]+)(\) VALUES )'
+  return [regex]::Replace($Sql, $pattern, {
+    param($match)
+    $mappedColumns = @($match.Groups[2].Value.Split(',') | ForEach-Object {
+      $column = $_.Trim()
+      $unquoted = $column.Trim('"')
+      if ($AppointmentColumnMap.Contains($unquoted)) {
+        if ($column.StartsWith('"')) { '"' + $AppointmentColumnMap[$unquoted] + '"' } else { $AppointmentColumnMap[$unquoted] }
+      } else {
+        $column
+      }
+    })
+    return $match.Groups[1].Value + ($mappedColumns -join ', ') + $match.Groups[3].Value
+  })
+}
+
 function New-SelectiveLoader {
   param([string]$SourceDatabase, [string[]]$PublicTables, [string]$OutputPath, [switch]$StaffOnly, [switch]$AuthOnly)
   $rawPath = "$OutputPath.raw"
@@ -709,6 +761,9 @@ function New-SelectiveLoader {
   Invoke-External -File $dump -Arguments $args -Label 'generate protected selective data SQL' | Out-Null
   $body = Get-Content -LiteralPath $rawPath -Raw
   Remove-Item -LiteralPath $rawPath -Force
+  if (-not $StaffOnly -and -not $AuthOnly) {
+    $body = Convert-AppointmentInsertColumns -Sql $body
+  }
   $header = @"
 \set ON_ERROR_STOP on
 begin;
@@ -740,6 +795,10 @@ function Assert-PortableAuthBoundary {
 function Invoke-RehearsePhase {
   [void](Assert-ApprovedArchive)
   $verifiedBackup = Assert-VerifiedBackup
+  foreach ($migration in @($StaffMessagesMigration, $CompatibilityMigration)) {
+    if (-not (Test-Path -LiteralPath $migration -PathType Leaf)) { throw 'Required scratch migration is missing.' }
+    Assert-NotReparsePoint -Path $migration -Label 'scratch migration'
+  }
   $sourceToc = Get-ArchiveToc -Archive $ApprovedArchive -Label 'source rehearsal archive list'
   $targetToc = Get-ArchiveToc -Archive $verifiedBackup.path -Label 'target rehearsal archive list'
   $sourcePublicTables = @(Get-TocTables -Toc $sourceToc -Schema 'public')
@@ -762,15 +821,18 @@ function Invoke-RehearsePhase {
     $sourcePost = Join-Path $lists 'source-post.list'
     $targetPre = Join-Path $lists 'target-pre.list'
     $targetPost = Join-Path $lists 'target-post.list'
-    $staffPre = Join-Path $lists 'staff-pre.list'
-    $staffPost = Join-Path $lists 'staff-post.list'
+    $targetMigrationPrerequisites = Join-Path $lists 'target-migration-prerequisites.list'
     [void](Write-TocSelection -Toc $sourceToc -Path $sourcePre -Stage pre -Scopes @('public','auth','migrations'))
     [void](Write-TocSelection -Toc $sourceToc -Path $sourceData -Stage data -Scopes @('public','auth','migrations'))
     [void](Write-TocSelection -Toc $sourceToc -Path $sourcePost -Stage post -Scopes @('public','auth'))
     [void](Write-TocSelection -Toc $targetToc -Path $targetPre -Stage pre -Scopes @('public','auth'))
     [void](Write-TocSelection -Toc $targetToc -Path $targetPost -Stage post -Scopes @('public','auth'))
-    [void](Write-TocSelection -Toc $sourceToc -Path $staffPre -Stage pre -Scopes @('staff'))
-    [void](Write-TocSelection -Toc $sourceToc -Path $staffPost -Stage post -Scopes @('staff'))
+    Write-TocPatternSelection -Toc $targetToc -Path $targetMigrationPrerequisites -Patterns @(
+      '^FUNCTION public is_staff_or_admin\(uuid\) '
+      '^FUNCTION public is_clinical\(uuid\) '
+      '^FUNCTION public is_staff_or_clinical\(uuid\) '
+      '^PUBLICATION - supabase_realtime '
+    )
 
     Restore-TocSelection -Archive $ApprovedArchive -Database $sourceDatabase -ListPath $sourcePre -Label 'restore source rehearsal schema'
     Restore-TocSelection -Archive $ApprovedArchive -Database $sourceDatabase -ListPath $sourceData -Label 'restore source rehearsal selected data'
@@ -783,7 +845,10 @@ function Invoke-RehearsePhase {
     Restore-TocSelection -Archive $ApprovedArchive -Database $sourceDatabase -ListPath $sourcePost -Label 'validate source rehearsal constraints'
 
     Restore-TocSelection -Archive $verifiedBackup.path -Database $targetDatabase -ListPath $targetPre -Label 'restore target rehearsal schema'
-    Restore-TocSelection -Archive $ApprovedArchive -Database $targetDatabase -ListPath $staffPre -Label 'restore missing staff_messages schema in target rehearsal'
+    Restore-TocSelection -Archive $verifiedBackup.path -Database $targetDatabase -ListPath $targetMigrationPrerequisites -Label 'restore target scratch migration prerequisites'
+    Restore-TocSelection -Archive $verifiedBackup.path -Database $targetDatabase -ListPath $targetPost -Label 'restore target rehearsal constraints before local migrations'
+    Invoke-LocalFile -Database $targetDatabase -Path $CompatibilityMigration -Label 'apply compatibility migration to disposable target scratch'
+    Invoke-LocalFile -Database $targetDatabase -Path $StaffMessagesMigration -Label 'apply staff_messages migration to disposable target scratch'
 
     $sourceColumns = @(Get-ColumnMetadata -Database $sourceDatabase)
     $targetColumns = @(Get-ColumnMetadata -Database $targetDatabase)
@@ -814,8 +879,6 @@ from public.appointments;
     $blockingColumnDiff = @($columnDiff.sourceOnly).Count -gt 0 -or @($columnDiff.targetRequiredOnly).Count -gt 0 -or @($columnDiff.typeDifferences).Count -gt 0
     if ($blockingColumnDiff) {
       Invoke-SelectiveDataLoader -Database $targetDatabase -LoaderPath $authLoader -Label 'rehearse portable Auth-only loader'
-      Restore-TocSelection -Archive $verifiedBackup.path -Database $targetDatabase -ListPath $targetPost -Label 'validate target rehearsal constraints after Auth-only load'
-      Restore-TocSelection -Archive $ApprovedArchive -Database $targetDatabase -ListPath $staffPost -Label 'validate empty staff_messages rehearsal constraints'
 
       $sourceConstraints = @(Get-ConstraintMetadata -Database $sourceDatabase)
       $targetConstraints = @(Get-ConstraintMetadata -Database $targetDatabase)
@@ -867,9 +930,6 @@ from public.appointments;
 
     Invoke-SelectiveDataLoader -Database $targetDatabase -LoaderPath $mainLoader -Label 'rehearse selective application and portable Auth loader'
     Invoke-SelectiveDataLoader -Database $targetDatabase -LoaderPath $staffLoader -Label 'rehearse held staff_messages loader'
-
-    Restore-TocSelection -Archive $verifiedBackup.path -Database $targetDatabase -ListPath $targetPost -Label 'validate target rehearsal constraints'
-    Restore-TocSelection -Archive $ApprovedArchive -Database $targetDatabase -ListPath $staffPost -Label 'validate staff_messages rehearsal constraints'
 
     $sourceConstraints = @(Get-ConstraintMetadata -Database $sourceDatabase)
     $targetConstraints = @(Get-ConstraintMetadata -Database $targetDatabase)
