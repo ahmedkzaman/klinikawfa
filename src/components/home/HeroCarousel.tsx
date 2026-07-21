@@ -16,34 +16,58 @@ interface HeroCarouselProps {
 export function HeroCarousel({ content, preview = false }: HeroCarouselProps) {
   const { language } = useLanguage();
   const slides = content.slides;
-  const backgroundOpacity = Math.min(25, Math.max(5, content.backgroundOpacity));
+  const backgroundOpacity = Number.isFinite(content.backgroundOpacity)
+    ? Math.min(25, Math.max(5, content.backgroundOpacity))
+    : 13;
+  const autoplayMs = Number.isFinite(content.autoplayMs)
+    ? Math.min(15000, Math.max(3000, Math.round(content.autoplayMs)))
+    : 5000;
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
 
   const nextSlide = useCallback(() => {
-    setCurrentSlide((prev) => (prev + 1) % slides.length);
+    setCurrentSlide((prev) =>
+      slides.length > 0 ? (prev + 1) % slides.length : 0,
+    );
   }, [slides.length]);
 
   const prevSlide = useCallback(() => {
-    setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
+    setCurrentSlide((prev) =>
+      slides.length > 0 ? (prev - 1 + slides.length) % slides.length : 0,
+    );
   }, [slides.length]);
 
-  const goToSlide = useCallback((index: number) => {
-    setCurrentSlide(index);
-  }, []);
+  const goToSlide = useCallback(
+    (index: number) => {
+      setCurrentSlide(
+        slides.length > 0 ? Math.min(slides.length - 1, Math.max(0, index)) : 0,
+      );
+    },
+    [slides.length],
+  );
 
   useEffect(() => {
-    if (isPaused) return;
-    const interval = setInterval(nextSlide, content.autoplayMs);
-    return () => clearInterval(interval);
-  }, [content.autoplayMs, isPaused, nextSlide]);
+    setCurrentSlide((previous) =>
+      slides.length > 0 ? Math.min(previous, slides.length - 1) : 0,
+    );
+  }, [slides.length]);
 
-  const slide = slides[currentSlide];
+  useEffect(() => {
+    if (isPaused || slides.length <= 1) return;
+    const interval = setInterval(nextSlide, autoplayMs);
+    return () => clearInterval(interval);
+  }, [autoplayMs, isPaused, nextSlide, slides.length]);
+
+  const safeCurrentSlide =
+    slides.length > 0 ? Math.min(currentSlide, slides.length - 1) : 0;
+  const slide = slides[safeCurrentSlide];
   const localized = (copy: { ms: string; en: string }) =>
     language === 'ms' ? copy.ms : copy.en || copy.ms;
   const preventPreviewNavigation = (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
   };
+
+  if (!slide) return null;
 
   return (
     <section
@@ -107,7 +131,7 @@ export function HeroCarousel({ content, preview = false }: HeroCarouselProps) {
           {/* Main title */}
           <AnimatePresence mode="wait">
             <motion.h1
-              key={`title-${currentSlide}`}
+              key={`title-${safeCurrentSlide}`}
               initial={{ opacity: 0, y: 30, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -20, scale: 0.95 }}
@@ -123,7 +147,7 @@ export function HeroCarousel({ content, preview = false }: HeroCarouselProps) {
           {/* Subtitle */}
           <AnimatePresence mode="wait">
             <motion.p
-              key={`subtitle-${currentSlide}`}
+              key={`subtitle-${safeCurrentSlide}`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
@@ -198,7 +222,7 @@ export function HeroCarousel({ content, preview = false }: HeroCarouselProps) {
                 whileTap={{ scale: 0.9 }}
                 className={cn(
                   'h-3 rounded-full transition-all duration-500',
-                  currentSlide === index
+                  safeCurrentSlide === index
                     ? 'w-10 bg-primary'
                     : 'w-3 bg-primary/30 hover:bg-primary/50'
                 )}

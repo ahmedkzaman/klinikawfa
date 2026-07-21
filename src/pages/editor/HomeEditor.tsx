@@ -44,6 +44,7 @@ import {
   type EditorWebsitePageResult,
 } from "@/features/website-cms/api/pages";
 import { DEFAULT_HOME_CONTENT } from "@/features/website-cms/home/homeDefaults";
+import { projectHomePreview } from "@/features/website-cms/home/projectHomePreview";
 import {
   HOME_SECTION_IDS,
   HOME_WHY_ICON_IDS,
@@ -429,6 +430,7 @@ export function HomeEditor() {
   }
 
   const currentContent = form.watch();
+  const previewContent = projectHomePreview(currentContent);
   const sectionOrder = form.watch("sectionOrder");
   const publishDisabled =
     isDirty || !editorPage.draft.persisted || isSaving || isPublishing;
@@ -721,7 +723,7 @@ export function HomeEditor() {
           <Button aria-label="Preview in English" aria-pressed={language === "en"} onClick={() => setLanguage("en")} size="sm" type="button" variant={language === "en" ? "default" : "outline"}>English</Button>
         </div>
         <LivePreview title={language === "ms" ? "Pratonton Langsung" : "Live Preview"}>
-          <HomeRenderer content={currentContent} preview />
+          <HomeRenderer content={previewContent} preview />
         </LivePreview>
       </section>
 
