@@ -98,7 +98,9 @@ describe("cutover compatibility rehearsal", () => {
     "20260721174422_preserve_source_cutover_fields.sql",
   ])("applies %s to disposable target scratch", (migration) => {
     expect(runner).toContain(migration);
-    expect(runner).toMatch(/invoke-localfile -database \$targetdatabase -path \$[a-z]+migration/);
+    expect(runner).toContain(
+      "invoke-task4scratchmigrations -database $targetdatabase -migrations $task4migrations",
+    );
   });
 
   it("never applies either migration to the target", () => {

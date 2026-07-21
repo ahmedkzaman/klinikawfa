@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory)]
-  [ValidateSet('Inventory','Backup','Rehearse','Import','Verify','Rollback')]
+  [ValidateSet('Inventory','Backup','Rehearse','PostMigration','Import','Verify','Rollback')]
   [string]$Phase,
   [string]$ProtectedEnv = 'C:\Users\ahmed\Documents\Codex\private\klinikawfa\staging.env',
   [string]$ArtifactRoot = 'C:\Users\ahmed\Documents\Codex\private\klinikawfa\cutover-20260722'
@@ -26,14 +26,42 @@ $InventoryName = 'target-inventory.json'
 $LoaderName = 'selective-data-loader.sql'
 $HeldStaffLoaderName = 'staff-messages-loader.sql'
 $AuthLoaderName = 'portable-auth-loader.sql'
+$ImportReportName = 'task4-import-integrity-report.json'
+$Task4TransitionManifestName = 'post-migration-transition-manifest.json'
+$Task4ValidationEvidenceName = 'task4-rollback-validation-evidence.json'
+$Task4DryRunEvidenceName = 'task4-readonly-dryrun-evidence.json'
+$Task4ValidatedBaseHead = '3aa624512437203d6ef5688ede4799ac5eb022d4'
+$LegacyCompositeRehearsalRunnerSha256 = '2E18A5193C223B4E2D095624FD41184E711B47399E213C5CDC0C31074C03FF26'
+$Task4ValidationEvidenceSha256 = '29E6CD5499FBF52E46D68DDFAA456514587FDE32690A7879197AED4F11D669A3'
+$Task4DryRunEvidenceSha256 = '39EA9CEBCD521D6AA178DC10716FCE06CDF4269EE06D2A6BE9AB8A3D5C6BD619'
+$LegacyCompositeRehearsalReportSha256 = '9AE7693B8B06E1CECDD6AABEA91A4D399E204184175028C3BF6EBBFCE59297CC'
+$LegacyCompositeRehearsalMigrations = @(
+  [ordered]@{ name='20260721174422_preserve_source_cutover_fields.sql'; sha256='ECEBAE8DFB0CED17B2C0A1332E627846844C439DB945A5C705C95B53E3611217' },
+  [ordered]@{ name='20260721162256_restore_staff_messages.sql'; sha256='4E0C335C855C1338EDAB28429B7377DAC7768D796666B3FF315FF1B4A55C9FB0' }
+)
 $RepositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $StaffMessagesMigration = Join-Path $RepositoryRoot 'supabase\migrations\20260721162256_restore_staff_messages.sql'
 $CompatibilityMigration = Join-Path $RepositoryRoot 'supabase\migrations\20260721174422_preserve_source_cutover_fields.sql'
+$Task4MigrationSpecifications = @(
+  [ordered]@{ version='20260720111916'; file='20260720111916_add_website_editor_role.sql'; sha256='87F0EEA795BC99CE1CBA8BB799B6E25D7C3A313A54E309425FC47165B5125618' },
+  [ordered]@{ version='20260720115031'; file='20260720115031_create_website_cms_foundation.sql'; sha256='A86DA7A8824CCF5BEF9033D9DC525C37D50AE6281AF0C060ED031995459E5D30' },
+  [ordered]@{ version='20260720225347'; file='20260720225347_harden_website_cms_integration.sql'; sha256='E4987CFCBD91251FE6EE10881D7F67858265C735DD7FDFCE31E49FBF63ECB8EC' },
+  [ordered]@{ version='20260721035032'; file='20260721035032_add_website_page_publishing.sql'; sha256='88BE2091198AECA44A556DF3A0C76C6AB6018FBA8149A0EE13F79C4AC92D4C39' },
+  [ordered]@{ version='20260721100403'; file='20260721100403_switch_tracking_to_google.sql'; sha256='EB84C03BD376D0B9E5AE2A7E1A14B7E41F9AA04B54D663793DCC79EF987E37A1' },
+  [ordered]@{ version='20260721162256'; file='20260721162256_restore_staff_messages.sql'; sha256='4E0C335C855C1338EDAB28429B7377DAC7768D796666B3FF315FF1B4A55C9FB0' },
+  [ordered]@{ version='20260721170000'; file='20260721170000_create_general_website_page_rpc.sql'; sha256='4762C9B6791AB4C5E95FBFCC1F05F6BB703911D2D2DCE9DDDFD89456D2B922A4' },
+  [ordered]@{ version='20260721174422'; file='20260721174422_preserve_source_cutover_fields.sql'; sha256='ECEBAE8DFB0CED17B2C0A1332E627846844C439DB945A5C705C95B53E3611217' }
+)
 $AppointmentColumnMap = [ordered]@{
   'patient_name' = 'name'
   'patient_phone' = 'phone'
   'appointment_date' = 'preferred_date'
   'appointment_time' = 'preferred_time'
+}
+$Task4ApprovedServiceLists = [ordered]@{
+  'pemeriksaan-kesihatan' = @('Pemeriksaan Bakal Haji 2026','Pemeriksaan Kesihatan Pelajar','Pemeriksaan Pra-Pekerjaan & Kecergasan Bekerja','Pemeriksaan Darah Menyeluruh')
+  'prosedur-minor' = @('Khatan Kanak-Kanak','Khatan Dewasa','Pembedahan Kecil / Ketuat','Penjagaan Telinga (Microsuction)')
+  'rawatan-am' = @('Konsultasi Sakit Tekak / Demam / Selsema','Terapi Nebuliser & Sedutan Kahak','Ujian Denggi / Darah Penuh (FBC)','Ujian Pantas (Influenza A & B / COVID-19 / Adenovirus / RSV)','Pencucian Hidung')
 }
 
 function Get-NormalizedPath {
@@ -99,6 +127,55 @@ function Get-StringSha256 {
 function Get-JsonSha256 {
   param([Parameter(Mandatory)]$Value)
   return Get-StringSha256 -Value ($Value | ConvertTo-Json -Depth 50 -Compress)
+}
+
+function Get-Task4StandaloneSequenceSpecifications {
+  return @(
+    [ordered]@{ identity='public.client_invoice_seq'; table='client_invoices'; column='invoice_no'; lastValue=2L; isCalled=$true; startValue=1L; incrementBy=1L },
+    [ordered]@{ identity='public.patient_reg_no_seq'; table='patients'; column='reg_no'; lastValue=117L; isCalled=$true; startValue=1L; incrementBy=1L },
+    [ordered]@{ identity='public.queue_number_seq'; table='queue_entries'; column='queue_number'; lastValue=1148L; isCalled=$true; startValue=1001L; incrementBy=1L }
+  )
+}
+
+function Get-Task4MigrationBindings {
+  if ($Task4MigrationSpecifications.Count -ne 8) { throw 'Task 4 migration specification must contain exactly eight entries.' }
+  $seenVersions = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+  $seenFiles = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+  foreach ($specification in $Task4MigrationSpecifications) {
+    if ($specification.version -notmatch '^\d{14}$' -or -not $specification.file.StartsWith(($specification.version + '_'), [StringComparison]::Ordinal) -or
+        $specification.sha256 -notmatch '^[A-F0-9]{64}$' -or -not $seenVersions.Add([string]$specification.version) -or -not $seenFiles.Add([string]$specification.file)) {
+      throw 'Task 4 migration specification contains an invalid or duplicate identity.'
+    }
+    $path = Join-Path $RepositoryRoot ('supabase\migrations\' + $specification.file)
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Task 4 migration is missing: $($specification.file)" }
+    Assert-NotReparsePoint -Path $path -Label 'Task 4 migration'
+    $actualSha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToUpperInvariant()
+    if ($actualSha256 -ne $specification.sha256) { throw "Task 4 migration hash mismatch: $($specification.file)" }
+    [ordered]@{ version=[string]$specification.version; file=[string]$specification.file; path=$path; sha256=$actualSha256 }
+  }
+}
+
+function Invoke-Task4ScratchMigrations {
+  param([Parameter(Mandatory)][string]$Database,[Parameter(Mandatory)]$Migrations)
+  $ordered = @($Migrations)
+  if ($ordered.Count -eq 0) { throw 'Task 4 scratch migration set is empty.' }
+  foreach ($migration in $ordered) {
+    if (-not (Test-Path -LiteralPath $migration.path -PathType Leaf) -or
+        (Get-FileHash -LiteralPath $migration.path -Algorithm SHA256).Hash.ToUpperInvariant() -ne [string]$migration.sha256) {
+      throw "Task 4 scratch migration binding changed: $($migration.file)"
+    }
+    $existing = Invoke-LocalQuery -Database $Database -Label "check Task 4 migration history $($migration.version)" -Sql "select count(*) from supabase_migrations.schema_migrations where version='$($migration.version)';"
+    if (-not [string]::IsNullOrWhiteSpace($existing) -and [int]$existing -ne 0) { throw "Task 4 scratch migration is already recorded: $($migration.version)" }
+    Invoke-LocalFile -Database $Database -Path $migration.path -Label "apply Task 4 scratch migration $($migration.file)"
+    $sql = Get-Content -LiteralPath $migration.path -Raw
+    $tag = '$task4_' + [Guid]::NewGuid().ToString('N') + '$'
+    while ($sql.IndexOf($tag, [StringComparison]::Ordinal) -ge 0) { $tag = '$task4_' + [Guid]::NewGuid().ToString('N') + '$' }
+    $name = ([IO.Path]::GetFileNameWithoutExtension([string]$migration.file)).Substring(15).Replace("'","''")
+    $recordSql = "insert into supabase_migrations.schema_migrations(version,statements,name) values ('$($migration.version)',array[$tag$sql$tag]::text[],'$name');"
+    [void](Invoke-LocalQuery -Database $Database -Label "record task4 migration $($migration.version)" -Sql $recordSql)
+    $recorded = Invoke-LocalQuery -Database $Database -Label "verify Task 4 migration history $($migration.version)" -Sql "select count(*) from supabase_migrations.schema_migrations where version='$($migration.version)';"
+    if (-not [string]::IsNullOrWhiteSpace($recorded) -and [int]$recorded -ne 1) { throw "Task 4 scratch migration was not recorded exactly once: $($migration.version)" }
+  }
 }
 
 function Invalidate-EvidenceFile {
@@ -406,7 +483,86 @@ select jsonb_build_object(
   return Get-StringSha256 -Value $metadataText
 }
 
+function Get-TargetExtendedSchemaSha256 {
+  $metadataText = Invoke-TargetQuery -Label 'target Task 4 extended schema digest input' -Sql @'
+select jsonb_build_object(
+  'namespaces', coalesce((
+    select jsonb_agg(jsonb_build_array(n.nspname,pg_get_userbyid(n.nspowner),coalesce(n.nspacl::text,'')) order by n.nspname)
+    from pg_namespace n where n.nspname in ('public','auth','storage','private','extensions','supabase_migrations')
+  ),'[]'::jsonb),
+  'relations', coalesce((
+    select jsonb_agg(jsonb_build_array(n.nspname,c.relname,c.relkind,pg_get_userbyid(c.relowner),c.relpersistence,c.relrowsecurity,c.relforcerowsecurity,c.relreplident,coalesce(c.relacl::text,''),coalesce(c.reloptions::text,''),coalesce(pg_get_expr(c.relpartbound,c.oid),'')) order by n.nspname,c.relname,c.oid)
+    from pg_class c join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname in ('public','auth','storage','private','extensions','supabase_migrations')
+  ),'[]'::jsonb),
+  'columns', coalesce((
+    select jsonb_agg(jsonb_build_array(n.nspname,c.relname,a.attnum,a.attname,format_type(a.atttypid,a.atttypmod),a.attnotnull,a.attidentity,a.attgenerated,a.attisdropped,coalesce(pg_get_expr(d.adbin,d.adrelid),''),coalesce(a.attacl::text,''),a.attstorage,a.attcompression) order by n.nspname,c.relname,a.attnum)
+    from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace left join pg_attrdef d on d.adrelid=a.attrelid and d.adnum=a.attnum
+    where a.attnum>0 and n.nspname in ('public','auth','storage','private','extensions','supabase_migrations')
+  ),'[]'::jsonb),
+  'constraints', coalesce((
+    select jsonb_agg(jsonb_build_array(n.nspname,c.relname,con.conname,con.contype,con.convalidated,con.condeferrable,con.condeferred,pg_get_constraintdef(con.oid,true)) order by n.nspname,c.relname,con.conname)
+    from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname in ('public','auth','storage','private','extensions','supabase_migrations')
+  ),'[]'::jsonb),
+  'indexes', coalesce((
+    select jsonb_agg(jsonb_build_array(n.nspname,c.relname,i.relname,x.indisunique,x.indisprimary,x.indisexclusion,x.indimmediate,x.indisclustered,x.indisvalid,x.indisready,x.indislive,pg_get_indexdef(i.oid)) order by n.nspname,c.relname,i.relname)
+    from pg_index x join pg_class c on c.oid=x.indrelid join pg_namespace n on n.oid=c.relnamespace join pg_class i on i.oid=x.indexrelid
+    where n.nspname in ('public','auth','storage','private','extensions','supabase_migrations')
+  ),'[]'::jsonb),
+  'policies', coalesce((
+    select jsonb_agg(jsonb_build_array(schemaname,tablename,policyname,permissive,roles,cmd,qual,with_check) order by schemaname,tablename,policyname)
+    from pg_policies where schemaname in ('public','auth','storage','private','extensions','supabase_migrations')
+  ),'[]'::jsonb),
+  'routines', coalesce((
+    select jsonb_agg(jsonb_build_array(n.nspname,p.proname,pg_get_function_identity_arguments(p.oid),p.prokind,pg_get_userbyid(p.proowner),p.prosecdef,p.proleakproof,p.provolatile,p.proparallel,coalesce(p.proconfig::text,''),coalesce(p.proacl::text,''),case when p.prokind in ('f','p') then pg_get_functiondef(p.oid) else '' end) order by n.nspname,p.proname,pg_get_function_identity_arguments(p.oid),p.oid)
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname in ('public','auth','storage','private','extensions','supabase_migrations')
+  ),'[]'::jsonb),
+  'triggers', coalesce((
+    select jsonb_agg(jsonb_build_array(n.nspname,c.relname,t.tgname,t.tgenabled,pg_get_triggerdef(t.oid,true)) order by n.nspname,c.relname,t.tgname)
+    from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace
+    where not t.tgisinternal and n.nspname in ('public','auth','storage','private','extensions','supabase_migrations')
+  ),'[]'::jsonb),
+  'types', coalesce((
+    select jsonb_agg(jsonb_build_array(n.nspname,t.typname,t.typtype,t.typcategory,pg_get_userbyid(t.typowner),coalesce(t.typacl::text,''),t.typnotnull,coalesce(pg_get_expr(t.typdefaultbin,0),t.typdefault,'')) order by n.nspname,t.typname,t.oid)
+    from pg_type t join pg_namespace n on n.oid=t.typnamespace
+    where n.nspname in ('public','auth','storage','private','extensions','supabase_migrations')
+  ),'[]'::jsonb),
+  'enums', coalesce((
+    select jsonb_agg(jsonb_build_array(n.nspname,t.typname,e.enumsortorder,e.enumlabel) order by n.nspname,t.typname,e.enumsortorder)
+    from pg_enum e join pg_type t on t.oid=e.enumtypid join pg_namespace n on n.oid=t.typnamespace
+    where n.nspname in ('public','auth','storage','private','extensions','supabase_migrations')
+  ),'[]'::jsonb),
+  'sequences', coalesce((
+    select jsonb_agg(jsonb_build_array(schemaname,sequencename,data_type,start_value,min_value,max_value,increment_by,cycle,cache_size) order by schemaname,sequencename)
+    from pg_sequences where schemaname in ('public','auth','storage','private','extensions','supabase_migrations')
+  ),'[]'::jsonb),
+  'extensions', coalesce((
+    select jsonb_agg(jsonb_build_array(e.extname,e.extversion,n.nspname,e.extrelocatable) order by e.extname)
+    from pg_extension e join pg_namespace n on n.oid=e.extnamespace
+  ),'[]'::jsonb),
+  'publications', coalesce((
+    select jsonb_agg(jsonb_build_array(pubname,puballtables,pubinsert,pubupdate,pubdelete,pubtruncate,pubviaroot) order by pubname) from pg_publication
+  ),'[]'::jsonb),
+  'publicationRelations', coalesce((
+    select jsonb_agg(jsonb_build_array(pubname,schemaname,tablename) order by pubname,schemaname,tablename) from pg_publication_tables
+  ),'[]'::jsonb),
+  'defaultPrivileges', coalesce((
+    select jsonb_agg(jsonb_build_array(coalesce(n.nspname,''),pg_get_userbyid(d.defaclrole),d.defaclobjtype,coalesce(d.defaclacl::text,'')) order by coalesce(n.nspname,''),pg_get_userbyid(d.defaclrole),d.defaclobjtype)
+    from pg_default_acl d left join pg_namespace n on n.oid=d.defaclnamespace
+    where n.nspname is null or n.nspname in ('public','auth','storage','private','extensions','supabase_migrations')
+  ),'[]'::jsonb),
+  'eventTriggers', coalesce((
+    select jsonb_agg(jsonb_build_array(evtname,evtevent,evtenabled,evtfoid::regprocedure::text,coalesce(evttags::text,'')) order by evtname) from pg_event_trigger
+  ),'[]'::jsonb)
+)::text;
+'@
+  return Get-StringSha256 -Value $metadataText
+}
+
 function Get-TargetInventory {
+  param([switch]$IncludeTask4Contract)
   $publicTables = [int](Invoke-TargetQuery -Label 'target public-table inventory' -Sql "select count(*) from information_schema.tables where table_schema='public' and table_type='BASE TABLE';")
   $authUsers = [int](Invoke-TargetQuery -Label 'target Auth user inventory' -Sql 'select count(*) from auth.users;')
   $authIdentities = [int](Invoke-TargetQuery -Label 'target Auth identity inventory' -Sql 'select count(*) from auth.identities;')
@@ -415,7 +571,7 @@ function Get-TargetInventory {
   $migrationIdentities = @(ConvertFrom-JsonArray -Text $migrationText)
   $migrationIdentitiesSha256 = Get-StringSha256 -Value ($migrationIdentities -join "`n")
   $schemaSha256 = Get-TargetSchemaSha256
-  return [ordered]@{
+  $inventory = [ordered]@{
     projectRef = $ExpectedRef
     publicTables = $publicTables
     authUsers = $authUsers
@@ -425,6 +581,8 @@ function Get-TargetInventory {
     migrationIdentitiesSha256 = $migrationIdentitiesSha256
     schemaSha256 = $schemaSha256
   }
+  if ($IncludeTask4Contract) { $inventory['extendedSchemaSha256'] = Get-TargetExtendedSchemaSha256 }
+  return $inventory
 }
 
 function Assert-RehearsalBinding {
@@ -439,6 +597,79 @@ function Assert-TargetBaselineUnchanged {
   if ((Get-JsonSha256 -Value $Expected) -ne (Get-JsonSha256 -Value $Actual)) {
     throw 'Target baseline changed after the completed backup and rehearsal.'
   }
+}
+
+function Get-PortableTask4MigrationBindings {
+  param([Parameter(Mandatory)]$Migrations)
+  foreach ($migration in @($Migrations)) {
+    [ordered]@{ version=[string]$migration.version; file=[string]$migration.file; sha256=([string]$migration.sha256).ToUpperInvariant() }
+  }
+}
+
+function New-PostMigrationExpectedInventory {
+  param(
+    [Parameter(Mandatory)]$PreBaseline,
+    [Parameter(Mandatory)]$Migrations,
+    [Parameter(Mandatory)][int]$PublicTables,
+    [Parameter(Mandatory)][string]$SchemaSha256,
+    [Parameter(Mandatory)][string]$ExtendedSchemaSha256
+  )
+  if ($SchemaSha256 -notmatch '^[A-Fa-f0-9]{64}$' -or $ExtendedSchemaSha256 -notmatch '^[A-Fa-f0-9]{64}$') { throw 'Expected post-migration schema digests are invalid.' }
+  $preIdentities = @($PreBaseline.migrationIdentities | ForEach-Object { [string]$_ })
+  if ([int]$PreBaseline.migrationRows -ne $preIdentities.Count -or
+      (Get-StringSha256 -Value ($preIdentities -join "`n")) -ne ([string]$PreBaseline.migrationIdentitiesSha256).ToUpperInvariant()) {
+    throw 'Pre-migration identity set is not internally consistent.'
+  }
+  $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+  foreach ($identity in $preIdentities) { if (-not $seen.Add($identity)) { throw 'Pre-migration identity set contains a duplicate.' } }
+  $portableMigrations = @(Get-PortableTask4MigrationBindings -Migrations $Migrations)
+  foreach ($migration in $portableMigrations) {
+    if ($migration.version -notmatch '^\d{14}$' -or $migration.file -notlike ($migration.version + '_*.sql') -or $migration.sha256 -notmatch '^[A-F0-9]{64}$' -or -not $seen.Add($migration.version)) {
+      throw 'Post-migration identity derivation received an invalid or pre-existing migration.'
+    }
+  }
+  $postIdentities = $preIdentities + @($portableMigrations | ForEach-Object { $_.version })
+  return [ordered]@{
+    projectRef = [string]$PreBaseline.projectRef
+    publicTables = $PublicTables
+    authUsers = 0
+    authIdentities = 0
+    migrationRows = $postIdentities.Count
+    migrationIdentities = $postIdentities
+    migrationIdentitiesSha256 = Get-StringSha256 -Value ($postIdentities -join "`n")
+    schemaSha256 = $SchemaSha256.ToUpperInvariant()
+    extendedSchemaSha256 = $ExtendedSchemaSha256.ToUpperInvariant()
+  }
+}
+
+function Assert-PostMigrationTransitionManifest {
+  param(
+    [Parameter(Mandatory)]$Manifest,
+    [Parameter(Mandatory)]$VerifiedBackup,
+    [Parameter(Mandatory)]$RehearsalReport,
+    [Parameter(Mandatory)]$Migrations,
+    [Parameter(Mandatory)]$Authorization
+  )
+  if ($null -eq $Manifest.payload -or ([string]$Manifest.payloadSha256).ToUpperInvariant() -ne (Get-JsonSha256 -Value $Manifest.payload)) { throw 'Post-migration transition manifest digest is invalid.' }
+  $payload = $Manifest.payload
+  if ($payload.formatVersion -ne 1 -or $payload.status -ne 'completed' -or $payload.targetRef -ne $ExpectedRef) { throw 'Post-migration transition manifest identity or status is invalid.' }
+  if ([string]$payload.preBaselineSha256 -cne [string]$VerifiedBackup.manifest.targetBaselineSha256) { throw 'Transition manifest is not bound to the verified pre-migration baseline.' }
+  if ([string]$payload.rehearsalBindingSha256 -cne [string]$RehearsalReport.currentBindingSha256) { throw 'Transition manifest is not bound to the current rehearsal artifacts and runner.' }
+  if ([string]$payload.authorizationSha256 -cne [string]$Authorization.sha256) { throw 'Transition manifest is not bound to the approved rollback-validation evidence.' }
+  $portableMigrations = @(Get-PortableTask4MigrationBindings -Migrations $Migrations)
+  if ((Get-JsonSha256 -Value @($payload.migrations)) -ne (Get-JsonSha256 -Value $portableMigrations)) { throw 'Transition manifest migration set is not the exact current binding.' }
+  if ((Get-JsonSha256 -Value $payload.expectedPostMigration) -ne (Get-JsonSha256 -Value $Authorization.expectedPersistentPost)) { throw 'Transition manifest expected post-state is not externally authorized.' }
+  $derived = New-PostMigrationExpectedInventory -PreBaseline $VerifiedBackup.manifest.targetBaseline -Migrations $portableMigrations -PublicTables ([int]$payload.expectedPostMigration.publicTables) -SchemaSha256 ([string]$payload.expectedPostMigration.schemaSha256) -ExtendedSchemaSha256 ([string]$payload.expectedPostMigration.extendedSchemaSha256)
+  if ((Get-JsonSha256 -Value $derived) -ne (Get-JsonSha256 -Value $payload.expectedPostMigration)) { throw 'Transition manifest post-state is not exactly derivable from the verified baseline and migrations.' }
+  if ($portableMigrations.Count -eq 8 -and ($derived.publicTables -ne 102 -or $derived.authUsers -ne 0 -or $derived.authIdentities -ne 0 -or $derived.migrationRows -ne 161)) { throw 'Transition manifest does not describe the exact Task 4 pre-import target state.' }
+  return $payload.expectedPostMigration
+}
+
+function Assert-PostMigrationTargetState {
+  param([Parameter(Mandatory)]$Expected,[Parameter(Mandatory)]$Actual)
+  if ([int]$Actual.authUsers -ne 0 -or [int]$Actual.authIdentities -ne 0) { throw 'Post-migration target contains Auth rows; refusing a non-idempotent import or retry.' }
+  if ((Get-JsonSha256 -Value $Expected) -ne (Get-JsonSha256 -Value $Actual)) { throw 'Target does not match the exact completed post-migration transition state.' }
+  return $Actual
 }
 
 function Invoke-InventoryPhase {
@@ -636,8 +867,26 @@ function Test-TocObject {
   if ($Scope -eq 'public') { return $Descriptor -match '\s+public\s+' -and $Descriptor -notmatch '^TABLE ATTACH\s+' }
   if ($Scope -eq 'auth') { return $Descriptor -match '\s+auth\s+(users|identities)(\s+|$)' }
   if ($Scope -eq 'migrations') { return $Descriptor -match '\s+supabase_migrations\s+schema_migrations(\s+|$)' }
+  if ($Scope -eq 'storage') { return $Descriptor -match '\s+storage\s+' }
   if ($Scope -eq 'staff') { return $Descriptor -match '\s+public\s+staff_messages(\s+|$)' }
   return $false
+}
+
+function Get-TocId {
+  param([Parameter(Mandatory)][string]$Line)
+  if ($Line -notmatch '^\s*(\d+);') { throw 'Archive TOC line does not contain a valid dump ID.' }
+  return [string]$Matches[1]
+}
+
+function Assert-UniqueTocSelections {
+  param([Parameter(Mandatory)]$Selections)
+  $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+  foreach ($selection in @($Selections)) {
+    foreach ($line in @($selection)) {
+      $id = Get-TocId -Line ([string]$line)
+      if (-not $seen.Add($id)) { throw "Archive TOC dump ID was selected more than once: $id" }
+    }
+  }
 }
 
 function Write-TocSelection {
@@ -666,9 +915,12 @@ function Write-TocPatternSelection {
     [Parameter(Mandatory)][string[]]$Patterns
   )
   $selected = New-Object 'System.Collections.Generic.List[string]'
+  $selectedIds = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
   foreach ($pattern in $Patterns) {
     $matches = @($Toc | Where-Object { (Get-TocDescriptor $_) -match $pattern })
     if ($matches.Count -ne 1) { throw "Archive prerequisite pattern must match exactly once: $pattern" }
+    $id = Get-TocId -Line $matches[0]
+    if (-not $selectedIds.Add($id)) { throw "Archive prerequisite patterns overlap on TOC dump ID: $id" }
     $selected.Add($matches[0])
   }
   Write-Utf8NoBom -Path $Path -Content (($selected -join "`n") + "`n")
@@ -697,6 +949,90 @@ function ConvertFrom-JsonArray {
     return
   }
   Write-Output $parsed
+}
+
+function Get-Task4ScratchPrerequisiteSql {
+  return @'
+select jsonb_build_object(
+  'pgJsonschema',exists(select 1 from pg_available_extensions where name='pg_jsonschema'),
+  'storageBuckets',to_regclass('storage.buckets') is not null,
+  'storageObjects',to_regclass('storage.objects') is not null,
+  'storageFoldername',to_regprocedure('storage.foldername(text)') is not null,
+  'dailyReportsBucket',exists(select 1 from storage.buckets where id='daily-reports' and public=false),
+  'legacyPolicies',(select count(*) from (values
+    ('public','clinic_reviews','Public can read clinic_reviews active'),
+    ('public','attendance_records','Staff can view own attendance'),('public','attendance_records','Staff can insert own attendance'),
+    ('public','daily_reports','Staff can view own daily reports'),('public','daily_reports','Staff can insert own daily reports'),('public','daily_reports','Staff can update own daily reports'),
+    ('storage','objects','Staff view own daily report files'),('storage','objects','Staff can upload own daily report files'),('storage','objects','Staff can update own daily report files'),('storage','objects','Staff can delete own daily report files')
+  ) expected(schemaname,tablename,policyname) where exists(select 1 from pg_policies actual where actual.schemaname=expected.schemaname and actual.tablename=expected.tablename and actual.policyname=expected.policyname)),
+  'clinicSlugUnique',exists(select 1 from pg_index i join pg_attribute a on a.attrelid=i.indrelid and a.attnum=any(i.indkey) where i.indrelid='public.clinic_services'::regclass and (i.indisunique or i.indisprimary) and a.attname='slug'),
+  'publication',exists(select 1 from pg_publication where pubname='supabase_realtime'),
+  'isStaffOrAdmin',to_regprocedure('public.is_staff_or_admin(uuid)') is not null,
+  'isClinical',to_regprocedure('public.is_clinical(uuid)') is not null,
+  'isStaffOrClinical',to_regprocedure('public.is_staff_or_clinical(uuid)') is not null,
+  'privateSafe',not exists(select 1 from pg_namespace n cross join lateral aclexplode(coalesce(n.nspacl,acldefault('n',n.nspowner))) a where n.nspname='private' and a.privilege_type='CREATE' and (a.grantee=0 or a.grantee in (select oid from pg_roles where rolname in ('anon','authenticated'))))
+)::text;
+'@
+}
+
+function Assert-Task4PrerequisiteResult {
+  param([Parameter(Mandatory)]$Result)
+  if ([int]$Result.legacyPolicies -ne 10) { throw 'Task 4 prerequisite failed: legacyPolicies' }
+  foreach ($field in @('pgJsonschema','storageBuckets','storageObjects','storageFoldername','dailyReportsBucket','clinicSlugUnique','publication','isStaffOrAdmin','isClinical','isStaffOrClinical','privateSafe')) {
+    if (-not [bool]$Result.$field) { throw "Task 4 prerequisite failed: $field" }
+  }
+}
+
+function Assert-Task4ScratchPrerequisites {
+  param([Parameter(Mandatory)][string]$Database)
+  $result = (Invoke-LocalQuery -Database $Database -Label 'task 4 scratch schema and dependency gates' -Sql (Get-Task4ScratchPrerequisiteSql)) | ConvertFrom-Json
+  Assert-Task4PrerequisiteResult -Result $result
+}
+
+function Get-Task4PostContractSql {
+  return @'
+select jsonb_build_object(
+  'publicTables',(select count(*) from information_schema.tables where table_schema='public' and table_type='BASE TABLE'),
+  'pgJsonschemaExact',exists(select 1 from pg_extension e join pg_namespace n on n.oid=e.extnamespace where e.extname='pg_jsonschema' and e.extversion='0.3.3' and n.nspname='extensions') and to_regprocedure('extensions.jsonb_matches_schema(json,jsonb)') is not null,
+  'task4Tables',(select count(*) from (values ('website_pages'),('website_page_drafts'),('website_content_drafts'),('website_content_versions'),('website_navigation_items'),('website_navigation_drafts'),('website_review_presentations'),('website_tracking_settings'),('staff_messages')) expected(name) where to_regclass('public.'||expected.name) is not null),
+  'privateSafe',(not exists(select 1 from pg_namespace n cross join lateral aclexplode(coalesce(n.nspacl,acldefault('n',n.nspowner))) a where n.nspname='private' and a.privilege_type='CREATE' and (a.grantee=0 or a.grantee in (select oid from pg_roles where rolname in ('anon','authenticated'))))) and has_schema_privilege('authenticated','private','USAGE'),
+  'privateHelpers',to_regprocedure('private.can_manage_website()') is not null and to_regprocedure('private.can_manage_tracking_settings()') is not null,
+  'staffHelpers',to_regprocedure('public.is_staff_or_admin(uuid)') is not null and to_regprocedure('public.is_clinical(uuid)') is not null and to_regprocedure('public.is_staff_or_clinical(uuid)') is not null,
+  'storageSurface',to_regclass('storage.buckets') is not null and to_regclass('storage.objects') is not null and to_regprocedure('storage.foldername(text)') is not null,
+  'websiteMediaBucketExact',exists(select 1 from storage.buckets where id='website-media' and name='website-media' and public and file_size_limit=26214400 and allowed_mime_types=ARRAY['image/jpeg','image/png','image/webp','video/mp4','video/webm']::text[]),
+  'dailyReportsBucketPrivate',exists(select 1 from storage.buckets where id='daily-reports' and name='daily-reports' and public=false),
+  'googleTagSeed',(select count(*)=1 from public.website_tracking_settings) and exists(select 1 from public.website_tracking_settings where provider='google_tag' and enabled=false and pixel_id is null and measurement_id is null and ads_conversion_id is null and ads_conversion_labels='{}'::jsonb and consent_version=1 and updated_by is null),
+  'clinicSlugUnique',exists(select 1 from pg_index i join pg_attribute a on a.attrelid=i.indrelid and a.attnum=any(i.indkey) where i.indrelid='public.clinic_services'::regclass and (i.indisunique or i.indisprimary) and a.attname='slug'),
+  'realtime',exists(select 1 from pg_publication where pubname='supabase_realtime') and exists(select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='staff_messages'),
+  'columnsExact',not exists(select 1 from (values
+    ('appointments','patient_ic','text','YES',null),('appointments','service_slug','text','YES',null),('appointments','payment_reference','text','YES',null),('appointments','updated_at','timestamptz','YES','now()'),
+    ('queue_entries','cancelled_at','timestamptz','YES',null),('queue_entries','cancelled_by','uuid','YES',null),('queue_entries','cancellation_reason','text','YES',null),('queue_entries','queue_sequence','int4','YES',null)
+  ) expected(table_name,column_name,udt_name,is_nullable,column_default) where not exists(select 1 from information_schema.columns c where c.table_schema='public' and c.table_name=expected.table_name and c.column_name=expected.column_name and c.udt_name=expected.udt_name and c.is_nullable=expected.is_nullable and c.column_default is not distinct from expected.column_default)),
+  'appointmentsFkExact',exists(select 1 from pg_constraint c where c.conrelid='public.appointments'::regclass and c.conname='appointments_service_slug_fkey' and c.contype='f' and c.confrelid='public.clinic_services'::regclass and c.confupdtype='a' and c.confdeltype='a' and c.confmatchtype='s' and c.convalidated and not c.condeferrable and pg_get_constraintdef(c.oid,true) is not null and c.conkey=ARRAY[(select attnum from pg_attribute where attrelid='public.appointments'::regclass and attname='service_slug')]::smallint[] and c.confkey=ARRAY[(select attnum from pg_attribute where attrelid='public.clinic_services'::regclass and attname='slug')]::smallint[]),
+  'queueFkExact',exists(select 1 from pg_constraint c where c.conrelid='public.queue_entries'::regclass and c.conname='queue_entries_cancelled_by_fkey' and c.contype='f' and c.confrelid='auth.users'::regclass and c.confupdtype='a' and c.confdeltype='a' and c.confmatchtype='s' and c.convalidated and not c.condeferrable and pg_get_constraintdef(c.oid,true) is not null and c.conkey=ARRAY[(select attnum from pg_attribute where attrelid='public.queue_entries'::regclass and attname='cancelled_by')]::smallint[] and c.confkey=ARRAY[(select attnum from pg_attribute where attrelid='auth.users'::regclass and attname='id')]::smallint[]),
+  'staffMessagesExact',exists(select 1 from pg_class where oid='public.staff_messages'::regclass and relrowsecurity) and (select count(*) from pg_policies where schemaname='public' and tablename='staff_messages' and policyname in ('staff_messages_staff_read','staff_messages_staff_send'))=2 and (select count(*) from pg_constraint where conrelid='public.staff_messages'::regclass and contype='f' and confrelid='auth.users'::regclass and confdeltype='c' and convalidated)=2
+)::text;
+'@
+}
+
+function Assert-Task4PostContractResult {
+  param([Parameter(Mandatory)]$Result)
+  if ([int]$Result.publicTables -ne 102 -or [int]$Result.task4Tables -ne 9) { throw 'Task 4 post-migration table surface is not exact.' }
+  foreach ($field in @('pgJsonschemaExact','privateSafe','privateHelpers','staffHelpers','storageSurface','websiteMediaBucketExact','dailyReportsBucketPrivate','googleTagSeed','clinicSlugUnique','realtime','columnsExact','appointmentsFkExact','queueFkExact','staffMessagesExact')) {
+    if (-not [bool]$Result.$field) { throw "Task 4 exact schema/dependency contract failed: $field" }
+  }
+}
+
+function Assert-Task4LocalSchemaAndDependencies {
+  param([Parameter(Mandatory)][string]$Database)
+  $result = (Invoke-LocalQuery -Database $Database -Label 'task 4 local post-migration schema contract' -Sql (Get-Task4PostContractSql)) | ConvertFrom-Json
+  Assert-Task4PostContractResult -Result $result
+}
+
+function Assert-Task4SchemaAndDependencies {
+  $result = (Invoke-TargetQuery -Label 'Task 4 exact target schema and dependency contract' -Sql (Get-Task4PostContractSql)) | ConvertFrom-Json
+  Assert-Task4PostContractResult -Result $result
+  return $result
 }
 
 function Get-ColumnMetadata {
@@ -871,26 +1207,157 @@ from (
   return $text | ConvertFrom-Json
 }
 
-function Get-SequenceChecks {
-  param([string]$Database)
+function Get-TargetTableCounts {
   $sql = @'
+select coalesce(jsonb_object_agg(table_name, row_count order by table_name),'{}'::jsonb)::text
+from (
+  select c.relname as table_name,
+         (xpath('/row/count/text()', query_to_xml(format('select count(*) as count from %I.%I', n.nspname, c.relname), false, true, '')))[1]::text::bigint as row_count
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind = 'r'
+) counts;
+'@
+  return (Invoke-TargetQuery -Sql $sql -Label 'post-import target table counts') | ConvertFrom-Json
+}
+
+function Get-SequenceCheckSql {
+  return @'
+with inventory as (
+  select array_agg(format('%s.%s',n.nspname,c.relname) order by n.nspname,c.relname) as identities
+  from pg_class c join pg_namespace n on n.oid=c.relnamespace
+  where c.relkind='S' and n.nspname='public'
+), checks as (
+  select 'public.client_invoice_seq'::text as sequence_identity,
+         'public.client_invoices.invoice_no'::text as bound_data,
+         2::numeric as expected_last_value,true as expected_is_called,
+         (select last_value::numeric from public.client_invoice_seq) as actual_last_value,
+         (select is_called from public.client_invoice_seq) as actual_is_called,
+         (select max(substring(invoice_no from '-([0-9]+)$')::numeric) from public.client_invoices where invoice_no ~ '-[0-9]+$') as data_boundary,
+         (select seqstart=1 and seqincrement=1 and seqmin=1 and seqmax=9223372036854775807 and not seqcycle and seqcache=1
+            from pg_sequence where seqrelid='public.client_invoice_seq'::regclass)
+           and not exists(select 1 from pg_depend where objid='public.client_invoice_seq'::regclass and deptype in ('a','i')) as config_matches
+  union all
+  select 'public.patient_reg_no_seq','public.patients.reg_no',117,true,
+         (select last_value::numeric from public.patient_reg_no_seq),
+         (select is_called from public.patient_reg_no_seq),
+         (select max(substring(reg_no from '^KA-([0-9]+)$')::numeric) from public.patients where reg_no ~ '^KA-[0-9]+$'),
+         (select seqstart=1 and seqincrement=1 and seqmin=1 and seqmax=9223372036854775807 and not seqcycle and seqcache=1
+            from pg_sequence where seqrelid='public.patient_reg_no_seq'::regclass)
+           and not exists(select 1 from pg_depend where objid='public.patient_reg_no_seq'::regclass and deptype in ('a','i'))
+  union all
+  select 'public.queue_number_seq','public.queue_entries.queue_number',1148,true,
+         (select last_value::numeric from public.queue_number_seq),
+         (select is_called from public.queue_number_seq),
+         (select max(queue_number)::numeric from public.queue_entries),
+         (select seqstart=1001 and seqincrement=1 and seqmin=1 and seqmax=9223372036854775807 and not seqcycle and seqcache=1
+            from pg_sequence where seqrelid='public.queue_number_seq'::regclass)
+           and not exists(select 1 from pg_depend where objid='public.queue_number_seq'::regclass and deptype in ('a','i'))
+), evaluated as (
+  select checks.*,
+         coalesce((select identities from inventory)=array['public.client_invoice_seq','public.patient_reg_no_seq','public.queue_number_seq']::text[],false) as inventory_matches
+  from checks
+)
 select coalesce(jsonb_agg(to_jsonb(x) order by sequence_identity),'[]'::jsonb)::text
 from (
-  select format('%I.%I', sn.nspname, seq.relname) as sequence_identity,
-         format('%I.%I.%I', tn.nspname, tab.relname, att.attname) as owned_column,
-         case when pg_sequence_last_value(seq.oid) is null then true
-              else pg_sequence_last_value(seq.oid) >=
-                   (xpath('/row/max/text()', query_to_xml(format('select coalesce(max(%I),0) as max from %I.%I', att.attname, tn.nspname, tab.relname), false, true, '')))[1]::text::numeric
-          end as passed
-  from pg_class seq
-  join pg_namespace sn on sn.oid = seq.relnamespace
-  join pg_depend dep on dep.objid = seq.oid and dep.deptype in ('a','i')
-  join pg_class tab on tab.oid = dep.refobjid
-  join pg_namespace tn on tn.oid = tab.relnamespace
-  join pg_attribute att on att.attrelid = tab.oid and att.attnum = dep.refobjsubid
-  where seq.relkind = 'S' and tn.nspname = 'public'
+  select sequence_identity,bound_data,expected_last_value,expected_is_called,actual_last_value,actual_is_called,data_boundary,
+         inventory_matches,coalesce(config_matches,false) as config_matches,
+         inventory_matches and coalesce(config_matches,false)
+           and actual_last_value=expected_last_value and actual_is_called is not distinct from expected_is_called
+           and (data_boundary is null or (actual_is_called and actual_last_value>=data_boundary)) as passed
+  from evaluated
 ) x;
 '@
+}
+
+function Assert-Task4SequenceChecks {
+  param([Parameter(Mandatory)]$SequenceChecks)
+  $actual = @($SequenceChecks)
+  $expected = @(Get-Task4StandaloneSequenceSpecifications)
+  if ($actual.Count -ne $expected.Count) { throw 'Post-import standalone sequence audit cardinality is not exactly three.' }
+  for ($index=0; $index -lt $expected.Count; $index++) {
+    if ([string]$actual[$index].sequence_identity -cne [string]$expected[$index].identity -or
+        [decimal]$actual[$index].actual_last_value -ne [decimal]$expected[$index].lastValue -or
+        [bool]$actual[$index].actual_is_called -ne [bool]$expected[$index].isCalled -or
+        -not [bool]$actual[$index].passed) {
+      throw "Post-import standalone sequence identity/state mismatch: $($expected[$index].identity)"
+    }
+  }
+  return $actual
+}
+
+function Get-TargetSequenceChecks {
+  $sql = Get-SequenceCheckSql
+  $text = Invoke-TargetQuery -Sql $sql -Label 'post-import target sequence checks'
+  return @(ConvertFrom-JsonArray -Text $text)
+}
+
+function Get-TargetPostImportMetrics {
+  $sql = @'
+select jsonb_build_object(
+  'authUsers',(select count(*) from auth.users),
+  'authIdentities',(select count(*) from auth.identities),
+  'sessions',(select count(*) from auth.sessions),
+  'refreshTokens',(select count(*) from auth.refresh_tokens),
+  'profilesMapped',(select count(*) from auth.users u join public.profiles p on p.id=u.id),
+  'authWithoutProfile',(select count(*) from auth.users u where not exists(select 1 from public.profiles p where p.id=u.id)),
+  'identitiesWithoutUser',(select count(*) from auth.identities i where not exists(select 1 from auth.users u where u.id=i.user_id))
+)::text;
+'@
+  return (Invoke-TargetQuery -Sql $sql -Label 'post-import Auth and profile integrity metrics') | ConvertFrom-Json
+}
+
+function Get-TargetApprovedServiceLists {
+  $sql = "select coalesce(jsonb_object_agg(slug,to_jsonb(services_list) order by slug),'{}'::jsonb)::text from public.clinic_services where slug in ('pemeriksaan-kesihatan','prosedur-minor','rawatan-am');"
+  return (Invoke-TargetQuery -Sql $sql -Label 'post-import approved service-list strings') | ConvertFrom-Json
+}
+
+function Assert-Task4PostImportResult {
+  param(
+    [Parameter(Mandatory)]$ExpectedPost,
+    [Parameter(Mandatory)]$ActualInventory,
+    [Parameter(Mandatory)]$ExpectedTableCounts,
+    [Parameter(Mandatory)]$ActualTableCounts,
+    [Parameter(Mandatory)]$Metrics,
+    [Parameter(Mandatory)]$SequenceChecks,
+    [Parameter(Mandatory)]$ServiceLists,
+    [Parameter(Mandatory)][int]$ForeignKeyCount
+  )
+  foreach ($field in @('projectRef','publicTables','migrationRows','migrationIdentitiesSha256','schemaSha256','extendedSchemaSha256')) {
+    if ([string]$ActualInventory.$field -cne [string]$ExpectedPost.$field) { throw "Post-import target inventory mismatch: $field" }
+  }
+  if ((Get-JsonSha256 -Value @($ActualInventory.migrationIdentities)) -ne (Get-JsonSha256 -Value @($ExpectedPost.migrationIdentities))) {
+    throw 'Post-import ordered migration identities changed.'
+  }
+  if ([int]$ActualInventory.authUsers -ne 11 -or [int]$ActualInventory.authIdentities -ne 11 -or
+      [int]$Metrics.authUsers -ne 11 -or [int]$Metrics.authIdentities -ne 11 -or [int]$Metrics.sessions -ne 0 -or [int]$Metrics.refreshTokens -ne 0 -or
+      [int]$Metrics.profilesMapped -ne 11 -or [int]$Metrics.authWithoutProfile -ne 0 -or [int]$Metrics.identitiesWithoutUser -ne 0) {
+    throw 'Post-import portable Auth/profile counts are not exactly 11/11 with zero managed-token rows and complete profile mapping.'
+  }
+  $countDifferences = New-Object 'System.Collections.Generic.List[string]'
+  foreach ($property in $ExpectedTableCounts.PSObject.Properties) {
+    $actualProperty = $ActualTableCounts.PSObject.Properties[$property.Name]
+    if ($null -eq $actualProperty -or [int64]$actualProperty.Value -ne [int64]$property.Value) { $countDifferences.Add([string]$property.Name) }
+  }
+  if ($countDifferences.Count -ne 0) { throw "Post-import source table counts differ: $($countDifferences -join ',')" }
+  [void](Assert-Task4SequenceChecks -SequenceChecks $SequenceChecks)
+  $actualServiceNames = @($ServiceLists.PSObject.Properties.Name | Sort-Object)
+  $expectedServiceNames = @($Task4ApprovedServiceLists.Keys | Sort-Object)
+  if ((Get-JsonSha256 -Value $actualServiceNames) -ne (Get-JsonSha256 -Value $expectedServiceNames)) { throw 'Post-import approved service-list slugs changed.' }
+  $serviceStringCount = 0
+  foreach ($slug in $Task4ApprovedServiceLists.Keys) {
+    $actualStrings = @($ServiceLists.$slug | ForEach-Object { [string]$_ })
+    $expectedStrings = @($Task4ApprovedServiceLists[$slug])
+    $serviceStringCount += $actualStrings.Count
+    if ((Get-JsonSha256 -Value $actualStrings) -ne (Get-JsonSha256 -Value $expectedStrings)) { throw "Post-import approved service-list strings changed: $slug" }
+  }
+  if ($serviceStringCount -ne 13 -or $ForeignKeyCount -le 0) { throw 'Post-import service-string or foreign-key audit cardinality is invalid.' }
+  return [ordered]@{ tableCountDifferences=@(); failedSequences=@(); approvedServiceStrings=$serviceStringCount; foreignKeysAudited=$ForeignKeyCount }
+}
+
+function Get-SequenceChecks {
+  param([string]$Database)
+  $sql = Get-SequenceCheckSql
   return @(Get-JsonQueryResult -Database $Database -Sql $sql -Label "sequence checks from $Database")
 }
 
@@ -1032,6 +1499,175 @@ function Assert-PortableAuthBoundary {
       throw "Selective loader contains forbidden managed Auth table $forbiddenTable."
     }
   }
+  $beginCount = [regex]::Matches($loaderText,'(?im)^\s*begin;\s*$').Count
+  $commitCount = [regex]::Matches($loaderText,'(?im)^\s*commit;\s*$').Count
+  $replicaIndex = $loaderText.IndexOf('set local session_replication_role = replica',[StringComparison]::OrdinalIgnoreCase)
+  $originIndex = $loaderText.IndexOf('set local session_replication_role = origin',[StringComparison]::OrdinalIgnoreCase)
+  $auditIndex = $loaderText.IndexOf('$foreign_key_audit$',[StringComparison]::OrdinalIgnoreCase)
+  $commitIndex = $loaderText.LastIndexOf('commit;',[StringComparison]::OrdinalIgnoreCase)
+  if ($beginCount -ne 1 -or $commitCount -ne 1 -or $replicaIndex -lt 0 -or $originIndex -le $replicaIndex -or $auditIndex -le $originIndex -or $commitIndex -le $auditIndex) {
+    throw 'Selective loader is not one trigger-disabled transaction with origin restoration and a final FK audit before commit.'
+  }
+  $users = [regex]::Matches($loaderText,'(?i)insert\s+into\s+(?:"auth"|auth)\.(?:"users"|users)').Count
+  $identities = [regex]::Matches($loaderText,'(?i)insert\s+into\s+(?:"auth"|auth)\.(?:"identities"|identities)').Count
+  if (($users -eq 0) -xor ($identities -eq 0)) { throw 'Selective loader must carry Auth users and identities together.' }
+}
+
+function New-InTransactionAuthZeroLoader {
+  param([Parameter(Mandatory)][string]$SourcePath,[Parameter(Mandatory)][string]$DestinationPath)
+  $resolvedRoot = Get-NormalizedPath $ArtifactRoot
+  $resolvedDestination = Get-NormalizedPath $DestinationPath
+  if (-not $resolvedDestination.StartsWith(($resolvedRoot + '\'),[StringComparison]::OrdinalIgnoreCase)) { throw 'Refusing guarded loader outside protected artifacts.' }
+  Assert-PortableAuthBoundary -LoaderPath $SourcePath
+  $loaderText = Get-Content -LiteralPath $SourcePath -Raw
+  $needle = "set local lock_timeout = '30s';"
+  if ([regex]::Matches($loaderText,[regex]::Escape($needle),[Text.RegularExpressions.RegexOptions]::IgnoreCase).Count -ne 1 -or
+      $loaderText.IndexOf('$auth_zero_guard$',[StringComparison]::OrdinalIgnoreCase) -ge 0) {
+    throw 'Selective loader cannot receive the deterministic in-transaction Auth-zero guard.'
+  }
+  $truncatePattern = '(?is)truncate\s+table\s+(?<tables>.*?)\s+restart\s+identity\s+cascade;'
+  $truncateMatch = [regex]::Match($loaderText,$truncatePattern)
+  if (-not $truncateMatch.Success -or [regex]::Matches($loaderText,$truncatePattern).Count -ne 1) { throw 'Selective loader must contain exactly one bound source-table truncate statement.' }
+  $tables = @($truncateMatch.Groups['tables'].Value -split ',' | ForEach-Object { $_.Trim() })
+  if ($tables.Count -ne 95 -or $tables[0] -cne 'auth.identities' -or $tables[1] -cne 'auth.users') { throw 'Selective loader truncate inventory is not the exact rehearsed 2 Auth + 93 public table set.' }
+  $publicTables = @($tables | Select-Object -Skip 2)
+  $seenPublicTables = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+  foreach ($table in $publicTables) {
+    if ($table -notmatch '^"public"\."[a-z_][a-z0-9_]*"$' -or $table -eq '"public"."staff_messages"' -or -not $seenPublicTables.Add($table)) {
+      throw 'Selective loader contains a non-source-owned, duplicate, or invalid public deletion target.'
+    }
+  }
+  $deleteSql = @($publicTables | ForEach-Object { "delete from $_;" }) -join "`n"
+  $loaderText = [regex]::Replace($loaderText,$truncatePattern,[Text.RegularExpressions.MatchEvaluator]{ param($match) $deleteSql },[Text.RegularExpressions.RegexOptions]::IgnoreCase)
+  $sourceTableNames = @($publicTables | ForEach-Object { [regex]::Match($_,'^"public"\."(?<name>[a-z_][a-z0-9_]*)"$').Groups['name'].Value })
+  foreach ($standaloneSequence in @(Get-Task4StandaloneSequenceSpecifications)) {
+    if ($sourceTableNames -cnotcontains [string]$standaloneSequence.table) { throw "Standalone sequence data table is not source-owned: $($standaloneSequence.table)" }
+  }
+  $sourceTableArray = @($sourceTableNames | ForEach-Object { "'$_'" }) -join ','
+  $ownedSequenceReconcile = @"
+do `$owned_sequence_reconcile`$
+declare
+  sequence_record record;
+  data_boundary bigint;
+begin
+  for sequence_record in
+    select seq.oid::regclass as sequence_identity, tab.relname as table_name, att.attname as column_name,
+           sequence_state.seqstart as start_value, sequence_state.seqincrement as increment_by
+    from pg_class seq
+    join pg_namespace sequence_namespace on sequence_namespace.oid=seq.relnamespace
+    join pg_depend dependency on dependency.objid=seq.oid and dependency.deptype in ('a','i')
+    join pg_class tab on tab.oid=dependency.refobjid
+    join pg_namespace table_namespace on table_namespace.oid=tab.relnamespace
+    join pg_attribute att on att.attrelid=tab.oid and att.attnum=dependency.refobjsubid
+    join pg_sequence sequence_state on sequence_state.seqrelid=seq.oid
+    where seq.relkind='S' and table_namespace.nspname='public'
+      and tab.relname=any(ARRAY[$sourceTableArray]::text[])
+    order by table_namespace.nspname,tab.relname,att.attnum,seq.oid
+  loop
+    execute format('select %s(%I)::bigint from %I.%I',case when sequence_record.increment_by>0 then 'max' else 'min' end,sequence_record.column_name,'public',sequence_record.table_name)
+      into data_boundary;
+    if data_boundary is null then
+      perform pg_catalog.setval(sequence_record.sequence_identity,sequence_record.start_value,false);
+    else
+      perform pg_catalog.setval(sequence_record.sequence_identity,data_boundary,true);
+    end if;
+  end loop;
+end
+`$owned_sequence_reconcile`$;
+"@
+  $standaloneSequenceReconcile = @"
+do `$sequence_reconcile`$
+begin
+  if (select array_agg(format('%s.%s',n.nspname,c.relname) order by n.nspname,c.relname)
+      from pg_class c join pg_namespace n on n.oid=c.relnamespace
+      where c.relkind='S' and n.nspname='public')
+      is distinct from array['public.client_invoice_seq','public.patient_reg_no_seq','public.queue_number_seq']::text[] then
+    raise exception 'Exact public standalone sequence inventory changed';
+  end if;
+  if not coalesce((select seqstart=1 and seqincrement=1 and seqmin=1 and seqmax=9223372036854775807 and not seqcycle and seqcache=1
+                    from pg_sequence where seqrelid='public.client_invoice_seq'::regclass),false)
+      or exists(select 1 from pg_depend where objid='public.client_invoice_seq'::regclass and deptype in ('a','i'))
+      or not coalesce((select seqstart=1 and seqincrement=1 and seqmin=1 and seqmax=9223372036854775807 and not seqcycle and seqcache=1
+                       from pg_sequence where seqrelid='public.patient_reg_no_seq'::regclass),false)
+      or exists(select 1 from pg_depend where objid='public.patient_reg_no_seq'::regclass and deptype in ('a','i'))
+      or not coalesce((select seqstart=1001 and seqincrement=1 and seqmin=1 and seqmax=9223372036854775807 and not seqcycle and seqcache=1
+                       from pg_sequence where seqrelid='public.queue_number_seq'::regclass),false)
+      or exists(select 1 from pg_depend where objid='public.queue_number_seq'::regclass and deptype in ('a','i')) then
+    raise exception 'Exact public standalone sequence configuration changed';
+  end if;
+  perform pg_catalog.setval('public.client_invoice_seq'::regclass,2,true);
+  perform pg_catalog.setval('public.patient_reg_no_seq'::regclass,117,true);
+  perform pg_catalog.setval('public.queue_number_seq'::regclass,1148,true);
+  if (select last_value<>2 or is_called is distinct from true from public.client_invoice_seq)
+      or (select last_value<>117 or is_called is distinct from true from public.patient_reg_no_seq)
+      or (select last_value<>1148 or is_called is distinct from true from public.queue_number_seq)
+      or (select max(substring(invoice_no from '-([0-9]+)$')::bigint) from public.client_invoices where invoice_no ~ '-[0-9]+$') > 2
+      or (select max(substring(reg_no from '^KA-([0-9]+)$')::bigint) from public.patients where reg_no ~ '^KA-[0-9]+$') > 117
+      or (select max(queue_number)::bigint from public.queue_entries) > 1148 then
+    raise exception 'Exact public standalone sequence state does not cover the approved source floor and imported data';
+  end if;
+end
+`$sequence_reconcile`$;
+"@
+  $originNeedle = 'set local session_replication_role = origin'
+  if ([regex]::Matches($loaderText,[regex]::Escape($originNeedle),[Text.RegularExpressions.RegexOptions]::IgnoreCase).Count -ne 1) { throw 'Selective loader origin-restoration marker is not exact.' }
+  $loaderText = [regex]::Replace($loaderText,[regex]::Escape($originNeedle),[Text.RegularExpressions.MatchEvaluator]{ param($match) $ownedSequenceReconcile + $standaloneSequenceReconcile + $originNeedle },[Text.RegularExpressions.RegexOptions]::IgnoreCase)
+  $lockedPublicTables = @($publicTables | Sort-Object)
+  $publicLockSql = 'lock table ' + ($lockedPublicTables -join ', ') + ' in access exclusive mode;'
+  $guard = @"
+$needle
+lock table auth.users, auth.identities in access exclusive mode;
+do `$auth_zero_guard`$
+begin
+  if exists(select 1 from auth.users) or exists(select 1 from auth.identities) then
+    raise exception 'Auth-zero guard failed inside the import transaction';
+  end if;
+end
+`$auth_zero_guard`$;
+$publicLockSql
+"@
+  $guarded = [regex]::Replace($loaderText,[regex]::Escape($needle),[Text.RegularExpressions.MatchEvaluator]{ param($match) $guard },[Text.RegularExpressions.RegexOptions]::IgnoreCase)
+  Write-Utf8NoBom -Path $DestinationPath -Content $guarded
+}
+
+function New-BoundLoaderSnapshot {
+  param([Parameter(Mandatory)][string]$SourcePath,[Parameter(Mandatory)][string]$DestinationPath,[Parameter(Mandatory)][string]$ExpectedSha256)
+  $resolvedRoot = Get-NormalizedPath $ArtifactRoot
+  $resolvedDestination = Get-NormalizedPath $DestinationPath
+  if (-not $resolvedDestination.StartsWith(($resolvedRoot + '\'),[StringComparison]::OrdinalIgnoreCase)) { throw 'Refusing loader snapshot outside protected artifacts.' }
+  Assert-NotReparsePoint -Path $SourcePath -Label 'bound loader source'
+  if ((Get-FileHash -LiteralPath $SourcePath -Algorithm SHA256).Hash.ToUpperInvariant() -cne $ExpectedSha256.ToUpperInvariant()) { throw 'Bound loader source hash changed.' }
+  Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
+  Assert-NotReparsePoint -Path $DestinationPath -Label 'bound loader snapshot'
+  if ((Get-FileHash -LiteralPath $DestinationPath -Algorithm SHA256).Hash.ToUpperInvariant() -cne $ExpectedSha256.ToUpperInvariant()) { throw 'Bound loader snapshot hash changed while copying.' }
+  (Get-Item -LiteralPath $DestinationPath).IsReadOnly = $true
+}
+
+function Assert-InTransactionAuthZeroGuard {
+  param([Parameter(Mandatory)][string]$LoaderPath)
+  $loaderText = Get-Content -LiteralPath $LoaderPath -Raw
+  $beginIndex = $loaderText.IndexOf('begin;',[StringComparison]::OrdinalIgnoreCase)
+  $lockIndex = $loaderText.IndexOf('lock table auth.users, auth.identities in access exclusive mode;',[StringComparison]::OrdinalIgnoreCase)
+  $guardIndex = $loaderText.IndexOf('$auth_zero_guard$',[StringComparison]::OrdinalIgnoreCase)
+  $publicLockMatches = [regex]::Matches($loaderText,'(?is)lock\s+table\s+(?<tables>"public"\."[a-z_][a-z0-9_]*"(?:\s*,\s*"public"\."[a-z_][a-z0-9_]*")*)\s+in\s+access\s+exclusive\s+mode;')
+  $publicLockIndex = if ($publicLockMatches.Count -eq 1) { $publicLockMatches[0].Index } else { -1 }
+  $replicaIndex = $loaderText.IndexOf('set local session_replication_role = replica',[StringComparison]::OrdinalIgnoreCase)
+  $ownedSequenceIndex = $loaderText.IndexOf('$owned_sequence_reconcile$',[StringComparison]::OrdinalIgnoreCase)
+  $sequenceIndex = $loaderText.IndexOf('$sequence_reconcile$',[StringComparison]::OrdinalIgnoreCase)
+  $originIndex = $loaderText.IndexOf('set local session_replication_role = origin',[StringComparison]::OrdinalIgnoreCase)
+  $truncateIndex = $loaderText.IndexOf('truncate table auth.identities, auth.users',[StringComparison]::OrdinalIgnoreCase)
+  $deleteMatches = [regex]::Matches($loaderText,'(?im)^delete from "public"\."[a-z_][a-z0-9_]*";\s*$')
+  $firstDeleteIndex = if ($deleteMatches.Count -gt 0) { $deleteMatches[0].Index } else { -1 }
+  $lockedTables = if ($publicLockMatches.Count -eq 1) { @($publicLockMatches[0].Groups['tables'].Value -split ',' | ForEach-Object { $_.Trim() }) } else { @() }
+  $deletedTables = @($deleteMatches | ForEach-Object { [regex]::Match($_.Value,'"public"\."[a-z_][a-z0-9_]*"').Value })
+  $expectedLockedTables = @($deletedTables | Sort-Object)
+  if ($beginIndex -lt 0 -or $lockIndex -le $beginIndex -or $guardIndex -le $lockIndex -or $publicLockIndex -le $guardIndex -or $replicaIndex -le $publicLockIndex -or $firstDeleteIndex -le $replicaIndex -or $ownedSequenceIndex -le $firstDeleteIndex -or $sequenceIndex -le $ownedSequenceIndex -or $originIndex -le $sequenceIndex -or $truncateIndex -ge 0 -or
+      [regex]::IsMatch($loaderText,'(?i)truncate\s+(?:table\s+)?auth\.') -or $deleteMatches.Count -ne 93 -or
+      $lockedTables.Count -ne 93 -or ($lockedTables -join "`n") -cne ($expectedLockedTables -join "`n") -or
+      [regex]::Matches($loaderText,'(?i)exists\s*\(\s*select\s+1\s+from\s+auth\.users\s*\)').Count -ne 1 -or
+      [regex]::Matches($loaderText,'(?i)exists\s*\(\s*select\s+1\s+from\s+auth\.identities\s*\)').Count -ne 1) {
+    throw 'Guarded loader does not lock Auth plus the exact sorted 93 source tables before trigger-disabled deletes.'
+  }
 }
 
 function Get-CurrentRehearsalBinding {
@@ -1045,14 +1681,12 @@ function Get-CurrentRehearsalBinding {
     if (-not (Test-Path -LiteralPath $entry.Value -PathType Leaf)) { throw "Rehearsal artifact is missing: $($entry.Value | Split-Path -Leaf)" }
     Assert-NotReparsePoint -Path $entry.Value -Label 'rehearsal loader'
   }
-  $migrationBindings = @()
-  foreach ($migration in @($CompatibilityMigration, $StaffMessagesMigration)) {
-    if (-not (Test-Path -LiteralPath $migration -PathType Leaf)) { throw 'Bound scratch migration is missing.' }
-    Assert-NotReparsePoint -Path $migration -Label 'bound scratch migration'
-    $migrationBindings += [ordered]@{
-      name = Split-Path -Leaf $migration
-      sha256 = (Get-FileHash -LiteralPath $migration -Algorithm SHA256).Hash.ToUpperInvariant()
-    }
+  $migrationBindings = @(Get-PortableTask4MigrationBindings -Migrations @(Get-Task4MigrationBindings))
+  $validationEvidencePath = Join-Path $ArtifactRoot $Task4ValidationEvidenceName
+  $dryRunEvidencePath = Join-Path $ArtifactRoot $Task4DryRunEvidenceName
+  foreach ($path in @($validationEvidencePath,$dryRunEvidencePath)) {
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Task 4 protected evidence is missing: $(Split-Path -Leaf $path)" }
+    Assert-NotReparsePoint -Path $path -Label 'Task 4 protected evidence'
   }
   return [ordered]@{
     runnerSha256 = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash.ToUpperInvariant()
@@ -1064,16 +1698,101 @@ function Get-CurrentRehearsalBinding {
     backupManifestSha256 = $VerifiedBackup.manifestSha256
     targetBaselineSha256 = ([string]$VerifiedBackup.manifest.targetBaselineSha256).ToUpperInvariant()
     migrations = $migrationBindings
+    task4ValidationEvidenceSha256 = (Get-FileHash -LiteralPath $validationEvidencePath -Algorithm SHA256).Hash.ToUpperInvariant()
+    task4DryRunEvidenceSha256 = (Get-FileHash -LiteralPath $dryRunEvidencePath -Algorithm SHA256).Hash.ToUpperInvariant()
+  }
+}
+
+function Assert-Task4ValidationEvidence {
+  param([Parameter(Mandatory)]$VerifiedBackup,[Parameter(Mandatory)]$Migrations)
+  $validationPath = Join-Path $ArtifactRoot $Task4ValidationEvidenceName
+  $dryRunPath = Join-Path $ArtifactRoot $Task4DryRunEvidenceName
+  foreach ($path in @($validationPath,$dryRunPath)) {
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Task 4 validation evidence is missing: $(Split-Path -Leaf $path)" }
+    Assert-NotReparsePoint -Path $path -Label 'Task 4 validation evidence'
+  }
+  $validationSha256 = (Get-FileHash -LiteralPath $validationPath -Algorithm SHA256).Hash.ToUpperInvariant()
+  $dryRunSha256 = (Get-FileHash -LiteralPath $dryRunPath -Algorithm SHA256).Hash.ToUpperInvariant()
+  if ($validationSha256 -cne $Task4ValidationEvidenceSha256 -or $dryRunSha256 -cne $Task4DryRunEvidenceSha256) {
+    throw 'Task 4 validation evidence does not match the independently pinned accepted digests.'
+  }
+  $portableMigrations = @(Get-PortableTask4MigrationBindings -Migrations $Migrations)
+  $dryRun = Get-Content -LiteralPath $dryRunPath -Raw | ConvertFrom-Json
+  if (-not $dryRun.dryRunPassed -or $dryRun.targetWriteConnections -ne 0 -or $dryRun.baselineRows -ne 153 -or $dryRun.placeholderRows -ne 153 -or
+      -not $dryRun.placeholdersEmpty -or $dryRun.pendingRows -ne 8 -or
+      (Get-JsonSha256 -Value @($dryRun.listedPendingMigrations)) -ne (Get-JsonSha256 -Value @($portableMigrations.file))) {
+    throw 'Task 4 real-TLS exact-history dry-run evidence is invalid.'
+  }
+  $validation = Get-Content -LiteralPath $validationPath -Raw | ConvertFrom-Json
+  if ($validation.formatVersion -ne 1 -or $validation.mode -ne 'Validate' -or $validation.status -ne 'passed-and-rolled-back' -or
+      -not $validation.tlsRequired -or -not $validation.exactPrePostMatch -or -not $validation.pgJsonschemaRemainingUninstalled -or
+      $validation.targetRef -ne $ExpectedRef -or $validation.targetWriteConnections -ne 1 -or $validation.inTransactionValidatedPost.publicTables -ne 102 -or
+      $validation.inTransactionValidatedPost.migrationRows -ne 153 -or $validation.inTransactionValidatedPost.pendingHistoryRows -ne 0 -or
+      $validation.inTransactionValidatedPost.authUsers -ne 0 -or $validation.inTransactionValidatedPost.authIdentities -ne 0 -or
+      -not $validation.inTransactionValidatedPost.pgJsonschemaInstalled -or $validation.inTransactionValidatedPost.pgJsonschemaVersion -ne '0.3.3') {
+    throw 'Task 4 rollback-only managed-extension validation evidence is invalid.'
+  }
+  if ([string]$validation.repository.head -cne $Task4ValidatedBaseHead -or
+      [string]$validation.repository.runnerSha256 -cne $LegacyCompositeRehearsalRunnerSha256 -or
+      [string]$validation.realTlsDryRun.evidenceSha256 -cne $dryRunSha256 -or
+      $validation.realTlsDryRun.baselinePlaceholders -ne 153 -or $validation.realTlsDryRun.pendingMigrations -ne 8 -or $validation.realTlsDryRun.targetWrites -ne 0) {
+    throw 'Task 4 rollback evidence is not bound to the exact validated base runner, commit, and real-TLS dry run.'
+  }
+  if ($validation.sourceArchive.bytes -ne $ApprovedArchiveBytes -or [string]$validation.sourceArchive.sha256 -cne $ApprovedArchiveSha256 -or
+      $validation.backup.bytes -ne $VerifiedBackup.bytes -or [string]$validation.backup.sha256 -cne $VerifiedBackup.sha256 -or
+      [string]$validation.backup.targetBaselineSha256 -cne [string]$VerifiedBackup.manifest.targetBaselineSha256) {
+    throw 'Task 4 rollback evidence is not bound to the approved source archive and verified backup.'
+  }
+  $evidenceMigrations = @($validation.migrations | ForEach-Object { [ordered]@{ version=[string]$_.version; file=[string]$_.file; sha256=([string]$_.sourceSha256).ToUpperInvariant() } })
+  if ((Get-JsonSha256 -Value $evidenceMigrations) -ne (Get-JsonSha256 -Value $portableMigrations)) { throw 'Task 4 rollback evidence migration binding differs from the current exact eight.' }
+  $baseline = $VerifiedBackup.manifest.targetBaseline
+  foreach ($field in @('projectRef','publicTables','authUsers','authIdentities','migrationRows','migrationIdentitiesSha256','schemaSha256')) {
+    if ([string]$validation.preState.$field -cne [string]$baseline.$field -or [string]$validation.postState.$field -cne [string]$baseline.$field) { throw "Task 4 rollback evidence baseline mismatch: $field" }
+  }
+  if ((Get-JsonSha256 -Value @($validation.preState.migrationIdentities)) -ne (Get-JsonSha256 -Value @($baseline.migrationIdentities)) -or
+      (Get-JsonSha256 -Value @($validation.postState.migrationIdentities)) -ne (Get-JsonSha256 -Value @($baseline.migrationIdentities))) {
+    throw 'Task 4 rollback evidence ordered baseline identities differ from the verified backup.'
+  }
+  $expected = New-PostMigrationExpectedInventory -PreBaseline $baseline -Migrations $portableMigrations -PublicTables 102 -SchemaSha256 ([string]$validation.expectedPersistentPost.schemaSha256) -ExtendedSchemaSha256 ([string]$validation.expectedPersistentPost.extendedSchemaSha256)
+  foreach ($field in @('publicTables','authUsers','authIdentities','migrationRows','migrationIdentitiesSha256','schemaSha256','extendedSchemaSha256')) {
+    if ([string]$validation.expectedPersistentPost.$field -cne [string]$expected.$field) { throw "Task 4 authorized expected post-state mismatch: $field" }
+  }
+  if ((Get-JsonSha256 -Value @($validation.expectedPersistentPost.migrationIdentities)) -ne (Get-JsonSha256 -Value @($expected.migrationIdentities))) { throw 'Task 4 authorized expected ordered post identities are invalid.' }
+  return [ordered]@{
+    sha256 = $validationSha256
+    dryRunSha256 = $dryRunSha256
+    repositoryHead = [string]$validation.repository.head
+    validatedRunnerSha256 = [string]$validation.repository.runnerSha256
+    migrations = $portableMigrations
+    expectedPersistentPost = $expected
+  }
+}
+
+function Assert-RehearsalArtifactBinding {
+  param([Parameter(Mandatory)]$Current,[Parameter(Mandatory)]$Recorded,[Parameter(Mandatory)]$Task4Authorization,[Parameter(Mandatory)][string]$RecordedReportSha256)
+  foreach ($field in @('loaderSha256','heldStaffLoaderSha256','portableAuthLoaderSha256','approvedArchiveSha256','backupSha256','backupManifestSha256','targetBaselineSha256')) {
+    if ([string]$Current.$field -cne [string]$Recorded.$field) { throw "Rehearsal artifact binding changed: $field" }
+  }
+  if ([string]$Task4Authorization.repositoryHead -cne $Task4ValidatedBaseHead -or
+      [string]$Task4Authorization.validatedRunnerSha256 -cne $LegacyCompositeRehearsalRunnerSha256 -or
+      [string]$Recorded.runnerSha256 -cne [string]$Task4Authorization.validatedRunnerSha256 -or
+      $RecordedReportSha256.ToUpperInvariant() -cne $LegacyCompositeRehearsalReportSha256) {
+    throw 'Legacy rehearsal is not cross-bound to the exact rollback-validated base runner and commit.'
+  }
+  if ((Get-JsonSha256 -Value @($Recorded.migrations)) -ne (Get-JsonSha256 -Value $LegacyCompositeRehearsalMigrations)) {
+    throw 'Legacy rehearsal does not contain the exact two historically rehearsed loader-enabling migrations.'
+  }
+  if ([string]$Current.task4ValidationEvidenceSha256 -cne [string]$Task4Authorization.sha256 -or
+      [string]$Current.task4DryRunEvidenceSha256 -cne [string]$Task4Authorization.dryRunSha256 -or
+      (Get-JsonSha256 -Value @($Current.migrations)) -ne (Get-JsonSha256 -Value @($Task4Authorization.migrations))) {
+    throw 'Current composite rehearsal binding is not cross-bound to the accepted exact-eight validation evidence.'
   }
 }
 
 function Invoke-RehearsePhase {
   [void](Assert-ApprovedArchive)
   $verifiedBackup = Assert-VerifiedBackup
-  foreach ($migration in @($StaffMessagesMigration, $CompatibilityMigration)) {
-    if (-not (Test-Path -LiteralPath $migration -PathType Leaf)) { throw 'Required scratch migration is missing.' }
-    Assert-NotReparsePoint -Path $migration -Label 'scratch migration'
-  }
+  $task4Migrations = @(Get-Task4MigrationBindings)
   $sourceToc = Get-ArchiveToc -Archive $ApprovedArchive -Label 'source rehearsal archive list'
   $targetToc = Get-ArchiveToc -Archive $verifiedBackup.path -Label 'target rehearsal archive list'
   $sourcePublicTables = @(Get-TocTables -Toc $sourceToc -Schema 'public')
@@ -1095,18 +1814,47 @@ function Invoke-RehearsePhase {
     $sourceData = Join-Path $lists 'source-data.list'
     $sourcePost = Join-Path $lists 'source-post.list'
     $targetPre = Join-Path $lists 'target-pre.list'
+    $targetData = Join-Path $lists 'target-data.list'
     $targetPost = Join-Path $lists 'target-post.list'
+    $targetStorageSchema = Join-Path $lists 'target-storage-schema.list'
+    $targetStorageBucketData = Join-Path $lists 'target-storage-bucket-data.list'
     $targetMigrationPrerequisites = Join-Path $lists 'target-migration-prerequisites.list'
     [void](Write-TocSelection -Toc $sourceToc -Path $sourcePre -Stage pre -Scopes @('public','auth','migrations'))
     [void](Write-TocSelection -Toc $sourceToc -Path $sourceData -Stage data -Scopes @('public','auth','migrations'))
     [void](Write-TocSelection -Toc $sourceToc -Path $sourcePost -Stage post -Scopes @('public','auth'))
-    [void](Write-TocSelection -Toc $targetToc -Path $targetPre -Stage pre -Scopes @('public','auth'))
-    [void](Write-TocSelection -Toc $targetToc -Path $targetPost -Stage post -Scopes @('public','auth'))
+    [void](Write-TocSelection -Toc $targetToc -Path $targetPre -Stage pre -Scopes @('public','auth','migrations','storage'))
+    [void](Write-TocSelection -Toc $targetToc -Path $targetData -Stage data -Scopes @('public','auth','migrations'))
+    [void](Write-TocSelection -Toc $targetToc -Path $targetPost -Stage post -Scopes @('public','auth','migrations','storage'))
+    Write-TocPatternSelection -Toc $targetToc -Path $targetStorageSchema -Patterns @(
+      '^SCHEMA - storage '
+    )
+    Write-TocPatternSelection -Toc $targetToc -Path $targetStorageBucketData -Patterns @(
+      '^TABLE DATA storage buckets '
+    )
     Write-TocPatternSelection -Toc $targetToc -Path $targetMigrationPrerequisites -Patterns @(
       '^FUNCTION public is_staff_or_admin\(uuid\) '
       '^FUNCTION public is_clinical\(uuid\) '
       '^FUNCTION public is_staff_or_clinical\(uuid\) '
+      '^FUNCTION storage foldername\(text\) '
       '^PUBLICATION - supabase_realtime '
+      '^POLICY public clinic_reviews Public can read clinic_reviews active '
+      '^POLICY public attendance_records Staff can view own attendance '
+      '^POLICY public attendance_records Staff can insert own attendance '
+      '^POLICY public daily_reports Staff can view own daily reports '
+      '^POLICY public daily_reports Staff can insert own daily reports '
+      '^POLICY public daily_reports Staff can update own daily reports '
+      '^POLICY storage objects Staff view own daily report files '
+      '^POLICY storage objects Staff can upload own daily report files '
+      '^POLICY storage objects Staff can update own daily report files '
+      '^POLICY storage objects Staff can delete own daily report files '
+    )
+    Assert-UniqueTocSelections -Selections @(
+      @(Get-Content -LiteralPath $targetStorageSchema),
+      @(Get-Content -LiteralPath $targetPre),
+      @(Get-Content -LiteralPath $targetData),
+      @(Get-Content -LiteralPath $targetStorageBucketData),
+      @(Get-Content -LiteralPath $targetPost),
+      @(Get-Content -LiteralPath $targetMigrationPrerequisites)
     )
 
     Restore-TocSelection -Archive $ApprovedArchive -Database $sourceDatabase -ListPath $sourcePre -Label 'restore source rehearsal schema'
@@ -1119,14 +1867,32 @@ function Invoke-RehearsePhase {
     }
     Restore-TocSelection -Archive $ApprovedArchive -Database $sourceDatabase -ListPath $sourcePost -Label 'validate source rehearsal constraints'
 
+    Restore-TocSelection -Archive $verifiedBackup.path -Database $targetDatabase -ListPath $targetStorageSchema -Label 'restore target rehearsal storage schema prerequisite'
     Restore-TocSelection -Archive $verifiedBackup.path -Database $targetDatabase -ListPath $targetPre -Label 'restore target rehearsal schema'
+    Restore-TocSelection -Archive $verifiedBackup.path -Database $targetDatabase -ListPath $targetData -Label 'restore target rehearsal selected data'
+    Restore-TocSelection -Archive $verifiedBackup.path -Database $targetDatabase -ListPath $targetStorageBucketData -Label 'restore target rehearsal storage bucket prerequisite data'
+    $scratchBaselineText = Invoke-LocalQuery -Database $targetDatabase -Label 'target scratch pre-constraint baseline counts' -Sql "select jsonb_build_object('publicTables',(select count(*) from information_schema.tables where table_schema='public' and table_type='BASE TABLE'),'authUsers',(select count(*) from auth.users),'authIdentities',(select count(*) from auth.identities),'migrationRows',(select count(*) from supabase_migrations.schema_migrations),'migrationIdentities',(select coalesce(jsonb_agg(version order by version),'[]'::jsonb) from supabase_migrations.schema_migrations))::text;"
+    $scratchBaseline = $scratchBaselineText | ConvertFrom-Json
+    $scratchBaselineIdentities = @($scratchBaseline.migrationIdentities | ForEach-Object { [string]$_ })
+    if ($scratchBaseline.publicTables -ne 93 -or $scratchBaseline.authUsers -ne 0 -or $scratchBaseline.authIdentities -ne 0 -or $scratchBaseline.migrationRows -ne 153 -or
+        (Get-StringSha256 -Value ($scratchBaselineIdentities -join "`n")) -ne ([string]$verifiedBackup.manifest.targetBaseline.migrationIdentitiesSha256).ToUpperInvariant()) {
+      throw 'Restored target scratch data does not match the backup-bound baseline counts and migration identities.'
+    }
+    Restore-TocSelection -Archive $verifiedBackup.path -Database $targetDatabase -ListPath $targetPost -Label 'restore target rehearsal constraints before Task 4 migrations'
     Restore-TocSelection -Archive $verifiedBackup.path -Database $targetDatabase -ListPath $targetMigrationPrerequisites -Label 'restore target scratch migration prerequisites'
-    Restore-TocSelection -Archive $verifiedBackup.path -Database $targetDatabase -ListPath $targetPost -Label 'restore target rehearsal constraints before local migrations'
-    Invoke-LocalFile -Database $targetDatabase -Path $CompatibilityMigration -Label 'apply compatibility migration to disposable target scratch'
-    Invoke-LocalFile -Database $targetDatabase -Path $StaffMessagesMigration -Label 'apply staff_messages migration to disposable target scratch'
+    Assert-Task4ScratchPrerequisites -Database $targetDatabase
+    Invoke-Task4ScratchMigrations -Database $targetDatabase -Migrations $task4Migrations
+    Assert-Task4LocalSchemaAndDependencies -Database $targetDatabase
+    $task4PostText = Invoke-LocalQuery -Database $targetDatabase -Label 'task 4 exact post-migration inventory' -Sql "select jsonb_build_object('publicTables',(select count(*) from information_schema.tables where table_schema='public' and table_type='BASE TABLE'),'authUsers',(select count(*) from auth.users),'authIdentities',(select count(*) from auth.identities),'migrationRows',(select count(*) from supabase_migrations.schema_migrations),'migrationIdentities',(select coalesce(jsonb_agg(version order by version),'[]'::jsonb) from supabase_migrations.schema_migrations))::text;"
+    $task4PostInventory = $task4PostText | ConvertFrom-Json
+    $expectedPostIdentities = @($verifiedBackup.manifest.targetBaseline.migrationIdentities | ForEach-Object { [string]$_ }) + @($task4Migrations | ForEach-Object { [string]$_.version })
+    if ($task4PostInventory.publicTables -ne 102 -or $task4PostInventory.authUsers -ne 0 -or $task4PostInventory.authIdentities -ne 0 -or $task4PostInventory.migrationRows -ne 161 -or
+        (Get-JsonSha256 -Value @($task4PostInventory.migrationIdentities)) -ne (Get-JsonSha256 -Value $expectedPostIdentities)) {
+      throw 'Task 4 scratch post-migration inventory is not the exact 102-table, 161-identity state.'
+    }
 
     $sourceColumns = @(Get-ColumnMetadata -Database $sourceDatabase)
-    $targetColumns = @(Get-ColumnMetadata -Database $targetDatabase)
+    $targetColumns = @(Get-ColumnMetadata -Database $targetDatabase | Where-Object { $_.schema_name -eq 'auth' -or ("public.$($_.table_name)" -in $sourcePublicTables) })
     $columnDiff = Compare-ColumnMetadata -Source $sourceColumns -Target $targetColumns
     $sourceNullCounts = Get-SourceNullCounts -Database $sourceDatabase -Details @($columnDiff.nullabilityDifferenceDetails)
     $nullabilityClassification = Classify-NullabilityDifferences -Details @($columnDiff.nullabilityDifferenceDetails) -SourceNullCounts $sourceNullCounts
@@ -1165,7 +1931,7 @@ from public.appointments;
       Invoke-SelectiveDataLoader -Database $targetDatabase -LoaderPath $authLoader -Label 'rehearse portable Auth-only loader'
 
       $sourceConstraints = @(Get-ConstraintMetadata -Database $sourceDatabase)
-      $targetConstraints = @(Get-ConstraintMetadata -Database $targetDatabase)
+      $targetConstraints = @(Get-ConstraintMetadata -Database $targetDatabase | Where-Object { $_.schema_name -eq 'auth' -or ("public.$($_.table_name)" -in $sourcePublicTables) })
       $constraintDiff = Compare-ConstraintMetadata -Source $sourceConstraints -Target $targetConstraints
       $sourceCounts = Get-TableCounts -Database $sourceDatabase
       $sourceUsers = [int](Invoke-LocalQuery -Database $sourceDatabase -Sql 'select count(*) from auth.users;' -Label 'source rehearsal Auth user count')
@@ -1186,7 +1952,7 @@ from public.appointments;
         pass = $false
         blockedReason = 'authoritative target schema cannot losslessly represent populated source columns'
         generatedAtUtc = [DateTime]::UtcNow.ToString('o')
-        safety = [ordered]@{ targetWriteConnections = 0; localHost = '127.0.0.1'; protectedArtifactsOnly = $true; migrationsApplied = 0 }
+        safety = [ordered]@{ targetWriteConnections = 0; localHost = '127.0.0.1'; protectedArtifactsOnly = $true; migrationsApplied = 8 }
         source = [ordered]@{ publicTables = $sourcePublicTables.Count; tableCounts = $sourceCounts; migrations = $sourceMigrations; archiveSha256 = $ApprovedArchiveSha256 }
         targetBaseline = [ordered]@{ publicTables = $targetPublicTables.Count; migrations = @($targetInventory.migrationIdentities); backupSha256 = $verifiedBackup.sha256 }
         tableDiff = $tableDiff
@@ -1216,7 +1982,7 @@ from public.appointments;
     Invoke-SelectiveDataLoader -Database $targetDatabase -LoaderPath $staffLoader -Label 'rehearse held staff_messages loader'
 
     $sourceConstraints = @(Get-ConstraintMetadata -Database $sourceDatabase)
-    $targetConstraints = @(Get-ConstraintMetadata -Database $targetDatabase)
+    $targetConstraints = @(Get-ConstraintMetadata -Database $targetDatabase | Where-Object { $_.schema_name -eq 'auth' -or ("public.$($_.table_name)" -in $sourcePublicTables) })
     $constraintDiff = Compare-ConstraintMetadata -Source $sourceConstraints -Target $targetConstraints
     $sourceCounts = Get-TableCounts -Database $sourceDatabase
     $targetCounts = Get-TableCounts -Database $targetDatabase
@@ -1257,9 +2023,10 @@ from public.appointments;
     $report = [ordered]@{
       pass = [bool]$pass
       generatedAtUtc = [DateTime]::UtcNow.ToString('o')
-      safety = [ordered]@{ targetWriteConnections = 0; localHost = '127.0.0.1'; protectedArtifactsOnly = $true; migrationsApplied = 0 }
+      safety = [ordered]@{ targetWriteConnections = 0; localHost = '127.0.0.1'; protectedArtifactsOnly = $true; migrationsApplied = 8 }
       source = [ordered]@{ publicTables = $sourcePublicTables.Count; tableCounts = $sourceCounts; migrations = $sourceMigrations; archiveSha256 = $ApprovedArchiveSha256 }
       targetBaseline = $verifiedBackup.manifest.targetBaseline
+      task4ScratchPost = [ordered]@{ publicTables=102; authUsers=0; authIdentities=0; migrationRows=161; migrationIdentities=$expectedPostIdentities; migrations=@(Get-PortableTask4MigrationBindings -Migrations $task4Migrations) }
       tableDiff = $tableDiff
       columnDiff = $columnDiff
       constraintDiff = $constraintDiff
@@ -1282,10 +2049,11 @@ from public.appointments;
 }
 
 function Assert-RehearsalReport {
-  param([Parameter(Mandatory)]$VerifiedBackup)
+  param([Parameter(Mandatory)]$VerifiedBackup,[Parameter(Mandatory)]$Task4Authorization)
   $path = Join-Path $ArtifactRoot $ReportName
   if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Passing rehearsal report is required.' }
   Assert-NotReparsePoint -Path $path -Label 'rehearsal report'
+  $reportSha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToUpperInvariant()
   $report = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
   if (-not $report.pass -or $report.auth.sessions -ne 0 -or $report.auth.refreshTokens -ne 0 -or
       $report.foreignKeyAudit.failures -ne 0 -or -not $report.foreignKeyAudit.enforcedBeforeLoaderCommit) {
@@ -1295,15 +2063,21 @@ function Assert-RehearsalReport {
     throw 'Rehearsal report binding digest is invalid.'
   }
   $currentBinding = Get-CurrentRehearsalBinding -VerifiedBackup $VerifiedBackup
-  Assert-RehearsalBinding -Expected $currentBinding -Actual $report.binding
+  if ((Get-JsonSha256 -Value $currentBinding) -ne (Get-JsonSha256 -Value $report.binding)) {
+    Assert-RehearsalArtifactBinding -Current $currentBinding -Recorded $report.binding -Task4Authorization $Task4Authorization -RecordedReportSha256 $reportSha256
+  }
   Assert-TargetBaselineUnchanged -Expected $VerifiedBackup.manifest.targetBaseline -Actual $report.targetBaseline
+  $report | Add-Member -MemberType NoteProperty -Name currentBinding -Value $currentBinding -Force
+  $report | Add-Member -MemberType NoteProperty -Name currentBindingSha256 -Value (Get-JsonSha256 -Value $currentBinding) -Force
   return $report
 }
 
 function Invoke-VerifyPhase {
   [void](Assert-ApprovedArchive)
   $verifiedBackup = Assert-VerifiedBackup
-  [void](Assert-RehearsalReport -VerifiedBackup $verifiedBackup)
+  $task4Migrations = @(Get-Task4MigrationBindings)
+  $authorization = Assert-Task4ValidationEvidence -VerifiedBackup $verifiedBackup -Migrations $task4Migrations
+  [void](Assert-RehearsalReport -VerifiedBackup $verifiedBackup -Task4Authorization $authorization)
   $inventory = Get-TargetInventory
   Assert-TargetBaselineUnchanged -Expected $verifiedBackup.manifest.targetBaseline -Actual $inventory
   if ($inventory.publicTables -ne 93 -or $inventory.authUsers -ne 0 -or $inventory.authIdentities -ne 0 -or $inventory.migrationRows -ne 153) {
@@ -1312,14 +2086,106 @@ function Invoke-VerifyPhase {
   Write-Summary 'Verify passed read-only: target ref, source archive, protected backup, rehearsal report, and unchanged target baseline are valid.'
 }
 
+function Invoke-PostMigrationPhase {
+  [void](Assert-ApprovedArchive)
+  $verifiedBackup = Assert-VerifiedBackup
+  $task4Migrations = @(Get-Task4MigrationBindings)
+  $authorization = Assert-Task4ValidationEvidence -VerifiedBackup $verifiedBackup -Migrations $task4Migrations
+  $rehearsalReport = Assert-RehearsalReport -VerifiedBackup $verifiedBackup -Task4Authorization $authorization
+  $actualPostState = Get-TargetInventory -IncludeTask4Contract
+  [void](Assert-PostMigrationTargetState -Expected $authorization.expectedPersistentPost -Actual $actualPostState)
+  [void](Assert-Task4SchemaAndDependencies)
+  $payload = [ordered]@{
+    formatVersion = 1
+    status = 'completed'
+    completedAtUtc = [DateTime]::UtcNow.ToString('o')
+    targetRef = $ExpectedRef
+    preBaselineSha256 = [string]$verifiedBackup.manifest.targetBaselineSha256
+    migrations = @(Get-PortableTask4MigrationBindings -Migrations $task4Migrations)
+    expectedPostMigration = $authorization.expectedPersistentPost
+    rehearsalBindingSha256 = [string]$rehearsalReport.currentBindingSha256
+    authorizationSha256 = [string]$authorization.sha256
+  }
+  $manifest = [ordered]@{ payload=$payload; payloadSha256=Get-JsonSha256 -Value $payload }
+  $transitionPath = Join-Path $ArtifactRoot $Task4TransitionManifestName
+  Write-ProtectedJson -Path $transitionPath -Value $manifest
+  Assert-NotReparsePoint -Path $transitionPath -Label 'post-migration transition manifest'
+  $writtenManifest = Get-Content -LiteralPath $transitionPath -Raw | ConvertFrom-Json
+  [void](Assert-PostMigrationTransitionManifest -Manifest $writtenManifest -VerifiedBackup $verifiedBackup -RehearsalReport $rehearsalReport -Migrations $task4Migrations -Authorization $authorization)
+  Write-Summary 'PostMigration passed read-only against the target and wrote an immediately revalidated completed transition manifest in protected artifacts.'
+}
+
 function Invoke-ImportPhase {
-  Invoke-VerifyPhase
+  [void](Assert-ApprovedArchive)
+  $verifiedBackup = Assert-VerifiedBackup
+  $task4Migrations = @(Get-Task4MigrationBindings)
+  $authorization = Assert-Task4ValidationEvidence -VerifiedBackup $verifiedBackup -Migrations $task4Migrations
+  $rehearsalReport = Assert-RehearsalReport -VerifiedBackup $verifiedBackup -Task4Authorization $authorization
+  $transitionPath = Join-Path $ArtifactRoot $Task4TransitionManifestName
+  if (-not (Test-Path -LiteralPath $transitionPath -PathType Leaf)) { throw 'Completed post-migration transition manifest is required before import.' }
+  Assert-NotReparsePoint -Path $transitionPath -Label 'post-migration transition manifest'
+  $transitionManifest = Get-Content -LiteralPath $transitionPath -Raw | ConvertFrom-Json
+  $expectedPostState = Assert-PostMigrationTransitionManifest -Manifest $transitionManifest -VerifiedBackup $verifiedBackup -RehearsalReport $rehearsalReport -Migrations $task4Migrations -Authorization $authorization
+  $targetInventory = Get-TargetInventory -IncludeTask4Contract
+  [void](Assert-PostMigrationTargetState -Expected $expectedPostState -Actual $targetInventory)
+  [void](Assert-Task4SchemaAndDependencies)
   $loader = Join-Path $ArtifactRoot $LoaderName
-  if (-not (Test-Path -LiteralPath $loader -PathType Leaf)) { throw 'Protected selective data loader is missing.' }
-  Assert-NotReparsePoint -Path $loader -Label 'selective data loader'
-  Assert-PortableAuthBoundary -LoaderPath $loader
-  Invoke-TargetFile -Path $loader -Label 'guarded target selective data import'
-  Write-Summary 'Import phase committed the rehearsed application/Auth loader; staff_messages data remains held until its hardened schema exists.'
+  $staffLoader = Join-Path $ArtifactRoot $HeldStaffLoaderName
+  foreach ($path in @($loader,$staffLoader)) {
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Protected selective data loader is missing: $(Split-Path -Leaf $path)" }
+    Assert-NotReparsePoint -Path $path -Label 'selective data loader'
+    Assert-PortableAuthBoundary -LoaderPath $path
+  }
+  $mainSnapshot = Join-Path $ArtifactRoot ('.task4-main-loader-snapshot-' + $PID + '.sql')
+  $staffSnapshot = Join-Path $ArtifactRoot ('.task4-staff-loader-snapshot-' + $PID + '.sql')
+  $guardedLoader = Join-Path $ArtifactRoot ('.task4-auth-zero-loader-' + $PID + '.sql')
+  try {
+    New-BoundLoaderSnapshot -SourcePath $loader -DestinationPath $mainSnapshot -ExpectedSha256 ([string]$rehearsalReport.currentBinding.loaderSha256)
+    New-BoundLoaderSnapshot -SourcePath $staffLoader -DestinationPath $staffSnapshot -ExpectedSha256 ([string]$rehearsalReport.currentBinding.heldStaffLoaderSha256)
+    New-InTransactionAuthZeroLoader -SourcePath $mainSnapshot -DestinationPath $guardedLoader
+    Assert-NotReparsePoint -Path $guardedLoader -Label 'guarded Auth-zero selective loader'
+    Assert-PortableAuthBoundary -LoaderPath $guardedLoader
+    Assert-InTransactionAuthZeroGuard -LoaderPath $guardedLoader
+    $guardedLoaderSha256 = (Get-FileHash -LiteralPath $guardedLoader -Algorithm SHA256).Hash.ToUpperInvariant()
+    (Get-Item -LiteralPath $guardedLoader).IsReadOnly = $true
+    if ((Get-FileHash -LiteralPath $guardedLoader -Algorithm SHA256).Hash.ToUpperInvariant() -cne $guardedLoaderSha256) { throw 'Guarded execution loader changed before execution.' }
+    Invoke-TargetFile -Path $guardedLoader -Label 'guarded target selective data import with in-transaction Auth-zero lock'
+    if ((Get-FileHash -LiteralPath $staffSnapshot -Algorithm SHA256).Hash.ToUpperInvariant() -cne [string]$rehearsalReport.currentBinding.heldStaffLoaderSha256) { throw 'Staff loader snapshot changed before execution.' }
+    Invoke-TargetFile -Path $staffSnapshot -Label 'guarded target staff_messages import after portable Auth'
+    [void](Invoke-TargetQuery -Sql (Get-ForeignKeyAuditSql) -Label 'post-import whole-target foreign-key audit')
+    $foreignKeyCount = [int](Invoke-TargetQuery -Sql "select count(*) from pg_constraint c join pg_class child on child.oid=c.conrelid join pg_namespace n on n.oid=child.relnamespace where c.contype='f' and (n.nspname='public' or (n.nspname='auth' and child.relname in ('users','identities')));" -Label 'post-import foreign-key audit cardinality')
+    [void](Assert-Task4SchemaAndDependencies)
+    $actualInventory = Get-TargetInventory -IncludeTask4Contract
+    $actualTableCounts = Get-TargetTableCounts
+    $metrics = Get-TargetPostImportMetrics
+    $sequenceChecks = @(Get-TargetSequenceChecks)
+    $serviceLists = Get-TargetApprovedServiceLists
+    $integrity = Assert-Task4PostImportResult -ExpectedPost $expectedPostState -ActualInventory $actualInventory -ExpectedTableCounts $rehearsalReport.source.tableCounts -ActualTableCounts $actualTableCounts -Metrics $metrics -SequenceChecks $sequenceChecks -ServiceLists $serviceLists -ForeignKeyCount $foreignKeyCount
+    $reportPayload = [ordered]@{
+      formatVersion = 1
+      pass = $true
+      completedAtUtc = [DateTime]::UtcNow.ToString('o')
+      targetRef = $ExpectedRef
+      transitionManifestSha256 = (Get-FileHash -LiteralPath $transitionPath -Algorithm SHA256).Hash.ToUpperInvariant()
+      sourceTableCountsSha256 = Get-JsonSha256 -Value $rehearsalReport.source.tableCounts
+      actualTableCountsSha256 = Get-JsonSha256 -Value $actualTableCounts
+      mainLoaderSha256 = (Get-FileHash -LiteralPath $mainSnapshot -Algorithm SHA256).Hash.ToUpperInvariant()
+      guardedExecutionLoaderSha256 = $guardedLoaderSha256
+      staffLoaderSha256 = (Get-FileHash -LiteralPath $staffSnapshot -Algorithm SHA256).Hash.ToUpperInvariant()
+      targetInventory = $actualInventory
+      auth = $metrics
+      integrity = $integrity
+      sequenceChecks = $sequenceChecks
+      approvedServiceListsSha256 = Get-JsonSha256 -Value $serviceLists
+    }
+    $importReport = [ordered]@{ payload=$reportPayload; payloadSha256=Get-JsonSha256 -Value $reportPayload }
+    Write-ProtectedJson -Path (Join-Path $ArtifactRoot $ImportReportName) -Value $importReport
+    Write-Summary 'Import passed: both trigger-disabled loaders committed with FK audits; post-import 11/11 Auth, table-count, sequence, profile, and 13 service-string integrity gates passed.'
+  } finally {
+    foreach ($path in @($guardedLoader,$mainSnapshot,$staffSnapshot)) {
+      if (Test-Path -LiteralPath $path) { (Get-Item -LiteralPath $path).IsReadOnly = $false; Remove-Item -LiteralPath $path -Force }
+    }
+  }
 }
 
 function Invoke-RollbackPhase {
@@ -1332,6 +2198,12 @@ function Invoke-RollbackPhase {
 
 if ($Phase -eq 'Backup') { Invalidate-BackupEvidence }
 if ($Phase -eq 'Rehearse') { Invalidate-RehearsalEvidence }
+if ($Phase -eq 'PostMigration') { Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot $Task4TransitionManifestName) }
+if ($Phase -eq 'Import') { Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot $ImportReportName) }
+if ($Phase -eq 'Rollback') {
+  Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot $Task4TransitionManifestName)
+  Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot $ImportReportName)
+}
 if (-not (Test-Path -LiteralPath $ProtectedEnv -PathType Leaf)) { throw 'Protected environment file is missing.' }
 Assert-NotReparsePoint -Path $ProtectedEnv -Label 'protected environment file'
 
@@ -1346,6 +2218,7 @@ try {
     'Backup' { Invoke-BackupPhase }
     'Rehearse' { Invoke-RehearsePhase }
     'Verify' { Invoke-VerifyPhase }
+    'PostMigration' { Invoke-PostMigrationPhase }
     'Import' { Invoke-ImportPhase }
     'Rollback' { Invoke-RollbackPhase }
   }
