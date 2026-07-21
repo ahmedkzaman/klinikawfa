@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-import { isSafeUrl } from "@/lib/security";
-
 export const PROTECTED_INTERNAL_PATH_SEGMENTS = [
   "auth",
   "staff",
@@ -19,45 +17,54 @@ export const PROTECTED_INTERNAL_PATH_SEGMENTS = [
   "callback",
 ] as const;
 
-export const SAFE_HREF_FORBIDDEN_CHARACTERS_PATTERN = "[\\u0000-\\u001F\\u007F\\\\]";
-export const SAFE_HREF_ENCODED_PATH_BYPASS_PATTERN = "%(?:2[eEfF]|5[cC])";
-export const SAFE_HREF_DOT_SEGMENT_PATTERN = "(?:^|/)(?:\\.{1,2})(?=/|$)";
+export const MANAGED_HREF_MAX_LENGTH = 2048;
 
-const protectedSegmentsPattern = PROTECTED_INTERNAL_PATH_SEGMENTS.map((segment) =>
-  [...segment].map((character) => `[${character}${character.toUpperCase()}]`).join(""),
-).join("|");
+const internalPathSegment = "[a-z0-9]+(?:-[a-z0-9]+)*";
+const rootRelativePath = `/(?:${internalPathSegment}(?:/${internalPathSegment})*)?`;
+const safeQuery = "(?:\\?[A-Za-z0-9._~!$'()*,-=&]{0,256})?";
+const safeHash = "(?:#[A-Za-z0-9._~-]{0,128})?";
+const dnsLabel = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+const dnsHost = `(?:${dnsLabel}\\.)+[a-z]{2,63}`;
+const absolutePathSegment = "[A-Za-z0-9_~!$&'()*+,;=:@-][A-Za-z0-9._~!$&'()*+,;=:@-]*";
+const absolutePath = `(?:/(?:${absolutePathSegment}(?:/${absolutePathSegment})*)?)?`;
+
+export const ROOT_RELATIVE_MANAGED_HREF_PATTERN =
+  `^${rootRelativePath}${safeQuery}${safeHash}$`;
+export const ANCHOR_MANAGED_HREF_PATTERN = "^#[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$";
+export const HTTP_MANAGED_HREF_PATTERN =
+  `^https?://${dnsHost}${absolutePath}${safeQuery}${safeHash}$`;
+export const MAILTO_MANAGED_HREF_PATTERN =
+  `^mailto:[A-Za-z0-9._+-]+@${dnsHost}$`;
+export const TEL_MANAGED_HREF_PATTERN = "^tel:\\+?[0-9][0-9-]{0,30}$";
+
+export const MANAGED_HREF_GRAMMAR_PATTERNS = [
+  ROOT_RELATIVE_MANAGED_HREF_PATTERN,
+  ANCHOR_MANAGED_HREF_PATTERN,
+  HTTP_MANAGED_HREF_PATTERN,
+  MAILTO_MANAGED_HREF_PATTERN,
+  TEL_MANAGED_HREF_PATTERN,
+] as const;
+
+const protectedSegmentsPattern = PROTECTED_INTERNAL_PATH_SEGMENTS.join("|");
+const protectedInternalSuffix = `(?:/${internalPathSegment})*${safeQuery}${safeHash}`;
+const protectedSameSiteSuffix = `(?:/${absolutePathSegment})*${safeQuery}${safeHash}`;
 
 export const PROTECTED_INTERNAL_RELATIVE_HREF_PATTERN =
-  `^/(?:${protectedSegmentsPattern})(?:/|[?#]|$)`;
-export const PROTECTED_INTERNAL_HTTP_HREF_PATTERN =
-  `^[hH][tT][tT][pP][sS]?://[^/?#]+/(?:${protectedSegmentsPattern})(?:/|[?#]|$)`;
+  `^/(?:${protectedSegmentsPattern})${protectedInternalSuffix}$`;
+export const PROTECTED_INTERNAL_SAME_SITE_HREF_PATTERN =
+  `^https?://(?:www\\.)?klinikawfa\\.com/(?:${protectedSegmentsPattern})${protectedSameSiteSuffix}$`;
 
-const URL_BASE = "https://managed-content.invalid";
-
-function hasUnsafeHrefSyntax(value: string): boolean {
-  return (
-    new RegExp(SAFE_HREF_FORBIDDEN_CHARACTERS_PATTERN).test(value) ||
-    new RegExp(SAFE_HREF_ENCODED_PATH_BYPASS_PATTERN, "i").test(value) ||
-    new RegExp(SAFE_HREF_DOT_SEGMENT_PATTERN).test(value)
-  );
-}
-
-function reachesProtectedPath(value: string): boolean {
-  try {
-    const parsed = new URL(value, URL_BASE);
-    const pathname = parsed.pathname.toLowerCase();
-    return PROTECTED_INTERNAL_PATH_SEGMENTS.some(
-      (segment) => pathname === `/${segment}` || pathname.startsWith(`/${segment}/`),
-    );
-  } catch {
-    return true;
-  }
-}
+const protectedManagedHrefPatterns = [
+  new RegExp(PROTECTED_INTERNAL_RELATIVE_HREF_PATTERN),
+  new RegExp(PROTECTED_INTERNAL_SAME_SITE_HREF_PATTERN),
+];
 
 export function isSafeManagedHref(value: string): boolean {
-  if (value !== value.trim() || value.length === 0 || hasUnsafeHrefSyntax(value)) return false;
-  if (value.startsWith("//")) return false;
-  return isSafeUrl(value);
+  return (
+    value.length > 0 &&
+    value.length <= MANAGED_HREF_MAX_LENGTH &&
+    MANAGED_HREF_GRAMMAR_PATTERNS.some((pattern) => new RegExp(pattern).test(value))
+  );
 }
 
 export const bilingualTextSchema = z
@@ -75,7 +82,7 @@ export const requiredBilingualTextSchema = bilingualTextSchema.refine(
 export const safeHrefSchema = z.string().refine(isSafeManagedHref, "Unsafe URL");
 
 export const websiteCtaHrefSchema = safeHrefSchema.refine(
-  (href) => !reachesProtectedPath(href),
+  (href) => !protectedManagedHrefPatterns.some((pattern) => pattern.test(href)),
   "Protected internal routes cannot be linked from managed content",
 );
 

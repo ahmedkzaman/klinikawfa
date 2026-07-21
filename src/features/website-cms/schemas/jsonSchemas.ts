@@ -1,9 +1,8 @@
 import {
-  PROTECTED_INTERNAL_HTTP_HREF_PATTERN,
+  MANAGED_HREF_GRAMMAR_PATTERNS,
+  MANAGED_HREF_MAX_LENGTH,
   PROTECTED_INTERNAL_RELATIVE_HREF_PATTERN,
-  SAFE_HREF_DOT_SEGMENT_PATTERN,
-  SAFE_HREF_ENCODED_PATH_BYPASS_PATTERN,
-  SAFE_HREF_FORBIDDEN_CHARACTERS_PATTERN,
+  PROTECTED_INTERNAL_SAME_SITE_HREF_PATTERN,
 } from "./common";
 
 const DRAFT_7 = "http://json-schema.org/draft-07/schema#";
@@ -31,30 +30,15 @@ const OPTIONAL_BILINGUAL_TEXT_JSON_SCHEMA = {
 const SAFE_HREF_JSON_SCHEMA = {
   type: "string",
   minLength: 1,
-  allOf: [
-    { not: { pattern: SAFE_HREF_FORBIDDEN_CHARACTERS_PATTERN } },
-    { not: { pattern: SAFE_HREF_ENCODED_PATH_BYPASS_PATTERN } },
-    { not: { pattern: SAFE_HREF_DOT_SEGMENT_PATTERN } },
-  ],
-  anyOf: [
-    { pattern: "^/(?!/)" },
-    { pattern: "^#" },
-    {
-      allOf: [
-        { pattern: "^[hH][tT][tT][pP][sS]?://[^/?#]+" },
-        { format: "uri" },
-      ],
-    },
-    { allOf: [{ pattern: "^[mM][aA][iI][lL][tT][oO]:" }, { format: "uri" }] },
-    { allOf: [{ pattern: "^[tT][eE][lL]:" }, { format: "uri" }] },
-  ],
+  maxLength: MANAGED_HREF_MAX_LENGTH,
+  anyOf: MANAGED_HREF_GRAMMAR_PATTERNS.map((pattern) => ({ pattern })),
 } as const;
 
 const WEBSITE_CTA_HREF_JSON_SCHEMA = {
   allOf: [
     SAFE_HREF_JSON_SCHEMA,
     {
-      not: { anyOf: [{ pattern: PROTECTED_INTERNAL_RELATIVE_HREF_PATTERN }, { pattern: PROTECTED_INTERNAL_HTTP_HREF_PATTERN }] },
+      not: { anyOf: [{ pattern: PROTECTED_INTERNAL_RELATIVE_HREF_PATTERN }, { pattern: PROTECTED_INTERNAL_SAME_SITE_HREF_PATTERN }] },
     },
   ],
 } as const;

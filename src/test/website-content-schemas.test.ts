@@ -198,8 +198,14 @@ describe("website content schemas", () => {
   it.each([
     ["/services", true],
     ["/appointment", true],
+    ["/services?tab=home#contact", true],
     ["https://example.test/health", true],
     ["http://example.test/health", true],
+    ["https://klinikawfa.com/health", true],
+    ["https://www.klinikawfa.com/health", true],
+    ["https://wa.me/60182523531", true],
+    ["https://maps.google.com/?q=3.871944656053272,103.27734116870465", true],
+    ["https://maps.google.com/maps?q=3.871944656053272,103.27734116870465&t=&z=17&ie=UTF8&iwloc=&output=embed", true],
     ["mailto:hello@example.test", true],
     ["tel:+6091234567", true],
     ["#contact", true],
@@ -208,8 +214,21 @@ describe("website content schemas", () => {
     ["/clinic\\patients", false],
     ["/safe\u0000path", false],
     ["/public/../clinic", false],
+    ["https://example.test/public/../clinic", false],
     ["/public/%2e%2e/clinic", false],
     ["/%2fclinic", false],
+    ["/%63linic", false],
+    ["/%43LINIC", false],
+    ["/CLINIC", false],
+    ["/video%2dcall", false],
+    ["/services%", false],
+    ["#contact%", false],
+    ["https://example.test/health%", false],
+    ["/services ", false],
+    ["#contact ", false],
+    ["https://example.test/health ", false],
+    ["https://example.test:443/health", false],
+    ["https://user@example.test/health", false],
     ["http://#", false],
   ])("keeps safe-href Zod and Draft 7 results aligned for %j", (href, accepted) => {
     expect(safeHrefSchema.safeParse(href).success).toBe(accepted);
@@ -219,8 +238,8 @@ describe("website content schemas", () => {
   it.each(PROTECTED_INTERNAL_PATH_SEGMENTS)("rejects every protected prefix through canonical CTA paths: %s", (segment) => {
     const ctaValues = [
       `/${segment}?source=editor`,
-      `/${segment.toUpperCase()}#preview`,
-      `https://example.test/${segment}/nested`,
+      `https://klinikawfa.com/${segment}/nested`,
+      `https://www.klinikawfa.com/${segment}#preview`,
       `/public/../${segment}`,
       `/public/%2e%2e/${segment}`,
     ];
@@ -232,6 +251,15 @@ describe("website content schemas", () => {
         cta: { label: { ms: "Baca lanjut" }, href },
       }, false);
     }
+  });
+
+  it("permits an external URL whose path happens to use a protected name", () => {
+    const href = "https://external.example/clinic?source=directory";
+    expect(websiteCtaHrefSchema.safeParse(href).success).toBe(true);
+    expectPairedResult(generalPageContentSchema, validateGeneralPage, {
+      ...validGeneralPage,
+      cta: { label: { ms: "Laman luar" }, href },
+    }, true);
   });
 
   it.each(RESERVED_PAGE_SLUGS)("rejects reserved slug %s", (slug) => {
