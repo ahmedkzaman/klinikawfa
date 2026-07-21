@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Plus, Save, Send, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   get,
   useFieldArray,
@@ -147,7 +147,10 @@ export function PageEditor() {
   const [slug, setSlug] = useState("");
   const [initialSlug, setInitialSlug] = useState("");
   const [slugError, setSlugError] = useState<string | null>(null);
-  const [editorPage, setEditorPage] = useState<EditorWebsitePageResult<GeneralPageContent> | null>(null);
+  const [loadedEditorPage, setLoadedEditorPage] = useState<{
+    result: EditorWebsitePageResult<GeneralPageContent>;
+    routeId: string;
+  } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mutation, setMutation] = useState<EditorMutation | null>(null);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
@@ -157,6 +160,9 @@ export function PageEditor() {
   const mutationRef = useRef<EditorMutation | null>(null);
   const generationRef = useRef(0);
   const mountedRef = useRef(true);
+  const routeIdRef = useRef(id);
+  const editorPage =
+    loadedEditorPage?.routeId === id ? loadedEditorPage.result : null;
   const isDirty = form.formState.isDirty || slug !== initialSlug;
 
   useEditorDirtyState(isDirty);
@@ -191,7 +197,8 @@ export function PageEditor() {
       generation: number,
     ) => {
       if (!isCurrentMutation(generation)) return false;
-      setEditorPage(result);
+      if (routeIdRef.current !== id) return false;
+      setLoadedEditorPage({ result, routeId: id });
       setSlug(result.page.slug);
       setInitialSlug(result.page.slug);
       form.reset(result.draft.content);
@@ -199,7 +206,7 @@ export function PageEditor() {
       setRefreshRequired(null);
       return true;
     },
-    [form, isCurrentMutation],
+    [form, id, isCurrentMutation],
   );
 
   const loadPage = useCallback(async () => {
@@ -227,6 +234,25 @@ export function PageEditor() {
       mutationRef.current = null;
     };
   }, []);
+
+  useLayoutEffect(() => {
+    if (routeIdRef.current === id) return;
+
+    routeIdRef.current = id;
+    generationRef.current += 1;
+    mutationRef.current = null;
+    setMutation(null);
+    setLoadedEditorPage(null);
+    setLoadError(null);
+    setSlug("");
+    setInitialSlug("");
+    setSlugError(null);
+    setPublishDialogOpen(false);
+    setConflict(false);
+    setRefreshRequired(null);
+    setNotice(null);
+    form.reset(structuredClone(NEW_PAGE_CONTENT));
+  }, [form, id]);
 
   useEffect(() => {
     if (!isNew) void loadPage();
@@ -276,11 +302,14 @@ export function PageEditor() {
         slug: editorPage.page.slug,
       });
       if (!isCurrentMutation(generation)) return;
-      setEditorPage((current) =>
-        current
+      setLoadedEditorPage((current) =>
+        current?.routeId === id
           ? {
               ...current,
-              draft: saved as EditorWebsitePageResult<GeneralPageContent>["draft"],
+              result: {
+                ...current.result,
+                draft: saved as EditorWebsitePageResult<GeneralPageContent>["draft"],
+              },
             }
           : current,
       );
@@ -438,7 +467,7 @@ export function PageEditor() {
     editorLocked ||
     conflict;
 
-  if (!isNew && mutation === "loading" && !editorPage) {
+  if (!isNew && !editorPage && !loadError) {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600" role="status">
         <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />

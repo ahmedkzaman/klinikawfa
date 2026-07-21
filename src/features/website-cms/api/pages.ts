@@ -19,7 +19,22 @@ type WebsitePageKind = "home" | "system_content" | "content";
 type WebsitePageStatus = "draft" | "published" | "archived";
 
 type WebsiteCmsDatabase = Omit<Database, "public"> & {
-  public: Omit<Database["public"], "Tables"> & {
+  public: Omit<Database["public"], "Functions" | "Tables"> & {
+    Functions: Database["public"]["Functions"] & {
+      create_general_website_page: {
+        Args: {
+          p_draft_content: Json;
+          p_slug: string;
+        };
+        Returns: Array<{
+          id: string;
+          kind: WebsitePageKind;
+          revision: number;
+          slug: string;
+          status: WebsitePageStatus;
+        }>;
+      };
+    };
     Tables: Database["public"]["Tables"] & {
       website_pages: {
         Row: {
@@ -364,37 +379,17 @@ export async function createGeneralPage(
 
   await requireWebsiteManagerSession();
 
-  const { data: page, error: pageError } = await cmsSupabase
-    .from("website_pages")
-    .insert({ kind: "content", slug: slug.data })
-    .select(
-      "id,kind,slug,published_content,status,revision,published_at,published_by,created_at,updated_at",
-    )
-    .single();
-
-  if (pageError || !page) {
-    throw new Error("Website page could not be created");
-  }
-
-  const { data: draft, error: draftError } = await cmsSupabase
-    .from("website_page_drafts")
-    .insert({
-      base_revision: page.revision,
-      draft_content: content.data as Json,
-      page_id: page.id,
-    })
-    .select("page_id,draft_content,base_revision")
-    .single();
-
-  if (draftError || !draft) {
-    throw new Error("Website page draft could not be created");
-  }
-
-  const persistedContent = generalPageContentSchema.safeParse(
-    draft.draft_content,
+  const { data: createdPages, error: createError } = await cmsSupabase.rpc(
+    "create_general_website_page",
+    {
+      p_draft_content: content.data as Json,
+      p_slug: slug.data,
+    },
   );
-  if (!persistedContent.success) {
-    throw new Error("Created website page draft is invalid");
+  const page = createdPages?.[0];
+
+  if (createError || !page) {
+    throw new Error("Website page could not be created");
   }
 
   return {
@@ -407,9 +402,9 @@ export async function createGeneralPage(
       status: page.status,
     },
     draft: {
-      baseRevision: draft.base_revision,
-      content: persistedContent.data,
-      pageId: draft.page_id,
+      baseRevision: page.revision,
+      content: content.data,
+      pageId: page.id,
       persisted: true,
     },
   };

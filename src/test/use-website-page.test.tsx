@@ -56,6 +56,7 @@ const publishingApi = pagesApi as typeof pagesApi & {
 const supabaseState = vi.hoisted(() => ({
   calls: [] as QueryCall[],
   getSession: vi.fn(),
+  rpc: vi.fn(),
   responses: [] as Array<Promise<QueryResult> | QueryResult>,
 }));
 
@@ -64,6 +65,7 @@ vi.mock("@/integrations/supabase/client", () => ({
     auth: {
       getSession: supabaseState.getSession,
     },
+    rpc: supabaseState.rpc,
     from: (table: string) => {
       const call: QueryCall = {
         table,
@@ -191,6 +193,7 @@ beforeEach(() => {
   supabaseState.calls.length = 0;
   supabaseState.responses.length = 0;
   supabaseState.getSession.mockReset();
+  supabaseState.rpc.mockReset();
   setSession(null);
 });
 
@@ -409,31 +412,25 @@ describe("general-page editor repository", () => {
     ]);
   });
 
-  it("creates only an empty published skeleton followed by a private draft", async () => {
+  it("creates a page and its private draft through one transactional RPC", async () => {
     const content = generalPageContent("Halaman baharu");
     setSession(createSession());
-    supabaseState.responses.push(
-      { data: { role: "website_editor" }, error: null },
-      {
-        data: {
+    supabaseState.responses.push({
+      data: { role: "website_editor" },
+      error: null,
+    });
+    supabaseState.rpc.mockResolvedValue({
+      data: [
+        {
           id: "page-new",
           kind: "content",
-          published_content: {},
           revision: 0,
           slug: "new-page",
           status: "draft",
         },
-        error: null,
-      },
-      {
-        data: {
-          base_revision: 0,
-          draft_content: content,
-          page_id: "page-new",
-        },
-        error: null,
-      },
-    );
+      ],
+      error: null,
+    });
 
     await expect(
       createGeneralPage({ content, slug: "new-page" }),
@@ -454,22 +451,37 @@ describe("general-page editor repository", () => {
       },
     });
 
-    expect(supabaseState.calls.slice(1)).toMatchObject([
+    expect(supabaseState.rpc).toHaveBeenCalledOnce();
+    expect(supabaseState.rpc).toHaveBeenCalledWith(
+      "create_general_website_page",
       {
-        table: "website_pages",
-        operation: "insert",
-        payload: { kind: "content", slug: "new-page" },
+        p_draft_content: content,
+        p_slug: "new-page",
       },
-      {
-        table: "website_page_drafts",
-        operation: "insert",
-        payload: {
-          base_revision: 0,
-          draft_content: content,
-          page_id: "page-new",
-        },
-      },
-    ]);
+    );
+    expect(supabaseState.calls).toHaveLength(1);
+    expect(supabaseState.calls[0]?.table).toBe("user_roles");
+  });
+
+  it("does not fall back to direct writes when transactional creation fails", async () => {
+    const content = generalPageContent("Halaman gagal");
+    setSession(createSession());
+    supabaseState.responses.push({
+      data: { role: "admin" },
+      error: null,
+    });
+    supabaseState.rpc.mockResolvedValue({
+      data: null,
+      error: { message: "draft insert failed" },
+    });
+
+    await expect(
+      createGeneralPage({ content, slug: "failed-page" }),
+    ).rejects.toThrow("Website page could not be created");
+
+    expect(supabaseState.rpc).toHaveBeenCalledOnce();
+    expect(supabaseState.calls).toHaveLength(1);
+    expect(supabaseState.calls[0]?.table).toBe("user_roles");
   });
 
   it("rejects reserved slugs and unknown payload keys before authorization or writes", async () => {

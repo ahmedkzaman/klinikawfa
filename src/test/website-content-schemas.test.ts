@@ -29,6 +29,28 @@ const ajv = new Ajv({ allErrors: true });
 const validateHome = ajv.compile(HOME_JSON_SCHEMA);
 const validateGeneralPage = ajv.compile(GENERAL_PAGE_JSON_SCHEMA);
 
+const EXPECTED_RESERVED_PAGE_SLUGS = [
+  "auth",
+  "staff",
+  "clinic",
+  "appointment",
+  "services",
+  "doctors",
+  "doctor-on-duty",
+  "gallery",
+  "health-tips",
+  "blog",
+  "editor",
+  "privacy",
+  "terms",
+  "video-call",
+  "tv",
+  "reset-password",
+  "locum-register",
+  "api",
+  "functions",
+] as const;
+
 const validGeneralPage = {
   title: { ms: "Halaman" },
   heroImage: null,
@@ -382,7 +404,11 @@ describe("website content schemas", () => {
     }, true);
   });
 
-  it.each(RESERVED_PAGE_SLUGS)("rejects reserved slug %s", (slug) => {
+  it("keeps the client reserved-slug contract aligned with routing and storage", () => {
+    expect(RESERVED_PAGE_SLUGS).toEqual(EXPECTED_RESERVED_PAGE_SLUGS);
+  });
+
+  it.each(EXPECTED_RESERVED_PAGE_SLUGS)("rejects reserved slug %s", (slug) => {
     expect(pageSlugSchema.safeParse(slug).success).toBe(false);
   });
 

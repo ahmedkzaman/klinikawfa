@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { HelmetProvider } from "react-helmet-async";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EditorDirtyNavigationProvider } from "@/components/editor/EditorDirtyNavigation";
@@ -72,23 +72,33 @@ const publishedContent: GeneralPageContent = {
 
 function editorResult(
   overrides: Partial<{
+    id: string;
     kind: "content" | "system_content";
+    slug: string;
     status: "draft" | "published";
+    title: string;
   }> = {},
 ) {
+  const content = structuredClone(publishedContent);
+  if (overrides.title) {
+    content.title.ms = overrides.title;
+    content.title.en = overrides.title;
+  }
+  const pageId = overrides.id ?? "page-family-care";
+
   return {
     page: {
-      id: "page-family-care",
+      id: pageId,
       kind: overrides.kind ?? ("content" as const),
-      publishedContent: structuredClone(publishedContent),
+      publishedContent: structuredClone(content),
       revision: 4,
-      slug: "family-care",
+      slug: overrides.slug ?? "family-care",
       status: overrides.status ?? ("published" as const),
     },
     draft: {
       baseRevision: 4,
-      content: structuredClone(publishedContent),
-      pageId: "page-family-care",
+      content,
+      pageId,
       persisted: true,
     },
   };
@@ -244,6 +254,38 @@ describe("GeneralPageRenderer", () => {
     expect(screen.queryByRole("link", { name: "Bahaya" })).not.toBeInTheDocument();
   });
 
+  it("allows safe rich-text formatting but strips every resource-loading element and attribute", () => {
+    const content = structuredClone(publishedContent);
+    content.heroImage = null;
+    content.media = [];
+    content.cta = null;
+    content.body.ms = `
+      <h2>Maklumat selamat</h2>
+      <p><strong>Tebal</strong> <em>condong</em> <a href="/services" title="Servis">Pautan</a></p>
+      <ul><li>Senarai</li></ul><blockquote>Petikan</blockquote><pre><code>kod</code></pre>
+      <svg><image href="https://tracker.example/svg.png"></image></svg>
+      <input type="image" src="https://tracker.example/input.png">
+      <form action="https://tracker.example/form"><button formaction="https://tracker.example/button">Hantar</button></form>
+      <video poster="https://tracker.example/poster.png"><source src="https://tracker.example/video.mp4" srcset="https://tracker.example/video-2.mp4"></video>
+      <object data="https://tracker.example/object"></object>
+    `;
+
+    const { container } = render(
+      <MemoryRouter>
+        <LanguageProvider>
+          <GeneralPageRenderer content={content} />
+        </LanguageProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("heading", { name: "Maklumat selamat" })).toBeInTheDocument();
+    expect(screen.getByText("Tebal").tagName).toBe("STRONG");
+    expect(screen.getByText("condong").tagName).toBe("EM");
+    expect(screen.getByRole("link", { name: "Pautan" })).toHaveAttribute("href", "/services");
+    expect(container.querySelector("svg, image, input, form, button, video, source, object")).toBeNull();
+    expect(container.querySelector("[src], [srcset], [poster], [data], [action], [formaction]")).toBeNull();
+  });
+
   it("blocks preview interactions and performs no media requests", async () => {
     render(
       <MemoryRouter>
@@ -265,6 +307,37 @@ describe("GeneralPageRenderer", () => {
     expect(preview.queryByRole("img")).not.toBeInTheDocument();
     expect(preview.queryByLabelText("Video klinik")).not.toBeInTheDocument();
     expect(preview.getAllByText("Media preview disabled")).toHaveLength(3);
+  });
+
+  it("uses the non-resource rich-text allowlist inside live preview", async () => {
+    const content = structuredClone(publishedContent);
+    content.heroImage = null;
+    content.media = [];
+    content.cta = null;
+    content.body.ms = `
+      <p><strong>Format selamat</strong></p>
+      <svg><image href="https://tracker.example/svg.png"></image></svg>
+      <input type="image" src="https://tracker.example/input.png">
+      <form action="https://tracker.example/form"><button formaction="https://tracker.example/button">Hantar</button></form>
+    `;
+
+    render(
+      <MemoryRouter>
+        <LanguageProvider>
+          <LivePreview title="Live Preview">
+            <GeneralPageRenderer content={content} preview />
+          </LivePreview>
+        </LanguageProvider>
+      </MemoryRouter>,
+    );
+
+    const frame = screen.getByTestId("live-preview-frame") as HTMLIFrameElement;
+    const preview = withinPreviewFrame();
+    expect(await preview.findByText("Format selamat")).toBeInTheDocument();
+    const previewBody = frame.contentDocument?.body;
+    expect(previewBody?.querySelector("strong")?.textContent).toBe("Format selamat");
+    expect(previewBody?.querySelector("svg, image, input, form, button")).toBeNull();
+    expect(previewBody?.querySelector("[src], [data], [action], [formaction]")).toBeNull();
   });
 });
 
@@ -358,6 +431,60 @@ describe("general page editor", () => {
     expect(screen.getByRole("button", { name: "Publish" })).toBeInTheDocument();
     expect(screen.getByText("Version history")).toBeInTheDocument();
     expect(screen.getByTestId("live-preview-frame")).toBeInTheDocument();
+  });
+
+  it("clears the prior page immediately when the route id changes and the next load fails", async () => {
+    let rejectSecondLoad!: (reason?: unknown) => void;
+    const secondLoad = new Promise<ReturnType<typeof editorResult>>(
+      (_resolve, reject) => {
+        rejectSecondLoad = reject;
+      },
+    );
+    pageApi.fetchEditorPageById
+      .mockResolvedValueOnce(
+        editorResult({
+          id: "page-one",
+          slug: "page-one",
+          title: "Page one title",
+        }),
+      )
+      .mockReturnValueOnce(secondLoad);
+
+    render(
+      <MemoryRouter initialEntries={["/editor/pages/page-one"]}>
+        <EditorDirtyNavigationProvider>
+          <LanguageProvider>
+            <Link to="/editor/pages/page-two">Open page two</Link>
+            <Routes>
+              <Route path="/editor/pages/:id" element={<PageEditor />} />
+            </Routes>
+          </LanguageProvider>
+        </EditorDirtyNavigationProvider>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole("textbox", { name: "Title (Malay)" }),
+    ).toHaveValue("Page one title");
+    fireEvent.click(screen.getByRole("link", { name: "Open page two" }));
+
+    expect(screen.getByRole("status")).toHaveTextContent("Loading page draft");
+    expect(
+      screen.queryByRole("textbox", { name: "Title (Malay)" }),
+    ).not.toBeInTheDocument();
+    await act(async () => {
+      rejectSecondLoad(new Error("load failed"));
+      await Promise.resolve();
+    });
+
+    expect(
+      await screen.findByRole("alert"),
+    ).toHaveTextContent("The page draft could not be loaded");
+    expect(
+      screen.queryByRole("textbox", { name: "Title (Malay)" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save Draft" })).not.toBeInTheDocument();
+    expect(pageApi.savePageDraft).not.toHaveBeenCalled();
   });
 });
 

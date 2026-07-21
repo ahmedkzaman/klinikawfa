@@ -7,7 +7,7 @@ import {
   websiteCtaHrefSchema,
   type BilingualText,
 } from "@/features/website-cms/schemas/common";
-import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
+import { sanitizeGeneralPageHtml } from "@/lib/sanitize-general-page-html";
 
 interface GeneralPageRendererProps {
   content: GeneralPageContent;
@@ -32,24 +32,13 @@ function PreviewMediaPlaceholder() {
   );
 }
 
-function sanitizeGeneralPageBody(html: string) {
-  const sanitized = sanitizeRichHtml(html);
-  const parsed = new DOMParser().parseFromString(sanitized, "text/html");
-  parsed.body
-    .querySelectorAll(
-      "audio, embed, iframe, img, object, picture, source, track, video",
-    )
-    .forEach((element) => element.remove());
-  return parsed.body.innerHTML;
-}
-
 export function GeneralPageRenderer({
   content,
   preview = false,
 }: GeneralPageRendererProps) {
   const { language } = useLanguage();
   const title = localizedPageText(content.title, language);
-  const body = sanitizeGeneralPageBody(
+  const body = sanitizeGeneralPageHtml(
     localizedPageText(content.body, language),
   );
   const heroImage = safeHrefSchema.safeParse(content.heroImage);

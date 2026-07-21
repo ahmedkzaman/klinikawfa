@@ -18,6 +18,7 @@ export const RESERVED_PAGE_SLUGS = [
   "doctor-on-duty",
   "gallery",
   "health-tips",
+  "blog",
   "editor",
   "privacy",
   "terms",
