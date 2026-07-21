@@ -1,40 +1,60 @@
+import {
+  PROTECTED_INTERNAL_HTTP_HREF_PATTERN,
+  PROTECTED_INTERNAL_RELATIVE_HREF_PATTERN,
+  SAFE_HREF_DOT_SEGMENT_PATTERN,
+  SAFE_HREF_ENCODED_PATH_BYPASS_PATTERN,
+  SAFE_HREF_FORBIDDEN_CHARACTERS_PATTERN,
+} from "./common";
+
 const DRAFT_7 = "http://json-schema.org/draft-07/schema#";
 
 const BILINGUAL_TEXT_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["ms", "en"],
+  required: ["ms"],
   properties: {
     ms: { type: "string", pattern: "\\S" },
-    en: { type: "string" },
+    en: { type: "string", default: "" },
   },
 } as const;
 
 const OPTIONAL_BILINGUAL_TEXT_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["ms", "en"],
+  required: ["ms"],
   properties: {
     ms: { type: "string" },
-    en: { type: "string" },
+    en: { type: "string", default: "" },
   },
 } as const;
 
 const SAFE_HREF_JSON_SCHEMA = {
   type: "string",
   minLength: 1,
-  pattern:
-    "^\\s*(?:/(?!/).*|#.*|[hH][tT][tT][pP][sS]?://\\S+|[mM][aA][iI][lL][tT][oO]:\\S*|[tT][eE][lL]:\\S*)\\s*$",
+  allOf: [
+    { not: { pattern: SAFE_HREF_FORBIDDEN_CHARACTERS_PATTERN } },
+    { not: { pattern: SAFE_HREF_ENCODED_PATH_BYPASS_PATTERN } },
+    { not: { pattern: SAFE_HREF_DOT_SEGMENT_PATTERN } },
+  ],
+  anyOf: [
+    { pattern: "^/(?!/)" },
+    { pattern: "^#" },
+    {
+      allOf: [
+        { pattern: "^[hH][tT][tT][pP][sS]?://[^/?#]+" },
+        { format: "uri" },
+      ],
+    },
+    { allOf: [{ pattern: "^[mM][aA][iI][lL][tT][oO]:" }, { format: "uri" }] },
+    { allOf: [{ pattern: "^[tT][eE][lL]:" }, { format: "uri" }] },
+  ],
 } as const;
 
 const WEBSITE_CTA_HREF_JSON_SCHEMA = {
   allOf: [
     SAFE_HREF_JSON_SCHEMA,
     {
-      not: {
-        pattern:
-          "^\\s*/(?:auth|staff|clinic|editor|appointment|video-call|reset-password|locum-register|tv|api|functions|payment|payments|callback)(?:/|\\s*$)",
-      },
+      not: { anyOf: [{ pattern: PROTECTED_INTERNAL_RELATIVE_HREF_PATTERN }, { pattern: PROTECTED_INTERNAL_HTTP_HREF_PATTERN }] },
     },
   ],
 } as const;
@@ -152,12 +172,11 @@ export const HOME_JSON_SCHEMA = {
     testimonials: {
       type: "object",
       additionalProperties: false,
-      required: ["eyebrow", "title", "description", "itemLimit"],
+      required: ["eyebrow", "title", "description"],
       properties: {
         eyebrow: BILINGUAL_TEXT_JSON_SCHEMA,
         title: BILINGUAL_TEXT_JSON_SCHEMA,
         description: BILINGUAL_TEXT_JSON_SCHEMA,
-        itemLimit: { type: "integer", minimum: 1, maximum: 12 },
       },
     },
     map: {

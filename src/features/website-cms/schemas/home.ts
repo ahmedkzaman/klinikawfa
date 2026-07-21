@@ -123,9 +123,7 @@ const homePreviewSchema = homeSectionCopySchema
 
 export const homeServicesSchema = homePreviewSchema;
 export const homeGallerySchema = homePreviewSchema;
-export const homeTestimonialsSchema = homeSectionCopySchema
-  .extend({ itemLimit: homeItemLimitSchema })
-  .strict();
+export const homeTestimonialsSchema = homeSectionCopySchema;
 
 export const homeMapSchema = homeSectionCopySchema
   .extend({

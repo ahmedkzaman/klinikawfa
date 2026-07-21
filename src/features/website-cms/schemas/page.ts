@@ -33,7 +33,6 @@ const reservedPageSlugs = new Set<string>(RESERVED_PAGE_SLUGS);
 
 export const pageSlugSchema = z
   .string()
-  .trim()
   .min(1)
   .max(100)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Invalid page slug")
