@@ -293,6 +293,12 @@ export function GalleryStrip({ content, preview = false }: GalleryStripProps) {
         open={lightboxOpen}
         onOpenChange={setLightboxOpen}
         onIndexChange={setCurrentImageIndex}
+        labels={{
+          close: localized(content.closeLabel),
+          previous: localized(content.previousLabel),
+          next: localized(content.nextLabel),
+          swipeHint: localized(content.swipeHint),
+        }}
       />
     </section>
   );

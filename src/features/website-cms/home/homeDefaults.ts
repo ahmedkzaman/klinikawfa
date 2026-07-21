@@ -170,6 +170,10 @@ export const DEFAULT_HOME_CONTENT: HomeContent = {
       next: { ms: "Next slide", en: "Next slide" },
       goTo: { ms: "Go to slide", en: "Go to slide" },
     },
+    closeLabel: { ms: "Close", en: "Close" },
+    previousLabel: { ms: "Previous", en: "Previous" },
+    nextLabel: { ms: "Next", en: "Next" },
+    swipeHint: { ms: "Swipe to navigate", en: "Swipe to navigate" },
     itemLimit: 8,
   },
   testimonials: {
@@ -187,6 +191,8 @@ export const DEFAULT_HOME_CONTENT: HomeContent = {
       en: "Klinik Awfa Patient",
     },
     goToSlideLabel: { ms: "Go to slide", en: "Go to slide" },
+    previousSlideLabel: { ms: "Previous slide", en: "Previous slide" },
+    nextSlideLabel: { ms: "Next slide", en: "Next slide" },
   },
   map: {
     eyebrow: { ms: "Cari Kami", en: "Find Us" },

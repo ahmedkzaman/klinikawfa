@@ -162,8 +162,14 @@ export function TestimonialsSection({ content, preview = false }: TestimonialsSe
                   </CarouselItem>
                 ))}
               </CarouselContent>
-              <CarouselPrevious className="hidden md:flex -left-4 h-12 w-12 border-2 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all" />
-              <CarouselNext className="hidden md:flex -right-4 h-12 w-12 border-2 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all" />
+              <CarouselPrevious
+                ariaLabel={localized(content.previousSlideLabel)}
+                className="hidden md:flex -left-4 h-12 w-12 border-2 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all"
+              />
+              <CarouselNext
+                ariaLabel={localized(content.nextSlideLabel)}
+                className="hidden md:flex -right-4 h-12 w-12 border-2 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all"
+              />
             </Carousel>
 
             {/* Dot indicators */}

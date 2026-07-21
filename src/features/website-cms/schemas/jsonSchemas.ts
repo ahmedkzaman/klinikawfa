@@ -167,7 +167,7 @@ export const HOME_JSON_SCHEMA = {
     gallery: {
       type: "object",
       additionalProperties: false,
-      required: ["eyebrow", "title", "description", "cta", "emptyMessage", "moreLabel", "carouselLabels", "itemLimit"],
+      required: ["eyebrow", "title", "description", "cta", "emptyMessage", "moreLabel", "carouselLabels", "closeLabel", "previousLabel", "nextLabel", "swipeHint", "itemLimit"],
       properties: {
         eyebrow: BILINGUAL_TEXT_JSON_SCHEMA,
         title: BILINGUAL_TEXT_JSON_SCHEMA,
@@ -176,19 +176,25 @@ export const HOME_JSON_SCHEMA = {
         emptyMessage: BILINGUAL_TEXT_JSON_SCHEMA,
         moreLabel: BILINGUAL_TEXT_JSON_SCHEMA,
         carouselLabels: HOME_CAROUSEL_LABELS_JSON_SCHEMA,
+        closeLabel: BILINGUAL_TEXT_JSON_SCHEMA,
+        previousLabel: BILINGUAL_TEXT_JSON_SCHEMA,
+        nextLabel: BILINGUAL_TEXT_JSON_SCHEMA,
+        swipeHint: BILINGUAL_TEXT_JSON_SCHEMA,
         itemLimit: { type: "integer", minimum: 1, maximum: 12 },
       },
     },
     testimonials: {
       type: "object",
       additionalProperties: false,
-      required: ["eyebrow", "title", "description", "patientLabel", "goToSlideLabel"],
+      required: ["eyebrow", "title", "description", "patientLabel", "goToSlideLabel", "previousSlideLabel", "nextSlideLabel"],
       properties: {
         eyebrow: BILINGUAL_TEXT_JSON_SCHEMA,
         title: BILINGUAL_TEXT_JSON_SCHEMA,
         description: BILINGUAL_TEXT_JSON_SCHEMA,
         patientLabel: BILINGUAL_TEXT_JSON_SCHEMA,
         goToSlideLabel: BILINGUAL_TEXT_JSON_SCHEMA,
+        previousSlideLabel: BILINGUAL_TEXT_JSON_SCHEMA,
+        nextSlideLabel: BILINGUAL_TEXT_JSON_SCHEMA,
       },
     },
     map: {

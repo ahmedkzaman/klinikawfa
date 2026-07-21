@@ -151,6 +151,10 @@ export const homeGallerySchema = homePreviewSchema
     emptyMessage: requiredBilingualTextSchema,
     moreLabel: requiredBilingualTextSchema,
     carouselLabels: homeCarouselLabelsSchema,
+    closeLabel: requiredBilingualTextSchema,
+    previousLabel: requiredBilingualTextSchema,
+    nextLabel: requiredBilingualTextSchema,
+    swipeHint: requiredBilingualTextSchema,
   })
   .strict();
 
@@ -158,6 +162,8 @@ export const homeTestimonialsSchema = homeSectionCopySchema
   .extend({
     patientLabel: requiredBilingualTextSchema,
     goToSlideLabel: requiredBilingualTextSchema,
+    previousSlideLabel: requiredBilingualTextSchema,
+    nextSlideLabel: requiredBilingualTextSchema,
   })
   .strict();
 

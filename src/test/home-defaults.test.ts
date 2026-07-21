@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import clinicExterior from "@/assets/klinik-awfa-exterior.webp";
+import { GalleryLightbox } from "@/components/gallery/GalleryLightbox";
 import { GalleryStrip } from "@/components/home/GalleryStrip";
 import { HeroCarousel } from "@/components/home/HeroCarousel";
 import { MapSection } from "@/components/home/MapSection";
@@ -39,11 +40,36 @@ vi.stubGlobal(
 
 const testState = vi.hoisted(() => ({
   indexSections: [] as Array<{ id: string; content: unknown; preview?: boolean }>,
+  galleryLightboxLabels: vi.fn(),
   videoSettingKeys: vi.fn(),
 }));
 
 vi.mock("@/components/gallery", () => ({
-  GalleryLightbox: () => null,
+  GalleryLightbox: ({
+    labels,
+    open,
+  }: {
+    labels?: {
+      close: string;
+      previous: string;
+      next: string;
+      swipeHint: string;
+    };
+    open: boolean;
+  }) => {
+    testState.galleryLightboxLabels(labels);
+
+    return open
+      ? createElement(
+          "div",
+          null,
+          createElement("button", null, labels?.close),
+          createElement("button", null, labels?.previous),
+          createElement("button", null, labels?.next),
+          createElement("p", null, labels?.swipeHint),
+        )
+      : null;
+  },
 }));
 
 vi.mock("@/hooks/useGalleryImages", () => ({
@@ -132,6 +158,7 @@ afterEach(() => {
   cleanup();
   localStorage.clear();
   testState.indexSections.length = 0;
+  testState.galleryLightboxLabels.mockClear();
   testState.videoSettingKeys.mockClear();
 });
 
@@ -309,6 +336,10 @@ describe("DEFAULT_HOME_CONTENT", () => {
           next: { ms: "Next slide", en: "Next slide" },
           goTo: { ms: "Go to slide", en: "Go to slide" },
         },
+        closeLabel: { ms: "Close", en: "Close" },
+        previousLabel: { ms: "Previous", en: "Previous" },
+        nextLabel: { ms: "Next", en: "Next" },
+        swipeHint: { ms: "Swipe to navigate", en: "Swipe to navigate" },
         itemLimit: 8,
       },
       testimonials: {
@@ -326,6 +357,8 @@ describe("DEFAULT_HOME_CONTENT", () => {
           en: "Klinik Awfa Patient",
         },
         goToSlideLabel: { ms: "Go to slide", en: "Go to slide" },
+        previousSlideLabel: { ms: "Previous slide", en: "Previous slide" },
+        nextSlideLabel: { ms: "Next slide", en: "Next slide" },
       },
       map: {
         eyebrow: { ms: "Cari Kami", en: "Find Us" },
@@ -467,10 +500,14 @@ describe("data-driven Home renderer", () => {
     }
   });
 
-  it("renders the configured Gallery limit and blocks preview CTAs", () => {
+  it("renders configured Gallery lightbox labels and blocks preview CTAs", () => {
     const content = structuredClone(DEFAULT_HOME_CONTENT.gallery);
     content.title.ms = "Galeri tersuai";
     content.cta.label.ms = "Semua gambar tersuai";
+    content.closeLabel.ms = "Tutup tersuai";
+    content.previousLabel.ms = "Sebelumnya tersuai";
+    content.nextLabel.ms = "Seterusnya tersuai";
+    content.swipeHint.ms = "Leret tersuai";
     content.itemLimit = 2;
 
     const { container } = renderSection(
@@ -479,14 +516,27 @@ describe("data-driven Home renderer", () => {
 
     expect(screen.getByRole("heading", { name: "Galeri tersuai" })).toBeVisible();
     expect(container.querySelectorAll("img")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Image 0" }));
+    expect(screen.getByRole("button", { name: "Tutup tersuai" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Sebelumnya tersuai" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Seterusnya tersuai" })).toBeVisible();
+    expect(screen.getByText("Leret tersuai")).toBeVisible();
+    expect(testState.galleryLightboxLabels).toHaveBeenLastCalledWith({
+      close: "Tutup tersuai",
+      previous: "Sebelumnya tersuai",
+      next: "Seterusnya tersuai",
+      swipeHint: "Leret tersuai",
+    });
     for (const link of screen.getAllByRole("link")) {
       expect(fireEvent.click(link)).toBe(false);
     }
   });
 
-  it("renders custom Testimonials copy", () => {
+  it("renders custom Testimonials copy and localized carousel labels", () => {
     const content = structuredClone(DEFAULT_HOME_CONTENT.testimonials);
     content.title.ms = "Testimoni tersuai";
+    content.previousSlideLabel.ms = "Testimoni sebelumnya";
+    content.nextSlideLabel.ms = "Testimoni seterusnya";
 
     renderSection(
       createElement(TestimonialsSection, { content, preview: true }),
@@ -495,6 +545,74 @@ describe("data-driven Home renderer", () => {
     expect(
       screen.getByRole("heading", { name: "Testimoni tersuai" }),
     ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Testimoni sebelumnya" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Testimoni seterusnya" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Previous slide")).not.toBeInTheDocument();
+    expect(screen.queryByText("Next slide")).not.toBeInTheDocument();
+  });
+
+  it("renders custom GalleryLightbox labels while retaining exact legacy defaults", () => {
+    const images = [
+      {
+        id: "image-1",
+        url: "/images/image-1.webp",
+        alt_text: "Image 1",
+        created_at: "2026-07-21T00:00:00.000Z",
+        display_order: 1,
+        tags: null,
+      },
+      {
+        id: "image-2",
+        url: "/images/image-2.webp",
+        alt_text: "Image 2",
+        created_at: "2026-07-21T00:00:00.000Z",
+        display_order: 2,
+        tags: null,
+      },
+    ];
+
+    const { unmount } = render(
+      createElement(GalleryLightbox, {
+        images,
+        currentIndex: 0,
+        open: true,
+        onOpenChange: vi.fn(),
+        onIndexChange: vi.fn(),
+      }),
+    );
+
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Previous" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeInTheDocument();
+    expect(screen.getByText("Swipe to navigate")).toBeVisible();
+    unmount();
+
+    render(
+      createElement(GalleryLightbox, {
+        images,
+        currentIndex: 0,
+        open: true,
+        onOpenChange: vi.fn(),
+        onIndexChange: vi.fn(),
+        labels: {
+          close: "Tutup sebenar",
+          previous: "Sebelumnya sebenar",
+          next: "Seterusnya sebenar",
+          swipeHint: "Leret sebenar",
+        },
+      }),
+    );
+
+    expect(screen.getByRole("button", { name: "Tutup sebenar" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Sebelumnya sebenar" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Seterusnya sebenar" })).toBeInTheDocument();
+    expect(screen.getByText("Leret sebenar")).toBeVisible();
   });
 
   it("renders configured Map content and blocks preview navigation", () => {
