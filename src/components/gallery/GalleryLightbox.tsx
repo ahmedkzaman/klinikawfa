@@ -5,12 +5,27 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { GalleryImage } from '@/hooks/useGalleryImages';
 
+export interface GalleryLightboxLabels {
+  close: string;
+  previous: string;
+  next: string;
+  swipeHint: string;
+}
+
+const DEFAULT_GALLERY_LIGHTBOX_LABELS: GalleryLightboxLabels = {
+  close: 'Close',
+  previous: 'Previous',
+  next: 'Next',
+  swipeHint: 'Swipe to navigate',
+};
+
 interface GalleryLightboxProps {
   images: GalleryImage[];
   currentIndex: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onIndexChange: (index: number) => void;
+  labels?: GalleryLightboxLabels;
 }
 
 export function GalleryLightbox({
@@ -19,6 +34,7 @@ export function GalleryLightbox({
   open,
   onOpenChange,
   onIndexChange,
+  labels = DEFAULT_GALLERY_LIGHTBOX_LABELS,
 }: GalleryLightboxProps) {
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
@@ -132,7 +148,7 @@ export function GalleryLightbox({
             onClick={handleClose}
           >
             <X className="h-5 w-5" />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">{labels.close}</span>
           </Button>
 
           {/* Counter badge */}
@@ -153,7 +169,7 @@ export function GalleryLightbox({
             disabled={!hasPrev}
           >
             <ChevronLeft className="h-6 w-6" />
-            <span className="sr-only">Previous</span>
+            <span className="sr-only">{labels.previous}</span>
           </Button>
 
           {/* Image container */}
@@ -191,7 +207,7 @@ export function GalleryLightbox({
             disabled={!hasNext}
           >
             <ChevronRight className="h-6 w-6" />
-            <span className="sr-only">Next</span>
+            <span className="sr-only">{labels.next}</span>
           </Button>
 
           {/* Caption */}
@@ -203,7 +219,7 @@ export function GalleryLightbox({
 
           {/* Mobile navigation hint */}
           <div className="absolute bottom-16 left-1/2 z-50 -translate-x-1/2 text-xs text-white/50 sm:hidden">
-            Swipe to navigate
+            {labels.swipeHint}
           </div>
         </div>
       </DialogPortal>

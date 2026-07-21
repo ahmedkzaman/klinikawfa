@@ -1,11 +1,17 @@
-// Admin-only edge function to silently create a clinic user (Locum or
-// employee role) without disrupting the calling staff member's session.
+// Admin-only edge function to silently create a clinic user (Locum, employee,
+// or Website Editor role) without disrupting the calling staff member's session.
 // Uses the service-role key to bypass standard auth and assigns the
 // requested role on creation. For employee roles (resident_doctor,
 // staff, operations) it also seeds a blank staff_onboarding row so HR
 // gates work on first login.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { z } from 'https://esm.sh/zod@3.23.8';
+import {
+  CREATABLE_USER_ROLES,
+  requiresStaffOnboarding,
+  resolveCreatableRole,
+} from './role-policy.ts';
+import type { CreatableUserRole } from './role-policy.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,15 +25,8 @@ const BodySchema = z.object({
   fullName: z.string().min(1).max(255),
   phone: z.string().max(40).optional().nullable(),
   password: z.string().min(8).max(72),
-  role: z
-    .enum(['locum', 'resident_doctor', 'ops_staff', 'staff', 'operations'])
-    .default('locum'),
+  role: z.enum(CREATABLE_USER_ROLES).default('locum'),
 });
-
-const EMPLOYEE_ROLES = new Set(['resident_doctor', 'ops_staff', 'staff', 'operations']);
-// Ops Staff tier callers (including legacy aliases) may only create locums.
-const OPS_TIER_CALLERS = new Set(['ops_staff', 'staff', 'operations']);
-const ADMIN_TIER_CALLERS = new Set(['admin', 'special_admin', 'doctor_admin']);
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -72,9 +71,7 @@ Deno.serve(async (req) => {
   if (roleErr) return json({ error: 'Role lookup failed' }, 500);
 
   const callerRole = roleRow?.role as string | undefined;
-  const isOpsTierCaller = !!callerRole && OPS_TIER_CALLERS.has(callerRole);
-  const isAdminTierCaller = !!callerRole && ADMIN_TIER_CALLERS.has(callerRole);
-  if (!callerRole || (!isOpsTierCaller && !isAdminTierCaller)) {
+  if (!callerRole) {
     return json({ error: 'Forbidden — staff or admin only' }, 403);
   }
 
@@ -90,14 +87,13 @@ Deno.serve(async (req) => {
     return json({ error: parsed.error.flatten().fieldErrors }, 400);
   }
   const { email, fullName, phone, password } = parsed.data;
-  // SECURITY: Ops-tier callers (front desk) can ONLY ever create locums.
-  // We hardcode the role server-side and ignore whatever the client sent,
-  // so a tampered request cannot escalate to resident_doctor/ops_staff/etc.
-  const role = isOpsTierCaller ? 'locum' : parsed.data.role;
-
-  // Only admin-tier callers can create elevated employee roles.
-  if (EMPLOYEE_ROLES.has(role) && !isAdminTierCaller) {
-    return json({ error: 'Only admins can create employee accounts' }, 403);
+  // The shared policy keeps operations callers at locum and rejects all
+  // callers outside the authorized administrator and operations tiers.
+  let role: CreatableUserRole;
+  try {
+    role = resolveCreatableRole(callerRole, parsed.data.role);
+  } catch {
+    return json({ error: 'Forbidden' }, 403);
   }
 
   // 5. Create the user. `email_confirm: true` is REQUIRED — locums and staff
@@ -138,7 +134,7 @@ Deno.serve(async (req) => {
 
   // 7. For employee roles, seed an HR onboarding row so the wizard
   // has a backing record on first login. Locums skip this entirely.
-  if (EMPLOYEE_ROLES.has(role)) {
+  if (requiresStaffOnboarding(role)) {
     const { error: onboardErr } = await admin
       .from('staff_onboarding')
       .upsert(

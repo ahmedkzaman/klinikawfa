@@ -1,5 +1,6 @@
 -- =============================================================================
--- Phase-D RLS matrix fixture seed. Idempotent; safe to re-run.
+-- Phase-D RLS matrix fixture seed. Requires clean reserved IDs; stale CMS
+-- fixtures fail closed and must be cleaned before a later approved run.
 --
 -- Internal guard: refuses to run unless the runner has exported
 --   PGOPTIONS="-c app.staging_project_ref=<staging_ref>"
@@ -12,10 +13,21 @@
 
 \set ON_ERROR_STOP on
 
+SELECT set_config(
+  'app.rls_claimed_staging_ref', :'STAGING_PROJECT_REF', false
+) AS guard_claimed_ref
+\gset
+SELECT set_config(
+  'app.rls_production_ref', :'PRODUCTION_PROJECT_REF', false
+) AS guard_production_ref
+\gset
+
 DO $guard$
 DECLARE
-  marker  text := current_setting('app.staging_project_ref', true);
-  claimed text := :'STAGING_PROJECT_REF';
+  marker           text := current_setting('app.staging_project_ref', true);
+  claimed          text := current_setting('app.rls_claimed_staging_ref', true);
+  production       text := current_setting('app.rls_production_ref', true);
+  known_production constant text := 'ncysmppzfjtiekfnomdv';
 BEGIN
   IF marker IS NULL OR marker = '' THEN
     RAISE EXCEPTION 'seed refused: app.staging_project_ref not set via PGOPTIONS';
@@ -26,7 +38,8 @@ BEGIN
   IF marker !~ '^[a-z0-9]{20}$' THEN
     RAISE EXCEPTION 'seed refused: project ref does not match ^[a-z0-9]{20}$';
   END IF;
-  IF marker = 'ncysmppzfjtiekfnomdv' THEN
+  IF production IS DISTINCT FROM known_production
+     OR marker = known_production THEN
     RAISE EXCEPTION 'seed refused: project ref equals production ref';
   END IF;
 END
@@ -59,6 +72,14 @@ BEGIN;
 --   locum-voided : fee0000f-0000-4000-8000-00000000000f
 -- panel_claims
 --   claim    : c1a10001-0000-4000-8000-000000000001
+-- Website CMS
+--   published page       : cafe5005-0000-4000-8000-000000000001
+--   page with draft      : cafe5005-0000-4000-8000-000000000002
+--   draft INSERT target  : cafe5005-0000-4000-8000-000000000003
+--   active clinic review : cafe5005-0000-4000-8000-000000000004
+--   staff INSERT target  : cafe5005-0000-4000-8000-000000000005
+--   Website Editor attendance row: cafe5005-0000-4000-8000-000000000006
+--   Website Editor daily report  : cafe5005-0000-4000-8000-000000000007
 
 -- -----------------------------------------------------------------------------
 -- User role assignments (one row per dedicated account).
@@ -92,6 +113,139 @@ VALUES
   ('babeaaaa-0000-4000-8000-000000000001', 'RLS Fixture Patient A'),
   ('babebbbb-0000-4000-8000-000000000002', 'RLS Fixture Patient B')
 ON CONFLICT (id) DO NOTHING;
+
+-- -----------------------------------------------------------------------------
+-- Website CMS evidence. Deliberately no ON CONFLICT: stale fixtures fail closed
+-- instead of allowing a false-positive matrix run.
+-- -----------------------------------------------------------------------------
+INSERT INTO public.website_pages (
+  id, kind, slug, published_content, status, revision,
+  published_at, published_by
+)
+VALUES
+  (
+    'cafe5005-0000-4000-8000-000000000001',
+    'content',
+    'rls-matrix-published-page',
+    '{"title":"RLS matrix published","body":"Public fixture"}'::jsonb,
+    'published',
+    1,
+    now(),
+    :'RLS_WEBSITE_EDITOR_UID'::uuid
+  ),
+  (
+    'cafe5005-0000-4000-8000-000000000002',
+    'content',
+    'rls-matrix-private-draft',
+    '{}'::jsonb,
+    'draft',
+    0,
+    NULL,
+    NULL
+  ),
+  (
+    'cafe5005-0000-4000-8000-000000000003',
+    'content',
+    'rls-matrix-insert-target',
+    '{}'::jsonb,
+    'draft',
+    0,
+    NULL,
+    NULL
+  ),
+  (
+    'cafe5005-0000-4000-8000-000000000005',
+    'content',
+    'rls-matrix-staff-insert-target',
+    '{}'::jsonb,
+    'draft',
+    0,
+    NULL,
+    NULL
+  );
+
+-- The draft trigger calls auth.uid(), authorizes through user_roles, and stamps
+-- updated_by. Set both standard Supabase request-claim forms transaction-locally
+-- to the runner-verified Website Editor only for this trigger-aware insert.
+SELECT set_config(
+  'request.jwt.claim.sub', :'RLS_WEBSITE_EDITOR_UID', true
+) IS NOT NULL AS website_editor_claim_sub_set
+\gset
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub', :'RLS_WEBSITE_EDITOR_UID',
+    'role', 'authenticated'
+  )::text,
+  true
+) IS NOT NULL AS website_editor_claims_set
+\gset
+
+INSERT INTO public.website_page_drafts (
+  page_id, draft_content, base_revision, updated_by
+)
+VALUES (
+  'cafe5005-0000-4000-8000-000000000002',
+  '{"title":"RLS matrix private draft"}'::jsonb,
+  0,
+  :'RLS_WEBSITE_EDITOR_UID'::uuid
+);
+
+DO $verify_draft_actor$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.website_page_drafts
+    WHERE page_id = 'cafe5005-0000-4000-8000-000000000002'
+      AND updated_by = current_setting('request.jwt.claim.sub', true)::uuid
+  ) THEN
+    RAISE EXCEPTION 'seed failed: draft trigger did not stamp verified Website Editor';
+  END IF;
+END
+$verify_draft_actor$;
+
+SELECT set_config('request.jwt.claim.sub', '', true) IS NOT NULL AS claim_sub_cleared
+\gset
+SELECT set_config('request.jwt.claims', '{}'::jsonb::text, true) IS NOT NULL AS claims_cleared
+\gset
+
+INSERT INTO public.clinic_reviews (
+  id, patient_id, patient_name, rating, review_text, status
+)
+VALUES (
+  'cafe5005-0000-4000-8000-000000000004',
+  'babeaaaa-0000-4000-8000-000000000001',
+  'RLS Fixture Patient A',
+  5,
+  'RLS matrix private review',
+  'active'
+);
+
+INSERT INTO public.attendance_records (
+  id, user_id, punch_type, punch_time, face_verified,
+  logical_work_date, shift_key, admin_note, recorded_by
+)
+VALUES (
+  'cafe5005-0000-4000-8000-000000000006',
+  :'RLS_WEBSITE_EDITOR_UID'::uuid,
+  'in',
+  '2099-12-30 01:00:00+00'::timestamptz,
+  false,
+  '2099-12-30'::date,
+  NULL,
+  'RLS matrix Website Editor attendance denial',
+  :'RLS_ADMIN_UID'::uuid
+);
+
+INSERT INTO public.daily_reports (
+  id, user_id, report_date, whatsapp_blast_count
+)
+VALUES (
+  'cafe5005-0000-4000-8000-000000000007',
+  :'RLS_WEBSITE_EDITOR_UID'::uuid,
+  '2099-12-30'::date,
+  7
+);
 
 -- -----------------------------------------------------------------------------
 -- Consultations.

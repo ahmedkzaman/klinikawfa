@@ -15,8 +15,14 @@ import {
 } from '@/components/ui/carousel';
 import { Quote, Star, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { HomeContent } from '@/features/website-cms/schemas/home';
 
-export function TestimonialsSection() {
+interface TestimonialsSectionProps {
+  content: HomeContent['testimonials'];
+  preview?: boolean;
+}
+
+export function TestimonialsSection({ content, preview = false }: TestimonialsSectionProps) {
   const { language } = useLanguage();
   const { data: reviews, isLoading } = useReviews(true);
   const [api, setApi] = useState<CarouselApi>();
@@ -44,6 +50,8 @@ export function TestimonialsSection() {
     },
     [api]
   );
+  const localized = (copy: { ms: string; en: string }) =>
+    language === 'ms' ? copy.ms : copy.en || copy.ms;
 
   if (!isLoading && (!reviews || reviews.length === 0)) {
     return null;
@@ -72,15 +80,13 @@ export function TestimonialsSection() {
             className="inline-flex items-center gap-2 mb-4 px-4 py-1.5 rounded-full bg-success/10 text-success text-sm font-medium border border-success/20"
           >
             <Sparkles className="h-4 w-4" />
-            {language === 'ms' ? 'Testimoni' : 'Testimonials'}
+            {localized(content.eyebrow)}
           </motion.span>
           <h2 className="mb-4">
-            {language === 'ms' ? 'Apa Kata Pesakit Kami' : 'What Our Patients Say'}
+            {localized(content.title)}
           </h2>
           <p className="mx-auto max-w-2xl text-muted-foreground text-lg">
-            {language === 'ms'
-              ? 'Kepuasan pesakit adalah keutamaan kami.'
-              : 'Patient satisfaction is our priority.'}
+            {localized(content.description)}
           </p>
         </motion.div>
 
@@ -99,6 +105,7 @@ export function TestimonialsSection() {
             className="mx-auto max-w-6xl px-10"
           >
             <Carousel
+              aria-roledescription={localized(content.carouselRoleDescription)}
               setApi={setApi}
               plugins={[autoplayPlugin.current]}
               opts={{
@@ -113,6 +120,7 @@ export function TestimonialsSection() {
                 {reviews?.map((review, index) => (
                   <CarouselItem
                     key={review.id}
+                    aria-roledescription={localized(content.slideRoleDescription)}
                     className="pl-6 basis-full md:basis-1/2 lg:basis-1/3"
                   >
                     <Card className="group h-full glass-card border-border/30 rounded-2xl overflow-hidden transition-all duration-500 hover:shadow-elevated hover:-translate-y-2">
@@ -148,7 +156,7 @@ export function TestimonialsSection() {
                               : review.name_en || review.name_ms}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {language === 'ms' ? 'Pesakit Klinik Awfa' : 'Klinik Awfa Patient'}
+                            {localized(content.patientLabel)}
                           </p>
                         </div>
                       </CardContent>
@@ -156,8 +164,14 @@ export function TestimonialsSection() {
                   </CarouselItem>
                 ))}
               </CarouselContent>
-              <CarouselPrevious className="hidden md:flex -left-4 h-12 w-12 border-2 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all" />
-              <CarouselNext className="hidden md:flex -right-4 h-12 w-12 border-2 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all" />
+              <CarouselPrevious
+                ariaLabel={localized(content.previousSlideLabel)}
+                className="hidden md:flex -left-4 h-12 w-12 border-2 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all"
+              />
+              <CarouselNext
+                ariaLabel={localized(content.nextSlideLabel)}
+                className="hidden md:flex -right-4 h-12 w-12 border-2 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all"
+              />
             </Carousel>
 
             {/* Dot indicators */}
@@ -175,7 +189,7 @@ export function TestimonialsSection() {
                         ? 'bg-gradient-to-r from-primary to-primary-glow w-8 shadow-glow-primary'
                         : 'bg-primary/30 w-2.5 hover:bg-primary/50'
                     )}
-                    aria-label={`Go to slide ${index + 1}`}
+                    aria-label={`${localized(content.goToSlideLabel)} ${index + 1}`}
                   />
                 ))}
               </div>

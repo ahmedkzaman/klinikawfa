@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type MouseEvent, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
@@ -10,15 +10,53 @@ import { GalleryLightbox } from '@/components/gallery';
 import useEmblaCarousel from 'embla-carousel-react';
 import Autoplay from 'embla-carousel-autoplay';
 import { cn } from '@/lib/utils';
+import type { HomeContent } from '@/features/website-cms/schemas/home';
 
-export function GalleryStrip() {
-  const { language, t } = useLanguage();
+interface PreviewLinkProps {
+  href: string;
+  preview: boolean;
+  className?: string;
+  children: ReactNode;
+}
+
+function PreviewLink({ href, preview, className, children }: PreviewLinkProps) {
+  const preventPreviewNavigation = (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+  };
+  const onClick = preview ? preventPreviewNavigation : undefined;
+
+  return href.startsWith('/') ? (
+    <Link to={href} className={className} onClick={onClick}>
+      {children}
+    </Link>
+  ) : (
+    <a
+      href={href}
+      className={className}
+      target={href.startsWith('http') ? '_blank' : undefined}
+      rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
+      onClick={onClick}
+    >
+      {children}
+    </a>
+  );
+}
+
+interface GalleryStripProps {
+  content: HomeContent['gallery'];
+  preview?: boolean;
+}
+
+export function GalleryStrip({ content, preview = false }: GalleryStripProps) {
+  const { language } = useLanguage();
   const { allImages, isLoading } = useGalleryImages();
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const displayImages = allImages.slice(0, 8);
+  const displayImages = allImages.slice(0, content.itemLimit);
+  const localized = (copy: { ms: string; en: string }) =>
+    language === 'ms' ? copy.ms : copy.en || copy.ms;
 
   const [emblaRef, emblaApi] = useEmblaCarousel(
     { 
@@ -83,15 +121,13 @@ export function GalleryStrip() {
               className="inline-flex items-center gap-2 mb-4 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium border border-primary/20"
             >
               <Camera className="h-4 w-4" />
-              {language === 'ms' ? 'Galeri Foto' : 'Photo Gallery'}
+              {localized(content.eyebrow)}
             </motion.span>
             <h2 className="mb-2">
-              {language === 'ms' ? 'Galeri Klinik' : 'Clinic Gallery'}
+              {localized(content.title)}
             </h2>
             <p className="text-muted-foreground text-lg">
-              {language === 'ms'
-                ? 'Lihat suasana di Klinik Awfa.'
-                : 'See the atmosphere at Klinik Awfa.'}
+              {localized(content.description)}
             </p>
           </div>
           <motion.div
@@ -105,10 +141,10 @@ export function GalleryStrip() {
               className="hidden sm:flex group border-2 hover:border-primary/50 hover:bg-primary/5 transition-all duration-300" 
               asChild
             >
-              <Link to="/gallery">
-                {t('cta.viewAll')}
+              <PreviewLink href={content.cta.href} preview={preview}>
+                {localized(content.cta.label)}
                 <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
-              </Link>
+              </PreviewLink>
             </Button>
           </motion.div>
         </motion.div>
@@ -137,7 +173,7 @@ export function GalleryStrip() {
               <div className="text-center text-muted-foreground">
                 <ImageIcon className="mx-auto mb-3 h-12 w-12 opacity-40" />
                 <p className="text-sm font-medium">
-                  {language === 'ms' ? 'Tiada gambar' : 'No images'}
+                  {localized(content.emptyMessage)}
                 </p>
               </div>
             </div>
@@ -175,22 +211,23 @@ export function GalleryStrip() {
                 ))}
 
                 {/* View all card */}
-                <Link
-                  to="/gallery"
+                <PreviewLink
+                  href={content.cta.href}
+                  preview={preview}
                   className="group flex aspect-[4/3] w-80 flex-shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-border bg-card/50 text-muted-foreground transition-all duration-300 hover:border-primary hover:text-primary hover:bg-primary/5 md:w-96 mr-4"
                 >
                   <div className="text-center">
                     <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                       <ArrowRight className="h-6 w-6 group-hover:translate-x-1 transition-transform" />
                     </div>
-                    <p className="font-bold text-lg">{t('cta.viewAll')}</p>
-                    {allImages.length > 8 && (
+                    <p className="font-bold text-lg">{localized(content.cta.label)}</p>
+                    {allImages.length > content.itemLimit && (
                       <p className="mt-1 text-sm opacity-70">
-                        +{allImages.length - 8} {language === 'ms' ? 'lagi' : 'more'}
+                        +{allImages.length - content.itemLimit} {localized(content.moreLabel)}
                       </p>
                     )}
                   </div>
-                </Link>
+                </PreviewLink>
               </div>
             </div>
 
@@ -201,7 +238,7 @@ export function GalleryStrip() {
                 whileTap={{ scale: 0.9 }}
                 onClick={scrollPrev}
                 className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-border bg-background/80 text-foreground backdrop-blur-sm transition-all duration-300 hover:border-primary hover:text-primary hover:bg-primary/5"
-                aria-label="Previous slide"
+                aria-label={localized(content.carouselLabels.previous)}
               >
                 <ChevronLeft className="h-5 w-5" />
               </motion.button>
@@ -218,7 +255,7 @@ export function GalleryStrip() {
                         ? 'w-8 bg-primary'
                         : 'w-2.5 bg-primary/30 hover:bg-primary/50'
                     )}
-                    aria-label={`Go to slide ${index + 1}`}
+                    aria-label={`${localized(content.carouselLabels.goTo)} ${index + 1}`}
                   />
                 ))}
               </div>
@@ -228,7 +265,7 @@ export function GalleryStrip() {
                 whileTap={{ scale: 0.9 }}
                 onClick={scrollNext}
                 className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-border bg-background/80 text-foreground backdrop-blur-sm transition-all duration-300 hover:border-primary hover:text-primary hover:bg-primary/5"
-                aria-label="Next slide"
+                aria-label={localized(content.carouselLabels.next)}
               >
                 <ChevronRight className="h-5 w-5" />
               </motion.button>
@@ -242,10 +279,10 @@ export function GalleryStrip() {
 
       <div className="container relative z-10 mt-8 text-center sm:hidden">
         <Button variant="outline" className="border-2" asChild>
-          <Link to="/gallery">
-            {t('cta.viewAll')}
+          <PreviewLink href={content.cta.href} preview={preview}>
+            {localized(content.cta.label)}
             <ArrowRight className="ml-2 h-4 w-4" />
-          </Link>
+          </PreviewLink>
         </Button>
       </div>
 
@@ -256,6 +293,12 @@ export function GalleryStrip() {
         open={lightboxOpen}
         onOpenChange={setLightboxOpen}
         onIndexChange={setCurrentImageIndex}
+        labels={{
+          close: localized(content.closeLabel),
+          previous: localized(content.previousLabel),
+          next: localized(content.nextLabel),
+          swipeHint: localized(content.swipeHint),
+        }}
       />
     </section>
   );

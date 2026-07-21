@@ -104,6 +104,14 @@ import TeamEditor from "./pages/admin/TeamEditor";
 import VideoCallManagement from "./pages/admin/VideoCallManagement";
 import ReviewsManagement from "./pages/admin/ReviewsManagement";
 import AdminSettings from "./pages/admin/Settings";
+import { EditorProtectedRoute } from "./components/editor/EditorProtectedRoute";
+import { EditorLayout } from "./components/editor/EditorLayout";
+import { HomeEditor } from "./pages/editor/HomeEditor";
+import { PageEditor } from "./pages/editor/PageEditor";
+import { Pages } from "./pages/editor/Pages";
+import { AnalyticsSettings } from "./pages/editor/AnalyticsSettings";
+import GeneralPage from "./pages/GeneralPage";
+import { GoogleAnalyticsController } from "./features/analytics/GoogleAnalyticsController";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -114,6 +122,17 @@ const queryClient = new QueryClient({
   },
 });
 
+function EditorUnavailableState() {
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm" aria-labelledby="editor-unavailable-title">
+      <h1 id="editor-unavailable-title" className="text-xl font-semibold text-slate-900">Coming in the next CMS plan</h1>
+      <p className="mt-2 text-sm leading-6 text-slate-600">
+        This section is being prepared for the next phase of the website editor.
+      </p>
+    </section>
+  );
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
@@ -122,7 +141,8 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
-            <Routes>
+            <GoogleAnalyticsController>
+              <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/services" element={<Services />} />
               <Route path="/services/:slug" element={<ServiceDetail />} />
@@ -132,12 +152,41 @@ const App = () => (
               <Route path="/gallery" element={<Gallery />} />
               <Route path="/health-tips" element={<HealthTips />} />
               <Route path="/health-tips/:slug" element={<BlogPost />} />
+              <Route path="/pages/:slug" element={<GeneralPage />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/locum-register" element={<LocumRegister />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/video-call" element={<VideoCall />} />
               <Route path="/video-call/staff" element={<VideoCallStaff />} />
               <Route path="/tv" element={<QueueTV />} />
+
+              <Route
+                path="/editor"
+                element={
+                  <EditorProtectedRoute>
+                    <EditorLayout />
+                  </EditorProtectedRoute>
+                }
+              >
+                <Route index element={<Navigate to="home" replace />} />
+                <Route path="home" element={<HomeEditor />} />
+                <Route path="pages" element={<Pages />} />
+                <Route path="pages/:id" element={<PageEditor />} />
+                <Route path="services" element={<EditorUnavailableState />} />
+                <Route path="team" element={<EditorUnavailableState />} />
+                <Route path="blog" element={<EditorUnavailableState />} />
+                <Route path="gallery" element={<EditorUnavailableState />} />
+                <Route path="reviews" element={<EditorUnavailableState />} />
+                <Route path="navigation" element={<EditorUnavailableState />} />
+                <Route
+                  path="analytics"
+                  element={
+                    <EditorProtectedRoute requireTrackingSettings>
+                      <AnalyticsSettings />
+                    </EditorProtectedRoute>
+                  }
+                />
+              </Route>
 
               {/* Staff Portal Routes */}
               <Route path="/staff" element={<StaffLayout />}>
@@ -452,7 +501,8 @@ const App = () => (
 
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
-            </Routes>
+              </Routes>
+            </GoogleAnalyticsController>
           </BrowserRouter>
         </TooltipProvider>
       </LanguageProvider>

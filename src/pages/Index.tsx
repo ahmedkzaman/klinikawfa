@@ -1,44 +1,21 @@
 import { MainLayout } from '@/components/layout';
 import { SEOHead } from '@/components/seo';
-import {
-  HeroCarousel,
-  WhySection,
-  VideoSection,
-  ServicesPreview,
-  GalleryStrip,
-  TestimonialsSection,
-  MapSection,
-} from '@/components/home';
+import { HomeRenderer } from '@/components/home';
+import { DEFAULT_HOME_CONTENT } from '@/features/website-cms/home/homeDefaults';
+import { usePublishedPage } from '@/features/website-cms/hooks/useWebsitePage';
 
 export default function Index() {
+  const content = usePublishedPage('home', DEFAULT_HOME_CONTENT);
+
   return (
     <MainLayout>
       <SEOHead
-        title="Klinik Keluarga Anda"
-        description="Klinik Awfa menawarkan rawatan kesihatan berkualiti untuk keluarga anda di KotaSAS, Kuantan. Buka setiap hari 8 pagi - 12 tengah malam."
+        title={content.seo.title.ms}
+        description={content.seo.description.ms}
         url="/"
       />
 
-      {/* Hero Carousel with auto-rotation */}
-      <HeroCarousel autoPlayInterval={5000} />
-
-      {/* Why Klinik Awfa - 6 key highlights */}
-      <WhySection />
-
-      {/* Autoplay Video Section */}
-      <VideoSection />
-
-      {/* Services Preview Grid */}
-      <ServicesPreview />
-
-      {/* Photo Gallery Strip - horizontal scroll */}
-      <GalleryStrip />
-
-      {/* Patient Testimonials */}
-      <TestimonialsSection />
-
-      {/* Map & Location */}
-      <MapSection />
+      <HomeRenderer content={content} />
     </MainLayout>
   );
 }

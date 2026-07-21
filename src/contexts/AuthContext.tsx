@@ -1,6 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  canManageTrackingSettingsRole,
+  canManageWebsiteRole,
+} from '@/lib/website-access';
 
 export type AppRole =
   | 'special_admin'
@@ -11,6 +15,7 @@ export type AppRole =
   | 'staff'
   | 'locum'
   | 'resident_doctor'
+  | 'website_editor'
   | 'guest';
 
 interface AuthContextType {
@@ -30,6 +35,8 @@ interface AuthContextType {
   isLocum: boolean;
   isClinical: boolean;
   canViewInsights: boolean;
+  canManageWebsite: boolean;
+  canManageTrackingSettings: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -198,6 +205,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     role === 'resident_doctor';
   const canViewInsights =
     role === 'admin' || role === 'special_admin' || role === 'doctor_admin';
+  const canManageWebsite = canManageWebsiteRole(role);
+  const canManageTrackingSettings = canManageTrackingSettingsRole(role);
 
   return (
     <AuthContext.Provider
@@ -218,6 +227,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLocum,
         isClinical,
         canViewInsights,
+        canManageWebsite,
+        canManageTrackingSettings,
         signIn,
         signUp,
         signOut,
