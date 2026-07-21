@@ -109,6 +109,7 @@ import { EditorLayout } from "./components/editor/EditorLayout";
 import { HomeEditor } from "./pages/editor/HomeEditor";
 import { PageEditor } from "./pages/editor/PageEditor";
 import { Pages } from "./pages/editor/Pages";
+import { AnalyticsSettings } from "./pages/editor/AnalyticsSettings";
 import GeneralPage from "./pages/GeneralPage";
 
 const queryClient = new QueryClient({
@@ -179,7 +180,7 @@ const App = () => (
                   path="analytics"
                   element={
                     <EditorProtectedRoute requireTrackingSettings>
-                      <EditorUnavailableState />
+                      <AnalyticsSettings />
                     </EditorProtectedRoute>
                   }
                 />
