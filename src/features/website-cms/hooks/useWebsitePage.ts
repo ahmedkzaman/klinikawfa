@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { fetchPublishedPage } from "@/features/website-cms/api/pages";
 import {
@@ -22,35 +22,36 @@ export function usePublishedPage(
   slug: string,
   fallback: HomeContent | GeneralPageContent,
 ): HomeContent | GeneralPageContent {
+  const schema = slug === "home" ? homeContentSchema : generalPageContentSchema;
+  const fallbackRef = useRef(fallback);
+  const committedSlugRef = useRef(slug);
   const [loaded, setLoaded] = useState<{
-    fallback: HomeContent | GeneralPageContent;
     slug: string;
     value: HomeContent | GeneralPageContent;
-  }>({ fallback, slug, value: fallback });
+  }>({ slug, value: fallback });
+  fallbackRef.current = fallback;
+
   const content =
-    loaded.slug === slug && loaded.fallback === fallback
+    committedSlugRef.current === slug && loaded.slug === slug
       ? loaded.value
       : fallback;
 
   useEffect(() => {
     let active = true;
-    const schema = slug === "home" ? homeContentSchema : generalPageContentSchema;
+    const requestFallback = fallbackRef.current;
+    committedSlugRef.current = slug;
 
     setLoaded((current) =>
-      current.slug === slug &&
-      current.fallback === fallback &&
-      current.value === fallback
+      current.slug === slug && current.value === requestFallback
         ? current
-        : { fallback, slug, value: fallback },
+        : { slug, value: requestFallback },
     );
-    void fetchPublishedPage(slug, schema, fallback).then((value) => {
+    void fetchPublishedPage(slug, schema, requestFallback).then((value) => {
       if (active) {
         setLoaded((current) =>
-          current.slug === slug &&
-          current.fallback === fallback &&
-          current.value === value
+          current.slug === slug && current.value === value
             ? current
-            : { fallback, slug, value },
+            : { slug, value },
         );
       }
     });
@@ -58,7 +59,7 @@ export function usePublishedPage(
     return () => {
       active = false;
     };
-  }, [fallback, slug]);
+  }, [schema, slug]);
 
   return content;
 }

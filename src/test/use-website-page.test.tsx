@@ -13,17 +13,17 @@ import {
   homeContentSchema,
   type HomeContent,
 } from "@/features/website-cms/schemas/home";
+import type { GeneralPageContent } from "@/features/website-cms/schemas/page";
 
 type QueryError = { message: string };
 type QueryResult = { data: unknown; error: QueryError | null };
 
 type QueryCall = {
   table: string;
-  operation: "select" | "upsert";
+  operation: "insert" | "select" | "update";
   columns?: string;
   filters: Array<{ column: string; value: unknown }>;
   payload?: unknown;
-  options?: unknown;
 };
 
 const supabaseState = vi.hoisted(() => ({
@@ -46,6 +46,11 @@ vi.mock("@/integrations/supabase/client", () => ({
       supabaseState.calls.push(call);
 
       const builder = {
+        insert(payload: unknown) {
+          call.operation = "insert";
+          call.payload = payload;
+          return builder;
+        },
         eq(column: string, value: unknown) {
           call.filters.push({ column, value });
           return builder;
@@ -64,10 +69,9 @@ vi.mock("@/integrations/supabase/client", () => ({
             supabaseState.responses.shift() ?? { data: null, error: null },
           );
         },
-        upsert(payload: unknown, options?: unknown) {
-          call.operation = "upsert";
+        update(payload: unknown) {
+          call.operation = "update";
           call.payload = payload;
-          call.options = options;
           return builder;
         },
       };
@@ -105,6 +109,21 @@ function customHomeContent(title: string): HomeContent {
   const content = structuredClone(DEFAULT_HOME_CONTENT);
   content.hero.slides[0].title.ms = title;
   return content;
+}
+
+function generalPageContent(title: string): GeneralPageContent {
+  return {
+    title: { ms: title, en: title },
+    heroImage: null,
+    heroAlt: { ms: "", en: "" },
+    body: { ms: `${title} body`, en: `${title} body` },
+    media: [],
+    cta: null,
+    seo: {
+      title: { ms: title, en: title },
+      description: { ms: `${title} description`, en: `${title} description` },
+    },
+  };
 }
 
 function deferredResult() {
@@ -291,6 +310,37 @@ describe("fetchEditorPage", () => {
       true,
     );
   });
+
+  it("isolates synthesized nested draft edits from published content", async () => {
+    const published = customHomeContent("Published stays unchanged");
+    setSession(createSession());
+    supabaseState.responses.push(
+      { data: { role: "website_editor" }, error: null },
+      {
+        data: {
+          id: "page-home",
+          kind: "home",
+          published_content: published,
+          revision: 12,
+          slug: "home",
+          status: "published",
+        },
+        error: null,
+      },
+      { data: null, error: null },
+    );
+
+    const result = await fetchEditorPage("home");
+
+    expect(result.draft.content).not.toBe(result.page.publishedContent);
+    expect(result.draft.content.hero.slides[0]).not.toBe(
+      result.page.publishedContent.hero.slides[0],
+    );
+    result.draft.content.hero.slides[0].title.ms = "Unsaved nested edit";
+    expect(result.page.publishedContent.hero.slides[0].title.ms).toBe(
+      "Published stays unchanged",
+    );
+  });
 });
 
 describe("savePageDraft", () => {
@@ -307,7 +357,7 @@ describe("savePageDraft", () => {
     expect(supabaseState.calls).toHaveLength(0);
   });
 
-  it("upserts only validated draft fields and omits actor and audit fields", async () => {
+  it("updates an existing draft without submitting its page_id", async () => {
     const content = customHomeContent("Draf disimpan");
     setSession(createSession());
     supabaseState.responses.push(
@@ -336,24 +386,116 @@ describe("savePageDraft", () => {
       persisted: true,
     });
 
-    const write = supabaseState.calls.find(({ operation }) => operation === "upsert");
+    const write = supabaseState.calls.find(({ operation }) => operation === "update");
     expect(write).toEqual({
       table: "website_page_drafts",
-      operation: "upsert",
+      operation: "update",
       columns: "page_id,draft_content,base_revision",
-      filters: [],
+      filters: [{ column: "page_id", value: "page-home" }],
       payload: {
-        page_id: "page-home",
         draft_content: content,
         base_revision: 3,
       },
-      options: { onConflict: "page_id" },
     });
-    expect(supabaseState.calls.some(({ table }) => table === "website_pages")).toBe(
-      false,
-    );
+    expect(supabaseState.calls.map(({ table }) => table)).toEqual([
+      "user_roles",
+      "website_page_drafts",
+    ]);
+    expect(Object.keys(write?.payload as object)).not.toContain("page_id");
     expect(Object.keys(write?.payload as object)).not.toContain("updated_by");
     expect(Object.keys(write?.payload as object)).not.toContain("updated_at");
+  });
+
+  it("inserts a missing draft with exactly the permitted create fields", async () => {
+    const content = customHomeContent("Draf pertama");
+    setSession(createSession());
+    supabaseState.responses.push(
+      { data: { role: "website_editor" }, error: null },
+      { data: null, error: null },
+      {
+        data: {
+          base_revision: 5,
+          draft_content: content,
+          page_id: "page-home",
+        },
+        error: null,
+      },
+    );
+
+    await expect(
+      savePageDraft({
+        baseRevision: 5,
+        content,
+        pageId: "page-home",
+        slug: "home",
+      }),
+    ).resolves.toEqual({
+      baseRevision: 5,
+      content,
+      pageId: "page-home",
+      persisted: true,
+    });
+
+    const writes = supabaseState.calls.filter(
+      ({ operation }) => operation === "update" || operation === "insert",
+    );
+    expect(writes).toEqual([
+      {
+        table: "website_page_drafts",
+        operation: "update",
+        columns: "page_id,draft_content,base_revision",
+        filters: [{ column: "page_id", value: "page-home" }],
+        payload: {
+          draft_content: content,
+          base_revision: 5,
+        },
+      },
+      {
+        table: "website_page_drafts",
+        operation: "insert",
+        columns: "page_id,draft_content,base_revision",
+        filters: [],
+        payload: {
+          page_id: "page-home",
+          draft_content: content,
+          base_revision: 5,
+        },
+      },
+    ]);
+    expect(supabaseState.calls.map(({ table }) => table)).toEqual([
+      "user_roles",
+      "website_page_drafts",
+      "website_page_drafts",
+    ]);
+  });
+
+  it("does not fall through to insert when the existing-draft update errors", async () => {
+    const content = customHomeContent("Draf gagal");
+    setSession(createSession());
+    supabaseState.responses.push(
+      { data: { role: "admin" }, error: null },
+      { data: null, error: { message: "update denied" } },
+    );
+
+    await expect(
+      savePageDraft({
+        baseRevision: 2,
+        content,
+        pageId: "page-home",
+        slug: "home",
+      }),
+    ).rejects.toThrow("Website page draft could not be saved");
+
+    expect(
+      supabaseState.calls.filter(({ operation }) => operation === "update"),
+    ).toHaveLength(1);
+    expect(
+      supabaseState.calls.filter(({ operation }) => operation === "insert"),
+    ).toHaveLength(0);
+    expect(supabaseState.calls.map(({ table }) => table)).toEqual([
+      "user_roles",
+      "website_page_drafts",
+    ]);
   });
 });
 
@@ -398,5 +540,89 @@ describe("usePublishedPage", () => {
     expect(result.current).toBe(DEFAULT_HOME_CONTENT);
     await waitFor(() => expect(supabaseState.calls).toHaveLength(1));
     expect(result.current).toBe(DEFAULT_HOME_CONTENT);
+  });
+
+  it("does not refetch or reset resolved content for equivalent fallback allocations", async () => {
+    const published = customHomeContent("Kandungan stabil");
+    const initialFallback = structuredClone(DEFAULT_HOME_CONTENT);
+    supabaseState.responses.push({
+      data: {
+        published_content: published,
+        revision: 11,
+        slug: "home",
+        status: "published",
+      },
+      error: null,
+    });
+
+    const { result, rerender } = renderHook(
+      ({ fallback }: { fallback: HomeContent }) =>
+        usePublishedPage("home", fallback),
+      { initialProps: { fallback: initialFallback } },
+    );
+
+    await waitFor(() => expect(result.current).toEqual(published));
+    expect(supabaseState.calls).toHaveLength(1);
+
+    rerender({ fallback: structuredClone(DEFAULT_HOME_CONTENT) });
+    expect(result.current).toEqual(published);
+    rerender({ fallback: structuredClone(DEFAULT_HOME_CONTENT) });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current).toEqual(published);
+    expect(supabaseState.calls).toHaveLength(1);
+  });
+
+  it("shows the new slug fallback immediately and ignores the stale request", async () => {
+    const firstPending = deferredResult();
+    const secondPending = deferredResult();
+    const firstFallback = generalPageContent("Fallback first");
+    const secondFallback = generalPageContent("Fallback second");
+    const firstPublished = generalPageContent("Published first");
+    const secondPublished = generalPageContent("Published second");
+    supabaseState.responses.push(firstPending.promise, secondPending.promise);
+
+    const { result, rerender } = renderHook(
+      ({ fallback, slug }: { fallback: GeneralPageContent; slug: string }) =>
+        usePublishedPage(slug, fallback),
+      { initialProps: { fallback: firstFallback, slug: "first-page" } },
+    );
+
+    expect(result.current).toBe(firstFallback);
+    await waitFor(() => expect(supabaseState.calls).toHaveLength(1));
+
+    rerender({ fallback: secondFallback, slug: "second-page" });
+    expect(result.current).toBe(secondFallback);
+    await waitFor(() => expect(supabaseState.calls).toHaveLength(2));
+
+    await act(async () => {
+      firstPending.resolve({
+        data: {
+          published_content: firstPublished,
+          revision: 1,
+          slug: "first-page",
+          status: "published",
+        },
+        error: null,
+      });
+      await firstPending.promise;
+    });
+    expect(result.current).toBe(secondFallback);
+
+    await act(async () => {
+      secondPending.resolve({
+        data: {
+          published_content: secondPublished,
+          revision: 2,
+          slug: "second-page",
+          status: "published",
+        },
+        error: null,
+      });
+      await secondPending.promise;
+    });
+    await waitFor(() => expect(result.current).toEqual(secondPublished));
   });
 });

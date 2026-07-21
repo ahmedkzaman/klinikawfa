@@ -204,9 +204,13 @@ export async function fetchEditorPage(
       persisted: true,
     };
   } else {
+    const synthesizedContent = schema.safeParse(pageRow.published_content);
+    if (!synthesizedContent.success) {
+      throw new Error("Website page contains invalid published content");
+    }
     draft = {
       baseRevision: pageRow.revision,
-      content: published.data,
+      content: synthesizedContent.data,
       pageId: pageRow.id,
       persisted: false,
     };
@@ -237,30 +241,44 @@ export async function savePageDraft(
 
   await requireWebsiteManagerSession();
 
-  const payload = {
-    page_id: input.pageId,
+  const updatePayload = {
     draft_content: parsed.data as Json,
     base_revision: input.baseRevision,
   };
-  const { data, error } = await cmsSupabase
+  const { data: updatedDraft, error: updateError } = await cmsSupabase
     .from("website_page_drafts")
-    .upsert(payload, { onConflict: "page_id" })
+    .update(updatePayload)
+    .eq("page_id", input.pageId)
     .select("page_id,draft_content,base_revision")
-    .single();
+    .maybeSingle();
 
-  if (error || !data) {
+  if (updateError) {
     throw new Error("Website page draft could not be saved");
   }
 
-  const savedContent = schema.safeParse(data.draft_content);
+  let savedDraft = updatedDraft;
+  if (!savedDraft) {
+    const { data: insertedDraft, error: insertError } = await cmsSupabase
+      .from("website_page_drafts")
+      .insert({ page_id: input.pageId, ...updatePayload })
+      .select("page_id,draft_content,base_revision")
+      .single();
+
+    if (insertError || !insertedDraft) {
+      throw new Error("Website page draft could not be saved");
+    }
+    savedDraft = insertedDraft;
+  }
+
+  const savedContent = schema.safeParse(savedDraft.draft_content);
   if (!savedContent.success) {
     throw new Error("Saved website page draft is invalid");
   }
 
   return {
-    baseRevision: data.base_revision,
+    baseRevision: savedDraft.base_revision,
     content: savedContent.data,
-    pageId: data.page_id,
+    pageId: savedDraft.page_id,
     persisted: true,
   };
 }
