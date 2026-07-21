@@ -47,4 +47,23 @@ describe("archive inventory", () => {
       { schema: "public", table: "patients" },
     ]);
   });
+
+  it("excludes descriptors while retaining managed-schema table metadata", () => {
+    const inventory = parseArchiveList(`
+201; 1259 30001 TABLE public patients postgres
+202; 0 30001 TABLE DATA public patients postgres
+203; 1259 30002 TABLE auth users supabase_auth_admin
+204; 1259 30003 TABLE realtime messages supabase_realtime_admin
+205; 0 0 TABLE ATTACH realtime messages_2026_07_22 supabase_realtime_admin
+206; 0 0 ACL - SCHEMA public postgres
+207; 0 0 COMMENT - EXTENSION pgcrypto
+`);
+
+    expect(inventory.schemas).toEqual(["auth", "public", "realtime"]);
+    expect(inventory.tables).toEqual([
+      { schema: "auth", table: "users" },
+      { schema: "public", table: "patients" },
+      { schema: "realtime", table: "messages" },
+    ]);
+  });
 });

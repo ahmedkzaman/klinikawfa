@@ -23,7 +23,7 @@ export const parseArchiveList = (contents) => {
   const tables = new Map();
 
   for (const line of contents.split(/\r?\n/)) {
-    const match = /^\s*\d+;\s+\d+\s+\d+\s+TABLE(?: DATA)?\s+(\S+)\s+(\S+)/.exec(line);
+    const match = /^\s*\d+;\s+\d+\s+\d+\s+TABLE(?: DATA)?(?!\s+ATTACH\b)\s+(\S+)\s+(\S+)/.exec(line);
     if (!match) continue;
 
     const [, schema, table] = match;
@@ -91,7 +91,8 @@ const main = async () => {
     output,
     projectRef: process.env.SUPABASE_PROJECT_REF,
   });
-  console.log(`archive verified; schemas=${inventory.schemas.length}; tables=${inventory.tables.length}`);
+  const applicationTableCount = inventory.tables.filter(({ schema }) => schema === "public").length;
+  console.log(`archive verified; schemas=${inventory.schemas.length}; tables=${applicationTableCount}`);
   console.log(`archive sha256=${inventory.archiveSha256}`);
   console.log(`schemas=${inventory.schemas.join(",")}`);
 };
