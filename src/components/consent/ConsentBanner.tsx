@@ -119,6 +119,12 @@ export function ConsentBanner({
               Google Analytics and Google Ads are used for site and advertising
               measurement only after your consent.
             </p>
+            <p className="text-muted-foreground">
+              Menarik balik pilihan menghentikan pengukuran seterusnya; ia tidak
+              memadam data yang telah dihantar kepada Google. / Withdrawing your
+              choice stops future measurement; it does not erase data already
+              sent to Google.
+            </p>
           </div>
 
           <div className="grid gap-2 sm:grid-cols-2">
