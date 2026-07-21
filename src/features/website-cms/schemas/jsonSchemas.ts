@@ -57,7 +57,7 @@ const HOME_LINK_JSON_SCHEMA = {
   required: ["label", "href"],
   properties: {
     label: BILINGUAL_TEXT_JSON_SCHEMA,
-    href: SAFE_HREF_JSON_SCHEMA,
+    href: MANAGED_LINK_HREF_JSON_SCHEMA,
   },
 } as const;
 

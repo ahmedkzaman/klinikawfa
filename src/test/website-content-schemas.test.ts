@@ -295,6 +295,26 @@ describe("website content schemas", () => {
     }, false);
   });
 
+  it.each([
+    ["Hero", { ...validHome, hero: { ...validHome.hero, ctas: [{ label: { ms: "Imej" }, href: clinicExterior }] } }],
+    ["Services", { ...validHome, services: { ...validHome.services, cta: { label: { ms: "Imej" }, href: clinicExterior } } }],
+    ["Gallery", { ...validHome, gallery: { ...validHome.gallery, cta: { label: { ms: "Imej" }, href: clinicExterior } } }],
+    ["Map", { ...validHome, map: { ...validHome.map, directionsCta: { label: { ms: "Imej" }, href: clinicExterior } } }],
+  ])("rejects an asset path from the %s Home link with Zod and Draft 7", (_surface, value) => {
+    expectPairedResult(homeContentSchema, validateHome, value, false);
+  });
+
+  it("continues to allow the clinic asset in image and media URL fields", () => {
+    expectPairedResult(homeContentSchema, validateHome, {
+      ...validHome,
+      hero: { ...validHome.hero, backgroundImage: clinicExterior },
+    }, true);
+    expectPairedResult(generalPageContentSchema, validateGeneralPage, {
+      ...validGeneralPage,
+      media: [{ type: "image", url: clinicExterior, alt: { ms: "Klinik" } }],
+    }, true);
+  });
+
   it.each(RESERVED_PAGE_SLUGS)("rejects reserved slug %s", (slug) => {
     expect(pageSlugSchema.safeParse(slug).success).toBe(false);
   });
