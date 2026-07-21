@@ -1,12 +1,20 @@
 import { describe, expect, it } from "vitest";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   APPROVED_ARCHIVE_SHA256,
   LIVE_SOURCE_PROJECT_REF,
   TARGET_PROJECT_REF,
   assertTargetProjectRef,
+  assertApprovedArchive,
   redactConnectionString,
 } from "../../scripts/cutover/cutover-contract.mjs";
-import { parseArchiveList } from "../../scripts/cutover/archive-inventory.mjs";
+import {
+  parseArchiveList,
+  resolveProtectedOutputPath,
+  stageApprovedArchive,
+} from "../../scripts/cutover/archive-inventory.mjs";
 
 describe("production cutover contract", () => {
   it("locks the approved source and target", () => {
@@ -29,6 +37,17 @@ describe("production cutover contract", () => {
     const output = redactConnectionString(input);
     expect(output).not.toContain("secret");
     expect(output).toContain("postgresql://postgres:***@example.test:5432/postgres");
+  });
+
+  it("rejects an archive with a mismatched fingerprint", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "cutover-contract-"));
+    const archive = join(directory, "unapproved.backup");
+    await writeFile(archive, "unapproved archive");
+
+    await expect(assertApprovedArchive(archive)).rejects.toThrow(
+      /Approved archive fingerprint mismatch/,
+    );
+    await rm(directory, { recursive: true, force: true });
   });
 });
 
@@ -65,5 +84,68 @@ describe("archive inventory", () => {
       { schema: "public", table: "patients" },
       { schema: "realtime", table: "messages" },
     ]);
+  });
+
+  it("enforces a canonical protected output path, including Windows casing", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cutover-output-"));
+    const output = join(root, "inventory", "source.json");
+    const outside = join(tmpdir(), "outside.json");
+
+    await expect(resolveProtectedOutputPath(output, root.toUpperCase())).resolves.toBe(output);
+    await expect(resolveProtectedOutputPath(outside, root)).rejects.toThrow(
+      /protected cutover directory/,
+    );
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("rejects protected output paths that traverse a junction", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cutover-output-"));
+    const outside = await mkdtemp(join(tmpdir(), "cutover-outside-"));
+    const junction = join(root, "escape");
+    await symlink(outside, junction, "junction");
+
+    await expect(resolveProtectedOutputPath(join(junction, "source.json"), root)).rejects.toThrow(
+      /reparse point/,
+    );
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  });
+
+  it("rejects a pre-existing symlinked inventory file", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cutover-output-"));
+    const outside = await mkdtemp(join(tmpdir(), "cutover-outside-"));
+    const output = join(root, "source.json");
+    await symlink(outside, output, "junction");
+
+    await expect(resolveProtectedOutputPath(output, root)).rejects.toThrow(/reparse point/);
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  });
+
+  it("verifies the protected staged copy after a source swap", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cutover-stage-"));
+    const source = join(root, "source.backup");
+    await writeFile(source, "approved-before-copy");
+    const verifyCalls: string[] = [];
+    const verifyArchive = async (path: string) => {
+      verifyCalls.push(path);
+      return { path, size: (await readFile(path)).length, sha256: "TEST" };
+    };
+    const copyArchive = async (from: string, to: string) => {
+      await writeFile(to, await readFile(from));
+      await writeFile(from, "swapped-after-copy");
+    };
+
+    const staged = await stageApprovedArchive({
+      archive: source,
+      protectedDirectory: root,
+      verifyArchive,
+      copyArchive,
+    });
+
+    expect(await readFile(staged.path, "utf8")).toBe("approved-before-copy");
+    expect(verifyCalls).toEqual([source, staged.path]);
+    await staged.cleanup();
+    await rm(root, { recursive: true, force: true });
   });
 });

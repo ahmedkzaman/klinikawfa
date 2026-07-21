@@ -1,6 +1,15 @@
 import { execFile } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
-import { delimiter, resolve } from "node:path";
+import {
+  copyFile,
+  lstat,
+  mkdir,
+  mkdtemp,
+  open,
+  realpath,
+  rename,
+  rm,
+} from "node:fs/promises";
+import { basename, delimiter, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   assertApprovedArchive,
@@ -10,6 +19,80 @@ import {
 const PROTECTED_CUTOVER_DIRECTORY = resolve(
   "C:\\Users\\ahmed\\Documents\\Codex\\private\\klinikawfa\\cutover-20260722",
 );
+
+const comparePath = (value) => resolve(value).replace(/[\\/]+$/, "").toLocaleLowerCase("en-US");
+
+const isWithin = (child, parent) => {
+  const normalizedChild = comparePath(child);
+  const normalizedParent = comparePath(parent);
+  return normalizedChild === normalizedParent || normalizedChild.startsWith(`${normalizedParent}\\`);
+};
+
+const assertNotReparsePoint = async (path, label) => {
+  const metadata = await lstat(path);
+  if (metadata.isSymbolicLink()) {
+    throw new Error(`Refusing ${label} through a symlink, junction, or reparse point`);
+  }
+  return metadata;
+};
+
+const canonicalProtectedRoot = async (protectedDirectory) => {
+  await mkdir(protectedDirectory, { recursive: true });
+  await assertNotReparsePoint(protectedDirectory, "protected cutover directory");
+  const canonicalRoot = await realpath(protectedDirectory);
+  if (comparePath(canonicalRoot) !== comparePath(protectedDirectory)) {
+    throw new Error("Refusing protected cutover directory through a symlink, junction, or reparse point");
+  }
+  return canonicalRoot;
+};
+
+const createCanonicalOutputParent = async (output, protectedRoot) => {
+  const requestedOutput = resolve(output);
+  if (!isWithin(requestedOutput, protectedRoot) || comparePath(requestedOutput) === comparePath(protectedRoot)) {
+    throw new Error("Inventory output must remain in the protected cutover directory");
+  }
+
+  const requestedRelative = relative(protectedRoot, requestedOutput);
+  const segments = requestedRelative.split(/[\\/]+/);
+  const fileName = segments.pop();
+  if (!fileName || fileName !== basename(requestedOutput) || segments.some((segment) => !segment || segment === "." || segment === "..")) {
+    throw new Error("Inventory output must remain in the protected cutover directory");
+  }
+
+  let parent = protectedRoot;
+  for (const segment of segments) {
+    parent = join(parent, segment);
+    await mkdir(parent, { recursive: true });
+    await assertNotReparsePoint(parent, "inventory output");
+    const canonicalParent = await realpath(parent);
+    if (!isWithin(canonicalParent, protectedRoot)) {
+      throw new Error("Inventory output must remain in the protected cutover directory");
+    }
+    parent = canonicalParent;
+  }
+
+  const canonicalParent = await realpath(parent);
+  if (!isWithin(canonicalParent, protectedRoot)) {
+    throw new Error("Inventory output must remain in the protected cutover directory");
+  }
+  return { path: join(canonicalParent, fileName), parent: canonicalParent };
+};
+
+export const resolveProtectedOutputPath = async (
+  output,
+  protectedDirectory = PROTECTED_CUTOVER_DIRECTORY,
+) => {
+  const protectedRoot = await canonicalProtectedRoot(protectedDirectory);
+  const resolved = await createCanonicalOutputParent(output, protectedRoot);
+
+  try {
+    await assertNotReparsePoint(resolved.path, "inventory output");
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+
+  return resolved.path;
+};
 
 const listArchiveContents = (archive) =>
   new Promise((resolveList, reject) => {
@@ -39,6 +122,57 @@ export const parseArchiveList = (contents) => {
   return { schemas, tables: tableList };
 };
 
+export const stageApprovedArchive = async ({
+  archive,
+  protectedDirectory = PROTECTED_CUTOVER_DIRECTORY,
+  verifyArchive = assertApprovedArchive,
+  copyArchive = copyFile,
+}) => {
+  const protectedRoot = await canonicalProtectedRoot(protectedDirectory);
+  const verifiedSource = await verifyArchive(archive);
+  const stagingDirectory = await mkdtemp(join(protectedRoot, ".archive-stage-"));
+  const stagedPath = join(stagingDirectory, "source.backup");
+
+  try {
+    await assertNotReparsePoint(stagingDirectory, "archive staging directory");
+    await copyArchive(verifiedSource.path, stagedPath);
+    const verifiedStaged = await verifyArchive(stagedPath);
+    return {
+      ...verifiedStaged,
+      path: stagedPath,
+      cleanup: () => rm(stagingDirectory, { recursive: true, force: true }),
+    };
+  } catch (error) {
+    await rm(stagingDirectory, { recursive: true, force: true });
+    throw error;
+  }
+};
+
+const writeInventorySafely = async (outputPath, inventory) => {
+  try {
+    await assertNotReparsePoint(outputPath, "inventory output");
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+
+  const temporaryPath = join(
+    dirname(outputPath),
+    `.${basename(outputPath)}.${process.pid}.${Date.now()}.tmp`,
+  );
+  try {
+    const handle = await open(temporaryPath, "wx");
+    try {
+      await handle.writeFile(`${JSON.stringify(inventory, null, 2)}\n`, "utf8");
+    } finally {
+      await handle.close();
+    }
+    await rename(temporaryPath, outputPath);
+  } catch (error) {
+    await rm(temporaryPath, { force: true });
+    throw error;
+  }
+};
+
 const parseArguments = (argv) => {
   const options = {};
   for (let index = 0; index < argv.length; index += 2) {
@@ -52,30 +186,22 @@ const parseArguments = (argv) => {
   return options;
 };
 
-const assertProtectedOutputPath = (output) => {
-  const resolvedOutput = resolve(output);
-  if (
-    resolvedOutput !== PROTECTED_CUTOVER_DIRECTORY &&
-    !resolvedOutput.startsWith(`${PROTECTED_CUTOVER_DIRECTORY}\\`)
-  ) {
-    throw new Error("Inventory output must remain in the protected cutover directory");
-  }
-  return resolvedOutput;
-};
-
 export const createArchiveInventory = async ({ archive, output, projectRef }) => {
   assertTargetProjectRef(projectRef);
-  const verifiedArchive = await assertApprovedArchive(archive);
-  const archiveList = await listArchiveContents(verifiedArchive.path);
-  const inventory = {
-    ...parseArchiveList(archiveList),
-    archiveSha256: verifiedArchive.sha256,
-  };
-  const outputPath = assertProtectedOutputPath(output);
+  const outputPath = await resolveProtectedOutputPath(output);
+  const stagedArchive = await stageApprovedArchive({ archive });
 
-  await mkdir(PROTECTED_CUTOVER_DIRECTORY, { recursive: true });
-  await writeFile(outputPath, `${JSON.stringify(inventory, null, 2)}\n`, "utf8");
-  return inventory;
+  try {
+    const archiveList = await listArchiveContents(stagedArchive.path);
+    const inventory = {
+      ...parseArchiveList(archiveList),
+      archiveSha256: stagedArchive.sha256,
+    };
+    await writeInventorySafely(outputPath, inventory);
+    return inventory;
+  } finally {
+    await stagedArchive.cleanup();
+  }
 };
 
 const main = async () => {
