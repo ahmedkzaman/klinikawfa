@@ -3,11 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_HOME_CONTENT } from "@/features/website-cms/home/homeDefaults";
-import {
-  fetchEditorPage,
-  fetchPublishedPage,
-  savePageDraft,
-} from "@/features/website-cms/api/pages";
+import * as pagesApi from "@/features/website-cms/api/pages";
 import { usePublishedPage } from "@/features/website-cms/hooks/useWebsitePage";
 import {
   homeContentSchema,
@@ -24,6 +20,23 @@ type QueryCall = {
   columns?: string;
   filters: Array<{ column: string; value: unknown }>;
   payload?: unknown;
+};
+
+const {
+  fetchEditorPage,
+  fetchPublishedPage,
+  savePageDraft,
+} = pagesApi;
+
+const publishingApi = pagesApi as typeof pagesApi & {
+  publishPageDraft(input: {
+    expectedRevision: number;
+    pageId: string;
+  }): Promise<void>;
+  restorePageVersionToDraft(input: {
+    pageId: string;
+    versionId: string;
+  }): Promise<void>;
 };
 
 const supabaseState = vi.hoisted(() => ({
@@ -496,6 +509,103 @@ describe("savePageDraft", () => {
       "user_roles",
       "website_page_drafts",
     ]);
+  });
+});
+
+describe("publishPageDraft", () => {
+  it("requests publish through the draft row with both optimistic filters", async () => {
+    setSession(createSession());
+    supabaseState.responses.push(
+      { data: { role: "website_editor" }, error: null },
+      { data: { page_id: "page-home" }, error: null },
+    );
+
+    await expect(
+      publishingApi.publishPageDraft({
+        expectedRevision: 8,
+        pageId: "page-home",
+      }),
+    ).resolves.toBeUndefined();
+
+    const write = supabaseState.calls.find(
+      ({ operation }) => operation === "update",
+    );
+    expect(write?.table).toBe("website_page_drafts");
+    expect(write?.filters).toEqual([
+      { column: "page_id", value: "page-home" },
+      { column: "base_revision", value: 8 },
+    ]);
+    expect(write?.columns).toBe("page_id");
+    expect(Object.keys(write?.payload as object)).toEqual([
+      "publish_requested_at",
+    ]);
+    const requestedAt = (write?.payload as { publish_requested_at: string })
+      .publish_requested_at;
+    expect(new Date(requestedAt).toISOString()).toBe(requestedAt);
+    expect(
+      supabaseState.calls.some(
+        ({ table, operation }) =>
+          table === "website_pages" && operation !== "select",
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("restorePageVersionToDraft", () => {
+  it("reads the authorized page version then restores only draft_content", async () => {
+    const restored = customHomeContent("Versi dipulihkan");
+    setSession(createSession());
+    supabaseState.responses.push(
+      { data: { role: "admin" }, error: null },
+      {
+        data: {
+          id: "version-4",
+          payload: restored,
+          resource_id: "page-home",
+        },
+        error: null,
+      },
+      { data: { page_id: "page-home" }, error: null },
+    );
+
+    await expect(
+      publishingApi.restorePageVersionToDraft({
+        pageId: "page-home",
+        versionId: "version-4",
+      }),
+    ).resolves.toBeUndefined();
+
+    const versionRead = supabaseState.calls.find(
+      ({ table }) => table === "website_content_versions",
+    );
+    expect(versionRead).toEqual({
+      table: "website_content_versions",
+      operation: "select",
+      columns: "id,resource_id,payload",
+      filters: [
+        { column: "id", value: "version-4" },
+        { column: "resource_type", value: "page" },
+        { column: "resource_id", value: "page-home" },
+      ],
+    });
+
+    const draftWrite = supabaseState.calls.find(
+      ({ table, operation }) =>
+        table === "website_page_drafts" && operation === "update",
+    );
+    expect(draftWrite).toEqual({
+      table: "website_page_drafts",
+      operation: "update",
+      columns: "page_id",
+      filters: [{ column: "page_id", value: "page-home" }],
+      payload: { draft_content: restored },
+    });
+    expect(
+      supabaseState.calls.some(
+        ({ table, operation }) =>
+          table === "website_pages" && operation !== "select",
+      ),
+    ).toBe(false);
   });
 });
 

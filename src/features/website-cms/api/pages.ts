@@ -45,6 +45,7 @@ type WebsiteCmsDatabase = Omit<Database, "public"> & {
           base_revision: number;
           draft_content: Json;
           page_id: string;
+          publish_requested_at: string | null;
           updated_at: string;
           updated_by: string;
         };
@@ -56,6 +57,7 @@ type WebsiteCmsDatabase = Omit<Database, "public"> & {
         Update: {
           base_revision?: number;
           draft_content?: Json;
+          publish_requested_at?: string;
         };
         Relationships: [
           {
@@ -66,6 +68,20 @@ type WebsiteCmsDatabase = Omit<Database, "public"> & {
             referencedColumns: ["id"];
           },
         ];
+      };
+      website_content_versions: {
+        Row: {
+          id: string;
+          payload: Json;
+          published_at: string;
+          published_by: string;
+          resource_id: string;
+          resource_type: string;
+          revision: number;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
       };
     };
   };
@@ -101,6 +117,16 @@ export interface SavePageDraftInput {
   content: unknown;
   pageId: string;
   slug: string;
+}
+
+export interface PublishPageDraftInput {
+  expectedRevision: number;
+  pageId: string;
+}
+
+export interface RestorePageVersionToDraftInput {
+  pageId: string;
+  versionId: string;
 }
 
 function schemaForSlug(
@@ -281,4 +307,51 @@ export async function savePageDraft(
     pageId: savedDraft.page_id,
     persisted: true,
   };
+}
+
+export async function publishPageDraft(
+  input: PublishPageDraftInput,
+): Promise<void> {
+  await requireWebsiteManagerSession();
+
+  const { data, error } = await cmsSupabase
+    .from("website_page_drafts")
+    .update({ publish_requested_at: new Date().toISOString() })
+    .eq("page_id", input.pageId)
+    .eq("base_revision", input.expectedRevision)
+    .select("page_id")
+    .maybeSingle();
+
+  if (error || !data) {
+    throw new Error("Website page draft could not be published");
+  }
+}
+
+export async function restorePageVersionToDraft(
+  input: RestorePageVersionToDraftInput,
+): Promise<void> {
+  await requireWebsiteManagerSession();
+
+  const { data: version, error: versionError } = await cmsSupabase
+    .from("website_content_versions")
+    .select("id,resource_id,payload")
+    .eq("id", input.versionId)
+    .eq("resource_type", "page")
+    .eq("resource_id", input.pageId)
+    .maybeSingle();
+
+  if (versionError || !version) {
+    throw new Error("Website page version could not be loaded");
+  }
+
+  const { data: draft, error: draftError } = await cmsSupabase
+    .from("website_page_drafts")
+    .update({ draft_content: version.payload })
+    .eq("page_id", input.pageId)
+    .select("page_id")
+    .maybeSingle();
+
+  if (draftError || !draft) {
+    throw new Error("Website page version could not be restored");
+  }
 }
