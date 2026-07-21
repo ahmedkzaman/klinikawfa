@@ -20,6 +20,7 @@ $SupabaseCli = 'C:\Users\ahmed\Documents\Codex\tools\supabase-cli\v2.109.1\supab
 
 $BackupName = 'target-before-cutover.backup'
 $BackupHashName = 'target-before-cutover.sha256'
+$BackupManifestName = 'target-before-cutover.manifest.json'
 $ReportName = 'rehearsal-report.json'
 $InventoryName = 'target-inventory.json'
 $LoaderName = 'selective-data-loader.sql'
@@ -61,8 +62,6 @@ function Assert-NotReparsePoint {
 
 Assert-ExactProtectedPath -Actual $ProtectedEnv -Expected $ExpectedEnv -Label 'environment'
 Assert-ExactProtectedPath -Actual $ArtifactRoot -Expected $ExpectedArtifactRoot -Label 'artifact root'
-if (-not (Test-Path -LiteralPath $ProtectedEnv -PathType Leaf)) { throw 'Protected environment file is missing.' }
-Assert-NotReparsePoint -Path $ProtectedEnv -Label 'protected environment file'
 New-Item -ItemType Directory -Path $ArtifactRoot -Force | Out-Null
 Assert-NotReparsePoint -Path $ArtifactRoot -Label 'protected artifact root'
 
@@ -84,6 +83,44 @@ function Write-Utf8NoBom {
   param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Content)
   $encoding = New-Object System.Text.UTF8Encoding($false)
   [IO.File]::WriteAllText($Path, $Content, $encoding)
+}
+
+function Get-StringSha256 {
+  param([Parameter(Mandatory)][AllowEmptyString()][string]$Value)
+  $algorithm = [Security.Cryptography.SHA256]::Create()
+  try {
+    $bytes = [Text.Encoding]::UTF8.GetBytes($Value)
+    return ([BitConverter]::ToString($algorithm.ComputeHash($bytes))).Replace('-', '').ToUpperInvariant()
+  } finally {
+    $algorithm.Dispose()
+  }
+}
+
+function Get-JsonSha256 {
+  param([Parameter(Mandatory)]$Value)
+  return Get-StringSha256 -Value ($Value | ConvertTo-Json -Depth 50 -Compress)
+}
+
+function Invalidate-EvidenceFile {
+  param([Parameter(Mandatory)][string]$Path)
+  if (-not (Test-Path -LiteralPath $Path)) { return }
+  $invalidated = "$Path.invalidated-$PID-$([Guid]::NewGuid().ToString('N'))"
+  Move-Item -LiteralPath $Path -Destination $invalidated
+  Remove-Item -LiteralPath $invalidated -Force
+}
+
+function Invalidate-RehearsalEvidence {
+  Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot $ReportName)
+  foreach ($name in @($LoaderName, $HeldStaffLoaderName, $AuthLoaderName)) {
+    Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot $name)
+  }
+}
+
+function Invalidate-BackupEvidence {
+  Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot $BackupManifestName)
+  Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot $BackupHashName)
+  Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot $BackupName)
+  Invalidate-RehearsalEvidence
 }
 
 function Write-ProtectedJson {
@@ -135,18 +172,11 @@ function Assert-TargetProjectRef {
 
   $userInfo = $uri.UserInfo.Split(':', 2)
   $username = [Uri]::UnescapeDataString($userInfo[0])
-  $hostRef = $null
-  $userRef = $null
-  if ($uri.Host -match '^db\.([a-z0-9]+)\.supabase\.co$') { $hostRef = $Matches[1] }
-  if ($username -match '^postgres\.([a-z0-9]+)$') { $userRef = $Matches[1] }
-  if ($hostRef -ne $ExpectedRef -and $userRef -ne $ExpectedRef) {
-    throw 'Refusing cutover operation: database host identity is not the promoted target.'
-  }
-  if ($hostRef -and $hostRef -ne $ExpectedRef) {
-    throw 'Refusing cutover operation: direct database host ref does not match the promoted target.'
-  }
-  if ($userRef -and $userRef -ne $ExpectedRef) {
-    throw 'Refusing cutover operation: pooler database user ref does not match the promoted target.'
+  $directHost = "db.$ExpectedRef.supabase.co"
+  $isDirect = $uri.Host -eq $directHost -and $username -eq 'postgres'
+  $isOfficialPooler = $uri.Host -match '^aws-[0-9]+-[a-z0-9-]+\.pooler\.supabase\.com$' -and $username -eq "postgres.$ExpectedRef"
+  if (-not $isDirect -and -not $isOfficialPooler) {
+    throw 'Refusing cutover operation: database host and username are not the exact direct target or an official target pooler.'
   }
 
   if ($Environment.ContainsKey('STAGING_API_URL') -and -not [string]::IsNullOrWhiteSpace($Environment['STAGING_API_URL'])) {
@@ -331,6 +361,51 @@ function Get-SetDiff {
   }
 }
 
+function Get-TargetSchemaSha256 {
+  $metadataText = Invoke-TargetQuery -Label 'target schema metadata digest input' -Sql @'
+select jsonb_build_object(
+  'relations', coalesce((
+    select jsonb_agg(jsonb_build_array(n.nspname,c.relname,c.relkind,c.relrowsecurity,c.relforcerowsecurity) order by n.nspname,c.relname)
+    from pg_class c join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='public' or (n.nspname='auth' and c.relname in ('users','identities'))
+  ),'[]'::jsonb),
+  'columns', coalesce((
+    select jsonb_agg(jsonb_build_array(table_schema,table_name,ordinal_position,column_name,data_type,udt_schema,udt_name,is_nullable,column_default,is_identity,is_generated) order by table_schema,table_name,ordinal_position)
+    from information_schema.columns
+    where table_schema='public' or (table_schema='auth' and table_name in ('users','identities'))
+  ),'[]'::jsonb),
+  'constraints', coalesce((
+    select jsonb_agg(jsonb_build_array(n.nspname,c.relname,con.conname,con.contype,con.convalidated,pg_get_constraintdef(con.oid,true)) order by n.nspname,c.relname,con.conname)
+    from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='public' or (n.nspname='auth' and c.relname in ('users','identities'))
+  ),'[]'::jsonb),
+  'indexes', coalesce((
+    select jsonb_agg(jsonb_build_array(n.nspname,c.relname,i.relname,pg_get_indexdef(i.oid)) order by n.nspname,c.relname,i.relname)
+    from pg_index x join pg_class c on c.oid=x.indrelid join pg_namespace n on n.oid=c.relnamespace join pg_class i on i.oid=x.indexrelid
+    where n.nspname='public' or (n.nspname='auth' and c.relname in ('users','identities'))
+  ),'[]'::jsonb),
+  'policies', coalesce((
+    select jsonb_agg(jsonb_build_array(schemaname,tablename,policyname,permissive,roles,cmd,qual,with_check) order by schemaname,tablename,policyname)
+    from pg_policies where schemaname='public' or (schemaname='auth' and tablename in ('users','identities'))
+  ),'[]'::jsonb),
+  'functions', coalesce((
+    select jsonb_agg(jsonb_build_array(n.nspname,p.proname,pg_get_function_identity_arguments(p.oid),pg_get_functiondef(p.oid)) order by n.nspname,p.proname,pg_get_function_identity_arguments(p.oid))
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','auth')
+  ),'[]'::jsonb),
+  'triggers', coalesce((
+    select jsonb_agg(jsonb_build_array(n.nspname,c.relname,t.tgname,pg_get_triggerdef(t.oid,true)) order by n.nspname,c.relname,t.tgname)
+    from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace
+    where not t.tgisinternal and (n.nspname='public' or (n.nspname='auth' and c.relname in ('users','identities')))
+  ),'[]'::jsonb),
+  'enums', coalesce((
+    select jsonb_agg(jsonb_build_array(n.nspname,t.typname,e.enumsortorder,e.enumlabel) order by n.nspname,t.typname,e.enumsortorder)
+    from pg_enum e join pg_type t on t.oid=e.enumtypid join pg_namespace n on n.oid=t.typnamespace where n.nspname in ('public','auth')
+  ),'[]'::jsonb)
+)::text;
+'@
+  return Get-StringSha256 -Value $metadataText
+}
+
 function Get-TargetInventory {
   $publicTables = [int](Invoke-TargetQuery -Label 'target public-table inventory' -Sql "select count(*) from information_schema.tables where table_schema='public' and table_type='BASE TABLE';")
   $authUsers = [int](Invoke-TargetQuery -Label 'target Auth user inventory' -Sql 'select count(*) from auth.users;')
@@ -338,6 +413,8 @@ function Get-TargetInventory {
   $migrationRows = [int](Invoke-TargetQuery -Label 'target migration inventory' -Sql 'select count(*) from supabase_migrations.schema_migrations;')
   $migrationText = Invoke-TargetQuery -Label 'target migration identity inventory' -Sql "select coalesce(jsonb_agg(version order by version),'[]'::jsonb)::text from supabase_migrations.schema_migrations;"
   $migrationIdentities = @(ConvertFrom-JsonArray -Text $migrationText)
+  $migrationIdentitiesSha256 = Get-StringSha256 -Value ($migrationIdentities -join "`n")
+  $schemaSha256 = Get-TargetSchemaSha256
   return [ordered]@{
     projectRef = $ExpectedRef
     publicTables = $publicTables
@@ -345,6 +422,22 @@ function Get-TargetInventory {
     authIdentities = $authIdentities
     migrationRows = $migrationRows
     migrationIdentities = $migrationIdentities
+    migrationIdentitiesSha256 = $migrationIdentitiesSha256
+    schemaSha256 = $schemaSha256
+  }
+}
+
+function Assert-RehearsalBinding {
+  param([Parameter(Mandatory)]$Expected, [Parameter(Mandatory)]$Actual)
+  if ((Get-JsonSha256 -Value $Expected) -ne (Get-JsonSha256 -Value $Actual)) {
+    throw 'Rehearsal evidence binding does not match the current runner, loaders, archive, backup, baseline, and migrations.'
+  }
+}
+
+function Assert-TargetBaselineUnchanged {
+  param([Parameter(Mandatory)]$Expected, [Parameter(Mandatory)]$Actual)
+  if ((Get-JsonSha256 -Value $Expected) -ne (Get-JsonSha256 -Value $Actual)) {
+    throw 'Target baseline changed after the completed backup and rehearsal.'
   }
 }
 
@@ -360,8 +453,8 @@ function Invoke-InventoryPhase {
   }
   Write-ProtectedJson -Path (Join-Path $ArtifactRoot $InventoryName) -Value $inventory
   if ($sourceTables.Count -ne 94) { throw "Source public-table count changed from the approved value: $($sourceTables.Count)." }
-  if ($targetInventory.publicTables -ne 93 -or $targetInventory.authUsers -ne 0 -or $targetInventory.migrationRows -ne 153) {
-    throw 'Target baseline no longer matches the approved 93-table, zero-user, 153-migration inventory.'
+  if ($targetInventory.publicTables -ne 93 -or $targetInventory.authUsers -ne 0 -or $targetInventory.authIdentities -ne 0 -or $targetInventory.migrationRows -ne 153) {
+    throw 'Target baseline no longer matches the approved 93-table, zero-user, zero-identity, 153-migration inventory.'
   }
   Write-Summary "Inventory passed: source public tables=94; target public tables=93; target Auth users=0; target migrations=153; target ref=$ExpectedRef."
   return $inventory
@@ -370,21 +463,44 @@ function Invoke-InventoryPhase {
 function Assert-VerifiedBackup {
   $backup = Join-Path $ArtifactRoot $BackupName
   $hashFile = Join-Path $ArtifactRoot $BackupHashName
-  if (-not (Test-Path -LiteralPath $backup -PathType Leaf) -or -not (Test-Path -LiteralPath $hashFile -PathType Leaf)) {
-    throw 'A verified pre-cutover backup is required before this phase.'
+  $manifestPath = Join-Path $ArtifactRoot $BackupManifestName
+  if (-not (Test-Path -LiteralPath $backup -PathType Leaf) -or
+      -not (Test-Path -LiteralPath $hashFile -PathType Leaf) -or
+      -not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+    throw 'A completed backup, digest, and manifest are required before this phase.'
   }
   Assert-NotReparsePoint -Path $backup -Label 'target backup'
   Assert-NotReparsePoint -Path $hashFile -Label 'target backup digest'
+  Assert-NotReparsePoint -Path $manifestPath -Label 'target backup manifest'
+  $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+  if ($manifest.formatVersion -ne 1 -or $manifest.backup.file -ne $BackupName -or $manifest.sourceArchiveSha256 -ne $ApprovedArchiveSha256) {
+    throw 'Target backup manifest identity is invalid.'
+  }
   $expected = ((Get-Content -LiteralPath $hashFile -Raw).Trim() -split '\s+')[0].ToUpperInvariant()
   if ($expected -notmatch '^[A-F0-9]{64}$') { throw 'Target backup digest file is invalid.' }
   $actual = (Get-FileHash -LiteralPath $backup -Algorithm SHA256).Hash.ToUpperInvariant()
-  if ($actual -ne $expected) { throw 'Target backup digest mismatch.' }
+  $bytes = (Get-Item -LiteralPath $backup).Length
+  if ($actual -ne $expected -or $actual -ne ([string]$manifest.backup.sha256).ToUpperInvariant() -or $bytes -ne [int64]$manifest.backup.bytes) {
+    throw 'Target backup artifact does not match its completed manifest and digest.'
+  }
+  $targetBaselineSha256 = Get-JsonSha256 -Value $manifest.targetBaseline
+  if ($targetBaselineSha256 -ne ([string]$manifest.targetBaselineSha256).ToUpperInvariant()) {
+    throw 'Target backup manifest baseline digest is invalid.'
+  }
   [void](Get-ArchiveToc -Archive $backup -Label 'target backup list validation')
-  return [ordered]@{ path = $backup; sha256 = $actual; bytes = (Get-Item -LiteralPath $backup).Length }
+  return [ordered]@{
+    path = $backup
+    sha256 = $actual
+    bytes = $bytes
+    manifest = $manifest
+    manifestPath = $manifestPath
+    manifestSha256 = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToUpperInvariant()
+  }
 }
 
 function Invoke-BackupPhase {
   [void](Invoke-InventoryPhase)
+  $inventory = Get-Content -LiteralPath (Join-Path $ArtifactRoot $InventoryName) -Raw | ConvertFrom-Json
   $backup = Join-Path $ArtifactRoot $BackupName
   $temporary = Join-Path $ArtifactRoot (".$BackupName.$PID.tmp")
   if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
@@ -397,10 +513,20 @@ function Invoke-BackupPhase {
     Move-Item -LiteralPath $temporary -Destination $backup -Force
     $hash = (Get-FileHash -LiteralPath $backup -Algorithm SHA256).Hash.ToUpperInvariant()
     Write-Utf8NoBom -Path (Join-Path $ArtifactRoot $BackupHashName) -Content "$hash  $BackupName`n"
+    $manifest = [ordered]@{
+      formatVersion = 1
+      completedAtUtc = [DateTime]::UtcNow.ToString('o')
+      sourceArchiveSha256 = $ApprovedArchiveSha256
+      backup = [ordered]@{ file = $BackupName; sha256 = $hash; bytes = (Get-Item -LiteralPath $backup).Length }
+      targetBaseline = $inventory.target
+      targetBaselineSha256 = Get-JsonSha256 -Value $inventory.target
+    }
+    Write-ProtectedJson -Path (Join-Path $ArtifactRoot $BackupManifestName) -Value $manifest
     [void](Assert-VerifiedBackup)
-    Write-Summary "Backup passed: $BackupName is non-empty, list-valid, and SHA-256 verified in the protected artifact root."
+    Write-Summary "Backup passed: $BackupName is non-empty, list-valid, and bound to a completed SHA-256 manifest in the protected artifact root."
   } catch {
     if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
+    Invalidate-BackupEvidence
     throw
   }
 }
@@ -598,10 +724,14 @@ function Compare-ColumnMetadata {
   $targetRequiredOnly = @()
   $typeDifferences = @()
   $defaultDifferences = @()
+  $allowedDefaultDifferences = @()
+  $blockingDefaultDifferences = @()
+  $nullabilityDifferences = @()
   $sourceOnlyDetails = @()
   $targetRequiredOnlyDetails = @()
   $typeDifferenceDetails = @()
   $defaultDifferenceDetails = @()
+  $nullabilityDifferenceDetails = @()
   $matchedTargetKeys = @{}
   foreach ($key in @($sourceMap.Keys | Sort-Object)) {
     $targetKey = $key
@@ -625,9 +755,20 @@ function Compare-ColumnMetadata {
       $typeDifferences += $comparisonIdentity
       $typeDifferenceDetails += [ordered]@{ identity = $comparisonIdentity; source = [ordered]@{ dataType = $left.data_type; udtSchema = $left.udt_schema; udtName = $left.udt_name }; target = [ordered]@{ dataType = $right.data_type; udtSchema = $right.udt_schema; udtName = $right.udt_name } }
     }
+    if ($left.is_nullable -ne $right.is_nullable) {
+      $nullabilityDifferences += $comparisonIdentity
+      $nullabilityDifferenceDetails += [ordered]@{ identity = $comparisonIdentity; sourceNullable = $left.is_nullable; targetNullable = $right.is_nullable }
+    }
     if ([string]$left.column_default -ne [string]$right.column_default) {
       $defaultDifferences += $comparisonIdentity
       $defaultDifferenceDetails += [ordered]@{ identity = $comparisonIdentity; sourceDefault = $left.column_default; targetDefault = $right.column_default }
+      if ($comparisonIdentity -eq 'public.appointments.status' -and
+          [string]$left.column_default -eq "'pending_payment'::text" -and
+          [string]$right.column_default -eq "'pending'::text") {
+        $allowedDefaultDifferences += $comparisonIdentity
+      } else {
+        $blockingDefaultDifferences += $comparisonIdentity
+      }
     }
   }
   foreach ($key in @($targetMap.Keys | Sort-Object)) {
@@ -645,9 +786,43 @@ function Compare-ColumnMetadata {
     targetRequiredOnlyDetails = $targetRequiredOnlyDetails
     typeDifferences = $typeDifferences
     typeDifferenceDetails = $typeDifferenceDetails
+    nullabilityDifferences = $nullabilityDifferences
+    nullabilityDifferenceDetails = $nullabilityDifferenceDetails
     defaultDifferences = $defaultDifferences
     defaultDifferenceDetails = $defaultDifferenceDetails
+    allowedDefaultDifferences = $allowedDefaultDifferences
+    blockingDefaultDifferences = $blockingDefaultDifferences
   }
+}
+
+function Classify-NullabilityDifferences {
+  param([Parameter(Mandatory)][object[]]$Details, [Parameter(Mandatory)][hashtable]$SourceNullCounts)
+  $allowed = @()
+  $blocking = @()
+  foreach ($detail in $Details) {
+    $identity = [string]$detail.identity
+    if ($detail.sourceNullable -eq 'YES' -and $detail.targetNullable -eq 'NO' -and
+        $SourceNullCounts.ContainsKey($identity) -and [int64]$SourceNullCounts[$identity] -eq 0) {
+      $allowed += $identity
+    } else {
+      $blocking += $identity
+    }
+  }
+  return [ordered]@{ allowed = $allowed; blocking = $blocking }
+}
+
+function Get-SourceNullCounts {
+  param([Parameter(Mandatory)][string]$Database, [Parameter(Mandatory)][object[]]$Details)
+  $counts = @{}
+  foreach ($detail in $Details) {
+    $sourceIdentity = ([string]$detail.identity -split ' -> ', 2)[0]
+    if ($sourceIdentity -notmatch '^(?<schema>[a-z_][a-z0-9_]*)\.(?<table>[a-z_][a-z0-9_]*)\.(?<column>[a-z_][a-z0-9_]*)$') {
+      throw 'Refusing invalid source nullability identity.'
+    }
+    $sql = 'select count(*) from "{0}"."{1}" where "{2}" is null;' -f $Matches.schema,$Matches.table,$Matches.column
+    $counts[[string]$detail.identity] = [int64](Invoke-LocalQuery -Database $Database -Sql $sql -Label "source nullability check for $sourceIdentity")
+  }
+  return $counts
 }
 
 function Get-ConstraintMetadata {
@@ -737,6 +912,72 @@ function Convert-AppointmentInsertColumns {
   })
 }
 
+function Get-ForeignKeyAuditSql {
+  return @'
+-- Catalog-driven audit includes every public FK, including both target-only
+-- public.staff_messages sender_id and receiver_id references.
+do $foreign_key_audit$
+declare
+  fk record;
+  equality_predicate text;
+  subject_predicate text;
+  orphan_exists boolean;
+begin
+  for fk in
+    select con.conname,
+           child_ns.nspname as child_schema,
+           child.relname as child_table,
+           parent_ns.nspname as parent_schema,
+           parent.relname as parent_table,
+           con.confmatchtype,
+           array_agg(child_att.attname order by key_columns.position) as child_columns,
+           array_agg(parent_att.attname order by key_columns.position) as parent_columns
+    from pg_constraint con
+    join pg_class child on child.oid = con.conrelid
+    join pg_namespace child_ns on child_ns.oid = child.relnamespace
+    join pg_class parent on parent.oid = con.confrelid
+    join pg_namespace parent_ns on parent_ns.oid = parent.relnamespace
+    cross join lateral unnest(con.conkey, con.confkey) with ordinality
+      as key_columns(child_attnum, parent_attnum, position)
+    join pg_attribute child_att on child_att.attrelid = child.oid and child_att.attnum = key_columns.child_attnum
+    join pg_attribute parent_att on parent_att.attrelid = parent.oid and parent_att.attnum = key_columns.parent_attnum
+    where con.contype = 'f'
+      and (child_ns.nspname = 'public' or (child_ns.nspname = 'auth' and child.relname in ('users','identities')))
+    group by con.oid, con.conname, child_ns.nspname, child.relname, parent_ns.nspname, parent.relname, con.confmatchtype
+  loop
+    select string_agg(format('child_row.%I = parent_row.%I', fk.child_columns[i], fk.parent_columns[i]), ' and '),
+           string_agg(format('child_row.%I is not null', fk.child_columns[i]), case when fk.confmatchtype = 'f' then ' or ' else ' and ' end)
+      into equality_predicate, subject_predicate
+    from generate_subscripts(fk.child_columns, 1) as i;
+
+    execute format(
+      'select exists (select 1 from %I.%I child_row where (%s) and not exists (select 1 from %I.%I parent_row where %s))',
+      fk.child_schema, fk.child_table, subject_predicate,
+      fk.parent_schema, fk.parent_table, equality_predicate
+    ) into orphan_exists;
+
+    if orphan_exists then
+      raise exception 'Foreign key orphan audit failed for %.%.%', fk.child_schema, fk.child_table, fk.conname;
+    end if;
+  end loop;
+end
+$foreign_key_audit$;
+'@
+}
+
+function Get-ForeignKeyConstraintCount {
+  param([Parameter(Mandatory)][string]$Database)
+  $sql = @'
+select count(*)
+from pg_constraint con
+join pg_class child on child.oid = con.conrelid
+join pg_namespace child_ns on child_ns.oid = child.relnamespace
+where con.contype = 'f'
+  and (child_ns.nspname = 'public' or (child_ns.nspname = 'auth' and child.relname in ('users','identities')));
+'@
+  return [int](Invoke-LocalQuery -Database $Database -Label 'foreign key audit coverage count' -Sql $sql)
+}
+
 function New-SelectiveLoader {
   param([string]$SourceDatabase, [string[]]$PublicTables, [string]$OutputPath, [switch]$StaffOnly, [switch]$AuthOnly)
   $rawPath = "$OutputPath.raw"
@@ -772,7 +1013,8 @@ set local lock_timeout = '30s';
 set local session_replication_role = replica;
 $truncate
 "@
-  $footer = "`nset local session_replication_role = origin;`ncommit;`n"
+  $foreignKeyAuditSql = Get-ForeignKeyAuditSql
+  $footer = "`nset local session_replication_role = origin;`n$foreignKeyAuditSql`ncommit;`n"
   Write-Utf8NoBom -Path $OutputPath -Content ($header + "`n" + $body + $footer)
 }
 
@@ -789,6 +1031,39 @@ function Assert-PortableAuthBoundary {
     if ($loaderText -match ('(?i)(insert\s+into|copy|truncate\s+table)[^;\r\n]*' + [regex]::Escape($forbiddenTable))) {
       throw "Selective loader contains forbidden managed Auth table $forbiddenTable."
     }
+  }
+}
+
+function Get-CurrentRehearsalBinding {
+  param([Parameter(Mandatory)]$VerifiedBackup)
+  $artifacts = [ordered]@{
+    loaderSha256 = Join-Path $ArtifactRoot $LoaderName
+    heldStaffLoaderSha256 = Join-Path $ArtifactRoot $HeldStaffLoaderName
+    portableAuthLoaderSha256 = Join-Path $ArtifactRoot $AuthLoaderName
+  }
+  foreach ($entry in $artifacts.GetEnumerator()) {
+    if (-not (Test-Path -LiteralPath $entry.Value -PathType Leaf)) { throw "Rehearsal artifact is missing: $($entry.Value | Split-Path -Leaf)" }
+    Assert-NotReparsePoint -Path $entry.Value -Label 'rehearsal loader'
+  }
+  $migrationBindings = @()
+  foreach ($migration in @($CompatibilityMigration, $StaffMessagesMigration)) {
+    if (-not (Test-Path -LiteralPath $migration -PathType Leaf)) { throw 'Bound scratch migration is missing.' }
+    Assert-NotReparsePoint -Path $migration -Label 'bound scratch migration'
+    $migrationBindings += [ordered]@{
+      name = Split-Path -Leaf $migration
+      sha256 = (Get-FileHash -LiteralPath $migration -Algorithm SHA256).Hash.ToUpperInvariant()
+    }
+  }
+  return [ordered]@{
+    runnerSha256 = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash.ToUpperInvariant()
+    loaderSha256 = (Get-FileHash -LiteralPath $artifacts.loaderSha256 -Algorithm SHA256).Hash.ToUpperInvariant()
+    heldStaffLoaderSha256 = (Get-FileHash -LiteralPath $artifacts.heldStaffLoaderSha256 -Algorithm SHA256).Hash.ToUpperInvariant()
+    portableAuthLoaderSha256 = (Get-FileHash -LiteralPath $artifacts.portableAuthLoaderSha256 -Algorithm SHA256).Hash.ToUpperInvariant()
+    approvedArchiveSha256 = (Get-FileHash -LiteralPath $ApprovedArchive -Algorithm SHA256).Hash.ToUpperInvariant()
+    backupSha256 = $VerifiedBackup.sha256
+    backupManifestSha256 = $VerifiedBackup.manifestSha256
+    targetBaselineSha256 = ([string]$VerifiedBackup.manifest.targetBaselineSha256).ToUpperInvariant()
+    migrations = $migrationBindings
   }
 }
 
@@ -853,6 +1128,11 @@ function Invoke-RehearsePhase {
     $sourceColumns = @(Get-ColumnMetadata -Database $sourceDatabase)
     $targetColumns = @(Get-ColumnMetadata -Database $targetDatabase)
     $columnDiff = Compare-ColumnMetadata -Source $sourceColumns -Target $targetColumns
+    $sourceNullCounts = Get-SourceNullCounts -Database $sourceDatabase -Details @($columnDiff.nullabilityDifferenceDetails)
+    $nullabilityClassification = Classify-NullabilityDifferences -Details @($columnDiff.nullabilityDifferenceDetails) -SourceNullCounts $sourceNullCounts
+    $columnDiff['sourceNullCounts'] = $sourceNullCounts
+    $columnDiff['allowedNullabilityDifferences'] = @($nullabilityClassification.allowed)
+    $columnDiff['blockingNullabilityDifferences'] = @($nullabilityClassification.blocking)
     $legacyUsageText = Invoke-LocalQuery -Database $sourceDatabase -Label 'legacy source-column usage counts' -Sql @'
 select jsonb_build_object(
   'appointments.patient_ic', count(*) filter (where patient_ic is not null),
@@ -876,7 +1156,11 @@ from public.appointments;
     New-SelectiveLoader -SourceDatabase $sourceDatabase -PublicTables $sourcePublicTables -OutputPath $staffLoader -StaffOnly
     New-SelectiveLoader -SourceDatabase $sourceDatabase -PublicTables $sourcePublicTables -OutputPath $authLoader -AuthOnly
 
-    $blockingColumnDiff = @($columnDiff.sourceOnly).Count -gt 0 -or @($columnDiff.targetRequiredOnly).Count -gt 0 -or @($columnDiff.typeDifferences).Count -gt 0
+    $blockingColumnDiff = @($columnDiff.sourceOnly).Count -gt 0 -or
+      @($columnDiff.targetRequiredOnly).Count -gt 0 -or
+      @($columnDiff.typeDifferences).Count -gt 0 -or
+      @($columnDiff.blockingNullabilityDifferences).Count -gt 0 -or
+      @($columnDiff.blockingDefaultDifferences).Count -gt 0
     if ($blockingColumnDiff) {
       Invoke-SelectiveDataLoader -Database $targetDatabase -LoaderPath $authLoader -Label 'rehearse portable Auth-only loader'
 
@@ -924,7 +1208,7 @@ from public.appointments;
         auth = [ordered]@{ sourceUsers = $sourceUsers; sourceIdentities = $sourceIdentities; importedUsers = $targetUsers; importedIdentities = $targetIdentities; sessions = 0; refreshTokens = 0 }
         loader = [ordered]@{ main = $LoaderName; heldStaffMessages = $HeldStaffLoaderName; portableAuth = $AuthLoaderName; publicDataExecuted = $false; productionTargetUsed = $false }
       }
-      Write-ProtectedJson -Path (Join-Path $ArtifactRoot $ReportName) -Value $report
+      Write-ProtectedJson -Path (Join-Path $ArtifactRoot 'rehearsal-failure-report.json') -Value $report
       throw 'Scratch rehearsal blocked: populated source columns have no lossless representation in the authoritative target schema.'
     }
 
@@ -952,6 +1236,7 @@ from public.appointments;
     $targetInventory = (Get-Content -LiteralPath $targetInventoryPath -Raw | ConvertFrom-Json).target
     $sequenceChecks = @(Get-SequenceChecks -Database $targetDatabase)
     $failedSequences = @($sequenceChecks | Where-Object { -not $_.passed })
+    $foreignKeyConstraintCount = Get-ForeignKeyConstraintCount -Database $targetDatabase
     $functionDiff = Get-SetDiff -Source (Get-TocIdentities -Toc $sourceToc -Kind FUNCTION) -Target (Get-TocIdentities -Toc $targetToc -Kind FUNCTION)
     $policyDiff = Get-SetDiff -Source (Get-TocIdentities -Toc $sourceToc -Kind POLICY) -Target (Get-TocIdentities -Toc $targetToc -Kind POLICY)
 
@@ -963,26 +1248,32 @@ from public.appointments;
       $targetUsers -eq 11 -and $targetIdentities -eq 11 -and
       $countDifferences.Count -eq 0 -and
       @($columnDiff.sourceOnly).Count -eq 0 -and @($columnDiff.targetRequiredOnly).Count -eq 0 -and @($columnDiff.typeDifferences).Count -eq 0 -and
-      @($constraintDiff.unvalidated).Count -eq 0 -and $failedSequences.Count -eq 0
+      @($columnDiff.blockingNullabilityDifferences).Count -eq 0 -and @($columnDiff.blockingDefaultDifferences).Count -eq 0 -and
+      @($columnDiff.allowedDefaultDifferences).Count -eq 1 -and $columnDiff.allowedDefaultDifferences[0] -eq 'public.appointments.status' -and
+      @($constraintDiff.unvalidated).Count -eq 0 -and $foreignKeyConstraintCount -gt 0 -and $failedSequences.Count -eq 0
 
+    if (-not $pass) { throw 'Scratch rehearsal completed but reconciliation gates did not pass; inspect the protected diagnostics.' }
+    $binding = Get-CurrentRehearsalBinding -VerifiedBackup $verifiedBackup
     $report = [ordered]@{
       pass = [bool]$pass
       generatedAtUtc = [DateTime]::UtcNow.ToString('o')
       safety = [ordered]@{ targetWriteConnections = 0; localHost = '127.0.0.1'; protectedArtifactsOnly = $true; migrationsApplied = 0 }
       source = [ordered]@{ publicTables = $sourcePublicTables.Count; tableCounts = $sourceCounts; migrations = $sourceMigrations; archiveSha256 = $ApprovedArchiveSha256 }
-      targetBaseline = [ordered]@{ publicTables = $targetPublicTables.Count; migrations = @($targetInventory.migrationIdentities); backupSha256 = $verifiedBackup.sha256 }
+      targetBaseline = $verifiedBackup.manifest.targetBaseline
       tableDiff = $tableDiff
       columnDiff = $columnDiff
       constraintDiff = $constraintDiff
+      foreignKeyAudit = [ordered]@{ checked = $foreignKeyConstraintCount; failures = 0; enforcedBeforeLoaderCommit = $true }
       policyDiff = $policyDiff
       functionDiff = $functionDiff
       rowCountDifferences = $countDifferences
       sequenceChecks = $sequenceChecks
       auth = [ordered]@{ sourceUsers = $sourceUsers; sourceIdentities = $sourceIdentities; importedUsers = $targetUsers; importedIdentities = $targetIdentities; sessions = 0; refreshTokens = 0 }
       loader = [ordered]@{ main = $LoaderName; heldStaffMessages = $HeldStaffLoaderName; productionTargetUsed = $false }
+      binding = $binding
+      bindingSha256 = Get-JsonSha256 -Value $binding
     }
     Write-ProtectedJson -Path (Join-Path $ArtifactRoot $ReportName) -Value $report
-    if (-not $pass) { throw 'Scratch rehearsal completed but reconciliation gates did not pass; inspect the protected report.' }
     Write-Summary 'Rehearsal passed locally: source public tables=94; source-only=public.staff_messages; Auth users=11; identities=11; imported sessions=0; refresh tokens=0; target writes=0.'
   } finally {
     Stop-DisposablePostgres -DataPath $scratch
@@ -991,20 +1282,31 @@ from public.appointments;
 }
 
 function Assert-RehearsalReport {
+  param([Parameter(Mandatory)]$VerifiedBackup)
   $path = Join-Path $ArtifactRoot $ReportName
   if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Passing rehearsal report is required.' }
   Assert-NotReparsePoint -Path $path -Label 'rehearsal report'
   $report = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
-  if (-not $report.pass -or $report.auth.sessions -ne 0 -or $report.auth.refreshTokens -ne 0) { throw 'Rehearsal report does not pass the required Auth/session gates.' }
+  if (-not $report.pass -or $report.auth.sessions -ne 0 -or $report.auth.refreshTokens -ne 0 -or
+      $report.foreignKeyAudit.failures -ne 0 -or -not $report.foreignKeyAudit.enforcedBeforeLoaderCommit) {
+    throw 'Rehearsal report does not pass the required Auth and referential-integrity gates.'
+  }
+  if ((Get-JsonSha256 -Value $report.binding) -ne ([string]$report.bindingSha256).ToUpperInvariant()) {
+    throw 'Rehearsal report binding digest is invalid.'
+  }
+  $currentBinding = Get-CurrentRehearsalBinding -VerifiedBackup $VerifiedBackup
+  Assert-RehearsalBinding -Expected $currentBinding -Actual $report.binding
+  Assert-TargetBaselineUnchanged -Expected $VerifiedBackup.manifest.targetBaseline -Actual $report.targetBaseline
   return $report
 }
 
 function Invoke-VerifyPhase {
   [void](Assert-ApprovedArchive)
-  [void](Assert-VerifiedBackup)
-  [void](Assert-RehearsalReport)
+  $verifiedBackup = Assert-VerifiedBackup
+  [void](Assert-RehearsalReport -VerifiedBackup $verifiedBackup)
   $inventory = Get-TargetInventory
-  if ($inventory.publicTables -ne 93 -or $inventory.authUsers -ne 0 -or $inventory.migrationRows -ne 153) {
+  Assert-TargetBaselineUnchanged -Expected $verifiedBackup.manifest.targetBaseline -Actual $inventory
+  if ($inventory.publicTables -ne 93 -or $inventory.authUsers -ne 0 -or $inventory.authIdentities -ne 0 -or $inventory.migrationRows -ne 153) {
     throw 'Target changed after rehearsal; refusing the write window.'
   }
   Write-Summary 'Verify passed read-only: target ref, source archive, protected backup, rehearsal report, and unchanged target baseline are valid.'
@@ -1027,6 +1329,11 @@ function Invoke-RollbackPhase {
   Invoke-WithTargetEnvironment -Action { Invoke-External -File $restore -Arguments $commandArguments -Label 'guarded full target rollback' | Out-Null }
   Write-Summary 'Rollback phase restored the verified pre-cutover target backup.'
 }
+
+if ($Phase -eq 'Backup') { Invalidate-BackupEvidence }
+if ($Phase -eq 'Rehearse') { Invalidate-RehearsalEvidence }
+if (-not (Test-Path -LiteralPath $ProtectedEnv -PathType Leaf)) { throw 'Protected environment file is missing.' }
+Assert-NotReparsePoint -Path $ProtectedEnv -Label 'protected environment file'
 
 try {
   Assert-RequiredTools
