@@ -111,6 +111,7 @@ import { PageEditor } from "./pages/editor/PageEditor";
 import { Pages } from "./pages/editor/Pages";
 import { AnalyticsSettings } from "./pages/editor/AnalyticsSettings";
 import GeneralPage from "./pages/GeneralPage";
+import { GoogleAnalyticsController } from "./features/analytics/GoogleAnalyticsController";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -140,7 +141,8 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
-            <Routes>
+            <GoogleAnalyticsController>
+              <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/services" element={<Services />} />
               <Route path="/services/:slug" element={<ServiceDetail />} />
@@ -499,7 +501,8 @@ const App = () => (
 
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
-            </Routes>
+              </Routes>
+            </GoogleAnalyticsController>
           </BrowserRouter>
         </TooltipProvider>
       </LanguageProvider>
