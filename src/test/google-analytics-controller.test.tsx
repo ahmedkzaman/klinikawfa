@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
@@ -77,7 +78,8 @@ describe("GoogleAnalyticsController", () => {
 
   it("tracks only safe public contact intents", async () => {
     const { GoogleAnalyticsController } = await import("@/features/analytics/GoogleAnalyticsController");
-    render(<MemoryRouter initialEntries={["/"]}><GoogleAnalyticsController /><a href="tel:+60123456789">call</a><a href="https://wa.me/60123456789">wa</a><a href="/appointment">appointment</a></MemoryRouter>);
+    const stopNavigation = (event: ReactMouseEvent<HTMLAnchorElement>) => event.preventDefault();
+    render(<MemoryRouter initialEntries={["/"]}><GoogleAnalyticsController /><a href="tel:+60123456789" onClick={stopNavigation}>call</a><a href="https://wa.me/60123456789" onClick={stopNavigation}>wa</a><a href="/appointment" onClick={stopNavigation}>appointment</a></MemoryRouter>);
     await waitFor(() => expect(fetchConfig).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: "accept" }));
     await waitFor(() => {
@@ -88,9 +90,9 @@ describe("GoogleAnalyticsController", () => {
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    screen.getByRole("link", { name: "call" }).dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    screen.getByRole("link", { name: "wa" }).dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    screen.getByRole("link", { name: "appointment" }).dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    fireEvent.click(screen.getByRole("link", { name: "call" }));
+    fireEvent.click(screen.getByRole("link", { name: "wa" }));
+    fireEvent.click(screen.getByRole("link", { name: "appointment" }));
     await waitFor(() => {
       expect(trackGoogleConversion).toHaveBeenCalledWith("phone_click", "/");
       expect(trackGoogleConversion).toHaveBeenCalledWith("whatsapp_click", "/");
