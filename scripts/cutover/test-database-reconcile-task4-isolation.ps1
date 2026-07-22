@@ -444,6 +444,13 @@ foreach($mutation in @('formatVersion','port','cliVersion','cliExtra','connectio
 }
 $pushEvidenceValidator=Get-RunnerFunctionText -Name 'Assert-Task4MigrationPushEvidence'
 if(-not $pushEvidenceValidator.Contains('[text.utf8encoding]::new($false,$true).getstring') -or -not $pushEvidenceValidator.Contains('[io.file]::readallbytes')){throw 'Push evidence file is not decoded from strict UTF-8 bytes.'}
+if(-not $pushEvidenceValidator.Contains('$evidencebytes = [io.file]::readallbytes') -or
+   -not $pushEvidenceValidator.Contains('get-task4bytessha256 -bytes $evidencebytes') -or
+   -not $pushEvidenceValidator.Contains('getstring($evidencebytes)') -or
+   $pushEvidenceValidator.Contains('get-filehash -literalpath $evidencepath') -or
+   [regex]::Matches($pushEvidenceValidator,'\[io\.file\]::readallbytes').Count -ne 1){
+  throw 'Push evidence independent pin and strict JSON decode do not use one immutable byte buffer.'
+}
 
 $quarantineRoot=Join-Path ([IO.Path]::GetTempPath()) ('task4-quarantine-'+[Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $quarantineRoot | Out-Null

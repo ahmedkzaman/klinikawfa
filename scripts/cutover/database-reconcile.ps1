@@ -3618,8 +3618,9 @@ function Assert-Task4MigrationPushEvidence {
   $evidencePath = Join-Path $ArtifactRoot $Task4MigrationPushEvidenceName
   if (-not (Test-Path -LiteralPath $evidencePath -PathType Leaf)) { throw 'Completed Task 4 migration Push evidence is required before import.' }
   Assert-NoReparsePointInPath -Path $evidencePath -Label 'Task 4 migration Push evidence'
-  if (-not $SkipIndependentPin -and (Get-FileHash -LiteralPath $evidencePath -Algorithm SHA256).Hash.ToUpperInvariant() -cne $Task4MigrationPushEvidenceSha256) { throw 'Task 4 migration Push evidence does not match its independent pin.' }
-  try { $evidence = [Text.UTF8Encoding]::new($false,$true).GetString([IO.File]::ReadAllBytes((Get-NormalizedPath $evidencePath))) | ConvertFrom-Json -ErrorAction Stop } catch { throw 'Task 4 migration Push evidence is not strict UTF-8 JSON.' }
+  $evidenceBytes = [IO.File]::ReadAllBytes((Get-NormalizedPath $evidencePath))
+  if (-not $SkipIndependentPin -and (Get-Task4BytesSha256 -Bytes $evidenceBytes) -cne $Task4MigrationPushEvidenceSha256) { throw 'Task 4 migration Push evidence does not match its independent pin.' }
+  try { $evidence = [Text.UTF8Encoding]::new($false,$true).GetString($evidenceBytes) | ConvertFrom-Json -ErrorAction Stop } catch { throw 'Task 4 migration Push evidence is not strict UTF-8 JSON.' }
   $payload = Assert-Task4MigrationPushEvidenceShape -Document $evidence -NowUtc $NowUtc
   $currentRunnerSha256 = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash.ToUpperInvariant()
   if ($payload.formatVersion -ne 2 -or $payload.status -ne 'completed' -or [string]$payload.targetRef -cne $ExpectedRef -or
