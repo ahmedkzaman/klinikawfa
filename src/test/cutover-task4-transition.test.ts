@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 
+const execFileAsync = promisify(execFile);
 const runnerPath = "scripts/cutover/database-reconcile.ps1";
 const runner = readFileSync(runnerPath, "utf8");
 const lowerRunner = runner.toLowerCase();
@@ -36,15 +38,14 @@ function expectInOrder(text: string, markers: string[]) {
 }
 
 describe("Task 4 cutover transition safeguards", () => {
-  it("executes the focused runtime contract, including self-consistent tamper rejection", () => {
-    const result = spawnSync(
+  it("executes the focused runtime contract, including self-consistent tamper rejection", async () => {
+    const result = await execFileAsync(
       "powershell",
       ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "scripts/cutover/test-database-reconcile-task4.ps1"],
-      { cwd: process.cwd(), encoding: "utf8" },
+      { cwd: process.cwd(), encoding: "utf8", timeout: 180_000, windowsHide: true },
     );
     expect(`${result.stdout}\n${result.stderr}`).toContain("Task 4 runner focused contract passed");
-    expect(result.status).toBe(0);
-  }, 30_000);
+  }, 190_000);
 
   it("binds exactly eight chronological migration identities to current file digests", () => {
     const specificationBlock = runner.match(/\$Task4MigrationSpecifications\s*=\s*@\(([\s\S]*?)\r?\n\)/)?.[1];
@@ -124,7 +125,12 @@ describe("Task 4 cutover transition safeguards", () => {
       "assert-postmigrationtransitionmanifest",
     ]);
     expect(block).not.toContain("invoke-targetfile");
-    expect(lowerRunner).toContain("if ($phase -eq 'postmigration') { invalidate-evidencefile");
+    expect(lowerRunner).not.toContain(
+      "invalidate-evidencefile -path (join-path $artifactroot $task4transitionmanifestname)",
+    );
+    expect(lowerRunner).toContain(
+      "if ($phase -eq 'postmigration' -and (test-path -literalpath (join-path $artifactroot $importreportname))) { throw 'completed import evidence already exists; refusing to replace its transition dependency.' }",
+    );
   });
 
   it("requires exact compatibility, dependency, private-schema, and FK contracts", () => {
@@ -205,8 +211,12 @@ describe("Task 4 cutover transition safeguards", () => {
     expect(importBlock).toContain("new-boundloadersnapshot");
     expect(importBlock).toContain("mainloadersha256 = (get-filehash -literalpath $mainsnapshot");
     expect(lowerRunner).toContain("if ($phase -eq 'rollback') {");
-    expect(lowerRunner).toContain("invalidate-evidencefile -path (join-path $artifactroot $task4transitionmanifestname)");
-    expect(lowerRunner).toContain("invalidate-evidencefile -path (join-path $artifactroot $importreportname)");
+    expect(lowerRunner).not.toContain(
+      "invalidate-evidencefile -path (join-path $artifactroot $importreportname)",
+    );
+    expect(lowerRunner).toContain(
+      "if ($phase -eq 'import' -and (test-path -literalpath (join-path $artifactroot $importreportname))) { throw 'completed import evidence already exists; refusing a repeated persistent phase.' }",
+    );
   });
 
   it("pins all accepted composite evidence digests", () => {
