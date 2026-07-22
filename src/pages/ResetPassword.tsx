@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Loader2, Lock } from 'lucide-react';
-import { resolveRecoverySessionState } from '@/lib/recovery-session';
+import { getRecoveryTokens, resolveRecoverySessionState } from '@/lib/recovery-session';
 
 const newPasswordSchema = z
   .object({
@@ -53,8 +53,19 @@ export default function ResetPassword() {
     });
 
     // Fallback check: if a session already exists from the recovery link
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       const hash = window.location.hash;
+      const recoveryTokens = getRecoveryTokens(hash);
+      if (!session && recoveryTokens) {
+        const { data: recovered } = await supabase.auth.setSession({
+          access_token: recoveryTokens.accessToken,
+          refresh_token: recoveryTokens.refreshToken,
+        });
+        if (recovered.session) {
+          setIsValidSession(true);
+          return;
+        }
+      }
       if (session && (hash.includes('type=recovery') || hash.includes('access_token'))) {
         setIsValidSession(true);
       } else if (!session) {
