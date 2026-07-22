@@ -13,12 +13,12 @@ describe("resolveSupabaseBuildConfig", () => {
     const resolved = resolveSupabaseBuildConfig("production", {});
 
     expect(resolved).toMatchObject({
-      url: "https://ncysmppzfjtiekfnomdv.supabase.co",
-      projectId: "ncysmppzfjtiekfnomdv",
+      url: "https://nhjbqdiyptjqherdfbqk.supabase.co",
+      projectId: "nhjbqdiyptjqherdfbqk",
       source: "public-production-fallback",
       missing: [],
     });
-    expect(resolved.publishableKey).toMatch(/^eyJ[A-Za-z0-9_-]+\./);
+    expect(resolved.publishableKey).toMatch(/^sb_publishable_/);
   });
 
   it("prefers a complete environment-provided config", () => {
