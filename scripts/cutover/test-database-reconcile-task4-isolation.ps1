@@ -533,10 +533,20 @@ $finalPushPattern='(?s)\$finalworkdir\s*=\s*assert-task4finalpushworkdir[^\r\n]*
 if(-not [regex]::IsMatch($pushWrapper,$finalPushPattern)){throw 'Isolation changes broke the exact final-workdir/native-Push adjacency contract.'}
 
 $httpBlock=Get-RunnerFunctionText -Name 'Invoke-Task4HttpsGetBytes'
+$httpAssemblyLoad=$httpBlock.IndexOf('add-type -assemblyname system.net.http -erroraction stop',[StringComparison]::Ordinal)
+$httpFirstTypeUse=$httpBlock.IndexOf('new-object net.http.httpclienthandler',[StringComparison]::Ordinal)
+if($httpAssemblyLoad -lt 0 -or $httpFirstTypeUse -lt 0 -or $httpAssemblyLoad -ge $httpFirstTypeUse){throw 'Live GET helper does not explicitly load System.Net.Http before its first Net.Http type use.'}
 if(-not $httpBlock.Contains('httpmethod]::get') -and -not $httpBlock.Contains('httpmethod.get')){throw 'Live isolation observation is not explicitly HTTP GET-only.'}
 foreach($mutationPrimitive in @('postasync','putasync','deleteasync','patch','github','dns','deploy')){
   if($httpBlock.Contains($mutationPrimitive)){throw "Live isolation observer contains a frontend/network mutation primitive: $mutationPrimitive"}
 }
+$priorErrorActionPreference=$ErrorActionPreference
+try{
+  $ErrorActionPreference='Continue'
+  $httpRuntimeOutput=@(& powershell.exe -NoProfile -NonInteractive -Command { Add-Type -AssemblyName System.Net.Http -ErrorAction Stop; $handler=New-Object Net.Http.HttpClientHandler; try { if($handler.GetType().FullName -cne 'System.Net.Http.HttpClientHandler'){throw 'wrong handler type'}; Write-Output 'System.Net.Http runtime contract passed' } finally { $handler.Dispose() } } 2>&1)
+  $httpRuntimeExitCode=$LASTEXITCODE
+}finally{$ErrorActionPreference=$priorErrorActionPreference}
+if($httpRuntimeExitCode -ne 0 -or (@($httpRuntimeOutput|ForEach-Object{[string]$_}) -join "`n") -notmatch 'System.Net.Http runtime contract passed'){throw 'Windows PowerShell 5.1 could not load and instantiate the System.Net.Http handler contract without network access.'}
 $phaseParameter=$ast.ParamBlock.Parameters|Where-Object{$_.Name.VariablePath.UserPath -eq 'Phase'}
 if(-not $phaseParameter){throw 'Runner Phase parameter is missing.'}
 $validateSet=$phaseParameter.Attributes|Where-Object{$_.TypeName.FullName -eq 'ValidateSet'}

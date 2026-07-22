@@ -327,6 +327,7 @@ function Get-Task4JavascriptDependencyUris {
 
 function Invoke-Task4HttpsGetBytes {
   param([Parameter(Mandatory)][Uri]$Uri)
+  Add-Type -AssemblyName System.Net.Http -ErrorAction Stop
   $handler = New-Object Net.Http.HttpClientHandler
   $handler.AllowAutoRedirect = $false
   $handler.AutomaticDecompression = [Net.DecompressionMethods]::GZip -bor [Net.DecompressionMethods]::Deflate
