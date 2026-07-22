@@ -476,6 +476,66 @@ export type Database = {
         }
         Relationships: []
       }
+      blog_tags: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          name_en: string
+          name_ms: string
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          name_en?: string
+          name_ms: string
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          name_en?: string
+          name_ms?: string
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      blog_post_tags: {
+        Row: {
+          post_id: string
+          tag_id: string
+        }
+        Insert: {
+          post_id: string
+          tag_id: string
+        }
+        Update: {
+          post_id?: string
+          tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blog_post_tags_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "blog_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blog_post_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "blog_tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       blog_posts: {
         Row: {
           author_id: string | null
@@ -497,6 +557,7 @@ export type Database = {
           title_en: string | null
           title_ms: string | null
           updated_at: string
+          website_editor_metadata: Json
         }
         Insert: {
           author_id?: string | null
@@ -518,6 +579,7 @@ export type Database = {
           title_en?: string | null
           title_ms?: string | null
           updated_at?: string
+          website_editor_metadata?: Json
         }
         Update: {
           author_id?: string | null
@@ -539,6 +601,7 @@ export type Database = {
           title_en?: string | null
           title_ms?: string | null
           updated_at?: string
+          website_editor_metadata?: Json
         }
         Relationships: [
           {
@@ -5008,6 +5071,45 @@ export type Database = {
           },
         ]
       }
+      website_content_audit: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          from_status: Database["public"]["Enums"]["website_content_status"] | null
+          id: string
+          metadata: Json
+          resource_id: string
+          resource_type: string
+          revision: number
+          to_status: Database["public"]["Enums"]["website_content_status"] | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          from_status?: Database["public"]["Enums"]["website_content_status"] | null
+          id?: string
+          metadata?: Json
+          resource_id: string
+          resource_type: string
+          revision: number
+          to_status?: Database["public"]["Enums"]["website_content_status"] | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          from_status?: Database["public"]["Enums"]["website_content_status"] | null
+          id?: string
+          metadata?: Json
+          resource_id?: string
+          resource_type?: string
+          revision?: number
+          to_status?: Database["public"]["Enums"]["website_content_status"] | null
+        }
+        Relationships: []
+      }
       website_content_drafts: {
         Row: {
           base_revision: number
@@ -5064,6 +5166,165 @@ export type Database = {
           revision?: number
         }
         Relationships: []
+      }
+      website_content_lifecycle: {
+        Row: {
+          resource_id: string
+          resource_type: string
+          revision: number
+          scheduled_at: string | null
+          status: Database["public"]["Enums"]["website_content_status"]
+          trashed_at: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          resource_id: string
+          resource_type: string
+          revision?: number
+          scheduled_at?: string | null
+          status?: Database["public"]["Enums"]["website_content_status"]
+          trashed_at?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          resource_id?: string
+          resource_type?: string
+          revision?: number
+          scheduled_at?: string | null
+          status?: Database["public"]["Enums"]["website_content_status"]
+          trashed_at?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      website_media: {
+        Row: {
+          alt_en: string
+          alt_ms: string
+          byte_size: number
+          caption_en: string
+          caption_ms: string
+          created_at: string
+          created_by: string
+          description_en: string
+          description_ms: string
+          height: number | null
+          id: string
+          mime_type: string
+          replaced_by: string | null
+          storage_bucket: string
+          storage_path: string
+          trashed_at: string | null
+          updated_at: string
+          width: number | null
+        }
+        Insert: {
+          alt_en?: string
+          alt_ms?: string
+          byte_size: number
+          caption_en?: string
+          caption_ms?: string
+          created_at?: string
+          created_by: string
+          description_en?: string
+          description_ms?: string
+          height?: number | null
+          id?: string
+          mime_type: string
+          replaced_by?: string | null
+          storage_bucket?: string
+          storage_path: string
+          trashed_at?: string | null
+          updated_at?: string
+          width?: number | null
+        }
+        Update: {
+          alt_en?: string
+          alt_ms?: string
+          byte_size?: number
+          caption_en?: string
+          caption_ms?: string
+          created_at?: string
+          created_by?: string
+          description_en?: string
+          description_ms?: string
+          height?: number | null
+          id?: string
+          mime_type?: string
+          replaced_by?: string | null
+          storage_bucket?: string
+          storage_path?: string
+          trashed_at?: string | null
+          updated_at?: string
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "website_media_replaced_by_fkey"
+            columns: ["replaced_by"]
+            isOneToOne: false
+            referencedRelation: "website_media"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      website_media_deletion_authorizations: {
+        Row: {
+          actor_id: string
+          expires_at: string
+          media_id: string
+        }
+        Insert: {
+          actor_id: string
+          expires_at: string
+          media_id: string
+        }
+        Update: {
+          actor_id?: string
+          expires_at?: string
+          media_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "website_media_deletion_authorizations_media_id_fkey"
+            columns: ["media_id"]
+            isOneToOne: true
+            referencedRelation: "website_media"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      website_media_references: {
+        Row: {
+          field_path: string
+          media_id: string
+          resource_id: string
+          resource_type: string
+        }
+        Insert: {
+          field_path: string
+          media_id: string
+          resource_id: string
+          resource_type: string
+        }
+        Update: {
+          field_path?: string
+          media_id?: string
+          resource_id?: string
+          resource_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "website_media_references_media_id_fkey"
+            columns: ["media_id"]
+            isOneToOne: false
+            referencedRelation: "website_media"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       website_navigation_drafts: {
         Row: {
@@ -5716,6 +5977,55 @@ export type Database = {
       }
     }
     Functions: {
+      discard_unstored_website_media: {
+        Args: { p_media_id: string }
+        Returns: undefined
+      }
+      finalize_website_media_deletion: {
+        Args: { p_media_id: string }
+        Returns: undefined
+      }
+      permanently_delete_website_media: {
+        Args: { p_media_id: string }
+        Returns: Json
+      }
+      permanently_delete_website_content: {
+        Args: {
+          p_expected_revision: number
+          p_resource_id: string
+          p_resource_type: string
+        }
+        Returns: undefined
+      }
+      publish_due_website_content: {
+        Args: { p_limit?: number }
+        Returns: Json
+      }
+      restore_website_content: {
+        Args: {
+          p_expected_revision: number
+          p_resource_id: string
+          p_resource_type: string
+        }
+        Returns: Json
+      }
+      schedule_website_content: {
+        Args: {
+          p_expected_revision: number
+          p_resource_id: string
+          p_resource_type: string
+          p_scheduled_at: string
+        }
+        Returns: Json
+      }
+      trash_website_content: {
+        Args: {
+          p_expected_revision: number
+          p_resource_id: string
+          p_resource_type: string
+        }
+        Returns: Json
+      }
       _promote_appointment_to_clinic_internal: {
         Args: { p_appointment_id: string; p_payment_reference?: string }
         Returns: string
@@ -5981,6 +6291,7 @@ export type Database = {
         | "rejected"
         | "received"
         | "cancelled"
+      website_content_status: "draft" | "scheduled" | "published" | "trash"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -6147,6 +6458,7 @@ export const Constants = {
         "received",
         "cancelled",
       ],
+      website_content_status: ["draft", "scheduled", "published", "trash"],
     },
   },
 } as const

@@ -336,11 +336,12 @@ describe("HomeEditor", { timeout: 30_000 }, () => {
       expect(screen.getByLabelText(label)).toBeInTheDocument();
     }
     expect(screen.getByRole("button", { name: "Move Hero down" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload media" })).toBeEnabled();
     expect(
-      screen.getByRole("button", {
+      screen.queryByRole("button", {
         name: "Media upload available in the resources phase",
       }),
-    ).toBeDisabled();
+    ).not.toBeInTheDocument();
   });
 
   it("keeps local state bilingual and switches the preview language", async () => {

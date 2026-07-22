@@ -7,6 +7,7 @@ import {
   safeMediaSchema,
   websiteCtaHrefSchema,
 } from "./common";
+import { pageSectionsSchema } from "@/features/website-cms/sections/schema";
 
 export const RESERVED_PAGE_SLUGS = [
   "auth",
@@ -64,6 +65,7 @@ export const generalPageContentSchema = z
     media: z.array(safeMediaSchema).max(12),
     cta: generalPageCtaSchema.nullable(),
     seo: generalPageSeoSchema,
+    sections: pageSectionsSchema.optional(),
   })
   .strict();
 

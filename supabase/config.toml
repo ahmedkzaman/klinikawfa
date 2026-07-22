@@ -21,6 +21,9 @@ verify_jwt = false
 [functions.publish-scheduled-posts]
 verify_jwt = false
 
+[functions.publish-scheduled-content]
+verify_jwt = false
+
 [functions.elevenlabs-scribe-token]
 verify_jwt = true
 

@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+import {
+  contentStatusSchema,
+} from "@/features/website-cms/domain/content";
+import {
+  emptySeoFields,
+  seoFieldsSchema,
+} from "@/features/website-cms/domain/seo";
 import { WEBSITE_RESOURCE_TYPES } from "@/features/website-cms/resources/types";
 
 const requiredText = z.string().trim().min(1).max(20_000);
@@ -57,13 +64,21 @@ export const blogPostDraftSchema = z.object({
   contentMs: requiredText,
   contentEn: optionalText,
   categoryId: z.string().uuid().optional().nullable(),
+  tagIds: z.array(z.string().uuid()).max(30).optional().default([]),
+  authorId: z.string().uuid().optional().nullable(),
   featuredImage: safePublicUrl.optional().or(z.literal("")),
+  featuredImageMediaId: z.string().uuid().nullable().optional().default(null),
   readingTime: z.number().int().min(1).max(240),
-  status: z.enum(["draft", "scheduled", "published", "archived"]),
+  status: contentStatusSchema,
   scheduledAt: z.string().datetime({ offset: true }).optional().nullable(),
+  seoMs: seoFieldsSchema.optional().default(emptySeoFields),
+  seoEn: seoFieldsSchema.optional().default(emptySeoFields),
 }).strict().superRefine((value, context) => {
   if (value.status === "scheduled" && !value.scheduledAt) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["scheduledAt"], message: "Scheduled posts require a date" });
+  }
+  if (value.status !== "scheduled" && value.scheduledAt) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["scheduledAt"], message: "Only scheduled posts may have a date" });
   }
 });
 

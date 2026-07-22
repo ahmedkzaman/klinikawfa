@@ -16,7 +16,7 @@ import type { Database, Json } from "@/integrations/supabase/types";
 import { canManageWebsiteRole } from "@/lib/website-access";
 
 type WebsitePageKind = "home" | "system_content" | "content";
-type WebsitePageStatus = "draft" | "published" | "archived";
+type WebsitePageStatus = "draft" | "scheduled" | "published" | "trash" | "archived";
 
 type WebsiteCmsDatabase = Omit<Database, "public"> & {
   public: Omit<Database["public"], "Functions" | "Tables"> & {
@@ -112,6 +112,7 @@ export interface EditorWebsitePage<T> {
   kind: WebsitePageKind;
   publishedContent: T | null;
   revision: number;
+  scheduledAt: string | null;
   slug: string;
   status: WebsitePageStatus;
 }
@@ -158,6 +159,8 @@ export interface EditorWebsitePageSummary {
   revision: number;
   slug: string;
   status: WebsitePageStatus;
+  scheduledAt: string | null;
+  updatedAt: string;
 }
 
 export interface CreateGeneralPageInput {
@@ -249,21 +252,36 @@ export async function listEditorPages(): Promise<EditorWebsitePageSummary[]> {
 
   const { data, error } = await cmsSupabase
     .from("website_pages")
-    .select("id,kind,slug,status,revision,created_at")
+    .select("id,kind,slug,status,revision,updated_at")
     .in("kind", ["content", "system_content"])
-    .order("created_at", { ascending: false });
+    .order("updated_at", { ascending: false });
 
   if (error || !data) {
     throw new Error("Website pages could not be loaded");
   }
 
-  return data.map((page) => ({
+  const ids = data.map((page) => page.id);
+  const { data: lifecycleRows } = ids.length
+    ? await supabase
+      .from("website_content_lifecycle")
+      .select("resource_id,status,revision,scheduled_at,updated_at")
+      .eq("resource_type", "page")
+      .in("resource_id", ids)
+    : { data: [] };
+  const lifecycle = new Map((lifecycleRows ?? []).map((row) => [row.resource_id, row]));
+
+  return data.map((page) => {
+    const state = lifecycle.get(page.id);
+    return {
     id: page.id,
     kind: page.kind as EditorWebsitePageSummary["kind"],
-    revision: page.revision,
+    revision: state?.revision ?? page.revision,
     slug: page.slug,
-    status: page.status,
-  }));
+    status: state?.status ?? page.status,
+    scheduledAt: state?.scheduled_at ?? null,
+    updatedAt: state?.updated_at ?? page.updated_at,
+  };
+  });
 }
 
 async function buildEditorPageResult(
@@ -284,6 +302,13 @@ async function buildEditorPageResult(
   if (draftError) {
     throw new Error("Website page draft could not be loaded");
   }
+
+  const { data: lifecycleRow } = await supabase
+    .from("website_content_lifecycle")
+    .select("status,revision,scheduled_at")
+    .eq("resource_type", "page")
+    .eq("resource_id", pageRow.id)
+    .maybeSingle();
 
   let draft: EditorWebsitePageDraft<WebsitePageContent>;
   if (draftRow) {
@@ -313,9 +338,10 @@ async function buildEditorPageResult(
       id: pageRow.id,
       kind: pageRow.kind,
       publishedContent: published.success ? published.data : null,
-      revision: pageRow.revision,
+      revision: lifecycleRow?.revision ?? pageRow.revision,
       slug: pageRow.slug,
-      status: pageRow.status,
+      status: lifecycleRow?.status ?? pageRow.status,
+      scheduledAt: lifecycleRow?.scheduled_at ?? null,
     },
     draft,
   };
@@ -400,6 +426,7 @@ export async function createGeneralPage(
       revision: page.revision,
       slug: page.slug,
       status: page.status,
+      scheduledAt: null,
     },
     draft: {
       baseRevision: page.revision,
