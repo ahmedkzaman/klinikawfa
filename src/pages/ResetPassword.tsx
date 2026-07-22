@@ -34,7 +34,9 @@ export default function ResetPassword() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isValidSession, setIsValidSession] = useState<boolean | null>(null);
+  const [isValidSession, setIsValidSession] = useState<boolean | null>(() =>
+    resolveRecoverySessionState({ session: null, hash: window.location.hash }),
+  );
 
   const form = useForm<NewPasswordFormData>({
     resolver: zodResolver(newPasswordSchema),
