@@ -1,0 +1,3 @@
+import{readFileSync}from"node:fs";import{join}from"node:path";import{describe,expect,it}from"vitest";import{DEFAULT_HOME_CONTENT}from"@/features/website-cms/home/homeDefaults";
+const sql=readFileSync(join(process.cwd(),"supabase/migrations/20260722194500_seed_exact_home_content.sql"),"utf8");
+describe("exact Home CMS seed",()=>{it("matches the bundled homepage content",()=>{const match=sql.match(/\$home\$\s*([\s\S]*?)\s*\$home\$::jsonb/);expect(match).not.toBeNull();expect(JSON.parse(match![1])).toEqual(DEFAULT_HOME_CONTENT)});it("never overwrites an existing Home row",()=>{expect(sql).toContain("IF FOUND THEN");expect(sql).not.toMatch(/ON CONFLICT[\s\S]*DO UPDATE/i);expect(sql).toContain("Conflicting non-home row")})});

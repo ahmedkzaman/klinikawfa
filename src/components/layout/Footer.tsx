@@ -5,10 +5,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { CLINIC_INFO } from '@/lib/constants';
 import { Phone, MessageCircle, Heart } from 'lucide-react';
 import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
+import { usePublishedNavigation } from '@/hooks/usePublishedNavigation';
 
 export function Footer() {
   const { language } = useLanguage();
   const { user, isStaffOrAdmin } = useAuth();
+  const managedNavigation = usePublishedNavigation();
   return (
     <footer className="relative bg-primary text-primary-foreground overflow-hidden">
       <div className="container relative z-10 py-14 md:py-20">
@@ -124,7 +126,12 @@ export function Footer() {
               )}
               <p>© {new Date().getFullYear()} {CLINIC_INFO.name}. All rights reserved.</p>
             </div>
-            <div className="flex gap-6">
+            <div className="flex flex-wrap justify-center gap-6">
+              {managedNavigation?.filter((item) => !item.parentId).slice(0, 6).map((item) => (
+                <Link key={item.id} to={item.href} className="hover:text-primary-foreground transition-colors">
+                  {language === 'en' ? item.labelEn || item.labelMs : item.labelMs}
+                </Link>
+              ))}
               <Link to="/privacy" className="hover:text-primary-foreground transition-colors">
                 Privacy Policy
               </Link>

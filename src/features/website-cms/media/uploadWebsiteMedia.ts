@@ -1,0 +1,3 @@
+import { supabase } from "@/integrations/supabase/client";
+import { createWebsiteMediaPath,validateWebsiteMedia,type WebsiteMediaFolder } from "@/features/website-cms/media/validation";
+export async function uploadWebsiteMedia(file:File,folder:WebsiteMediaFolder):Promise<string>{const{extension,mime}=validateWebsiteMedia(file);const path=createWebsiteMediaPath(folder,extension);const{error}=await supabase.storage.from("website-media").upload(path,file,{contentType:mime,upsert:false});if(error)throw new Error("Media upload failed. The file was not published.");const{data}=supabase.storage.from("website-media").getPublicUrl(path);if(!data.publicUrl)throw new Error("Uploaded media URL is unavailable.");return data.publicUrl}

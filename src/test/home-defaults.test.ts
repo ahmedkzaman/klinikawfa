@@ -3,7 +3,6 @@ import { createElement, type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import clinicExterior from "@/assets/klinik-awfa-exterior.webp";
 import { GalleryLightbox } from "@/components/gallery/GalleryLightbox";
 import { GalleryStrip } from "@/components/home/GalleryStrip";
 import { HeroCarousel } from "@/components/home/HeroCarousel";
@@ -180,7 +179,7 @@ describe("DEFAULT_HOME_CONTENT", () => {
     );
     expect(DEFAULT_HOME_CONTENT).toEqual({
       hero: {
-        backgroundImage: clinicExterior,
+        backgroundImage: "/klinik-awfa-exterior.webp",
         backgroundAlt: { ms: "", en: "" },
         backgroundOpacity: 13,
         autoplayMs: 5000,

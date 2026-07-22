@@ -71,6 +71,7 @@ export function useGalleryImages(activeCategory: GalleryCategoryId = 'all') {
 
   // Client-side filtering for instant response
   const filteredImages = query.data?.filter((image) => {
+    if ((image as GalleryImage & { is_visible?: boolean }).is_visible === false) return false;
     if (activeCategory === 'all') return true;
     
     const category = GALLERY_CATEGORIES.find((c) => c.id === activeCategory);

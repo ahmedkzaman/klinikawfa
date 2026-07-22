@@ -1,0 +1,3 @@
+import{useEffect,useState}from"react";import{supabase}from"@/integrations/supabase/client";
+export interface PublishedNavigationItem{id:string;href:string;labelMs:string;labelEn:string;parentId:string|null;displayOrder:number}
+export function usePublishedNavigation(){const[items,setItems]=useState<PublishedNavigationItem[]|null>(null);useEffect(()=>{let active=true;void supabase.from("website_navigation_items").select("id,href,label_ms,label_en,parent_id,display_order").eq("is_visible",true).order("display_order").then(({data,error})=>{if(active&&!error&&data?.length)setItems(data.map((row)=>({id:row.id,href:row.href,labelMs:row.label_ms,labelEn:row.label_en??"",parentId:row.parent_id,displayOrder:row.display_order}))) });return()=>{active=false}},[]);return items}

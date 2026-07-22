@@ -10,6 +10,7 @@ import { ArrowLeft, CheckCircle, Calendar, AlertTriangle } from "lucide-react";
 // GHSA-v3m3-f69x-jf25: Quill HTML export must pass through the shared sanitizer.
 import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
 import { resolveServiceCategorySlug } from "@/lib/serviceSlugMap";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const stripHtml = (html: string) =>
   (html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -21,10 +22,19 @@ interface ClinicService {
   description: string;
   services_list: string[];
   call_to_action: string;
+  title_ms?: string | null;
+  title_en?: string | null;
+  description_ms?: string | null;
+  description_en?: string | null;
+  call_to_action_ms?: string | null;
+  call_to_action_en?: string | null;
+  services_list_ms?: string[] | null;
+  services_list_en?: string[] | null;
 }
 
 export default function ServiceDetail() {
   const { slug } = useParams<{ slug: string }>();
+  const { language } = useLanguage();
 
   const dbSlug = resolveServiceCategorySlug(slug);
 
@@ -85,11 +95,16 @@ export default function ServiceDetail() {
     );
   }
 
+  const title = language === "en" ? service.title_en || service.title_ms || service.title : service.title_ms || service.title;
+  const description = language === "en" ? service.description_en || service.description_ms || service.description : service.description_ms || service.description;
+  const callToAction = language === "en" ? service.call_to_action_en || service.call_to_action_ms || service.call_to_action : service.call_to_action_ms || service.call_to_action;
+  const serviceItems = language === "en" && service.services_list_en?.length ? service.services_list_en : service.services_list_ms?.length ? service.services_list_ms : service.services_list;
+
   return (
     <MainLayout>
       <SEOHead
-        title={service.title}
-        description={stripHtml(service.description).substring(0, 160)}
+        title={title}
+        description={stripHtml(description).substring(0, 160)}
         url={`/services/${service.slug}`}
       />
 
@@ -102,16 +117,16 @@ export default function ServiceDetail() {
           >
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Services
           </Link>
-          <h1 className="mb-4">{service.title}</h1>
+          <h1 className="mb-4">{title}</h1>
           <div
             className="service-rich-content prose max-w-none mb-8 text-muted-foreground"
             dangerouslySetInnerHTML={{
-              __html: sanitizeRichHtml(service.description || ""),
+              __html: sanitizeRichHtml(description || ""),
             }}
           />
           <Button asChild size="lg">
             <Link to="/appointment">
-              <Calendar className="mr-2 h-5 w-5" /> {service.call_to_action}
+              <Calendar className="mr-2 h-5 w-5" /> {callToAction}
             </Link>
           </Button>
         </div>
@@ -121,7 +136,7 @@ export default function ServiceDetail() {
       <section className="container py-16">
         <h2 className="mb-8">What's Included</h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          {service.services_list?.map((item, index) => (
+          {serviceItems?.map((item, index) => (
             <Card key={index} className="border-border/50 shadow-soft">
               <CardContent className="flex items-start gap-3 p-4">
                 <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
@@ -152,7 +167,7 @@ export default function ServiceDetail() {
           </p>
           <Button asChild size="lg" variant="secondary">
             <Link to="/appointment">
-              <Calendar className="mr-2 h-5 w-5" /> {service.call_to_action}
+              <Calendar className="mr-2 h-5 w-5" /> {callToAction}
             </Link>
           </Button>
         </div>

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   listEditorPages,
   type EditorWebsitePageSummary,
@@ -13,6 +14,8 @@ export function Pages() {
   const [pages, setPages] = useState<EditorWebsitePageSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
 
   const loadPages = useCallback(async () => {
     setLoading(true);
@@ -69,6 +72,15 @@ export function Pages() {
         </div>
       )}
 
+      {!loading && !error && pages.length > 0 && (
+        <div className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-[1fr_12rem]">
+          <Input aria-label="Search pages" placeholder="Search by page slug" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <select aria-label="Filter by status" className="h-10 rounded-md border bg-background px-3 text-sm" value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="all">All statuses</option><option value="published">Published</option><option value="draft">Draft</option><option value="archived">Archived</option>
+          </select>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600" role="status">
           <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
@@ -83,7 +95,7 @@ export function Pages() {
         )
       ) : (
         <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          {pages.map((page) => (
+          {pages.filter((page) => (status === "all" || page.status === status) && page.slug.toLowerCase().includes(query.trim().toLowerCase())).map((page) => (
             <li className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between" key={page.id}>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">

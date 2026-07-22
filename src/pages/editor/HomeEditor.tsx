@@ -20,6 +20,7 @@ import {
 } from "react-hook-form";
 
 import { LivePreview } from "@/components/editor/LivePreview";
+import { WebsiteMediaUploader } from "@/components/editor/WebsiteMediaUploader";
 import { useEditorDirtyState } from "@/components/editor/useEditorDirtyNavigation";
 import { HomeRenderer } from "@/components/home";
 import {
@@ -684,7 +685,10 @@ export function HomeEditor() {
           disabled={editorLocked}
         >
         <EditorSection description="Background, carousel timing, slides, calls to action, and accessible carousel labels." initiallyOpen title="Hero">
-          <EditorField errors={errors} label="Hero background image URL" name="hero.backgroundImage" register={form.register} />
+          <div>
+            <EditorField errors={errors} label="Hero background image URL" name="hero.backgroundImage" register={form.register} />
+            <WebsiteMediaUploader folder="home" onUploaded={(url) => form.setValue("hero.backgroundImage", url, { shouldDirty: true, shouldValidate: true })} />
+          </div>
           <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4">
             <Button disabled size="sm" type="button" variant="outline">Media upload available in the resources phase</Button>
             <p className="mt-2 text-xs leading-5 text-slate-600">

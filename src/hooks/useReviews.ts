@@ -21,14 +21,30 @@ export function useReviews(publishedOnly = true) {
   return useQuery({
     queryKey: ['reviews', { publishedOnly }],
     queryFn: async () => {
-      let query = supabase
+      if (publishedOnly) {
+        const { data, error } = await supabase
+          .from('website_review_presentations')
+          .select('id,name_ms,name_en,review_text_ms,review_text_en,rating,display_order,created_at,updated_at')
+          .eq('status', 'published')
+          .order('display_order', { ascending: true });
+        if (error) throw error;
+        return (data || []).map((row) => ({
+          id: row.id,
+          name_ms: row.name_ms,
+          name_en: row.name_en,
+          text_ms: row.review_text_ms,
+          text_en: row.review_text_en,
+          rating: row.rating,
+          published: true,
+          display_order: row.display_order,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+        })) as Review[];
+      }
+      const query = supabase
         .from('reviews')
         .select('*')
         .order('display_order', { ascending: true });
-
-      if (publishedOnly) {
-        query = query.eq('published', true);
-      }
 
       const { data, error } = await query;
 
