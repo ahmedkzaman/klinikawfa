@@ -661,8 +661,11 @@ function global:Invoke-LocalQuery {
 }
 New-LocalDatabase -Database 'managed_owner_fixture'
 if($null -eq $script:capturedBootstrapSql -or $script:capturedCreateDatabase.arguments[-1] -cne 'managed_owner_fixture'){throw 'Disposable database bootstrap behavior was not captured.'}
-$selectedRestoreOwners=@('postgres','supabase_admin','supabase_auth_admin','supabase_storage_admin')
-foreach($owner in @($selectedRestoreOwners|Where-Object{$_ -ne 'postgres'})){
+$sourceArchiveRoleIdentifiers=@('anon','authenticated','dashboard_user','pgbouncer','postgres','sandbox_exec','service_role','supabase_admin','supabase_auth_admin','supabase_functions_admin','supabase_realtime_admin','supabase_storage_admin')
+$targetArchiveRoleIdentifiers=@('anon','authenticated','dashboard_user','pgbouncer','postgres','service_role','supabase_admin','supabase_auth_admin','supabase_realtime_admin','supabase_storage_admin')
+$selectedRestoreOwners=@($sourceArchiveRoleIdentifiers+$targetArchiveRoleIdentifiers|Sort-Object -Unique)
+$disposableRestoreOwners=@($selectedRestoreOwners|Where-Object{$_ -ne 'postgres'})
+foreach($owner in $disposableRestoreOwners){
   $exactOwnerBootstrap="if not exists (select 1 from pg_roles where rolname = '$owner') then create role $owner nologin; end if;"
   if(-not $script:capturedBootstrapSql.Contains($exactOwnerBootstrap)){throw "Disposable bootstrap does not create selected archive owner as NOLOGIN: $owner"}
 }
@@ -679,9 +682,10 @@ try{
   $bootstrapPath=Join-Path $sequenceRoot 'disposable-bootstrap.sql'
   [IO.File]::WriteAllText($bootstrapPath,$script:capturedBootstrapSql,[Text.UTF8Encoding]::new($false))
   & (Join-Path $postgresBin 'psql.exe') -X -q -v ON_ERROR_STOP=1 --host 127.0.0.1 --port $sequencePort --username postgres --dbname sequence_test --file $bootstrapPath *> $null;if($LASTEXITCODE -ne 0){throw 'Disposable managed-owner bootstrap failed against PostgreSQL.'}
-  $managedOwnerState=@(& (Join-Path $postgresBin 'psql.exe') -X -A -t -q -v ON_ERROR_STOP=1 --host 127.0.0.1 --port $sequencePort --username postgres --dbname sequence_test --command "select rolname||'|'||rolcanlogin::text from pg_roles where rolname in ('supabase_admin','supabase_auth_admin','supabase_storage_admin') order by rolname;")
+  $disposableRestoreOwnerSql=($disposableRestoreOwners|ForEach-Object{"'$_'"})-join ','
+  $managedOwnerState=@(& (Join-Path $postgresBin 'psql.exe') -X -A -t -q -v ON_ERROR_STOP=1 --host 127.0.0.1 --port $sequencePort --username postgres --dbname sequence_test --command "select rolname||'|'||rolcanlogin::text from pg_roles where rolname in ($disposableRestoreOwnerSql) order by rolname;")
   if($LASTEXITCODE -ne 0){throw 'Disposable managed-owner role query failed.'}
-  Assert-EqualJson -Expected @('supabase_admin|false','supabase_auth_admin|false','supabase_storage_admin|false') -Actual @($managedOwnerState|ForEach-Object{$_.Trim()}|Where-Object{$_}) -Label 'Disposable PostgreSQL bootstrap did not create the exact selected archive owners as NOLOGIN.'
+  Assert-EqualJson -Expected @($disposableRestoreOwners|Sort-Object|ForEach-Object{"$_|false"}) -Actual @($managedOwnerState|ForEach-Object{$_.Trim()}|Where-Object{$_}) -Label 'Disposable PostgreSQL bootstrap did not create the exact selected archive owners as NOLOGIN.'
   $sequenceFixture=@'
 create table public.t001(id bigint primary key);
 create sequence public.t001_id_seq start 1 increment 1 owned by public.t001.id;
