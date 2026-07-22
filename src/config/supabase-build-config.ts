@@ -43,11 +43,12 @@ export const resolveSupabaseBuildConfig = (
   mode: string,
   environment: SupabaseBuildEnvironment,
 ): SupabaseBuildConfig => {
-  const url = environment.VITE_SUPABASE_URL;
+  const clean = (value: string | undefined) => value?.trim() || undefined;
+  const url = clean(environment.VITE_SUPABASE_URL);
   const publishableKey =
-    environment.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    environment.VITE_SUPABASE_ANON_KEY;
-  const projectId = environment.VITE_SUPABASE_PROJECT_ID;
+    clean(environment.VITE_SUPABASE_PUBLISHABLE_KEY) ||
+    clean(environment.VITE_SUPABASE_ANON_KEY);
+  const projectId = clean(environment.VITE_SUPABASE_PROJECT_ID);
   const missing = missingVariables(url, publishableKey, projectId);
   const hasAnyEnvironmentValue = Boolean(url || publishableKey || projectId);
 
