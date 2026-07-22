@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Loader2, Lock } from 'lucide-react';
+import { resolveRecoverySessionState } from '@/lib/recovery-session';
 
 const newPasswordSchema = z
   .object({
@@ -55,7 +56,7 @@ export default function ResetPassword() {
       if (session && (hash.includes('type=recovery') || hash.includes('access_token'))) {
         setIsValidSession(true);
       } else if (!session) {
-        setIsValidSession(false);
+        setIsValidSession(resolveRecoverySessionState({ session, hash }));
       } else {
         // user already signed in with a normal session — still allow them to update password
         setIsValidSession(true);
