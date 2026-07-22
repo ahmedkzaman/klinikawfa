@@ -33,6 +33,18 @@ $Task4DryRunEvidenceName = 'task4-readonly-dryrun-evidence.json'
 $Task4MigrationPushEvidenceName = 'task4-migration-push-evidence.json'
 $Task4MigrationPushEvidenceSha256 = ''
 $Task4MigrationPushProducerRunnerSha256 = ''
+$LiveSourceRef = 'ncysmppzfjtiekfnomdv'
+$LiveFrontendUrl = 'https://klinikawfa.com/'
+$Task4IsolationEvidenceName = 'task4-staging-isolation-evidence.json'
+$Task4QuarantineName = 'task4-target-quarantine.json'
+$Task4PushIsolationMaxAgeMinutes = 15
+$Task4ImportPushEvidenceMaxAgeHours = 24
+$Task4BaselineStorageBuckets = 6
+$Task4BaselineStorageObjects = 0
+$Task4BaselineStorageBucketConfigurationSha256 = '7CC19FC8A7567582D947EDA8CA6BAB6FC1D8961713AEE85099F639347B2540D5'
+$Task4BaselineStorageObjectMetadataSha256 = '4F53CDA18C2BAA0C0354BB5F9A3ECBE5ED12AB4D8E11BA873C2F11161202B945'
+$Task4BaselineStorageMigrationRows = 61
+$Task4BaselineStorageMigrationsSha256 = '3090C773F9B3823737BA83A66D5B5D3DA75A5BC62CE56EA891CCF5E5489792DD'
 $Task4RollbackRestoreEvidenceName = 'task4-rollback-restore-evidence.json'
 $Task4RollbackRestoreEvidenceSha256 = ''
 $Task4RollbackBackupBytes = 1070000L
@@ -92,6 +104,10 @@ $Task4ApprovedServiceLists = [ordered]@{
   'pemeriksaan-kesihatan' = @('Pemeriksaan Bakal Haji 2026','Pemeriksaan Kesihatan Pelajar','Pemeriksaan Pra-Pekerjaan & Kecergasan Bekerja','Pemeriksaan Darah Menyeluruh')
   'prosedur-minor' = @('Khatan Kanak-Kanak','Khatan Dewasa','Pembedahan Kecil / Ketuat','Penjagaan Telinga (Microsuction)')
   'rawatan-am' = @('Konsultasi Sakit Tekak / Demam / Selsema','Terapi Nebuliser & Sedutan Kahak','Ujian Denggi / Darah Penuh (FBC)','Ujian Pantas (Influenza A & B / COVID-19 / Adenovirus / RSV)','Pencucian Hidung')
+}
+
+if ($Phase -eq 'Rollback') {
+  throw 'Task 4 Rollback is unavailable before any protected artifact, environment, tool, target, or restore action.'
 }
 
 function Get-NormalizedPath {
@@ -173,6 +189,729 @@ function Get-StringSha256 {
 function Get-JsonSha256 {
   param([Parameter(Mandatory)]$Value)
   return Get-StringSha256 -Value ($Value | ConvertTo-Json -Depth 50 -Compress)
+}
+
+function Get-Task4BytesSha256 {
+  param([Parameter(Mandatory)][byte[]]$Bytes)
+  $algorithm = [Security.Cryptography.SHA256]::Create()
+  try {
+    return ([BitConverter]::ToString($algorithm.ComputeHash($Bytes))).Replace('-', '').ToUpperInvariant()
+  } finally {
+    $algorithm.Dispose()
+  }
+}
+
+function Get-Task4IsolationContractRunnerSha256 {
+  param([string]$Path = $Task4RunnerPath)
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw 'Task 4 isolation runner contract file is missing.' }
+  $text = [IO.File]::ReadAllText((Get-NormalizedPath $Path))
+  foreach ($name in @('Task4MigrationPushEvidenceSha256','Task4MigrationPushProducerRunnerSha256')) {
+    $assignment = '$' + $name
+    $pattern = '(?m)^' + [regex]::Escape($assignment) + "\s*=\s*'[^'\r\n]*'\s*$"
+    if ([regex]::Matches($text,$pattern).Count -ne 1) { throw "Task 4 isolation runner mutable pin assignment is not canonical: $name" }
+    $text = [regex]::Replace($text,$pattern,($assignment + " = ''"))
+  }
+  return Get-StringSha256 -Value $text
+}
+
+function Get-Task4ByteOccurrenceCount {
+  param(
+    [Parameter(Mandatory)][byte[]]$Bytes,
+    [Parameter(Mandatory)][string]$AsciiText
+  )
+  if ([string]::IsNullOrWhiteSpace($AsciiText) -or $AsciiText -cmatch '[^\x20-\x7E]') { throw 'Task 4 live reference marker must be non-empty ASCII.' }
+  $needle = [Text.Encoding]::ASCII.GetBytes($AsciiText)
+  $count = 0
+  for ($index = 0; $index -le $Bytes.Length - $needle.Length; $index++) {
+    $matches = $true
+    for ($offset = 0; $offset -lt $needle.Length; $offset++) {
+      if ($Bytes[$index + $offset] -ne $needle[$offset]) { $matches = $false; break }
+    }
+    if ($matches) { $count++; $index += $needle.Length - 1 }
+  }
+  return $count
+}
+
+function Get-Task4HtmlAttributeValue {
+  param(
+    [Parameter(Mandatory)][string]$Tag,
+    [Parameter(Mandatory)][string]$Name,
+    [switch]$Required
+  )
+  $pattern = '(?is)\b' + [regex]::Escape($Name) + '\s*=\s*(?:"(?<double>[^"]*)"|''(?<single>[^'']*)''|(?<bare>[^\s>]+))'
+  $matches = [regex]::Matches($Tag,$pattern)
+  if ($matches.Count -gt 1) { throw "Task 4 live HTML tag has duplicate $Name attributes." }
+  if ($matches.Count -eq 0) {
+    if ($Required) { throw "Task 4 live HTML tag is missing $Name." }
+    return $null
+  }
+  foreach ($group in @('double','single','bare')) {
+    if ($matches[0].Groups[$group].Success) { return [Net.WebUtility]::HtmlDecode($matches[0].Groups[$group].Value) }
+  }
+  throw "Task 4 live HTML $Name attribute could not be decoded."
+}
+
+function ConvertTo-Task4SameOriginJavascriptUri {
+  param(
+    [Parameter(Mandatory)][string]$Value,
+    [Parameter(Mandatory)][Uri]$BaseUri,
+    [Parameter(Mandatory)][Uri]$RootUri
+  )
+  if ([string]::IsNullOrWhiteSpace($Value)) { throw 'Task 4 live JavaScript URL is empty.' }
+  try { $uri = [Uri]::new($BaseUri,$Value) } catch { throw 'Task 4 live JavaScript URL is invalid.' }
+  if (-not $uri.IsAbsoluteUri -or $uri.Scheme -cne 'https' -or $uri.Host -cne $RootUri.Host -or
+      $uri.Port -ne $RootUri.Port -or -not [string]::IsNullOrEmpty($uri.UserInfo) -or
+      -not [string]::IsNullOrEmpty($uri.Fragment) -or $uri.AbsolutePath -cnotmatch '(?i)\.(?:m?js)$') {
+    throw 'Task 4 live JavaScript URL is not an exact same-origin HTTPS asset.'
+  }
+  return $uri
+}
+
+function Get-Task4LiveJavascriptUris {
+  param(
+    [Parameter(Mandatory)][byte[]]$HtmlBytes,
+    [Parameter(Mandatory)][string]$RootUrl
+  )
+  try { $rootUri = [Uri]$RootUrl } catch { throw 'Task 4 live frontend root URL is invalid.' }
+  if (-not $rootUri.IsAbsoluteUri -or $rootUri.AbsoluteUri -cne $LiveFrontendUrl -or $rootUri.Scheme -cne 'https' -or $rootUri.Host -cne 'klinikawfa.com' -or $rootUri.AbsolutePath -cne '/' -or -not [string]::IsNullOrEmpty($rootUri.Query) -or -not [string]::IsNullOrEmpty($rootUri.Fragment)) {
+    throw 'Task 4 live frontend root URL is not the exact approved HTTPS origin.'
+  }
+  try { $html = [Text.UTF8Encoding]::new($false,$true).GetString($HtmlBytes) } catch { throw 'Task 4 live HTML is not valid UTF-8.' }
+  if ($html -match '(?is)<base\b') { throw 'Task 4 live HTML contains a base URL override.' }
+  $uris = New-Object 'System.Collections.Generic.List[Uri]'
+  $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+  foreach ($match in [regex]::Matches($html,'(?is)<script\b[^>]*>|<link\b[^>]*>')) {
+    $tag = $match.Value
+    $value = $null
+    if ($tag -match '(?is)^<script\b') {
+      $value = Get-Task4HtmlAttributeValue -Tag $tag -Name 'src'
+      if ($null -eq $value) { continue }
+    } else {
+      $rel = Get-Task4HtmlAttributeValue -Tag $tag -Name 'rel'
+      if ($null -eq $rel -or @($rel -split '\s+' | Where-Object { $_ -ceq 'modulepreload' }).Count -eq 0) { continue }
+      $value = Get-Task4HtmlAttributeValue -Tag $tag -Name 'href' -Required
+    }
+    $uri = ConvertTo-Task4SameOriginJavascriptUri -Value $value -BaseUri $rootUri -RootUri $rootUri
+    if (-not $seen.Add($uri.AbsoluteUri)) { throw 'Task 4 live HTML contains a duplicate canonical JavaScript asset.' }
+    $uris.Add($uri)
+  }
+  if ($uris.Count -eq 0) { throw 'Task 4 live HTML contains no external same-origin JavaScript assets.' }
+  return @($uris | Sort-Object AbsoluteUri)
+}
+
+function Get-Task4JavascriptDependencyUris {
+  param(
+    [Parameter(Mandatory)][byte[]]$JavascriptBytes,
+    [Parameter(Mandatory)][Uri]$AssetUri,
+    [Parameter(Mandatory)][Uri]$RootUri
+  )
+  try { $javascript = [Text.UTF8Encoding]::new($false,$true).GetString($JavascriptBytes) } catch { throw 'Task 4 live JavaScript asset is not valid UTF-8.' }
+  $uris = New-Object 'System.Collections.Generic.List[Uri]'
+  $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+  $specifier = '(?:"(?<double>[^"\r\n]+\.(?:m?js)(?:\?[^"\r\n]*)?)"|''(?<single>[^''\r\n]+\.(?:m?js)(?:\?[^''\r\n]*)?)'')'
+  $patterns = @(
+    ('(?is)\bimport\s*\(\s*' + $specifier)
+    ('(?is)\bimport\s*' + $specifier)
+    ('(?is)\b(?:import|export)\b[^;"''\r\n]*?\bfrom\s*' + $specifier)
+    ('(?is)\bnew\s+URL\s*\(\s*' + $specifier)
+  )
+  foreach ($pattern in $patterns) {
+    foreach ($match in [regex]::Matches($javascript,$pattern)) {
+      $value = if ($match.Groups['double'].Success) { $match.Groups['double'].Value } else { $match.Groups['single'].Value }
+      $uri = ConvertTo-Task4SameOriginJavascriptUri -Value $value -BaseUri $AssetUri -RootUri $RootUri
+      if ($seen.Add($uri.AbsoluteUri)) { $uris.Add($uri) }
+    }
+  }
+  return @($uris | Sort-Object AbsoluteUri)
+}
+
+function Invoke-Task4HttpsGetBytes {
+  param([Parameter(Mandatory)][Uri]$Uri)
+  $handler = New-Object Net.Http.HttpClientHandler
+  $handler.AllowAutoRedirect = $false
+  $handler.AutomaticDecompression = [Net.DecompressionMethods]::GZip -bor [Net.DecompressionMethods]::Deflate
+  $client = New-Object Net.Http.HttpClient($handler)
+  $client.Timeout = [TimeSpan]::FromSeconds(20)
+  $request = New-Object Net.Http.HttpRequestMessage([Net.Http.HttpMethod]::Get,$Uri)
+  [void]$request.Headers.TryAddWithoutValidation('Cache-Control','no-cache, no-store, max-age=0')
+  try {
+    $response = $client.SendAsync($request).GetAwaiter().GetResult()
+    try {
+      $bytes = $response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
+      $contentType = if ($null -eq $response.Content.Headers.ContentType) { '' } else { $response.Content.Headers.ContentType.ToString() }
+      return [pscustomobject]@{
+        requestedUrl = $Uri.AbsoluteUri
+        finalUrl = $response.RequestMessage.RequestUri.AbsoluteUri
+        statusCode = [int]$response.StatusCode
+        contentType = $contentType
+        bytes = [byte[]]$bytes
+      }
+    } finally { $response.Dispose() }
+  } finally { $request.Dispose(); $client.Dispose(); $handler.Dispose() }
+}
+
+function Assert-Task4HttpsResponse {
+  param(
+    [Parameter(Mandatory)]$Response,
+    [Parameter(Mandatory)][Uri]$ExpectedUri,
+    [Parameter(Mandatory)][ValidateSet('Html','Javascript')][string]$Kind
+  )
+  foreach ($name in @('requestedUrl','finalUrl','statusCode','contentType','bytes')) {
+    if ($null -eq $Response.PSObject.Properties[$name]) { throw "Task 4 HTTPS response is missing $name." }
+  }
+  if ($Response.requestedUrl -isnot [string] -or $Response.finalUrl -isnot [string] -or $Response.statusCode -isnot [int] -or
+      $Response.contentType -isnot [string] -or $Response.bytes -isnot [Array]) { throw 'Task 4 HTTPS response has invalid field types.' }
+  if ([int]$Response.statusCode -ne 200 -or [string]$Response.requestedUrl -cne $ExpectedUri.AbsoluteUri -or [string]$Response.finalUrl -cne $ExpectedUri.AbsoluteUri) {
+    throw 'Task 4 HTTPS response redirected, changed origin, or did not return status 200.'
+  }
+  $maximumBytes = if ($Kind -eq 'Html') { 2097152 } else { 16777216 }
+  if ($Response.bytes.Count -le 0 -or $Response.bytes.Count -gt $maximumBytes) { throw "Task 4 $Kind response byte length is outside the approved bound." }
+  $mediaType = ([string]$Response.contentType -split ';',2)[0].Trim().ToLowerInvariant()
+  if ($Kind -eq 'Html' -and $mediaType -notin @('text/html','application/xhtml+xml')) { throw 'Task 4 live root did not return HTML.' }
+  if ($Kind -eq 'Javascript' -and $mediaType -notin @('application/javascript','text/javascript','application/ecmascript','text/ecmascript')) { throw 'Task 4 live asset did not return JavaScript.' }
+  return [byte[]]$Response.bytes
+}
+
+function Get-Task4LiveFrontendSnapshotOnce {
+  param(
+    [Parameter(Mandatory)][string]$RootUrl,
+    [Parameter(Mandatory)][string]$SourceRef,
+    [Parameter(Mandatory)][string]$TargetRef
+  )
+  $rootUri = [Uri]$RootUrl
+  $htmlResponse = Invoke-Task4HttpsGetBytes -Uri $rootUri
+  $htmlBytes = @(Assert-Task4HttpsResponse -Response $htmlResponse -ExpectedUri $rootUri -Kind Html)
+  $queue = New-Object 'System.Collections.Generic.Queue[Uri]'
+  foreach ($uri in @(Get-Task4LiveJavascriptUris -HtmlBytes $htmlBytes -RootUrl $RootUrl)) { $queue.Enqueue($uri) }
+  $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+  $assets = New-Object 'System.Collections.Generic.List[object]'
+  $totalBytes = [int64]$htmlBytes.Count
+  while ($queue.Count -gt 0) {
+    $uri = $queue.Dequeue()
+    if (-not $seen.Add($uri.AbsoluteUri)) { continue }
+    if ($seen.Count -gt 128) { throw 'Task 4 live JavaScript dependency graph exceeds the approved asset limit.' }
+    $response = Invoke-Task4HttpsGetBytes -Uri $uri
+    $bytes = @(Assert-Task4HttpsResponse -Response $response -ExpectedUri $uri -Kind Javascript)
+    $totalBytes += $bytes.Count
+    if ($totalBytes -gt 67108864) { throw 'Task 4 live frontend snapshot exceeds the approved total byte limit.' }
+    $assets.Add([ordered]@{
+      url = $uri.AbsoluteUri
+      bytes = [int64]$bytes.Count
+      sha256 = Get-Task4BytesSha256 -Bytes ([byte[]]$bytes)
+      sourceRefOccurrences = Get-Task4ByteOccurrenceCount -Bytes $bytes -AsciiText $SourceRef
+      targetRefOccurrences = Get-Task4ByteOccurrenceCount -Bytes $bytes -AsciiText $TargetRef
+    })
+    foreach ($dependency in @(Get-Task4JavascriptDependencyUris -JavascriptBytes $bytes -AssetUri $uri -RootUri $rootUri)) {
+      if (-not $seen.Contains($dependency.AbsoluteUri)) { $queue.Enqueue($dependency) }
+    }
+  }
+  $orderedAssets = @($assets | Sort-Object { $_.url })
+  $html = [ordered]@{
+    url = $rootUri.AbsoluteUri
+    bytes = [int64]$htmlBytes.Count
+    sha256 = Get-Task4BytesSha256 -Bytes ([byte[]]$htmlBytes)
+    sourceRefOccurrences = Get-Task4ByteOccurrenceCount -Bytes $htmlBytes -AsciiText $SourceRef
+    targetRefOccurrences = Get-Task4ByteOccurrenceCount -Bytes $htmlBytes -AsciiText $TargetRef
+  }
+  $sourceCount = [int]$html.sourceRefOccurrences
+  $targetCount = [int]$html.targetRefOccurrences
+  foreach ($asset in $orderedAssets) { $sourceCount += [int]$asset.sourceRefOccurrences; $targetCount += [int]$asset.targetRefOccurrences }
+  if ($sourceCount -le 0 -or $targetCount -ne 0) { throw 'Task 4 live frontend is not isolated on the approved source project.' }
+  $snapshot = [ordered]@{
+    rootUrl = $rootUri.AbsoluteUri
+    html = $html
+    javascriptAssets = $orderedAssets
+    javascriptAssetsSha256 = Get-JsonSha256 -Value $orderedAssets
+    sourceRefOccurrences = $sourceCount
+    targetRefOccurrences = $targetCount
+  }
+  $snapshot['snapshotSha256'] = Get-JsonSha256 -Value $snapshot
+  return $snapshot
+}
+
+function Get-Task4LiveFrontendSnapshot {
+  param(
+    [string]$RootUrl = $LiveFrontendUrl,
+    [string]$SourceRef = $LiveSourceRef,
+    [string]$TargetRef = $ExpectedRef
+  )
+  $first = Get-Task4LiveFrontendSnapshotOnce -RootUrl $RootUrl -SourceRef $SourceRef -TargetRef $TargetRef
+  $second = Get-Task4LiveFrontendSnapshotOnce -RootUrl $RootUrl -SourceRef $SourceRef -TargetRef $TargetRef
+  if ((Get-JsonSha256 -Value $first) -cne (Get-JsonSha256 -Value $second)) { throw 'Task 4 live frontend changed during the isolation observation.' }
+  return $second
+}
+
+function Assert-Task4IsolationExactProperties {
+  param(
+    [Parameter(Mandatory)]$Value,
+    [Parameter(Mandatory)][string[]]$Names,
+    [Parameter(Mandatory)][string]$Label
+  )
+  if ($Value -is [Collections.IDictionary]) {
+    $actual = @($Value.Keys | ForEach-Object { [string]$_ } | Sort-Object)
+  } elseif ($Value -is [pscustomobject]) {
+    $actual = @($Value.PSObject.Properties.Name | Sort-Object)
+  } else {
+    throw "$Label must be a JSON object."
+  }
+  $expected = @($Names | Sort-Object)
+  if (($actual -join "`n") -cne ($expected -join "`n")) { throw "$Label has missing or unexpected fields." }
+}
+
+function Assert-Task4IsolationSha256 {
+  param($Value,[Parameter(Mandatory)][string]$Label)
+  if ($Value -isnot [string] -or $Value -cnotmatch '^[A-F0-9]{64}$') { throw "$Label must be an uppercase SHA-256 digest string." }
+}
+
+function Assert-Task4IsolationInteger {
+  param($Value,[Parameter(Mandatory)][string]$Label)
+  if ($Value -isnot [int] -and $Value -isnot [long]) { throw "$Label must be a JSON integer." }
+}
+
+function Get-Task4IsolationTargetSnapshotOnce {
+  $inventory = Get-TargetInventory -IncludeTask4Contract
+  $sql = @'
+begin read only;
+set local time zone 'UTC';
+with
+bucket_rows as (
+  select coalesce(jsonb_agg(to_jsonb(b) order by b.id),'[]'::jsonb) as value from storage.buckets b
+),
+preexisting_bucket_rows as (
+  select coalesce(jsonb_agg(to_jsonb(b) order by b.id),'[]'::jsonb) as value from storage.buckets b where b.id <> 'website-media'
+),
+object_rows as (
+  select coalesce(jsonb_agg(to_jsonb(o) order by o.bucket_id,o.name,o.id),'[]'::jsonb) as value from storage.objects o
+),
+storage_migration_rows as (
+  select coalesce(jsonb_agg(to_jsonb(m) order by to_jsonb(m)::text),'[]'::jsonb) as value from storage.migrations m
+),
+sequence_catalog as (
+  select format('%I.%I',s.schemaname,s.sequencename) as identity,
+         s.start_value::bigint as start_value,s.min_value::bigint as min_value,s.max_value::bigint as max_value,
+         s.increment_by::bigint as increment_by,s.cycle,s.cache_size::bigint as cache_size,
+         (select format('%I.%I.%I',tn.nspname,tc.relname,a.attname)
+            from pg_class sc join pg_namespace sn on sn.oid=sc.relnamespace
+            join pg_depend d on d.classid='pg_class'::regclass and d.objid=sc.oid and d.deptype in ('a','i')
+            join pg_class tc on tc.oid=d.refobjid join pg_namespace tn on tn.oid=tc.relnamespace
+            join pg_attribute a on a.attrelid=tc.oid and a.attnum=d.refobjsubid
+           where sn.nspname=s.schemaname and sc.relname=s.sequencename limit 1) as owned_by
+    from pg_sequences s where s.schemaname='public'
+),
+sequence_values as (
+  select 'public.client_invoice_seq'::text as identity,last_value::bigint,is_called from public.client_invoice_seq
+  union all select 'public.patient_reg_no_seq',last_value::bigint,is_called from public.patient_reg_no_seq
+  union all select 'public.queue_number_seq',last_value::bigint,is_called from public.queue_number_seq
+),
+sequence_rows as (
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'identity',c.identity,'lastValue',v.last_value,'isCalled',v.is_called,'startValue',c.start_value,
+    'minValue',c.min_value,'maxValue',c.max_value,'incrementBy',c.increment_by,'cycle',c.cycle,
+    'cacheSize',c.cache_size,'ownedBy',c.owned_by) order by c.identity),'[]'::jsonb) as value
+  from sequence_catalog c left join sequence_values v using(identity)
+),
+sequence_identities as (
+  select coalesce(jsonb_agg(identity order by identity),'[]'::jsonb) as value from sequence_catalog
+)
+select jsonb_build_object(
+  'authSessions',(select count(*) from auth.sessions),
+  'authRefreshTokens',(select count(*) from auth.refresh_tokens),
+  'authOneTimeTokens',(select count(*) from auth.one_time_tokens),
+  'storage',jsonb_build_object(
+    'buckets',(select count(*) from storage.buckets),
+    'objects',(select count(*) from storage.objects),
+    'bucketConfigurationSha256',(select upper(encode(extensions.digest(convert_to(value::text,'UTF8'),'sha256'),'hex')) from bucket_rows),
+    'preexistingBucketConfigurationSha256',(select upper(encode(extensions.digest(convert_to(value::text,'UTF8'),'sha256'),'hex')) from preexisting_bucket_rows),
+    'websiteMediaBucket',(select jsonb_build_object('id',id,'name',name,'owner',owner,'ownerId',owner_id,'public',public,'avifAutodetection',avif_autodetection,'fileSizeLimit',file_size_limit,'allowedMimeTypes',to_jsonb(allowed_mime_types),'type',type::text) from storage.buckets where id='website-media'),
+    'objectMetadataSha256',(select upper(encode(extensions.digest(convert_to(value::text,'UTF8'),'sha256'),'hex')) from object_rows),
+    'storageMigrationRows',(select count(*) from storage.migrations),
+    'storageMigrationsSha256',(select upper(encode(extensions.digest(convert_to(value::text,'UTF8'),'sha256'),'hex')) from storage_migration_rows)
+  ),
+  'publicSequenceIdentities',(select value from sequence_identities),
+  'standaloneSequences',(select value from sequence_rows)
+)::text;
+rollback;
+'@
+  try { $managed = (Invoke-TargetQueryWithoutOutputLog -Sql $sql -Label 'Task 4 target isolation managed-state observation') | ConvertFrom-Json -ErrorAction Stop }
+  catch { throw 'Task 4 target isolation managed-state observation is not valid JSON.' }
+  Assert-Task4IsolationExactProperties -Value $managed -Names @('authSessions','authRefreshTokens','authOneTimeTokens','storage','publicSequenceIdentities','standaloneSequences') -Label 'Task 4 target isolation managed state'
+  Assert-Task4IsolationExactProperties -Value $managed.storage -Names @('buckets','objects','bucketConfigurationSha256','preexistingBucketConfigurationSha256','websiteMediaBucket','objectMetadataSha256','storageMigrationRows','storageMigrationsSha256') -Label 'Task 4 target isolation Storage state'
+  $storage = [ordered]@{
+    buckets = $managed.storage.buckets
+    objects = $managed.storage.objects
+    bucketConfigurationSha256 = $managed.storage.bucketConfigurationSha256
+    preexistingBucketConfigurationSha256 = $managed.storage.preexistingBucketConfigurationSha256
+    websiteMediaBucket = $managed.storage.websiteMediaBucket
+    objectMetadataSha256 = $managed.storage.objectMetadataSha256
+    storageMigrationRows = $managed.storage.storageMigrationRows
+    storageMigrationsSha256 = $managed.storage.storageMigrationsSha256
+  }
+  $storage['stateSha256'] = Get-JsonSha256 -Value $storage
+  $identities = @($managed.publicSequenceIdentities)
+  $snapshot = [ordered]@{
+    projectRef = $inventory.projectRef
+    publicTables = $inventory.publicTables
+    authUsers = $inventory.authUsers
+    authIdentities = $inventory.authIdentities
+    authSessions = $managed.authSessions
+    authRefreshTokens = $managed.authRefreshTokens
+    authOneTimeTokens = $managed.authOneTimeTokens
+    migrationRows = $inventory.migrationRows
+    migrationIdentities = @($inventory.migrationIdentities)
+    migrationIdentitiesSha256 = $inventory.migrationIdentitiesSha256
+    schemaSha256 = $inventory.schemaSha256
+    extendedSchemaSha256 = $inventory.extendedSchemaSha256
+    storage = $storage
+    publicSequenceIdentities = $identities
+    publicSequenceIdentitiesSha256 = Get-JsonSha256 -Value $identities
+    standaloneSequences = @($managed.standaloneSequences)
+  }
+  $snapshot['snapshotSha256'] = Get-JsonSha256 -Value $snapshot
+  return $snapshot
+}
+
+function Get-Task4IsolationTargetSnapshot {
+  $first = Get-Task4IsolationTargetSnapshotOnce
+  $second = Get-Task4IsolationTargetSnapshotOnce
+  if ((Get-JsonSha256 -Value $first) -cne (Get-JsonSha256 -Value $second)) { throw 'Task 4 target changed during the isolation observation.' }
+  return $second
+}
+
+function Assert-Task4IsolationTargetBaseline {
+  param(
+    [Parameter(Mandatory)]$Snapshot,
+    [Parameter(Mandatory)]$VerifiedBaseline,
+    [Parameter(Mandatory)][string]$ExpectedExtendedSchemaSha256
+  )
+  Assert-Task4IsolationExactProperties -Value $Snapshot -Names @(
+    'projectRef','publicTables','authUsers','authIdentities','authSessions','authRefreshTokens','authOneTimeTokens',
+    'migrationRows','migrationIdentities','migrationIdentitiesSha256','schemaSha256','extendedSchemaSha256','storage',
+    'publicSequenceIdentities','publicSequenceIdentitiesSha256','standaloneSequences','snapshotSha256'
+  ) -Label 'Task 4 target isolation snapshot'
+  Assert-Task4IsolationSha256 -Value $Snapshot.snapshotSha256 -Label 'Task 4 target isolation snapshot digest'
+  $snapshotForHash = $Snapshot | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+  [void]$snapshotForHash.PSObject.Properties.Remove('snapshotSha256')
+  if ([string]$Snapshot.snapshotSha256 -cne (Get-JsonSha256 -Value $snapshotForHash)) { throw 'Task 4 target isolation snapshot self-hash is invalid.' }
+  foreach ($name in @('publicTables','authUsers','authIdentities','authSessions','authRefreshTokens','authOneTimeTokens','migrationRows')) {
+    Assert-Task4IsolationInteger -Value $Snapshot.$name -Label "Task 4 target isolation $name"
+  }
+  $baselineProjection = [ordered]@{
+    projectRef = $Snapshot.projectRef
+    publicTables = $Snapshot.publicTables
+    authUsers = $Snapshot.authUsers
+    authIdentities = $Snapshot.authIdentities
+    migrationRows = $Snapshot.migrationRows
+    migrationIdentities = @($Snapshot.migrationIdentities)
+    migrationIdentitiesSha256 = $Snapshot.migrationIdentitiesSha256
+    schemaSha256 = $Snapshot.schemaSha256
+  }
+  if ((Get-JsonSha256 -Value $baselineProjection) -cne (Get-JsonSha256 -Value $VerifiedBaseline)) { throw 'Task 4 target isolation snapshot differs from the protected pre-write baseline.' }
+  Assert-Task4IsolationSha256 -Value $Snapshot.extendedSchemaSha256 -Label 'Task 4 target isolation extended schema digest'
+  if ([string]$Snapshot.extendedSchemaSha256 -cne $ExpectedExtendedSchemaSha256) { throw 'Task 4 target isolation extended schema digest changed.' }
+  if ([int64]$Snapshot.authSessions -ne 0 -or [int64]$Snapshot.authRefreshTokens -ne 0 -or [int64]$Snapshot.authOneTimeTokens -ne 0) { throw 'Task 4 target isolation requires zero managed Auth workflow rows.' }
+
+  Assert-Task4IsolationExactProperties -Value $Snapshot.storage -Names @('buckets','objects','bucketConfigurationSha256','preexistingBucketConfigurationSha256','websiteMediaBucket','objectMetadataSha256','storageMigrationRows','storageMigrationsSha256','stateSha256') -Label 'Task 4 target isolation Storage state'
+  foreach ($name in @('buckets','objects','storageMigrationRows')) {
+    Assert-Task4IsolationInteger -Value $Snapshot.storage.$name -Label "Task 4 target isolation Storage $name"
+    if ([int64]$Snapshot.storage.$name -lt 0) { throw "Task 4 target isolation Storage $name cannot be negative." }
+  }
+  foreach ($name in @('bucketConfigurationSha256','preexistingBucketConfigurationSha256','objectMetadataSha256','storageMigrationsSha256','stateSha256')) { Assert-Task4IsolationSha256 -Value $Snapshot.storage.$name -Label "Task 4 target isolation Storage $name" }
+  $storageForHash = [ordered]@{
+    buckets=$Snapshot.storage.buckets; objects=$Snapshot.storage.objects
+    bucketConfigurationSha256=$Snapshot.storage.bucketConfigurationSha256; preexistingBucketConfigurationSha256=$Snapshot.storage.preexistingBucketConfigurationSha256
+    websiteMediaBucket=$Snapshot.storage.websiteMediaBucket; objectMetadataSha256=$Snapshot.storage.objectMetadataSha256
+    storageMigrationRows=$Snapshot.storage.storageMigrationRows; storageMigrationsSha256=$Snapshot.storage.storageMigrationsSha256
+  }
+  if ([string]$Snapshot.storage.stateSha256 -cne (Get-JsonSha256 -Value $storageForHash)) { throw 'Task 4 target isolation Storage state self-hash is invalid.' }
+  if ([int64]$Snapshot.storage.buckets -ne $Task4BaselineStorageBuckets -or [int64]$Snapshot.storage.objects -ne $Task4BaselineStorageObjects -or
+      [string]$Snapshot.storage.bucketConfigurationSha256 -cne $Task4BaselineStorageBucketConfigurationSha256 -or [string]$Snapshot.storage.preexistingBucketConfigurationSha256 -cne $Task4BaselineStorageBucketConfigurationSha256 -or
+      $null -ne $Snapshot.storage.websiteMediaBucket -or [string]$Snapshot.storage.objectMetadataSha256 -cne $Task4BaselineStorageObjectMetadataSha256 -or
+      [int64]$Snapshot.storage.storageMigrationRows -ne $Task4BaselineStorageMigrationRows -or [string]$Snapshot.storage.storageMigrationsSha256 -cne $Task4BaselineStorageMigrationsSha256) { throw 'Task 4 target isolation Storage state differs from the protected known baseline.' }
+
+  $expectedIdentities = @('public.client_invoice_seq','public.patient_reg_no_seq','public.queue_number_seq')
+  if ((@($Snapshot.publicSequenceIdentities) -join "`n") -cne ($expectedIdentities -join "`n")) { throw 'Task 4 target isolation public sequence inventory is not exactly the approved three standalone sequences.' }
+  Assert-Task4IsolationSha256 -Value $Snapshot.publicSequenceIdentitiesSha256 -Label 'Task 4 target isolation sequence identity digest'
+  if ([string]$Snapshot.publicSequenceIdentitiesSha256 -cne (Get-JsonSha256 -Value @($Snapshot.publicSequenceIdentities))) { throw 'Task 4 target isolation sequence identity digest is invalid.' }
+  $sequences = @($Snapshot.standaloneSequences)
+  if ($sequences.Count -ne 3) { throw 'Task 4 target isolation standalone sequence cardinality is not exactly three.' }
+  $expectedStartValues = @(1L,1L,1001L)
+  $expectedLastValues = @(1L,9L,1012L)
+  $expectedIsCalled = @($false,$true,$true)
+  for ($index=0; $index -lt 3; $index++) {
+    $sequence = $sequences[$index]
+    Assert-Task4IsolationExactProperties -Value $sequence -Names @('identity','lastValue','isCalled','startValue','minValue','maxValue','incrementBy','cycle','cacheSize','ownedBy') -Label 'Task 4 target isolation standalone sequence'
+    if ($sequence.identity -isnot [string] -or [string]$sequence.identity -cne $expectedIdentities[$index] -or $sequence.isCalled -isnot [bool] -or [bool]$sequence.isCalled -ne $expectedIsCalled[$index] -or $sequence.cycle -isnot [bool] -or [bool]$sequence.cycle -or $null -ne $sequence.ownedBy) { throw 'Task 4 target isolation standalone sequence identity, boolean state, or ownership is invalid.' }
+    foreach ($name in @('lastValue','startValue','minValue','maxValue','incrementBy','cacheSize')) { Assert-Task4IsolationInteger -Value $sequence.$name -Label "Task 4 target isolation standalone sequence $name" }
+    if ([int64]$sequence.lastValue -ne $expectedLastValues[$index] -or [int64]$sequence.startValue -ne $expectedStartValues[$index] -or [int64]$sequence.minValue -ne 1L -or [int64]$sequence.maxValue -ne [int64]::MaxValue -or [int64]$sequence.incrementBy -ne 1L -or [int64]$sequence.cacheSize -ne 1L) { throw 'Task 4 target isolation standalone sequence state or configuration changed.' }
+  }
+  return $Snapshot
+}
+
+function Assert-Task4IsolationSnapshotIntegrity {
+  param([Parameter(Mandatory)]$Snapshot)
+  Assert-Task4IsolationExactProperties -Value $Snapshot -Names @(
+    'projectRef','publicTables','authUsers','authIdentities','authSessions','authRefreshTokens','authOneTimeTokens',
+    'migrationRows','migrationIdentities','migrationIdentitiesSha256','schemaSha256','extendedSchemaSha256','storage',
+    'publicSequenceIdentities','publicSequenceIdentitiesSha256','standaloneSequences','snapshotSha256'
+  ) -Label 'Task 4 target isolation snapshot'
+  Assert-Task4IsolationSha256 -Value $Snapshot.snapshotSha256 -Label 'Task 4 target isolation snapshot digest'
+  $forHash = $Snapshot | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+  [void]$forHash.PSObject.Properties.Remove('snapshotSha256')
+  if ([string]$Snapshot.snapshotSha256 -cne (Get-JsonSha256 -Value $forHash)) { throw 'Task 4 target isolation snapshot self-hash is invalid.' }
+  foreach ($name in @('publicTables','authUsers','authIdentities','authSessions','authRefreshTokens','authOneTimeTokens','migrationRows')) { Assert-Task4IsolationInteger -Value $Snapshot.$name -Label "Task 4 target isolation $name" }
+  foreach ($name in @('migrationIdentitiesSha256','schemaSha256','extendedSchemaSha256','publicSequenceIdentitiesSha256')) { Assert-Task4IsolationSha256 -Value $Snapshot.$name -Label "Task 4 target isolation $name" }
+  Assert-Task4IsolationExactProperties -Value $Snapshot.storage -Names @('buckets','objects','bucketConfigurationSha256','preexistingBucketConfigurationSha256','websiteMediaBucket','objectMetadataSha256','storageMigrationRows','storageMigrationsSha256','stateSha256') -Label 'Task 4 target isolation Storage state'
+  foreach ($name in @('buckets','objects','storageMigrationRows')) { Assert-Task4IsolationInteger -Value $Snapshot.storage.$name -Label "Task 4 target isolation Storage $name" }
+  foreach ($name in @('bucketConfigurationSha256','preexistingBucketConfigurationSha256','objectMetadataSha256','storageMigrationsSha256','stateSha256')) { Assert-Task4IsolationSha256 -Value $Snapshot.storage.$name -Label "Task 4 target isolation Storage $name" }
+  $storageForHash = [ordered]@{
+    buckets=$Snapshot.storage.buckets; objects=$Snapshot.storage.objects
+    bucketConfigurationSha256=$Snapshot.storage.bucketConfigurationSha256; preexistingBucketConfigurationSha256=$Snapshot.storage.preexistingBucketConfigurationSha256
+    websiteMediaBucket=$Snapshot.storage.websiteMediaBucket; objectMetadataSha256=$Snapshot.storage.objectMetadataSha256
+    storageMigrationRows=$Snapshot.storage.storageMigrationRows; storageMigrationsSha256=$Snapshot.storage.storageMigrationsSha256
+  }
+  if ([string]$Snapshot.storage.stateSha256 -cne (Get-JsonSha256 -Value $storageForHash)) { throw 'Task 4 target isolation Storage state self-hash is invalid.' }
+  if ([string]$Snapshot.publicSequenceIdentitiesSha256 -cne (Get-JsonSha256 -Value @($Snapshot.publicSequenceIdentities))) { throw 'Task 4 target isolation sequence identity digest is invalid.' }
+  return $Snapshot
+}
+
+function Assert-Task4WebsiteMediaBucket {
+  param([Parameter(Mandatory)]$Bucket)
+  Assert-Task4IsolationExactProperties -Value $Bucket -Names @('id','name','owner','ownerId','public','avifAutodetection','fileSizeLimit','allowedMimeTypes','type') -Label 'Task 4 website-media bucket configuration'
+  Assert-Task4IsolationInteger -Value $Bucket.fileSizeLimit -Label 'Task 4 website-media file size limit'
+  if ($Bucket.allowedMimeTypes -isnot [Array] -or @($Bucket.allowedMimeTypes | Where-Object { $_ -isnot [string] }).Count -ne 0) { throw 'Task 4 website-media allowed MIME types must be an exact JSON string array.' }
+  if ($Bucket.id -isnot [string] -or [string]$Bucket.id -cne 'website-media' -or $Bucket.name -isnot [string] -or [string]$Bucket.name -cne 'website-media' -or $null -ne $Bucket.owner -or $null -ne $Bucket.ownerId -or
+      $Bucket.public -isnot [bool] -or -not [bool]$Bucket.public -or $Bucket.avifAutodetection -isnot [bool] -or [bool]$Bucket.avifAutodetection -or [int64]$Bucket.fileSizeLimit -ne 26214400L -or
+      (@($Bucket.allowedMimeTypes) -join "`n") -cne (@('image/jpeg','image/png','image/webp','video/mp4','video/webm') -join "`n") -or $Bucket.type -isnot [string] -or [string]$Bucket.type -cne 'STANDARD') { throw 'Task 4 website-media bucket configuration is not the exact approved migration delta.' }
+  return $Bucket
+}
+
+function Assert-Task4StandaloneSequenceShape {
+  param(
+    [Parameter(Mandatory)]$Sequence,
+    [Parameter(Mandatory)][string]$ExpectedIdentity
+  )
+  Assert-Task4IsolationExactProperties -Value $Sequence -Names @('identity','lastValue','isCalled','startValue','minValue','maxValue','incrementBy','cycle','cacheSize','ownedBy') -Label 'Task 4 standalone sequence state'
+  if ($Sequence.identity -isnot [string] -or [string]$Sequence.identity -cne $ExpectedIdentity -or $Sequence.isCalled -isnot [bool] -or $Sequence.cycle -isnot [bool] -or $null -ne $Sequence.ownedBy) { throw 'Task 4 standalone sequence identity, boolean types, or ownership is invalid.' }
+  foreach ($name in @('lastValue','startValue','minValue','maxValue','incrementBy','cacheSize')) { Assert-Task4IsolationInteger -Value $Sequence.$name -Label "Task 4 standalone sequence $name" }
+  return $Sequence
+}
+
+function Assert-Task4IsolationPostMigrationState {
+  param(
+    [Parameter(Mandatory)]$Snapshot,
+    [Parameter(Mandatory)]$PreWriteSnapshot,
+    [Parameter(Mandatory)]$ExpectedPostState
+  )
+  [void](Assert-Task4IsolationSnapshotIntegrity -Snapshot $Snapshot)
+  $postInventory = [ordered]@{
+    projectRef=$Snapshot.projectRef; publicTables=$Snapshot.publicTables; authUsers=$Snapshot.authUsers; authIdentities=$Snapshot.authIdentities
+    migrationRows=$Snapshot.migrationRows; migrationIdentities=@($Snapshot.migrationIdentities); migrationIdentitiesSha256=$Snapshot.migrationIdentitiesSha256
+    schemaSha256=$Snapshot.schemaSha256; extendedSchemaSha256=$Snapshot.extendedSchemaSha256
+  }
+  [void](Assert-PostMigrationTargetState -Expected $ExpectedPostState -Actual $postInventory)
+  if ([int64]$Snapshot.authSessions -ne 0 -or [int64]$Snapshot.authRefreshTokens -ne 0 -or [int64]$Snapshot.authOneTimeTokens -ne 0) { throw 'Task 4 post-migration isolation requires zero managed Auth workflow rows.' }
+  [void](Assert-Task4WebsiteMediaBucket -Bucket $Snapshot.storage.websiteMediaBucket)
+  if ([int64]$Snapshot.storage.buckets -ne ([int64]$PreWriteSnapshot.storage.buckets + 1L) -or [int64]$Snapshot.storage.objects -ne [int64]$PreWriteSnapshot.storage.objects -or
+      [string]$Snapshot.storage.bucketConfigurationSha256 -ceq [string]$PreWriteSnapshot.storage.bucketConfigurationSha256 -or [string]$Snapshot.storage.preexistingBucketConfigurationSha256 -cne [string]$PreWriteSnapshot.storage.bucketConfigurationSha256 -or
+      [string]$Snapshot.storage.objectMetadataSha256 -cne [string]$PreWriteSnapshot.storage.objectMetadataSha256 -or [int64]$Snapshot.storage.storageMigrationRows -ne [int64]$PreWriteSnapshot.storage.storageMigrationRows -or
+      [string]$Snapshot.storage.storageMigrationsSha256 -cne [string]$PreWriteSnapshot.storage.storageMigrationsSha256) { throw 'Task 4 migration Push Storage change is not exactly the approved website-media bucket delta.' }
+  if ((Get-JsonSha256 -Value @($Snapshot.publicSequenceIdentities)) -cne (Get-JsonSha256 -Value @($PreWriteSnapshot.publicSequenceIdentities)) -or
+      (Get-JsonSha256 -Value @($Snapshot.standaloneSequences)) -cne (Get-JsonSha256 -Value @($PreWriteSnapshot.standaloneSequences))) { throw 'Task 4 migration Push changed standalone sequence identity or state.' }
+  return $Snapshot
+}
+
+function Assert-Task4IsolationPostImportState {
+  param(
+    [Parameter(Mandatory)]$Snapshot,
+    [Parameter(Mandatory)]$ExpectedStorage
+  )
+  [void](Assert-Task4IsolationSnapshotIntegrity -Snapshot $Snapshot)
+  if ([int64]$Snapshot.authSessions -ne 0 -or [int64]$Snapshot.authRefreshTokens -ne 0 -or [int64]$Snapshot.authOneTimeTokens -ne 0) { throw 'Task 4 post-import isolation requires zero managed Auth workflow rows.' }
+  [void](Assert-Task4WebsiteMediaBucket -Bucket $Snapshot.storage.websiteMediaBucket)
+  if ((Get-JsonSha256 -Value $Snapshot.storage) -cne (Get-JsonSha256 -Value $ExpectedStorage)) { throw 'Task 4 Import changed the validated post-Push Storage configuration or metadata.' }
+  $expectedIdentities = @('public.client_invoice_seq','public.patient_reg_no_seq','public.queue_number_seq')
+  if ($Snapshot.publicSequenceIdentities -isnot [Array] -or @($Snapshot.publicSequenceIdentities | Where-Object { $_ -isnot [string] }).Count -ne 0 -or (@($Snapshot.publicSequenceIdentities) -join "`n") -cne ($expectedIdentities -join "`n")) { throw 'Task 4 post-import public sequence inventory is not exactly the approved three standalone sequences.' }
+  $expected = @(Get-Task4StandaloneSequenceSpecifications)
+  $actual = @($Snapshot.standaloneSequences)
+  if ($actual.Count -ne 3) { throw 'Task 4 post-import standalone sequence state cardinality is not exactly three.' }
+  for ($index=0; $index -lt 3; $index++) {
+    [void](Assert-Task4StandaloneSequenceShape -Sequence $actual[$index] -ExpectedIdentity $expectedIdentities[$index])
+    if ([int64]$actual[$index].lastValue -ne [int64]$expected[$index].lastValue -or [bool]$actual[$index].isCalled -ne [bool]$expected[$index].isCalled -or
+        [int64]$actual[$index].startValue -ne [int64]$expected[$index].startValue -or [int64]$actual[$index].minValue -ne 1L -or [int64]$actual[$index].maxValue -ne [int64]::MaxValue -or [int64]$actual[$index].incrementBy -ne [int64]$expected[$index].incrementBy -or
+        [bool]$actual[$index].cycle -or [int64]$actual[$index].cacheSize -ne 1L -or $null -ne $actual[$index].ownedBy) { throw "Task 4 post-import standalone sequence state mismatch: $($expected[$index].identity)" }
+  }
+  return $Snapshot
+}
+
+function New-Task4StagingIsolationEvidence {
+  param(
+    [Parameter(Mandatory)][DateTimeOffset]$ObservedAtUtc,
+    [Parameter(Mandatory)][string]$ContractRunnerSha256,
+    [Parameter(Mandatory)]$VerifiedBackup,
+    [Parameter(Mandatory)]$LiveFrontend,
+    [Parameter(Mandatory)]$TargetPreWrite
+  )
+  Assert-Task4IsolationSha256 -Value $ContractRunnerSha256 -Label 'Task 4 isolation normalized runner digest'
+  $observed = $ObservedAtUtc.ToUniversalTime()
+  $payload = [ordered]@{
+    formatVersion = 1
+    status = 'isolated-staging-verified'
+    observedAtUtc = $observed.UtcDateTime.ToString('o')
+    expiresAtUtc = $observed.AddMinutes($Task4PushIsolationMaxAgeMinutes).UtcDateTime.ToString('o')
+    targetRef = $ExpectedRef
+    liveSourceRef = $LiveSourceRef
+    contractRunnerSha256 = $ContractRunnerSha256
+    protectedBaseline = [ordered]@{
+      backupManifestFileSha256 = [string]$VerifiedBackup.manifestSha256
+      targetBaselineSha256 = [string]$VerifiedBackup.manifest.targetBaselineSha256
+    }
+    liveFrontend = $LiveFrontend
+    targetPreWrite = $TargetPreWrite
+    liveFrontendSha256 = [string]$LiveFrontend.snapshotSha256
+    targetPreWriteSha256 = [string]$TargetPreWrite.snapshotSha256
+  }
+  return [ordered]@{ payload=$payload; payloadSha256=Get-JsonSha256 -Value $payload }
+}
+
+function Assert-Task4StagingIsolationEvidenceDocument {
+  param(
+    [Parameter(Mandatory)]$Document,
+    [Parameter(Mandatory)][DateTimeOffset]$NowUtc,
+    [Parameter(Mandatory)][string]$ExpectedContractRunnerSha256,
+    [Parameter(Mandatory)]$VerifiedBackup,
+    $CurrentLiveFrontend,
+    $CurrentTargetPreWrite,
+    [Parameter(Mandatory)][ValidateSet('Verify','Push','Import')][string]$Purpose
+  )
+  Assert-Task4IsolationExactProperties -Value $Document -Names @('payload','payloadSha256') -Label 'Task 4 staging isolation evidence envelope'
+  Assert-Task4IsolationSha256 -Value $Document.payloadSha256 -Label 'Task 4 staging isolation evidence self-hash'
+  if ([string]$Document.payloadSha256 -cne (Get-JsonSha256 -Value $Document.payload)) { throw 'Task 4 staging isolation evidence self-hash is invalid.' }
+  $payload = $Document.payload
+  Assert-Task4IsolationExactProperties -Value $payload -Names @('formatVersion','status','observedAtUtc','expiresAtUtc','targetRef','liveSourceRef','contractRunnerSha256','protectedBaseline','liveFrontend','targetPreWrite','liveFrontendSha256','targetPreWriteSha256') -Label 'Task 4 staging isolation evidence payload'
+  Assert-Task4IsolationInteger -Value $payload.formatVersion -Label 'Task 4 staging isolation evidence formatVersion'
+  if ([int64]$payload.formatVersion -ne 1 -or $payload.status -isnot [string] -or [string]$payload.status -cne 'isolated-staging-verified' -or $payload.targetRef -isnot [string] -or [string]$payload.targetRef -cne $ExpectedRef -or $payload.liveSourceRef -isnot [string] -or [string]$payload.liveSourceRef -cne $LiveSourceRef) { throw 'Task 4 staging isolation evidence identity or status is invalid.' }
+  foreach ($name in @('contractRunnerSha256','liveFrontendSha256','targetPreWriteSha256')) { Assert-Task4IsolationSha256 -Value $payload.$name -Label "Task 4 staging isolation evidence $name" }
+  if ([string]$payload.contractRunnerSha256 -cne $ExpectedContractRunnerSha256) { throw 'Task 4 staging isolation evidence is stale for the current normalized runner contract.' }
+  Assert-Task4IsolationExactProperties -Value $payload.protectedBaseline -Names @('backupManifestFileSha256','targetBaselineSha256') -Label 'Task 4 staging isolation protected baseline binding'
+  foreach ($name in @('backupManifestFileSha256','targetBaselineSha256')) { Assert-Task4IsolationSha256 -Value $payload.protectedBaseline.$name -Label "Task 4 staging isolation protected baseline $name" }
+  if ([string]$payload.protectedBaseline.backupManifestFileSha256 -cne [string]$VerifiedBackup.manifestSha256 -or [string]$payload.protectedBaseline.targetBaselineSha256 -cne [string]$VerifiedBackup.manifest.targetBaselineSha256) { throw 'Task 4 staging isolation evidence is not bound to the verified backup baseline.' }
+  if ($payload.observedAtUtc -isnot [string] -or $payload.expiresAtUtc -isnot [string]) { throw 'Task 4 staging isolation evidence timestamps must be JSON strings.' }
+  $observed = [DateTimeOffset]::MinValue; $expires = [DateTimeOffset]::MinValue
+  if (-not [DateTimeOffset]::TryParse([string]$payload.observedAtUtc,[ref]$observed) -or -not [DateTimeOffset]::TryParse([string]$payload.expiresAtUtc,[ref]$expires) -or $observed.Offset -ne [TimeSpan]::Zero -or $expires.Offset -ne [TimeSpan]::Zero -or $expires - $observed -ne [TimeSpan]::FromMinutes($Task4PushIsolationMaxAgeMinutes) -or $observed -gt $NowUtc.ToUniversalTime().AddMinutes(5)) { throw 'Task 4 staging isolation evidence timestamps or freshness window are invalid.' }
+  if ($Purpose -in @('Verify','Push') -and $NowUtc.ToUniversalTime() -gt $expires) { throw 'Task 4 staging isolation evidence is stale for the Push window.' }
+  if ([string]$payload.liveFrontendSha256 -cne [string]$payload.liveFrontend.snapshotSha256 -or [string]$payload.targetPreWriteSha256 -cne [string]$payload.targetPreWrite.snapshotSha256) { throw 'Task 4 staging isolation evidence snapshot bindings are inconsistent.' }
+  if ($null -ne $CurrentLiveFrontend -and ((Get-JsonSha256 -Value $payload.liveFrontend) -cne (Get-JsonSha256 -Value $CurrentLiveFrontend) -or [string]$payload.liveFrontendSha256 -cne [string]$CurrentLiveFrontend.snapshotSha256)) { throw 'Task 4 live frontend isolation changed after Verify.' }
+  if ($null -ne $CurrentTargetPreWrite -and ((Get-JsonSha256 -Value $payload.targetPreWrite) -cne (Get-JsonSha256 -Value $CurrentTargetPreWrite) -or [string]$payload.targetPreWriteSha256 -cne [string]$CurrentTargetPreWrite.snapshotSha256)) { throw 'Task 4 target pre-write isolation changed after Verify.' }
+  return $payload
+}
+
+function Assert-Task4StagingIsolationEvidence {
+  param(
+    [Parameter(Mandatory)]$VerifiedBackup,
+    $CurrentLiveFrontend,
+    $CurrentTargetPreWrite,
+    [Parameter(Mandatory)][ValidateSet('Verify','Push','Import')][string]$Purpose,
+    [DateTimeOffset]$NowUtc = [DateTimeOffset]::UtcNow,
+    [string]$ExpectedEvidenceSha256
+  )
+  $path = Join-Path $ArtifactRoot $Task4IsolationEvidenceName
+  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Task 4 staging isolation evidence is missing.' }
+  Assert-NoReparsePointInPath -Path $path -Label 'Task 4 staging isolation evidence'
+  $bytes = [IO.File]::ReadAllBytes((Get-NormalizedPath $path))
+  $fileSha256 = Get-Task4BytesSha256 -Bytes $bytes
+  if (-not [string]::IsNullOrWhiteSpace($ExpectedEvidenceSha256)) {
+    Assert-Task4IsolationSha256 -Value $ExpectedEvidenceSha256 -Label 'Task 4 staging isolation evidence expected file digest'
+    if ($fileSha256 -cne $ExpectedEvidenceSha256) { throw 'Task 4 staging isolation evidence file does not match the Push evidence binding.' }
+  }
+  try { $document = [Text.UTF8Encoding]::new($false,$true).GetString($bytes) | ConvertFrom-Json -ErrorAction Stop }
+  catch { throw 'Task 4 staging isolation evidence is not strict UTF-8 JSON.' }
+  $payload = Assert-Task4StagingIsolationEvidenceDocument -Document $document -NowUtc $NowUtc -ExpectedContractRunnerSha256 (Get-Task4IsolationContractRunnerSha256) -VerifiedBackup $VerifiedBackup -CurrentLiveFrontend $CurrentLiveFrontend -CurrentTargetPreWrite $CurrentTargetPreWrite -Purpose $Purpose
+  return [ordered]@{ payload=$payload; file=[ordered]@{ name=$Task4IsolationEvidenceName; bytes=[int64]$bytes.Length; sha256=$fileSha256 } }
+}
+
+function Assert-Task4Quarantine {
+  param(
+    [Parameter(Mandatory)][ValidateSet('Push','Import')][string]$ExpectedPhase,
+    [Parameter(Mandatory)][string]$ExpectedAttemptId,
+    $ExpectedDocument
+  )
+  $path = Join-Path $ArtifactRoot $Task4QuarantineName
+  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Task 4 target quarantine marker is missing.' }
+  Assert-NoReparsePointInPath -Path $path -Label 'Task 4 target quarantine marker'
+  try { $document = [Text.UTF8Encoding]::new($false,$true).GetString([IO.File]::ReadAllBytes((Get-NormalizedPath $path))) | ConvertFrom-Json -ErrorAction Stop }
+  catch { throw 'Task 4 target quarantine marker is not strict UTF-8 JSON.' }
+  Assert-Task4IsolationExactProperties -Value $document -Names @('payload','payloadSha256') -Label 'Task 4 target quarantine envelope'
+  Assert-Task4IsolationSha256 -Value $document.payloadSha256 -Label 'Task 4 target quarantine self-hash'
+  if ([string]$document.payloadSha256 -cne (Get-JsonSha256 -Value $document.payload)) { throw 'Task 4 target quarantine self-hash is invalid.' }
+  $payload = $document.payload
+  Assert-Task4IsolationExactProperties -Value $payload -Names @('formatVersion','status','phase','attemptId','createdAtUtc','targetRef','contractRunnerSha256','isolationEvidenceSha256','preWriteObservationSha256','expectedTargetStateSha256') -Label 'Task 4 target quarantine payload'
+  Assert-Task4IsolationInteger -Value $payload.formatVersion -Label 'Task 4 target quarantine formatVersion'
+  if ([int64]$payload.formatVersion -ne 1 -or $payload.status -isnot [string] -or [string]$payload.status -cne 'active' -or $payload.phase -isnot [string] -or [string]$payload.phase -cne $ExpectedPhase -or $payload.attemptId -isnot [string] -or [string]$payload.attemptId -cne $ExpectedAttemptId -or [string]$payload.attemptId -cnotmatch '^[a-f0-9]{32}$' -or $payload.targetRef -isnot [string] -or [string]$payload.targetRef -cne $ExpectedRef -or $payload.createdAtUtc -isnot [string]) { throw 'Task 4 target quarantine identity, status, or field type is invalid.' }
+  foreach ($name in @('contractRunnerSha256','isolationEvidenceSha256','preWriteObservationSha256','expectedTargetStateSha256')) { Assert-Task4IsolationSha256 -Value $payload.$name -Label "Task 4 target quarantine $name" }
+  if ([string]$payload.contractRunnerSha256 -cne (Get-Task4IsolationContractRunnerSha256)) { throw 'Task 4 target quarantine marker is stale for the current normalized runner contract.' }
+  $created = [DateTimeOffset]::MinValue
+  if (-not [DateTimeOffset]::TryParse([string]$payload.createdAtUtc,[ref]$created) -or $created.Offset -ne [TimeSpan]::Zero -or $created -gt [DateTimeOffset]::UtcNow.AddMinutes(5)) { throw 'Task 4 target quarantine timestamp is invalid.' }
+  if ($null -ne $ExpectedDocument -and (Get-JsonSha256 -Value $document) -cne (Get-JsonSha256 -Value $ExpectedDocument)) { throw 'Task 4 target quarantine marker no longer matches its exact original phase binding.' }
+  return $payload
+}
+
+function Assert-NoTask4Quarantine {
+  $path = Join-Path $ArtifactRoot $Task4QuarantineName
+  if (-not (Test-Path -LiteralPath $path)) { return }
+  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Task 4 target quarantine path exists but is not a regular file.' }
+  Assert-NoReparsePointInPath -Path $path -Label 'Task 4 target quarantine marker'
+  throw 'Task 4 target is quarantined by a retained persistent-phase marker; reviewed recovery is required.'
+}
+
+function New-Task4Quarantine {
+  param(
+    [Parameter(Mandatory)][ValidateSet('Push','Import')][string]$Phase,
+    [Parameter(Mandatory)][string]$ContractRunnerSha256,
+    [Parameter(Mandatory)][string]$IsolationEvidenceSha256,
+    [Parameter(Mandatory)][string]$PreWriteObservationSha256,
+    [Parameter(Mandatory)][string]$ExpectedTargetStateSha256,
+    [DateTimeOffset]$CreatedAtUtc = [DateTimeOffset]::UtcNow
+  )
+  foreach ($entry in @(
+    @{value=$ContractRunnerSha256;label='Task 4 target quarantine runner digest'},
+    @{value=$IsolationEvidenceSha256;label='Task 4 target quarantine isolation evidence digest'},
+    @{value=$PreWriteObservationSha256;label='Task 4 target quarantine pre-write observation digest'},
+    @{value=$ExpectedTargetStateSha256;label='Task 4 target quarantine expected target state digest'}
+  )) { Assert-Task4IsolationSha256 -Value $entry.value -Label $entry.label }
+  if ($ContractRunnerSha256 -cne (Get-Task4IsolationContractRunnerSha256)) { throw 'Task 4 target quarantine runner digest does not match the current normalized contract.' }
+  Assert-NoTask4Quarantine
+  $payload = [ordered]@{
+    formatVersion=1; status='active'; phase=$Phase; attemptId=[Guid]::NewGuid().ToString('N')
+    createdAtUtc=$CreatedAtUtc.ToUniversalTime().UtcDateTime.ToString('o'); targetRef=$ExpectedRef
+    contractRunnerSha256=$ContractRunnerSha256; isolationEvidenceSha256=$IsolationEvidenceSha256
+    preWriteObservationSha256=$PreWriteObservationSha256; expectedTargetStateSha256=$ExpectedTargetStateSha256
+  }
+  $document = [ordered]@{ payload=$payload; payloadSha256=Get-JsonSha256 -Value $payload }
+  $path = Join-Path $ArtifactRoot $Task4QuarantineName
+  Assert-NoReparsePointInPath -Path $ArtifactRoot -Label 'protected artifact root'
+  $bytes = [Text.UTF8Encoding]::new($false).GetBytes(($document | ConvertTo-Json -Depth 50) + "`n")
+  $stream = $null
+  try {
+    $stream = [IO.FileStream]::new((Get-NormalizedPath $path),[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+    $stream.Write($bytes,0,$bytes.Length)
+    $stream.Flush($true)
+  } finally {
+    if ($null -ne $stream) { $stream.Dispose() }
+  }
+  [void](Assert-Task4Quarantine -ExpectedPhase $Phase -ExpectedAttemptId $payload.attemptId -ExpectedDocument $document)
+  return $document
+}
+
+function Complete-Task4Quarantine {
+  param(
+    [Parameter(Mandatory)][ValidateSet('Push','Import')][string]$ExpectedPhase,
+    [Parameter(Mandatory)][string]$ExpectedAttemptId,
+    [Parameter(Mandatory)]$ExpectedDocument
+  )
+  [void](Assert-Task4Quarantine -ExpectedPhase $ExpectedPhase -ExpectedAttemptId $ExpectedAttemptId -ExpectedDocument $ExpectedDocument)
+  $path = Join-Path $ArtifactRoot $Task4QuarantineName
+  Remove-Item -LiteralPath $path -Force
+  if (Test-Path -LiteralPath $path) { throw 'Task 4 target quarantine marker could not be cleared after complete revalidation.' }
 }
 
 function Get-Task4StandaloneSequenceSpecifications {
@@ -1580,6 +2319,7 @@ function Get-TargetPostImportMetrics {
 select jsonb_build_object(
   'sessions',(select count(*) from auth.sessions),
   'refreshTokens',(select count(*) from auth.refresh_tokens),
+  'oneTimeTokens',(select count(*) from auth.one_time_tokens),
   'profilesMapped',(select count(*) from auth.users u join public.profiles p on p.id=u.id),
   'authWithoutProfile',(select count(*) from auth.users u where not exists(select 1 from public.profiles p where p.id=u.id)),
   'identitiesWithoutUser',(select count(*) from auth.identities i where not exists(select 1 from auth.users u where u.id=i.user_id))
@@ -1614,7 +2354,7 @@ function Assert-Task4PostImportResult {
     throw 'Post-import ordered migration identities changed.'
   }
   if ([int]$ActualInventory.authUsers -ne 11 -or [int]$ActualInventory.authIdentities -ne 11 -or
-      [int]$Metrics.authUsers -ne 11 -or [int]$Metrics.authIdentities -ne 11 -or [int]$Metrics.sessions -ne 0 -or [int]$Metrics.refreshTokens -ne 0 -or
+      [int]$Metrics.authUsers -ne 11 -or [int]$Metrics.authIdentities -ne 11 -or [int]$Metrics.sessions -ne 0 -or [int]$Metrics.refreshTokens -ne 0 -or [int]$Metrics.oneTimeTokens -ne 0 -or
       [int]$Metrics.profilesMapped -ne 11 -or [int]$Metrics.authWithoutProfile -ne 0 -or [int]$Metrics.identitiesWithoutUser -ne 0) {
     throw 'Post-import portable Auth/profile counts are not exactly 11/11 with zero managed-token rows and complete profile mapping.'
   }
@@ -2273,7 +3013,7 @@ function Get-CurrentRehearsalBinding {
     Assert-NotReparsePoint -Path $path -Label 'Task 4 protected evidence'
   }
   return [ordered]@{
-    runnerSha256 = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash.ToUpperInvariant()
+    runnerSha256 = Get-Task4IsolationContractRunnerSha256
     loaderSha256 = (Get-FileHash -LiteralPath $artifacts.loaderSha256 -Algorithm SHA256).Hash.ToUpperInvariant()
     heldStaffLoaderSha256 = (Get-FileHash -LiteralPath $artifacts.heldStaffLoaderSha256 -Algorithm SHA256).Hash.ToUpperInvariant()
     portableAuthLoaderSha256 = (Get-FileHash -LiteralPath $artifacts.portableAuthLoaderSha256 -Algorithm SHA256).Hash.ToUpperInvariant()
@@ -2834,17 +3574,53 @@ function Invoke-Task4PinnedCliPush {
   return [ordered]@{ inventory=$execution.inventory; log=@($execution.log) }
 }
 
+function Assert-Task4MigrationPushEvidenceShape {
+  param(
+    [Parameter(Mandatory)]$Document,
+    [DateTimeOffset]$NowUtc = [DateTimeOffset]::UtcNow
+  )
+  Assert-Task4IsolationExactProperties -Value $Document -Names @('payload','payloadSha256') -Label 'Task 4 migration Push evidence envelope'
+  Assert-Task4IsolationSha256 -Value $Document.payloadSha256 -Label 'Task 4 migration Push evidence self-hash'
+  if ([string]$Document.payloadSha256 -cne (Get-JsonSha256 -Value $Document.payload)) { throw 'Task 4 migration Push evidence self-hash is invalid.' }
+  $payload = $Document.payload
+  Assert-Task4IsolationExactProperties -Value $payload -Names @('formatVersion','status','completedAtUtc','targetRef','cli','producerRunnerSha256','connection','preBaseline','preBaselineSha256','stagingIsolation','workdir','migrations','migrationsSha256','listedPendingMigrations','dryRunTranscript','dryRunTranscriptSha256','pushTranscript','pushTranscriptSha256','postHistory','postHistorySha256','postTargetState','postWriteIsolationState','postWriteIsolationStateSha256') -Label 'Task 4 migration Push evidence payload'
+  Assert-Task4IsolationInteger -Value $payload.formatVersion -Label 'Task 4 migration Push evidence formatVersion'
+  if ([int64]$payload.formatVersion -ne 2 -or $payload.status -isnot [string] -or [string]$payload.status -cne 'completed' -or $payload.completedAtUtc -isnot [string] -or $payload.targetRef -isnot [string] -or [string]$payload.targetRef -cne $ExpectedRef) { throw 'Task 4 migration Push evidence identity, status, timestamp, or format type is invalid.' }
+  Assert-Task4IsolationExactProperties -Value $payload.cli -Names @('version','sha256') -Label 'Task 4 migration Push evidence CLI binding'
+  if ($payload.cli.version -isnot [string]) { throw 'Task 4 migration Push evidence CLI version must be a JSON string.' }
+  Assert-Task4IsolationSha256 -Value $payload.cli.sha256 -Label 'Task 4 migration Push evidence CLI digest'
+  Assert-Task4IsolationSha256 -Value $payload.producerRunnerSha256 -Label 'Task 4 migration Push producer runner digest'
+  Assert-Task4IsolationExactProperties -Value $payload.connection -Names @('host','port','username','database','sslMode','credentialTransport') -Label 'Task 4 migration Push evidence connection binding'
+  Assert-Task4IsolationInteger -Value $payload.connection.port -Label 'Task 4 migration Push evidence connection port'
+  foreach ($name in @('host','username','database','sslMode','credentialTransport')) { if ($payload.connection.$name -isnot [string]) { throw "Task 4 migration Push evidence connection $name must be a JSON string." } }
+  foreach ($name in @('preBaselineSha256','migrationsSha256','dryRunTranscriptSha256','pushTranscriptSha256','postHistorySha256','postWriteIsolationStateSha256')) { Assert-Task4IsolationSha256 -Value $payload.$name -Label "Task 4 migration Push evidence $name" }
+  foreach ($name in @('migrations','listedPendingMigrations','postHistory')) { if ($payload.$name -isnot [Array]) { throw "Task 4 migration Push evidence $name must be a JSON array." } }
+  foreach ($name in @('preBaseline','stagingIsolation','workdir','dryRunTranscript','pushTranscript','postTargetState','postWriteIsolationState')) {
+    if ($payload.$name -isnot [Collections.IDictionary] -and $payload.$name -isnot [pscustomobject]) { throw "Task 4 migration Push evidence $name must be a JSON object." }
+  }
+  $completedAt = [DateTimeOffset]::MinValue
+  if (-not [DateTimeOffset]::TryParse([string]$payload.completedAtUtc,[ref]$completedAt) -or $completedAt.Offset -ne [TimeSpan]::Zero -or $completedAt -gt $NowUtc.ToUniversalTime().AddMinutes(5) -or $NowUtc.ToUniversalTime() - $completedAt -gt [TimeSpan]::FromHours($Task4ImportPushEvidenceMaxAgeHours)) { throw 'Task 4 migration Push evidence is not fresh enough to authorize Import.' }
+  return $payload
+}
+
 function Assert-Task4MigrationPushEvidence {
-  param([Parameter(Mandatory)]$VerifiedBackup,[Parameter(Mandatory)]$Migrations,[Parameter(Mandatory)]$Authorization,[switch]$SkipIndependentPin)
+  param(
+    [Parameter(Mandatory)]$VerifiedBackup,
+    [Parameter(Mandatory)]$Migrations,
+    [Parameter(Mandatory)]$Authorization,
+    $StagingIsolationEvidence,
+    $CurrentPostMigrationIsolation,
+    [DateTimeOffset]$NowUtc = [DateTimeOffset]::UtcNow,
+    [switch]$SkipIndependentPin
+  )
   if (-not $SkipIndependentPin -and [string]::IsNullOrWhiteSpace($Task4MigrationPushEvidenceSha256)) { throw 'Task 4 migration Push evidence has not been independently pinned.' }
   if (-not $SkipIndependentPin -and [string]$Task4MigrationPushProducerRunnerSha256 -notmatch '^[A-F0-9]{64}$') { throw 'Task 4 migration Push producer runner has not been independently pinned.' }
   $evidencePath = Join-Path $ArtifactRoot $Task4MigrationPushEvidenceName
   if (-not (Test-Path -LiteralPath $evidencePath -PathType Leaf)) { throw 'Completed Task 4 migration Push evidence is required before import.' }
   Assert-NoReparsePointInPath -Path $evidencePath -Label 'Task 4 migration Push evidence'
   if (-not $SkipIndependentPin -and (Get-FileHash -LiteralPath $evidencePath -Algorithm SHA256).Hash.ToUpperInvariant() -cne $Task4MigrationPushEvidenceSha256) { throw 'Task 4 migration Push evidence does not match its independent pin.' }
-  try { $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json } catch { throw 'Task 4 migration Push evidence is invalid JSON.' }
-  if ($null -eq $evidence.payload -or ([string]$evidence.payloadSha256).ToUpperInvariant() -cne (Get-JsonSha256 -Value $evidence.payload)) { throw 'Task 4 migration Push evidence self-hash is invalid.' }
-  $payload = $evidence.payload
+  try { $evidence = [Text.UTF8Encoding]::new($false,$true).GetString([IO.File]::ReadAllBytes((Get-NormalizedPath $evidencePath))) | ConvertFrom-Json -ErrorAction Stop } catch { throw 'Task 4 migration Push evidence is not strict UTF-8 JSON.' }
+  $payload = Assert-Task4MigrationPushEvidenceShape -Document $evidence -NowUtc $NowUtc
   $currentRunnerSha256 = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash.ToUpperInvariant()
   if ($payload.formatVersion -ne 2 -or $payload.status -ne 'completed' -or [string]$payload.targetRef -cne $ExpectedRef -or
       [string]$payload.cli.version -cne $Task4SupabaseCliVersion -or [string]$payload.cli.sha256 -cne $Task4SupabaseCliSha256 -or
@@ -2866,6 +3642,24 @@ function Assert-Task4MigrationPushEvidence {
   Assert-Task4TranscriptBinding -Binding $payload.pushTranscript -ExpectedName 'task4-migration-push-transcript.log' -Phase Push -Migrations $Migrations -PostHistory @($payload.postHistory)
   if ([string]$payload.dryRunTranscriptSha256 -cne [string]$payload.dryRunTranscript.sha256 -or [string]$payload.pushTranscriptSha256 -cne [string]$payload.pushTranscript.sha256) { throw 'Task 4 migration Push evidence sanitized transcript hashes are inconsistent.' }
   if ($null -ne $Authorization -and (Get-JsonSha256 -Value $payload.postTargetState) -cne (Get-JsonSha256 -Value $Authorization.expectedPersistentPost)) { throw 'Task 4 migration Push evidence post-write target state differs from the authorized exact state.' }
+  Assert-Task4IsolationExactProperties -Value $payload.stagingIsolation -Names @('file','evidencePayloadSha256','contractRunnerSha256','liveFrontendSha256','targetPreWriteSha256') -Label 'Task 4 migration Push staging-isolation binding'
+  Assert-Task4IsolationExactProperties -Value $payload.stagingIsolation.file -Names @('name','bytes','sha256') -Label 'Task 4 migration Push staging-isolation file binding'
+  Assert-Task4IsolationInteger -Value $payload.stagingIsolation.file.bytes -Label 'Task 4 migration Push staging-isolation file bytes'
+  if ([string]$payload.stagingIsolation.file.name -cne $Task4IsolationEvidenceName -or [int64]$payload.stagingIsolation.file.bytes -le 0) { throw 'Task 4 migration Push staging-isolation file binding is invalid.' }
+  foreach ($name in @('evidencePayloadSha256','contractRunnerSha256','liveFrontendSha256','targetPreWriteSha256')) { Assert-Task4IsolationSha256 -Value $payload.stagingIsolation.$name -Label "Task 4 migration Push staging-isolation $name" }
+  Assert-Task4IsolationSha256 -Value $payload.stagingIsolation.file.sha256 -Label 'Task 4 migration Push staging-isolation file digest'
+  if ([string]$payload.stagingIsolation.contractRunnerSha256 -cne (Get-Task4IsolationContractRunnerSha256)) { throw 'Task 4 migration Push staging-isolation binding is stale for the current normalized runner contract.' }
+  Assert-Task4IsolationSha256 -Value $payload.postWriteIsolationStateSha256 -Label 'Task 4 migration Push post-write isolation-state digest'
+  [void](Assert-Task4IsolationSnapshotIntegrity -Snapshot $payload.postWriteIsolationState)
+  if ([string]$payload.postWriteIsolationStateSha256 -cne [string]$payload.postWriteIsolationState.snapshotSha256) { throw 'Task 4 migration Push post-write isolation-state binding is invalid.' }
+  if ($null -ne $StagingIsolationEvidence) {
+    if ((Get-JsonSha256 -Value $payload.stagingIsolation.file) -cne (Get-JsonSha256 -Value $StagingIsolationEvidence.file) -or [string]$payload.stagingIsolation.evidencePayloadSha256 -cne (Get-JsonSha256 -Value $StagingIsolationEvidence.payload) -or [string]$payload.stagingIsolation.contractRunnerSha256 -cne [string]$StagingIsolationEvidence.payload.contractRunnerSha256 -or [string]$payload.stagingIsolation.liveFrontendSha256 -cne [string]$StagingIsolationEvidence.payload.liveFrontendSha256 -or [string]$payload.stagingIsolation.targetPreWriteSha256 -cne [string]$StagingIsolationEvidence.payload.targetPreWriteSha256) { throw 'Task 4 migration Push evidence is not bound to the validated staging-isolation evidence.' }
+  }
+  if ($null -ne $CurrentPostMigrationIsolation) {
+    if ($null -eq $StagingIsolationEvidence) { throw 'Task 4 current post-migration isolation validation requires the bound staging-isolation evidence.' }
+    if ((Get-JsonSha256 -Value $CurrentPostMigrationIsolation) -cne (Get-JsonSha256 -Value $payload.postWriteIsolationState)) { throw 'Task 4 current post-migration isolation state differs from the exact pinned Push result.' }
+    [void](Assert-Task4IsolationPostMigrationState -Snapshot $CurrentPostMigrationIsolation -PreWriteSnapshot $StagingIsolationEvidence.payload.targetPreWrite -ExpectedPostState $Authorization.expectedPersistentPost)
+  }
   return $payload
 }
 
@@ -2884,12 +3678,20 @@ function Invoke-PushPhase {
   $dryRun = Invoke-Task4PinnedCliDryRun -Workdir $workdir.path
   $listedPendingMigrations = @(Assert-Task4CliDryRunOutput -Lines $dryRun.log -Migrations $task4Migrations)
   $dryRunTranscript = Write-Task4SanitizedCliTranscript -Name 'task4-migration-dry-run-transcript.log' -Phase DryRun -Migrations $task4Migrations
+  $liveFrontend = Get-Task4LiveFrontendSnapshot
+  $targetPreWrite = Get-Task4IsolationTargetSnapshot
+  [void](Assert-Task4IsolationTargetBaseline -Snapshot $targetPreWrite -VerifiedBaseline $verifiedBackup.manifest.targetBaseline -ExpectedExtendedSchemaSha256 $Task4RollbackExtendedCatalogSha256)
+  $isolationEvidence = Assert-Task4StagingIsolationEvidence -VerifiedBackup $verifiedBackup -CurrentLiveFrontend $liveFrontend -CurrentTargetPreWrite $targetPreWrite -Purpose Push
+  $contractRunnerSha256 = Get-Task4IsolationContractRunnerSha256
+  $quarantine = New-Task4Quarantine -Phase Push -ContractRunnerSha256 $contractRunnerSha256 -IsolationEvidenceSha256 $isolationEvidence.file.sha256 -PreWriteObservationSha256 $targetPreWrite.snapshotSha256 -ExpectedTargetStateSha256 (Get-JsonSha256 -Value $authorization.expectedPersistentPost)
   $pushResult = Invoke-Task4PinnedCliPush -Workdir $workdir.path -Migrations $task4Migrations
   $historyRows = Get-Task4MigrationHistoryRows -Migrations $task4Migrations -Label 'post-Push exact Task 4 migration history'
   $postHistory = @(Assert-Task4MigrationHistoryBindings -Migrations $task4Migrations -Rows $historyRows)
   $actualPostState = Get-TargetInventory -IncludeTask4Contract
   [void](Assert-PostMigrationTargetState -Expected $authorization.expectedPersistentPost -Actual $actualPostState)
   [void](Assert-Task4SchemaAndDependencies)
+  $postWriteIsolation = Get-Task4IsolationTargetSnapshot
+  [void](Assert-Task4IsolationPostMigrationState -Snapshot $postWriteIsolation -PreWriteSnapshot $targetPreWrite -ExpectedPostState $authorization.expectedPersistentPost)
   $pushTranscript = Write-Task4SanitizedCliTranscript -Name 'task4-migration-push-transcript.log' -Phase Push -Migrations $task4Migrations -PostHistory $postHistory
   $payload = [ordered]@{
     formatVersion = 2
@@ -2901,6 +3703,13 @@ function Invoke-PushPhase {
     connection = [ordered]@{ host=$script:Target.Host; port=$script:Target.Port; username=$script:Target.Username; database=$script:Target.Database; sslMode='require'; credentialTransport='PGPASSWORD' }
     preBaseline = $verifiedBackup.manifest.targetBaseline
     preBaselineSha256 = [string]$verifiedBackup.manifest.targetBaselineSha256
+    stagingIsolation = [ordered]@{
+      file=$isolationEvidence.file
+      evidencePayloadSha256=Get-JsonSha256 -Value $isolationEvidence.payload
+      contractRunnerSha256=[string]$isolationEvidence.payload.contractRunnerSha256
+      liveFrontendSha256=[string]$isolationEvidence.payload.liveFrontendSha256
+      targetPreWriteSha256=[string]$isolationEvidence.payload.targetPreWriteSha256
+    }
     workdir = $pushResult.inventory
     migrations = @(Get-PortableTask4MigrationBindings -Migrations $task4Migrations)
     migrationsSha256 = $Task4MigrationHistoryBindingSha256
@@ -2912,12 +3721,19 @@ function Invoke-PushPhase {
     postHistory = $postHistory
     postHistorySha256 = $Task4MigrationHistoryBindingSha256
     postTargetState = $actualPostState
+    postWriteIsolationState = $postWriteIsolation
+    postWriteIsolationStateSha256 = [string]$postWriteIsolation.snapshotSha256
   }
   $manifest = [ordered]@{ payload=$payload; payloadSha256=Get-JsonSha256 -Value $payload }
   $evidencePath = Join-Path $ArtifactRoot $Task4MigrationPushEvidenceName
   Write-ProtectedJson -Path $evidencePath -Value $manifest
   Assert-NoReparsePointInPath -Path $evidencePath -Label 'Task 4 migration Push evidence'
-  [void](Assert-Task4MigrationPushEvidence -VerifiedBackup $verifiedBackup -Migrations $task4Migrations -Authorization $authorization -SkipIndependentPin)
+  [void](Assert-Task4MigrationPushEvidence -VerifiedBackup $verifiedBackup -Migrations $task4Migrations -Authorization $authorization -StagingIsolationEvidence $isolationEvidence -CurrentPostMigrationIsolation $postWriteIsolation -SkipIndependentPin)
+  $completionLiveFrontend = Get-Task4LiveFrontendSnapshot
+  $completionIsolationEvidence = Assert-Task4StagingIsolationEvidence -VerifiedBackup $verifiedBackup -CurrentLiveFrontend $completionLiveFrontend -Purpose Push -ExpectedEvidenceSha256 $isolationEvidence.file.sha256
+  $completionPostWriteIsolation = Get-Task4IsolationTargetSnapshot
+  [void](Assert-Task4MigrationPushEvidence -VerifiedBackup $verifiedBackup -Migrations $task4Migrations -Authorization $authorization -StagingIsolationEvidence $completionIsolationEvidence -CurrentPostMigrationIsolation $completionPostWriteIsolation -SkipIndependentPin)
+  Complete-Task4Quarantine -ExpectedPhase Push -ExpectedAttemptId $quarantine.payload.attemptId -ExpectedDocument $quarantine
   Write-Summary 'Push completed exact migrations and evidence validation; Import remains blocked pending independent evidence and producer-runner pins.'
 }
 
@@ -2932,7 +3748,16 @@ function Invoke-VerifyPhase {
   if ($inventory.publicTables -ne 93 -or $inventory.authUsers -ne 0 -or $inventory.authIdentities -ne 0 -or $inventory.migrationRows -ne 153) {
     throw 'Target changed after rehearsal; refusing the write window.'
   }
-  Write-Summary 'Verify passed read-only: target ref, source archive, protected backup, rehearsal report, and unchanged target baseline are valid.'
+  $liveFrontend = Get-Task4LiveFrontendSnapshot
+  $targetPreWrite = Get-Task4IsolationTargetSnapshot
+  [void](Assert-Task4IsolationTargetBaseline -Snapshot $targetPreWrite -VerifiedBaseline $verifiedBackup.manifest.targetBaseline -ExpectedExtendedSchemaSha256 $Task4RollbackExtendedCatalogSha256)
+  $observedAtUtc = [DateTimeOffset]::UtcNow
+  $contractRunnerSha256 = Get-Task4IsolationContractRunnerSha256
+  $document = New-Task4StagingIsolationEvidence -ObservedAtUtc $observedAtUtc -ContractRunnerSha256 $contractRunnerSha256 -VerifiedBackup $verifiedBackup -LiveFrontend $liveFrontend -TargetPreWrite $targetPreWrite
+  [void](Assert-Task4StagingIsolationEvidenceDocument -Document $document -NowUtc $observedAtUtc -ExpectedContractRunnerSha256 $contractRunnerSha256 -VerifiedBackup $verifiedBackup -CurrentLiveFrontend $liveFrontend -CurrentTargetPreWrite $targetPreWrite -Purpose Verify)
+  Write-ProtectedJson -Path (Join-Path $ArtifactRoot $Task4IsolationEvidenceName) -Value $document
+  [void](Assert-Task4StagingIsolationEvidence -VerifiedBackup $verifiedBackup -CurrentLiveFrontend $liveFrontend -CurrentTargetPreWrite $targetPreWrite -Purpose Verify -NowUtc $observedAtUtc)
+  Write-Summary 'Verify passed read-only target/live observation and wrote immediately revalidated, short-lived staging-isolation evidence.'
 }
 
 function Invoke-PostMigrationPhase {
@@ -2972,7 +3797,12 @@ function Invoke-ImportPhase {
   $task4Migrations = @(Get-Task4MigrationBindings)
   $authorization = Assert-Task4ValidationEvidence -VerifiedBackup $verifiedBackup -Migrations $task4Migrations
   $rehearsalReport = Assert-RehearsalReport -VerifiedBackup $verifiedBackup -Task4Authorization $authorization
-  [void](Assert-Task4MigrationPushEvidence -VerifiedBackup $verifiedBackup -Migrations $task4Migrations -Authorization $authorization)
+  $pushEvidence = Assert-Task4MigrationPushEvidence -VerifiedBackup $verifiedBackup -Migrations $task4Migrations -Authorization $authorization
+  $currentLiveFrontend = Get-Task4LiveFrontendSnapshot
+  $isolationEvidence = Assert-Task4StagingIsolationEvidence -VerifiedBackup $verifiedBackup -CurrentLiveFrontend $currentLiveFrontend -Purpose Import -ExpectedEvidenceSha256 $pushEvidence.stagingIsolation.file.sha256
+  $currentPostMigrationIsolation = Get-Task4IsolationTargetSnapshot
+  [void](Assert-Task4IsolationPostMigrationState -Snapshot $currentPostMigrationIsolation -PreWriteSnapshot $isolationEvidence.payload.targetPreWrite -ExpectedPostState $authorization.expectedPersistentPost)
+  $pushEvidence = Assert-Task4MigrationPushEvidence -VerifiedBackup $verifiedBackup -Migrations $task4Migrations -Authorization $authorization -StagingIsolationEvidence $isolationEvidence -CurrentPostMigrationIsolation $currentPostMigrationIsolation
   $historyRows = Get-Task4MigrationHistoryRows -Migrations $task4Migrations -Label 'Import authorization exact Task 4 migration history'
   [void](Assert-Task4MigrationHistoryBindings -Migrations $task4Migrations -Rows $historyRows)
   $transitionPath = Join-Path $ArtifactRoot $Task4TransitionManifestName
@@ -3002,6 +3832,12 @@ function Invoke-ImportPhase {
     Assert-InTransactionAuthZeroGuard -LoaderPath $guardedLoader
     $guardedLoaderSha256 = (Get-FileHash -LiteralPath $guardedLoader -Algorithm SHA256).Hash.ToUpperInvariant()
     (Get-Item -LiteralPath $guardedLoader).IsReadOnly = $true
+    $expectedImportContract = [ordered]@{
+      expectedPostState=$expectedPostState; sourceTableCountsSha256=Get-JsonSha256 -Value $rehearsalReport.source.tableCounts
+      authAggregateSha256=Get-JsonSha256 -Value $rehearsalReport.auth.aggregate
+      standaloneSequences=Get-Task4StandaloneSequenceSpecifications; approvedServiceLists=$Task4ApprovedServiceLists
+    }
+    $quarantine = New-Task4Quarantine -Phase Import -ContractRunnerSha256 (Get-Task4IsolationContractRunnerSha256) -IsolationEvidenceSha256 $isolationEvidence.file.sha256 -PreWriteObservationSha256 $currentPostMigrationIsolation.snapshotSha256 -ExpectedTargetStateSha256 (Get-JsonSha256 -Value $expectedImportContract)
     if ((Get-FileHash -LiteralPath $guardedLoader -Algorithm SHA256).Hash.ToUpperInvariant() -cne $guardedLoaderSha256) { throw 'Guarded execution loader changed before execution.' }
     Invoke-TargetFile -Path $guardedLoader -Label 'guarded target selective data import with in-transaction Auth-zero lock'
     if ((Get-FileHash -LiteralPath $staffSnapshot -Algorithm SHA256).Hash.ToUpperInvariant() -cne [string]$rehearsalReport.currentBinding.heldStaffLoaderSha256) { throw 'Staff loader snapshot changed before execution.' }
@@ -3015,6 +3851,8 @@ function Invoke-ImportPhase {
     $sequenceChecks = @(Get-TargetSequenceChecks)
     $serviceLists = Get-TargetApprovedServiceLists
     $integrity = Assert-Task4PostImportResult -ExpectedPost $expectedPostState -ActualInventory $actualInventory -ExpectedTableCounts $rehearsalReport.source.tableCounts -ActualTableCounts $actualTableCounts -Metrics $metrics -AuthBaseline $rehearsalReport.auth.aggregate -SequenceChecks $sequenceChecks -ServiceLists $serviceLists -ForeignKeyCount $foreignKeyCount
+    $postImportIsolation = Get-Task4IsolationTargetSnapshot
+    [void](Assert-Task4IsolationPostImportState -Snapshot $postImportIsolation -ExpectedStorage $pushEvidence.postWriteIsolationState.storage)
     $reportPayload = [ordered]@{
       formatVersion = 1
       pass = $true
@@ -3031,9 +3869,25 @@ function Invoke-ImportPhase {
       integrity = $integrity
       sequenceChecks = $sequenceChecks
       approvedServiceListsSha256 = Get-JsonSha256 -Value $serviceLists
+      stagingIsolationEvidenceSha256 = [string]$isolationEvidence.file.sha256
+      preImportIsolationSha256 = [string]$currentPostMigrationIsolation.snapshotSha256
+      postImportIsolation = $postImportIsolation
+      postImportIsolationSha256 = [string]$postImportIsolation.snapshotSha256
     }
     $importReport = [ordered]@{ payload=$reportPayload; payloadSha256=Get-JsonSha256 -Value $reportPayload }
-    Write-ProtectedJson -Path (Join-Path $ArtifactRoot $ImportReportName) -Value $importReport
+    $importReportPath = Join-Path $ArtifactRoot $ImportReportName
+    Write-ProtectedJson -Path $importReportPath -Value $importReport
+    Assert-NoReparsePointInPath -Path $importReportPath -Label 'Task 4 import integrity report'
+    try { $writtenImportReport = Get-Content -LiteralPath $importReportPath -Raw | ConvertFrom-Json -ErrorAction Stop } catch { throw 'Task 4 import integrity report is invalid JSON after writing.' }
+    Assert-Task4IsolationExactProperties -Value $writtenImportReport -Names @('payload','payloadSha256') -Label 'Task 4 import integrity report envelope'
+    Assert-Task4IsolationSha256 -Value $writtenImportReport.payloadSha256 -Label 'Task 4 import integrity report self-hash'
+    if ([string]$writtenImportReport.payloadSha256 -cne (Get-JsonSha256 -Value $writtenImportReport.payload) -or (Get-JsonSha256 -Value $writtenImportReport.payload) -cne (Get-JsonSha256 -Value $reportPayload)) { throw 'Task 4 import integrity report failed immediate readback validation.' }
+    $completionLiveFrontend = Get-Task4LiveFrontendSnapshot
+    [void](Assert-Task4StagingIsolationEvidence -VerifiedBackup $verifiedBackup -CurrentLiveFrontend $completionLiveFrontend -Purpose Import -ExpectedEvidenceSha256 $isolationEvidence.file.sha256)
+    $completionPostImportIsolation = Get-Task4IsolationTargetSnapshot
+    [void](Assert-Task4IsolationPostImportState -Snapshot $completionPostImportIsolation -ExpectedStorage $pushEvidence.postWriteIsolationState.storage)
+    if ((Get-JsonSha256 -Value $completionPostImportIsolation) -cne (Get-JsonSha256 -Value $postImportIsolation)) { throw 'Task 4 target changed after the post-import report observation.' }
+    Complete-Task4Quarantine -ExpectedPhase Import -ExpectedAttemptId $quarantine.payload.attemptId -ExpectedDocument $quarantine
     Write-Summary 'Import passed: both trigger-disabled loaders committed with FK audits; post-import 11/11 Auth, table-count, sequence, profile, and 13 service-string integrity gates passed.'
   } finally {
     foreach ($path in @($guardedLoader,$mainSnapshot,$staffSnapshot)) {
@@ -3146,22 +4000,14 @@ function Invoke-RollbackPhase {
   throw 'Task 4 Rollback remains unavailable until a separately reviewed execution implementation is added.'
 }
 
+if ($Phase -in @('Backup','Rehearse','Verify','Push','PostMigration','Import')) { Assert-NoTask4Quarantine }
 if ($Phase -eq 'Backup') { Invalidate-BackupEvidence }
 if ($Phase -eq 'Rehearse') { Invalidate-RehearsalEvidence }
-if ($Phase -eq 'Push') {
-  Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot $Task4MigrationPushEvidenceName)
-  Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot 'task4-migration-dry-run-transcript.log')
-  Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot 'task4-migration-push-transcript.log')
-  Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot $Task4TransitionManifestName)
-  Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot $ImportReportName)
-}
-if ($Phase -eq 'PostMigration') { Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot $Task4TransitionManifestName) }
-if ($Phase -eq 'Import') { Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot $ImportReportName) }
-if ($Phase -eq 'Rollback') {
-  Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot $Task4MigrationPushEvidenceName)
-  Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot $Task4TransitionManifestName)
-  Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot $ImportReportName)
-}
+if ($Phase -eq 'PostMigration') { Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot '.task4-postmigration-preflight-attempt') }
+if ($Phase -eq 'Verify' -and (Test-Path -LiteralPath (Join-Path $ArtifactRoot $Task4MigrationPushEvidenceName))) { throw 'Verify cannot replace isolation evidence after completed migration Push evidence exists.' }
+if ($Phase -eq 'Push' -and (Test-Path -LiteralPath (Join-Path $ArtifactRoot $Task4MigrationPushEvidenceName))) { throw 'Completed migration Push evidence already exists; refusing a repeated persistent phase.' }
+if ($Phase -eq 'PostMigration' -and (Test-Path -LiteralPath (Join-Path $ArtifactRoot $ImportReportName))) { throw 'Completed Import evidence already exists; refusing to replace its transition dependency.' }
+if ($Phase -eq 'Import' -and (Test-Path -LiteralPath (Join-Path $ArtifactRoot $ImportReportName))) { throw 'Completed Import evidence already exists; refusing a repeated persistent phase.' }
 if (-not (Test-Path -LiteralPath $ProtectedEnv -PathType Leaf)) { throw 'Protected environment file is missing.' }
 Assert-NotReparsePoint -Path $ProtectedEnv -Label 'protected environment file'
 
