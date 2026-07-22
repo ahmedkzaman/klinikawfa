@@ -513,7 +513,8 @@ Assert-InOrder -Text $entryTry.Extent.Text.ToLowerInvariant() -Label 'Execution 
   'Assert-TargetProjectRef'
 )
 $entryFinally=$entryTry.Finally
-if($null -eq $entryFinally -or -not $entryFinally.Extent.Text.Contains('Close-Task4Log') -or -not $entryFinally.Extent.Text.Contains('Exit-Task4ExecutionLock')){throw 'Task 4 outer execution boundary does not dispose both the log writer and mutex in finally.'}
+if($null -eq $entryFinally){throw 'Task 4 outer execution boundary has no finally cleanup.'}
+Assert-InOrder -Text $entryFinally.Extent.Text.ToLowerInvariant() -Label 'Execution resource cleanup order' -Markers @('Close-Task4Log','Exit-Task4ExecutionLock')
 
 $mutexBlock=Get-RunnerFunctionText -Name 'Get-Task4ExecutionMutexName'
 foreach($identityMarker in @('Get-NormalizedPath','RepositoryRoot','TargetRef','Phase','Get-StringSha256')){
@@ -533,7 +534,10 @@ $logBlock=Get-RunnerFunctionText -Name 'Initialize-Task4Log'
 foreach($logMarker in @('[IO.FileMode]::CreateNew','[IO.FileAccess]::Write','[IO.FileShare]::Read','[IO.StreamWriter]','AutoFlush','$PID','[Guid]::NewGuid')){
   if(-not $logBlock.Contains($logMarker.ToLowerInvariant())){throw "Protected log owner contract is missing: $logMarker"}
 }
-if($runner -match '(?im)^\s*Add-Content\s+.*\$script:LogPath'){throw 'Protected log still reopens its path through Add-Content.'}
+$logReopenCommands=@($ast.FindAll({param($node)$node -is [Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Add-Content' -and $node.Extent.Text -match '(?i)\$script:LogPath'},$true))
+if($logReopenCommands.Count -ne 0){throw 'Protected log still reopens its path through Add-Content.'}
+$externalBlock=Get-RunnerFunctionText -Name 'Invoke-External'
+if(-not $externalBlock.Contains('write-log -message ([string]$_) -raw')){throw 'External command output does not flow through the owned raw log writer.'}
 
 $logRoot=Join-Path ([IO.Path]::GetTempPath()) ('task4-owned-log-'+[Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $logRoot | Out-Null
