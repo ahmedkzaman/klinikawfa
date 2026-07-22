@@ -30,10 +30,9 @@ const isPreview =
   typeof window !== 'undefined' &&
   new URLSearchParams(window.location.search).get('preview') === 'true';
 
-// Professional chime hosted in Lovable Cloud public storage.
+// Professional chime hosted in the active Supabase public storage project.
 // Capped to CHIME_MAX_MS so the TTS announcement doesn't wait too long.
-const CHIME_URL =
-  'https://ncysmppzfjtiekfnomdv.supabase.co/storage/v1/object/public/assets/clinic-chime.mp3';
+const CHIME_URL = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/assets/clinic-chime.mp3`;
 const CHIME_MAX_MS = 3000;
 
 export default function QueueTV() {

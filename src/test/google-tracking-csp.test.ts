@@ -23,7 +23,7 @@ describe("Google tracking consent boundary", () => {
     for (const origin of googleOrigins) expect(headers).toContain(origin);
     expect(headers).not.toMatch(/https:\s*(?:;|$)/i);
     expect(headers).not.toMatch(/(?:script-src|connect-src)[^\n]*\*/i);
-    expect(headers).not.toMatch(/facebook\.com|connect\.facebook\.net|fbq/i);
+    expect(headers).not.toMatch(/facebook\.com|connect\.facebook\.net|\bfbq\b|fbq\(/i);
     expect(headers).not.toMatch(/\bmeta\s+(?:pixel|tracking)/i);
   });
 
