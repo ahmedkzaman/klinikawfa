@@ -545,7 +545,9 @@ try{
   $fixedNow=[DateTimeOffset]::Parse('2026-07-22T02:01:17Z')
   $firstLog=[string](Initialize-Task4Log -ArtifactRoot $logRoot -Phase Push -NowUtc $fixedNow)
   Write-Log 'first same-second writer'
+  Write-Log -Message '' -Raw
   Close-Task4Log
+  if([IO.File]::ReadAllText($firstLog) -cnotmatch 'first same-second writer\r?\n\r?\n$'){throw 'Empty external-output log line did not preserve transcript continuity.'}
   $secondLog=[string](Initialize-Task4Log -ArtifactRoot $logRoot -Phase Push -NowUtc $fixedNow)
   if($firstLog -ceq $secondLog){throw 'Same-second protected log identities collided.'}
   foreach($path in @($firstLog,$secondLog)){

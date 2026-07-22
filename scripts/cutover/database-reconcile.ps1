@@ -159,7 +159,7 @@ $script:LocalPort = $null
 $script:Target = $null
 
 function Write-Log {
-  param([Parameter(Mandatory)][string]$Message, [switch]$Raw)
+  param([Parameter(Mandatory)][AllowEmptyString()][string]$Message, [switch]$Raw)
   if ($null -eq $script:LogWriter) { throw 'Task 4 protected log writer is not initialized.' }
   $line = if ($Raw) { $Message } else { '{0:o} {1}' -f [DateTime]::UtcNow, $Message }
   $script:LogWriter.WriteLine([string]$line)
