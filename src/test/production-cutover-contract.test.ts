@@ -16,6 +16,8 @@ import {
   stageApprovedArchive,
 } from "../../scripts/cutover/archive-inventory.mjs";
 
+const windowsOnlyIt = process.platform === "win32" ? it : it.skip;
+
 describe("production cutover contract", () => {
   it("locks the approved source and target", () => {
     expect(APPROVED_ARCHIVE_SHA256).toBe(
@@ -86,7 +88,7 @@ describe("archive inventory", () => {
     ]);
   });
 
-  it("enforces a canonical protected output path, including Windows casing", async () => {
+  windowsOnlyIt("enforces a canonical protected output path, including Windows casing", async () => {
     const root = await mkdtemp(join(tmpdir(), "cutover-output-"));
     const protectedRoot = await realpath(root);
     const output = join(protectedRoot, "inventory", "source.json");
