@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -88,12 +88,13 @@ describe("archive inventory", () => {
 
   it("enforces a canonical protected output path, including Windows casing", async () => {
     const root = await mkdtemp(join(tmpdir(), "cutover-output-"));
-    const output = join(root, "inventory", "source.json");
+    const protectedRoot = await realpath(root);
+    const output = join(protectedRoot, "inventory", "source.json");
     const outside = join(tmpdir(), "outside.json");
 
-    const caseVariantRoot = process.platform === "win32" ? root.toUpperCase() : root;
+    const caseVariantRoot = process.platform === "win32" ? protectedRoot.toUpperCase() : protectedRoot;
     await expect(resolveProtectedOutputPath(output, caseVariantRoot)).resolves.toBe(output);
-    await expect(resolveProtectedOutputPath(outside, root)).rejects.toThrow(
+    await expect(resolveProtectedOutputPath(outside, protectedRoot)).rejects.toThrow(
       /protected cutover directory/,
     );
     await rm(root, { recursive: true, force: true });

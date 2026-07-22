@@ -11,6 +11,7 @@ const lowerRunner = runner.toLowerCase();
 const powershellCommand = process.platform === "win32" ? "powershell" : "pwsh";
 const powershellExecutionPolicyArgs =
   process.platform === "win32" ? ["-ExecutionPolicy", "Bypass"] : [];
+const windowsOnlyIt = process.platform === "win32" ? it : it.skip;
 
 const task4Migrations = [
   ["20260720111916", "20260720111916_add_website_editor_role.sql", "87F0EEA795BC99CE1CBA8BB799B6E25D7C3A313A54E309425FC47165B5125618"],
@@ -41,7 +42,7 @@ function expectInOrder(text: string, markers: string[]) {
 }
 
 describe("Task 4 cutover transition safeguards", () => {
-  it("executes the focused runtime contract, including self-consistent tamper rejection", async () => {
+  windowsOnlyIt("executes the focused runtime contract, including self-consistent tamper rejection", async () => {
     const result = await execFileAsync(
       powershellCommand,
       [

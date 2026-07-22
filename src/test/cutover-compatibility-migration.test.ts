@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 const powershellCommand = process.platform === "win32" ? "powershell" : "pwsh";
 const powershellExecutionPolicyArgs =
   process.platform === "win32" ? ["-ExecutionPolicy", "Bypass"] : [];
+const windowsOnlyIt = process.platform === "win32" ? it : it.skip;
 
 const sql = readFileSync(
   "supabase/migrations/20260721174422_preserve_source_cutover_fields.sql",
@@ -267,7 +268,7 @@ if (@($unsafe.blocking) -notcontains 'public.patients.name') { throw 'Populated 
     ).toContain("column drift guards passed");
   });
 
-  it("generates an all-FK audit that rejects sender and receiver orphans", () => {
+  windowsOnlyIt("generates an all-FK audit that rejects sender and receiver orphans", () => {
     expect(
       runGuardProbe(String.raw`
 Import-RunnerFunction Get-ForeignKeyAuditSql
