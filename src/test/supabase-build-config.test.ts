@@ -33,6 +33,22 @@ describe("resolveSupabaseBuildConfig", () => {
     });
   });
 
+  it("removes BOM and surrounding whitespace from injected build variables", () => {
+    expect(
+      resolveSupabaseBuildConfig("production", {
+        VITE_SUPABASE_URL: "\uFEFFhttps://example.supabase.co \r\n",
+        VITE_SUPABASE_PUBLISHABLE_KEY: "\uFEFFsb_publishable_example\n",
+        VITE_SUPABASE_PROJECT_ID: " example-project\r\n",
+      }),
+    ).toEqual({
+      url: completeEnvironment.VITE_SUPABASE_URL,
+      publishableKey: completeEnvironment.VITE_SUPABASE_PUBLISHABLE_KEY,
+      projectId: completeEnvironment.VITE_SUPABASE_PROJECT_ID,
+      source: "environment",
+      missing: [],
+    });
+  });
+
   it("accepts the legacy anon variable as the browser key", () => {
     const { VITE_SUPABASE_PUBLISHABLE_KEY: _unused, ...environment } =
       completeEnvironment;
