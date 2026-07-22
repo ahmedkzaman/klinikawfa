@@ -689,12 +689,6 @@ export function HomeEditor() {
             <EditorField errors={errors} label="Hero background image URL" name="hero.backgroundImage" register={form.register} />
             <WebsiteMediaUploader folder="home" onUploaded={(url) => form.setValue("hero.backgroundImage", url, { shouldDirty: true, shouldValidate: true })} />
           </div>
-          <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4">
-            <Button disabled size="sm" type="button" variant="outline">Media upload available in the resources phase</Button>
-            <p className="mt-2 text-xs leading-5 text-slate-600">
-              The current URL remains unchanged unless you edit it directly. A later media uploader will replace it only after a successful upload.
-            </p>
-          </div>
           <BilingualFields base="hero.backgroundAlt" errors={errors} label="Hero background alt text" register={form.register} />
           <div className="grid gap-4 md:grid-cols-2">
             <EditorField errors={errors} label="Hero background opacity" max={25} min={5} name="hero.backgroundOpacity" register={form.register} step={1} valueAsNumber />
