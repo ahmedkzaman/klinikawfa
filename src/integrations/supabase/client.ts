@@ -9,6 +9,11 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 // import { supabase } from "@/integrations/supabase/client";
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  global: {
+    // Bind the browser primitive explicitly. This avoids SDK/bundler fetch
+    // resolution failures that otherwise stop Auth before a request is sent.
+    fetch: globalThis.fetch.bind(globalThis),
+  },
   auth: {
     storage: localStorage,
     persistSession: true,
