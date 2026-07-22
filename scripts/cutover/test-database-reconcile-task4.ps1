@@ -392,11 +392,18 @@ commit;
   }
 }finally{if(Test-Path $authFixtureRoot){Remove-Item $authFixtureRoot -Recurse -Force}}
 
+$guardedRehearseDefinition=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-RehearsePhase'},$true)
+if(-not $guardedRehearseDefinition){throw 'Rehearse phase is missing.'}
+$guardedRehearseText=$guardedRehearseDefinition.Extent.Text.ToLowerInvariant()
+foreach($marker in @('$guardedrehearsalloader','invoke-guardedlocalrehearsalloader','-sourcepath $mainloader','-guardedpath $guardedrehearsalloader')){if(-not $guardedRehearseText.Contains($marker)){throw "Rehearse guarded-loader lifecycle is missing marker: $marker"}}
+if([regex]::IsMatch($guardedRehearseText,'invoke-selectivedataloader\s+-database\s+\$targetdatabase\s+-loaderpath\s+\$mainloader')){throw 'Rehearse still executes the canonical unguarded main loader.'}
+
 Import-RunnerFunction Get-NormalizedPath
 Import-RunnerFunction Write-Utf8NoBom
 Import-RunnerFunction Assert-PortableAuthBoundary
 Import-RunnerFunction New-InTransactionAuthZeroLoader
 Import-RunnerFunction Assert-InTransactionAuthZeroGuard
+Import-RunnerFunction Invoke-GuardedLocalRehearsalLoader
 $guardRoot=Join-Path ([IO.Path]::GetTempPath()) ('task4-auth-guard-'+[Guid]::NewGuid().ToString('N'))
 $global:ArtifactRoot=$guardRoot
 New-Item -ItemType Directory -Path $guardRoot|Out-Null
@@ -423,7 +430,24 @@ commit;
   $lockIndex=$guardedText.IndexOf($expectedPublicLock,[StringComparison]::OrdinalIgnoreCase);$replicaIndex=$guardedText.IndexOf('set local session_replication_role = replica',[StringComparison]::OrdinalIgnoreCase);$deleteIndex=$guardedText.IndexOf('delete from "public"."t001";',[StringComparison]::OrdinalIgnoreCase)
   if($lockIndex -lt 0 -or $replicaIndex -le $lockIndex -or $deleteIndex -le $replicaIndex){throw 'Exact93 public lock is not before replica mode and the first delete.'}
   if($guardedText -match '(?i)truncate\s+(?:table\s+)?auth\.' -or $guardedText.Contains('restart identity cascade')){throw 'Guarded loader still truncates managed Auth or uses CASCADE.'}
-}finally{if(Test-Path $guardRoot){Remove-Item $guardRoot -Recurse -Force}}
+
+  $canonicalLoaderSha256=(Get-FileHash -LiteralPath $sourceLoader -Algorithm SHA256).Hash
+  $rehearsalExecutionLoader=Join-Path $guardRoot 'rehearsal-execution.sql'
+  $script:rehearsalLoaderCapture=$null
+  function global:Invoke-SelectiveDataLoader {
+    param([string]$Database,[string]$LoaderPath,[string]$Label)
+    $item=Get-Item -LiteralPath $LoaderPath
+    $script:rehearsalLoaderCapture=[ordered]@{database=$Database;path=$LoaderPath;label=$Label;isReadOnly=$item.IsReadOnly;text=Get-Content -LiteralPath $LoaderPath -Raw}
+  }
+  Invoke-GuardedLocalRehearsalLoader -Database 'cutover_target' -SourcePath $sourceLoader -GuardedPath $rehearsalExecutionLoader
+  if(Test-Path -LiteralPath $rehearsalExecutionLoader){throw 'Successful guarded rehearsal left its temporary execution loader behind.'}
+  if($script:rehearsalLoaderCapture.database -cne 'cutover_target' -or $script:rehearsalLoaderCapture.path -cne $rehearsalExecutionLoader -or -not $script:rehearsalLoaderCapture.isReadOnly -or -not $script:rehearsalLoaderCapture.text.Contains('$sequence_reconcile$')){throw 'Rehearse helper did not execute the read-only transformed loader with sequence reconciliation.'}
+  if((Get-FileHash -LiteralPath $sourceLoader -Algorithm SHA256).Hash -cne $canonicalLoaderSha256){throw 'Guarded rehearsal changed the canonical protected main loader.'}
+
+  function global:Invoke-SelectiveDataLoader {param([string]$Database,[string]$LoaderPath,[string]$Label);throw 'guarded rehearsal execution sentinel'}
+  $failure=$null;try{Invoke-GuardedLocalRehearsalLoader -Database 'cutover_target' -SourcePath $sourceLoader -GuardedPath $rehearsalExecutionLoader}catch{$failure=$_.Exception.Message}
+  if($failure -cne 'guarded rehearsal execution sentinel' -or (Test-Path -LiteralPath $rehearsalExecutionLoader)){throw 'Failed guarded rehearsal did not propagate the loader error and clean its temporary execution loader.'}
+}finally{Remove-Item function:\Invoke-SelectiveDataLoader -Force -ErrorAction SilentlyContinue;if(Test-Path $guardRoot){Remove-Item $guardRoot -Recurse -Force}}
 
 Import-RunnerFunction Assert-Task4SequenceChecks
 Import-RunnerFunction Assert-Task4PostImportResult

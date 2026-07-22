@@ -2228,6 +2228,32 @@ function Assert-InTransactionAuthZeroGuard {
   }
 }
 
+function Invoke-GuardedLocalRehearsalLoader {
+  param(
+    [Parameter(Mandatory)][string]$Database,
+    [Parameter(Mandatory)][string]$SourcePath,
+    [Parameter(Mandatory)][string]$GuardedPath,
+    [string]$Label = 'rehearse selective application and portable Auth loader'
+  )
+  $sourceSha256 = (Get-FileHash -LiteralPath $SourcePath -Algorithm SHA256).Hash.ToUpperInvariant()
+  try {
+    New-InTransactionAuthZeroLoader -SourcePath $SourcePath -DestinationPath $GuardedPath
+    Assert-NotReparsePoint -Path $GuardedPath -Label 'guarded rehearsal selective loader'
+    Assert-PortableAuthBoundary -LoaderPath $GuardedPath
+    Assert-InTransactionAuthZeroGuard -LoaderPath $GuardedPath
+    $guardedSha256 = (Get-FileHash -LiteralPath $GuardedPath -Algorithm SHA256).Hash.ToUpperInvariant()
+    (Get-Item -LiteralPath $GuardedPath).IsReadOnly = $true
+    if ((Get-FileHash -LiteralPath $SourcePath -Algorithm SHA256).Hash.ToUpperInvariant() -cne $sourceSha256) { throw 'Canonical rehearsal loader changed while preparing guarded execution.' }
+    if ((Get-FileHash -LiteralPath $GuardedPath -Algorithm SHA256).Hash.ToUpperInvariant() -cne $guardedSha256) { throw 'Guarded rehearsal loader changed before execution.' }
+    Invoke-SelectiveDataLoader -Database $Database -LoaderPath $GuardedPath -Label $Label
+  } finally {
+    if (Test-Path -LiteralPath $GuardedPath) {
+      (Get-Item -LiteralPath $GuardedPath).IsReadOnly = $false
+      Remove-Item -LiteralPath $GuardedPath -Force
+    }
+  }
+}
+
 function Get-CurrentRehearsalBinding {
   param([Parameter(Mandatory)]$VerifiedBackup)
   $artifacts = [ordered]@{
@@ -2477,6 +2503,7 @@ from public.appointments;
     $mainLoader = Join-Path $ArtifactRoot $LoaderName
     $staffLoader = Join-Path $ArtifactRoot $HeldStaffLoaderName
     $authLoader = Join-Path $ArtifactRoot $AuthLoaderName
+    $guardedRehearsalLoader = Join-Path $ArtifactRoot ('.task4-rehearsal-auth-zero-loader-' + $PID + '.sql')
     $authBaseline = Get-Task4AuthAggregateBaseline
     $sourceAuthAggregate = Get-LocalTask4AuthAggregate -Database $sourceDatabase -Label 'source portable Auth preservation aggregate'
     [void](Assert-Task4AuthAggregate -Actual $sourceAuthAggregate -Baseline $authBaseline)
@@ -2542,7 +2569,7 @@ from public.appointments;
       throw 'Scratch rehearsal blocked: populated source columns have no lossless representation in the authoritative target schema.'
     }
 
-    Invoke-SelectiveDataLoader -Database $targetDatabase -LoaderPath $mainLoader -Label 'rehearse selective application and portable Auth loader'
+    Invoke-GuardedLocalRehearsalLoader -Database $targetDatabase -SourcePath $mainLoader -GuardedPath $guardedRehearsalLoader -Label 'rehearse selective application and portable Auth loader'
     Invoke-SelectiveDataLoader -Database $targetDatabase -LoaderPath $staffLoader -Label 'rehearse held staff_messages loader'
 
     $sourceConstraints = @(Get-ConstraintMetadata -Database $sourceDatabase)
