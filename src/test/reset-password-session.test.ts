@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveRecoverySessionState } from "@/lib/recovery-session";
+import { getRecoveryTokens, resolveRecoverySessionState } from "@/lib/recovery-session";
 
 describe("reset password recovery session state", () => {
   it("allows the recovery form when a recovery token is present", () => {
@@ -18,5 +18,12 @@ describe("reset password recovery session state", () => {
         hash: "",
       }),
     ).toBe(false);
+  });
+
+  it("extracts recovery tokens from the URL hash without exposing them", () => {
+    expect(getRecoveryTokens('#access_token=access-value&refresh_token=refresh-value&type=recovery')).toEqual({
+      accessToken: 'access-value',
+      refreshToken: 'refresh-value',
+    });
   });
 });
