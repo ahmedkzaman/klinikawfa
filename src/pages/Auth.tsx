@@ -12,9 +12,14 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema, signUpSchema, resetPasswordSchema, LoginFormData, SignUpFormData, ResetPasswordFormData } from '@/lib/validations';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Loader2, Mail, Lock, User, ArrowLeft } from 'lucide-react';
+import { Loader2, Mail, Lock, User, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 
 type AuthMode = 'login' | 'signup' | 'reset';
+
+type LoginAuthError = Error & {
+  code?: string;
+  status?: number;
+};
 
 export default function Auth() {
   const { language } = useLanguage();
@@ -23,6 +28,7 @@ export default function Auth() {
   const { toast } = useToast();
   const [mode, setMode] = useState<AuthMode>('login');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
 
   // Role-aware redirect once session and role are both resolved
   useEffect(() => {
@@ -60,37 +66,69 @@ export default function Auth() {
     defaultValues: { email: '' },
   });
 
+  const changeMode = (nextMode: AuthMode) => {
+    if (mode === 'login' && nextMode !== 'login') {
+      loginForm.resetField('password', { defaultValue: '' });
+      setShowLoginPassword(false);
+    }
+    setMode(nextMode);
+  };
+
   const handleLogin = async (data: LoginFormData) => {
     setIsSubmitting(true);
-    const { error } = await signIn(data.email, data.password);
-    setIsSubmitting(false);
+    try {
+      const { error } = await signIn(data.email, data.password);
 
-    if (error) {
-      let message = language === 'ms' 
-        ? 'Ralat semasa log masuk. Sila cuba lagi.'
-        : 'Error during login. Please try again.';
-      
-      if (error.message.includes('Invalid login credentials')) {
-        message = language === 'ms'
-          ? 'Email atau kata laluan tidak sah.'
-          : 'Invalid email or password.';
-      } else if (error.message.includes('Email not confirmed')) {
-        message = language === 'ms'
-          ? 'Sila sahkan email anda terlebih dahulu.'
-          : 'Please confirm your email first.';
+      if (error) {
+        const authError = error as LoginAuthError;
+        const isInvalidCredentials =
+          authError.code === 'invalid_credentials' ||
+          authError.message.includes('Invalid login credentials');
+
+        let message = language === 'ms'
+          ? `Log masuk gagal${authError.code ? ` (${authError.code})` : ''}. Sila cuba lagi.`
+          : `Login failed${authError.code ? ` (${authError.code})` : ''}. Please try again.`;
+
+        if (isInvalidCredentials) {
+          loginForm.resetField('password', { defaultValue: '' });
+          setShowLoginPassword(false);
+          message = language === 'ms'
+            ? 'Email atau kata laluan tidak sah. Sila taip semula kata laluan.'
+            : 'Invalid email or password. Please type the password again.';
+        } else if (
+          authError.code === 'email_not_confirmed' ||
+          authError.message.includes('Email not confirmed')
+        ) {
+          message = language === 'ms'
+            ? 'Sila sahkan email anda terlebih dahulu.'
+            : 'Please confirm your email first.';
+        }
+
+        toast({
+          title: language === 'ms' ? 'Ralat' : 'Error',
+          description: message,
+          variant: 'destructive',
+        });
+        return;
       }
 
-      toast({
-        title: language === 'ms' ? 'Ralat' : 'Error',
-        description: message,
-        variant: 'destructive',
-      });
-    } else {
       toast({
         title: language === 'ms' ? 'Berjaya' : 'Success',
         description: language === 'ms' ? 'Log masuk berjaya!' : 'Login successful!',
       });
       // Role-aware redirect handled by the effect above once role resolves.
+    } catch (error) {
+      const authError = error as Partial<LoginAuthError>;
+      const diagnostic = authError.code || (authError.status ? `HTTP ${authError.status}` : null);
+      toast({
+        title: language === 'ms' ? 'Ralat' : 'Error',
+        description: language === 'ms'
+          ? `Log masuk gagal${diagnostic ? ` (${diagnostic})` : ''}. Sila periksa sambungan dan cuba lagi.`
+          : `Login failed${diagnostic ? ` (${diagnostic})` : ''}. Please check your connection and try again.`,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -124,7 +162,7 @@ export default function Auth() {
         duration: 10000, // Show for 10 seconds
       });
       signUpForm.reset();
-      setMode('login');
+      changeMode('login');
     }
   };
 
@@ -148,7 +186,7 @@ export default function Auth() {
           ? 'Sila semak email anda untuk pautan reset kata laluan.'
           : 'Please check your email for password reset link.',
       });
-      setMode('login');
+      changeMode('login');
     }
   };
 
@@ -197,12 +235,20 @@ export default function Auth() {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>{language === 'ms' ? 'Email' : 'Email'}</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                <Input {...field} type="email" placeholder="email@contoh.com" className="pl-10" />
-                              </div>
-                            </FormControl>
+                            <div className="relative">
+                              <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  type="email"
+                                  autoComplete="username"
+                                  autoCapitalize="none"
+                                  spellCheck={false}
+                                  placeholder="email@contoh.com"
+                                  className="pl-10"
+                                />
+                              </FormControl>
+                            </div>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -213,12 +259,30 @@ export default function Auth() {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>{language === 'ms' ? 'Kata Laluan' : 'Password'}</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                <Input {...field} type="password" placeholder="••••••" className="pl-10" />
-                              </div>
-                            </FormControl>
+                            <div className="relative">
+                              <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  type={showLoginPassword ? 'text' : 'password'}
+                                  autoComplete="current-password"
+                                  placeholder="••••••"
+                                  className="pl-10 pr-12"
+                                />
+                              </FormControl>
+                              <button
+                                type="button"
+                                onClick={() => setShowLoginPassword((visible) => !visible)}
+                                className="absolute right-0 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                aria-label={showLoginPassword
+                                  ? (language === 'ms' ? 'Sembunyikan kata laluan' : 'Hide password')
+                                  : (language === 'ms' ? 'Tunjukkan kata laluan' : 'Show password')}
+                              >
+                                {showLoginPassword
+                                  ? <EyeOff className="h-4 w-4" />
+                                  : <Eye className="h-4 w-4" />}
+                              </button>
+                            </div>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -322,7 +386,7 @@ export default function Auth() {
                     <>
                       <button
                         type="button"
-                        onClick={() => setMode('reset')}
+                        onClick={() => changeMode('reset')}
                         className="text-primary hover:underline"
                       >
                         {language === 'ms' ? 'Lupa kata laluan?' : 'Forgot password?'}
@@ -331,7 +395,7 @@ export default function Auth() {
                         {language === 'ms' ? 'Belum ada akaun?' : "Don't have an account?"}{' '}
                         <button
                           type="button"
-                          onClick={() => setMode('signup')}
+                          onClick={() => changeMode('signup')}
                           className="text-primary hover:underline"
                         >
                           {language === 'ms' ? 'Daftar' : 'Sign up'}
@@ -345,7 +409,7 @@ export default function Auth() {
                       {language === 'ms' ? 'Sudah ada akaun?' : 'Already have an account?'}{' '}
                       <button
                         type="button"
-                        onClick={() => setMode('login')}
+                        onClick={() => changeMode('login')}
                         className="text-primary hover:underline"
                       >
                         {language === 'ms' ? 'Log masuk' : 'Login'}
@@ -356,7 +420,7 @@ export default function Auth() {
                   {mode === 'reset' && (
                     <button
                       type="button"
-                      onClick={() => setMode('login')}
+                      onClick={() => changeMode('login')}
                       className="inline-flex items-center gap-1 text-primary hover:underline"
                     >
                       <ArrowLeft className="h-4 w-4" />
