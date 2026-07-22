@@ -126,6 +126,7 @@ jobs:
             editor/reviews
             editor/navigation
             editor/analytics
+            editor/profile
             staff
             clinic
             admin
@@ -140,7 +141,9 @@ jobs:
           test -f dist/editor/index.html
           test -f dist/CNAME
           test "$(cat dist/CNAME)" = "klinikawfa.com"
-          test -n "$(find dist/assets -type f -name 'klinik-awfa-exterior-*.webp' -print -quit)"
+          # The clinic background intentionally lives under public/ so the CMS
+          # can store one stable URL instead of a build-specific asset hash.
+          test -f dist/klinik-awfa-exterior.webp
           if find dist -type f -name '.env*' | grep -q .; then
             echo "Private environment file found in Pages artifact."
             exit 1
