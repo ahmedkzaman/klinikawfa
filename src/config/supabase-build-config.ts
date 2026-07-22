@@ -23,10 +23,9 @@ export interface SupabaseBuildConfig {
 // publishable/legacy anon key as safe for browser bundles and source code when
 // RLS protects the database. Never add a secret/service-role key here.
 const PUBLIC_PRODUCTION_CONFIG = {
-  url: "https://ncysmppzfjtiekfnomdv.supabase.co",
-  publishableKey:
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jeXNtcHB6Zmp0aWVrZm5vbWR2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5MTIzNTEsImV4cCI6MjA4NTQ4ODM1MX0.4JUfcL915cqt42h-gocFeZ4OQQT27BOtI0YaQSPxlCg",
-  projectId: "ncysmppzfjtiekfnomdv",
+  url: "https://nhjbqdiyptjqherdfbqk.supabase.co",
+  publishableKey: "sb_publishable_jYmxqUODxxFd2SvPJWC62w_wb3PqQ0e",
+  projectId: "nhjbqdiyptjqherdfbqk",
 } as const;
 
 const missingVariables = (
