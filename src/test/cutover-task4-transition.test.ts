@@ -8,6 +8,9 @@ const execFileAsync = promisify(execFile);
 const runnerPath = "scripts/cutover/database-reconcile.ps1";
 const runner = readFileSync(runnerPath, "utf8");
 const lowerRunner = runner.toLowerCase();
+const powershellCommand = process.platform === "win32" ? "powershell" : "pwsh";
+const powershellExecutionPolicyArgs =
+  process.platform === "win32" ? ["-ExecutionPolicy", "Bypass"] : [];
 
 const task4Migrations = [
   ["20260720111916", "20260720111916_add_website_editor_role.sql", "87F0EEA795BC99CE1CBA8BB799B6E25D7C3A313A54E309425FC47165B5125618"],
@@ -40,8 +43,14 @@ function expectInOrder(text: string, markers: string[]) {
 describe("Task 4 cutover transition safeguards", () => {
   it("executes the focused runtime contract, including self-consistent tamper rejection", async () => {
     const result = await execFileAsync(
-      "powershell",
-      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "scripts/cutover/test-database-reconcile-task4.ps1"],
+      powershellCommand,
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        ...powershellExecutionPolicyArgs,
+        "-File",
+        "scripts/cutover/test-database-reconcile-task4.ps1",
+      ],
       { cwd: process.cwd(), encoding: "utf8", timeout: 180_000, windowsHide: true },
     );
     expect(`${result.stdout}\n${result.stderr}`).toContain("Task 4 runner focused contract passed");

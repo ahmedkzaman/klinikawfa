@@ -2,6 +2,10 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 
+const powershellCommand = process.platform === "win32" ? "powershell" : "pwsh";
+const powershellExecutionPolicyArgs =
+  process.platform === "win32" ? ["-ExecutionPolicy", "Bypass"] : [];
+
 const sql = readFileSync(
   "supabase/migrations/20260721174422_preserve_source_cutover_fields.sql",
   "utf8",
@@ -29,8 +33,14 @@ function Import-RunnerFunction {
 ${body}
 `;
   const result = spawnSync(
-    "powershell",
-    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "-"],
+    powershellCommand,
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      ...powershellExecutionPolicyArgs,
+      "-Command",
+      "-",
+    ],
     { cwd: process.cwd(), input: script, encoding: "utf8" },
   );
   if (result.status !== 0) {

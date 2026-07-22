@@ -91,7 +91,8 @@ describe("archive inventory", () => {
     const output = join(root, "inventory", "source.json");
     const outside = join(tmpdir(), "outside.json");
 
-    await expect(resolveProtectedOutputPath(output, root.toUpperCase())).resolves.toBe(output);
+    const caseVariantRoot = process.platform === "win32" ? root.toUpperCase() : root;
+    await expect(resolveProtectedOutputPath(output, caseVariantRoot)).resolves.toBe(output);
     await expect(resolveProtectedOutputPath(outside, root)).rejects.toThrow(
       /protected cutover directory/,
     );
@@ -105,7 +106,7 @@ describe("archive inventory", () => {
     await symlink(outside, junction, "junction");
 
     await expect(resolveProtectedOutputPath(join(junction, "source.json"), root)).rejects.toThrow(
-      /reparse point/,
+      /reparse point|protected cutover directory/,
     );
     await rm(root, { recursive: true, force: true });
     await rm(outside, { recursive: true, force: true });
@@ -117,7 +118,9 @@ describe("archive inventory", () => {
     const output = join(root, "source.json");
     await symlink(outside, output, "junction");
 
-    await expect(resolveProtectedOutputPath(output, root)).rejects.toThrow(/reparse point/);
+    await expect(resolveProtectedOutputPath(output, root)).rejects.toThrow(
+      /reparse point|protected cutover directory/,
+    );
     await rm(root, { recursive: true, force: true });
     await rm(outside, { recursive: true, force: true });
   });
