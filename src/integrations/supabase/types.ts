@@ -5008,6 +5008,301 @@ export type Database = {
           },
         ]
       }
+      website_content_drafts: {
+        Row: {
+          base_revision: number
+          draft_payload: Json
+          resource_id: string
+          resource_type: string
+          updated_at: string
+          updated_by: string
+        }
+        Insert: {
+          base_revision?: number
+          draft_payload: Json
+          resource_id: string
+          resource_type: string
+          updated_at?: string
+          updated_by: string
+        }
+        Update: {
+          base_revision?: number
+          draft_payload?: Json
+          resource_id?: string
+          resource_type?: string
+          updated_at?: string
+          updated_by?: string
+        }
+        Relationships: []
+      }
+      website_content_versions: {
+        Row: {
+          id: string
+          payload: Json
+          published_at: string
+          published_by: string
+          resource_id: string
+          resource_type: string
+          revision: number
+        }
+        Insert: {
+          id?: string
+          payload: Json
+          published_at?: string
+          published_by: string
+          resource_id: string
+          resource_type: string
+          revision: number
+        }
+        Update: {
+          id?: string
+          payload?: Json
+          published_at?: string
+          published_by?: string
+          resource_id?: string
+          resource_type?: string
+          revision?: number
+        }
+        Relationships: []
+      }
+      website_navigation_drafts: {
+        Row: {
+          base_revision: number
+          draft_items: Json
+          singleton: boolean
+          updated_at: string
+          updated_by: string
+        }
+        Insert: {
+          base_revision?: number
+          draft_items?: Json
+          singleton?: boolean
+          updated_at?: string
+          updated_by: string
+        }
+        Update: {
+          base_revision?: number
+          draft_items?: Json
+          singleton?: boolean
+          updated_at?: string
+          updated_by?: string
+        }
+        Relationships: []
+      }
+      website_navigation_items: {
+        Row: {
+          created_at: string
+          display_order: number
+          href: string
+          id: string
+          is_visible: boolean
+          label_en: string | null
+          label_ms: string
+          page_id: string | null
+          parent_id: string | null
+          revision: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_order: number
+          href: string
+          id?: string
+          is_visible?: boolean
+          label_en?: string | null
+          label_ms: string
+          page_id?: string | null
+          parent_id?: string | null
+          revision?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_order?: number
+          href?: string
+          id?: string
+          is_visible?: boolean
+          label_en?: string | null
+          label_ms?: string
+          page_id?: string | null
+          parent_id?: string | null
+          revision?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "website_navigation_items_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: false
+            referencedRelation: "website_pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "website_navigation_items_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "website_navigation_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      website_page_drafts: {
+        Row: {
+          base_revision: number
+          draft_content: Json
+          page_id: string
+          updated_at: string
+          updated_by: string
+        }
+        Insert: {
+          base_revision?: number
+          draft_content?: Json
+          page_id: string
+          updated_at?: string
+          updated_by: string
+        }
+        Update: {
+          base_revision?: number
+          draft_content?: Json
+          page_id?: string
+          updated_at?: string
+          updated_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "website_page_drafts_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: true
+            referencedRelation: "website_pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      website_pages: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          published_at: string | null
+          published_by: string | null
+          published_content: Json
+          revision: number
+          slug: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          published_at?: string | null
+          published_by?: string | null
+          published_content?: Json
+          revision?: number
+          slug: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          published_at?: string | null
+          published_by?: string | null
+          published_content?: Json
+          revision?: number
+          slug?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      website_review_presentations: {
+        Row: {
+          created_at: string
+          display_order: number
+          id: string
+          name_en: string | null
+          name_ms: string
+          published_at: string | null
+          rating: number
+          review_text_en: string | null
+          review_text_ms: string
+          source_label: string
+          source_review_id: string | null
+          status: string
+          updated_at: string
+          website_revision: number
+        }
+        Insert: {
+          created_at?: string
+          display_order?: number
+          id?: string
+          name_en?: string | null
+          name_ms: string
+          published_at?: string | null
+          rating: number
+          review_text_en?: string | null
+          review_text_ms: string
+          source_label?: string
+          source_review_id?: string | null
+          status?: string
+          updated_at?: string
+          website_revision?: number
+        }
+        Update: {
+          created_at?: string
+          display_order?: number
+          id?: string
+          name_en?: string | null
+          name_ms?: string
+          published_at?: string | null
+          rating?: number
+          review_text_en?: string | null
+          review_text_ms?: string
+          source_label?: string
+          source_review_id?: string | null
+          status?: string
+          updated_at?: string
+          website_revision?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "website_review_presentations_source_review_id_fkey"
+            columns: ["source_review_id"]
+            isOneToOne: true
+            referencedRelation: "reviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      website_tracking_settings: {
+        Row: {
+          consent_version: number
+          enabled: boolean
+          pixel_id: string | null
+          provider: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          consent_version?: number
+          enabled?: boolean
+          pixel_id?: string | null
+          provider: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          consent_version?: number
+          enabled?: boolean
+          pixel_id?: string | null
+          provider?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       insight_financials_view: {
@@ -5661,6 +5956,7 @@ export type Database = {
         | "locum"
         | "resident_doctor"
         | "ops_staff"
+        | "website_editor"
       clinic_appointment_status:
         | "scheduled"
         | "confirmed"
@@ -5822,6 +6118,7 @@ export const Constants = {
         "locum",
         "resident_doctor",
         "ops_staff",
+        "website_editor",
       ],
       clinic_appointment_status: [
         "scheduled",
