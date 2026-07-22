@@ -12,6 +12,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 
 import { LivePreview } from "@/components/editor/LivePreview";
+import { WebsiteMediaUploader } from "@/components/editor/WebsiteMediaUploader";
 import { useEditorDirtyState } from "@/components/editor/useEditorDirtyNavigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -618,6 +619,7 @@ export function PageEditor() {
                   {(form.formState.errors.heroImage as { message?: string }).message}
                 </p>
               )}
+              <WebsiteMediaUploader folder="pages" onUploaded={(url) => form.setValue("heroImage", url, { shouldDirty: true, shouldValidate: true })} />
             </div>
             <BilingualFields base="heroAlt" errors={form.formState.errors} label="Hero image alt text" register={form.register} />
             <BilingualFields base="body" errors={form.formState.errors} label="Rich HTML body" multiline register={form.register} />

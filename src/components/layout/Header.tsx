@@ -16,12 +16,15 @@ import {
 import { Menu, Phone, MessageCircle, LogIn, Settings, LogOut, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
+import { usePublishedNavigation } from '@/hooks/usePublishedNavigation';
 
 export function Header() {
   const { language, setLanguage, t } = useLanguage();
   const { user, isStaffOrAdmin, signOut, loading } = useAuth();
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
+  const managedNavigation = usePublishedNavigation();
+  const navigationItems = managedNavigation?.filter((item) => !item.parentId).map((item) => ({ href: item.href, label: language === 'en' ? item.labelEn || item.labelMs : item.labelMs })) ?? NAV_ITEMS.map((item) => ({ href: item.href, label: t(item.labelKey) }));
 
   const isActive = (href: string) => {
     if (href === '/') return location.pathname === '/';
@@ -52,7 +55,7 @@ export function Header() {
 
         {/* Desktop Navigation */}
         <nav className="hidden items-center gap-1 lg:flex">
-          {NAV_ITEMS.map((item) => (
+          {navigationItems.map((item) => (
             <Link
               key={item.href}
               to={item.href}
@@ -63,7 +66,7 @@ export function Header() {
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               )}
             >
-              {t(item.labelKey)}
+              {item.label}
               {isActive(item.href) && (
                 <motion.div
                   layoutId="activeNav"
@@ -206,7 +209,7 @@ export function Header() {
             <SheetContent side="right" className="w-full max-w-sm bg-background border-l border-border">
               <div className="flex flex-col gap-6 pt-8">
                 <nav className="flex flex-col gap-2">
-                  {NAV_ITEMS.map((item) => (
+                  {navigationItems.map((item) => (
                     <Link
                       key={item.href}
                       to={item.href}
@@ -218,7 +221,7 @@ export function Header() {
                           : 'text-foreground hover:bg-muted/50'
                       )}
                     >
-                      {t(item.labelKey)}
+                      {item.label}
                     </Link>
                   ))}
                 </nav>

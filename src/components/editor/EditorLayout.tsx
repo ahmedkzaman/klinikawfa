@@ -7,9 +7,11 @@ import {
   Menu,
   Network,
   PanelTop,
+  LayoutDashboard,
   ShieldCheck,
   Star,
   Stethoscope,
+  UserRound,
   Wrench,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,7 +21,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const editorNavItems = [
-  { to: "/editor/home", label: "Overview", icon: Home },
+  { to: "/editor", label: "Dashboard", icon: LayoutDashboard, end: true },
+  { to: "/editor/home", label: "Home", icon: Home },
   { to: "/editor/pages", label: "Pages", icon: PanelTop },
   { to: "/editor/services", label: "Services", icon: Wrench },
   { to: "/editor/team", label: "Team", icon: Stethoscope },
@@ -27,6 +30,7 @@ const editorNavItems = [
   { to: "/editor/gallery", label: "Gallery", icon: GalleryHorizontal },
   { to: "/editor/reviews", label: "Reviews", icon: Star },
   { to: "/editor/navigation", label: "Navigation", icon: Network },
+  { to: "/editor/profile", label: "My profile", icon: UserRound },
 ];
 
 export function EditorLayout() {
@@ -96,14 +100,17 @@ function EditorNavLink({
   to,
   label,
   icon: Icon,
+  end,
 }: {
   to: string;
   label: string;
   icon: typeof Home;
+  end?: boolean;
 }) {
   return (
     <NavLink
       to={to}
+      end={end}
       className={({ isActive }) =>
         cn(
           "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1",

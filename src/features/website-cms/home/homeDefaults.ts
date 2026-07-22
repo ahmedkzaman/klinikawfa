@@ -1,5 +1,6 @@
-import clinicExterior from "@/assets/klinik-awfa-exterior.webp";
 import type { HomeContent } from "@/features/website-cms/schemas/home";
+
+const clinicExterior = "/klinik-awfa-exterior.webp";
 
 export const DEFAULT_HOME_CONTENT: HomeContent = {
   hero: {

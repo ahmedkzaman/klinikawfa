@@ -110,6 +110,15 @@ import { HomeEditor } from "./pages/editor/HomeEditor";
 import { PageEditor } from "./pages/editor/PageEditor";
 import { Pages } from "./pages/editor/Pages";
 import { AnalyticsSettings } from "./pages/editor/AnalyticsSettings";
+import EditorDashboard from "./pages/editor/Dashboard";
+import { EditorProfile } from "./pages/editor/EditorProfile";
+import { ServicesEditorList } from "./pages/editor/Services";
+import { ServiceEditor } from "./pages/editor/ServiceEditor";
+import { TeamEditorList, TeamWebsiteEditor } from "./pages/editor/Team";
+import { BlogEditorList, BlogWebsiteEditor } from "./pages/editor/Blog";
+import { GalleryEditorList, GalleryWebsiteEditor } from "./pages/editor/Gallery";
+import { ReviewsEditorList, ReviewWebsiteEditor } from "./pages/editor/Reviews";
+import { NavigationEditor } from "./pages/editor/Navigation";
 import GeneralPage from "./pages/GeneralPage";
 import { GoogleAnalyticsController } from "./features/analytics/GoogleAnalyticsController";
 
@@ -121,17 +130,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
-function EditorUnavailableState() {
-  return (
-    <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm" aria-labelledby="editor-unavailable-title">
-      <h1 id="editor-unavailable-title" className="text-xl font-semibold text-slate-900">Coming in the next CMS plan</h1>
-      <p className="mt-2 text-sm leading-6 text-slate-600">
-        This section is being prepared for the next phase of the website editor.
-      </p>
-    </section>
-  );
-}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -168,16 +166,22 @@ const App = () => (
                   </EditorProtectedRoute>
                 }
               >
-                <Route index element={<Navigate to="home" replace />} />
+                <Route index element={<EditorDashboard />} />
                 <Route path="home" element={<HomeEditor />} />
                 <Route path="pages" element={<Pages />} />
                 <Route path="pages/:id" element={<PageEditor />} />
-                <Route path="services" element={<EditorUnavailableState />} />
-                <Route path="team" element={<EditorUnavailableState />} />
-                <Route path="blog" element={<EditorUnavailableState />} />
-                <Route path="gallery" element={<EditorUnavailableState />} />
-                <Route path="reviews" element={<EditorUnavailableState />} />
-                <Route path="navigation" element={<EditorUnavailableState />} />
+                <Route path="services" element={<ServicesEditorList />} />
+                <Route path="services/:id" element={<ServiceEditor />} />
+                <Route path="team" element={<TeamEditorList />} />
+                <Route path="team/:id" element={<TeamWebsiteEditor />} />
+                <Route path="blog" element={<BlogEditorList />} />
+                <Route path="blog/:id" element={<BlogWebsiteEditor />} />
+                <Route path="gallery" element={<GalleryEditorList />} />
+                <Route path="gallery/:id" element={<GalleryWebsiteEditor />} />
+                <Route path="reviews" element={<ReviewsEditorList />} />
+                <Route path="reviews/:id" element={<ReviewWebsiteEditor />} />
+                <Route path="navigation" element={<NavigationEditor />} />
+                <Route path="profile" element={<EditorProfile />} />
                 <Route
                   path="analytics"
                   element={
