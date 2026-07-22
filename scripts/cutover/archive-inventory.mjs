@@ -25,7 +25,11 @@ const comparePath = (value) => resolve(value).replace(/[\\/]+$/, "").toLocaleLow
 const isWithin = (child, parent) => {
   const normalizedChild = comparePath(child);
   const normalizedParent = comparePath(parent);
-  return normalizedChild === normalizedParent || normalizedChild.startsWith(`${normalizedParent}\\`);
+  return (
+    normalizedChild === normalizedParent ||
+    normalizedChild.startsWith(`${normalizedParent}\\`) ||
+    normalizedChild.startsWith(`${normalizedParent}/`)
+  );
 };
 
 const assertNotReparsePoint = async (path, label) => {
