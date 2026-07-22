@@ -4,10 +4,10 @@
 
 - Production traffic cutover: **NO-GO**.
 - Frontend, DNS, GitHub environment, and public Supabase configuration changes: **NOT AUTHORIZED**.
-- Isolated target staging build: **conditionally ready only through the guarded runner**, and only while a newly generated `Verify` artifact is still fresh.
+- Isolated target staging build: **NO-GO after an aborted dry-run attempt; do not retry**.
 - Persistent target phases executed in this task: **none**. `Push`, `PostMigration`, `Import`, and `Rollback` were not run.
 
-The public website remains on Lovable Cloud project `ncysmppzfjtiekfnomdv`. The unused target project `nhjbqdiyptjqherdfbqk` remains at its approved pre-write baseline. The staging-isolation artifact is deliberately short-lived and cannot be treated as durable authorization.
+The public website remains on Lovable Cloud project `ncysmppzfjtiekfnomdv`. The unused target project `nhjbqdiyptjqherdfbqk` remains at its approved pre-write baseline. The post-attempt staging-isolation artifact is diagnostic only and does not authorize a retry.
 
 ## Live and target isolation
 
@@ -15,9 +15,9 @@ The final `Verify` phase uses GET-only HTTPS requests with redirects disabled, r
 
 Final evidence values will be inserted after the last full-suite run and final `Verify`:
 
-- isolation evidence file SHA-256: `128FAD5CEE5C250BAB4750AF570864B67C6DBF4D04A5580D597F11C88D17BDEB`
-- isolation evidence payload SHA-256: `C89E4E5BEDAEC5BF2E470BA1BCC6352925B596F376FD27DC6ADD18ABC063AD0D`
-- observed / expires UTC: `2026-07-22T01:54:21.0487841Z` / `2026-07-22T02:09:21.0487841Z`
+- isolation evidence file SHA-256: `FA72532FBF8114162CB64E1839A624956668F2C6892A6FB11346531B63FDAA3E`
+- isolation evidence payload SHA-256: `8C987513D4518D8F88AE4689AE595CFC11CCCB589279F3979B592274F0119AA4`
+- observed / expires UTC: `2026-07-22T02:04:43.0890797Z` / `2026-07-22T02:19:43.0890797Z`
 - normalized isolation runner SHA-256: `813042B3776C9A25C8AB5ABC246FE7BB156098E85DD753AEFD4D2FD2D09E9578`
 - live frontend snapshot SHA-256: `3FF05590B59D312CE9B71782761CA1A216A02C2CFBB0E586AFBDC90FCFA12DE7`
 - live source / target reference occurrences: 16 / 0 across two JavaScript assets
@@ -50,6 +50,19 @@ The final-byte disposable PostgreSQL rehearsal passed locally:
 - imported sequence checks: `client_invoice_seq` 2/called, `patient_reg_no_seq` 117/called, `queue_number_seq` 1148/called
 
 The local PostgreSQL distribution required a temporary local-only `pg_jsonschema` compatibility shim to exercise the disposable schema path. It was not production evidence, never touched the managed target, and was deleted after the rehearsal. Managed-target extension capability remains covered by the separately pinned protected validation evidence.
+
+## Aborted Push attempt
+
+One explicitly authorized `-Phase Push` invocation began at `2026-07-22T02:00:54Z` and stopped during the pinned CLI **dry run** because the protected log file was locked. The runner never reached quarantine creation or `Invoke-Task4PinnedCliPush`.
+
+- protected attempt log: `database-reconcile-push-20260722-100053.log`
+- log bytes / SHA-256: 544306 / `4AAE953E47285099FF882C1BF32D8E04658AC5518E40AE41461E4C68E3E6F536`
+- last structured log event: `Starting Task 4 exact migration push dry run.`
+- dry-run transcript / quarantine / Push transcript / Push evidence: absent / absent / absent / absent
+- post-attempt exact Task 4 migration rows: 0 of 8
+- post-attempt `pg_jsonschema` installed rows / version: 0 / null
+
+The post-attempt read-only `Verify` reproduced the exact 93 / 0 / 0 / 153 baseline, original migration-history, schema and extended-schema hashes, unchanged Storage, and the three pre-write sequence states. Therefore no target migration was applied. The attempt is nevertheless non-retriable under the fail-closed operator boundary until the protected-log concurrency failure is separately reviewed and a new authorization package is produced.
 
 ## Exact migration transition
 
@@ -108,13 +121,13 @@ If `Push`, `Import`, or any post-write gate fails, quarantine the target, do not
 - independent isolation review: SPEC PASS / QUALITY APPROVED, no Critical or Important findings;
 - focused Task 4 Vitest: 2 / 2 files and 35 / 35 tests passed in 153.34 seconds;
 - full Vitest: 39 / 39 files and 483 / 483 tests passed in 441.72 seconds;
-- final live read-only `Verify`: passed in 86.5 seconds and produced the exact short-lived evidence above.
+- post-attempt live read-only `Verify`: passed in 82.6 seconds and produced the exact diagnostic evidence above.
 
 ## Operator boundary
 
 1. Treat production cutover as NO-GO. Do not change frontend, DNS, GitHub environment, or public Supabase values.
-2. If a separately reviewed operator chooses to build the isolated target staging database, rerun `-Phase Verify` immediately before `Push` and require unexpired exact isolation evidence.
-3. Run `Push` at most once. If it succeeds, independently review and pin the Push evidence and producer runner before `PostMigration` or `Import`.
-4. Run `PostMigration` only against the exact pinned post-Push state. Run `Import` only after all independent pins and transition evidence pass.
-5. On any failure or interruption, retain quarantine and stop. Do not retry and do not invoke rollback.
+2. Do not retry `Push`. Preserve the protected attempt log and post-attempt evidence for review.
+3. Resolve and independently review the protected-log concurrency failure before producing any new authorization package.
+4. `PostMigration` and `Import` remain prohibited because no Push evidence exists and none of the eight migrations is present.
+5. Do not invoke rollback: no persistent target change occurred and rollback remains unavailable.
 6. Frontend cutover stays blocked until the isolated target passes every database, Auth, Storage-byte, Edge Function, RLS, advisor, application, CI, and quarantine-absence gate under a separate authorization.
