@@ -69,6 +69,12 @@ function Set-Utf8File {
 
 foreach($name in @(
   'Get-NormalizedPath',
+  'Get-Task4ExecutionMutexName',
+  'Enter-Task4ExecutionLock',
+  'Exit-Task4ExecutionLock',
+  'Initialize-Task4Log',
+  'Close-Task4Log',
+  'Write-Log',
   'Assert-NotReparsePoint',
   'Assert-NoReparsePointInPath',
   'Get-StringSha256',
@@ -492,6 +498,137 @@ function Assert-InOrder {
   }
 }
 
+# Persistent phases must own one execution mutex and one protected log writer
+# before any artifact, tool, environment, or target action can occur.
+$entryTry=@($ast.EndBlock.Statements|Where-Object{$_ -is [Management.Automation.Language.TryStatementAst] -and $_.Extent.Text -match '(?i)Enter-Task4ExecutionLock'})|Select-Object -Last 1
+if($null -eq $entryTry){throw 'Task 4 runner has no outer execution-lock ownership boundary.'}
+Assert-InOrder -Text $entryTry.Extent.Text.ToLowerInvariant() -Label 'Execution lock and owned-log entry chain' -Markers @(
+  'Enter-Task4ExecutionLock',
+  'Assert-ExactProtectedPath',
+  'New-Item',
+  'Initialize-Task4Log',
+  'Assert-NoTask4Quarantine',
+  'Assert-RequiredTools',
+  'Import-ProtectedEnvironment',
+  'Assert-TargetProjectRef'
+)
+$entryFinally=$entryTry.Finally
+if($null -eq $entryFinally -or -not $entryFinally.Extent.Text.Contains('Close-Task4Log') -or -not $entryFinally.Extent.Text.Contains('Exit-Task4ExecutionLock')){throw 'Task 4 outer execution boundary does not dispose both the log writer and mutex in finally.'}
+
+$mutexBlock=Get-RunnerFunctionText -Name 'Get-Task4ExecutionMutexName'
+foreach($identityMarker in @('Get-NormalizedPath','RepositoryRoot','TargetRef','Phase','Get-StringSha256')){
+  if(-not $mutexBlock.Contains($identityMarker.ToLowerInvariant())){throw "Task 4 mutex name is not derived from normalized repo, target, and phase: $identityMarker"}
+}
+$mutexRoot=Join-Path ([IO.Path]::GetTempPath()) ('task4-mutex-identity-'+[Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $mutexRoot | Out-Null
+try{
+  $mutexName=Get-Task4ExecutionMutexName -RepositoryRoot $mutexRoot -TargetRef $global:ExpectedRef -Phase Push
+  $normalizedMutexName=Get-Task4ExecutionMutexName -RepositoryRoot (Join-Path $mutexRoot '.') -TargetRef $global:ExpectedRef -Phase Push
+  if($mutexName -cne $normalizedMutexName -or $mutexName -cnotmatch '^KlinikaWafa\.Task4\.[A-F0-9]{64}$'){throw 'Task 4 mutex identity is not canonical.'}
+  if((Get-Task4ExecutionMutexName -RepositoryRoot $mutexRoot -TargetRef ('x'+$global:ExpectedRef) -Phase Push) -ceq $mutexName){throw 'Task 4 mutex identity ignores the target ref.'}
+  if((Get-Task4ExecutionMutexName -RepositoryRoot $mutexRoot -TargetRef $global:ExpectedRef -Phase Import) -ceq $mutexName){throw 'Task 4 mutex identity ignores the phase.'}
+}finally{if(Test-Path -LiteralPath $mutexRoot){Remove-Item -LiteralPath $mutexRoot -Recurse -Force}}
+
+$logBlock=Get-RunnerFunctionText -Name 'Initialize-Task4Log'
+foreach($logMarker in @('[IO.FileMode]::CreateNew','[IO.FileAccess]::Write','[IO.FileShare]::Read','[IO.StreamWriter]','AutoFlush','$PID','[Guid]::NewGuid')){
+  if(-not $logBlock.Contains($logMarker.ToLowerInvariant())){throw "Protected log owner contract is missing: $logMarker"}
+}
+if($runner -match '(?im)^\s*Add-Content\s+.*\$script:LogPath'){throw 'Protected log still reopens its path through Add-Content.'}
+
+$logRoot=Join-Path ([IO.Path]::GetTempPath()) ('task4-owned-log-'+[Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $logRoot | Out-Null
+try{
+  $fixedNow=[DateTimeOffset]::Parse('2026-07-22T02:01:17Z')
+  $firstLog=[string](Initialize-Task4Log -ArtifactRoot $logRoot -Phase Push -NowUtc $fixedNow)
+  Write-Log 'first same-second writer'
+  Close-Task4Log
+  $secondLog=[string](Initialize-Task4Log -ArtifactRoot $logRoot -Phase Push -NowUtc $fixedNow)
+  if($firstLog -ceq $secondLog){throw 'Same-second protected log identities collided.'}
+  foreach($path in @($firstLog,$secondLog)){
+    if([IO.Path]::GetFileName($path) -cnotmatch ('^database-reconcile-push-20260722-020117-'+$PID+'-[a-f0-9]{32}\.log$')){throw "Protected log name is not timestamp/PID/GUID bound: $path"}
+  }
+  Write-Log 'before concurrent reader'
+  $reader=[IO.FileStream]::new($secondLog,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite)
+  try{Write-Log 'after concurrent reader'}finally{$reader.Dispose()}
+  Close-Task4Log
+  $logged=[IO.File]::ReadAllText($secondLog)
+  if($logged -notmatch 'before concurrent reader' -or $logged -notmatch 'after concurrent reader'){throw 'A concurrent protected-log reader interrupted the owned writer.'}
+  $exclusive=[IO.FileStream]::new($secondLog,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+  $exclusive.Dispose()
+}finally{
+  try{Close-Task4Log}catch{}
+  if(Test-Path -LiteralPath $logRoot){Remove-Item -LiteralPath $logRoot -Recurse -Force}
+}
+
+# A simulated phase failure must release both resources for a different process.
+$failureRoot=Join-Path ([IO.Path]::GetTempPath()) ('task4-owned-failure-'+[Guid]::NewGuid().ToString('N'))
+$failureRepo=Join-Path $failureRoot 'repo'
+$failureLogs=Join-Path $failureRoot 'logs'
+New-Item -ItemType Directory -Path $failureRepo,$failureLogs | Out-Null
+$failureLog=$null
+$failureObserved=$false
+$failureMutexName=Get-Task4ExecutionMutexName -RepositoryRoot $failureRepo -TargetRef $global:ExpectedRef -Phase Push
+$failureMutexObserver=[Threading.Mutex]::new($false,$failureMutexName)
+try{
+  try{
+    [void](Enter-Task4ExecutionLock -RepositoryRoot $failureRepo -TargetRef $global:ExpectedRef -Phase Push)
+    $failureLog=[string](Initialize-Task4Log -ArtifactRoot $failureLogs -Phase Push)
+    Write-Log 'before simulated phase failure'
+    throw 'simulated phase failure'
+  }catch{
+    if($_.Exception.Message -cne 'simulated phase failure'){throw}
+    $failureObserved=$true
+  }finally{
+    try{Close-Task4Log}finally{Exit-Task4ExecutionLock}
+  }
+  if(-not $failureObserved){throw 'Simulated phase failure was not observed.'}
+  $exclusive=[IO.FileStream]::new($failureLog,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None);$exclusive.Dispose()
+  $probePath=Join-Path $failureRoot 'probe-mutex.ps1'
+  Set-Utf8File -Path $probePath -Text @'
+param([Parameter(Mandatory)][string]$Name)
+$mutex=[Threading.Mutex]::new($false,$Name)
+try{
+  $owned=$false
+  try{$owned=$mutex.WaitOne(0)}catch [Threading.AbandonedMutexException]{exit 10}
+  if(-not $owned){exit 9}
+  $mutex.ReleaseMutex()
+}finally{$mutex.Dispose()}
+'@
+  & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $probePath -Name $failureMutexName
+  if($LASTEXITCODE -ne 0){throw 'Execution mutex remained owned after a simulated phase failure.'}
+}finally{
+  try{Close-Task4Log}catch{}
+  try{Exit-Task4ExecutionLock}catch{}
+  $failureMutexObserver.Dispose()
+  if(Test-Path -LiteralPath $failureRoot){Remove-Item -LiteralPath $failureRoot -Recurse -Force}
+}
+
+# A concurrent real runner copy must reject before creating its artifact root.
+$concurrencyRoot=Join-Path ([IO.Path]::GetTempPath()) ('task4-concurrent-runner-'+[Guid]::NewGuid().ToString('N'))
+$concurrencyRepo=Join-Path $concurrencyRoot 'repo'
+$concurrencyCutover=Join-Path $concurrencyRepo 'scripts\cutover'
+$concurrencyRunner=Join-Path $concurrencyCutover 'database-reconcile.ps1'
+$concurrencyEnv=Join-Path $concurrencyRoot 'protected.env'
+$concurrencyArtifacts=Join-Path $concurrencyRoot 'protected-artifacts'
+New-Item -ItemType Directory -Path $concurrencyCutover | Out-Null
+$copiedRunner=[regex]::Replace($runner,"(?m)^\`$ExpectedEnv\s*=\s*'[^'\r\n]*'\s*$",("`$ExpectedEnv = '"+$concurrencyEnv.Replace("'","''")+"'"))
+$copiedRunner=[regex]::Replace($copiedRunner,"(?m)^\`$ExpectedArtifactRoot\s*=\s*'[^'\r\n]*'\s*$",("`$ExpectedArtifactRoot = '"+$concurrencyArtifacts.Replace("'","''")+"'"))
+Set-Utf8File -Path $concurrencyRunner -Text $copiedRunner
+try{
+  [void](Enter-Task4ExecutionLock -RepositoryRoot $concurrencyRepo -TargetRef $global:ExpectedRef -Phase Push)
+  $priorErrorActionPreference=$ErrorActionPreference
+  try{
+    $ErrorActionPreference='Continue'
+    $concurrentOutput=@(& powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $concurrencyRunner -Phase Push -ProtectedEnv $concurrencyEnv -ArtifactRoot $concurrencyArtifacts 2>&1)
+    $concurrentExitCode=$LASTEXITCODE
+  }finally{$ErrorActionPreference=$priorErrorActionPreference}
+  if($concurrentExitCode -eq 0){throw 'Concurrent same-target/phase runner was accepted.'}
+  if((@($concurrentOutput|ForEach-Object{[string]$_}) -join "`n") -notmatch 'Another Task 4 Push execution is already active'){throw 'Concurrent runner did not fail at the exact mutex gate.'}
+  if(Test-Path -LiteralPath $concurrencyArtifacts){throw 'Concurrent runner mutated protected artifacts before mutex refusal.'}
+}finally{
+  try{Exit-Task4ExecutionLock}finally{if(Test-Path -LiteralPath $concurrencyRoot){Remove-Item -LiteralPath $concurrencyRoot -Recurse -Force}}
+}
+
 $verifyBlock=Get-RunnerFunctionText -Name 'Invoke-VerifyPhase'
 Assert-InOrder -Text $verifyBlock -Label 'Verify isolation evidence chain' -Markers @(
   'Assert-Task4StagingIsolationEvidence',
@@ -556,7 +693,7 @@ Assert-EqualJson -Expected @('Inventory','Backup','Rehearse','Push','PostMigrati
 $rehearsalBindingBlock=Get-RunnerFunctionText -Name 'Get-CurrentRehearsalBinding'
 if(-not $rehearsalBindingBlock.Contains('runnersha256 = get-task4isolationcontractrunnersha256') -or $rehearsalBindingBlock.Contains('get-filehash -literalpath $pscommandpath')){throw 'Current rehearsal binding is not normalized across only the two reviewed Push pin edits.'}
 
-$topLevelIfs=@($ast.EndBlock.Statements|Where-Object{$_ -is [Management.Automation.Language.IfStatementAst]})
+$topLevelIfs=@($entryTry.Body.Statements|Where-Object{$_ -is [Management.Automation.Language.IfStatementAst]})
 $quarantineGate=$topLevelIfs|Where-Object{$_.Extent.Text -match "(?i)^if\s*\(\`$Phase\s+-in\s+@\('Backup','Rehearse','Verify','Push','PostMigration','Import'\)\)"}|Select-Object -First 1
 $firstInvalidation=$topLevelIfs|Where-Object{$_.Extent.Text -match "(?i)^if\s*\(\`$Phase\s+-eq\s+'Backup'\)"}|Select-Object -First 1
 if($null -eq $quarantineGate -or $null -eq $firstInvalidation -or $quarantineGate.Extent.StartOffset -ge $firstInvalidation.Extent.StartOffset){throw 'Top-level quarantine gate does not run before every evidence invalidation.'}

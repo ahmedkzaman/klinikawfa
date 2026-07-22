@@ -149,19 +149,20 @@ function Assert-NoReparsePointInPath {
   }
 }
 
-Assert-ExactProtectedPath -Actual $ProtectedEnv -Expected $ExpectedEnv -Label 'environment'
-Assert-ExactProtectedPath -Actual $ArtifactRoot -Expected $ExpectedArtifactRoot -Label 'artifact root'
-Assert-NoReparsePointInPath -Path $ArtifactRoot -Label 'protected artifact root'
-New-Item -ItemType Directory -Path $ArtifactRoot -Force | Out-Null
-Assert-NoReparsePointInPath -Path $ArtifactRoot -Label 'protected artifact root'
-
-$script:LogPath = Join-Path $ArtifactRoot ('database-reconcile-{0}-{1}.log' -f $Phase.ToLowerInvariant(), (Get-Date -Format 'yyyyMMdd-HHmmss'))
+$script:LogPath = $null
+$script:LogStream = $null
+$script:LogWriter = $null
+$script:ExecutionMutex = $null
+$script:ExecutionMutexOwned = $false
+$script:ExecutionMutexName = $null
 $script:LocalPort = $null
 $script:Target = $null
 
 function Write-Log {
-  param([Parameter(Mandatory)][string]$Message)
-  Add-Content -LiteralPath $script:LogPath -Value ('{0:o} {1}' -f [DateTime]::UtcNow, $Message) -Encoding UTF8
+  param([Parameter(Mandatory)][string]$Message, [switch]$Raw)
+  if ($null -eq $script:LogWriter) { throw 'Task 4 protected log writer is not initialized.' }
+  $line = if ($Raw) { $Message } else { '{0:o} {1}' -f [DateTime]::UtcNow, $Message }
+  $script:LogWriter.WriteLine([string]$line)
 }
 
 function Write-Summary {
@@ -183,6 +184,93 @@ function Get-StringSha256 {
     return ([BitConverter]::ToString($algorithm.ComputeHash($bytes))).Replace('-', '').ToUpperInvariant()
   } finally {
     $algorithm.Dispose()
+  }
+}
+
+function Get-Task4ExecutionMutexName {
+  param(
+    [Parameter(Mandatory)][string]$RepositoryRoot,
+    [Parameter(Mandatory)][string]$TargetRef,
+    [Parameter(Mandatory)][string]$Phase
+  )
+  $identity = '{0}|{1}|{2}' -f (Get-NormalizedPath $RepositoryRoot).ToLowerInvariant(), $TargetRef.ToLowerInvariant(), $Phase.ToLowerInvariant()
+  return 'KlinikaWafa.Task4.{0}' -f (Get-StringSha256 -Value $identity)
+}
+
+function Enter-Task4ExecutionLock {
+  param(
+    [Parameter(Mandatory)][string]$RepositoryRoot,
+    [Parameter(Mandatory)][string]$TargetRef,
+    [Parameter(Mandatory)][string]$Phase
+  )
+  if ($null -ne $script:ExecutionMutex -or $script:ExecutionMutexOwned) { throw 'Task 4 execution mutex is already initialized in this process.' }
+  $name = Get-Task4ExecutionMutexName -RepositoryRoot $RepositoryRoot -TargetRef $TargetRef -Phase $Phase
+  $mutex = [Threading.Mutex]::new($false,$name)
+  $owned = $false
+  try {
+    try { $owned = $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $owned = $true }
+    if (-not $owned) { throw "Another Task 4 $Phase execution is already active for the same repository and target." }
+    $script:ExecutionMutex = $mutex
+    $script:ExecutionMutexOwned = $true
+    $script:ExecutionMutexName = $name
+    return $name
+  } catch {
+    if ($owned) { try { $mutex.ReleaseMutex() } catch {} }
+    $mutex.Dispose()
+    throw
+  }
+}
+
+function Exit-Task4ExecutionLock {
+  $mutex = $script:ExecutionMutex
+  $owned = $script:ExecutionMutexOwned
+  $script:ExecutionMutex = $null
+  $script:ExecutionMutexOwned = $false
+  $script:ExecutionMutexName = $null
+  if ($null -eq $mutex) { return }
+  try {
+    if ($owned) { $mutex.ReleaseMutex() }
+  } finally {
+    $mutex.Dispose()
+  }
+}
+
+function Initialize-Task4Log {
+  param(
+    [Parameter(Mandatory)][string]$ArtifactRoot,
+    [Parameter(Mandatory)][string]$Phase,
+    [DateTimeOffset]$NowUtc = [DateTimeOffset]::UtcNow
+  )
+  if ($null -ne $script:LogWriter -or $null -ne $script:LogStream) { throw 'Task 4 protected log writer is already initialized.' }
+  $timestamp = $NowUtc.UtcDateTime.ToString('yyyyMMdd-HHmmss',[Globalization.CultureInfo]::InvariantCulture)
+  $fileName = 'database-reconcile-{0}-{1}-{2}-{3}.log' -f $Phase.ToLowerInvariant(), $timestamp, $PID, [Guid]::NewGuid().ToString('N')
+  $path = Join-Path $ArtifactRoot $fileName
+  $stream = $null
+  $writer = $null
+  try {
+    $stream = [IO.FileStream]::new((Get-NormalizedPath $path),[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
+    $writer = [IO.StreamWriter]::new($stream,[Text.UTF8Encoding]::new($false),4096,$false)
+    $writer.AutoFlush = $true
+    $script:LogPath = $path
+    $script:LogStream = $stream
+    $script:LogWriter = $writer
+    return $path
+  } catch {
+    if ($null -ne $writer) { $writer.Dispose() }
+    if ($null -ne $stream) { $stream.Dispose() }
+    throw
+  }
+}
+
+function Close-Task4Log {
+  $writer = $script:LogWriter
+  $stream = $script:LogStream
+  $script:LogWriter = $null
+  $script:LogStream = $null
+  try {
+    if ($null -ne $writer) { $writer.Dispose() }
+  } finally {
+    if ($null -ne $stream) { $stream.Dispose() }
   }
 }
 
@@ -1274,7 +1362,7 @@ function Invoke-External {
   } finally {
     $ErrorActionPreference = $priorErrorActionPreference
   }
-  if (-not $NoOutputLog -and $captured.Count -gt 0) { $captured | ForEach-Object { Add-Content -LiteralPath $script:LogPath -Value ([string]$_) -Encoding UTF8 } }
+  if (-not $NoOutputLog -and $captured.Count -gt 0) { $captured | ForEach-Object { Write-Log -Message ([string]$_) -Raw } }
   if ($exitCode -ne 0) {
     if ($NoOutputLog) { throw "$Label failed with exit code $exitCode." }
     throw "$Label failed with exit code $exitCode. See the protected log."
@@ -4002,18 +4090,27 @@ function Invoke-RollbackPhase {
   throw 'Task 4 Rollback remains unavailable until a separately reviewed execution implementation is added.'
 }
 
-if ($Phase -in @('Backup','Rehearse','Verify','Push','PostMigration','Import')) { Assert-NoTask4Quarantine }
-if ($Phase -eq 'Backup') { Invalidate-BackupEvidence }
-if ($Phase -eq 'Rehearse') { Invalidate-RehearsalEvidence }
-if ($Phase -eq 'PostMigration') { Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot '.task4-postmigration-preflight-attempt') }
-if ($Phase -eq 'Verify' -and (Test-Path -LiteralPath (Join-Path $ArtifactRoot $Task4MigrationPushEvidenceName))) { throw 'Verify cannot replace isolation evidence after completed migration Push evidence exists.' }
-if ($Phase -eq 'Push' -and (Test-Path -LiteralPath (Join-Path $ArtifactRoot $Task4MigrationPushEvidenceName))) { throw 'Completed migration Push evidence already exists; refusing a repeated persistent phase.' }
-if ($Phase -eq 'PostMigration' -and (Test-Path -LiteralPath (Join-Path $ArtifactRoot $ImportReportName))) { throw 'Completed Import evidence already exists; refusing to replace its transition dependency.' }
-if ($Phase -eq 'Import' -and (Test-Path -LiteralPath (Join-Path $ArtifactRoot $ImportReportName))) { throw 'Completed Import evidence already exists; refusing a repeated persistent phase.' }
-if (-not (Test-Path -LiteralPath $ProtectedEnv -PathType Leaf)) { throw 'Protected environment file is missing.' }
-Assert-NotReparsePoint -Path $ProtectedEnv -Label 'protected environment file'
-
+$task4ExitCode = 0
 try {
+  [void](Enter-Task4ExecutionLock -RepositoryRoot $RepositoryRoot -TargetRef $ExpectedRef -Phase $Phase)
+  Assert-ExactProtectedPath -Actual $ProtectedEnv -Expected $ExpectedEnv -Label 'environment'
+  Assert-ExactProtectedPath -Actual $ArtifactRoot -Expected $ExpectedArtifactRoot -Label 'artifact root'
+  Assert-NoReparsePointInPath -Path $ArtifactRoot -Label 'protected artifact root'
+  New-Item -ItemType Directory -Path $ArtifactRoot -Force | Out-Null
+  Assert-NoReparsePointInPath -Path $ArtifactRoot -Label 'protected artifact root'
+  [void](Initialize-Task4Log -ArtifactRoot $ArtifactRoot -Phase $Phase)
+
+  if ($Phase -in @('Backup','Rehearse','Verify','Push','PostMigration','Import')) { Assert-NoTask4Quarantine }
+  if ($Phase -eq 'Backup') { Invalidate-BackupEvidence }
+  if ($Phase -eq 'Rehearse') { Invalidate-RehearsalEvidence }
+  if ($Phase -eq 'PostMigration') { Invalidate-EvidenceFile -Path (Join-Path $ArtifactRoot '.task4-postmigration-preflight-attempt') }
+  if ($Phase -eq 'Verify' -and (Test-Path -LiteralPath (Join-Path $ArtifactRoot $Task4MigrationPushEvidenceName))) { throw 'Verify cannot replace isolation evidence after completed migration Push evidence exists.' }
+  if ($Phase -eq 'Push' -and (Test-Path -LiteralPath (Join-Path $ArtifactRoot $Task4MigrationPushEvidenceName))) { throw 'Completed migration Push evidence already exists; refusing a repeated persistent phase.' }
+  if ($Phase -eq 'PostMigration' -and (Test-Path -LiteralPath (Join-Path $ArtifactRoot $ImportReportName))) { throw 'Completed Import evidence already exists; refusing to replace its transition dependency.' }
+  if ($Phase -eq 'Import' -and (Test-Path -LiteralPath (Join-Path $ArtifactRoot $ImportReportName))) { throw 'Completed Import evidence already exists; refusing a repeated persistent phase.' }
+  if (-not (Test-Path -LiteralPath $ProtectedEnv -PathType Leaf)) { throw 'Protected environment file is missing.' }
+  Assert-NotReparsePoint -Path $ProtectedEnv -Label 'protected environment file'
+
   Assert-RequiredTools
   $environment = Import-ProtectedEnvironment -Path $ProtectedEnv
   $targetUri = Assert-TargetProjectRef -Environment $environment
@@ -4031,7 +4128,11 @@ try {
     'Rollback' { Invoke-RollbackPhase }
   }
 } catch {
-  Write-Log ('FAILED: ' + $_.Exception.Message)
-  Write-Error $_.Exception.Message
-  exit 1
+  $failureMessage = $_.Exception.Message
+  if ($null -ne $script:LogWriter) { try { Write-Log ('FAILED: ' + $failureMessage) } catch {} }
+  Write-Error -Message $failureMessage -ErrorAction Continue
+  $task4ExitCode = 1
+} finally {
+  try { Close-Task4Log } finally { Exit-Task4ExecutionLock }
 }
+if ($task4ExitCode -ne 0) { exit $task4ExitCode }
