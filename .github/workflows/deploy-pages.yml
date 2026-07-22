@@ -84,8 +84,60 @@ jobs:
       - name: Prepare and validate Pages artifact
         run: |
           cp dist/index.html dist/404.html
+          routes=(
+            services
+            services/rawatan-umum
+            services/sakit-tekak-selsema-demam
+            services/ujian-pantas
+            services/nebulizer
+            services/sedutan-kahak
+            services/pencucian-hidung
+            services/penjagaan-telinga
+            services/khatan
+            services/ketumbuhan-ketuat
+            services/ujian-darah-penuh
+            services/ujian-denggi
+            services/pemeriksaan-kesihatan
+            services/pemeriksaan-darah
+            services/pemeriksaan-pelajar
+            services/pemeriksaan-pra-pekerjaan
+            services/pemeriksaan-kembali-bekerja
+            services/pemeriksaan-haji-2026
+            services/prosedur-kecil
+            doctors
+            doctor-on-duty
+            appointment
+            gallery
+            health-tips
+            pages
+            auth
+            locum-register
+            reset-password
+            video-call
+            video-call/staff
+            tv
+            editor
+            editor/home
+            editor/pages
+            editor/services
+            editor/team
+            editor/blog
+            editor/gallery
+            editor/reviews
+            editor/navigation
+            editor/analytics
+            staff
+            clinic
+            admin
+          )
+          for route in "${routes[@]}"; do
+            mkdir -p "dist/${route}"
+            cp dist/index.html "dist/${route}/index.html"
+          done
           test -f dist/index.html
           test -f dist/404.html
+          test -f dist/services/index.html
+          test -f dist/editor/index.html
           test -f dist/CNAME
           test "$(cat dist/CNAME)" = "klinikawfa.com"
           test -n "$(find dist/assets -type f -name 'klinik-awfa-exterior-*.webp' -print -quit)"
