@@ -7,7 +7,7 @@
 # 3. Runs TypeScript before touching the database.
 # 4. Verifies every UID/email mapping and the Website Editor's exact sole role.
 # 5. Seeds fixtures, then installs fail-closed cleanup traps.
-# 6. Runs all three Bun test files.
+# 6. Runs the guarded Bun RLS test files.
 # 7. Returns test failure first, otherwise the real cleanup exit status.
 # =============================================================================
 set -euo pipefail
@@ -207,6 +207,7 @@ TEST_STATUS=0
 ( cd "$ROOT_DIR" && bun test \
     phase-d/rls-matrix.fixture.test.ts \
     phase-d/website-cms.fixture.test.ts \
+    phase-d/website-editor-wordpress-matrix.test.ts \
     phase-d/rls.test.ts ) || TEST_STATUS=$?
 
 # --- 8. Final exit ---------------------------------------------------------

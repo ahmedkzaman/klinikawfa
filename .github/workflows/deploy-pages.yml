@@ -119,6 +119,9 @@ jobs:
             editor
             editor/home
             editor/pages
+            editor/posts
+            editor/posts/new
+            editor/media
             editor/services
             editor/team
             editor/blog

@@ -116,30 +116,34 @@ export function newResourceId(): string {
 
 export interface WebsiteResourceSummary {
   id: string;
+  revision: number;
+  scheduledAt: string | null;
+  slug: string;
   status: string;
   subtitle: string;
   title: string;
+  updatedAt: string;
 }
 
 export async function listResourceSummaries(type: Exclude<WebsiteResourceType, "service">): Promise<WebsiteResourceSummary[]> {
   if (type === "team_member") {
-    const { data, error } = await supabase.from("team_members").select("id,name_ms,title_ms,type,is_active,display_order").order("display_order");
+    const { data, error } = await supabase.from("team_members").select("id,name_ms,title_ms,type,is_active,display_order,updated_at").order("display_order");
     if (error || !data) throw new Error("Team profiles could not be loaded");
-    return data.map((row) => ({ id: row.id, title: row.name_ms, subtitle: row.title_ms ?? row.type, status: row.is_active ? "published" : "hidden" }));
+    return data.map((row) => ({ id: row.id, title: row.name_ms, slug: row.id, subtitle: row.title_ms ?? row.type, status: row.is_active ? "published" : "draft", revision: Number((row as { website_revision?: number }).website_revision ?? 0), scheduledAt: null, updatedAt: row.updated_at }));
   }
   if (type === "blog_post") {
-    const { data, error } = await supabase.from("blog_posts").select("id,title_ms,title,slug,published,scheduled_at").order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("blog_posts").select("id,title_ms,title,slug,published,scheduled_at,updated_at").order("created_at", { ascending: false });
     if (error || !data) throw new Error("Blog posts could not be loaded");
-    return data.map((row) => ({ id: row.id, title: row.title_ms ?? row.title, subtitle: row.slug, status: row.published ? "published" : row.scheduled_at ? "scheduled" : "draft" }));
+    return data.map((row) => ({ id: row.id, title: row.title_ms ?? row.title, slug: row.slug, subtitle: row.slug, status: row.published ? "published" : row.scheduled_at ? "scheduled" : "draft", revision: Number((row as { website_revision?: number }).website_revision ?? 0), scheduledAt: row.scheduled_at, updatedAt: row.updated_at }));
   }
   if (type === "gallery_image") {
-    const { data, error } = await supabase.from("gallery_images").select("id,alt_text,url,display_order").order("display_order");
+    const { data, error } = await supabase.from("gallery_images").select("id,alt_text,url,display_order,created_at").order("display_order");
     if (error || !data) throw new Error("Gallery could not be loaded");
-    return data.map((row) => ({ id: row.id, title: row.alt_text ?? "Gallery item", subtitle: row.url, status: (row as { is_visible?: boolean }).is_visible === false ? "hidden" : "published" }));
+    return data.map((row) => ({ id: row.id, title: row.alt_text ?? "Gallery item", slug: row.id, subtitle: row.url, status: (row as { is_visible?: boolean }).is_visible === false ? "draft" : "published", revision: Number((row as { website_revision?: number }).website_revision ?? 0), scheduledAt: null, updatedAt: row.created_at }));
   }
   const { data, error } = await supabase.from("website_review_presentations").select("id,name_ms,review_text_ms,status,display_order").order("display_order");
   if (error || !data) throw new Error("Reviews could not be loaded");
-  return data.map((row) => ({ id: row.id, title: row.name_ms, subtitle: row.review_text_ms, status: row.status }));
+  return data.map((row) => ({ id: row.id, title: row.name_ms, slug: row.id, subtitle: row.review_text_ms, status: row.status === "published" ? "published" : "draft", revision: row.website_revision, scheduledAt: null, updatedAt: row.updated_at }));
 }
 
 export async function fetchResourceForEditor(type: Exclude<WebsiteResourceType, "service">, resourceId: string): Promise<{ payload: TeamMemberDraft | BlogPostDraft | GalleryImageDraft | ReviewDraft; revision: number } | null> {
@@ -153,7 +157,8 @@ export async function fetchResourceForEditor(type: Exclude<WebsiteResourceType, 
   if (type === "blog_post") {
     const { data, error } = await supabase.from("blog_posts").select("*").eq("id",resourceId).maybeSingle(); if (error) throw error; if (!data) return null;
     const row = data as typeof data & Record<string, unknown>;
-    return { revision: Number(row.website_revision ?? 0), payload: parseWebsiteResourceDraft(type,{ slug: row.slug, titleMs: row.title_ms ?? row.title, titleEn: row.title_en ?? "", excerptMs: row.excerpt_ms ?? "Ringkasan artikel.", excerptEn: row.excerpt_en ?? "", contentMs: row.content_ms ?? row.content, contentEn: row.content_en ?? "", categoryId: row.category_id, featuredImage: row.featured_image ?? "", readingTime: row.reading_time ?? 1, status: row.published ? "published" : row.scheduled_at ? "scheduled" : "draft", scheduledAt: row.scheduled_at }) as BlogPostDraft };
+    const metadata = (row.website_editor_metadata ?? {}) as Record<string, unknown>;
+    return { revision: Number(row.website_revision ?? 0), payload: parseWebsiteResourceDraft(type,{ slug: row.slug, titleMs: row.title_ms ?? row.title, titleEn: row.title_en ?? "", excerptMs: row.excerpt_ms ?? "Ringkasan artikel.", excerptEn: row.excerpt_en ?? "", contentMs: row.content_ms ?? row.content, contentEn: row.content_en ?? "", categoryId: row.category_id, tagIds: metadata.tagIds ?? [], authorId: metadata.authorId ?? null, featuredImage: row.featured_image ?? "", featuredImageMediaId: metadata.featuredImageMediaId ?? null, readingTime: row.reading_time ?? 1, status: row.published ? "published" : row.scheduled_at ? "scheduled" : "draft", scheduledAt: row.scheduled_at, seoMs: metadata.seoMs, seoEn: metadata.seoEn }) as BlogPostDraft };
   }
   if (type === "gallery_image") {
     const { data, error } = await supabase.from("gallery_images").select("*").eq("id",resourceId).maybeSingle(); if (error) throw error; if (!data) return null;

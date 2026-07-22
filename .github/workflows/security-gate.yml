@@ -55,6 +55,9 @@ jobs:
       - name: Deno tests (edge function auth helpers)
         run: deno test --allow-net --allow-env supabase/functions/tests/ai.test.ts
 
+      - name: Deno tests (scheduled website publishing)
+        run: deno test supabase/functions/publish-scheduled-content/index_test.ts
+
       - name: Dependency audit (public npm registry, fail-closed JSON parse)
         env:
           npm_config_registry: https://registry.npmjs.org/

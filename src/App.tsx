@@ -108,6 +108,7 @@ import { EditorProtectedRoute } from "./components/editor/EditorProtectedRoute";
 import { EditorLayout } from "./components/editor/EditorLayout";
 import { HomeEditor } from "./pages/editor/HomeEditor";
 import { PageEditor } from "./pages/editor/PageEditor";
+import { DraftPreview } from "./pages/editor/DraftPreview";
 import { Pages } from "./pages/editor/Pages";
 import { AnalyticsSettings } from "./pages/editor/AnalyticsSettings";
 import EditorDashboard from "./pages/editor/Dashboard";
@@ -116,7 +117,9 @@ import { ServicesEditorList } from "./pages/editor/Services";
 import { ServiceEditor } from "./pages/editor/ServiceEditor";
 import { TeamEditorList, TeamWebsiteEditor } from "./pages/editor/Team";
 import { BlogEditorList, BlogWebsiteEditor } from "./pages/editor/Blog";
+import { PostsEditorList, PostsWebsiteEditor } from "./pages/editor/Posts";
 import { GalleryEditorList, GalleryWebsiteEditor } from "./pages/editor/Gallery";
+import { MediaLibrary, MediaWorkspace } from "./pages/editor/MediaLibrary";
 import { ReviewsEditorList, ReviewWebsiteEditor } from "./pages/editor/Reviews";
 import { NavigationEditor } from "./pages/editor/Navigation";
 import GeneralPage from "./pages/GeneralPage";
@@ -170,12 +173,17 @@ const App = () => (
                 <Route path="home" element={<HomeEditor />} />
                 <Route path="pages" element={<Pages />} />
                 <Route path="pages/:id" element={<PageEditor />} />
+                <Route path="preview/:resourceType/:id" element={<DraftPreview />} />
                 <Route path="services" element={<ServicesEditorList />} />
                 <Route path="services/:id" element={<ServiceEditor />} />
                 <Route path="team" element={<TeamEditorList />} />
                 <Route path="team/:id" element={<TeamWebsiteEditor />} />
+                <Route path="posts" element={<PostsEditorList />} />
+                <Route path="posts/:id" element={<PostsWebsiteEditor />} />
                 <Route path="blog" element={<BlogEditorList />} />
                 <Route path="blog/:id" element={<BlogWebsiteEditor />} />
+                <Route path="media" element={<MediaLibrary />} />
+                <Route path="media/:id" element={<MediaWorkspace />} />
                 <Route path="gallery" element={<GalleryEditorList />} />
                 <Route path="gallery/:id" element={<GalleryWebsiteEditor />} />
                 <Route path="reviews" element={<ReviewsEditorList />} />

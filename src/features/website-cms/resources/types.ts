@@ -12,6 +12,8 @@ export interface WebsiteResourceDraftEnvelope<T> {
   baseRevision: number;
   payload: T;
   resourceId: string;
-  resourceType: WebsiteResourceType;
+  resourceType: WebsiteResourceType | "page";
   updatedAt?: string;
+  lifecycleStatus?: "draft" | "scheduled" | "published" | "trash";
+  lifecycleScheduledAt?: string | null;
 }

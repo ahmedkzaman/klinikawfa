@@ -28,7 +28,10 @@ export const websiteResourceJsonSchemas: Readonly<Record<WebsiteResourceType, Js
   blog_post: strictObject(["slug", "titleMs", "excerptMs", "contentMs", "readingTime", "status"], {
     slug: text, titleMs: text, titleEn: optionalText, excerptMs: text, excerptEn: optionalText, contentMs: text,
     contentEn: optionalText, categoryId: { type: ["string", "null"] }, featuredImage: optionalText,
-    readingTime: { type: "integer", minimum: 1 }, status: { enum: ["draft", "scheduled", "published", "archived"] }, scheduledAt: { type: ["string", "null"] },
+    tagIds: { type: "array", items: { type: "string", format: "uuid" }, maxItems: 30 }, authorId: { type: ["string", "null"] },
+    featuredImageMediaId: { type: ["string", "null"] },
+    readingTime: { type: "integer", minimum: 1 }, status: { enum: ["draft", "scheduled", "published", "trash"] }, scheduledAt: { type: ["string", "null"] },
+    seoMs: { type: "object" }, seoEn: { type: "object" },
   }),
   gallery_image: strictObject(["url", "altMs", "tags", "displayOrder", "visible"], {
     url: text, altMs: text, altEn: optionalText, tags: textArray, displayOrder: { type: "integer", minimum: 0 }, visible: { type: "boolean" },

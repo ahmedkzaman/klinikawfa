@@ -1,0 +1,14 @@
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import type { SeoFields } from "@/features/website-cms/domain/seo";
+import { MediaSelectorDialog } from "@/components/editor/media/MediaSelectorDialog";
+
+import { GoogleSearchPreview } from "./GoogleSearchPreview";
+import { SocialPreview } from "./SocialPreview";
+
+export function SeoPanel({ value, language, onChange }: { value: SeoFields; language: "ms" | "en"; onChange(value: SeoFields): void }) {
+  const update = <K extends keyof SeoFields>(key: K, next: SeoFields[K]) => onChange({ ...value, [key]: next });
+  const previewUrl = value.canonicalUrl || "https://klinikawfa.com/";
+  return <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5"><div><h2 className="font-semibold text-slate-950">Search and social appearance</h2><p className="mt-1 text-sm text-slate-600">Guidance helps readability; longer valid text is not silently truncated.</p></div><div><Label htmlFor="seo-search-title">Search title</Label><Input className="mt-2" id="seo-search-title" maxLength={120} onChange={(event) => update("title", event.target.value)} value={value.title} /><p className="mt-1 text-xs text-slate-500">{value.title.length} / 60 characters</p></div><div><Label htmlFor="seo-description">Search description</Label><Textarea className="mt-2" id="seo-description" maxLength={320} onChange={(event) => update("description", event.target.value)} value={value.description} /><p className="mt-1 text-xs text-slate-500">{value.description.length} / 160 characters</p></div><div><Label htmlFor="seo-canonical">Canonical URL</Label><Input className="mt-2" id="seo-canonical" onChange={(event) => update("canonicalUrl", event.target.value)} placeholder="Automatic" type="url" value={value.canonicalUrl} /></div><div className="space-y-2"><Label>Social sharing image ({language === "ms" ? "Malay" : "English"})</Label><div><MediaSelectorDialog folder="blog" label={value.socialImageMediaId ? "Change social image" : "Choose social image"} onSelect={(media) => update("socialImageMediaId", media.id)} /></div></div><div className="flex flex-wrap gap-5"><label className="flex items-center gap-2 text-sm"><input checked={value.index} onChange={(event) => update("index", event.target.checked)} type="checkbox" />Allow search indexing</label><label className="flex items-center gap-2 text-sm"><input checked={value.follow} onChange={(event) => update("follow", event.target.checked)} type="checkbox" />Allow link following</label></div><div className="grid gap-4 lg:grid-cols-2"><GoogleSearchPreview description={value.description} title={value.title} url={previewUrl} /><SocialPreview description={value.socialDescription || value.description} title={value.socialTitle || value.title} /></div></section>;
+}

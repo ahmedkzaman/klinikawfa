@@ -318,7 +318,7 @@ describe("general-page editor repository", () => {
       {
         data: [
           {
-            created_at: "2026-07-21T01:00:00.000Z",
+            updated_at: "2026-07-21T01:00:00.000Z",
             id: "page-content",
             kind: "content",
             revision: 2,
@@ -326,7 +326,7 @@ describe("general-page editor repository", () => {
             status: "published",
           },
           {
-            created_at: "2026-07-20T01:00:00.000Z",
+            updated_at: "2026-07-20T01:00:00.000Z",
             id: "page-system",
             kind: "system_content",
             revision: 1,
@@ -343,15 +343,19 @@ describe("general-page editor repository", () => {
         id: "page-content",
         kind: "content",
         revision: 2,
+        scheduledAt: null,
         slug: "family-care",
         status: "published",
+        updatedAt: "2026-07-21T01:00:00.000Z",
       },
       {
         id: "page-system",
         kind: "system_content",
         revision: 1,
+        scheduledAt: null,
         slug: "privacy",
         status: "published",
+        updatedAt: "2026-07-20T01:00:00.000Z",
       },
     ]);
     expect(supabaseState.calls[1]).toMatchObject({
@@ -360,7 +364,7 @@ describe("general-page editor repository", () => {
       filters: [
         { column: "kind", value: ["content", "system_content"] },
       ],
-      order: { ascending: false, column: "created_at" },
+      order: { ascending: false, column: "updated_at" },
     });
   });
 
@@ -396,6 +400,7 @@ describe("general-page editor repository", () => {
         kind: "content",
         publishedContent: null,
         revision: 0,
+        scheduledAt: null,
         slug: "draft-page",
         status: "draft",
       },
@@ -547,6 +552,7 @@ describe("fetchEditorPage", () => {
         kind: "home",
         publishedContent: published,
         revision: 7,
+        scheduledAt: null,
         slug: "home",
         status: "published",
       },
@@ -561,6 +567,7 @@ describe("fetchEditorPage", () => {
       "user_roles",
       "website_pages",
       "website_page_drafts",
+      "website_content_lifecycle",
     ]);
   });
 

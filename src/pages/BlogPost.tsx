@@ -8,6 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ShareButtons, RelatedPosts, MarkdownRenderer } from '@/components/blog';
 import { ArrowLeft, Calendar, Clock, BookOpen } from 'lucide-react';
+import { sanitizeRichHtml } from '@/lib/sanitize-rich-html';
+import { derivePageMetadata } from '@/features/website-cms/seo/usePageMetadata';
+import type { SeoFields } from '@/features/website-cms/domain/seo';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function BlogPost() {
   const { slug } = useParams<{ slug: string }>();
@@ -72,17 +76,40 @@ export default function BlogPost() {
   const categoryName = category
     ? (language === 'ms' ? (category.name_ms || category.name) : (category.name_en || category.name))
     : null;
+  const editorMetadata = (post as unknown as {
+    website_editor_metadata?: {
+      seoMs?: SeoFields;
+      seoEn?: SeoFields;
+      seoMsSocialImagePath?: string | null;
+      seoEnSocialImagePath?: string | null;
+    };
+  }).website_editor_metadata;
+  const metadata = derivePageMetadata(
+    language === 'ms' ? editorMetadata?.seoMs : editorMetadata?.seoEn,
+    { title, description: excerpt || title, path: `/health-tips/${post.slug}` },
+  );
+  const socialImagePath = language === 'ms'
+    ? editorMetadata?.seoMsSocialImagePath
+    : editorMetadata?.seoEnSocialImagePath;
+  const socialImage = socialImagePath
+    ? supabase.storage.from('website-media').getPublicUrl(socialImagePath).data.publicUrl
+    : post.featured_image || undefined;
 
   return (
     <MainLayout>
       <SEOHead
-        title={title}
-        description={excerpt || title}
-        image={post.featured_image || undefined}
+        title={metadata.title}
+        description={metadata.description}
+        image={socialImage}
         url={`/health-tips/${post.slug}`}
         type="article"
         publishedTime={post.published_at || undefined}
         author="Klinik Awfa"
+        canonicalUrl={metadata.canonical}
+        noIndex={metadata.robots.includes('noindex')}
+        noFollow={metadata.robots.includes('nofollow')}
+        socialTitle={metadata.socialTitle}
+        socialDescription={metadata.socialDescription}
       />
       <ArticleSchema
         title={title}
@@ -146,7 +173,11 @@ export default function BlogPost() {
         </div>
 
         {/* Article content */}
-        <MarkdownRenderer content={content} className="mb-12" />
+        {/<[a-z][\s\S]*>/i.test(content) ? (
+          <div className="prose mb-12 max-w-none" dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(content) }} />
+        ) : (
+          <MarkdownRenderer content={content} className="mb-12" />
+        )}
 
         {/* Share buttons */}
         <div className="mb-12 rounded-xl border border-border bg-muted/30 p-6">

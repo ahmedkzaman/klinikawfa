@@ -8,6 +8,7 @@ import {
   type BilingualText,
 } from "@/features/website-cms/schemas/common";
 import { sanitizeGeneralPageHtml } from "@/lib/sanitize-general-page-html";
+import { PageSectionsRenderer } from "@/features/website-cms/sections/registry";
 
 interface GeneralPageRendererProps {
   content: GeneralPageContent;
@@ -127,6 +128,9 @@ export function GeneralPageRenderer({
           </a>
         )}
       </div>
+      {content.sections?.length ? (
+        <PageSectionsRenderer language={language} sections={content.sections} />
+      ) : null}
     </article>
   );
 }

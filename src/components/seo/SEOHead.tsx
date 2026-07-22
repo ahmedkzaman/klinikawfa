@@ -9,11 +9,15 @@ interface SEOHeadProps {
   publishedTime?: string;
   author?: string;
   noIndex?: boolean;
+  noFollow?: boolean;
+  canonicalUrl?: string;
+  socialTitle?: string;
+  socialDescription?: string;
 }
 
 const SITE_NAME = 'Klinik Awfa';
-const DEFAULT_IMAGE = 'https://klinikawfa.lovable.app/og-image.png';
-const SITE_URL = 'https://klinikawfa.lovable.app';
+const DEFAULT_IMAGE = 'https://klinikawfa.com/og-image.png';
+const SITE_URL = 'https://klinikawfa.com';
 
 export function SEOHead({
   title,
@@ -24,20 +28,25 @@ export function SEOHead({
   publishedTime,
   author,
   noIndex = false,
+  noFollow,
+  canonicalUrl,
+  socialTitle,
+  socialDescription,
 }: SEOHeadProps) {
   const fullTitle = `${title} | ${SITE_NAME}`;
-  const fullUrl = url ? `${SITE_URL}${url}` : SITE_URL;
+  const fullUrl = canonicalUrl || (url ? `${SITE_URL}${url}` : SITE_URL);
+  const blockFollowing = noFollow ?? noIndex;
 
   return (
     <Helmet>
       {/* Basic Meta Tags */}
       <title>{fullTitle}</title>
       <meta name="description" content={description} />
-      {noIndex && <meta name="robots" content="noindex, nofollow" />}
+      {(noIndex || blockFollowing) && <meta name="robots" content={`${noIndex ? 'noindex' : 'index'}, ${blockFollowing ? 'nofollow' : 'follow'}`} />}
 
       {/* Open Graph */}
-      <meta property="og:title" content={fullTitle} />
-      <meta property="og:description" content={description} />
+      <meta property="og:title" content={socialTitle || fullTitle} />
+      <meta property="og:description" content={socialDescription || description} />
       <meta property="og:type" content={type} />
       <meta property="og:url" content={fullUrl} />
       <meta property="og:image" content={image} />
@@ -55,8 +64,8 @@ export function SEOHead({
 
       {/* Twitter Card */}
       <meta name="twitter:card" content="summary_large_image" />
-      <meta name="twitter:title" content={fullTitle} />
-      <meta name="twitter:description" content={description} />
+      <meta name="twitter:title" content={socialTitle || fullTitle} />
+      <meta name="twitter:description" content={socialDescription || description} />
       <meta name="twitter:image" content={image} />
 
       {/* Canonical URL */}

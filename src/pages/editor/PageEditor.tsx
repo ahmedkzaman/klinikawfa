@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Plus, Save, Send, Trash2 } from "lucide-react";
+import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   get,
@@ -11,9 +11,14 @@ import {
 } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { LivePreview } from "@/components/editor/LivePreview";
 import { WebsiteMediaUploader } from "@/components/editor/WebsiteMediaUploader";
+import { AddSectionDialog } from "@/components/editor/sections/AddSectionDialog";
+import { SectionList } from "@/components/editor/sections/SectionList";
 import { useEditorDirtyState } from "@/components/editor/useEditorDirtyNavigation";
+import { EditorNotice } from "@/components/editor/workspace/EditorNotice";
+import { EditorWorkspace } from "@/components/editor/workspace/EditorWorkspace";
+import { PublishingSidebar } from "@/components/editor/workspace/PublishingSidebar";
+import { useRecoverableAutosave } from "@/components/editor/workspace/useRecoverableAutosave";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,6 +41,7 @@ import {
 } from "@/features/website-cms/schemas/page";
 import { cn } from "@/lib/utils";
 import { VersionsPanel } from "@/pages/editor/VersionsPanel";
+import { pageAdapter } from "@/features/website-cms/resources/pageAdapter";
 
 const NEW_PAGE_CONTENT: GeneralPageContent = {
   title: { ms: "Halaman baharu", en: "" },
@@ -48,6 +54,7 @@ const NEW_PAGE_CONTENT: GeneralPageContent = {
     title: { ms: "Halaman baharu", en: "" },
     description: { ms: "Maklumat halaman.", en: "" },
   },
+  sections: [],
 };
 
 type EditorMutation =
@@ -277,6 +284,7 @@ export function PageEditor() {
           slug: parsedSlug.data,
         });
         if (!applyLoadedPage(created, generation)) return;
+        recovery.clearRecovery();
         setNotice({ message: "Draft saved privately.", tone: "success" });
         navigate(`/editor/pages/${created.page.id}`, { replace: true });
       } catch {
@@ -315,6 +323,7 @@ export function PageEditor() {
           : current,
       );
       form.reset(saved.content as GeneralPageContent);
+      recovery.clearRecovery();
       setNotice({ message: "Draft saved privately.", tone: "success" });
       setConflict(false);
     } catch {
@@ -458,15 +467,58 @@ export function PageEditor() {
   };
 
   const previewContent = form.watch() as GeneralPageContent;
+  const recovery = useRecoverableAutosave({
+    key: `page:${id}`,
+    value: { content: previewContent, slug },
+    serverUpdatedAt: editorPage ? String(editorPage.draft.baseRevision) : null,
+    enabled: isDirty,
+  });
   const cta = form.watch("cta");
+  const sections = form.watch("sections") ?? [];
   const isBusy = mutation !== null;
   const editorLocked = isBusy || refreshRequired !== null;
-  const publishDisabled =
-    !editorPage ||
-    !editorPage.draft.persisted ||
-    isDirty ||
-    editorLocked ||
-    conflict;
+  const completeness = {
+    ms: {
+      complete: Boolean(previewContent.title.ms.trim() && previewContent.body.ms.trim()),
+      missing: [
+        ...(!previewContent.title.ms.trim() ? ["Title"] : []),
+        ...(!previewContent.body.ms.trim() ? ["Body"] : []),
+      ],
+    },
+    en: {
+      complete: Boolean(previewContent.title.en.trim() && previewContent.body.en.trim()),
+      missing: [
+        ...(!previewContent.title.en.trim() ? ["Title"] : []),
+        ...(!previewContent.body.en.trim() ? ["Body"] : []),
+      ],
+    },
+  };
+
+  const schedulePage = async (scheduledAt: string) => {
+    if (!editorPage) return;
+    setMutation("publishing");
+    try {
+      await pageAdapter.schedule(editorPage.page.id, editorPage.draft.baseRevision, scheduledAt);
+      setNotice({ message: "Page scheduled for publication.", tone: "success" });
+    } catch (error) {
+      setNotice({ message: error instanceof Error ? error.message : "Page could not be scheduled.", tone: "error" });
+    } finally {
+      setMutation(null);
+    }
+  };
+
+  const trashPage = async () => {
+    if (!editorPage || !window.confirm("Move this page to Trash?")) return;
+    setMutation("publishing");
+    try {
+      await pageAdapter.trash(editorPage.page.id, editorPage.draft.baseRevision);
+      setNotice({ message: "Page moved to Trash.", tone: "success" });
+    } catch (error) {
+      setNotice({ message: error instanceof Error ? error.message : "Page could not be moved to Trash.", tone: "error" });
+    } finally {
+      setMutation(null);
+    }
+  };
 
   if (!isNew && !editorPage && !loadError) {
     return (
@@ -489,15 +541,11 @@ export function PageEditor() {
   }
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-          {isNew ? "Create page" : "Edit page"}
-        </h1>
-        <p className="mt-1 text-sm leading-6 text-slate-600">
-          Malay content is required. Blank English fields fall back to Malay.
-        </p>
-      </header>
+    <>
+      <EditorWorkspace
+        completeness={completeness}
+        description="Malay content is required. Blank English fields fall back to Malay."
+        editor={<div className="space-y-6">
 
       {notice && (
         <div
@@ -536,6 +584,28 @@ export function PageEditor() {
         </div>
       )}
 
+      {recovery.hasRecovery && (
+        <EditorNotice tone="warning">
+          <p className="font-semibold">Recoverable browser draft found</p>
+          <p className="mt-1">You can restore the unsaved content kept safely in this browser.</p>
+          <div className="mt-3 flex gap-2">
+            <Button
+              onClick={() => {
+                const recovered = recovery.recoveryValue as { content: GeneralPageContent; slug: string };
+                form.reset(recovered.content, { keepDefaultValues: true });
+                setSlug(recovered.slug);
+                recovery.clearRecovery();
+              }}
+              size="sm"
+              type="button"
+            >
+              Restore
+            </Button>
+            <Button onClick={recovery.clearRecovery} size="sm" type="button" variant="outline">Discard</Button>
+          </div>
+        </EditorNotice>
+      )}
+
       <form
         className="space-y-5"
         noValidate
@@ -546,33 +616,6 @@ export function PageEditor() {
           }),
         )}
       >
-        <div className="sticky top-3 z-20 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-medium text-slate-900">
-              {isDirty ? "Unsaved local changes" : "Draft matches saved version"}
-            </p>
-            {editorPage && (
-              <p className="mt-1 text-xs text-slate-500">
-                Published revision {editorPage.page.revision} · Draft based on revision {editorPage.draft.baseRevision}
-              </p>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button disabled={(!isNew && !isDirty) || editorLocked} type="submit" variant="outline">
-              {mutation === "saving" || mutation === "creating" ? (
-                <Loader2 aria-hidden="true" className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Save aria-hidden="true" className="mr-2 h-4 w-4" />
-              )}
-              Save Draft
-            </Button>
-            <Button disabled={publishDisabled} onClick={() => setPublishDialogOpen(true)} type="button">
-              <Send aria-hidden="true" className="mr-2 h-4 w-4" />
-              Publish
-            </Button>
-          </div>
-        </div>
-
         <fieldset aria-label="General page editable fields" className="space-y-5" disabled={editorLocked}>
           <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="font-semibold text-slate-900">Page identity</h2>
@@ -668,6 +711,21 @@ export function PageEditor() {
           </section>
 
           <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="font-semibold text-slate-900">Page sections</h2>
+                <p className="mt-1 text-xs text-slate-500">Build the page using guided, reusable blocks. Hidden sections remain in the draft but do not appear publicly.</p>
+              </div>
+              <AddSectionDialog onAdd={(section) => form.setValue("sections", [...sections, section], { shouldDirty: true, shouldValidate: true })} />
+            </div>
+            {sections.length ? (
+              <SectionList language={language} onChange={(next) => form.setValue("sections", next, { shouldDirty: true, shouldValidate: true })} sections={sections} />
+            ) : (
+              <p className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">No guided sections yet. Add one to begin.</p>
+            )}
+          </section>
+
+          <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <label className="flex items-center gap-3 text-sm font-medium text-slate-900">
               <input checked={Boolean(cta)} onChange={(event) => toggleCta(event.target.checked)} type="checkbox" />
               Show call to action
@@ -697,17 +755,27 @@ export function PageEditor() {
           />
         )}
       </form>
-
-      <section aria-labelledby="live-preview-title" className="mt-12 border-t border-slate-200 pt-10">
-        <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
-          <span className="mr-2 text-sm font-medium text-slate-700">Preview language</span>
-          <Button aria-label="Preview in Malay" aria-pressed={language === "ms"} onClick={() => setLanguage("ms")} size="sm" type="button" variant={language === "ms" ? "default" : "outline"}>Malay</Button>
-          <Button aria-label="Preview in English" aria-pressed={language === "en"} onClick={() => setLanguage("en")} size="sm" type="button" variant={language === "en" ? "default" : "outline"}>English</Button>
-        </div>
-        <LivePreview title={language === "ms" ? "Pratonton Langsung" : "Live Preview"}>
-          <GeneralPageRenderer content={previewContent} preview />
-        </LivePreview>
-      </section>
+      </div>}
+        language={language}
+        onLanguageChange={setLanguage}
+        preview={<GeneralPageRenderer content={previewContent} preview />}
+        publishing={
+          <PublishingSidebar
+            busy={isBusy}
+            completeness={completeness}
+            dirty={isDirty}
+            onPreview={() => document.querySelector('[aria-label="Live Preview"]')?.scrollIntoView({ behavior: "smooth" })}
+            onPublish={async () => { setPublishDialogOpen(true); }}
+            onSaveDraft={async () => { await form.handleSubmit(saveDraft)(); }}
+            onSchedule={schedulePage}
+            onTrash={trashPage}
+            revision={editorPage?.draft.baseRevision ?? 0}
+            scheduledAt={editorPage?.page.scheduledAt ?? null}
+            status={editorPage?.page.status === "published" || editorPage?.page.status === "scheduled" || editorPage?.page.status === "trash" ? editorPage.page.status : "draft"}
+          />
+        }
+        title={isNew ? "Create page" : "Edit page"}
+      />
 
       {publishDialogOpen && (
         <div aria-label="Publish page?" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="alertdialog">
@@ -725,6 +793,6 @@ export function PageEditor() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
