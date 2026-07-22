@@ -45,6 +45,7 @@ Before any target write:
 3. Inventory target Auth users, public-table row counts, Storage buckets and object counts, migration history, extensions, functions, policies, and Edge Functions without displaying private record contents.
 4. Confirm the source archive SHA-256 matches the approved fingerprint.
 5. Confirm no production secret value, database password, service-role key, export, or patient data is added to Git.
+6. Produce fresh protected evidence that the live HTTPS frontend bundle contains `ncysmppzfjtiekfnomdv`, contains no `nhjbqdiyptjqherdfbqk`, and that the target still matches the exact approved 93 / 0 / 0 / 153 baseline with zero managed Auth workflow rows and unchanged Storage metadata/configuration.
 
 The live site, DNS, GitHub Pages, GitHub environment variables, and source Lovable Cloud project remain unchanged during preparation.
 
@@ -63,7 +64,7 @@ For the target import:
 - Do not overwrite target schema definitions with source definitions.
 - Run foreign-key, uniqueness, not-null, orphan, sequence, and row-count reconciliation before proceeding.
 
-Any unexplained row-count difference, constraint failure, or schema incompatibility stops the cutover and triggers target rollback.
+Any unexplained row-count difference, constraint failure, schema incompatibility, failed write, or interrupted write quarantines the target and stops the cutover. The runner must not retry and must not claim database rollback: no matching-Supabase restore plus Storage-byte recovery has been proven.
 
 ## Storage Migration
 
@@ -137,12 +138,14 @@ The cutover requires all of the following:
 - Every expected Storage object present and private buckets still private.
 - No production form submission, payment, appointment creation, patient update, or other real-data mutation during smoke testing.
 
-## Rollback
+## Failure Containment and Frontend Rollback
 
-Rollback remains available until production verification is complete:
+The public frontend remains on the untouched Lovable Cloud source while the target is built and validated as isolated staging. Database rollback is not authorized by this design revision. A protected quarantine marker is created before each persistent target phase and removed only after the whole phase validates; any failure or interruption leaves it in place and blocks retry.
+
+Frontend rollback remains available only after a later, fully gated frontend cutover:
 
 - Revert the three protected GitHub frontend Supabase values to the Lovable Cloud project and redeploy the last known-good frontend commit.
-- Restore the target from its pre-migration backup if target state must be reset.
+- If target state may be inconsistent, quarantine it and stop. Rebuild or restore it only under a separately reviewed platform-faithful database and Storage recovery procedure.
 - Retain migration logs, row-count reports, object digests, and the exact deployed commit SHA outside the public repository when they contain operational details.
 - Do not delete or modify the Lovable Cloud source project during the migration or verification window.
 
@@ -158,6 +161,7 @@ Stop without frontend cutover if any of these occurs:
 - RLS matrix failure or critical/high advisor finding.
 - Missing required Edge Function secret.
 - CI, build, test, or dependency-audit failure.
+- Missing, stale, or mismatched isolated-staging evidence; any existing target quarantine marker; or any interrupted/failed target write.
 - Live verification shows wrong database reference, broken route, console error, or unintended data exposure.
 
 ## Success Condition

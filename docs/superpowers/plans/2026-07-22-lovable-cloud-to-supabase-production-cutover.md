@@ -480,18 +480,18 @@ git commit -m "feat: preserve source cutover fields"
 - Apply: the six approved CMS migrations, `supabase/migrations/20260721162256_restore_staff_messages.sql`, and `supabase/migrations/20260721174422_preserve_source_cutover_fields.sql`
 
 **Interfaces:**
-- Consumes: passing rehearsal report and verified pre-cutover target backup.
-- Produces: target application data, 11 Auth users, 11 provider identities, zero source sessions/refresh tokens, recorded target migrations, and a passing integrity report.
+- Consumes: passing rehearsal report, verified pre-cutover target backup, and fresh protected evidence that the target is isolated staging rather than the live backend.
+- Produces: an isolated target staging build containing application data, 11 Auth users, 11 provider identities, zero source sessions/refresh/one-time-token workflow rows, recorded target migrations, and a passing integrity report. It does not authorize frontend or DNS cutover.
 
 - [ ] **Step 1: Reconfirm all hard preconditions immediately before the write window**
 
 Run: `powershell -File scripts/cutover/database-reconcile.ps1 -Phase Verify`
 
-Expected: target ref correct; target backup digest valid; source archive digest valid; rehearsal `pass=true`; target is not serving the public frontend; no private artifact is tracked by Git.
+Expected: target ref correct; target backup digest valid; source archive digest valid; rehearsal `pass=true`; target remains exactly 93 public tables / 0 Auth users / 0 identities / 153 migrations; managed Auth session, refresh-token, and one-time-token counts are zero; Storage metadata/configuration matches the protected baseline; and a fresh self-hashed isolation artifact proves the live HTTPS HTML/JavaScript still contains source ref `ncysmppzfjtiekfnomdv` and contains no target ref `nhjbqdiyptjqherdfbqk`. No private artifact is tracked by Git.
 
 - [ ] **Step 2: Apply only the eight reconciled migrations through a temporary whitelist workdir**
 
-Copy exactly these files to a protected temporary Supabase workdir and run a dry run followed by migration up against the target database URL:
+Run the guarded `Push` phase. It copies exactly these files to a protected temporary Supabase workdir, performs a dry run, revalidates the fresh isolation artifact and exact target baseline, creates a protected pre-write quarantine marker, and only then invokes the pinned CLI against the target staging database:
 
 ```text
 20260720111916_add_website_editor_role.sql
@@ -506,6 +506,8 @@ Copy exactly these files to a protected temporary Supabase workdir and run a dry
 
 Expected: dry run lists only those eight; apply succeeds; each is recorded once; the three target hardening migrations already represented as `20260718093731`, `20260718102253`, and `20260718110721` are not replayed.
 
+The quarantine marker is removed only after exact post-history, schema, dependency, and evidence checks pass. A failed or interrupted Push leaves the marker in place, permanently blocks retry in this runner, and keeps the live frontend on the untouched source.
+
 If disposable Windows PostgreSQL cannot execute a migration solely because a Supabase-managed extension binary is unavailable locally, use this fail-closed fallback instead of stubbing the extension:
 
 1. Prove read-only that the exact target exposes the required extension and that the missing local binary is the only remaining scratch failure.
@@ -519,15 +521,15 @@ This fallback validates the managed extension in its real environment but author
 
 - [ ] **Step 3: Import public data in a single guarded transaction**
 
-The import truncates only source-owned application tables represented in the approved archive, never managed schemas or `supabase_migrations`. It disables user triggers only within the controlled import transaction where necessary, restores table data in dependency order, resets sequences from `max(id)`, reenables triggers, and validates foreign keys before commit. `public.staff_messages` data is held until its hardened schema exists.
+The import truncates only source-owned application tables represented in the approved archive, never managed schemas or `supabase_migrations`. Before its first write it revalidates the live old-source/target-absent isolation evidence, exact migration/schema state, zero target Auth users/identities/sessions/refresh/one-time-token rows, unchanged Storage metadata/configuration, and the exact three standalone sequence states wherever the post-migration schema permits them. It disables user triggers only within the controlled import transaction where necessary, restores table data in dependency order, resets sequences from `max(id)`, reenables triggers, and validates foreign keys before commit. `public.staff_messages` data is held until its hardened schema exists.
 
 Run: `powershell -File scripts/cutover/database-reconcile.ps1 -Phase Import`
 
-Expected: transaction commits once; no managed schema definition is replaced; no constraint failure; row-count report is written outside Git.
+Expected: a protected quarantine marker is created before the first loader write; transactions commit only through the guarded path; no managed schema definition is replaced; no constraint failure; the row-count report is written outside Git; and the marker is removed only after the complete post-import integrity chain passes. Any failure or interruption leaves the target quarantined and blocks retry.
 
 - [ ] **Step 4: Import only portable Auth users and identities**
 
-The generated Auth SQL inserts the 11 source `auth.users` rows and 11 `auth.identities` rows with source UUIDs, encrypted password hashes, confirmation state, `raw_app_meta_data`, and provider linkage. It excludes `auth.sessions`, `auth.refresh_tokens`, one-time tokens, audit logs, MFA challenges, and instance settings.
+The generated Auth SQL inserts the 11 source `auth.users` rows and 11 `auth.identities` rows through an explicit destination-column contract. It preserves source UUIDs, encrypted password hashes, confirmation state, `raw_app_meta_data`, and provider linkage while explicitly neutralizing token and pending-change fields. It excludes `auth.sessions`, `auth.refresh_tokens`, one-time tokens, audit logs, MFA challenges, and instance settings.
 
 Expected queries: `select count(*) from auth.users` returns `11`; `select count(*) from auth.identities` returns `11`; no source session or refresh-token row was inserted. Existing target count was zero, so UUID conflicts must be zero.
 
@@ -537,7 +539,7 @@ Expected checks: public table counts match approved source counts or a documente
 
 - [ ] **Step 6: Run database advisors and commit no generated private artifact**
 
-Expected: no new critical/high security or performance finding on the changed surface. Keep the full advisor output outside Git. If the import or a gate fails, run `-Phase Rollback` using `target-before-cutover.backup` and stop before frontend cutover.
+Expected: no new critical/high security or performance finding on the changed surface. Keep the full advisor output outside Git. `Rollback` is intentionally unavailable because no faithful matching-Supabase database-plus-Storage restore has been proven. If Push, Import, or a post-write gate fails, leave the quarantine marker in place, do not retry or restore through this runner, and stop before every frontend/DNS cutover step. The public frontend continues using the untouched Lovable Cloud source.
 
 ---
 
@@ -747,7 +749,7 @@ Push the commits, open a pull request to `main`, inspect the complete diff, and 
 
 - [ ] **Step 5: Record the rollback state and switch protected frontend values**
 
-Record the current live commit SHA and the three old public frontend values in the protected rollback report without printing them. Update GitHub Actions secrets/variables to URL `https://nhjbqdiyptjqherdfbqk.supabase.co`, the target publishable key, and project ID `nhjbqdiyptjqherdfbqk`. Never store the service-role key in GitHub frontend configuration.
+This step remains hard-blocked until the isolated target staging build has passed every database, Auth, Storage-byte, Edge Function, RLS, advisor, application, CI, and quarantine-absence gate. Record the current live commit SHA and the three old public frontend values in the protected frontend-rollback report without printing them. Update GitHub Actions secrets/variables to URL `https://nhjbqdiyptjqherdfbqk.supabase.co`, the target publishable key, and project ID `nhjbqdiyptjqherdfbqk`. Never store the service-role key in GitHub frontend configuration.
 
 - [ ] **Step 6: Merge and let GitHub Pages publish the reviewed commit**
 
@@ -759,4 +761,4 @@ Verify desktop and mobile homepage, direct routes, all service routes, gallery/m
 
 - [ ] **Step 8: Close or roll back**
 
-Success requires all live checks, Storage counts/privacy, Auth/RLS boundaries, and function probes to pass. On failure, immediately restore the three old GitHub frontend values and redeploy the previous live commit; restore the target pre-cutover backup only if target data integrity was affected. Keep the Lovable Cloud source untouched throughout the verification window.
+Success requires all live checks, Storage counts/privacy, Auth/RLS boundaries, and function probes to pass. On frontend verification failure, immediately restore the three old GitHub frontend values and redeploy the previous live commit. If target data integrity is affected, quarantine the target and stop; this runner has no authorized database restore or retry path. Keep the Lovable Cloud source untouched throughout the verification window.
