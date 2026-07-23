@@ -7,6 +7,8 @@ import {
   safeMediaSchema,
   websiteCtaHrefSchema,
 } from "./common";
+import { websiteLayoutSchema } from "@/features/website-cms/layout/schema";
+import { GENERAL_PAGE_LAYOUT_KINDS } from "@/features/website-cms/layout/types";
 import { pageSectionsSchema } from "@/features/website-cms/sections/schema";
 
 export const RESERVED_PAGE_SLUGS = [
@@ -66,6 +68,7 @@ export const generalPageContentSchema = z
     cta: generalPageCtaSchema.nullable(),
     seo: generalPageSeoSchema,
     sections: pageSectionsSchema.optional(),
+    layout: websiteLayoutSchema(GENERAL_PAGE_LAYOUT_KINDS).optional(),
   })
   .strict();
 

@@ -165,6 +165,56 @@ afterEach(() => {
 });
 
 describe("GeneralPageRenderer", () => {
+  it("uses a saved grid layout while omitting hidden blocks", () => {
+    const content: GeneralPageContent = {
+      ...structuredClone(publishedContent),
+      layout: {
+        version: 1,
+        blocks: [
+          {
+            id: "body",
+            kind: "body",
+            contentRef: "body",
+            order: 0,
+            hidden: false,
+            desktop: { column: 5, width: 8, row: 1, height: 1 },
+          },
+          {
+            id: "title",
+            kind: "title",
+            contentRef: "title",
+            order: 1,
+            hidden: false,
+            desktop: { column: 1, width: 4, row: 1, height: 1 },
+          },
+          {
+            id: "cta",
+            kind: "cta",
+            contentRef: "cta",
+            order: 2,
+            hidden: true,
+            desktop: { column: 1, width: 12, row: 2, height: 1 },
+          },
+        ],
+      },
+    };
+
+    const { container } = render(
+      <MemoryRouter>
+        <LanguageProvider>
+          <GeneralPageRenderer content={content} />
+        </LanguageProvider>
+      </MemoryRouter>,
+    );
+
+    expect(
+      Array.from(container.querySelectorAll("[data-layout-kind]")).map(
+        (element) => element.getAttribute("data-layout-kind"),
+      ),
+    ).toEqual(["body", "title"]);
+    expect(screen.queryByRole("link", { name: "Buat temujanji" })).not.toBeInTheDocument();
+  });
+
   it("renders valid Malay published content and sanitizes rich HTML", () => {
     const { container } = render(
       <MemoryRouter>
@@ -369,6 +419,36 @@ describe("GeneralPage public route", () => {
 });
 
 describe("general page editor", () => {
+  it("saves a custom page grid through the existing private draft", async () => {
+    render(
+      <MemoryRouter initialEntries={["/editor/pages/page-family-care"]}>
+        <EditorDirtyNavigationProvider>
+          <LanguageProvider>
+            <Routes>
+              <Route path="/editor/pages/:id" element={<PageEditor />} />
+            </Routes>
+          </LanguageProvider>
+        </EditorDirtyNavigationProvider>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Advanced grid designer" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Two equal columns" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Draft" }));
+
+    await waitFor(() =>
+      expect(pageApi.savePageDraft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.objectContaining({
+            layout: expect.objectContaining({ version: 1 }),
+          }),
+        }),
+      ),
+    );
+  }, 15_000);
+
   it("rejects a reserved slug before creating a page or private draft", async () => {
     renderNewEditor();
 

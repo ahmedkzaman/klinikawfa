@@ -6,6 +6,8 @@ import {
   requiredBilingualTextSchema,
   safeHrefSchema,
 } from "./common";
+import { websiteLayoutSchema } from "@/features/website-cms/layout/schema";
+import { HOME_LAYOUT_KINDS } from "@/features/website-cms/layout/types";
 
 export const HOME_SECTION_IDS = [
   "hero",
@@ -191,6 +193,7 @@ export const homeContentSchema = z
     map: homeMapSchema,
     seo: homeSeoSchema,
     sectionOrder: homeSectionOrderSchema,
+    layout: websiteLayoutSchema(HOME_LAYOUT_KINDS).optional(),
   })
   .strict();
 

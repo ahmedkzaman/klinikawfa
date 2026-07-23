@@ -2,6 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+  .website-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .website-grid-block {
+    min-width: 0;
+  }
+
+  @media (min-width: 1024px) {
+    .website-grid {
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+    }
+
+    .website-grid-block {
+      grid-column:
+        var(--website-grid-column) /
+        span var(--website-grid-width);
+      grid-row:
+        var(--website-grid-row) /
+        span var(--website-grid-height);
+    }
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

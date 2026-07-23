@@ -1,4 +1,6 @@
 import { DEFAULT_HOME_CONTENT } from "./homeDefaults";
+import { parseWebsiteLayout } from "@/features/website-cms/layout/schema";
+import { HOME_LAYOUT_KINDS } from "@/features/website-cms/layout/types";
 import {
   HOME_SECTION_IDS,
   HOME_VIDEO_POSTER_SETTING_KEYS,
@@ -131,6 +133,8 @@ export function projectHomePreview(rawValue: unknown): HomeContent {
     ? preview.video.posterSettingKey
     : DEFAULT_HOME_CONTENT.video.posterSettingKey;
   preview.sectionOrder = safeSectionOrder(getRecord(rawValue, "sectionOrder"));
+  const layout = parseWebsiteLayout(getRecord(rawValue, "layout"), HOME_LAYOUT_KINDS);
+  if (layout) preview.layout = layout;
 
   return preview;
 }

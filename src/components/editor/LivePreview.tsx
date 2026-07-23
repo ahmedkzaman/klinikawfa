@@ -8,15 +8,16 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { Monitor, Smartphone } from "lucide-react";
+import { Monitor, Smartphone, Tablet } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type PreviewMode = "desktop" | "mobile";
+type PreviewMode = "desktop" | "tablet" | "mobile";
 
 const PREVIEW_WIDTHS: Record<PreviewMode, number> = {
   desktop: 1280,
+  tablet: 768,
   mobile: 390,
 };
 
@@ -186,6 +187,21 @@ export function LivePreview({ children, title }: LivePreviewProps) {
             Desktop
           </Button>
           <Button
+            aria-label="Tablet 768 px"
+            aria-pressed={mode === "tablet"}
+            className={cn(
+              "gap-2",
+              mode === "tablet" && "bg-slate-900 text-white hover:bg-slate-800",
+            )}
+            onClick={() => setMode("tablet")}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            <Tablet aria-hidden="true" className="h-4 w-4" />
+            Tablet
+          </Button>
+          <Button
             aria-label="Mobile 390 px"
             aria-pressed={mode === "mobile"}
             className={cn(
@@ -205,7 +221,7 @@ export function LivePreview({ children, title }: LivePreviewProps) {
 
       <div className="max-h-[75vh] overflow-auto rounded-xl border border-slate-300 bg-white">
         <iframe
-          aria-label={`${mode === "desktop" ? "Desktop" : "Mobile"} preview canvas`}
+          aria-label={`${mode === "desktop" ? "Desktop" : mode === "tablet" ? "Tablet" : "Mobile"} preview canvas`}
           className="block min-h-[720px] border-0 bg-white transition-[width] duration-200"
           data-preview-mode={mode}
           data-preview-width={width}

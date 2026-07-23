@@ -67,15 +67,28 @@ describe("website page publishing migration", () => {
     expect(validator).toMatch(/RETURNS boolean[\s\S]*LANGUAGE plpgsql/i);
     expect(validator).toMatch(/IMMUTABLE[\s\S]*SECURITY INVOKER/i);
     expect(validator).toMatch(/SET search_path = pg_catalog/i);
+    const { layout: _homeLayout, ...legacyHomeProperties } =
+      HOME_JSON_SCHEMA.properties;
+    const legacyHomeSchema = {
+      ...HOME_JSON_SCHEMA,
+      properties: legacyHomeProperties,
+    };
+    const { layout: _generalLayout, ...legacyGeneralProperties } =
+      GENERAL_PAGE_JSON_SCHEMA.properties;
+    const legacyGeneralSchema = {
+      ...GENERAL_PAGE_JSON_SCHEMA,
+      properties: legacyGeneralProperties,
+    };
+
     expect(embeddedSchemaAfter(body, /WHEN p_kind = 'home' THEN/i)).toEqual(
-      HOME_JSON_SCHEMA,
+      legacyHomeSchema,
     );
     expect(
       embeddedSchemaAfter(
         body,
         /WHEN p_kind IN \('system_content', 'content'\) THEN/i,
       ),
-    ).toEqual(GENERAL_PAGE_JSON_SCHEMA);
+    ).toEqual(legacyGeneralSchema);
     expect(body).toMatch(/ELSE\s+RETURN false;\s+END CASE;/i);
     expect(body.match(/extensions\.jsonb_matches_schema/gi) ?? []).toHaveLength(
       2,
