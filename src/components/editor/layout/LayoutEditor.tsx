@@ -14,11 +14,15 @@ import {
   undoLayout,
   type LayoutCommandResult,
 } from "@/features/website-cms/layout/commands";
-import type {
-  WebsiteLayout,
-} from "@/features/website-cms/layout/types";
+import {
+  applyDesktopRows,
+  deriveDesktopRows,
+  type DesktopLayoutRow,
+} from "@/features/website-cms/layout/rows";
+import type { WebsiteLayout } from "@/features/website-cms/layout/types";
 
 import { BlockOrderPanel } from "./BlockOrderPanel";
+import { DesktopRowBuilder } from "./DesktopRowBuilder";
 import { GridCanvas } from "./GridCanvas";
 import { LayoutPresets } from "./LayoutPresets";
 import { createPresetLayout, type LayoutPreset } from "./presets";
@@ -42,11 +46,13 @@ export function LayoutEditor<const Kinds extends LayoutKinds>({
 }: LayoutEditorProps<Kinds>) {
   const [history, setHistory] = useState(() => createLayoutHistory(layout));
   const [status, setStatus] = useState("Layout ready");
+  const [desktopRows, setDesktopRows] = useState(() => deriveDesktopRows(layout));
 
   useEffect(() => {
     setHistory((current) =>
       current.present === layout ? current : createLayoutHistory(layout),
     );
+    setDesktopRows(deriveDesktopRows(layout));
   }, [layout]);
 
   const commit = (
@@ -58,14 +64,31 @@ export function LayoutEditor<const Kinds extends LayoutKinds>({
       return;
     }
     setHistory((current) => applyLayoutChange(current, result.layout));
+    setDesktopRows(deriveDesktopRows(result.layout));
     setStatus(message);
     onChange(result.layout);
+  };
+
+  const applyPreset = (preset: LayoutPreset) => {
+    const candidate = createPresetLayout(history.present, preset);
+    commit({ ok: true, layout: candidate }, "Layout preset applied");
+  };
+
+  const applyRows = (nextRows: DesktopLayoutRow[]) => {
+    setDesktopRows(nextRows);
+    const result = applyDesktopRows(history.present, nextRows);
+    if (!result.ok) {
+      setStatus("Desktop rows are incomplete or invalid");
+      return;
+    }
+    commit({ ok: true, layout: result.layout }, "Row layout applied");
   };
 
   const handleUndo = () => {
     const next = undoLayout(history);
     if (next === history) return;
     setHistory(next);
+    setDesktopRows(deriveDesktopRows(next.present));
     setStatus("Layout change undone");
     onChange(next.present);
   };
@@ -74,13 +97,9 @@ export function LayoutEditor<const Kinds extends LayoutKinds>({
     const next = redoLayout(history);
     if (next === history) return;
     setHistory(next);
+    setDesktopRows(deriveDesktopRows(next.present));
     setStatus("Layout change restored");
     onChange(next.present);
-  };
-
-  const applyPreset = (preset: LayoutPreset) => {
-    const candidate = createPresetLayout(history.present, preset);
-    commit({ ok: true, layout: candidate }, "Layout preset applied");
   };
 
   return (
@@ -148,60 +167,69 @@ export function LayoutEditor<const Kinds extends LayoutKinds>({
           </div>
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <GridCanvas
+        <div className="space-y-4">
+          <DesktopRowBuilder
             blockLabels={blockLabels}
             layout={history.present}
-            onMove={(blockId, column, row) =>
-              commit(
-                moveBlock(history.present, blockId, { column, row }, allowedKinds),
-                "Block moved",
-              )
-            }
-            onResize={(blockId, width, height) =>
-              commit(
-                resizeBlock(history.present, blockId, { width, height }, allowedKinds),
-                "Block resized",
-              )
-            }
+            onChange={applyRows}
+            rows={desktopRows}
           />
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-slate-900">
-              Mobile and reading order
-            </h3>
-            <BlockOrderPanel
+
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+            <GridCanvas
               blockLabels={blockLabels}
               layout={history.present}
-              onDelete={(blockId) =>
+              onMove={(blockId, column, row) =>
                 commit(
-                  deleteBlock(
-                    history.present,
-                    blockId,
-                    protectedBlockIds,
-                    allowedKinds,
-                  ),
-                  "Block deleted",
+                  moveBlock(history.present, blockId, { column, row }, allowedKinds),
+                  "Block moved",
                 )
               }
-              onReorder={(blockId, order) =>
+              onResize={(blockId, width, height) =>
                 commit(
-                  reorderBlock(history.present, blockId, order, allowedKinds),
-                  "Reading order updated",
+                  resizeBlock(history.present, blockId, { width, height }, allowedKinds),
+                  "Block resized",
                 )
               }
-              onVisibility={(blockId, hidden) =>
-                commit(
-                  setBlockHidden(
-                    history.present,
-                    blockId,
-                    hidden,
-                    allowedKinds,
-                  ),
-                  hidden ? "Block hidden" : "Block shown",
-                )
-              }
-              protectedBlockIds={protectedBlockIds}
             />
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-slate-900">
+                Mobile and reading order
+              </h3>
+              <BlockOrderPanel
+                blockLabels={blockLabels}
+                layout={history.present}
+                onDelete={(blockId) =>
+                  commit(
+                    deleteBlock(
+                      history.present,
+                      blockId,
+                      protectedBlockIds,
+                      allowedKinds,
+                    ),
+                    "Block deleted",
+                  )
+                }
+                onReorder={(blockId, order) =>
+                  commit(
+                    reorderBlock(history.present, blockId, order, allowedKinds),
+                    "Reading order updated",
+                  )
+                }
+                onVisibility={(blockId, hidden) =>
+                  commit(
+                    setBlockHidden(
+                      history.present,
+                      blockId,
+                      hidden,
+                      allowedKinds,
+                    ),
+                    hidden ? "Block hidden" : "Block shown",
+                  )
+                }
+                protectedBlockIds={protectedBlockIds}
+              />
+            </div>
           </div>
         </div>
 
