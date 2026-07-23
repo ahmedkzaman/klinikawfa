@@ -5,6 +5,11 @@ import {
   PROTECTED_INTERNAL_RELATIVE_HREF_PATTERN,
   PROTECTED_INTERNAL_SAME_SITE_HREF_PATTERN,
 } from "./common";
+import { websiteLayoutJsonSchema } from "../layout/jsonSchema";
+import {
+  GENERAL_PAGE_LAYOUT_KINDS,
+  HOME_LAYOUT_KINDS,
+} from "../layout/types";
 
 const DRAFT_7 = "http://json-schema.org/draft-07/schema#";
 
@@ -231,6 +236,7 @@ export const HOME_JSON_SCHEMA = {
       uniqueItems: true,
       items: { enum: HOME_SECTION_IDS },
     },
+    layout: websiteLayoutJsonSchema(HOME_LAYOUT_KINDS),
   },
 } as const;
 
@@ -275,5 +281,6 @@ export const GENERAL_PAGE_JSON_SCHEMA = {
       required: ["title", "description"],
       properties: { title: BILINGUAL_TEXT_JSON_SCHEMA, description: BILINGUAL_TEXT_JSON_SCHEMA },
     },
+    layout: websiteLayoutJsonSchema(GENERAL_PAGE_LAYOUT_KINDS),
   },
 } as const;
