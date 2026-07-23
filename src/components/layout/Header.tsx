@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Menu, Phone, MessageCircle, LogIn, Settings, LogOut, User } from 'lucide-react';
+import { Menu, Phone, MessageCircle, LogIn, Settings, LogOut, User, Stethoscope } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
 import { usePublishedNavigation } from '@/hooks/usePublishedNavigation';
@@ -135,33 +135,43 @@ export function Header() {
                   </Link>
                 </Button>
               ) : (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="gap-2 hover:bg-muted/50">
-                      <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center">
-                        <User className="h-4 w-4 text-primary-foreground" />
-                      </div>
-                      <span className="max-w-[100px] truncate text-xs">{user.email}</span>
+                <>
+                  {isStaffOrAdmin && (
+                    <Button variant="outline" size="sm" asChild>
+                      <Link to="/clinic">
+                        <Stethoscope className="mr-2 h-4 w-4" />
+                        {language === 'ms' ? 'Portal Klinik' : 'Clinic Portal'}
+                      </Link>
                     </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    {isStaffOrAdmin && (
-                      <>
-                        <DropdownMenuItem asChild>
-                          <Link to="/staff/dashboard" className="flex items-center gap-2">
-                            <Settings className="h-4 w-4" />
-                            {language === 'ms' ? 'Portal Staf' : 'Staff Portal'}
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                      </>
-                    )}
-                    <DropdownMenuItem onClick={() => signOut()} className="flex items-center gap-2 text-destructive">
-                      <LogOut className="h-4 w-4" />
-                      {language === 'ms' ? 'Log Keluar' : 'Logout'}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                  )}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="gap-2 hover:bg-muted/50">
+                        <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center">
+                          <User className="h-4 w-4 text-primary-foreground" />
+                        </div>
+                        <span className="max-w-[100px] truncate text-xs">{user.email}</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      {isStaffOrAdmin && (
+                        <>
+                          <DropdownMenuItem asChild>
+                            <Link to="/staff/dashboard" className="flex items-center gap-2">
+                              <Settings className="h-4 w-4" />
+                              {language === 'ms' ? 'Portal Staf' : 'Staff Portal'}
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                        </>
+                      )}
+                      <DropdownMenuItem onClick={() => signOut()} className="flex items-center gap-2 text-destructive">
+                        <LogOut className="h-4 w-4" />
+                        {language === 'ms' ? 'Log Keluar' : 'Logout'}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
               )}
             </>
           )}
@@ -253,12 +263,20 @@ export function Header() {
                       ) : (
                         <>
                           {isStaffOrAdmin && (
-                            <Button size="lg" variant="outline" className="border-2" asChild onClick={() => setIsOpen(false)}>
-                              <Link to="/staff/dashboard">
-                                <Settings className="mr-2 h-5 w-5" />
-                                {language === 'ms' ? 'Portal Staf' : 'Staff Portal'}
-                              </Link>
-                            </Button>
+                            <>
+                              <Button size="lg" variant="outline" className="border-2" asChild onClick={() => setIsOpen(false)}>
+                                <Link to="/clinic">
+                                  <Stethoscope className="mr-2 h-5 w-5" />
+                                  {language === 'ms' ? 'Portal Klinik' : 'Clinic Portal'}
+                                </Link>
+                              </Button>
+                              <Button size="lg" variant="outline" className="border-2" asChild onClick={() => setIsOpen(false)}>
+                                <Link to="/staff/dashboard">
+                                  <Settings className="mr-2 h-5 w-5" />
+                                  {language === 'ms' ? 'Portal Staf' : 'Staff Portal'}
+                                </Link>
+                              </Button>
+                            </>
                           )}
                           <Button size="lg" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => { signOut(); setIsOpen(false); }}>
                             <LogOut className="mr-2 h-5 w-5" />
