@@ -144,7 +144,8 @@ export function GalleryLightbox({
           <Button
             variant="ghost"
             size="icon"
-            className="absolute right-4 top-4 z-50 h-10 w-10 rounded-full bg-background/20 text-white backdrop-blur-sm hover:bg-background/40"
+            aria-label={labels.close}
+            className="absolute right-4 top-4 z-50 h-11 w-11 rounded-full bg-background/20 text-white backdrop-blur-sm hover:bg-background/40"
             onClick={handleClose}
           >
             <X className="h-5 w-5" />
@@ -152,7 +153,7 @@ export function GalleryLightbox({
           </Button>
 
           {/* Counter badge */}
-          <div className="absolute left-4 top-4 z-50 rounded-full bg-background/20 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm">
+          <div aria-live="polite" className="absolute left-4 top-4 z-50 rounded-full bg-background/20 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm">
             {currentIndex + 1} / {images.length}
           </div>
 

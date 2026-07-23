@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Card, CardContent } from '@/components/ui/card';
+import { PublicSectionHeader } from '@/components/public';
 import type { HomeContent } from '@/features/website-cms/schemas/home';
 import type { ElementType } from 'react';
 import { 
@@ -55,27 +56,21 @@ export function WhySection({ content, preview = false }: WhySectionProps) {
     language === 'ms' ? copy.ms : copy.en || copy.ms;
 
   return (
-    <section className="relative py-20 md:py-28 overflow-hidden">
+    <section className="public-section bg-background">
       <div className="container relative z-10">
         <motion.div
           initial={false}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 0.6 }}
-          className="mb-16 text-center"
+          className="mb-12"
         >
-          <motion.span
-            initial={false}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            className="inline-block mb-4 border-b border-primary pb-1 text-primary text-sm font-semibold uppercase tracking-[0.12em]"
-          >
-            {localized(content.eyebrow)}
-          </motion.span>
-          <h2 className="mb-4 gradient-text">{localized(content.title)}</h2>
-          <p className="mx-auto max-w-2xl text-muted-foreground text-lg">
-            {localized(content.description)}
-          </p>
+          <PublicSectionHeader
+            align="center"
+            eyebrow={localized(content.eyebrow)}
+            title={localized(content.title)}
+            description={localized(content.description)}
+          />
         </motion.div>
 
         <motion.div
@@ -83,19 +78,19 @@ export function WhySection({ content, preview = false }: WhySectionProps) {
           initial={false}
           whileInView="visible"
           viewport={{ once: true, margin: "-50px" }}
-          className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
         >
           {content.items.map((card, index) => {
             const Icon = iconMap[card.icon];
             return (
               <motion.div key={`${card.icon}-${index}`} variants={itemVariants}>
-                <Card className="group h-full interactive-card border-border shadow-soft rounded-lg overflow-hidden hover:border-primary/30">
-                  <CardContent className="flex items-start gap-5 p-6">
-                    <div className="icon-gradient h-14 w-14 shrink-0 text-primary relative z-10">
-                      <Icon className="h-7 w-7 relative z-10" />
+                <Card className="group h-full rounded-none border-border bg-card shadow-soft transition-colors hover:border-primary/35">
+                  <CardContent className="flex items-start gap-4 p-6">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center border border-primary/20 bg-muted text-primary">
+                      <Icon className="h-6 w-6" />
                     </div>
                     <div>
-                      <h3 className="mb-2 text-lg font-bold group-hover:text-primary transition-colors duration-300">
+                      <h3 className="mb-2 text-lg font-bold group-hover:text-primary transition-colors">
                         {localized(card.title)}
                       </h3>
                       <p className="text-sm text-muted-foreground leading-relaxed">

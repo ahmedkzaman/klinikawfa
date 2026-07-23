@@ -193,6 +193,13 @@ describe("GeneralPageRenderer", () => {
       "src",
       "https://media.example.com/clinic.mp4",
     );
+    expect(container.querySelector("article")).toHaveClass(
+      "bg-background",
+      "text-foreground",
+    );
+    expect(container.querySelector(".public-clinic-line")).toBeInTheDocument();
+    expect(container.querySelector(".prose-slate")).not.toBeInTheDocument();
+    expect(container.querySelector(".bg-blue-700")).not.toBeInTheDocument();
   });
 
   it("falls back field-by-field to Malay when optional English is blank", async () => {
