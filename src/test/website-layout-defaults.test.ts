@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   createDefaultGeneralPageLayout,
+  createEditableHomeLayout,
   createDefaultHomeLayout,
 } from "@/features/website-cms/layout/defaults";
 import { DEFAULT_HOME_CONTENT } from "@/features/website-cms/home/homeDefaults";
@@ -50,6 +51,17 @@ describe("website layout defaults", () => {
         desktop: { column: 1, width: 12, row: 3, height: 1 },
       },
     ]);
+  });
+
+  it("keeps omitted Home sections available as hidden editor blocks", () => {
+    const editable = createEditableHomeLayout(["hero", "map"]);
+
+    expect(editable.blocks).toHaveLength(7);
+    expect(editable.blocks.slice(0, 2)).toMatchObject([
+      { kind: "hero", order: 0, hidden: false },
+      { kind: "map", order: 1, hidden: false },
+    ]);
+    expect(editable.blocks.slice(2).every((block) => block.hidden)).toBe(true);
   });
 
   it("creates general-page blocks only for content that exists", () => {

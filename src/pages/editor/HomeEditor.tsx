@@ -20,6 +20,7 @@ import {
 } from "react-hook-form";
 
 import { LivePreview } from "@/components/editor/LivePreview";
+import { LayoutEditor } from "@/components/editor/layout/LayoutEditor";
 import { WebsiteMediaUploader } from "@/components/editor/WebsiteMediaUploader";
 import { useEditorDirtyState } from "@/components/editor/useEditorDirtyNavigation";
 import { HomeRenderer } from "@/components/home";
@@ -48,6 +49,8 @@ import {
 } from "@/features/website-cms/api/pages";
 import { DEFAULT_HOME_CONTENT } from "@/features/website-cms/home/homeDefaults";
 import { projectHomePreview } from "@/features/website-cms/home/projectHomePreview";
+import { createEditableHomeLayout } from "@/features/website-cms/layout/defaults";
+import { HOME_LAYOUT_KINDS } from "@/features/website-cms/layout/types";
 import {
   HOME_SECTION_IDS,
   HOME_WHY_ICON_IDS,
@@ -602,6 +605,8 @@ export function HomeEditor() {
   const currentContent = form.watch();
   const previewContent = projectHomePreview(currentContent);
   const sectionOrder = form.watch("sectionOrder");
+  const editableLayout =
+    currentContent.layout ?? createEditableHomeLayout(sectionOrder);
   const isBusy = mutation !== null;
   const editorLocked = isBusy || refreshRequired !== null;
   const isSaving = mutation === "saving";
@@ -610,6 +615,21 @@ export function HomeEditor() {
     isDirty || !editorPage.draft.persisted || editorLocked;
 
   const toggleSection = (section: HomeSectionId, visible: boolean) => {
+    if (currentContent.layout) {
+      const visibleCount = currentContent.layout.blocks.filter(
+        (block) => !block.hidden,
+      ).length;
+      if (!visible && visibleCount === 1) return;
+      const nextLayout = {
+        ...currentContent.layout,
+        blocks: currentContent.layout.blocks.map((block) =>
+          block.kind === section ? { ...block, hidden: !visible } : block,
+        ),
+      };
+      applyHomeLayout(nextLayout);
+      return;
+    }
+
     const nextOrder = visible
       ? [...sectionOrder, section]
       : sectionOrder.filter((item) => item !== section);
@@ -633,7 +653,40 @@ export function HomeEditor() {
       shouldDirty: true,
       shouldValidate: true,
     });
+
+    if (currentContent.layout) {
+      const hidden = currentContent.layout.blocks
+        .filter((block) => block.hidden)
+        .map((block) => block.kind);
+      const combinedOrder = [...nextOrder, ...hidden];
+      const nextLayout = {
+        ...currentContent.layout,
+        blocks: combinedOrder.map((kind, order) => ({
+          ...currentContent.layout!.blocks.find((block) => block.kind === kind)!,
+          order,
+        })),
+      };
+      applyHomeLayout(nextLayout);
+    }
   };
+
+  function applyHomeLayout(nextLayout: HomeContent["layout"]) {
+    if (!nextLayout) return;
+    form.setValue("layout", nextLayout, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    const nextSectionOrder = [...nextLayout.blocks]
+      .sort((left, right) => left.order - right.order)
+      .filter((block) => !block.hidden)
+      .map((block) => block.kind);
+    if (nextSectionOrder.length > 0) {
+      form.setValue("sectionOrder", nextSectionOrder, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  }
 
   return (
     <section aria-labelledby="home-editor-title" className="space-y-6">
@@ -936,6 +989,14 @@ export function HomeEditor() {
           </ol>
         </EditorSection>
         </fieldset>
+
+        <LayoutEditor
+          allowedKinds={HOME_LAYOUT_KINDS}
+          blockLabels={SECTION_LABELS}
+          layout={editableLayout}
+          onChange={applyHomeLayout}
+          protectedBlockIds={new Set(HOME_LAYOUT_KINDS)}
+        />
 
         <VersionsPanel
           disabled={editorLocked}

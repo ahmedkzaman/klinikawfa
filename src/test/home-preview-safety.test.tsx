@@ -86,6 +86,27 @@ describe("projectHomePreview", () => {
     expect(preview).not.toBe(raw);
     expect(preview.hero).not.toBe(raw.hero);
   });
+
+  it("keeps a valid unsaved layout for the exact public preview renderer", () => {
+    const raw = structuredClone(DEFAULT_HOME_CONTENT) as typeof DEFAULT_HOME_CONTENT & {
+      layout: unknown;
+    };
+    raw.layout = {
+      version: 1,
+      blocks: [
+        {
+          id: "hero",
+          kind: "hero",
+          contentRef: "hero",
+          order: 0,
+          hidden: false,
+          desktop: { column: 1, width: 12, row: 1, height: 1 },
+        },
+      ],
+    };
+
+    expect(projectHomePreview(raw).layout).toEqual(raw.layout);
+  });
 });
 
 describe("HeroCarousel preview safety", () => {

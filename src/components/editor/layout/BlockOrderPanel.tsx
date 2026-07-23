@@ -60,7 +60,7 @@ export function BlockOrderPanel<K extends string>({
                   <ArrowDown aria-hidden="true" className="h-4 w-4" />
                 </Button>
                 <Button
-                  aria-label={`${block.hidden ? "Show" : "Hide"} ${label}`}
+                  aria-label={`${block.hidden ? "Show" : "Hide"} ${label} layout block`}
                   onClick={() => onVisibility(block.id, !block.hidden)}
                   size="icon"
                   type="button"

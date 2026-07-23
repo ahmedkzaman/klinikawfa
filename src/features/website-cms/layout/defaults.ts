@@ -7,6 +7,7 @@ import type {
   WebsiteLayout,
   WebsiteLayoutBlock,
 } from "./types";
+import { HOME_LAYOUT_KINDS } from "./types";
 
 function createFullWidthBlocks<K extends string>(
   kinds: readonly K[],
@@ -32,6 +33,24 @@ export function createDefaultHomeLayout(
   return {
     version: 1,
     blocks: createFullWidthBlocks(sectionOrder),
+  };
+}
+
+export function createEditableHomeLayout(
+  sectionOrder: readonly HomeSectionId[],
+): WebsiteLayout<HomeLayoutKind> {
+  const visible = new Set(sectionOrder);
+  const ordered = [
+    ...sectionOrder,
+    ...HOME_LAYOUT_KINDS.filter((kind) => !visible.has(kind)),
+  ];
+  const layout = createDefaultHomeLayout(ordered);
+  return {
+    ...layout,
+    blocks: layout.blocks.map((block) => ({
+      ...block,
+      hidden: !visible.has(block.kind),
+    })),
   };
 }
 

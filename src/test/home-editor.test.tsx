@@ -291,6 +291,38 @@ describe("LivePreview", () => {
 });
 
 describe("HomeEditor", { timeout: 30_000 }, () => {
+  it("saves grid changes only through the existing private draft payload", async () => {
+    await loadEditor();
+
+    expect(
+      screen.getByRole("heading", { name: "Advanced grid designer" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Two equal columns" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Draft" }));
+
+    await waitFor(() =>
+      expect(pageApi.savePageDraft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.objectContaining({
+            layout: expect.objectContaining({
+              version: 1,
+              blocks: expect.arrayContaining([
+                expect.objectContaining({
+                  kind: "hero",
+                  desktop: expect.objectContaining({ column: 1, width: 6 }),
+                }),
+                expect.objectContaining({
+                  kind: "why",
+                  desktop: expect.objectContaining({ column: 7, width: 6 }),
+                }),
+              ]),
+            }),
+          }),
+        }),
+      ),
+    );
+  });
+
   it("renders local unsaved changes in the final bottom preview before saving", async () => {
     await loadEditor();
     const input = screen.getByRole("textbox", {

@@ -88,9 +88,13 @@ describe("LayoutEditor", () => {
   it("supports hide, semantic reorder, undo, redo, and presets", () => {
     const { onChange } = renderEditor();
 
-    fireEvent.click(screen.getByRole("button", { name: "Hide Main content" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Hide Main content layout block" }),
+    );
     expect(onChange).toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Show Main content" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Show Main content layout block" }),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Move Main content up" }));
     expect(onChange).toHaveBeenLastCalledWith(
