@@ -31,7 +31,6 @@ import {
 import { printDocument } from '@/lib/clinic/printDocument';
 
 import { PrintReceiptDialog } from '@/components/clinic/billing/PrintReceiptDialog';
-import { DrugLabelPrintout } from '@/components/clinic/dispensary/DrugLabelPrintout';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -62,9 +61,12 @@ import {
 import { useConsultationLock } from '@/hooks/clinic/useConsultationLock';
 import { ConsultationLockBanner } from '@/components/clinic/consultation/ConsultationLockBanner';
 import { useConsultationItems } from '@/hooks/clinic/useConsultationItems';
+import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
+import { useDrugLabelSettings } from '@/hooks/clinic/useDrugLabelSettings';
 import { usePayments } from '@/hooks/clinic/usePayments';
 import { CatalogItemPicker } from '@/components/clinic/visit/CatalogItemPicker';
 import { EditInstructionsDialog } from '@/components/clinic/visit/EditInstructionsDialog';
+import { generateDrugLabelPdf } from '@/lib/clinic/printDrugLabel';
 import type { ConsultationItemRow } from '@/types/clinic';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
@@ -89,6 +91,21 @@ import {
   primaryBtn,
   secondaryBtn,
 } from '@/lib/clinic/bentoTokens';
+
+type ConsultationItemWithInventoryDefaults = ConsultationItemRow & {
+  inventory_items?: {
+    category?: string | null;
+    unit?: string | null;
+    default_indication?: string | null;
+    default_dosage_qty?: number | string | null;
+    default_dosage_unit?: string | null;
+    default_frequency?: string | null;
+    default_instruction?: string | null;
+    default_duration?: string | null;
+    default_duration_unit?: string | null;
+    default_precaution?: string | null;
+  } | null;
+};
 
 export default function DispenseCheckout() {
   const { queueEntryId } = useParams<{ queueEntryId: string }>();
@@ -121,6 +138,8 @@ export default function DispenseCheckout() {
 
   const { data: consultation, isFetched: consultationFetched, refetch: refetchConsultation } = useConsultation(queueEntryId);
   const { data: items = [] } = useConsultationItems(consultation?.id);
+  const { settings: clinicSettings } = useClinicSettings();
+  const { data: labelSettings } = useDrugLabelSettings();
   const { data: payments = [] } = usePayments(queueEntryId);
   const { data: attachedDocs = [] } = useConsultationDocuments(consultation?.id);
   const { data: docTemplates = [] } = useDocumentTemplates();
@@ -302,7 +321,6 @@ export default function DispenseCheckout() {
   const patientDue = Math.max(grandTotal - panelCoveredAmount, 0);
 
   const [printPaymentId, setPrintPaymentId] = useState<string | null>(null);
-  const [printLabels, setPrintLabels] = useState(false);
   const latestPaymentId = useMemo(() => {
     if (!payments.length) return null;
     const sorted = [...payments].sort(
@@ -364,6 +382,88 @@ export default function DispenseCheckout() {
     paymentMethod,
   ]);
 
+  const handlePrintLabels = useCallback(() => {
+    const labelRows = (items as ConsultationItemWithInventoryDefaults[])
+      .filter((item) => {
+        if (!item.item_id) return false;
+        const category = item.inventory_items?.category ?? null;
+        return category === 'Medication' || category === 'Vaccine';
+      })
+      .map((item) => {
+        const inventory = item.inventory_items ?? null;
+        const fallbackDosageQtyRaw = inventory?.default_dosage_qty;
+        const fallbackDosageQty =
+          fallbackDosageQtyRaw == null || fallbackDosageQtyRaw === ''
+            ? null
+            : Number(fallbackDosageQtyRaw);
+        const fallbackDuration =
+          inventory?.default_duration == null || inventory.default_duration === ''
+            ? null
+            : inventory.default_duration_unit
+              ? `${inventory.default_duration} ${inventory.default_duration_unit}`
+              : inventory.default_duration;
+
+        return {
+          item_name: item.item_name,
+          quantity: item.quantity ?? 0,
+          unit: inventory?.unit ?? null,
+          indication: item.indication ?? inventory?.default_indication ?? null,
+          dosage: item.dosage ?? null,
+          dosage_qty:
+            item.dosage_qty ??
+            (Number.isFinite(fallbackDosageQty) ? fallbackDosageQty : null),
+          dosage_unit: item.dosage_unit ?? inventory?.default_dosage_unit ?? null,
+          frequency: item.frequency ?? inventory?.default_frequency ?? null,
+          instruction: item.instruction ?? inventory?.default_instruction ?? null,
+          duration: item.duration ?? fallbackDuration,
+          precaution: item.precaution ?? inventory?.default_precaution ?? null,
+        };
+      });
+
+    if (labelRows.length === 0) {
+      toast.info('No medicines to print labels for');
+      return;
+    }
+
+    try {
+      const addressFull = [
+        clinicSettings.address_line_1,
+        clinicSettings.address_line_2,
+      ]
+        .map((value) => (value ?? '').trim())
+        .filter(Boolean)
+        .join(', ');
+      const url = generateDrugLabelPdf(
+        labelRows,
+        patient?.name ?? null,
+        labelSettings,
+        {
+          name: clinicSettings.clinic_name,
+          addressFull,
+          phone: clinicSettings.phone,
+        },
+        patient?.date_of_birth ?? null,
+      );
+      const win = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!win) {
+        toast.error('Pop-up blocked - allow pop-ups to print labels');
+        return;
+      }
+      win.addEventListener(
+        'load',
+        () => {
+          try {
+            win.print();
+          } catch {
+            // The browser viewer can still print manually.
+          }
+        },
+        { once: true },
+      );
+    } catch (err) {
+      toast.error((err as Error).message || 'Failed to generate label PDF');
+    }
+  }, [clinicSettings, items, labelSettings, patient?.date_of_birth, patient?.name]);
 
   const handleComplete = async () => {
     if (!queueEntryId || !consultation?.id) return;
@@ -387,7 +487,6 @@ export default function DispenseCheckout() {
         p_payment_method: isPanelOnly ? 'panel' : paymentMethod,
         p_payment_type: panelId ? 'panel' : 'self_pay',
         p_panel_provider_id: panelId ?? null,
-        p_panel_covered_amount: panelCoveredAmount,
         p_other_charges: selectedCharges.map((c) => ({
           name: c.name,
           amount: c.amount,
@@ -816,7 +915,7 @@ export default function DispenseCheckout() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setPrintLabels(true)}
+              onClick={handlePrintLabels}
             >
               <Tags className="h-4 w-4 mr-2" />
               Print Drug Labels
@@ -875,14 +974,6 @@ export default function DispenseCheckout() {
         onOpenChange={(o) => !o && setPrintPaymentId(null)}
         paymentId={printPaymentId}
       />
-      {consultation?.id && (
-        <DrugLabelPrintout
-          consultationId={consultation.id}
-          patientName={patient?.name ?? null}
-          open={printLabels}
-          onClose={() => setPrintLabels(false)}
-        />
-      )}
 
       <IssueDocumentModal
         isOpen={!!issuingTemplate || !!editingDoc}
