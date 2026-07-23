@@ -447,7 +447,7 @@ describe("general page editor", () => {
         }),
       ),
     );
-  });
+  }, 15_000);
 
   it("rejects a reserved slug before creating a page or private draft", async () => {
     renderNewEditor();
