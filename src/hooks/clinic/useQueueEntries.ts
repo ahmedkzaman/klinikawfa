@@ -8,6 +8,13 @@ import type { QueueEntryWithJoins, QueueEntryRow } from "@/types/clinic";
 const QUEUE_QUERY_KEY = ["clinic", "queue-entries"] as const;
 const CONSULT_QUEUE_QUERY_KEY = ["clinic", "consultation-queue-entries"] as const;
 const CANCELLED_TODAY_QUERY_KEY = ["clinic", "queue-entries", "cancelled-today"] as const;
+let queueRealtimeSubscriberId = 0;
+
+export function createQueueRealtimeChannelName() {
+  queueRealtimeSubscriberId += 1;
+  return `clinic-queue-entries-sync-${queueRealtimeSubscriberId}`;
+}
+
 async function attachInsuranceProviderDirectory(
   rows: unknown[],
 ): Promise<QueueEntryWithJoins[]> {
@@ -49,7 +56,7 @@ function useQueueEntriesRealtimeSync() {
   const qc = useQueryClient();
   useEffect(() => {
     const channel = supabase
-      .channel("clinic-queue-entries-sync")
+      .channel(createQueueRealtimeChannelName())
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "queue_entries" },
