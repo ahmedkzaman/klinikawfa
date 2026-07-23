@@ -11,7 +11,6 @@ import { ArrowLeft, CheckCircle, Calendar, AlertTriangle } from "lucide-react";
 import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
 import { resolveServiceCategorySlug } from "@/lib/serviceSlugMap";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { PublicClosingCta, PublicPageHeader } from "@/components/public";
 
 const stripHtml = (html: string) =>
   (html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -100,9 +99,6 @@ export default function ServiceDetail() {
   const description = language === "en" ? service.description_en || service.description_ms || service.description : service.description_ms || service.description;
   const callToAction = language === "en" ? service.call_to_action_en || service.call_to_action_ms || service.call_to_action : service.call_to_action_ms || service.call_to_action;
   const serviceItems = language === "en" && service.services_list_en?.length ? service.services_list_en : service.services_list_ms?.length ? service.services_list_ms : service.services_list;
-  const sanitizedDescription = description === service.description
-    ? sanitizeRichHtml(service.description || "")
-    : sanitizeRichHtml(description || "");
 
   return (
     <MainLayout>
@@ -112,9 +108,8 @@ export default function ServiceDetail() {
         url={`/services/${service.slug}`}
       />
 
-      <PublicPageHeader title={title} />
-
-      <section className="border-b border-border/70 bg-muted/20 py-12 md:py-16">
+      {/* Hero */}
+      <section className="bg-gradient-to-br from-primary/10 via-background to-accent/5 py-16 md:py-24">
         <div className="container">
           <Link
             to="/services"
@@ -122,10 +117,11 @@ export default function ServiceDetail() {
           >
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Services
           </Link>
+          <h1 className="mb-4">{title}</h1>
           <div
-            className="service-rich-content mb-8 max-w-3xl text-muted-foreground"
+            className="service-rich-content prose max-w-none mb-8 text-muted-foreground"
             dangerouslySetInnerHTML={{
-              __html: sanitizedDescription,
+              __html: sanitizeRichHtml(description || ""),
             }}
           />
           <Button asChild size="lg">
@@ -162,11 +158,20 @@ export default function ServiceDetail() {
         </Card>
       </section>
 
-      <PublicClosingCta
-        title="Ready to seek treatment?"
-        description="Book an appointment online or walk in to our clinic today. Our medical team is ready to assist you."
-        appointmentLabel={callToAction}
-      />
+      {/* Bottom CTA */}
+      <section className="bg-primary py-16 text-primary-foreground">
+        <div className="container text-center">
+          <h2 className="mb-4 text-primary-foreground">Ready to seek treatment?</h2>
+          <p className="mx-auto mb-8 max-w-xl text-primary-foreground/80">
+            Book an appointment online or walk in to our clinic today. Our medical team is ready to assist you.
+          </p>
+          <Button asChild size="lg" variant="secondary">
+            <Link to="/appointment">
+              <Calendar className="mr-2 h-5 w-5" /> {callToAction}
+            </Link>
+          </Button>
+        </div>
+      </section>
     </MainLayout>
   );
 }

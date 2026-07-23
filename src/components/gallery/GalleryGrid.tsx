@@ -28,9 +28,9 @@ export function GalleryGrid() {
     return (
       <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-6 text-center">
         <p className="text-sm text-destructive">
-          {language === 'ms'
-          ? 'Ralat memuatkan galeri. Sila cuba lagi.'
-          : 'Error loading gallery. Please try again.'}
+          {language === 'ms' 
+            ? 'Ralat memuatkan galeri. Sila cuba lagi.' 
+            : 'Error loading gallery. Please try again.'}
         </p>
       </div>
     );
@@ -39,7 +39,7 @@ export function GalleryGrid() {
   return (
     <>
       {/* Filter Buttons */}
-      <div className="border-b border-border bg-card py-4">
+      <div className="border-b border-border py-4">
         <div className="container">
           <div className="flex flex-wrap gap-2">
             {GALLERY_CATEGORIES.map((cat) => (
@@ -49,7 +49,6 @@ export function GalleryGrid() {
                 size="sm"
                 onClick={() => setActiveCategory(cat.id as GalleryCategoryId)}
                 className={cn(
-                  'min-h-11 px-4',
                   activeCategory === cat.id && 'bg-primary text-primary-foreground hover:bg-primary/90'
                 )}
               >
@@ -88,7 +87,7 @@ export function GalleryGrid() {
                 <button
                   key={image.id}
                   onClick={() => handleImageClick(index)}
-                  className="group relative aspect-square cursor-pointer overflow-hidden rounded-lg bg-muted shadow-soft transition-shadow hover:shadow-card focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                  className="group relative aspect-square cursor-pointer overflow-hidden rounded-xl bg-muted transition-all hover:shadow-card focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
                 >
                   <img
                     src={image.url}

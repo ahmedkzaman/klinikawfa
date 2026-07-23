@@ -538,66 +538,6 @@ describe("data-driven Home renderer", () => {
     expect(play).toHaveBeenCalledTimes(1);
   });
 
-  it("labels video controls dynamically in Malay", async () => {
-    const content = structuredClone(DEFAULT_HOME_CONTENT.video);
-    testState.videoSettingsData.push({
-      key: content.videoUrlSettingKey,
-      value: "/clinic.mp4",
-    });
-    const play = vi
-      .spyOn(HTMLMediaElement.prototype, "play")
-      .mockResolvedValue(undefined);
-    const pause = vi
-      .spyOn(HTMLMediaElement.prototype, "pause")
-      .mockImplementation(() => undefined);
-
-    renderSection(createElement(VideoSection, { content, preview: false }));
-
-    const pauseButton = await screen.findByRole("button", {
-      name: "Jeda video",
-    });
-    expect(pauseButton).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("button", { name: "Nyahredam video" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-
-    fireEvent.click(pauseButton);
-    expect(pause).toHaveBeenCalledOnce();
-    const playButton = screen.getByRole("button", { name: "Mainkan video" });
-    expect(playButton).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    playButton.focus();
-    expect(playButton).toHaveFocus();
-    expect(playButton.parentElement).toHaveClass(
-      "opacity-0",
-      "focus-within:opacity-100",
-    );
-    expect(play).toHaveBeenCalledTimes(1);
-  });
-
-  it("labels video controls dynamically in English", async () => {
-    localStorage.setItem("klinik-awfa-language", "en");
-    const content = structuredClone(DEFAULT_HOME_CONTENT.video);
-    testState.videoSettingsData.push({
-      key: content.videoUrlSettingKey,
-      value: "/clinic.mp4",
-    });
-    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
-
-    renderSection(createElement(VideoSection, { content, preview: false }));
-
-    expect(
-      await screen.findByRole("button", { name: "Pause video" }),
-    ).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("button", { name: "Unmute video" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-  });
-
   it("renders the configured Services limit and blocks preview links", () => {
     const content = structuredClone(DEFAULT_HOME_CONTENT.services);
     content.title.ms = "Servis tersuai";

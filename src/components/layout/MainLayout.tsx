@@ -14,10 +14,12 @@ export function MainLayout({ children }: MainLayoutProps) {
       <SkipToContent />
       <SchemaMarkup />
       <Header />
-      <main id="main-content" className="flex-1 pb-20 lg:pb-0">
+      <main id="main-content" className="flex-1">
         {children}
       </main>
       <Footer />
+      {/* Spacer for fixed MobileCTABar on mobile */}
+      <div className="h-16 lg:hidden" aria-hidden="true" />
       <MobileCTABar />
     </div>
   );
