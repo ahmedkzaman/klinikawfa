@@ -132,6 +132,38 @@ jobs:
             editor/profile
             staff
             clinic
+            clinic/queue
+            clinic/appointments
+            clinic/video-calls
+            clinic/patients
+            clinic/consultation
+            clinic/dispensary
+            clinic/procurement
+            clinic/procurement-dashboard
+            clinic/seasonal-forecast
+            clinic/billings
+            clinic/panel-claims
+            clinic/receivables
+            clinic/inventory
+            clinic/inventory/restock-review
+            clinic/owe-slips
+            clinic/insight
+            clinic/settings
+            clinic/settings/clinic-profile
+            clinic/settings/preferences
+            clinic/settings/users
+            clinic/settings/locum-registration
+            clinic/settings/inventory
+            clinic/settings/diagnoses
+            clinic/settings/panels
+            clinic/settings/drug-label
+            clinic/settings/documents
+            clinic/settings/document-templates
+            clinic/settings/charges
+            clinic/settings/queue
+            clinic/settings/procurement-rules
+            clinic/voided
+            clinic
             admin
           )
           for route in "${routes[@]}"; do

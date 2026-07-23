@@ -11,6 +11,43 @@ const cnamePath = resolve(repoRoot, "public/CNAME");
 const readWorkflow = () => readFileSync(workflowPath, "utf8");
 
 describe("GitHub Pages hosting", () => {
+  const fixedClinicRoutes = [
+    "clinic",
+    "clinic/queue",
+    "clinic/appointments",
+    "clinic/video-calls",
+    "clinic/patients",
+    "clinic/consultation",
+    "clinic/dispensary",
+    "clinic/procurement",
+    "clinic/procurement-dashboard",
+    "clinic/seasonal-forecast",
+    "clinic/billings",
+    "clinic/panel-claims",
+    "clinic/receivables",
+    "clinic/inventory",
+    "clinic/inventory/restock-review",
+    "clinic/owe-slips",
+    "clinic/insight",
+    "clinic/settings",
+    "clinic/settings/clinic-profile",
+    "clinic/settings/preferences",
+    "clinic/settings/users",
+    "clinic/settings/locum-registration",
+    "clinic/settings/inventory",
+    "clinic/settings/diagnoses",
+    "clinic/settings/panels",
+    "clinic/settings/drug-label",
+    "clinic/settings/documents",
+    "clinic/settings/document-templates",
+    "clinic/settings/charges",
+    "clinic/settings/queue",
+    "clinic/settings/procurement-rules",
+    "clinic/voided",
+    "staff",
+    "admin",
+  ];
+
   it("deploys only successful Security Gate commits from main", () => {
     const workflow = readWorkflow();
     expect(workflow).toContain('workflows: ["Security Gate"]');
@@ -50,5 +87,15 @@ describe("GitHub Pages hosting", () => {
 
   it("declares the approved production domain", () => {
     expect(readFileSync(cnamePath, "utf8").trim()).toBe("klinikawfa.com");
+  });
+
+  it("pre-renders every fixed clinic portal and staff routes", () => {
+    const workflow = readWorkflow();
+
+    for (const route of fixedClinicRoutes) {
+      expect(workflow).toContain(`\n            ${route}\n`);
+      expect(workflow).toContain(`mkdir -p "dist/${route}"`);
+      expect(workflow).toContain(`cp dist/index.html "dist/${route}/index.html"`);
+    }
   });
 });
