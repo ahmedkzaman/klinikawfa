@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
   const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-  // 1. Manual JWT verification using anon client + getClaims
+  // 1. Verify the caller token with the method supported by the pinned client.
   const authHeader = req.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
     return json({ error: 'Unauthorized' }, 401);
@@ -50,11 +50,11 @@ Deno.serve(async (req) => {
   const token = authHeader.slice('Bearer '.length);
 
   const anon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const { data: claimsData, error: claimsErr } = await anon.auth.getClaims(token);
-  if (claimsErr || !claimsData?.claims?.sub) {
+  const { data: userData, error: userError } = await anon.auth.getUser(token);
+  if (userError || !userData?.user?.id) {
     return json({ error: 'Invalid token' }, 401);
   }
-  const callerId = claimsData.claims.sub as string;
+  const callerId = userData.user.id;
 
   // 2. Service-role client for privileged ops
   const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
