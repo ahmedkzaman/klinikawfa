@@ -33,5 +33,13 @@ const RICH_HTML_CONFIG = {
 
 export function sanitizeRichHtml(html: string): string {
   if (!html) return "";
-  return DOMPurify.sanitize(html, RICH_HTML_CONFIG) as unknown as string;
+  const sanitized = DOMPurify.sanitize(
+    html,
+    RICH_HTML_CONFIG,
+  ) as unknown as string;
+
+  // Quill may export ordinary prose with every separator encoded as a
+  // non-breaking space. Normalizing those separators after sanitization keeps
+  // the wording intact while allowing long descriptions to wrap on mobile.
+  return sanitized.replace(/(?:&nbsp;|\u00a0)/g, " ");
 }

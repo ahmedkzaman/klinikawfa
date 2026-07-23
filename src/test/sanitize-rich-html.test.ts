@@ -72,6 +72,14 @@ describe("sanitizeRichHtml (GHSA-v3m3-f69x-jf25 mitigation)", () => {
     expect(clean).toContain('src="https://cdn.example/v.mp4"');
   });
 
+  it("normalizes Quill non-breaking spaces so long prose can wrap on mobile", () => {
+    const clean = sanitizeRichHtml(
+      "<p>Rawatan&nbsp;pantas\u00a0untuk&nbsp;keluarga</p>",
+    );
+
+    expect(clean).toBe("<p>Rawatan pantas untuk keluarga</p>");
+  });
+
   it("is idempotent", () => {
     const input =
       '<p>hi <a href="https://x.example">x</a></p><script>bad()</script>';
