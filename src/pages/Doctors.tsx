@@ -4,6 +4,7 @@ import { SEOHead } from '@/components/seo';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { PublicPageHeader } from '@/components/public';
 import { CLINIC_INFO } from '@/lib/constants';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
@@ -17,7 +18,9 @@ import {
   Clock,
   Users,
   ShieldCheck,
-  Loader2
+  Loader2,
+  Info,
+  Camera
 } from 'lucide-react';
 
 type TeamMember = Tables<'team_members'>;
@@ -161,29 +164,13 @@ export default function Doctors() {
         url="/doctors"
       />
 
-      {/* Hero Section */}
-      {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-background via-primary/5 to-background py-16 md:py-24">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,hsl(var(--primary)/0.1),transparent_50%)]" />
-        <div className="container relative">
-          <div className="mx-auto max-w-3xl text-center">
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-sm font-medium text-primary">
-              <Stethoscope className="h-4 w-4" />
-              {language === 'ms' ? 'Pasukan Perubatan Kami' : 'Our Medical Team'}
-            </div>
-            <h1 className="mb-6">
-              {language === 'ms' 
-                ? 'Doktor Yang Mengutamakan Anda' 
-                : 'Doctors Who Put You First'}
-            </h1>
-            <p className="text-lg text-muted-foreground md:text-xl">
-              {language === 'ms'
-                ? 'Pasukan doktor berpengalaman kami komited untuk memberikan rawatan kesihatan berkualiti tinggi dengan sentuhan peribadi untuk setiap pesakit.'
-                : 'Our experienced team of doctors is committed to providing high-quality healthcare with a personal touch for every patient.'}
-            </p>
-          </div>
-        </div>
-      </section>
+      <PublicPageHeader
+        eyebrow={language === 'ms' ? 'Pasukan Perubatan Kami' : 'Our Medical Team'}
+        title={language === 'ms' ? 'Doktor Yang Mengutamakan Anda' : 'Doctors Who Put You First'}
+        description={language === 'ms'
+          ? 'Pasukan doktor berpengalaman kami komited untuk memberikan rawatan kesihatan berkualiti tinggi dengan sentuhan peribadi untuk setiap pesakit.'
+          : 'Our experienced team of doctors is committed to providing high-quality healthcare with a personal touch for every patient.'}
+      />
 
       {/* Values Section */}
       <section className="border-b border-border/50 bg-muted/30 py-12">
@@ -223,9 +210,10 @@ export default function Doctors() {
           </div>
 
           {usingMockData && (
-            <div className="mb-8 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-center">
-              <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
-                ⚠️ {language === 'ms'
+            <div className="mb-8 flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-4" role="status">
+              <Info className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+              <p className="text-sm font-medium text-foreground">
+                {language === 'ms'
                   ? 'Ini adalah data contoh. Data sebenar akan dikemaskini tidak lama lagi.'
                   : 'This is sample data. Actual data will be updated soon.'}
               </p>
@@ -241,26 +229,26 @@ export default function Doctors() {
               {doctors.map((doctor) => (
                 <Card 
                   key={doctor.id} 
-                  className="group overflow-hidden border-border/50 shadow-soft transition-all hover:shadow-card"
+                  className="overflow-hidden border-border bg-card shadow-sm transition-shadow hover:shadow-md"
                 >
                   {/* Photo or Placeholder */}
-                  <div className="relative aspect-[16/10] bg-gradient-to-br from-primary/10 via-primary/5 to-background">
+                  <div className="relative flex min-h-48 items-center justify-center border-b border-border bg-muted/40 p-6">
                     <div className="absolute inset-0 flex items-center justify-center">
                       {doctor.photo_url ? (
                         <img
                           src={doctor.photo_url}
                           alt={language === 'ms' ? doctor.name_ms : doctor.name_en}
-                          className="h-28 w-28 rounded-full object-cover shadow-lg ring-4 ring-primary/20 md:h-36 md:w-36"
+                          className="h-28 w-28 rounded-full border-4 border-background object-cover shadow-sm md:h-36 md:w-36"
                         />
                       ) : (
-                        <div className="flex h-28 w-28 items-center justify-center rounded-full bg-background shadow-lg ring-4 ring-primary/20 md:h-36 md:w-36">
+                        <div className="flex h-28 w-28 items-center justify-center rounded-full border border-border bg-background shadow-sm md:h-36 md:w-36">
                           <User className="h-14 w-14 text-primary md:h-18 md:w-18" />
                         </div>
                       )}
                     </div>
                     {/* Experience Badge */}
                     {doctor.years_experience && (
-                      <div className="absolute bottom-4 right-4 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-lg">
+                      <div className="absolute bottom-4 right-4 rounded-full border border-primary/20 bg-background px-4 py-2 text-sm font-semibold text-primary">
                         {doctor.years_experience}+ {language === 'ms' ? 'Tahun' : 'Years'}
                       </div>
                     )}
@@ -272,7 +260,7 @@ export default function Doctors() {
                       <h3 className="text-2xl font-bold md:text-3xl">
                         {language === 'ms' ? doctor.name_ms : doctor.name_en}
                       </h3>
-                      <p className="text-lg text-muted-foreground">
+                      <p className="text-lg font-medium text-muted-foreground">
                         {language === 'ms' ? doctor.title_ms : doctor.title_en}
                       </p>
                     </div>
@@ -283,7 +271,7 @@ export default function Doctors() {
                         {doctor.qualifications.map((qual) => (
                           <span
                             key={qual}
-                            className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary"
+                            className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-sm font-semibold text-primary"
                           >
                             <Award className="h-4 w-4" />
                             {qual}
@@ -302,7 +290,7 @@ export default function Doctors() {
                           {(language === 'ms' ? doctor.expertise_ms : doctor.expertise_en)?.map((exp) => (
                             <span
                               key={exp}
-                              className="inline-flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm"
+                              className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm"
                             >
                               <Stethoscope className="h-4 w-4 text-primary" />
                               {exp}
@@ -323,9 +311,10 @@ export default function Doctors() {
           )}
 
           {/* Photo Update Notice */}
-          <div className="mt-10 rounded-2xl border border-dashed border-primary/30 bg-primary/5 p-6 text-center">
+          <div className="mt-10 flex items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center">
+            <Camera className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
             <p className="text-sm text-muted-foreground">
-              📸 {language === 'ms'
+              {language === 'ms'
                 ? 'Gambar profesional doktor akan dikemaskini tidak lama lagi.'
                 : 'Professional doctor photos will be updated soon.'}
             </p>
@@ -355,7 +344,7 @@ export default function Doctors() {
             ) : (
               <div className="grid gap-6 sm:grid-cols-2">
                 {staff.map((member) => (
-                  <Card key={member.id} className="border-border/50 bg-card shadow-soft">
+                  <Card key={member.id} className="border-border bg-card shadow-sm">
                     <CardContent className="p-6">
                       <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                         {member.photo_url ? (
@@ -384,8 +373,8 @@ export default function Doctors() {
             )}
 
             {/* Friendly Message */}
-            <div className="mt-8 rounded-2xl bg-gradient-to-r from-primary/10 to-primary/5 p-6 text-center md:p-8">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/20 text-primary">
+            <div className="mt-8 rounded-lg border border-border bg-background p-6 text-center md:p-8">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <Heart className="h-8 w-8" />
               </div>
               <h3 className="mb-2 text-xl font-semibold">
@@ -404,28 +393,28 @@ export default function Doctors() {
       </section>
 
       {/* CTA Section */}
-      <section className="bg-primary py-16 text-primary-foreground">
+      <section className="border-t border-border bg-muted/30 py-16">
         <div className="container">
           <div className="mx-auto max-w-3xl text-center">
-            <h2 className="mb-4 text-primary-foreground">
+            <h2 className="mb-4">
               {language === 'ms' ? 'Buat Temujanji Hari Ini' : 'Book an Appointment Today'}
             </h2>
-            <p className="mb-8 text-primary-foreground/80">
+            <p className="mb-8 text-muted-foreground">
               {language === 'ms'
                 ? 'Hubungi kami sekarang untuk membuat temujanji dengan doktor kami. Kami sedia membantu anda.'
                 : 'Contact us now to make an appointment with our doctors. We are ready to help you.'}
             </p>
             <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <Button size="lg" variant="secondary" className="min-w-[180px]" asChild>
+              <Button size="lg" className="min-w-[180px]" asChild>
                 <a href={CLINIC_INFO.whatsapp} target="_blank" rel="noopener noreferrer">
                   <MessageCircle className="mr-2 h-5 w-5" />
                   WhatsApp
                 </a>
               </Button>
-              <Button 
-                size="lg" 
-                variant="outline" 
-                className="min-w-[180px] border-primary-foreground/30 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground" 
+              <Button
+                size="lg"
+                variant="outline"
+                className="min-w-[180px]"
                 asChild
               >
                 <a href={CLINIC_INFO.phoneLink}>

@@ -4,6 +4,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
+import { PublicSectionHeader } from '@/components/public';
 import { SERVICES } from '@/lib/constants';
 import { 
   ArrowRight, 
@@ -88,7 +89,7 @@ export function ServicesPreview({ content, preview = false }: ServicesPreviewPro
         {localized(content.cta.label)}
         <ArrowRight
           className={animated
-            ? 'ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform'
+            ? 'ml-2 h-4 w-4 group-hover:translate-x-0.5 transition-transform'
             : 'ml-2 h-4 w-4'}
         />
       </>
@@ -114,34 +115,21 @@ export function ServicesPreview({ content, preview = false }: ServicesPreviewPro
   };
 
   return (
-    <section className="relative py-20 md:py-28 overflow-hidden gradient-section-alt">
-      {/* Decorative elements */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/5 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-accent/5 rounded-full blur-3xl" />
-      </div>
-
+    <section className="public-section bg-muted/45">
       <div className="container relative z-10">
         <motion.div
           initial={false}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 0.6 }}
-          className="mb-14 flex flex-col items-center text-center sm:flex-row sm:items-end sm:justify-between sm:text-left"
+          className="mb-10 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between"
         >
           <div>
-            <motion.span
-              initial={false}
-              whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true }}
-              className="inline-block mb-4 px-4 py-1.5 rounded-full bg-accent/10 text-accent text-sm font-medium border border-accent/20"
-            >
-              {localized(content.eyebrow)}
-            </motion.span>
-            <h2 className="mb-4">{localized(content.title)}</h2>
-            <p className="max-w-2xl text-muted-foreground text-lg">
-              {localized(content.description)}
-            </p>
+            <PublicSectionHeader
+              eyebrow={localized(content.eyebrow)}
+              title={localized(content.title)}
+              description={localized(content.description)}
+            />
           </div>
           <motion.div
             initial={false}
@@ -151,7 +139,7 @@ export function ServicesPreview({ content, preview = false }: ServicesPreviewPro
           >
             <Button 
               variant="outline" 
-              className="hidden sm:flex group border-2 hover:border-primary/50 hover:bg-primary/5 transition-all duration-300" 
+              className="hidden min-h-11 sm:flex group border-border bg-background hover:border-primary/50 hover:bg-muted"
               asChild
             >
               {renderCta(true)}
@@ -164,7 +152,7 @@ export function ServicesPreview({ content, preview = false }: ServicesPreviewPro
           initial={false}
           whileInView="visible"
           viewport={{ once: true, margin: "-50px" }}
-          className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3"
+          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
         >
           {featuredServices.map((service, index) => {
             const IconComponent = iconMap[service.icon] || Stethoscope;
@@ -174,18 +162,18 @@ export function ServicesPreview({ content, preview = false }: ServicesPreviewPro
                   to={`/services/${service.slug}`}
                   onClick={preview ? preventPreviewNavigation : undefined}
                 >
-                  <Card className="group h-full interactive-card border-border/50 shadow-soft rounded-2xl overflow-hidden">
-                    <CardContent className="flex items-start gap-5 p-6">
-                      <div className="icon-gradient h-14 w-14 shrink-0 text-primary relative z-10">
-                        <IconComponent className="h-7 w-7 relative z-10" />
+                  <Card className="group h-full rounded-none border-border bg-card shadow-soft transition-transform hover:-translate-y-0.5 hover:border-primary/35">
+                    <CardContent className="flex items-start gap-4 p-6">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center border border-primary/20 bg-background text-primary">
+                        <IconComponent className="h-6 w-6" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h4 className="mb-2 font-bold text-lg group-hover:text-primary transition-colors duration-300">
+                        <h4 className="mb-2 font-bold text-lg group-hover:text-primary transition-colors">
                           {language === 'ms' ? service.titleMs : service.titleEn}
                         </h4>
                         <p className="text-sm text-muted-foreground flex items-center gap-1 group-hover:text-primary/80 transition-colors">
                           {localized(content.learnMoreLabel)}
-                          <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
+                          <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
                         </p>
                       </div>
                     </CardContent>
@@ -203,7 +191,7 @@ export function ServicesPreview({ content, preview = false }: ServicesPreviewPro
           transition={{ delay: 0.4 }}
           className="mt-10 text-center sm:hidden"
         >
-          <Button variant="outline" className="border-2" asChild>
+            <Button variant="outline" className="min-h-11 border-border bg-background" asChild>
             {renderCta(false)}
           </Button>
         </motion.div>

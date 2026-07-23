@@ -16,6 +16,7 @@ import {
 
 import { MainLayout } from "@/components/layout";
 import { SEOHead } from "@/components/seo";
+import { PublicPageHeader } from "@/components/public";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -130,10 +131,10 @@ export default function AppointmentBooking() {
       setBookingId(data.id);
       setStep(4);
     },
-    onError: (err: any) => {
+    onError: (error: unknown) => {
       toast({
         title: "Booking failed",
-        description: err?.message ?? "Please try again",
+        description: error instanceof Error ? error.message : "Please try again",
         variant: "destructive",
       });
     },
@@ -155,19 +156,22 @@ export default function AppointmentBooking() {
         title="Book Appointment | Klinik Awfa"
         description="Reserve your appointment slot at Klinik Awfa. Simple, secure, and confirmed once your booking fee is received."
       />
-      <section className="bg-slate-50 py-12 md:py-16">
-        <div className="container max-w-2xl mx-auto px-4">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl md:text-4xl font-bold text-slate-900">
-              Book Your Appointment
-            </h1>
-            <p className="mt-2 text-slate-600">
-              Reserve your slot in three quick steps.
-            </p>
-          </div>
+      <PublicPageHeader
+        title="Book Your Appointment"
+        description="Reserve your slot in three quick steps."
+      />
+      <section className="bg-muted/30 py-10 md:py-14">
+        <div className="container mx-auto max-w-3xl px-4">
 
           {step < 4 && (
-            <div className="flex items-center justify-center gap-2 mb-6">
+            <div
+              className="mb-6 flex items-center justify-center gap-2"
+              role="progressbar"
+              aria-label="Booking progress"
+              aria-valuemin={1}
+              aria-valuemax={3}
+              aria-valuenow={step}
+            >
               {[1, 2, 3].map((n) => (
                 <div key={n} className="flex items-center gap-2">
                   <div
@@ -193,19 +197,19 @@ export default function AppointmentBooking() {
             </div>
           )}
 
-          <Card>
+          <Card className="border-border/70 shadow-card">
             {step === 1 && (
               <>
-                <CardHeader>
-                  <CardTitle>Patient Details</CardTitle>
+                <CardHeader className="space-y-2 pb-5">
+                  <CardTitle className="font-display text-2xl">Patient Details</CardTitle>
                   <CardDescription>Who is this appointment for?</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="patient_name">Full Name</Label>
-                    <Input id="patient_name" {...register("patient_name")} />
+                    <Input id="patient_name" className="min-h-11" {...register("patient_name")} />
                     {formState.errors.patient_name && (
-                      <p className="text-sm text-destructive">
+                      <p className="text-sm text-destructive" role="alert">
                         {formState.errors.patient_name.message}
                       </p>
                     )}
@@ -215,10 +219,11 @@ export default function AppointmentBooking() {
                     <Input
                       id="patient_phone"
                       placeholder="012-3456789"
+                      className="min-h-11"
                       {...register("patient_phone")}
                     />
                     {formState.errors.patient_phone && (
-                      <p className="text-sm text-destructive">
+                      <p className="text-sm text-destructive" role="alert">
                         {formState.errors.patient_phone.message}
                       </p>
                     )}
@@ -228,16 +233,17 @@ export default function AppointmentBooking() {
                     <Input
                       id="patient_ic"
                       placeholder="900101012345"
+                      className="min-h-11"
                       {...register("patient_ic")}
                     />
                     {formState.errors.patient_ic && (
-                      <p className="text-sm text-destructive">
+                      <p className="text-sm text-destructive" role="alert">
                         {formState.errors.patient_ic.message}
                       </p>
                     )}
                   </div>
                   <div className="flex justify-end pt-2">
-                    <Button onClick={next}>
+                    <Button onClick={next} className="min-h-11">
                       Next <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
@@ -247,13 +253,13 @@ export default function AppointmentBooking() {
 
             {step === 2 && (
               <>
-                <CardHeader>
-                  <CardTitle>Service &amp; Slot</CardTitle>
+                <CardHeader className="space-y-2 pb-5">
+                  <CardTitle className="font-display text-2xl">Service &amp; Slot</CardTitle>
                   <CardDescription>Choose what you need and when.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Service</Label>
+                    <Label htmlFor="service_slug">Service</Label>
                     <Select
                       value={values.service_slug}
                       onValueChange={(slug) => {
@@ -262,7 +268,7 @@ export default function AppointmentBooking() {
                         setValue("service_title", s?.title ?? "", { shouldValidate: true });
                       }}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="service_slug" className="min-h-11" aria-label="Service">
                         <SelectValue
                           placeholder={servicesLoading ? "Loading…" : "Select a service"}
                         />
@@ -276,20 +282,22 @@ export default function AppointmentBooking() {
                       </SelectContent>
                     </Select>
                     {formState.errors.service_slug && (
-                      <p className="text-sm text-destructive">
+                      <p className="text-sm text-destructive" role="alert">
                         {formState.errors.service_slug.message}
                       </p>
                     )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Date</Label>
+                    <Label htmlFor="appointment_date">Date</Label>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button
                           variant="outline"
+                          id="appointment_date"
+                          aria-label="Date"
                           className={cn(
-                            "w-full justify-start text-left font-normal",
+                            "min-h-11 w-full justify-start text-left font-normal",
                             !values.appointment_date && "text-muted-foreground",
                           )}
                         >
@@ -324,21 +332,21 @@ export default function AppointmentBooking() {
                       </PopoverContent>
                     </Popover>
                     {formState.errors.appointment_date && (
-                      <p className="text-sm text-destructive">
+                      <p className="text-sm text-destructive" role="alert">
                         {formState.errors.appointment_date.message}
                       </p>
                     )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Time Slot</Label>
+                    <Label htmlFor="appointment_time">Time Slot</Label>
                     <Select
                       value={values.appointment_time}
                       onValueChange={(v) =>
                         setValue("appointment_time", v, { shouldValidate: true })
                       }
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="appointment_time" className="min-h-11" aria-label="Time Slot">
                         <SelectValue placeholder="Select a 30-min slot" />
                       </SelectTrigger>
                       <SelectContent>
@@ -350,17 +358,17 @@ export default function AppointmentBooking() {
                       </SelectContent>
                     </Select>
                     {formState.errors.appointment_time && (
-                      <p className="text-sm text-destructive">
+                      <p className="text-sm text-destructive" role="alert">
                         {formState.errors.appointment_time.message}
                       </p>
                     )}
                   </div>
 
                   <div className="flex justify-between pt-2">
-                    <Button variant="ghost" onClick={() => setStep(1)}>
+                    <Button variant="ghost" onClick={() => setStep(1)} className="min-h-11">
                       <ChevronLeft className="h-4 w-4" /> Back
                     </Button>
-                    <Button onClick={next}>
+                    <Button onClick={next} className="min-h-11">
                       Next <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
@@ -370,8 +378,8 @@ export default function AppointmentBooking() {
 
             {step === 3 && (
               <>
-                <CardHeader>
-                  <CardTitle>Confirm &amp; Pay</CardTitle>
+                <CardHeader className="space-y-2 pb-5">
+                  <CardTitle className="font-display text-2xl">Confirm &amp; Pay</CardTitle>
                   <CardDescription>
                     Review your details before payment.
                   </CardDescription>
@@ -412,19 +420,19 @@ export default function AppointmentBooking() {
                       id="pdpa"
                       checked={!!values.pdpa}
                       onCheckedChange={(c) =>
-                        setValue("pdpa", c === true ? true : (undefined as any), {
+                        setValue("pdpa", c === true ? true : (undefined as unknown as true), {
                           shouldValidate: true,
                         })
                       }
                     />
-                    <Label htmlFor="pdpa" className="text-sm font-normal leading-snug">
+                    <Label htmlFor="pdpa" className="flex min-h-11 flex-1 items-center text-sm font-normal leading-snug">
                       I consent to Klinik Awfa processing my personal data in
                       accordance with the PDPA 2010 for the purpose of this
                       appointment.
                     </Label>
                   </div>
                   {formState.errors.pdpa && (
-                    <p className="text-sm text-destructive">
+                    <p className="text-sm text-destructive" role="alert">
                       {formState.errors.pdpa.message as string}
                     </p>
                   )}
@@ -434,12 +442,14 @@ export default function AppointmentBooking() {
                       variant="ghost"
                       onClick={() => setStep(2)}
                       disabled={bookMutation.isPending}
+                      className="min-h-11"
                     >
                       <ChevronLeft className="h-4 w-4" /> Back
                     </Button>
                     <Button
                       onClick={handleSubmit(onSubmit)}
                       disabled={bookMutation.isPending}
+                      className="min-h-11"
                     >
                       {bookMutation.isPending ? (
                         <>
@@ -471,7 +481,7 @@ export default function AppointmentBooking() {
                   </p>
                 )}
                 <div className="pt-4">
-                  <Button asChild variant="outline">
+                  <Button asChild variant="outline" className="min-h-11">
                     <Link to="/">Return home</Link>
                   </Button>
                 </div>

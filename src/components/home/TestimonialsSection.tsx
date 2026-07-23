@@ -13,8 +13,9 @@ import {
   CarouselNext,
   type CarouselApi,
 } from '@/components/ui/carousel';
-import { Quote, Star, Sparkles } from 'lucide-react';
+import { Quote, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { PublicSectionHeader } from '@/components/public';
 import type { HomeContent } from '@/features/website-cms/schemas/home';
 
 interface TestimonialsSectionProps {
@@ -58,42 +59,27 @@ export function TestimonialsSection({ content, preview = false }: TestimonialsSe
   }
 
   return (
-    <section className="relative py-20 md:py-28 overflow-hidden">
-      {/* Background decoration */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/4 left-0 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-0 w-80 h-80 bg-accent/5 rounded-full blur-3xl" />
-      </div>
-
+    <section className="public-section bg-muted/45">
       <div className="container relative z-10">
         <motion.div
           initial={false}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 0.6 }}
-          className="mb-14 text-center"
+          className="mb-12"
         >
-          <motion.span
-            initial={false}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            className="inline-flex items-center gap-2 mb-4 px-4 py-1.5 rounded-full bg-success/10 text-success text-sm font-medium border border-success/20"
-          >
-            <Sparkles className="h-4 w-4" />
-            {localized(content.eyebrow)}
-          </motion.span>
-          <h2 className="mb-4">
-            {localized(content.title)}
-          </h2>
-          <p className="mx-auto max-w-2xl text-muted-foreground text-lg">
-            {localized(content.description)}
-          </p>
+          <PublicSectionHeader
+            align="center"
+            eyebrow={localized(content.eyebrow)}
+            title={localized(content.title)}
+            description={localized(content.description)}
+          />
         </motion.div>
 
         {isLoading ? (
           <div className="flex gap-6 justify-center">
             {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-56 w-full max-w-sm rounded-2xl" />
+              <Skeleton key={i} className="h-56 w-full max-w-sm rounded-none" />
             ))}
           </div>
         ) : (
@@ -123,24 +109,22 @@ export function TestimonialsSection({ content, preview = false }: TestimonialsSe
                     aria-roledescription={localized(content.slideRoleDescription)}
                     className="pl-6 basis-full md:basis-1/2 lg:basis-1/3"
                   >
-                    <Card className="group h-full glass-card border-border/30 rounded-2xl overflow-hidden transition-all duration-500 hover:shadow-elevated hover:-translate-y-2">
-                      <CardContent className="p-6 relative">
-                        {/* Decorative quote */}
-                        <div className="absolute -top-2 -left-2 w-16 h-16 bg-gradient-to-br from-primary/20 to-primary/5 rounded-full blur-xl" />
-                        <Quote className="relative mb-4 h-10 w-10 text-primary/40" />
+                    <Card className="h-full rounded-none border-border bg-card shadow-soft transition-transform hover:-translate-y-0.5 hover:border-primary/35">
+                      <CardContent className="relative p-7">
+                        <Quote className="mb-6 h-9 w-9 text-primary" aria-hidden="true" />
 
                         {/* Rating */}
                         <div className="mb-4 flex gap-1">
                           {Array.from({ length: review.rating }).map((_, i) => (
                             <Star
                               key={i}
-                              className="h-5 w-5 fill-accent text-accent drop-shadow-sm"
+                              className="h-4 w-4 fill-accent text-accent"
                             />
                           ))}
                         </div>
 
                         {/* Text */}
-                        <p className="mb-5 text-muted-foreground leading-relaxed line-clamp-4">
+                        <p className="mb-6 font-display text-lg leading-8 text-foreground line-clamp-4">
                           "
                           {language === 'ms'
                             ? review.text_ms
@@ -149,7 +133,7 @@ export function TestimonialsSection({ content, preview = false }: TestimonialsSe
                         </p>
 
                         {/* Name */}
-                        <div className="pt-4 border-t border-border/50">
+                        <div className="border-t border-border pt-4">
                           <p className="font-bold text-foreground">
                             {language === 'ms'
                               ? review.name_ms
@@ -166,11 +150,11 @@ export function TestimonialsSection({ content, preview = false }: TestimonialsSe
               </CarouselContent>
               <CarouselPrevious
                 ariaLabel={localized(content.previousSlideLabel)}
-                className="hidden md:flex -left-4 h-12 w-12 border-2 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all"
+                className="hidden h-12 w-12 rounded-none border-border bg-background hover:border-primary hover:bg-primary hover:text-primary-foreground md:flex"
               />
               <CarouselNext
                 ariaLabel={localized(content.nextSlideLabel)}
-                className="hidden md:flex -right-4 h-12 w-12 border-2 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all"
+                className="hidden h-12 w-12 rounded-none border-border bg-background hover:border-primary hover:bg-primary hover:text-primary-foreground md:flex"
               />
             </Carousel>
 
@@ -181,13 +165,11 @@ export function TestimonialsSection({ content, preview = false }: TestimonialsSe
                   <motion.button
                     key={index}
                     onClick={() => scrollTo(index)}
-                    whileHover={{ scale: 1.2 }}
-                    whileTap={{ scale: 0.9 }}
                     className={cn(
-                      'h-2.5 rounded-full transition-all duration-400',
+                      'h-11 w-11 rounded-full transition-colors',
                       current === index
-                        ? 'bg-gradient-to-r from-primary to-primary-glow w-8 shadow-glow-primary'
-                        : 'bg-primary/30 w-2.5 hover:bg-primary/50'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-background text-primary hover:bg-primary/10'
                     )}
                     aria-label={`${localized(content.goToSlideLabel)} ${index + 1}`}
                   />

@@ -107,10 +107,10 @@ export default function ResetPassword() {
 
   return (
     <MainLayout>
-      <div className="min-h-[70vh] flex items-center justify-center px-4 py-12">
-        <Card className="w-full max-w-md">
-          <CardHeader className="space-y-2">
-            <CardTitle className="text-2xl">
+      <div className="flex min-h-[70vh] items-center justify-center bg-muted/30 px-4 py-12">
+        <Card className="w-full max-w-md border-border/70 shadow-card">
+          <CardHeader className="space-y-3">
+            <CardTitle className="font-display text-2xl">
               {language === 'ms' ? 'Tetapkan Semula Kata Laluan' : 'Reset Password'}
             </CardTitle>
             <CardDescription>
@@ -122,12 +122,12 @@ export default function ResetPassword() {
           <CardContent>
             {isValidSession === false ? (
               <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground" role="alert">
                   {language === 'ms'
                     ? 'Pautan tetapan semula tidak sah atau telah tamat tempoh. Sila minta pautan baharu.'
                     : 'This reset link is invalid or has expired. Please request a new one.'}
                 </p>
-                <Button className="w-full" onClick={() => navigate('/auth')}>
+                <Button className="w-full min-h-11" onClick={() => navigate('/auth')}>
                   {language === 'ms' ? 'Kembali ke Log Masuk' : 'Back to Login'}
                 </Button>
               </div>
@@ -142,12 +142,12 @@ export default function ResetPassword() {
                         <FormLabel>
                           {language === 'ms' ? 'Kata Laluan Baharu' : 'New Password'}
                         </FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <div className="relative [&>input]:min-h-11">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <FormControl>
                             <Input type="password" className="pl-10" placeholder="••••••••" {...field} />
-                          </div>
-                        </FormControl>
+                          </FormControl>
+                        </div>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -160,17 +160,17 @@ export default function ResetPassword() {
                         <FormLabel>
                           {language === 'ms' ? 'Sahkan Kata Laluan' : 'Confirm Password'}
                         </FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <div className="relative [&>input]:min-h-11">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <FormControl>
                             <Input type="password" className="pl-10" placeholder="••••••••" {...field} />
-                          </div>
-                        </FormControl>
+                          </FormControl>
+                        </div>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <Button type="submit" className="w-full" disabled={isSubmitting || isValidSession === null}>
+                  <Button type="submit" className="w-full min-h-11" disabled={isSubmitting || isValidSession === null}>
                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     {language === 'ms' ? 'Kemas Kini Kata Laluan' : 'Update Password'}
                   </Button>

@@ -8,6 +8,16 @@ import { DEFAULT_HOME_CONTENT } from "@/features/website-cms/home/homeDefaults";
 import { projectHomePreview } from "@/features/website-cms/home/projectHomePreview";
 import { homeContentSchema } from "@/features/website-cms/schemas/home";
 
+const motionPreference = vi.hoisted(() => ({ reduce: false }));
+
+vi.mock("framer-motion", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("framer-motion")>();
+  return {
+    ...actual,
+    useReducedMotion: () => motionPreference.reduce,
+  };
+});
+
 vi.stubGlobal(
   "IntersectionObserver",
   class IntersectionObserver {
@@ -35,6 +45,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   localStorage.clear();
+  motionPreference.reduce = false;
 });
 
 describe("projectHomePreview", () => {
@@ -140,5 +151,53 @@ describe("HeroCarousel preview safety", () => {
         ([, delay]) => delay === DEFAULT_HOME_CONTENT.hero.autoplayMs,
       ),
     ).toBe(true);
+  });
+
+  it("provides a visible pause and resume control", () => {
+    renderHero();
+
+    const pauseButton = screen.getByRole("button", {
+      name: "Jeda karusel",
+    });
+    expect(pauseButton).toBeVisible();
+    expect(pauseButton).toHaveAttribute("aria-pressed", "false");
+
+    act(() => pauseButton.click());
+
+    expect(screen.getByRole("button", { name: "Sambung karusel" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("stops automatic rotation while focus is inside the hero", () => {
+    vi.useFakeTimers();
+    const content = structuredClone(DEFAULT_HOME_CONTENT.hero);
+    content.autoplayMs = 3000;
+    renderHero(content);
+
+    act(() => screen.getByRole("link", { name: /Buat Temujanji/ }).focus());
+    act(() => vi.advanceTimersByTime(3000));
+
+    expect(screen.getByRole("button", { name: "Go to slide 1" })).toHaveClass(
+      "w-10",
+    );
+
+    act(() => screen.getByRole("link", { name: /Buat Temujanji/ }).blur());
+    act(() => vi.advanceTimersByTime(3000));
+
+    expect(screen.getByRole("button", { name: "Go to slide 2" })).toHaveClass(
+      "w-10",
+    );
+  });
+
+  it("does not start automatic rotation when reduced motion is requested", () => {
+    vi.useFakeTimers();
+    motionPreference.reduce = true;
+    const intervalSpy = vi.spyOn(globalThis, "setInterval");
+
+    renderHero();
+
+    expect(intervalSpy).not.toHaveBeenCalled();
   });
 });
