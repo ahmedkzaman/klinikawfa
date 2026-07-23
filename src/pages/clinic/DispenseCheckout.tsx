@@ -135,6 +135,7 @@ export default function DispenseCheckout() {
     () => entries.find((e) => e.id === queueEntryId),
     [entries, queueEntryId],
   );
+  const patient = entry?.patients;
 
   const { data: consultation, isFetched: consultationFetched, refetch: refetchConsultation } = useConsultation(queueEntryId);
   const { data: items = [] } = useConsultationItems(consultation?.id);
@@ -561,7 +562,6 @@ export default function DispenseCheckout() {
     );
   }
 
-  const patient = entry.patients;
   const dob = patient?.date_of_birth
     ? `${format(new Date(patient.date_of_birth), 'd MMM yyyy')} (Age: ${calculateClinicalAge(patient.date_of_birth)})`
     : '—';
