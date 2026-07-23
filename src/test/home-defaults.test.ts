@@ -538,6 +538,33 @@ describe("data-driven Home renderer", () => {
     expect(play).toHaveBeenCalledTimes(1);
   });
 
+  it("embeds YouTube videos with muted autoplay and looping", async () => {
+    const content = structuredClone(DEFAULT_HOME_CONTENT.video);
+    testState.videoSettingsData.push({
+      key: content.videoUrlSettingKey,
+      value: "https://www.youtube.com/watch?v=abc123XYZ_0",
+    });
+
+    const { container } = renderSection(
+      createElement(VideoSection, { content, preview: false }),
+    );
+
+    const iframe = await waitFor(() => {
+      const element = container.querySelector("iframe");
+      expect(element).toBeInTheDocument();
+      return element!;
+    });
+
+    const src = new URL(iframe.getAttribute("src")!);
+    expect(src.origin + src.pathname).toBe(
+      "https://www.youtube.com/embed/abc123XYZ_0",
+    );
+    expect(src.searchParams.get("autoplay")).toBe("1");
+    expect(src.searchParams.get("mute")).toBe("1");
+    expect(src.searchParams.get("loop")).toBe("1");
+    expect(src.searchParams.get("playlist")).toBe("abc123XYZ_0");
+  });
+
   it("renders the configured Services limit and blocks preview links", () => {
     const content = structuredClone(DEFAULT_HOME_CONTENT.services);
     content.title.ms = "Servis tersuai";

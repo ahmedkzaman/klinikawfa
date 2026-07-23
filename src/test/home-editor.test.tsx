@@ -40,6 +40,11 @@ const pageApi = vi.hoisted(() => {
   };
 });
 
+const appSettingsApi = vi.hoisted(() => ({
+  maybeSingle: vi.fn(),
+  upsert: vi.fn(),
+}));
+
 vi.mock("@/features/website-cms/api/pages", () => pageApi);
 vi.mock("@/hooks/useGalleryImages", () => ({
   useGalleryImages: () => ({ allImages: [], isLoading: false }),
@@ -51,8 +56,12 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: () => ({
       select: () => ({
+        eq: () => ({
+          maybeSingle: appSettingsApi.maybeSingle,
+        }),
         in: async () => ({ data: [], error: null }),
       }),
+      upsert: appSettingsApi.upsert,
     }),
   },
 }));
@@ -116,6 +125,11 @@ function withinPreviewFrame() {
 
 beforeEach(() => {
   localStorage.clear();
+  appSettingsApi.maybeSingle.mockReset().mockResolvedValue({
+    data: { value: "https://youtu.be/abc123XYZ_0" },
+    error: null,
+  });
+  appSettingsApi.upsert.mockReset().mockResolvedValue({ error: null });
   pageApi.fetchEditorPage.mockReset().mockResolvedValue(editorResult());
   pageApi.fetchPageVersions.mockReset().mockResolvedValue([
     {
@@ -342,6 +356,34 @@ describe("HomeEditor", { timeout: 30_000 }, () => {
         name: "Media upload available in the resources phase",
       }),
     ).not.toBeInTheDocument();
+  });
+
+  it("loads and saves the homepage video URL through the approved settings row", async () => {
+    await loadEditor();
+
+    const input = await screen.findByRole("textbox", {
+      name: "Homepage video URL",
+    });
+    await waitFor(() =>
+      expect(input).toHaveValue("https://youtu.be/abc123XYZ_0"),
+    );
+
+    fireEvent.change(input, {
+      target: { value: "https://www.youtube.com/watch?v=newVideo123" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Video URL" }));
+
+    await waitFor(() =>
+      expect(appSettingsApi.upsert).toHaveBeenCalledWith(
+        {
+          description: "Homepage clinic video URL",
+          key: "homepage_video_url",
+          value: "https://www.youtube.com/watch?v=newVideo123",
+        },
+        { onConflict: "key" },
+      ),
+    );
+    expect(screen.getByText("Homepage video URL saved.")).toBeInTheDocument();
   });
 
   it("keeps local state bilingual and switches the preview language", async () => {
