@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Users, Shield, User, Loader2 } from 'lucide-react';
+import { Users, Shield, User, Loader2, UserPlus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { AddUserDialog, type CreatableUserRole } from '@/components/clinic/settings/AddUserDialog';
+import { Button } from '@/components/ui/button';
 import { useAuth, type AppRole } from '@/contexts/AuthContext';
 
 const STAFF_POSITIONS = ['Clinic Assistant', 'Staff Nurse', 'Medical Assistant', 'Doctor', 'Manager', 'Purchaser', 'Housecall Nurse'];
@@ -16,14 +18,18 @@ interface Employee {
   department: string | null;
   position: string | null;
   created_at: string;
-  role: 'admin' | 'staff' | 'guest';
+  role: AppRole;
 }
 
 export default function AdminEmployees() {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [addUserDialog, setAddUserDialog] = useState<{ open: boolean; role: CreatableUserRole }>({
+    open: false,
+    role: 'website_editor',
+  });
 
   useEffect(() => { fetchEmployees(); }, []);
 
@@ -34,7 +40,10 @@ export default function AdminEmployees() {
     const { data: roles } = await supabase.from('user_roles').select('user_id, role');
     const roleMap: Record<string, AppRole> = {};
     roles?.forEach((r) => { roleMap[r.user_id] = r.role as AppRole; });
-    setEmployees((profiles || []).map((p: any) => ({ ...p, role: roleMap[p.id] || 'staff' })));
+    setEmployees((profiles || []).map((profile) => ({
+      ...profile,
+      role: roleMap[profile.id] || 'staff',
+    })));
     setIsLoading(false);
   };
 
@@ -68,7 +77,18 @@ export default function AdminEmployees() {
 
   return (
     <div className="space-y-6">
-      <div><h1 className="text-2xl font-bold tracking-tight">Employees</h1><p className="text-slate-500">Manage staff members and their roles</p></div>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Employees</h1>
+          <p className="text-slate-500">Manage staff members and their roles</p>
+        </div>
+        {isAdmin && (
+          <Button onClick={() => setAddUserDialog({ open: true, role: 'website_editor' })}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Invite Website Editor
+          </Button>
+        )}
+      </div>
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" />Staff Directory</CardTitle><CardDescription>{employees.length} employees registered</CardDescription></CardHeader>
         <CardContent>
@@ -100,6 +120,7 @@ export default function AdminEmployees() {
                        <SelectItem value="operations">Operations</SelectItem>
                        <SelectItem value="doctor_admin">Doctor Admin</SelectItem>
                        <SelectItem value="admin">Admin</SelectItem>
+                       <SelectItem value="website_editor">Website Editor</SelectItem>
                      </SelectContent>
                   </Select>
                 </div>
@@ -108,6 +129,15 @@ export default function AdminEmployees() {
           )}
         </CardContent>
       </Card>
+
+      <AddUserDialog
+        open={addUserDialog.open}
+        onOpenChange={(open) => {
+          setAddUserDialog((current) => ({ ...current, open }));
+          if (!open) fetchEmployees();
+        }}
+        role={addUserDialog.role}
+      />
     </div>
   );
 }
