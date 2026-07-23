@@ -188,7 +188,7 @@ function PublicVideoSection({ content }: Pick<VideoSectionProps, 'content'>) {
                 {/* Controls overlay */}
                 <div 
                   className={cn(
-                    'absolute inset-0 flex items-center justify-center bg-foreground/30 backdrop-blur-sm transition-all duration-500',
+                    'absolute inset-0 flex items-center justify-center bg-transparent transition-all duration-500',
                     hasInteracted ? 'opacity-0 hover:opacity-100' : 'opacity-100'
                   )}
                 >
@@ -196,7 +196,7 @@ function PublicVideoSection({ content }: Pick<VideoSectionProps, 'content'>) {
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={togglePlay}
-                    className="flex h-20 w-20 items-center justify-center rounded-full bg-white/20 backdrop-blur-md text-white shadow-elevated hover:bg-white/30 transition-colors"
+                    className="flex h-20 w-20 items-center justify-center rounded-full bg-white/20 text-white shadow-elevated hover:bg-white/30 transition-colors"
                   >
                     {isPlaying ? (
                       <Pause className="h-10 w-10" />
@@ -212,7 +212,7 @@ function PublicVideoSection({ content }: Pick<VideoSectionProps, 'content'>) {
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={toggleMute}
-                    className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 backdrop-blur-md text-white hover:bg-white/30 transition-colors"
+                    className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 transition-colors"
                   >
                     {isMuted ? (
                       <VolumeX className="h-5 w-5" />
