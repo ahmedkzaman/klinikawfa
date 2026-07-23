@@ -55,6 +55,7 @@ import {
   type HomeContent,
   type HomeSectionId,
 } from "@/features/website-cms/schemas/home";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { VersionsPanel } from "@/pages/editor/VersionsPanel";
 
@@ -278,6 +279,9 @@ export function HomeEditor() {
   const [conflict, setConflict] = useState(false);
   const [refreshRequired, setRefreshRequired] = useState<RefreshRequired | null>(null);
   const [notice, setNotice] = useState<{ message: string; tone: "error" | "success" } | null>(null);
+  const [homepageVideoUrl, setHomepageVideoUrl] = useState("");
+  const [isSavingHomepageVideoUrl, setIsSavingHomepageVideoUrl] = useState(false);
+  const [loadingHomepageVideoUrl, setLoadingHomepageVideoUrl] = useState(false);
   const mutationRef = useRef<EditorMutation | null>(null);
   const mutationGenerationRef = useRef(0);
   const mountedRef = useRef(true);
@@ -327,6 +331,65 @@ export function HomeEditor() {
     [form, isCurrentMutation],
   );
 
+  const loadHomepageVideoUrl = useCallback(async () => {
+    setLoadingHomepageVideoUrl(true);
+    try {
+      const { data, error } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "homepage_video_url")
+        .maybeSingle();
+      if (error) throw error;
+      setHomepageVideoUrl(typeof data?.value === "string" ? data.value : "");
+    } catch (error) {
+      console.error("Failed to fetch homepage video URL:", error);
+    } finally {
+      setLoadingHomepageVideoUrl(false);
+    }
+  }, []);
+
+  const saveHomepageVideoUrl = useCallback(async () => {
+    setNotice(null);
+    const nextValue = homepageVideoUrl.trim();
+
+    if (nextValue) {
+      try {
+        const parsed = new URL(nextValue);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          throw new Error("Unsupported URL protocol");
+        }
+      } catch {
+        setNotice({
+          message: "Homepage video URL must be a valid http(s) URL.",
+          tone: "error",
+        });
+        return;
+      }
+    }
+
+    setIsSavingHomepageVideoUrl(true);
+    try {
+      const { error } = await supabase.from("app_settings").upsert(
+        {
+          description: "Homepage clinic video URL",
+          key: "homepage_video_url",
+          value: nextValue,
+        },
+        { onConflict: "key" },
+      );
+      if (error) throw error;
+      setNotice({ message: "Homepage video URL saved.", tone: "success" });
+    } catch (error) {
+      console.error("Failed to save homepage video URL:", error);
+      setNotice({
+        message: "Unable to save homepage video URL. Please try again.",
+        tone: "error",
+      });
+    } finally {
+      setIsSavingHomepageVideoUrl(false);
+    }
+  }, [homepageVideoUrl]);
+
   const loadPage = useCallback(
     async () => {
       const generation = beginMutation("loading");
@@ -358,7 +421,8 @@ export function HomeEditor() {
 
   useEffect(() => {
     void loadPage();
-  }, [loadPage]);
+    void loadHomepageVideoUrl();
+  }, [loadHomepageVideoUrl, loadPage]);
 
   const saveDraft = async (content: HomeContent) => {
     if (!editorPage) return;
@@ -767,6 +831,30 @@ export function HomeEditor() {
           <div className="grid gap-4 md:grid-cols-2">
             <EditorField errors={errors} label="Video URL setting key" name="video.videoUrlSettingKey" readOnly register={form.register} />
             <EditorField errors={errors} label="Video poster setting key" name="video.posterSettingKey" readOnly register={form.register} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="homepage-video-url">Homepage video URL</Label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                className="sm:max-w-xl"
+                disabled={loadingHomepageVideoUrl || isSavingHomepageVideoUrl}
+                id="homepage-video-url"
+                onChange={(event) => setHomepageVideoUrl(event.target.value)}
+                placeholder="https://www.youtube.com/watch?v=... (or direct MP4/WEBM URL)"
+                value={homepageVideoUrl}
+              />
+              <Button
+                disabled={loadingHomepageVideoUrl || isSavingHomepageVideoUrl}
+                onClick={() => void saveHomepageVideoUrl()}
+                type="button"
+              >
+                {isSavingHomepageVideoUrl ? "Saving..." : "Save Video URL"}
+              </Button>
+            </div>
+            <p className="text-xs text-slate-500">
+              Paste a YouTube URL or hosted video URL. YouTube videos autoplay muted and loop.
+              Leave this blank to remove the homepage video.
+            </p>
           </div>
         </EditorSection>
 

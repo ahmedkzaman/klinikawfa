@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { Button } from '@/components/ui/button';
 import { Play, Pause, Volume2, VolumeX, Film } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -10,6 +9,36 @@ import type { HomeContent } from '@/features/website-cms/schemas/home';
 interface VideoSectionProps {
   content: HomeContent['video'];
   preview?: boolean;
+}
+
+function getYouTubeEmbedUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+    let videoId = "";
+
+    if (
+      hostname === "youtu.be" ||
+      hostname === "youtube.com" ||
+      hostname.endsWith(".youtube.com")
+    ) {
+      if (hostname === "youtu.be") {
+        videoId = parsed.pathname.replace(/^\//, "").split("/")[0];
+      } else if (parsed.pathname === "/watch") {
+        videoId = parsed.searchParams.get("v") || "";
+      } else if (parsed.pathname.startsWith("/shorts/")) {
+        videoId = parsed.pathname.replace(/^\/shorts\//, "").split("/")[0];
+      } else if (parsed.pathname.startsWith("/embed/")) {
+        videoId = parsed.pathname.replace(/^\/embed\//, "").split("/")[0];
+      }
+    }
+
+    if (!videoId) return null;
+
+    return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}&controls=1&rel=0&modestbranding=1`;
+  } catch {
+    return null;
+  }
 }
 
 function VideoPreviewSection({ content }: Pick<VideoSectionProps, 'content'>) {
@@ -62,7 +91,6 @@ function PublicVideoSection({ content }: Pick<VideoSectionProps, 'content'>) {
   const [hasInteracted, setHasInteracted] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchVideoSettings = async () => {
@@ -83,13 +111,13 @@ function PublicVideoSection({ content }: Pick<VideoSectionProps, 'content'>) {
         });
       } catch (error) {
         console.error('Error fetching video settings:', error);
-      } finally {
-        setIsLoading(false);
       }
     };
 
     fetchVideoSettings();
   }, [content.posterSettingKey, content.videoUrlSettingKey]);
+
+  const youtubeEmbedUrl = getYouTubeEmbedUrl(videoUrl || "");
 
   useEffect(() => {
     const video = videoRef.current;
@@ -173,54 +201,67 @@ function PublicVideoSection({ content }: Pick<VideoSectionProps, 'content'>) {
           <div className="relative aspect-video bg-muted rounded-3xl overflow-hidden">
             {hasVideo ? (
               <>
-                <video
-                  ref={videoRef}
-                  className="h-full w-full object-cover"
-                  muted={isMuted}
-                  loop
-                  playsInline
-                  poster={posterUrl || undefined}
-                  src={videoUrl}
-                >
-                  {localized(content.unsupportedMessage)}
-                </video>
+                {youtubeEmbedUrl ? (
+                  <iframe
+                    allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                    allowFullScreen
+                    className="h-full w-full border-0"
+                    src={youtubeEmbedUrl}
+                    title={localized(content.title)}
+                  />
+                ) : (
+                  <video
+                    ref={videoRef}
+                    className="h-full w-full object-cover"
+                    muted={isMuted}
+                    loop
+                    playsInline
+                    poster={posterUrl || undefined}
+                    src={videoUrl}
+                  >
+                    {localized(content.unsupportedMessage)}
+                  </video>
+                )}
 
                 {/* Controls overlay */}
-                <div 
-                  className={cn(
-                    'absolute inset-0 flex items-center justify-center bg-transparent transition-all duration-500',
-                    hasInteracted ? 'opacity-0 hover:opacity-100' : 'opacity-100'
-                  )}
-                >
-                  <motion.button
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={togglePlay}
-                    className="flex h-20 w-20 items-center justify-center rounded-full bg-white/20 text-white shadow-elevated hover:bg-white/30 transition-colors"
-                  >
-                    {isPlaying ? (
-                      <Pause className="h-10 w-10" />
-                    ) : (
-                      <Play className="ml-1 h-10 w-10" />
-                    )}
-                  </motion.button>
-                </div>
+                {!youtubeEmbedUrl && (
+                  <>
+                    <div
+                      className={cn(
+                        'absolute inset-0 flex items-center justify-center bg-transparent transition-all duration-500',
+                        hasInteracted ? 'opacity-0 hover:opacity-100' : 'opacity-100'
+                      )}
+                    >
+                      <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={togglePlay}
+                        className="flex h-20 w-20 items-center justify-center rounded-full bg-white/20 text-white shadow-elevated hover:bg-white/30 transition-colors"
+                      >
+                        {isPlaying ? (
+                          <Pause className="h-10 w-10" />
+                        ) : (
+                          <Play className="ml-1 h-10 w-10" />
+                        )}
+                      </motion.button>
+                    </div>
 
-                {/* Bottom controls */}
-                <div className="absolute bottom-6 right-6 flex gap-3">
-                  <motion.button
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={toggleMute}
-                    className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 transition-colors"
-                  >
-                    {isMuted ? (
-                      <VolumeX className="h-5 w-5" />
-                    ) : (
-                      <Volume2 className="h-5 w-5" />
-                    )}
-                  </motion.button>
-                </div>
+                    <div className="absolute bottom-6 right-6 flex gap-3">
+                      <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={toggleMute}
+                        className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 transition-colors"
+                      >
+                        {isMuted ? (
+                          <VolumeX className="h-5 w-5" />
+                        ) : (
+                          <Volume2 className="h-5 w-5" />
+                        )}
+                      </motion.button>
+                    </div>
+                  </>
+                )}
               </>
             ) : (
               /* Placeholder when no video is uploaded */
