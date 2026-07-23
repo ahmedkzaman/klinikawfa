@@ -5,6 +5,7 @@ name: Security Gate
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   security-and-type-check:
