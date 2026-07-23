@@ -419,6 +419,36 @@ describe("GeneralPage public route", () => {
 });
 
 describe("general page editor", () => {
+  it("saves a custom page grid through the existing private draft", async () => {
+    render(
+      <MemoryRouter initialEntries={["/editor/pages/page-family-care"]}>
+        <EditorDirtyNavigationProvider>
+          <LanguageProvider>
+            <Routes>
+              <Route path="/editor/pages/:id" element={<PageEditor />} />
+            </Routes>
+          </LanguageProvider>
+        </EditorDirtyNavigationProvider>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Advanced grid designer" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Two equal columns" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Draft" }));
+
+    await waitFor(() =>
+      expect(pageApi.savePageDraft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.objectContaining({
+            layout: expect.objectContaining({ version: 1 }),
+          }),
+        }),
+      ),
+    );
+  });
+
   it("rejects a reserved slug before creating a page or private draft", async () => {
     renderNewEditor();
 

@@ -12,6 +12,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 
 import { WebsiteMediaUploader } from "@/components/editor/WebsiteMediaUploader";
+import { LayoutEditor } from "@/components/editor/layout/LayoutEditor";
 import { AddSectionDialog } from "@/components/editor/sections/AddSectionDialog";
 import { SectionList } from "@/components/editor/sections/SectionList";
 import { useEditorDirtyState } from "@/components/editor/useEditorDirtyNavigation";
@@ -39,6 +40,8 @@ import {
   pageSlugSchema,
   type GeneralPageContent,
 } from "@/features/website-cms/schemas/page";
+import { createDefaultGeneralPageLayout } from "@/features/website-cms/layout/defaults";
+import { GENERAL_PAGE_LAYOUT_KINDS } from "@/features/website-cms/layout/types";
 import { cn } from "@/lib/utils";
 import { VersionsPanel } from "@/pages/editor/VersionsPanel";
 import { pageAdapter } from "@/features/website-cms/resources/pageAdapter";
@@ -467,6 +470,8 @@ export function PageEditor() {
   };
 
   const previewContent = form.watch() as GeneralPageContent;
+  const editableLayout =
+    previewContent.layout ?? createDefaultGeneralPageLayout(previewContent);
   const recovery = useRecoverableAutosave({
     key: `page:${id}`,
     value: { content: previewContent, slug },
@@ -744,6 +749,27 @@ export function PageEditor() {
             <BilingualFields base="seo.description" errors={form.formState.errors} label="SEO description" multiline register={form.register} />
           </section>
         </fieldset>
+
+        <LayoutEditor
+          allowedKinds={GENERAL_PAGE_LAYOUT_KINDS}
+          blockLabels={{
+            title: "Page title",
+            hero: "Hero media",
+            body: "Main content",
+            media: "Media gallery",
+            cta: "Call to action",
+          }}
+          layout={editableLayout}
+          onChange={(layout) =>
+            form.setValue("layout", layout, {
+              shouldDirty: true,
+              shouldValidate: true,
+            })
+          }
+          protectedBlockIds={new Set(
+            editableLayout.blocks.map((block) => block.id),
+          )}
+        />
 
         {editorPage && (
           <VersionsPanel
