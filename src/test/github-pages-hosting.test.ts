@@ -90,12 +90,14 @@ describe("GitHub Pages hosting", () => {
   });
 
   it("pre-renders every fixed clinic portal and staff routes", () => {
-    const workflow = readWorkflow();
+    const workflow = readWorkflow().replaceAll("\r\n", "\n");
 
     for (const route of fixedClinicRoutes) {
       expect(workflow).toContain(`\n            ${route}\n`);
-      expect(workflow).toContain(`mkdir -p "dist/${route}"`);
-      expect(workflow).toContain(`cp dist/index.html "dist/${route}/index.html"`);
     }
+
+    expect(workflow).toContain('for route in "${routes[@]}"; do');
+    expect(workflow).toContain('mkdir -p "dist/${route}"');
+    expect(workflow).toContain('cp dist/index.html "dist/${route}/index.html"');
   });
 });
