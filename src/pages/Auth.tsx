@@ -202,12 +202,12 @@ export default function Auth() {
 
   return (
     <MainLayout>
-      <section className="bg-muted/30 py-12 md:py-20">
+      <section className="py-16 md:py-24">
         <div className="container">
           <div className="mx-auto max-w-md">
-            <Card className="border-border/70 shadow-card">
-              <CardHeader className="space-y-3 text-center">
-                <CardTitle className="font-display text-2xl">
+            <Card className="border-border/50 shadow-card">
+              <CardHeader className="text-center">
+                <CardTitle className="text-2xl">
                   {mode === 'login' && (language === 'ms' ? 'Log Masuk' : 'Login')}
                   {mode === 'signup' && (language === 'ms' ? 'Daftar Akaun' : 'Sign Up')}
                   {mode === 'reset' && (language === 'ms' ? 'Reset Kata Laluan' : 'Reset Password')}
@@ -245,7 +245,7 @@ export default function Auth() {
                                   autoCapitalize="none"
                                   spellCheck={false}
                                   placeholder="email@contoh.com"
-                                  className="min-h-11 pl-10"
+                                  className="pl-10"
                                 />
                               </FormControl>
                             </div>
@@ -267,13 +267,13 @@ export default function Auth() {
                                   type={showLoginPassword ? 'text' : 'password'}
                                   autoComplete="current-password"
                                   placeholder="••••••"
-                                  className="min-h-11 pl-10 pr-12"
+                                  className="pl-10 pr-12"
                                 />
                               </FormControl>
                               <button
                                 type="button"
                                 onClick={() => setShowLoginPassword((visible) => !visible)}
-                                className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                className="absolute right-0 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                 aria-label={showLoginPassword
                                   ? (language === 'ms' ? 'Sembunyikan kata laluan' : 'Hide password')
                                   : (language === 'ms' ? 'Tunjukkan kata laluan' : 'Show password')}
@@ -287,7 +287,7 @@ export default function Auth() {
                           </FormItem>
                         )}
                       />
-                      <Button type="submit" className="w-full min-h-11" disabled={isSubmitting}>
+                      <Button type="submit" className="w-full" disabled={isSubmitting}>
                         {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         {language === 'ms' ? 'Log Masuk' : 'Login'}
                       </Button>
@@ -304,12 +304,12 @@ export default function Auth() {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>{language === 'ms' ? 'Nama Penuh' : 'Full Name'}</FormLabel>
-                            <div className="relative">
-                              <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                              <FormControl>
-                                <Input {...field} placeholder="Ahmad bin Ali" className="min-h-11 pl-10" />
-                              </FormControl>
-                            </div>
+                            <FormControl>
+                              <div className="relative">
+                                <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input {...field} placeholder="Ahmad bin Ali" className="pl-10" />
+                              </div>
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -320,12 +320,12 @@ export default function Auth() {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>{language === 'ms' ? 'Email' : 'Email'}</FormLabel>
-                            <div className="relative">
-                              <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                              <FormControl>
-                                <Input {...field} type="email" placeholder="email@contoh.com" className="min-h-11 pl-10" />
-                              </FormControl>
-                            </div>
+                            <FormControl>
+                              <div className="relative">
+                                <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input {...field} type="email" placeholder="email@contoh.com" className="pl-10" />
+                              </div>
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -336,17 +336,17 @@ export default function Auth() {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>{language === 'ms' ? 'Kata Laluan' : 'Password'}</FormLabel>
-                            <div className="relative">
-                              <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                              <FormControl>
-                                <Input {...field} type="password" placeholder="••••••" className="min-h-11 pl-10" />
-                              </FormControl>
-                            </div>
+                            <FormControl>
+                              <div className="relative">
+                                <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input {...field} type="password" placeholder="••••••" className="pl-10" />
+                              </div>
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
-                      <Button type="submit" className="w-full min-h-11" disabled={isSubmitting}>
+                      <Button type="submit" className="w-full" disabled={isSubmitting}>
                         {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         {language === 'ms' ? 'Daftar' : 'Sign Up'}
                       </Button>
@@ -363,17 +363,17 @@ export default function Auth() {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>{language === 'ms' ? 'Email' : 'Email'}</FormLabel>
-                            <div className="relative">
-                              <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                              <FormControl>
-                                <Input {...field} type="email" placeholder="email@contoh.com" className="min-h-11 pl-10" />
-                              </FormControl>
-                            </div>
+                            <FormControl>
+                              <div className="relative">
+                                <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input {...field} type="email" placeholder="email@contoh.com" className="pl-10" />
+                              </div>
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
-                      <Button type="submit" className="w-full min-h-11" disabled={isSubmitting}>
+                      <Button type="submit" className="w-full" disabled={isSubmitting}>
                         {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         {language === 'ms' ? 'Hantar Pautan Reset' : 'Send Reset Link'}
                       </Button>
@@ -387,7 +387,7 @@ export default function Auth() {
                       <button
                         type="button"
                         onClick={() => changeMode('reset')}
-                        className="min-h-11 px-2 text-primary hover:underline"
+                        className="text-primary hover:underline"
                       >
                         {language === 'ms' ? 'Lupa kata laluan?' : 'Forgot password?'}
                       </button>
@@ -396,7 +396,7 @@ export default function Auth() {
                         <button
                           type="button"
                           onClick={() => changeMode('signup')}
-                          className="min-h-11 px-2 text-primary hover:underline"
+                          className="text-primary hover:underline"
                         >
                           {language === 'ms' ? 'Daftar' : 'Sign up'}
                         </button>
@@ -410,7 +410,7 @@ export default function Auth() {
                       <button
                         type="button"
                         onClick={() => changeMode('login')}
-                        className="min-h-11 px-2 text-primary hover:underline"
+                        className="text-primary hover:underline"
                       >
                         {language === 'ms' ? 'Log masuk' : 'Login'}
                       </button>
@@ -421,7 +421,7 @@ export default function Auth() {
                     <button
                       type="button"
                       onClick={() => changeMode('login')}
-                      className="inline-flex min-h-11 items-center gap-1 px-2 text-primary hover:underline"
+                      className="inline-flex items-center gap-1 text-primary hover:underline"
                     >
                       <ArrowLeft className="h-4 w-4" />
                       {language === 'ms' ? 'Kembali ke log masuk' : 'Back to login'}

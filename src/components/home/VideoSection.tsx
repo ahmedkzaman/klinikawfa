@@ -2,9 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
-import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Film } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { PublicSectionHeader } from '@/components/public';
 import { supabase } from '@/integrations/supabase/client';
 import type { HomeContent } from '@/features/website-cms/schemas/home';
 
@@ -19,24 +18,32 @@ function VideoPreviewSection({ content }: Pick<VideoSectionProps, 'content'>) {
     language === 'ms' ? copy.ms : copy.en || copy.ms;
 
   return (
-    <section className="public-section bg-background">
-      <div className="container">
-        <div className="mb-10">
-          <PublicSectionHeader
-            align="center"
-            eyebrow={localized(content.eyebrow)}
-            title={localized(content.title)}
-            description={localized(content.description)}
-          />
+    <section className="relative py-20 md:py-28 bg-gradient-to-br from-foreground via-foreground to-foreground/95 overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-accent/10 rounded-full blur-3xl" />
+      </div>
+
+      <div className="container relative z-10">
+        <div className="mb-12 text-center">
+          <span className="inline-flex items-center gap-2 mb-4 px-4 py-1.5 rounded-full bg-white/10 text-white/90 text-sm font-medium border border-white/20 backdrop-blur-sm">
+            <Film className="h-4 w-4" />
+            {localized(content.eyebrow)}
+          </span>
+          <h2 className="mb-4 text-background">{localized(content.title)}</h2>
+          <p className="mx-auto max-w-2xl text-background/70 text-lg">
+            {localized(content.description)}
+          </p>
         </div>
 
-        <div className="mx-auto max-w-5xl overflow-hidden border border-border bg-muted shadow-card">
-          <div className="relative aspect-video overflow-hidden">
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-primary/10">
-              <div className="mb-6 flex h-20 w-20 items-center justify-center border border-primary/25 bg-background text-primary">
+        <div className="relative mx-auto max-w-5xl overflow-hidden rounded-3xl shadow-elevated">
+          <div className="absolute -inset-1 bg-gradient-to-r from-primary via-accent to-primary rounded-3xl blur-lg opacity-30" />
+          <div className="relative aspect-video bg-muted rounded-3xl overflow-hidden">
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-primary/30 to-accent/20">
+              <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-white/20 backdrop-blur-md text-white">
                 <Play className="h-12 w-12" />
               </div>
-              <p className="text-lg text-muted-foreground">
+              <p className="text-white/80 text-lg">
                 {localized(content.placeholder)}
               </p>
             </div>
@@ -118,27 +125,38 @@ function PublicVideoSection({ content }: Pick<VideoSectionProps, 'content'>) {
   const hasVideo = !!videoUrl;
   const localized = (copy: { ms: string; en: string }) =>
     language === 'ms' ? copy.ms : copy.en || copy.ms;
-  const playLabel = language === 'ms' ? 'Mainkan video' : 'Play video';
-  const pauseLabel = language === 'ms' ? 'Jeda video' : 'Pause video';
-  const muteLabel = language === 'ms' ? 'Redam video' : 'Mute video';
-  const unmuteLabel = language === 'ms' ? 'Nyahredam video' : 'Unmute video';
 
   return (
-    <section className="public-section bg-background">
-      <div className="container">
+    <section className="relative py-20 md:py-28 bg-gradient-to-br from-foreground via-foreground to-foreground/95 overflow-hidden">
+      {/* Decorative elements */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-accent/10 rounded-full blur-3xl" />
+      </div>
+
+      <div className="container relative z-10">
         <motion.div
           initial={false}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 0.6 }}
-          className="mb-10"
+          className="mb-12 text-center"
         >
-          <PublicSectionHeader
-            align="center"
-            eyebrow={localized(content.eyebrow)}
-            title={localized(content.title)}
-            description={localized(content.description)}
-          />
+          <motion.span
+            initial={false}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            className="inline-flex items-center gap-2 mb-4 px-4 py-1.5 rounded-full bg-white/10 text-white/90 text-sm font-medium border border-white/20 backdrop-blur-sm"
+          >
+            <Film className="h-4 w-4" />
+            {localized(content.eyebrow)}
+          </motion.span>
+          <h2 className="mb-4 text-background">
+            {localized(content.title)}
+          </h2>
+          <p className="mx-auto max-w-2xl text-background/70 text-lg">
+            {localized(content.description)}
+          </p>
         </motion.div>
 
         <motion.div
@@ -146,9 +164,13 @@ function PublicVideoSection({ content }: Pick<VideoSectionProps, 'content'>) {
           whileInView={{ opacity: 1, y: 0, scale: 1 }}
           viewport={{ once: true, margin: "-50px" }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="relative mx-auto max-w-5xl overflow-hidden border border-border bg-muted shadow-card"
+          className="relative mx-auto max-w-5xl overflow-hidden rounded-3xl shadow-elevated"
         >
-          <div className="relative aspect-video overflow-hidden">
+          {/* Glowing border effect */}
+          <div className="absolute -inset-1 bg-gradient-to-r from-primary via-accent to-primary rounded-3xl blur-lg opacity-30 animate-pulse-glow" />
+          
+          {/* Video container */}
+          <div className="relative aspect-video bg-muted rounded-3xl overflow-hidden">
             {hasVideo ? (
               <>
                 <video
@@ -166,15 +188,15 @@ function PublicVideoSection({ content }: Pick<VideoSectionProps, 'content'>) {
                 {/* Controls overlay */}
                 <div 
                   className={cn(
-                    'absolute inset-0 flex items-center justify-center bg-foreground/35 transition-opacity duration-300',
-                    hasInteracted ? 'opacity-0 hover:opacity-100 focus-within:opacity-100' : 'opacity-100'
+                    'absolute inset-0 flex items-center justify-center bg-foreground/30 backdrop-blur-sm transition-all duration-500',
+                    hasInteracted ? 'opacity-0 hover:opacity-100' : 'opacity-100'
                   )}
                 >
                   <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.95 }}
                     onClick={togglePlay}
-                    aria-label={isPlaying ? pauseLabel : playLabel}
-                    aria-pressed={!isPlaying}
-                    className="flex h-20 w-20 items-center justify-center border border-white/50 bg-background/95 text-primary shadow-card hover:bg-background"
+                    className="flex h-20 w-20 items-center justify-center rounded-full bg-white/20 backdrop-blur-md text-white shadow-elevated hover:bg-white/30 transition-colors"
                   >
                     {isPlaying ? (
                       <Pause className="h-10 w-10" />
@@ -187,10 +209,10 @@ function PublicVideoSection({ content }: Pick<VideoSectionProps, 'content'>) {
                 {/* Bottom controls */}
                 <div className="absolute bottom-6 right-6 flex gap-3">
                   <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.95 }}
                     onClick={toggleMute}
-                    aria-label={isMuted ? unmuteLabel : muteLabel}
-                    aria-pressed={isMuted}
-                    className="flex h-12 w-12 items-center justify-center border border-white/50 bg-background/95 text-primary hover:bg-background"
+                    className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 backdrop-blur-md text-white hover:bg-white/30 transition-colors"
                   >
                     {isMuted ? (
                       <VolumeX className="h-5 w-5" />
@@ -202,11 +224,15 @@ function PublicVideoSection({ content }: Pick<VideoSectionProps, 'content'>) {
               </>
             ) : (
               /* Placeholder when no video is uploaded */
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-primary/10">
-                <div className="mb-6 flex h-20 w-20 items-center justify-center border border-primary/25 bg-background text-primary">
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-primary/30 to-accent/20">
+                <motion.div
+                  animate={{ scale: [1, 1.05, 1] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                  className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-white/20 backdrop-blur-md text-white"
+                >
                   <Play className="h-12 w-12" />
-                </div>
-                <p className="text-lg text-muted-foreground">
+                </motion.div>
+                <p className="text-white/80 text-lg">
                   {localized(content.placeholder)}
                 </p>
               </div>

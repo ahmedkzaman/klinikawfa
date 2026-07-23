@@ -12,7 +12,6 @@ import { sanitizeRichHtml } from '@/lib/sanitize-rich-html';
 import { derivePageMetadata } from '@/features/website-cms/seo/usePageMetadata';
 import type { SeoFields } from '@/features/website-cms/domain/seo';
 import { supabase } from '@/integrations/supabase/client';
-import { PublicClosingCta, PublicPageHeader } from '@/components/public';
 
 export default function BlogPost() {
   const { slug } = useParams<{ slug: string }>();
@@ -49,14 +48,16 @@ export default function BlogPost() {
           description={language === 'ms' ? 'Artikel tidak wujud' : 'Article not found'}
           noIndex
         />
-        <PublicPageHeader
-          title={language === 'ms' ? 'Artikel Tidak Dijumpai' : 'Article Not Found'}
-          description={language === 'ms'
-            ? 'Artikel yang anda cari tidak wujud atau telah dipadamkan.'
-            : "The article you're looking for doesn't exist or has been removed."}
-        />
-        <div className="container py-12 text-center">
+        <div className="container py-16 text-center">
           <BookOpen className="mx-auto mb-4 h-16 w-16 text-muted-foreground/50" />
+          <h1 className="mb-4 text-2xl font-bold">
+            {language === 'ms' ? 'Artikel Tidak Dijumpai' : 'Article Not Found'}
+          </h1>
+          <p className="mb-8 text-muted-foreground">
+            {language === 'ms'
+              ? 'Artikel yang anda cari tidak wujud atau telah dipadamkan.'
+              : "The article you're looking for doesn't exist or has been removed."}
+          </p>
           <Button asChild>
             <Link to="/health-tips">
               <ArrowLeft className="mr-2 h-4 w-4" />
@@ -142,19 +143,15 @@ export default function BlogPost() {
         </div>
       )}
 
-      <PublicPageHeader
-        title={title}
-        description={excerpt || undefined}
-        eyebrow={categoryName || undefined}
-      />
-
       {/* Article header */}
-      <article className="container max-w-3xl py-10 md:py-14">
+      <article className="container max-w-3xl">
         {categoryName && (
           <Badge variant="secondary" className="mb-4">
             {categoryName}
           </Badge>
         )}
+        
+        <h1 className="mb-4 text-3xl font-bold md:text-4xl">{title}</h1>
         
         <div className="mb-8 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
           {post.published_at && (
@@ -197,13 +194,27 @@ export default function BlogPost() {
         <RelatedPosts categoryId={post.category_id} currentPostId={post.id} />
       </div>
 
-      <PublicClosingCta
-        title={language === 'ms' ? 'Ada Soalan Kesihatan?' : 'Have Health Questions?'}
-        description={language === 'ms'
-          ? 'Jangan ragu untuk menghubungi kami. Kami sedia membantu!'
-          : "Don't hesitate to contact us. We're here to help!"}
-        appointmentLabel={language === 'ms' ? 'Buat Temujanji' : 'Book Appointment'}
-      />
+      {/* CTA Section */}
+      <section className="bg-muted/50 py-16">
+        <div className="container">
+          <div className="mx-auto max-w-3xl text-center">
+            <h2 className="mb-4">
+              {language === 'ms' ? 'Ada Soalan Kesihatan?' : 'Have Health Questions?'}
+            </h2>
+            <p className="mb-8 text-muted-foreground">
+              {language === 'ms'
+                ? 'Jangan ragu untuk menghubungi kami. Kami sedia membantu!'
+                : "Don't hesitate to contact us. We're here to help!"}
+            </p>
+            <Button size="lg" asChild>
+              <Link to="/appointment">
+                <Calendar className="mr-2 h-5 w-5" />
+                {language === 'ms' ? 'Buat Temujanji' : 'Book Appointment'}
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </section>
     </MainLayout>
   );
 }

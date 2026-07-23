@@ -4,10 +4,10 @@ import { SEOHead } from '@/components/seo';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { BookOpen, FileX } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Calendar, BookOpen, FileX } from 'lucide-react';
 import { useBlogPosts } from '@/hooks/useBlogPosts';
 import { BlogCard, BlogSearch, BlogPagination } from '@/components/blog';
-import { PublicClosingCta, PublicPageHeader } from '@/components/public';
 
 export default function HealthTips() {
   const { language } = useLanguage();
@@ -43,15 +43,24 @@ export default function HealthTips() {
         url="/health-tips"
       />
 
-      <PublicPageHeader
-        title={language === 'ms' ? 'Tips Kesihatan' : 'Health Tips'}
-        description={language === 'ms'
-          ? 'Artikel dan panduan kesihatan daripada pakar kami.'
-          : 'Health articles and guides from our experts.'}
-      />
+      {/* Hero */}
+      <section className="bg-gradient-to-b from-background to-primary/5 py-16 md:py-24">
+        <div className="container">
+          <div className="mx-auto max-w-3xl text-center">
+            <h1 className="mb-4">
+              {language === 'ms' ? 'Tips Kesihatan' : 'Health Tips'}
+            </h1>
+            <p className="text-lg text-muted-foreground">
+              {language === 'ms'
+                ? 'Artikel dan panduan kesihatan daripada pakar kami.'
+                : 'Health articles and guides from our experts.'}
+            </p>
+          </div>
+        </div>
+      </section>
 
       {/* Search */}
-      <section className="border-b border-border bg-card py-4">
+      <section className="border-b border-border py-4">
         <div className="container">
           <div className="max-w-md">
             <BlogSearch value={searchQuery} onChange={handleSearchChange} />
@@ -60,14 +69,13 @@ export default function HealthTips() {
       </section>
 
       {/* Category Filter Buttons */}
-      <section className="border-b border-border bg-card py-4">
+      <section className="border-b border-border py-4">
         <div className="container">
           <div className="flex flex-wrap gap-2 overflow-x-auto pb-2 md:pb-0">
             <Button
               variant={!selectedCategory ? 'default' : 'outline'}
               size="sm"
               onClick={() => handleCategoryChange(undefined)}
-              className="min-h-11 px-4"
             >
               {language === 'ms' ? 'Semua' : 'All'}
             </Button>
@@ -85,7 +93,6 @@ export default function HealthTips() {
                   variant={selectedCategory === cat.slug ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => handleCategoryChange(cat.slug)}
-                  className="min-h-11 px-4"
                 >
                   {language === 'ms' ? (cat.name_ms || cat.name) : (cat.name_en || cat.name)}
                 </Button>
@@ -162,13 +169,27 @@ export default function HealthTips() {
         </div>
       </section>
 
-      <PublicClosingCta
-        title={language === 'ms' ? 'Ada Soalan Kesihatan?' : 'Have Health Questions?'}
-        description={language === 'ms'
-          ? 'Jangan ragu untuk menghubungi kami. Kami sedia membantu!'
-          : "Don't hesitate to contact us. We're here to help!"}
-        appointmentLabel={language === 'ms' ? 'Buat Temujanji' : 'Book Appointment'}
-      />
+      {/* CTA Section */}
+      <section className="bg-muted/50 py-16">
+        <div className="container">
+          <div className="mx-auto max-w-3xl text-center">
+            <h2 className="mb-4">
+              {language === 'ms' ? 'Ada Soalan Kesihatan?' : 'Have Health Questions?'}
+            </h2>
+            <p className="mb-8 text-muted-foreground">
+              {language === 'ms'
+                ? 'Jangan ragu untuk menghubungi kami. Kami sedia membantu!'
+                : "Don't hesitate to contact us. We're here to help!"}
+            </p>
+            <Button size="lg" asChild>
+              <Link to="/appointment">
+                <Calendar className="mr-2 h-5 w-5" />
+                {language === 'ms' ? 'Buat Temujanji' : 'Book Appointment'}
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </section>
     </MainLayout>
   );
 }
