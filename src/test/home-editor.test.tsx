@@ -381,12 +381,10 @@ describe("HomeEditor", { timeout: 30_000 }, () => {
     for (const label of labels) {
       expect(screen.getByLabelText(label)).toBeInTheDocument();
     }
-    const visibilitySection = screen.getByRole("region", {
-      name: "Section visibility and order",
-    });
-    expect(
-      within(visibilitySection).getByRole("button", { name: "Move Hero down" }),
-    ).toBeInTheDocument();
+    const heroToggle = screen.getByLabelText("Show Hero");
+    const heroRow = heroToggle.closest("li");
+    expect(heroRow).not.toBeNull();
+    expect(within(heroRow as HTMLElement).getByRole("button", { name: "Move Hero down" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Upload media" })).toBeEnabled();
     expect(
       screen.queryByRole("button", {
