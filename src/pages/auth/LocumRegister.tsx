@@ -46,6 +46,7 @@ export default function LocumRegister() {
       });
       if (error) throw error;
       setSuccess(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       const msg = err?.message?.includes('registered')
         ? 'This email is already registered.'

@@ -130,6 +130,7 @@ export default function AppointmentBooking() {
       setBookingId(data.id);
       setStep(4);
     },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
       toast({
         title: "Booking failed",
@@ -412,7 +413,7 @@ export default function AppointmentBooking() {
                       id="pdpa"
                       checked={!!values.pdpa}
                       onCheckedChange={(c) =>
-                        setValue("pdpa", c === true ? true : (undefined as any), {
+                        setValue("pdpa", c === true ? true : (undefined as unknown as true), {
                           shouldValidate: true,
                         })
                       }
