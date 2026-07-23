@@ -17,4 +17,13 @@ describe('dispensary regressions', () => {
     expect(checkoutPage).toContain('generateDrugLabelPdf');
     expect(checkoutPage).not.toContain('DrugLabelPrintout');
   });
+
+  test('initializes the patient before the label print callback reads it', () => {
+    const patientDeclaration = checkoutPage.indexOf('const patient = entry?.patients');
+    const printCallback = checkoutPage.indexOf('const handlePrintLabels = useCallback');
+
+    expect(patientDeclaration).toBeGreaterThan(-1);
+    expect(printCallback).toBeGreaterThan(-1);
+    expect(patientDeclaration).toBeLessThan(printCallback);
+  });
 });
