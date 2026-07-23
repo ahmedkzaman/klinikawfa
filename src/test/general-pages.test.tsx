@@ -165,6 +165,56 @@ afterEach(() => {
 });
 
 describe("GeneralPageRenderer", () => {
+  it("uses a saved grid layout while omitting hidden blocks", () => {
+    const content: GeneralPageContent = {
+      ...structuredClone(publishedContent),
+      layout: {
+        version: 1,
+        blocks: [
+          {
+            id: "body",
+            kind: "body",
+            contentRef: "body",
+            order: 0,
+            hidden: false,
+            desktop: { column: 5, width: 8, row: 1, height: 1 },
+          },
+          {
+            id: "title",
+            kind: "title",
+            contentRef: "title",
+            order: 1,
+            hidden: false,
+            desktop: { column: 1, width: 4, row: 1, height: 1 },
+          },
+          {
+            id: "cta",
+            kind: "cta",
+            contentRef: "cta",
+            order: 2,
+            hidden: true,
+            desktop: { column: 1, width: 12, row: 2, height: 1 },
+          },
+        ],
+      },
+    };
+
+    const { container } = render(
+      <MemoryRouter>
+        <LanguageProvider>
+          <GeneralPageRenderer content={content} />
+        </LanguageProvider>
+      </MemoryRouter>,
+    );
+
+    expect(
+      Array.from(container.querySelectorAll("[data-layout-kind]")).map(
+        (element) => element.getAttribute("data-layout-kind"),
+      ),
+    ).toEqual(["body", "title"]);
+    expect(screen.queryByRole("link", { name: "Buat temujanji" })).not.toBeInTheDocument();
+  });
+
   it("renders valid Malay published content and sanitizes rich HTML", () => {
     const { container } = render(
       <MemoryRouter>

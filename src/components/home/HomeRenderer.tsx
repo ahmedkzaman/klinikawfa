@@ -7,6 +7,9 @@ import { ServicesPreview } from "@/components/home/ServicesPreview";
 import { TestimonialsSection } from "@/components/home/TestimonialsSection";
 import { VideoSection } from "@/components/home/VideoSection";
 import { WhySection } from "@/components/home/WhySection";
+import { WebsiteGridRenderer } from "@/components/website/WebsiteGridRenderer";
+import { createDefaultHomeLayout } from "@/features/website-cms/layout/defaults";
+import { HOME_LAYOUT_KINDS } from "@/features/website-cms/layout/types";
 import type {
   HomeContent,
   HomeSectionId,
@@ -30,7 +33,18 @@ export function HomeRenderer({ content, preview = false }: HomeRendererProps) {
     map: () => <MapSection content={content.map} preview={preview} />,
   };
 
-  return content.sectionOrder.map((section) => (
-    <Fragment key={section}>{sectionRenderers[section]()}</Fragment>
-  ));
+  if (!content.layout) {
+    return content.sectionOrder.map((section) => (
+      <Fragment key={section}>{sectionRenderers[section]()}</Fragment>
+    ));
+  }
+
+  return (
+    <WebsiteGridRenderer
+      allowedKinds={HOME_LAYOUT_KINDS}
+      fallbackLayout={createDefaultHomeLayout(content.sectionOrder)}
+      layout={content.layout}
+      renderBlock={sectionRenderers}
+    />
+  );
 }

@@ -9,6 +9,9 @@ import {
 } from "@/features/website-cms/schemas/common";
 import { sanitizeGeneralPageHtml } from "@/lib/sanitize-general-page-html";
 import { PageSectionsRenderer } from "@/features/website-cms/sections/registry";
+import { WebsiteGridRenderer } from "@/components/website/WebsiteGridRenderer";
+import { createDefaultGeneralPageLayout } from "@/features/website-cms/layout/defaults";
+import { GENERAL_PAGE_LAYOUT_KINDS } from "@/features/website-cms/layout/types";
 
 interface GeneralPageRendererProps {
   content: GeneralPageContent;
@@ -52,6 +55,100 @@ export function GeneralPageRenderer({
   const cta = content.cta
     ? websiteCtaHrefSchema.safeParse(content.cta.href)
     : null;
+
+  if (content.layout) {
+    const renderMedia = () =>
+      media.length > 0 ? (
+        <div className="mx-auto grid max-w-4xl gap-6 px-4 py-10 sm:px-6 md:grid-cols-2 lg:px-8">
+          {media.map((item, index) => {
+            const alt = localizedPageText(item.alt, language);
+            if (preview) {
+              return <PreviewMediaPlaceholder key={`${item.type}-${index}`} />;
+            }
+            if (item.type === "image") {
+              return (
+                <img
+                  alt={alt}
+                  className="h-full max-h-96 w-full rounded-xl object-cover"
+                  decoding="async"
+                  key={`${item.type}-${index}`}
+                  loading="lazy"
+                  src={item.url}
+                />
+              );
+            }
+            return (
+              <video
+                aria-label={alt}
+                className="max-h-96 w-full rounded-xl bg-black"
+                controls
+                key={`${item.type}-${index}`}
+                preload="metadata"
+                src={item.url}
+              />
+            );
+          })}
+        </div>
+      ) : null;
+
+    return (
+      <article className="bg-white text-slate-900">
+        <WebsiteGridRenderer
+          allowedKinds={GENERAL_PAGE_LAYOUT_KINDS}
+          fallbackLayout={createDefaultGeneralPageLayout(content)}
+          layout={content.layout}
+          renderBlock={{
+            title: () => (
+              <header className="mx-auto max-w-5xl px-4 pb-8 pt-12 sm:px-6 lg:px-8 lg:pt-16">
+                <h1 className="text-balance text-4xl font-bold tracking-tight sm:text-5xl">
+                  {title}
+                </h1>
+              </header>
+            ),
+            hero: () =>
+              heroImage?.success && content.heroImage ? (
+                <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+                  {preview ? (
+                    <PreviewMediaPlaceholder />
+                  ) : (
+                    <img
+                      alt={localizedPageText(content.heroAlt, language)}
+                      className="max-h-[32rem] w-full rounded-2xl object-cover"
+                      decoding="async"
+                      src={content.heroImage}
+                    />
+                  )}
+                </div>
+              ) : null,
+            body: () => (
+              <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
+                <div
+                  className="prose prose-slate max-w-none"
+                  dangerouslySetInnerHTML={{ __html: body }}
+                />
+              </div>
+            ),
+            media: renderMedia,
+            cta: () =>
+              content.cta && cta?.success ? (
+                <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
+                  <a
+                    className="inline-flex min-h-11 items-center justify-center rounded-lg bg-blue-700 px-5 py-3 font-semibold text-white transition-colors hover:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 focus-visible:ring-offset-2"
+                    href={cta.data}
+                    rel={cta.data.startsWith("http") ? "noopener noreferrer" : undefined}
+                  >
+                    {localizedPageText(content.cta.label, language)}
+                  </a>
+                </div>
+              ) : null,
+          }}
+        />
+        {content.sections?.length ? (
+          <PageSectionsRenderer language={language} sections={content.sections} />
+        ) : null}
+      </article>
+    );
+  }
 
   return (
     <article className="bg-white text-slate-900">
