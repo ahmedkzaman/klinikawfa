@@ -5,7 +5,7 @@ desk workstations and what to do when the traffic-light indicator in the
 registration dialog turns RED.
 
 > The bridge is a small local HTTP service running on `127.0.0.1` that talks to
-> the JPN card reader and exposes `/read-mykad` and `/status` endpoints to the
+> the JPN card reader and exposes `/read-mykad` and `/health` endpoints to the
 > Klinik Awfa web app.
 
 ---
@@ -34,10 +34,11 @@ Install in the following order before deploying the bridge service:
 
 ## 3. Browser Security Flags
 
-The web app is served over HTTPS but the bridge runs on plain HTTP at
-`127.0.0.1`. Chromium treats `localhost` as a secure context, but some
-enterprise policies block private-network requests — set these flags once per
-workstation:
+The web app is served over HTTPS but the bridge runs on plain HTTP at loopback
+addresses. The app first tries `localhost:8787`, then falls back to
+`127.0.0.1:8787` for bridge services that bind only to IPv4 loopback. Chromium
+treats loopback as a secure context, but some enterprise policies block
+private-network requests -- set these flags once per workstation:
 
 - `chrome://flags/#allow-insecure-localhost` → **Enabled**
 - `chrome://flags/#block-insecure-private-network-requests` → **Disabled**
