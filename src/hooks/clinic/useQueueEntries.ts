@@ -8,6 +8,7 @@ import type { QueueEntryWithJoins, QueueEntryRow } from "@/types/clinic";
 const QUEUE_QUERY_KEY = ["clinic", "queue-entries"] as const;
 const CONSULT_QUEUE_QUERY_KEY = ["clinic", "consultation-queue-entries"] as const;
 const CANCELLED_TODAY_QUERY_KEY = ["clinic", "queue-entries", "cancelled-today"] as const;
+const COMPLETED_TODAY_QUERY_KEY = ["clinic", "queue-entries", "completed-today"] as const;
 let queueRealtimeSubscriberId = 0;
 
 function dateRangeForLocalDate(date: string) {
@@ -82,6 +83,7 @@ function useQueueEntriesRealtimeSync() {
           qc.invalidateQueries({ queryKey: QUEUE_QUERY_KEY });
           qc.invalidateQueries({ queryKey: CONSULT_QUEUE_QUERY_KEY });
           qc.invalidateQueries({ queryKey: CANCELLED_TODAY_QUERY_KEY });
+          qc.invalidateQueries({ queryKey: COMPLETED_TODAY_QUERY_KEY });
         },
       )
       .subscribe();
@@ -184,6 +186,7 @@ export function useUpdateQueueEntry() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUEUE_QUERY_KEY });
       qc.invalidateQueries({ queryKey: CONSULT_QUEUE_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: COMPLETED_TODAY_QUERY_KEY });
     },
   });
 }
@@ -316,6 +319,7 @@ export function useCancelQueueEntry() {
       qc.invalidateQueries({ queryKey: QUEUE_QUERY_KEY });
       qc.invalidateQueries({ queryKey: CONSULT_QUEUE_QUERY_KEY });
       qc.invalidateQueries({ queryKey: CANCELLED_TODAY_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: COMPLETED_TODAY_QUERY_KEY });
       toast.success("Visit terminated and documented.");
     },
     onError: (err: unknown) => {
@@ -355,6 +359,7 @@ export function useRestoreQueueEntry() {
       qc.invalidateQueries({ queryKey: QUEUE_QUERY_KEY });
       qc.invalidateQueries({ queryKey: CONSULT_QUEUE_QUERY_KEY });
       qc.invalidateQueries({ queryKey: CANCELLED_TODAY_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: COMPLETED_TODAY_QUERY_KEY });
       toast.success("Entry restored to Registered.");
     },
     onError: (err: unknown) => {
@@ -389,4 +394,43 @@ export function useCancelledTodayEntries(selectedDate = todayInputValue()) {
   return query;
 }
 
-export { QUEUE_QUERY_KEY, CONSULT_QUEUE_QUERY_KEY, CANCELLED_TODAY_QUERY_KEY, todayInputValue };
+export function useCompletedTodayEntries(selectedDate = todayInputValue(), enabled = true) {
+  const query = useQuery<QueueEntryWithJoins[]>({
+    queryKey: [...COMPLETED_TODAY_QUERY_KEY, selectedDate],
+    enabled,
+    queryFn: async () => {
+      const { start, end } = dateRangeForLocalDate(selectedDate);
+
+      const { data, error } = await supabase
+        .from("queue_entries")
+        .select(
+          `
+          *,
+          patients ( name, phone ),
+          doctors:assigned_doctor_id ( name )
+        `,
+        )
+        .eq("clinic_status", "completed")
+        .is("deleted_at", null)
+        .gte("updated_at", start)
+        .lt("updated_at", end)
+        .order("updated_at", { ascending: false });
+
+      if (error) throw error;
+      return attachInsuranceProviderDirectory(data ?? []);
+    },
+    staleTime: 30_000,
+  });
+
+  useQueueEntriesRealtimeSync();
+
+  return query;
+}
+
+export {
+  QUEUE_QUERY_KEY,
+  CONSULT_QUEUE_QUERY_KEY,
+  CANCELLED_TODAY_QUERY_KEY,
+  COMPLETED_TODAY_QUERY_KEY,
+  todayInputValue,
+};

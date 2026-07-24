@@ -14,6 +14,7 @@ import {
   RefreshCcw,
   MessageSquare,
   CalendarDays,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SEOHead } from "@/components/seo/SEOHead";
@@ -31,6 +32,7 @@ import {
   useCancelledTodayEntries,
   useRestoreQueueEntry,
   todayInputValue,
+  useCompletedTodayEntries,
 } from "@/hooks/clinic/useQueueEntries";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTodayAppointments } from "@/hooks/clinic/useTodayAppointments";
@@ -137,6 +139,10 @@ export default function QueueBoard() {
   const selectedDateIsToday = effectiveQueueDate === todayValue;
   const { data: entries = [], isLoading } = useQueueEntries(effectiveQueueDate);
   const { data: cancelledToday = [] } = useCancelledTodayEntries(effectiveQueueDate);
+  const { data: completedToday = [], isLoading: isCompletedLoading } = useCompletedTodayEntries(
+    effectiveQueueDate,
+    canViewQueueHistory,
+  );
   const { data: appointments = [] } = useTodayAppointments();
 
   const updateQueue = useUpdateQueueEntry();
@@ -296,6 +302,53 @@ export default function QueueBoard() {
                 );
               })}
             </div>
+          )}
+
+          {canViewQueueHistory && (
+            <section className={cn(bento, "mt-8 p-4")}>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                  <h2 className="text-sm font-bold uppercase tracking-tight text-slate-700">
+                    {selectedDateIsToday ? "Completed Today" : "Completed on Selected Date"}
+                  </h2>
+                </div>
+                <span className={cn(softBadge, "px-2 py-0.5 text-xs")}>{completedToday.length}</span>
+              </div>
+
+              {isCompletedLoading ? (
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <Skeleton key={index} className="h-20 w-full rounded-xl" />
+                  ))}
+                </div>
+              ) : completedToday.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-slate-200 bg-white p-4 text-center text-xs text-slate-400">
+                  No completed patients for this date.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {completedToday.map((entry) => (
+                    <div key={entry.id} className="rounded-xl border border-emerald-100 bg-white p-3 shadow-sm">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-mono text-sm font-semibold tabular-nums text-slate-800">
+                          {formatQueueNo(entry.created_at, entry.queue_sequence)}
+                        </p>
+                        <span className="text-xs tabular-nums text-slate-400">
+                          {format(new Date(entry.updated_at), "HH:mm")}
+                        </span>
+                      </div>
+                      <p className="mt-1 truncate text-sm font-medium text-slate-800">
+                        {entry.patients?.name ? toMalayTitleCase(entry.patients.name) : "Unknown patient"}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-slate-500">
+                        Attending: {entry.doctors?.name ? `Dr. ${entry.doctors.name}` : "Not assigned"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
           )}
 
           {/* Recently Cancelled Drawer */}
