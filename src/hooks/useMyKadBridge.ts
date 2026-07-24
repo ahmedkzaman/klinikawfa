@@ -8,11 +8,12 @@ export type MyKadBridgeStatus =
 const RAW_URL =
   (import.meta.env.VITE_MYKAD_BRIDGE_URL as string | undefined) ||
   'http://localhost:8787/read-mykad';
+const LOOPBACK_RAW_URL = 'http://127.0.0.1:8787/read-mykad';
 
 /** Derive the status endpoint from the bridge base URL. */
-function getStatusUrl(): string {
+function toStatusUrl(rawUrl: string): string {
   try {
-    const u = new URL(RAW_URL);
+    const u = new URL(rawUrl);
     u.pathname = u.pathname.replace(/\/read-mykad\/?$/, '') + '/health';
     return u.toString();
   } catch {
@@ -20,7 +21,9 @@ function getStatusUrl(): string {
   }
 }
 
-const STATUS_URL = getStatusUrl();
+function getStatusUrls(): string[] {
+  return Array.from(new Set([toStatusUrl(RAW_URL), toStatusUrl(LOOPBACK_RAW_URL)]));
+}
 
 /**
  * Silently polls the local MyKad bridge every `intervalMs` ms.
@@ -35,27 +38,28 @@ export function useMyKadBridge(intervalMs = 10_000): { status: MyKadBridgeStatus
     let cancelled = false;
 
     const ping = async () => {
-      try {
-        const res = await fetch(STATUS_URL, {
-          method: 'GET',
-          // 2s ping timeout — fast enough to not pile up.
-          signal: AbortSignal.timeout(2000),
-        });
-        if (!res.ok) {
-          if (!cancelled) setStatus('disconnected');
+      for (const url of getStatusUrls()) {
+        try {
+          const res = await fetch(url, {
+            method: 'GET',
+            signal: AbortSignal.timeout(2000),
+          });
+          if (!res.ok) continue;
+
+          const body = (await res.json().catch(() => null)) as
+            | { card_present?: boolean; cardPresent?: boolean }
+            | null;
+          const present = body?.card_present ?? body?.cardPresent ?? false;
+          if (!cancelled) {
+            setStatus(present ? 'connected_card_ready' : 'connected_no_card');
+          }
           return;
+        } catch {
+          // Try the next loopback host before marking the bridge disconnected.
         }
-        const body = (await res.json().catch(() => null)) as
-          | { card_present?: boolean; cardPresent?: boolean }
-          | null;
-        const present = body?.card_present ?? body?.cardPresent ?? false;
-        if (!cancelled) {
-          setStatus(present ? 'connected_card_ready' : 'connected_no_card');
-        }
-      } catch {
-        // Silent: no console spam.
-        if (!cancelled) setStatus('disconnected');
       }
+
+      if (!cancelled) setStatus('disconnected');
     };
 
     const start = () => {
