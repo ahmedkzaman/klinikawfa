@@ -80,7 +80,17 @@ function csvEscape(value: string | number | null | undefined): string {
 }
 
 function downloadCSV(rows: RawFinancialRow[], startDate: Date, endDate: Date) {
-  const header = ['visit_date', 'queue_entry_id', 'payment_method', 'item_name', 'revenue', 'cogs', 'profit'];
+  const header = [
+    'visit_date',
+    'queue_entry_id',
+    'payment_method',
+    'item_name',
+    'kind',
+    'revenue',
+    'cogs',
+    'profit',
+    'has_missing_cogs',
+  ];
   const lines = [header.join(',')];
   for (const r of rows) {
     lines.push([
@@ -88,9 +98,11 @@ function downloadCSV(rows: RawFinancialRow[], startDate: Date, endDate: Date) {
       csvEscape(r.queue_entry_id),
       csvEscape(r.payment_method),
       csvEscape(r.item_name),
+      csvEscape(r.kind),
       csvEscape(r.revenue.toFixed(2)),
       csvEscape(r.cogs.toFixed(2)),
       csvEscape(r.profit.toFixed(2)),
+      csvEscape(r.hasMissingCogs ? 'true' : 'false'),
     ].join(','));
   }
   const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
@@ -308,7 +320,7 @@ export default function Insight() {
               <InsightSkeleton />
             ) : (
               <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
                   <SummaryCard
                     icon={<Wallet className="h-4 w-4" />}
                     label="Total Collected"
@@ -323,6 +335,11 @@ export default function Insight() {
                     icon={<PackageMinus className="h-4 w-4" />}
                     label="COGS"
                     value={summary ? formatRM(summary.totalCogs) : '-'}
+                  />
+                  <SummaryCard
+                    icon={<TrendingUp className="h-4 w-4" />}
+                    label="Missing COGS Lines"
+                    value={summary ? `${summary.missingCogsLineCount}` : '-'}
                   />
                   <SummaryCard
                     icon={<TrendingUp className="h-4 w-4" />}
