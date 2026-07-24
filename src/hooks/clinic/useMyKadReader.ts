@@ -88,7 +88,7 @@ export function useMyKadReader() {
       try {
         res = await fetch(BRIDGE_URL, {
           method: 'GET',
-          signal: AbortSignal.timeout(8000),
+          signal: AbortSignal.timeout(40_000),
         });
       } catch {
         // Network failure / CORS / timeout / mixed-content block

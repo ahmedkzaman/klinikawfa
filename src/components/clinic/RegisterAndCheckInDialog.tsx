@@ -251,7 +251,7 @@ function parseMyKad(ic: string): { dob: string | null; gender: 'male' | 'female'
 function BridgeStatusDot({ status }: { status: MyKadBridgeStatus }) {
   const map: Record<MyKadBridgeStatus, { cls: string; label: string }> = {
     connected_card_ready: { cls: 'bg-emerald-500', label: 'MyKad reader ready' },
-    connected_no_card: { cls: 'bg-amber-500', label: 'Reader connected — no card inserted' },
+    connected_no_card: { cls: 'bg-amber-500', label: 'MyKad bridge connected' },
     disconnected: { cls: 'bg-red-500', label: 'Reader offline — type IC manually' },
   };
   const { cls, label } = map[status];
@@ -585,20 +585,14 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                           setReadingMyKad(true);
                           let data: MyKadPayload | null = null;
                           try {
-                            data = await Promise.race<MyKadPayload | null>([
-                              readMyKad(),
-                              new Promise<MyKadPayload | null>((_, rej) =>
-                                setTimeout(() => rej(new Error('bridge_timeout')), 3000),
-                              ),
-                            ]);
+                            data = await readMyKad();
                           } catch {
                             data = null;
                           } finally {
                             setReadingMyKad(false);
                           }
                           if (!data) {
-                            // Silent fallback — focus the manual field, no blocking modal.
-                            toast.message('MyKad reader unavailable — type IC manually.');
+                            // The reader hook already shows the specific error.
                             requestAnimationFrame(() => {
                               icInputRef.current?.focus();
                               icInputRef.current?.select();

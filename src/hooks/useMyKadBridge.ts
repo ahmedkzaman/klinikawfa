@@ -7,16 +7,16 @@ export type MyKadBridgeStatus =
 
 const RAW_URL =
   (import.meta.env.VITE_MYKAD_BRIDGE_URL as string | undefined) ||
-  'http://127.0.0.1:8787/read-mykad';
+  'http://localhost:8787/read-mykad';
 
 /** Derive the status endpoint from the bridge base URL. */
 function getStatusUrl(): string {
   try {
     const u = new URL(RAW_URL);
-    u.pathname = u.pathname.replace(/\/read-mykad\/?$/, '') + '/status';
+    u.pathname = u.pathname.replace(/\/read-mykad\/?$/, '') + '/health';
     return u.toString();
   } catch {
-    return 'http://127.0.0.1:8787/status';
+    return 'http://localhost:8787/health';
   }
 }
 
