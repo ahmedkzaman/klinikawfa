@@ -1066,7 +1066,7 @@ export default function DispenseCheckout() {
         onClose={() => setViewingDoc(null)}
         onPrint={(d) => {
           setViewingDoc(null);
-          printDocument(d);
+          void printDocument(d, clinicSettings);
         }}
       />
     </div>

@@ -1,9 +1,17 @@
 import { Printer, X } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { getPaperStyle, type PaperOrientation, type PaperSize } from '@/lib/clinic/paperStyle';
 import type { ConsultationDocument } from '@/hooks/clinic/useClinicDocuments';
+import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
+import { ConsultationDocumentPage } from '@/components/clinic/consultation/ConsultationDocumentPage';
 
 interface Props {
   doc: ConsultationDocument | null;
@@ -12,6 +20,7 @@ interface Props {
 }
 
 export function ViewDocumentModal({ doc, onClose, onPrint }: Props) {
+  const { settings } = useClinicSettings();
   if (!doc) return null;
   const size = (doc.paper_size as PaperSize) ?? 'A4';
   const orientation = (doc.orientation as PaperOrientation) ?? 'portrait';
@@ -27,6 +36,9 @@ export function ViewDocumentModal({ doc, onClose, onPrint }: Props) {
               {size} · {orientation}
             </Badge>
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Preview the saved document with the clinic-wide document header.
+          </DialogDescription>
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={() => onPrint(doc)} className="gap-1.5">
               <Printer className="h-4 w-4" /> Print
@@ -37,11 +49,15 @@ export function ViewDocumentModal({ doc, onClose, onPrint }: Props) {
           </div>
         </DialogHeader>
         <div className="flex-1 min-h-0 overflow-auto bg-slate-200 p-6 flex justify-center items-start">
-          <div className="bg-white shadow-xl" style={paperStyle}>
+          <ConsultationDocumentPage
+            settings={settings}
+            className="shadow-xl"
+            style={paperStyle}
+          >
             <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate-900 m-0">
               {doc.content}
             </pre>
-          </div>
+          </ConsultationDocumentPage>
         </div>
       </DialogContent>
     </Dialog>

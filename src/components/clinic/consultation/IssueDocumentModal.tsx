@@ -3,6 +3,7 @@ import { FileText, Save, Clock } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -25,6 +26,7 @@ import {
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { useCurrentDoctor } from '@/hooks/clinic/useCurrentDoctor';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
+import { ConsultationDocumentPage } from '@/components/clinic/consultation/ConsultationDocumentPage';
 
 interface PatientLite {
   id: string;
@@ -173,6 +175,10 @@ export function IssueDocumentModal({
               {paperSize} · {orientation}
             </Badge>
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Edit the dedicated document content and preview it below the
+            clinic-wide document header.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0 p-4">
@@ -219,14 +225,16 @@ export function IssueDocumentModal({
 
           {/* Preview */}
           <div className="bg-slate-200 rounded-lg p-4 flex justify-center items-start overflow-y-auto min-h-0">
-            <div
-              className="bg-white shadow-xl transition-all duration-300"
+            <ConsultationDocumentPage
+              settings={settings}
+              testId="consultation-document-preview"
+              className="shadow-xl transition-all duration-300"
               style={paperStyle}
             >
               <div className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate-900">
                 {content}
               </div>
-            </div>
+            </ConsultationDocumentPage>
           </div>
         </div>
 

@@ -106,6 +106,7 @@ import { VisitRemarksBanner } from '@/components/clinic/VisitRemarksBanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
+import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 
 const PRICE_TIERS = ['SELF PAY', 'PANEL'];
 
@@ -281,6 +282,7 @@ export default function ConsultationDetail() {
   const navigate = useNavigate();
   const { isLocum } = useAuth();
   const { data: doctor } = useCurrentDoctor();
+  const { settings: clinicSettings } = useClinicSettings();
   const { data: entries = [] } = useConsultationQueueEntries();
   const updateQueue = useUpdateQueueEntry();
   const { data: rooms = [] } = useRooms();
@@ -1491,7 +1493,7 @@ export default function ConsultationDetail() {
           onClose={() => setViewingDoc(null)}
           onPrint={(d) => {
             setViewingDoc(null);
-            printDocument(d);
+            void printDocument(d, clinicSettings);
           }}
         />
 

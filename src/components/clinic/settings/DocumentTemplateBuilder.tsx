@@ -23,6 +23,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { escapeHtml } from '@/lib/security';
+import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
+import { ConsultationDocumentPage } from '@/components/clinic/consultation/ConsultationDocumentPage';
 
 const PREVIEW_DICTIONARY: Record<string, string> = {
   '{{patient_name}}': 'Ahmad bin Ali',
@@ -87,6 +89,7 @@ const BLANK_CONTENT =
   'MEMORANDUM\n\nDate: {{current_date}}\nTo: Whom It May Concern\n\nThis is to certify that {{patient_name}} (IC: {{patient_ic}}) was examined at {{clinic_name}} by {{doctor_name}}.\n\nDiagnosis: {{diagnosis}}';
 
 export default function DocumentTemplateBuilder() {
+  const { settings: clinicSettings } = useClinicSettings();
   const { data: templates = [], isLoading } = useDocumentTemplates();
   const upsert = useUpsertDocumentTemplate();
   const del = useDeleteDocumentTemplate();
@@ -384,8 +387,9 @@ export default function DocumentTemplateBuilder() {
 
         {/* RIGHT: PAPER PREVIEW */}
         <div className="bg-slate-200 rounded-xl p-6 flex justify-center items-start overflow-y-auto min-h-0">
-          <div
-            className="bg-white shadow-xl transition-all duration-300 ease-in-out"
+          <ConsultationDocumentPage
+            settings={clinicSettings}
+            className="shadow-xl transition-all duration-300 ease-in-out"
             style={{
               width: '100%',
               maxWidth: `${finalW}mm`,
@@ -397,7 +401,7 @@ export default function DocumentTemplateBuilder() {
               className="max-w-none whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate-900"
               dangerouslySetInnerHTML={{ __html: livePreviewHtml }}
             />
-          </div>
+          </ConsultationDocumentPage>
         </div>
       </div>
 
