@@ -19,6 +19,7 @@ interface BridgeResponse {
 const BRIDGE_URL =
   (import.meta.env.VITE_MYKAD_BRIDGE_URL as string | undefined) ||
   'http://localhost:8787/read-mykad';
+const LOOPBACK_BRIDGE_URL = 'http://127.0.0.1:8787/read-mykad';
 
 const BRIDGE_DOWN_MSG =
   'MyKad Bridge is not running. Please open the MyKad Bridge app on this computer.';
@@ -32,8 +33,12 @@ function asString(raw: unknown): string | undefined {
 function asDigits(raw: unknown): string | undefined {
   const v = asString(raw);
   if (!v) return undefined;
-  const digits = v.replace(/\\D/g, '');
+  const digits = v.replace(/\D/g, '');
   return digits.length ? digits : undefined;
+}
+
+function getBridgeUrls(): string[] {
+  return Array.from(new Set([BRIDGE_URL, LOOPBACK_BRIDGE_URL]));
 }
 
 function toMyKadPayload(raw: Record<string, unknown>): MyKadPayload {
@@ -84,20 +89,32 @@ export function useMyKadReader() {
   const readMyKad = useCallback(async (): Promise<MyKadPayload | null> => {
     setIsReading(true);
     try {
-      let res: Response;
-      try {
-        res = await fetch(BRIDGE_URL, {
-          method: 'GET',
-          signal: AbortSignal.timeout(40_000),
-        });
-      } catch {
-        // Network failure / CORS / timeout / mixed-content block
+      let res: Response | null = null;
+      let lastFetchFailed = false;
+      for (const url of getBridgeUrls()) {
+        try {
+          res = await fetch(url, {
+            method: 'GET',
+            signal: AbortSignal.timeout(40_000),
+          });
+          break;
+        } catch {
+          // Network failure / CORS / timeout / mixed-content block
+          lastFetchFailed = true;
+        }
+      }
+
+      if (!res) {
         toast.error(BRIDGE_DOWN_MSG);
         return null;
       }
 
       if (!res.ok) {
-        toast.error('MyKad Bridge returned an unexpected error.');
+        toast.error(
+          lastFetchFailed
+            ? 'MyKad Bridge was reached on fallback address but returned an unexpected error.'
+            : 'MyKad Bridge returned an unexpected error.',
+        );
         return null;
       }
 
