@@ -10,6 +10,24 @@ const CONSULT_QUEUE_QUERY_KEY = ["clinic", "consultation-queue-entries"] as cons
 const CANCELLED_TODAY_QUERY_KEY = ["clinic", "queue-entries", "cancelled-today"] as const;
 let queueRealtimeSubscriberId = 0;
 
+function dateRangeForLocalDate(date: string) {
+  const start = new Date(`${date}T00:00:00`);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 1);
+  return {
+    start: start.toISOString(),
+    end: end.toISOString(),
+  };
+}
+
+function todayInputValue() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function createQueueRealtimeChannelName() {
   queueRealtimeSubscriberId += 1;
   return `clinic-queue-entries-sync-${queueRealtimeSubscriberId}`;
@@ -78,17 +96,13 @@ function useQueueEntriesRealtimeSync() {
  * Today's active queue entries for the main Queue Board.
  * Uses an "Allow-list" of statuses to prevent enum spelling errors.
  */
-export function useQueueEntries() {
+export function useQueueEntries(selectedDate = todayInputValue()) {
   const query = useQuery<QueueEntryWithJoins[]>({
-    queryKey: QUEUE_QUERY_KEY,
+    queryKey: [...QUEUE_QUERY_KEY, selectedDate],
     queryFn: async () => {
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
+      const { start, end } = dateRangeForLocalDate(selectedDate);
 
-      // Define exactly which statuses should appear on the board
-      const activeStatuses = ACTIVE_STATUSES;
-
-      const { data, error } = await supabase
+      const queueQuery = supabase
         .from("queue_entries")
         .select(
           `
@@ -98,12 +112,13 @@ export function useQueueEntries() {
         `,
         )
         .is("deleted_at", null)
-        .or(
-          `created_at.gte.${startOfDay.toISOString()},clinic_status.in.(${activeStatuses.join(",")})`,
-        )
+        .gte("created_at", start)
+        .lt("created_at", end)
         .order("is_urgent", { ascending: false })
         .order("created_at", { ascending: true })
         .order("queue_sequence", { ascending: true, nullsFirst: false });
+
+      const { data, error } = await queueQuery;
 
       if (error) {
         console.error("Queue Query Error:", error);
@@ -349,18 +364,18 @@ export function useRestoreQueueEntry() {
   });
 }
 
-export function useCancelledTodayEntries() {
+export function useCancelledTodayEntries(selectedDate = todayInputValue()) {
   const query = useQuery<QueueEntryWithJoins[]>({
-    queryKey: CANCELLED_TODAY_QUERY_KEY,
+    queryKey: [...CANCELLED_TODAY_QUERY_KEY, selectedDate],
     queryFn: async () => {
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
+      const { start, end } = dateRangeForLocalDate(selectedDate);
 
       const { data, error } = await supabase
         .from("queue_entries")
         .select(`*, patients ( name, phone )`)
         .eq("clinic_status", "cancelled")
-        .gte("cancelled_at", startOfDay.toISOString())
+        .gte("cancelled_at", start)
+        .lt("cancelled_at", end)
         .order("cancelled_at", { ascending: false });
 
       if (error) throw error;
@@ -374,4 +389,4 @@ export function useCancelledTodayEntries() {
   return query;
 }
 
-export { QUEUE_QUERY_KEY, CONSULT_QUEUE_QUERY_KEY, CANCELLED_TODAY_QUERY_KEY };
+export { QUEUE_QUERY_KEY, CONSULT_QUEUE_QUERY_KEY, CANCELLED_TODAY_QUERY_KEY, todayInputValue };

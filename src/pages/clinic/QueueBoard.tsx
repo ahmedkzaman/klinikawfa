@@ -13,10 +13,12 @@ import {
   ChevronDown,
   RefreshCcw,
   MessageSquare,
+  CalendarDays,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SEOHead } from "@/components/seo/SEOHead";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -28,6 +30,7 @@ import {
   useUpdateQueueEntry,
   useCancelledTodayEntries,
   useRestoreQueueEntry,
+  todayInputValue,
 } from "@/hooks/clinic/useQueueEntries";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTodayAppointments } from "@/hooks/clinic/useTodayAppointments";
@@ -122,10 +125,19 @@ function QueueCard({ entry, onClick }: { entry: QueueEntryWithJoins; onClick: ()
 
 export default function QueueBoard() {
   useTickEveryMinute();
-  const { data: entries = [], isLoading } = useQueueEntries();
-  const { data: cancelledToday = [] } = useCancelledTodayEntries();
+  const [selectedDate, setSelectedDate] = useState(() => todayInputValue());
+  const { isLocum, isAdmin, isGuest } = useAuth();
+  const canViewQueueHistory = !isLocum && !isGuest;
+  const todayValue = todayInputValue();
+  const effectiveQueueDate = canViewQueueHistory ? selectedDate : todayValue;
+  const selectedDateLabel = format(
+    new Date(`${effectiveQueueDate}T00:00:00`),
+    "EEEE, d MMMM yyyy",
+  );
+  const selectedDateIsToday = effectiveQueueDate === todayValue;
+  const { data: entries = [], isLoading } = useQueueEntries(effectiveQueueDate);
+  const { data: cancelledToday = [] } = useCancelledTodayEntries(effectiveQueueDate);
   const { data: appointments = [] } = useTodayAppointments();
-  const { isLocum, isAdmin } = useAuth();
 
   const updateQueue = useUpdateQueueEntry();
   const restoreEntry = useRestoreQueueEntry();
@@ -195,10 +207,36 @@ export default function QueueBoard() {
             <div>
               <h1 className="text-2xl font-semibold text-slate-800">Queue Board</h1>
               <p className="text-sm text-slate-500 mt-0.5">
-                {format(new Date(), "EEEE, d MMMM yyyy")} · {visibleEntries.length} active
+                {selectedDateLabel} · {visibleEntries.length} active
               </p>
             </div>
             <div className="flex gap-2 flex-wrap">
+              {canViewQueueHistory && (
+                <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-1 shadow-sm">
+                  <CalendarDays className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                  <Label htmlFor="queue-date" className="sr-only">
+                    Queue date
+                  </Label>
+                  <Input
+                    id="queue-date"
+                    type="date"
+                    value={selectedDate}
+                    onChange={(event) => setSelectedDate(event.target.value || todayInputValue())}
+                    className="h-8 w-[9.5rem] border-0 bg-transparent px-1 py-0 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                  />
+                  {!selectedDateIsToday && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-slate-600 hover:bg-slate-100"
+                      onClick={() => setSelectedDate(todayInputValue())}
+                    >
+                      Today
+                    </Button>
+                  )}
+                </div>
+              )}
               <Button variant="ghost" onClick={() => setWalkInDialog(true)} className={secondaryBtn} disabled={isLocum}>
                 <UserPlus className="h-4 w-4 mr-1" /> Walk-In
               </Button>
@@ -264,7 +302,7 @@ export default function QueueBoard() {
           <Collapsible className="mt-12 w-full border rounded-xl overflow-hidden bg-slate-50/50">
             <CollapsibleTrigger className="flex w-full items-center justify-between p-4 bg-white hover:bg-slate-50 transition-colors">
               <span className="text-sm font-bold text-slate-500 uppercase tracking-tight">
-                Recently Cancelled Today ({cancelledToday.length})
+                {selectedDateIsToday ? "Recently Cancelled Today" : "Cancelled on Selected Date"} ({cancelledToday.length})
               </span>
               <ChevronDown className="h-4 w-4 text-slate-400" />
             </CollapsibleTrigger>
