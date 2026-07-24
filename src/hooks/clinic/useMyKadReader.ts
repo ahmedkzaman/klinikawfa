@@ -12,7 +12,8 @@ export interface MyKadPayload {
 interface BridgeResponse {
   success: boolean;
   message?: string;
-  data?: MyKadPayload;
+  data?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 const BRIDGE_URL =
@@ -21,6 +22,61 @@ const BRIDGE_URL =
 
 const BRIDGE_DOWN_MSG =
   'MyKad Bridge is not running. Please open the MyKad Bridge app on this computer.';
+
+function asString(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  return trimmed.length ? trimmed : undefined;
+}
+
+function asDigits(raw: unknown): string | undefined {
+  const v = asString(raw);
+  if (!v) return undefined;
+  const digits = v.replace(/\\D/g, '');
+  return digits.length ? digits : undefined;
+}
+
+function toMyKadPayload(raw: Record<string, unknown>): MyKadPayload {
+  const lower = Object.fromEntries(
+    Object.entries(raw).map(([k, v]) => [k.toLowerCase(), v]),
+  ) as Record<string, unknown>;
+
+  const name =
+    asString(lower.name) ??
+    asString(lower.fullname) ??
+    asString(lower.full_name) ??
+    asString(lower.nama) ??
+    asString(lower.nama_penuh);
+
+  const ic_no =
+    asDigits(lower.ic_no) ??
+    asDigits(lower.icno) ??
+    asDigits(lower.ic) ??
+    asDigits(lower.nric) ??
+    asDigits(lower.national_id) ??
+    asDigits(lower.mykad) ??
+    asDigits(lower.my_kad) ??
+    asDigits(lower.r) ??
+    asDigits(lower.id_no);
+
+  const dob =
+    asString(lower.dob) ??
+    asString(lower.date_of_birth) ??
+    asString(lower.birthdate) ??
+    asString(lower.dob_full);
+
+  const gender =
+    asString(lower.gender) ??
+    asString(lower.sex) ??
+    asString(lower.jantina);
+
+  const address =
+    asString(lower.address) ??
+    asString(lower.alamat) ??
+    asString(lower.alamat_penuh);
+
+  return { name, ic_no, dob, gender, address };
+}
 
 export function useMyKadReader() {
   const [isReading, setIsReading] = useState(false);
@@ -50,7 +106,14 @@ export function useMyKadReader() {
         toast.error(result.message || 'IC Reader returned an error.');
         return null;
       }
-      return result.data ?? null;
+
+      const payload = typeof result.data === 'object' && result.data !== null ? result.data : result;
+      const normalized = toMyKadPayload(payload);
+      if (!normalized.ic_no && !normalized.name && !normalized.dob && !normalized.gender && !normalized.address) {
+        toast.error('Reader returned an unknown response format.');
+        return null;
+      }
+      return normalized;
     } finally {
       setIsReading(false);
     }
