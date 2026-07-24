@@ -1,6 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
+
+type OutOfStockRequestFrequencyRow = {
+  month: string;
+  month_label: string;
+  inventory_item_id: string;
+  item_name: string;
+  request_count: number;
+};
 
 export function useRestockRequests(status: 'open' | 'all' = 'open') {
   return useQuery({
@@ -93,5 +102,61 @@ export function useCloseRestockRequest() {
       toast.success('Marked as ordered');
     },
     onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+export function useOutOfStockRestockRequestFrequency() {
+  return useQuery({
+    queryKey: ['restock_requests', 'out_of_stock_frequency'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('restock_requests' as never)
+        .select('id, created_at, inventory_item_id, inventory_items(name, stock)')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const rows = (data ?? []).filter(
+        (r: Record<string, unknown>) =>
+          ((r.inventory_items as Record<string, unknown> | null)?.stock ?? null) === 0,
+      );
+
+      const counts = rows.reduce<Map<string, OutOfStockRequestFrequencyRow>>((acc, row) => {
+        const stockRow = row.inventory_items as Record<string, unknown> | null;
+        if (!stockRow) return acc;
+
+        const itemId = String(row.inventory_item_id);
+        const itemName = String(stockRow.name ?? 'Unknown item');
+        const createdAt = row.created_at as string | null;
+        if (!createdAt) return acc;
+
+        const month = format(new Date(createdAt), 'yyyy-MM');
+        const monthLabel = format(new Date(createdAt), 'MMMM yyyy');
+        const key = `${itemId}::${month}`;
+
+        const existing = acc.get(key);
+        if (existing) {
+          existing.request_count += 1;
+          return acc;
+        }
+
+        acc.set(key, {
+          month,
+          month_label: monthLabel,
+          inventory_item_id: itemId,
+          item_name: itemName,
+          request_count: 1,
+        });
+        return acc;
+      }, new Map<string, OutOfStockRequestFrequencyRow>());
+
+      return [...counts.values()].sort((a, b) => {
+        if (a.month !== b.month) {
+          return b.month.localeCompare(a.month);
+        }
+        return b.request_count - a.request_count;
+      });
+    },
+    staleTime: 1000 * 60,
   });
 }
