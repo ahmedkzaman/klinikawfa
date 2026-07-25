@@ -6079,6 +6079,13 @@ export type Database = {
         }
         Returns: Json
       }
+      remove_consultation_item_dispensary: {
+        Args: {
+          p_consultation_id: string
+          p_item_id: string
+        }
+        Returns: string
+      }
       update_consultation_item_dispensary: {
         Args: {
           p_consultation_id: string

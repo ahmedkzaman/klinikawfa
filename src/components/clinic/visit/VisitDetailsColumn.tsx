@@ -20,6 +20,16 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   useConsultationItems,
   useUpdateConsultationItem,
   useRemoveConsultationItem,
@@ -148,6 +158,8 @@ export function VisitDetailsColumn({
     'all' | 'items' | 'services' | 'packages' | 'documents'
   >('all');
   const [editingItem, setEditingItem] = useState<ConsultationItemRow | null>(null);
+  const [pendingRemoval, setPendingRemoval] =
+    useState<ConsultationItemRow | null>(null);
 
   // Print orchestration: build a real 60×50mm PDF with jsPDF and open it in
   // a new tab. The PDF carries its physical page dimensions in its metadata,
@@ -262,10 +274,11 @@ export function VisitDetailsColumn({
     }
   };
 
-  const handleRemove = async (id: string) => {
-    if (!consultationId) return;
+  const handleRemove = async () => {
+    if (!consultationId || !pendingRemoval) return;
     try {
-      await removeItem.mutateAsync({ id, consultationId });
+      await removeItem.mutateAsync({ id: pendingRemoval.id, consultationId });
+      setPendingRemoval(null);
       toast.success('Item removed');
     } catch (err) {
       toast.error((err as Error).message);
@@ -392,7 +405,7 @@ export function VisitDetailsColumn({
               canEdit={canEdit}
               onQty={handleQty}
               onPrice={handlePrice}
-              onRemove={handleRemove}
+              onRemove={setPendingRemoval}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
               canEditInstructions={canEditInstr}
@@ -413,7 +426,7 @@ export function VisitDetailsColumn({
               canEdit={canEdit}
               onQty={handleQty}
               onPrice={handlePrice}
-              onRemove={handleRemove}
+              onRemove={setPendingRemoval}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
               canEditInstructions={canEditInstr}
@@ -434,7 +447,7 @@ export function VisitDetailsColumn({
               canEdit={canEdit}
               onQty={handleQty}
               onPrice={handlePrice}
-              onRemove={handleRemove}
+              onRemove={setPendingRemoval}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
               canEditInstructions={canEditInstr}
@@ -455,7 +468,7 @@ export function VisitDetailsColumn({
               canEdit={canEdit}
               onQty={handleQty}
               onPrice={handlePrice}
-              onRemove={handleRemove}
+              onRemove={setPendingRemoval}
               onPrintLabel={handlePrintLabel}
               onEdit={setEditingItem}
               canEditInstructions={canEditInstr}
@@ -483,6 +496,32 @@ export function VisitDetailsColumn({
         open={editingItem !== null}
         onOpenChange={(o) => !o && setEditingItem(null)}
       />
+      <AlertDialog
+        open={pendingRemoval !== null}
+        onOpenChange={(open) => !open && setPendingRemoval(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove item?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove <strong>{pendingRemoval?.item_name}</strong> from this
+              visit? The removal will be recorded in the audit history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removeItem.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRemove}
+              disabled={removeItem.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {removeItem.isPending ? 'Removing...' : 'Confirm removal'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -495,7 +534,7 @@ interface ItemListProps {
   canEditInstructions: boolean;
   onQty: (id: string, currentQty: number, delta: number) => void;
   onPrice: (id: string, nextPrice: number) => void;
-  onRemove: (id: string) => void;
+  onRemove: (item: ConsultationItemRow) => void;
   onPrintLabel: (item: ConsultationItemRow) => void;
   onEdit: (item: ConsultationItemRow) => void;
   updatingId: boolean;
@@ -610,7 +649,7 @@ function ItemList({
                     variant="ghost"
                     size="icon"
                     className="h-6 w-6 ml-auto text-muted-foreground hover:text-destructive"
-                    onClick={() => onRemove(item.id)}
+                    onClick={() => onRemove(item)}
                     disabled={removingId}
                     aria-label="Remove item"
                   >

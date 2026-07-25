@@ -103,18 +103,13 @@ export function useRemoveConsultationItem() {
       id: string;
       consultationId: string;
     }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const { data, error } = await supabase
-        .from('consultation_items')
-        .update({
-          deleted_at: new Date().toISOString(),
-          deleted_by: user?.id ?? null,
-        })
-        .eq('id', id)
-        .select('id')
-        .maybeSingle();
+      const { data, error } = await supabase.rpc(
+        'remove_consultation_item_dispensary',
+        {
+          p_item_id: id,
+          p_consultation_id: consultationId,
+        },
+      );
       if (error) throw error;
       if (!data) throw new Error('Permission denied or item not found.');
       return consultationId;
