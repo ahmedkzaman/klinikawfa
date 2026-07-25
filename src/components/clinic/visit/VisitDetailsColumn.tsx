@@ -568,7 +568,7 @@ function ItemList({
                 </div>
               )}
 
-              {/* Inline qty controls + price (free-text rows) + remove */}
+              {/* Inline quantity, visit price, and removal controls */}
               {canEdit && (
                 <div className="mt-2 flex items-center gap-2 flex-wrap">
                   <div className="flex items-center gap-1">
@@ -598,17 +598,13 @@ function ItemList({
                       <Plus className="h-3 w-3" />
                     </Button>
                   </div>
-                  {item.item_id == null &&
-                    item.service_id == null &&
-                    item.package_id == null && (
-                      <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                        RM
-                        <PriceInput
-                          value={Number(item.price ?? 0)}
-                          onCommit={(v) => onPrice(item.id, v)}
-                        />
-                      </label>
-                    )}
+                  <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                    RM
+                    <PriceInput
+                      value={Number(item.price ?? 0)}
+                      onCommit={(v) => onPrice(item.id, v)}
+                    />
+                  </label>
                   <Button
                     type="button"
                     variant="ghost"
