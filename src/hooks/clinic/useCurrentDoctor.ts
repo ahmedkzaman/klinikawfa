@@ -22,6 +22,8 @@ export function useCurrentDoctor() {
         .from('doctors')
         .select('*')
         .eq('user_id', user!.id)
+        .order('created_at', { ascending: true })
+        .limit(1)
         .maybeSingle();
       if (error) throw error;
       if (data) return data;
@@ -58,6 +60,8 @@ export function useCurrentDoctor() {
           .from('doctors')
           .select('*')
           .eq('user_id', user!.id)
+          .order('created_at', { ascending: true })
+          .limit(1)
           .maybeSingle();
         if (retry) return retry;
         throw insertError;
