@@ -6079,6 +6079,14 @@ export type Database = {
         }
         Returns: Json
       }
+      update_consultation_item_dispensary: {
+        Args: {
+          p_consultation_id: string
+          p_item_id: string
+          p_updates: Json
+        }
+        Returns: string
+      }
       cleanup_appointment_submission_log: { Args: never; Returns: undefined }
       commit_inventory: {
         Args: { _item_id: string; _qty: number }

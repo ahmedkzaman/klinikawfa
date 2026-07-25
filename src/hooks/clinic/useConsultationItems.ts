@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
 
 const STOCK_MSG = 'Not enough stock available for this item.';
 
@@ -173,12 +174,14 @@ export function useUpdateConsultationItem() {
       duration?: string | null;
       precaution?: string | null;
     }) => {
-      const { data, error } = await supabase
-        .from('consultation_items')
-        .update(updates)
-        .eq('id', id)
-        .select('id')
-        .maybeSingle();
+      const { data, error } = await supabase.rpc(
+        'update_consultation_item_dispensary',
+        {
+          p_item_id: id,
+          p_consultation_id: consultationId,
+          p_updates: updates as Json,
+        },
+      );
       if (error) {
         if (isInsufficientStock(error)) {
           toast.error(STOCK_MSG);
