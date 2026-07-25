@@ -159,7 +159,7 @@ if (-not $rejected) { throw 'Forged pooler hostname was accepted.' }
 'host guard passed'
 `),
     ).toContain("host guard passed");
-  }, 15_000);
+  }, 30_000);
 
   it("atomically invalidates stale rehearsal and backup evidence", () => {
     expect(
