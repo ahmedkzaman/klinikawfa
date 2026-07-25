@@ -133,16 +133,17 @@ export function useUpdateDispensedQty() {
       dispensed_qty: number | null;
       partial_reason: 'patient_request' | 'out_of_stock' | null;
     }) => {
-      const { data, error } = await supabase
-        .from('consultation_items')
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .update({
-          dispensed_qty: input.dispensed_qty,
-          partial_reason: input.partial_reason,
-        } as any)
-        .eq('id', input.id)
-        .select('id')
-        .maybeSingle();
+      const { data, error } = await supabase.rpc(
+        'update_consultation_item_dispensary',
+        {
+          p_item_id: input.id,
+          p_consultation_id: input.consultationId,
+          p_updates: {
+            dispensed_qty: input.dispensed_qty,
+            partial_reason: input.partial_reason,
+          } as Json,
+        },
+      );
       if (error) throw error;
       if (!data) throw new Error('Permission denied or item not found.');
       return input.consultationId;
