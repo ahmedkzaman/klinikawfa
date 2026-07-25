@@ -71,6 +71,7 @@ import type { ConsultationItemRow } from '@/types/clinic';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 import { PAYMENT_METHOD_OPTIONS } from '@/lib/clinic/paymentMethod';
@@ -110,6 +111,7 @@ type ConsultationItemWithInventoryDefaults = ConsultationItemRow & {
 export default function DispenseCheckout() {
   const { queueEntryId } = useParams<{ queueEntryId: string }>();
   const navigate = useNavigate();
+  const { isLocum } = useAuth();
 
   const { data: entries = [], isLoading: entriesLoading } =
     useConsultationQueueEntries();
@@ -160,7 +162,7 @@ export default function DispenseCheckout() {
   // edit, and remove items even if the doctor never released the lock.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const isDispensingStage = (entry as any)?.clinic_status === 'dispensing_payment';
-  const dispensaryCanEdit = isDispensingStage ? true : canEdit;
+  const dispensaryCanEdit = !isLocum && (isDispensingStage ? true : canEdit);
 
 
   // Panel billing context: name + medication discount % drive the
