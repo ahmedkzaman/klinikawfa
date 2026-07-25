@@ -63,6 +63,11 @@ function useTickEveryMinute() {
   }, []);
 }
 
+function formatDoctorLabel(name: string | null | undefined): string {
+  if (!name) return "Not assigned";
+  return /^dr\.?\s/i.test(name) ? name : `Dr. ${name}`;
+}
+
 function QueueCard({ entry, onClick }: { entry: QueueEntryWithJoins; onClick: () => void }) {
   const status = entry.clinic_status as ClinicStatus;
   const waited = formatDistanceToNowStrict(new Date(entry.created_at), { addSuffix: false });
@@ -105,7 +110,7 @@ function QueueCard({ entry, onClick }: { entry: QueueEntryWithJoins; onClick: ()
       )}
       {entry.assigned_doctor_id ? (
         <p className="text-[11px] text-slate-600 truncate mt-0.5">
-          Attending: Dr. {entry.doctors?.name ?? "—"}
+          Attending: {formatDoctorLabel(entry.doctors?.name)}
         </p>
       ) : status === "registered" ? (
         <p className="text-[11px] text-amber-600 italic truncate mt-0.5">Awaiting Assignment</p>
@@ -342,7 +347,7 @@ export default function QueueBoard() {
                         {entry.patients?.name ? toMalayTitleCase(entry.patients.name) : "Unknown patient"}
                       </p>
                       <p className="mt-0.5 truncate text-xs text-slate-500">
-                        Attending: {entry.doctors?.name ? `Dr. ${entry.doctors.name}` : "Not assigned"}
+                        Attending: {formatDoctorLabel(entry.doctors?.name)}
                       </p>
                     </div>
                   ))}
