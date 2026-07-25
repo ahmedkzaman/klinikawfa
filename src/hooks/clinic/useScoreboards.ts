@@ -1,6 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  isProcedureScoreboardRow,
+  normalizeProcedureName,
+} from '@/lib/clinic/procedureRoi';
 
 // View not yet in generated types — same loose-cast pattern as useFinancialInsights.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -68,18 +72,27 @@ export function useScoreboards(startDate: Date, endDate: Date) {
   return useQuery<ScoreboardsData>({
     queryKey: ['scoreboards', startKey, endKey],
     queryFn: async () => {
-      const { data, error } = await db
-        .from('insight_financials_view')
-        .select(
-          'id, item_name, visit_date, payment_method, revenue, profit, queue_entry_id, ' +
-            'doctor_id, doctor_name, diagnosis_id, diagnosis_name, patient_id, kind',
-        )
-        .gte('visit_date', startKey)
-        .lte('visit_date', endKey);
+      const [financialQuery, servicesQuery] = await Promise.all([
+        db
+          .from('insight_financials_view')
+          .select(
+            'id, item_name, visit_date, payment_method, revenue, profit, queue_entry_id, ' +
+              'doctor_id, doctor_name, diagnosis_id, diagnosis_name, patient_id, kind',
+          )
+          .gte('visit_date', startKey)
+          .lte('visit_date', endKey),
+        db.from('services').select('name, category'),
+      ]);
 
-      if (error) throw error;
+      if (financialQuery.error) throw financialQuery.error;
+      if (servicesQuery.error) throw servicesQuery.error;
 
-      const rows: ViewRow[] = (data ?? []) as ViewRow[];
+      const rows: ViewRow[] = (financialQuery.data ?? []) as ViewRow[];
+      const serviceCategories = new Map<string, string>(
+        ((servicesQuery.data ?? []) as Array<{ name: string | null; category: string | null }>)
+          .filter((service) => service.name && service.category)
+          .map((service) => [normalizeProcedureName(service.name!), service.category!] as const),
+      );
 
       // ---- Aggregations ----------------------------------------------------
       type DoctorAcc = {
@@ -153,7 +166,7 @@ export function useScoreboards(startDate: Date, endDate: Date) {
         }
 
         // Procedure ROI (services only)
-        if (r.kind === 'service') {
+        if (isProcedureScoreboardRow(r, serviceCategories)) {
           const procAcc =
             procedureMap.get(r.item_name) ??
             ({ revenue: 0, cogs: 0, encounters: new Set<string>() } as ProcedureAcc);
