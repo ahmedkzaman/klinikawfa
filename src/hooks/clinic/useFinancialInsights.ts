@@ -82,13 +82,20 @@ function toNumber(value: number | string | null | undefined): number {
   return Number.isFinite(amount) ? amount : 0;
 }
 
+function isMissingViewColumnError(error: { code?: string; message?: string } | null | undefined) {
+  return (
+    error?.code === '42703' ||
+    error?.code === 'PGRST204' ||
+    /column .* does not exist|could not find .* column/i.test(error?.message ?? '')
+  );
+}
+
 // View is not in generated types; use loose client for this read-only query.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any;
 
 function parseFinancialRow(r: ViewRow) {
   const rev = toNumber(r.revenue);
-  const cogs = toNumber(r.cogs);
   const hasStoredCogs = Number.isFinite(Number(r.cogs ?? NaN));
   const hasStoredProfit = Number.isFinite(Number(r.profit ?? NaN));
   const hasMissingCogs = !hasStoredCogs && !hasStoredProfit && r.kind === 'medication';
@@ -96,10 +103,12 @@ function parseFinancialRow(r: ViewRow) {
     return { rev, cogs: 0, profit: 0, hasMissingCogs };
   }
 
+  const cogs = hasStoredCogs ? toNumber(r.cogs) : 0;
   const profProvided = hasStoredProfit ? Number(r.profit) : NaN;
   const profit = Number.isFinite(profProvided) ? profProvided : rev - cogs;
+  const effectiveCogs = hasStoredCogs ? cogs : rev - profit;
 
-  return { rev, cogs, profit, hasMissingCogs };
+  return { rev, cogs: effectiveCogs, profit, hasMissingCogs };
 }
 
 export function useFinancialInsights(startDate: Date, endDate: Date) {
@@ -110,13 +119,24 @@ export function useFinancialInsights(startDate: Date, endDate: Date) {
     queryKey: ['financial-insights', startKey, endKey],
     queryFn: async () => {
       const { startIso, endExclusiveIso } = getLocalDateRangeBounds(startDate, endDate);
-      const { data, error } = await db
+      const queryWithCogs = await db
         .from('insight_financials_view')
         .select(
           'id, item_name, visit_date, payment_method, revenue, cogs, profit, queue_entry_id, kind, queue_entry_created_at',
         )
         .gte('queue_entry_created_at', startIso)
         .lt('queue_entry_created_at', endExclusiveIso);
+
+      const queryWithoutCogs =
+        isMissingViewColumnError(queryWithCogs.error)
+          ? await db
+              .from('insight_financials_view')
+              .select('id, item_name, visit_date, payment_method, revenue, profit, queue_entry_id, kind')
+              .gte('visit_date', startKey)
+              .lte('visit_date', endKey)
+          : queryWithCogs;
+
+      const { data, error } = queryWithoutCogs;
 
       if (error) throw error;
 
