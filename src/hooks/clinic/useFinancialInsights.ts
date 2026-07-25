@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
+import { getLocalDateRangeBounds } from '@/lib/clinic/salesInsights';
 
 export interface InsightSummary {
   totalRevenue: number;
@@ -64,6 +65,7 @@ interface ViewRow {
   profit: number | string | null;
   queue_entry_id: string;
   kind: string;
+  queue_entry_created_at: string;
 }
 
 const SELF_PAY_KEYS = ['cash', 'card', 'fpx', 'qr', 'tng', 'self', 'self-pay', 'selfpay'];
@@ -107,11 +109,14 @@ export function useFinancialInsights(startDate: Date, endDate: Date) {
   return useQuery<FinancialInsights>({
     queryKey: ['financial-insights', startKey, endKey],
     queryFn: async () => {
+      const { startIso, endExclusiveIso } = getLocalDateRangeBounds(startDate, endDate);
       const { data, error } = await db
         .from('insight_financials_view')
-        .select('id, item_name, visit_date, payment_method, revenue, cogs, profit, queue_entry_id, kind')
-        .gte('visit_date', startKey)
-        .lte('visit_date', endKey);
+        .select(
+          'id, item_name, visit_date, payment_method, revenue, cogs, profit, queue_entry_id, kind, queue_entry_created_at',
+        )
+        .gte('queue_entry_created_at', startIso)
+        .lt('queue_entry_created_at', endExclusiveIso);
 
       if (error) throw error;
 
