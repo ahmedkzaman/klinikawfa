@@ -10,7 +10,9 @@ describe('guarded dispensary item updates', () => {
     );
     const updateHook = source.slice(source.indexOf('export function useUpdateConsultationItem'));
 
-    expect(updateHook).toContain(".rpc('update_consultation_item_dispensary'");
+    expect(updateHook).toMatch(
+      /\.rpc\(\s*'update_consultation_item_dispensary'/,
+    );
     expect(updateHook).not.toContain(".from('consultation_items')");
   });
 
