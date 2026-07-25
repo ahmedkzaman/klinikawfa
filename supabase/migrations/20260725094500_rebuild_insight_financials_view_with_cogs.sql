@@ -31,6 +31,6 @@ JOIN public.queue_entries  qe ON c.queue_entry_id   = qe.id
 LEFT JOIN public.doctors    d  ON c.doctor_id       = d.id
 LEFT JOIN public.diagnoses  dx ON c.diagnosis_id    = dx.id
 LEFT JOIN public.patients   p  ON qe.patient_id     = p.id
-WHERE c.status = 'completed'
+WHERE (c.status = 'completed' OR qe.clinic_status = 'completed')
   AND ci.deleted_at IS NULL
   AND c.deleted_at IS NULL;
