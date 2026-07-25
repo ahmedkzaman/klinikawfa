@@ -10,6 +10,8 @@ export type AppRole =
   | 'special_admin'
   | 'admin'
   | 'doctor_admin'
+  | 'purchaser'
+  | 'staff_nurse'
   | 'ops_staff'
   | 'operations'
   | 'staff'
@@ -181,6 +183,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     role === 'special_admin' ||
     role === 'operations' ||
     role === 'doctor_admin' ||
+    role === 'purchaser' ||
+    role === 'staff_nurse' ||
     role === 'resident_doctor';
   const isGuest = role === 'guest' || role === null;
   const isSpecialAdmin = role === 'special_admin';
