@@ -72,9 +72,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 import { PAYMENT_METHOD_OPTIONS } from '@/lib/clinic/paymentMethod';
+import { canEditDispensary } from '@/lib/clinic/dispensaryPermissions';
+import {
+  buildDispensaryPayerUpdate,
+  type DispensaryPayerType,
+} from '@/lib/clinic/dispensaryPayer';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -129,6 +135,8 @@ export default function DispenseCheckout() {
   const [checkoutPending, setCheckoutPending] = useState(false);
   const [panelCoveredAmount, setPanelCoveredAmount] = useState<number>(0);
   const [panelCoveredInput, setPanelCoveredInput] = useState<string>('');
+  const [payerSelection, setPayerSelection] = useState<DispensaryPayerType>('self');
+  const [selectedPanelId, setSelectedPanelId] = useState<string>('');
   const handleChargesChange = useCallback((c: SelectedCharge[]) => {
     setSelectedCharges(c);
   }, []);
@@ -146,6 +154,7 @@ export default function DispenseCheckout() {
   const { data: payments = [] } = usePayments(queueEntryId);
   const { data: attachedDocs = [] } = useConsultationDocuments(consultation?.id);
   const { data: docTemplates = [] } = useDocumentTemplates();
+  const { data: activePanels = [] } = useInsuranceProviders({ activeOnly: true });
   const deleteDoc = useDeleteConsultationDocument();
   const { isLockedByOther, canEdit, forceUnlock } = useConsultationLock(
     consultation as
@@ -161,14 +170,36 @@ export default function DispenseCheckout() {
   // pessimistic lock no longer applies — pharmacy/cashier must be able to add,
   // edit, and remove items even if the doctor never released the lock.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const isDispensingStage = (entry as any)?.clinic_status === 'dispensing_payment';
-  const dispensaryCanEdit = !isLocum && (isDispensingStage ? true : canEdit);
+  const clinicStatus = (entry as any)?.clinic_status as string | null | undefined;
+  const dispensaryCanEdit = canEditDispensary(isLocum, clinicStatus, canEdit);
 
 
   // Panel billing context: name + medication discount % drive the
   // "Panel Billing Applied" badge and the per-row strikethrough pricing.
   const panelId =
     (entry as unknown as { panel_id?: string | null } | undefined)?.panel_id ?? null;
+  const payerType: DispensaryPayerType = panelId ? 'panel' : 'self';
+
+  useEffect(() => {
+    setPayerSelection(payerType);
+    setSelectedPanelId(panelId ?? '');
+  }, [panelId, payerType]);
+
+  const savePayer = async (
+    nextPayerType: DispensaryPayerType,
+    nextPanelId?: string | null,
+  ) => {
+    if (!queueEntryId || !dispensaryCanEdit) return;
+    try {
+      await updateQueue.mutateAsync({
+        id: queueEntryId,
+        ...buildDispensaryPayerUpdate(nextPayerType, nextPanelId),
+      });
+      toast.success(nextPayerType === 'panel' ? 'Panel billing applied' : 'Self pay applied');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update payer');
+    }
+  };
   const [panelInfo, setPanelInfo] = useState<{
     name: string;
     medication_discount_pct: number;
@@ -833,6 +864,59 @@ export default function DispenseCheckout() {
               )}
             </div>
           </div>
+
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="payer-type" className="text-xs text-slate-500">
+              Payer
+            </Label>
+            <Select
+              value={payerSelection}
+              disabled={!dispensaryCanEdit || updateQueue.isPending}
+              onValueChange={(value) => {
+                const nextPayer = value as DispensaryPayerType;
+                setPayerSelection(nextPayer);
+                if (nextPayer === 'self') {
+                  setSelectedPanelId('');
+                  void savePayer('self');
+                }
+              }}
+            >
+              <SelectTrigger id="payer-type" className="h-9 w-[130px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="self">Self Pay</SelectItem>
+                <SelectItem value="panel">Panel</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {payerSelection === 'panel' && (
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="panel-provider" className="text-xs text-slate-500">
+                Panel Provider
+              </Label>
+              <Select
+                value={selectedPanelId}
+                disabled={!dispensaryCanEdit || updateQueue.isPending}
+                onValueChange={(value) => {
+                  setSelectedPanelId(value);
+                  void savePayer('panel', value);
+                }}
+              >
+                <SelectTrigger id="panel-provider" className="h-9 w-[200px]">
+                  <SelectValue placeholder="Select panel" />
+                </SelectTrigger>
+                <SelectContent>
+                  {activePanels.map((panel) => (
+                    <SelectItem key={panel.id} value={panel.id}>
+                      {panel.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {panelId && (
             <div className="flex flex-col gap-1">
