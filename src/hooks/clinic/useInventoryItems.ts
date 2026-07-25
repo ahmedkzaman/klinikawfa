@@ -209,12 +209,15 @@ export function useUpdateInventoryItem() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...input }: { id: string } & Partial<InventoryItemInput>): Promise<{ id: string }> => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('inventory_items')
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .update(mapItemPayload(input) as any)
-        .eq('id', id);
+        .eq('id', id)
+        .select('id')
+        .maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error('You do not have permission to edit this inventory item.');
       return { id };
     },
     onSuccess: () => invalidateInventory(queryClient),
