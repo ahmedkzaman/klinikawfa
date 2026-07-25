@@ -982,6 +982,7 @@ export default function ConsultationDetail() {
                         priceTiers={PRICE_TIERS}
                         isPanel={isPanel}
                         disabled={!canEdit}
+                        canEditPrice={!isLocum}
                         onRemove={async () => {
                           if (!consultationId) return;
                           try {

@@ -59,6 +59,7 @@ interface Props {
   priceTiers: string[];
   isPanel?: boolean;
   disabled?: boolean;
+  canEditPrice?: boolean;
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 700;
@@ -71,6 +72,7 @@ export function TreatmentItemCard({
   priceTiers,
   isPanel = false,
   disabled = false,
+  canEditPrice = true,
 }: Props) {
   const [qty, setQty] = useState(item.quantity);
   const [rate, setRate] = useState(Number(item.price));
@@ -98,7 +100,7 @@ export function TreatmentItemCard({
 
   const buildUpdates = (): ItemUpdate => ({
     quantity: qty,
-    price: rate,
+    price: canEditPrice ? rate : item.price,
     price_tier: tier || null,
     indication: indication || null,
     dosage_qty: dosageQty ? Number(dosageQty) : null,
@@ -293,8 +295,13 @@ export function TreatmentItemCard({
             min={0}
             step={0.01}
             value={rate}
-            onChange={(e) => setRate(Number(e.target.value) || 0)}
+            onChange={(e) => {
+              if (!canEditPrice) return;
+              setRate(Number(e.target.value) || 0);
+            }}
             onBlur={flushSave}
+            readOnly={!canEditPrice}
+            disabled={!canEditPrice}
             className="h-8 text-sm mt-1"
           />
         </div>
