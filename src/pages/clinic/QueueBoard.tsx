@@ -33,6 +33,7 @@ import {
   useRestoreQueueEntry,
   todayInputValue,
   useCompletedTodayEntries,
+  useCompletedVisitDetail,
 } from "@/hooks/clinic/useQueueEntries";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTodayAppointments } from "@/hooks/clinic/useTodayAppointments";
@@ -66,6 +67,13 @@ function useTickEveryMinute() {
 function formatDoctorLabel(name: string | null | undefined): string {
   if (!name) return "Not assigned";
   return /^dr\.?\s/i.test(name) ? name : `Dr. ${name}`;
+}
+
+function formatRM(value: number): string {
+  return `RM ${value.toLocaleString("en-MY", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function QueueCard({ entry, onClick }: { entry: QueueEntryWithJoins; onClick: () => void }) {
@@ -161,6 +169,28 @@ export default function QueueBoard() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [settleDebtEntry, setSettleDebtEntry] = useState<QueueEntryWithJoins | null>(null);
   const [activeEntry, setActiveEntry] = useState<QueueEntryWithJoins | null>(null);
+  const [completedVisitId, setCompletedVisitId] = useState<string | null>(null);
+  const { data: completedVisit, isLoading: completedVisitLoading } = useCompletedVisitDetail(completedVisitId);
+
+  const completedConsultation = useMemo(() => {
+    const consultations = completedVisit?.consultations;
+    return Array.isArray(consultations) ? consultations[0] ?? null : consultations ?? null;
+  }, [completedVisit?.consultations]);
+
+  const completedVisitDoctor = useMemo(() => {
+    const doctor = completedConsultation?.doctors;
+    if (Array.isArray(doctor)) return doctor[0]?.name ?? completedVisit?.doctors?.name ?? null;
+    return doctor?.name ?? completedVisit?.doctors?.name ?? null;
+  }, [completedConsultation?.doctors, completedVisit?.doctors?.name]);
+
+  const completedVisitNote =
+    completedConsultation?.case_note?.trim() ||
+    completedConsultation?.diagnosis_text?.trim() ||
+    completedVisit?.visit_notes?.trim() ||
+    "";
+  const completedVisitDispenseNote = completedConsultation?.dispense_note?.trim() ?? "";
+  const completedVisitItems = completedConsultation?.consultation_items ?? [];
+  const completedAttachmentCount = completedConsultation?.consultation_attachments?.[0]?.count ?? 0;
 
   const handleCardClick = (entry: QueueEntryWithJoins) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -334,7 +364,12 @@ export default function QueueBoard() {
               ) : (
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
                   {completedToday.map((entry) => (
-                    <div key={entry.id} className="rounded-xl border border-emerald-100 bg-white p-3 shadow-sm">
+                    <button
+                      key={entry.id}
+                      type="button"
+                      onClick={() => setCompletedVisitId(entry.id)}
+                      className="rounded-xl border border-emerald-100 bg-white p-3 text-left shadow-sm transition-all hover:border-emerald-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200"
+                    >
                       <div className="flex items-start justify-between gap-2">
                         <p className="font-mono text-sm font-semibold tabular-nums text-slate-800">
                           {formatQueueNo(entry.created_at, entry.queue_sequence)}
@@ -349,7 +384,7 @@ export default function QueueBoard() {
                       <p className="mt-0.5 truncate text-xs text-slate-500">
                         Attending: {formatDoctorLabel(entry.doctors?.name)}
                       </p>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -399,6 +434,105 @@ export default function QueueBoard() {
           </Collapsible>
         </div>
       </div>
+
+      <Sheet open={!!completedVisitId} onOpenChange={(open) => !open && setCompletedVisitId(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto bg-slate-50">
+          <SheetHeader>
+            <SheetTitle className="font-mono tabular-nums text-slate-800">
+              {completedVisit
+                ? formatQueueNo(completedVisit.created_at, completedVisit.queue_sequence)
+                : "Completed Visit"}
+            </SheetTitle>
+            <SheetDescription>
+              {completedVisit?.patients?.name ? toMalayTitleCase(completedVisit.patients.name) : "Visit summary"}
+            </SheetDescription>
+          </SheetHeader>
+
+          {completedVisitLoading ? (
+            <div className="mt-6 space-y-3">
+              <Skeleton className="h-20 w-full rounded-xl" />
+              <Skeleton className="h-40 w-full rounded-xl" />
+              <Skeleton className="h-32 w-full rounded-xl" />
+            </div>
+          ) : completedVisit ? (
+            <div className="mt-6 space-y-4">
+              <section className={cn(bento, "p-4")}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Visit</p>
+                    <p className="mt-1 text-sm font-medium text-slate-800">
+                      {format(new Date(completedVisit.created_at), "d MMM yyyy, h:mma")}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Attending: {formatDoctorLabel(completedVisitDoctor)}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                    Completed
+                  </span>
+                </div>
+              </section>
+
+              <section className={cn(bento, "p-4")}>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Clinical Notes</p>
+                {completedVisitNote ? (
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+                    {completedVisitNote}
+                  </p>
+                ) : (
+                  <p className="mt-3 text-sm text-slate-400">No clinical notes recorded for this visit.</p>
+                )}
+              </section>
+
+              {completedVisitDispenseNote && (
+                <section className={cn(bento, "border-blue-100 bg-blue-50/40 p-4")}>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-blue-700">Dispense Notes</p>
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+                    {completedVisitDispenseNote}
+                  </p>
+                </section>
+              )}
+
+              <section className={cn(bento, "p-4")}>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Billing Items</p>
+                {completedVisitItems.length === 0 ? (
+                  <p className="mt-3 text-sm text-slate-400">No billed items recorded for this visit.</p>
+                ) : (
+                  <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                    {completedVisitItems.map((item) => {
+                      const qty = Number(item.quantity ?? 0);
+                      const price = Number(item.price ?? 0);
+                      return (
+                        <div key={item.id} className="flex items-start justify-between gap-4 border-b border-slate-100 px-3 py-3 last:border-b-0">
+                          <div className="min-w-0">
+                            <p className="break-words text-sm font-medium text-slate-700">{item.item_name}</p>
+                            <p className="mt-1 text-xs tabular-nums text-slate-500">
+                              Qty {qty} x {formatRM(price)}
+                            </p>
+                          </div>
+                          <p className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">
+                            {formatRM(qty * price)}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+
+              <p className="px-1 text-sm text-slate-500">
+                {completedAttachmentCount > 0
+                  ? `${completedAttachmentCount} attachment${completedAttachmentCount === 1 ? "" : "s"} on this visit.`
+                  : "No attachments on this visit."}
+              </p>
+            </div>
+          ) : (
+            <p className="mt-6 rounded-xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-400">
+              Visit details could not be loaded.
+            </p>
+          )}
+        </SheetContent>
+      </Sheet>
 
       {/* Detail sheet */}
       <Sheet open={!!activeEntry} onOpenChange={(o) => !o && setActiveEntry(null)}>

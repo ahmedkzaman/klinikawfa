@@ -268,6 +268,72 @@ export function useQueueEntry(id?: string) {
 // Defensive Cancellation (LWBS / Absconded) — terminal status with audit trail.
 // ─────────────────────────────────────────────────────────────────────────────
 
+type CompletedVisitConsultation = {
+  id: string;
+  diagnosis_text: string | null;
+  case_note: string | null;
+  dispense_note: string | null;
+  doctors: { id: string; name: string } | { id: string; name: string }[] | null;
+  consultation_items?: Array<{
+    id: string;
+    item_name: string;
+    quantity: number;
+    price: number;
+    deleted_at?: string | null;
+  }> | null;
+  consultation_attachments?: { count: number }[] | null;
+};
+
+export type CompletedVisitDetail = QueueEntryWithJoins & {
+  consultations: CompletedVisitConsultation | CompletedVisitConsultation[] | null;
+};
+
+export function useCompletedVisitDetail(queueEntryId: string | null) {
+  return useQuery<CompletedVisitDetail | null>({
+    queryKey: ["clinic", "completed-visit-detail", queueEntryId],
+    enabled: !!queueEntryId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("queue_entries")
+        .select(
+          `
+          *,
+          patients ( * ),
+          doctors:assigned_doctor_id ( id, name, avatar_url ),
+          consultations:consultations!consultations_queue_entry_id_fkey (
+            id, diagnosis_text, case_note, dispense_note,
+            doctors:doctor_id ( id, name ),
+            consultation_items!left ( id, item_name, quantity, price, deleted_at ),
+            consultation_attachments ( count )
+          )
+        `,
+        )
+        .eq("id", queueEntryId!)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return null;
+
+      const [entry] = await attachInsuranceProviderDirectory([data]);
+      const detail = entry as CompletedVisitDetail;
+      const consultations = Array.isArray(detail.consultations)
+        ? detail.consultations
+        : detail.consultations
+          ? [detail.consultations]
+          : [];
+
+      for (const consultation of consultations) {
+        consultation.consultation_items = (consultation.consultation_items ?? []).filter(
+          (item) => !item.deleted_at,
+        );
+      }
+
+      return detail;
+    },
+    staleTime: 30_000,
+  });
+}
+
 function malayTimestamp(): string {
   return new Date().toLocaleString("en-MY", {
     timeZone: "Asia/Kuala_Lumpur",
