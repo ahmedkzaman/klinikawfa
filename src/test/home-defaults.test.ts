@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { createElement, type ReactNode } from "react";
+import { HelmetProvider } from "react-helmet-async";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -124,10 +125,12 @@ vi.mock("@/components/layout", () => ({
   MainLayout: ({ children }: { children: ReactNode }) => children,
 }));
 
-vi.mock("@/components/seo", () => ({
-  SEOHead: () => null,
-  SchemaMarkup: () => null,
-}));
+vi.mock("@/components/seo", async () => {
+  const { SEOHead } = await vi.importActual<typeof import("@/components/seo")>(
+    "@/components/seo",
+  );
+  return { SEOHead, SchemaMarkup: () => null };
+});
 
 vi.mock("@/components/home", async () => {
   const { HomeRenderer } = await vi.importActual<
@@ -182,6 +185,9 @@ describe("DEFAULT_HOME_CONTENT", () => {
     expect(indexShell).toContain(
       "<title>Klinik Awfa KotaSAS | Klinik Keluarga di Kuantan</title>",
     );
+    expect(indexShell).toContain(
+      'content="3.871944656053272;103.27734116870465"',
+    );
     expect(getSeoRoute("/").title).toBe(
       "Klinik Awfa KotaSAS | Klinik Keluarga di Kuantan",
     );
@@ -190,10 +196,26 @@ describe("DEFAULT_HOME_CONTENT", () => {
     await act(async () => {
       rendered = render(
         createElement(
-          MemoryRouter,
+          HelmetProvider,
           null,
-          createElement(LanguageProvider, null, createElement(Index)),
+          createElement(
+            MemoryRouter,
+            null,
+            createElement(LanguageProvider, null, createElement(Index)),
+          ),
         ),
+      );
+    });
+
+    await waitFor(() => {
+      expect(document.title).toBe("Klinik Awfa KotaSAS | Klinik Keluarga di Kuantan");
+      expect(document.head.querySelector('meta[name="description"]')).toHaveAttribute(
+        "content",
+        getSeoRoute("/").description,
+      );
+      expect(document.head.querySelector('meta[property="og:image"]')).toHaveAttribute(
+        "content",
+        "https://klinikawfa.com/klinik-awfa-exterior.webp",
       );
     });
 
@@ -808,9 +830,13 @@ describe("data-driven Home renderer", () => {
     await act(async () => {
       rendered = render(
         createElement(
-          MemoryRouter,
+          HelmetProvider,
           null,
-          createElement(LanguageProvider, null, createElement(Index)),
+          createElement(
+            MemoryRouter,
+            null,
+            createElement(LanguageProvider, null, createElement(Index)),
+          ),
         ),
       );
     });

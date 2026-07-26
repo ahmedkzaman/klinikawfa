@@ -95,6 +95,20 @@ describe('local SEO service pages', () => {
       </MemoryRouter>,
     );
     expect(paths.every((path) => footer.container.querySelector(`a[href="${path}"]`))).toBe(true);
+
+    const footerPaths = Array.from(footer.container.querySelectorAll('a[href^="/"]'))
+      .map((link) => link.getAttribute('href'))
+      .sort();
+    expect(footerPaths).toEqual(
+      [
+        '/',
+        '/services',
+        '/doctors',
+        '/appointment',
+        '/health-tips',
+        ...paths,
+      ].sort(),
+    );
   });
 
   it.each([

@@ -162,12 +162,6 @@ export function Footer() {
                   {language === 'en' ? item.en : item.ms}
                 </Link>
               ))}
-              <Link to="/privacy" className="hover:text-primary-foreground transition-colors">
-                Privacy Policy
-              </Link>
-              <Link to="/terms" className="hover:text-primary-foreground transition-colors">
-                Terms of Service
-              </Link>
             </div>
           </div>
         </motion.div>

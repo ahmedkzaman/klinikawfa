@@ -18,7 +18,7 @@ interface SEOHeadProps {
 }
 
 const SITE_NAME = 'Klinik Awfa';
-const DEFAULT_IMAGE = 'https://klinikawfa.com/og-image.png';
+const DEFAULT_IMAGE = 'https://klinikawfa.com/klinik-awfa-exterior.webp';
 
 export function SEOHead({
   title,

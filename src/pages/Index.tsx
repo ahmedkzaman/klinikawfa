@@ -7,12 +7,13 @@ import { DEFAULT_HOME_CONTENT } from '@/features/website-cms/home/homeDefaults';
 import { usePublishedPage } from '@/features/website-cms/hooks/useWebsitePage';
 import { CLINIC_INFO } from '@/lib/constants';
 import { buildClinicSchema, buildWebPageSchema, PUBLIC_CLINIC_FACTS } from '@/lib/website/clinicSchema';
-import { SITE_ORIGIN } from '@/lib/website/seoRoutes';
+import { getSeoRoute, SITE_ORIGIN } from '@/lib/website/seoRoutes';
 
 const localServiceHubs = Object.values(LOCAL_SERVICE_PAGES);
 
 export default function Index() {
   const content = usePublishedPage('home', DEFAULT_HOME_CONTENT);
+  const homepageRoute = getSeoRoute('/');
   const schemas = [
     buildClinicSchema(PUBLIC_CLINIC_FACTS),
     {
@@ -24,16 +25,16 @@ export default function Index() {
     },
     buildWebPageSchema({
       path: '/',
-      name: content.seo.title.ms,
-      description: content.seo.description.ms,
+      name: homepageRoute.title,
+      description: homepageRoute.description,
     }),
   ];
 
   return (
     <MainLayout>
       <SEOHead
-        title={content.seo.title.ms}
-        description={content.seo.description.ms}
+        title={homepageRoute.title}
+        description={homepageRoute.description}
         url="/"
       />
       <SchemaMarkup schemas={schemas} />
