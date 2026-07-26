@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { Slider } from '@/components/ui/slider';
+import { buildMalayAnnouncement } from '@/lib/tv/malayAnnouncement';
 
 interface CallEvent {
   id: string;
@@ -44,7 +45,6 @@ export default function QueueTV() {
   const playingRef = useRef(false);
   
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const currentTtsAudioRef = useRef<HTMLAudioElement | null>(null);
   const seenRef = useRef<Set<string>>(new Set());
 
   // Realtime subscription
@@ -172,50 +172,27 @@ export default function QueueTV() {
     const lang = (settings.tts_language ?? 'ms-MY') as 'ms-MY' | 'en-US';
     const isMalay = lang === 'ms-MY';
     const text = isMalay
-      ? (callBy === 'name'
-          ? `Pesakit, ${next.display}, sila ke, ${next.roomLabel}`
-          : `Nombor giliran, ${next.display}, sila ke, ${next.roomLabel}`)
+      ? buildMalayAnnouncement({ callBy, display: next.display, roomLabel: next.roomLabel })
       : (callBy === 'name'
-          ? `Patient, ${next.display}, please proceed to, ${next.roomLabel}`
-          : `Queue number, ${next.display}, please proceed to, ${next.roomLabel}`);
-
-    const voiceName = isMalay ? 'ms-MY-Wavenet-A' : 'en-US-Journey-F';
+          ? `Calling ${next.display}, please proceed to ${next.roomLabel} now.`
+          : `Queue number ${next.display}, please proceed to ${next.roomLabel} now.`);
 
     try {
-      // Stop any stale clip
-      if (currentTtsAudioRef.current) {
-        try { currentTtsAudioRef.current.pause(); } catch { /* noop */ }
-        currentTtsAudioRef.current = null;
-      }
-
-      const { data, error } = await supabase.functions.invoke('generate-tts', {
-        body: { text, languageCode: lang, voiceName },
-      });
-
-      if (error || !data?.audioContent) {
-        console.error('TTS invoke failed', error);
-        return;
-      }
-
-      const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
-      currentTtsAudioRef.current = audio;
-      audio.volume = 1;
+      // Browser speech synthesis is free and keeps patient names on the TV device.
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = lang;
+      utterance.rate = isMalay ? 0.9 : 0.95;
+      utterance.pitch = 1.05;
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoice = voices.find((voice) => voice.lang.toLowerCase().startsWith(lang.toLowerCase().slice(0, 2)));
+      if (preferredVoice) utterance.voice = preferredVoice;
 
       await new Promise<void>((resolve) => {
-        const done = () => {
-          audio.removeEventListener('ended', done);
-          audio.removeEventListener('error', done);
-          if (currentTtsAudioRef.current === audio) {
-            currentTtsAudioRef.current = null;
-          }
-          resolve();
-        };
-        audio.addEventListener('ended', done);
-        audio.addEventListener('error', done);
-        audio.play().catch((e) => {
-          console.error('TTS audio play failed', e);
-          done();
-        });
+        utterance.onend = () => resolve();
+        utterance.onerror = () => resolve();
+        window.speechSynthesis.speak(utterance);
       });
     } catch (e) {
       console.error('speakAnnouncement error', e);
