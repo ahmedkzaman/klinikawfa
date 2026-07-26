@@ -11,7 +11,16 @@ describe('SEO route policy', () => {
     expect(canonicalUrl('/')).toBe('https://klinikawfa.com/');
   });
 
-  it.each(['/clinic/queue', '/staff/dashboard', '/editor/home', '/auth', '/tv'])(
+  it.each([
+    '/clinic/queue',
+    '/staff/dashboard',
+    '/editor/home',
+    '/auth',
+    '/locum-register',
+    '/reset-password',
+    '/video-call',
+    '/tv',
+  ])(
     'keeps operational route %s out of search',
     (path) => {
       expect(isProtectedFromIndex(path)).toBe(true);

@@ -1,6 +1,6 @@
 import { Helmet } from 'react-helmet-async';
 import { useLocation } from 'react-router-dom';
-import { canonicalUrl as routeCanonicalUrl, getSeoRoute, isProtectedFromIndex } from '@/lib/website/seoRoutes';
+import { canonicalUrl as routeCanonicalUrl, getSeoRoute, isProtectedFromIndex, normalizeCanonicalUrl } from '@/lib/website/seoRoutes';
 
 interface SEOHeadProps {
   title?: string;
@@ -40,7 +40,7 @@ export function SEOHead({
   const pageTitle = title?.trim() || route.title;
   const pageDescription = description?.trim() || route.description;
   const fullTitle = pageTitle.includes(SITE_NAME) ? pageTitle : `${pageTitle} | ${SITE_NAME}`;
-  const fullUrl = canonicalUrl || (url ? routeCanonicalUrl(url) : routeCanonicalUrl(location.pathname));
+  const fullUrl = (canonicalUrl && normalizeCanonicalUrl(canonicalUrl)) || (url ? routeCanonicalUrl(url) : routeCanonicalUrl(location.pathname));
   const shouldNoIndex = protectedRoute || noIndex || !route.index;
   const blockFollowing = protectedRoute || noFollow || shouldNoIndex || !route.follow;
 

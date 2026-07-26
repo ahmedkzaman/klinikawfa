@@ -90,3 +90,12 @@ export function getSeoRoute(pathname: string): SeoRouteDefinition {
 export function canonicalUrl(pathname: string): string {
   return `${SITE_ORIGIN}${normalizedPath(pathname)}`;
 }
+
+export function normalizeCanonicalUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return url.origin === SITE_ORIGIN ? canonicalUrl(url.pathname) : null;
+  } catch {
+    return null;
+  }
+}

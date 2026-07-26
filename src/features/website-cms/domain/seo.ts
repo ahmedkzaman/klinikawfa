@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SITE_ORIGIN, normalizeCanonicalUrl } from "@/lib/website/seoRoutes";
 
 const canonicalUrlSchema = z
   .string()
@@ -8,11 +9,12 @@ const canonicalUrlSchema = z
     if (value === "") return true;
     try {
       const url = new URL(value);
-      return url.protocol === "https:" && url.hostname === "klinikawfa.com";
+      return url.origin === SITE_ORIGIN;
     } catch {
       return false;
     }
-  }, "Canonical URL must use https://klinikawfa.com");
+  }, "Canonical URL must use https://klinikawfa.com")
+  .transform((value) => (value === "" ? "" : normalizeCanonicalUrl(value)!));
 
 export const seoFieldsSchema = z
   .object({

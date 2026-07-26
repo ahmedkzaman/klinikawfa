@@ -35,6 +35,16 @@ describe("website CMS domain", () => {
       seoFieldsSchema.safeParse({ ...result, canonicalUrl: "https://evil.example/" })
         .success,
     ).toBe(false);
+    expect(
+      seoFieldsSchema.safeParse({ ...result, canonicalUrl: "https://klinikawfa.com:444/page" })
+        .success,
+    ).toBe(false);
+    expect(
+      seoFieldsSchema.parse({
+        ...result,
+        canonicalUrl: "https://klinikawfa.com/services/?from=home#details",
+      }).canonicalUrl,
+    ).toBe("https://klinikawfa.com/services");
   });
 
   it("normalizes safe list defaults and restricts page sizes", () => {
