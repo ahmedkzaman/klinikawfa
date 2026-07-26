@@ -1,22 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import { cleanup, render, waitFor } from '@testing-library/react';
+import { createElement } from 'react';
+import { HelmetProvider } from 'react-helmet-async';
+import { afterEach, describe, expect, it } from 'vitest';
+import { ArticleSchema } from '@/components/seo/SchemaMarkup';
+import { CLINIC_INFO } from '@/lib/constants';
 import {
   buildBreadcrumbSchema,
   buildClinicSchema,
   buildServiceSchema,
   buildWebPageSchema,
   CLINIC_ENTITY_ID,
+  PUBLIC_CLINIC_FACTS,
 } from '@/lib/website/clinicSchema';
+
+afterEach(() => cleanup());
 
 describe('Klinik Awfa structured data', () => {
   it('identifies one stable medical clinic entity in KotaSAS, Kuantan', () => {
-    const schema = buildClinicSchema({
-      telephone: '09-5751312',
-      streetAddress: 'Ground Floor B2 & B4, Jalan Pahang KS 1/12, KotaSAS',
-      postalCode: '25200',
-      latitude: 3.8077,
-      longitude: 103.326,
-      openingHours: ['Mo-Su 08:00-24:00'],
-    });
+    const schema = buildClinicSchema(PUBLIC_CLINIC_FACTS);
 
     expect(schema).toMatchObject({
       '@context': 'https://schema.org',
@@ -25,6 +26,14 @@ describe('Klinik Awfa structured data', () => {
       name: 'Klinik Awfa',
       url: 'https://klinikawfa.com/',
       address: { addressLocality: 'Kuantan', addressRegion: 'Pahang', addressCountry: 'MY' },
+    });
+    expect(schema).toMatchObject({
+      telephone: CLINIC_INFO.phone,
+      address: {
+        streetAddress: 'B2 & B4, Jalan KS 1/12, KotaSAS Avenue',
+        postalCode: '25200',
+      },
+      geo: { latitude: 3.871944656053272, longitude: 103.27734116870465 },
     });
   });
 
@@ -89,6 +98,28 @@ describe('Klinik Awfa structured data', () => {
         { '@type': 'ListItem', position: 1, name: 'Utama', item: 'https://klinikawfa.com/' },
         { '@type': 'ListItem', position: 2, name: 'Perkhidmatan', item: 'https://klinikawfa.com/services' },
       ],
+    });
+  });
+
+  it('omits article image and logo markup when no public asset is available', async () => {
+    render(
+      createElement(
+        HelmetProvider,
+        null,
+        createElement(ArticleSchema, {
+          title: 'Artikel',
+          description: 'Maklumat kesihatan',
+          url: '/health-tips/artikel',
+        }),
+      ),
+    );
+
+    await waitFor(() => {
+      const script = document.head.querySelector('script[type="application/ld+json"]');
+      expect(script).toBeTruthy();
+      const schema = JSON.parse(script!.textContent || '{}');
+      expect(schema).not.toHaveProperty('image');
+      expect(schema.publisher).not.toHaveProperty('logo');
     });
   });
 });

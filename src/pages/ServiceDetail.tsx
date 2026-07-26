@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { SEOHead } from "@/components/seo/SEOHead";
+import { SchemaMarkup } from "@/components/seo/SchemaMarkup";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,6 +12,7 @@ import { ArrowLeft, CheckCircle, Calendar, AlertTriangle } from "lucide-react";
 import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
 import { resolveServiceCategorySlug } from "@/lib/serviceSlugMap";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { buildBreadcrumbSchema, buildServiceSchema, buildWebPageSchema } from "@/lib/website/clinicSchema";
 
 const stripHtml = (html: string) =>
   (html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -99,14 +101,26 @@ export default function ServiceDetail() {
   const description = language === "en" ? service.description_en || service.description_ms || service.description : service.description_ms || service.description;
   const callToAction = language === "en" ? service.call_to_action_en || service.call_to_action_ms || service.call_to_action : service.call_to_action_ms || service.call_to_action;
   const serviceItems = language === "en" && service.services_list_en?.length ? service.services_list_en : service.services_list_ms?.length ? service.services_list_ms : service.services_list;
+  const servicePath = `/services/${service.slug}`;
+  const schemaDescription = stripHtml(description).substring(0, 160);
+  const schemas = [
+    buildWebPageSchema({ path: servicePath, name: title, description: schemaDescription }),
+    buildServiceSchema({ path: servicePath, name: title, description: schemaDescription }),
+    buildBreadcrumbSchema([
+      { name: 'Utama', path: '/' },
+      { name: 'Perkhidmatan', path: '/services' },
+      { name: title, path: servicePath },
+    ]),
+  ];
 
   return (
     <MainLayout>
       <SEOHead
         title={title}
-        description={stripHtml(description).substring(0, 160)}
-        url={`/services/${service.slug}`}
+        description={schemaDescription}
+        url={servicePath}
       />
+      <SchemaMarkup schemas={schemas} />
 
       {/* Hero */}
       <section className="bg-gradient-to-br from-primary/10 via-background to-accent/5 py-16 md:py-24">

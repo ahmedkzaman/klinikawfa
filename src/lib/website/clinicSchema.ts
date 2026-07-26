@@ -1,4 +1,5 @@
 import { canonicalUrl, SITE_ORIGIN } from './seoRoutes';
+import { CLINIC_INFO } from '@/lib/constants';
 
 export const CLINIC_ENTITY_ID = `${SITE_ORIGIN}/#clinic`;
 
@@ -27,6 +28,24 @@ export interface BreadcrumbItem {
   path: string;
   name: string;
 }
+
+function mapCoordinates(mapUrl: string): Pick<ClinicPublicFacts, 'latitude' | 'longitude'> {
+  const coordinates = new URL(mapUrl).searchParams.get('q')?.split(',').map(Number) ?? [];
+  const [latitude, longitude] = coordinates;
+
+  return Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : {};
+}
+
+export const PUBLIC_CLINIC_FACTS: ClinicPublicFacts = {
+  telephone: CLINIC_INFO.phone,
+  streetAddress: [CLINIC_INFO.address.line1, CLINIC_INFO.address.line2].join(', '),
+  postalCode: CLINIC_INFO.address.city.match(/^\d{5}/)?.[0],
+  ...mapCoordinates(CLINIC_INFO.googleMapsUrl),
+  openingHours: CLINIC_INFO.hours.days === 'Setiap Hari / Every Day'
+    && CLINIC_INFO.hours.time === '8:00 AM - 12:00 Midnight'
+    ? ['Mo-Su 08:00-24:00']
+    : [],
+};
 
 function nonBlank(value: string | undefined): string | undefined {
   const trimmed = value?.trim();

@@ -39,7 +39,7 @@ export function ArticleSchema({
     '@type': 'Article',
     headline: title,
     description: description,
-    image: image || `${SITE_ORIGIN}/og-image.png`,
+    ...(image ? { image } : {}),
     url: canonicalUrl(url),
     datePublished: publishedTime,
     author: {
@@ -50,10 +50,6 @@ export function ArticleSchema({
     publisher: {
       '@type': 'Organization',
       name: 'Klinik Awfa',
-      logo: {
-        '@type': 'ImageObject',
-        url: `${SITE_ORIGIN}/logo.png`,
-      },
     },
     mainEntityOfPage: {
       '@type': 'WebPage',
