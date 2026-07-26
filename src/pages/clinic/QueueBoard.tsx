@@ -55,7 +55,7 @@ import { toMalayTitleCase } from "@/lib/textCase";
 import { formatQueueNo } from "@/lib/clinic/queueNumber";
 import { bento, pageInner, pageShell, primaryBtn, secondaryBtn, softBadge } from "@/lib/clinic/bentoTokens";
 import { calculateClinicalAge } from "@/lib/clinic/clinicalAge";
-import { isCompletedVisitUnpaid } from "@/lib/clinic/queuePaymentFocus";
+import { isCashVisit, isCompletedVisitUnpaid } from "@/lib/clinic/queuePaymentFocus";
 
 function useTickEveryMinute() {
   const [, setTick] = useState(0);
@@ -187,7 +187,9 @@ export default function QueueBoard() {
 
   const displayedCompletedToday = useMemo(
     () => missingPaymentFocus
-      ? completedToday.filter((entry) => isCompletedVisitUnpaid(entry.payments))
+      ? completedToday.filter((entry) =>
+          isCashVisit(entry.payment_method, entry.panel_id) && isCompletedVisitUnpaid(entry.payments),
+        )
       : completedToday,
     [completedToday, missingPaymentFocus],
   );
