@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -55,6 +55,7 @@ import { toMalayTitleCase } from "@/lib/textCase";
 import { formatQueueNo } from "@/lib/clinic/queueNumber";
 import { bento, pageInner, pageShell, primaryBtn, secondaryBtn, softBadge } from "@/lib/clinic/bentoTokens";
 import { calculateClinicalAge } from "@/lib/clinic/clinicalAge";
+import { isCompletedVisitUnpaid } from "@/lib/clinic/queuePaymentFocus";
 
 function useTickEveryMinute() {
   const [, setTick] = useState(0);
@@ -141,6 +142,9 @@ function QueueCard({ entry, onClick }: { entry: QueueEntryWithJoins; onClick: ()
 export default function QueueBoard() {
   useTickEveryMinute();
   const [selectedDate, setSelectedDate] = useState(() => todayInputValue());
+  const [searchParams] = useSearchParams();
+  const missingPaymentFocus = searchParams.get("focus") === "missing-payment";
+  const [highlightMissingPayment, setHighlightMissingPayment] = useState(missingPaymentFocus);
   const { isLocum, isAdmin, isGuest } = useAuth();
   const canViewQueueHistory = !isLocum && !isGuest;
   const todayValue = todayInputValue();
@@ -171,6 +175,20 @@ export default function QueueBoard() {
   const [activeEntry, setActiveEntry] = useState<QueueEntryWithJoins | null>(null);
   const [completedVisitId, setCompletedVisitId] = useState<string | null>(null);
   const { data: completedVisit, isLoading: completedVisitLoading } = useCompletedVisitDetail(completedVisitId);
+
+  useEffect(() => {
+    if (!missingPaymentFocus) return;
+    setHighlightMissingPayment(true);
+    const timer = window.setTimeout(() => setHighlightMissingPayment(false), 60_000);
+    return () => window.clearTimeout(timer);
+  }, [missingPaymentFocus]);
+
+  const displayedCompletedToday = useMemo(
+    () => missingPaymentFocus
+      ? completedToday.filter((entry) => isCompletedVisitUnpaid(entry.payments))
+      : completedToday,
+    [completedToday, missingPaymentFocus],
+  );
 
   const completedConsultation = useMemo(() => {
     const consultations = completedVisit?.consultations;
@@ -345,10 +363,10 @@ export default function QueueBoard() {
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
                   <h2 className="text-sm font-bold uppercase tracking-tight text-slate-700">
-                    {selectedDateIsToday ? "Completed Today" : "Completed on Selected Date"}
+                    {missingPaymentFocus ? "Completed Visits Without Payment" : selectedDateIsToday ? "Completed Today" : "Completed on Selected Date"}
                   </h2>
                 </div>
-                <span className={cn(softBadge, "px-2 py-0.5 text-xs")}>{completedToday.length}</span>
+                <span className={cn(softBadge, "px-2 py-0.5 text-xs")}>{displayedCompletedToday.length}</span>
               </div>
 
               {isCompletedLoading ? (
@@ -357,18 +375,23 @@ export default function QueueBoard() {
                     <Skeleton key={index} className="h-20 w-full rounded-xl" />
                   ))}
                 </div>
-              ) : completedToday.length === 0 ? (
+              ) : displayedCompletedToday.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-slate-200 bg-white p-4 text-center text-xs text-slate-400">
                   No completed patients for this date.
                 </p>
               ) : (
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-                  {completedToday.map((entry) => (
+                  {displayedCompletedToday.map((entry) => (
                     <button
                       key={entry.id}
                       type="button"
                       onClick={() => setCompletedVisitId(entry.id)}
-                      className="rounded-xl border border-emerald-100 bg-white p-3 text-left shadow-sm transition-all hover:border-emerald-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200"
+                      className={cn(
+                        "rounded-xl border bg-white p-3 text-left shadow-sm transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2",
+                        highlightMissingPayment && missingPaymentFocus
+                          ? "border-rose-500 bg-rose-50 shadow-[0_0_0_2px_rgba(244,63,94,0.2)] focus-visible:ring-rose-300"
+                          : "border-emerald-100 hover:border-emerald-200 focus-visible:ring-emerald-200",
+                      )}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <p className="font-mono text-sm font-semibold tabular-nums text-slate-800">
@@ -384,6 +407,9 @@ export default function QueueBoard() {
                       <p className="mt-0.5 truncate text-xs text-slate-500">
                         Attending: {formatDoctorLabel(entry.doctors?.name)}
                       </p>
+                      {missingPaymentFocus && (
+                        <p className="mt-1 text-[11px] font-semibold text-rose-700">Belum ada bayaran direkodkan</p>
+                      )}
                     </button>
                   ))}
                 </div>

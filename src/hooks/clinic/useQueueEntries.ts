@@ -110,7 +110,8 @@ export function useQueueEntries(selectedDate = todayInputValue()) {
           `
           *,
           patients ( name, phone ),
-          doctors:assigned_doctor_id ( name )
+          doctors:assigned_doctor_id ( name ),
+          payments ( id, amount, deleted_at )
         `,
         )
         .is("deleted_at", null)

@@ -28,4 +28,17 @@ describe('buildClinicAlerts', () => {
     };
     expect(buildClinicAlerts(metrics)).toHaveLength(0);
   });
+
+  it('links unpaid completed visits to the focused queue view', () => {
+    const metrics: ClinicHealthMetrics = {
+      financial: { revenue: 0, profit: 0, marginPct: 0 },
+      visits: { registered: 1, completed: 1, cancelled: 0, noShow: 0 },
+      claims: { outstandingAmount: 0, unsubmittedCount: 0, overdueCount: 0 },
+      panelFees: { activePanels: 0, missingDefaultCount: 0, mismatchedVisitCount: 0 },
+      inventory: { outOfStockCount: 0, belowReorderCount: 0, expiring60DaysCount: 0 },
+      dataQuality: { completedWithoutPayment: 1, panelVisitWithoutPanel: 0, consultationWithoutFee: 0 },
+    };
+    expect(buildClinicAlerts(metrics).find((alert) => alert.id === 'missing-payment')?.href)
+      .toBe('/clinic/queue?focus=missing-payment');
+  });
 });
