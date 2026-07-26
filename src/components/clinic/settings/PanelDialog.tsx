@@ -323,7 +323,7 @@ export function PanelDialog({ open, onOpenChange, panel }: Props) {
                 />
               </Field>
               <Field
-                label="Consultation Fee Override (RM)"
+                label="Default Consultation Fee (RM)"
                 error={form.formState.errors.consultation_fee_override?.message as string | undefined}
               >
                 <Input
@@ -331,10 +331,10 @@ export function PanelDialog({ open, onOpenChange, panel }: Props) {
                   step="0.01"
                   min="0"
                   {...form.register('consultation_fee_override')}
-                  placeholder="Leave blank to use clinic default"
+                  placeholder="Leave blank to use cash consultation fee"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Fixed RM amount charged for the consultation fee row on panel visits.
+                  Used for new panel visits. Leave blank to use the clinic cash consultation fee.
                 </p>
               </Field>
               <Field

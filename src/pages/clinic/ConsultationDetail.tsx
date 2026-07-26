@@ -107,6 +107,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
+import { useVisitConsultationFee } from '@/hooks/clinic/useVisitConsultationFee';
 
 const PRICE_TIERS = ['SELF PAY', 'PANEL'];
 
@@ -303,6 +304,15 @@ export default function ConsultationDetail() {
     !!(entry as { panel_id?: string | null } | undefined)?.panel_id ||
     (entry?.payment_method ?? '').startsWith('panel');
 
+  const cashConsultationFee = parseFloat(
+    getPreference('default_consultation_fee_price', '0'),
+  );
+  const panelId = (entry as { panel_id?: string | null } | undefined)?.panel_id ?? null;
+  const {
+    data: resolvedConsultationFee,
+    isLoading: consultationFeeLoading,
+  } = useVisitConsultationFee(panelId, cashConsultationFee);
+
   const { data: consultation, isLoading: consultLoading } = useConsultation(queueEntryId);
   const createConsultation = useCreateConsultation();
   const updateConsultation = useUpdateConsultation();
@@ -451,7 +461,7 @@ export default function ConsultationDetail() {
   // Strict-Mode double-mount or re-render during the ~200ms DB roundtrip
   // cannot create a second consultation or double-seed the fee.
   useEffect(() => {
-    if (preferencesLoading) return;
+    if (preferencesLoading || consultationFeeLoading) return;
     if (consultLoading) return;
     if (!entry || !doctor) return;
     if (consultation) return;
@@ -468,8 +478,8 @@ export default function ConsultationDetail() {
       {
         onSuccess: (newConsultation) => {
           const feeName = getPreference('default_consultation_fee_name', 'Consultation Fee');
-          const feePrice = parseFloat(getPreference('default_consultation_fee_price', '0'));
-          if (feeName && feePrice > 0 && !hasSeededFeeRef.current) {
+          const feePrice = resolvedConsultationFee?.amount ?? cashConsultationFee;
+          if (feeName && Number.isFinite(feePrice) && feePrice >= 0 && !hasSeededFeeRef.current) {
             hasSeededFeeRef.current = true; // lock BEFORE seeding
             addItem.mutate({
               consultation_id: newConsultation.id,
@@ -486,7 +496,7 @@ export default function ConsultationDetail() {
       },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preferencesLoading, consultLoading, consultation, entry, doctor]);
+  }, [preferencesLoading, consultationFeeLoading, consultLoading, consultation, entry, doctor, resolvedConsultationFee, cashConsultationFee]);
 
   useEffect(() => {
     if (consultation) {
