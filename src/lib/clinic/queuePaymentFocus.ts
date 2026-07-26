@@ -8,5 +8,5 @@ export function isCompletedVisitUnpaid(payments: PaymentSummary[] | null | undef
 }
 
 export function isCashVisit(paymentMethod: string | null | undefined, panelId: string | null | undefined): boolean {
-  return paymentMethod === 'cash' && !panelId;
+  return (paymentMethod ?? '').trim().toLowerCase() === 'cash' && !panelId;
 }

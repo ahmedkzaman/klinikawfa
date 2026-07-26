@@ -367,11 +367,14 @@ export default function QueueBoard() {
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
                   <h2 className="text-sm font-bold uppercase tracking-tight text-slate-700">
-                    {missingPaymentFocus ? "Completed Visits Without Payment" : selectedDateIsToday ? "Completed Today" : "Completed on Selected Date"}
+                    {missingPaymentFocus ? "Cash Visits Without Payment" : selectedDateIsToday ? "Completed Today" : "Completed on Selected Date"}
                   </h2>
                 </div>
                 <span className={cn(softBadge, "px-2 py-0.5 text-xs")}>{displayedCompletedToday.length}</span>
               </div>
+              {missingPaymentFocus && (
+                <p className="mb-3 text-xs text-slate-500">Cash visits only — panel visits are excluded.</p>
+              )}
 
               {isCompletedLoading ? (
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">

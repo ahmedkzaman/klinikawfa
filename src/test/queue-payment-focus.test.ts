@@ -13,6 +13,7 @@ describe('isCompletedVisitUnpaid', () => {
 
   it('recognizes only cash visits without a panel', () => {
     expect(isCashVisit('cash', null)).toBe(true);
+    expect(isCashVisit(' CASH ', null)).toBe(true);
     expect(isCashVisit('panel', 'panel-1')).toBe(false);
     expect(isCashVisit('cash', 'panel-1')).toBe(false);
   });
