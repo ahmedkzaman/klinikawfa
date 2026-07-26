@@ -10,6 +10,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import Services from "./pages/Services";
 import ServiceDetail from "./pages/ServiceDetail";
+import LocalServicePage from "./pages/LocalServicePage";
 import Doctors from "./pages/Doctors";
 import DoctorOnDuty from "./pages/DoctorOnDuty";
 import AppointmentBooking from "./pages/AppointmentBooking";
@@ -148,6 +149,11 @@ const App = () => (
               <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/services" element={<Services />} />
+              <Route path="/services/rawatan-telinga-kuantan" element={<LocalServicePage />} />
+              <Route path="/services/minor-surgery-kutil-kuantan" element={<LocalServicePage />} />
+              <Route path="/services/swab-test-demam-kuantan" element={<LocalServicePage />} />
+              <Route path="/services/pengurusan-berat-badan-kuantan" element={<LocalServicePage />} />
+              <Route path="/services/sunat-kuantan" element={<LocalServicePage />} />
               <Route path="/services/:slug" element={<ServiceDetail />} />
               <Route path="/doctors" element={<Doctors />} />
               <Route path="/doctor-on-duty" element={<DoctorOnDuty />} />
