@@ -3,12 +3,16 @@ import { HelmetProvider } from 'react-helmet-async';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '@/App';
+import { Footer } from '@/components/layout/Footer';
 import { LOCAL_SERVICE_PAGES } from '@/content/localServicePages';
 import { CLINIC_INFO } from '@/lib/constants';
+import { LanguageProvider } from '@/contexts/LanguageContext';
 import LocalServicePage from '@/pages/LocalServicePage';
+import Services from '@/pages/Services';
 
 vi.mock('@/contexts/AuthContext', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useAuth: () => ({ user: null, isStaffOrAdmin: false }),
 }));
 
 vi.mock('@/features/analytics/GoogleAnalyticsController', () => ({
@@ -20,6 +24,22 @@ vi.mock('@/integrations/supabase/client', () => ({ supabase: {} }));
 vi.mock('@/components/layout', () => ({
   MainLayout: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
 }));
+
+vi.mock('@/hooks/usePublishedNavigation', () => ({
+  usePublishedNavigation: () => [],
+}));
+
+vi.stubGlobal(
+  'IntersectionObserver',
+  class IntersectionObserver {
+    disconnect() {}
+    observe() {}
+    takeRecords() {
+      return [];
+    }
+    unobserve() {}
+  },
+);
 
 afterEach(() => {
   cleanup();
@@ -48,6 +68,33 @@ describe('local SEO service pages', () => {
     const allCopy = JSON.stringify(LOCAL_SERVICE_PAGES).toLowerCase();
     expect(allCopy).not.toMatch(/dijamin|guaranteed|100% berkesan/);
     expect(allCopy).toContain('penilaian doktor');
+  });
+
+  it('links to every local service hub from the services page and footer', () => {
+    const paths = Object.values(LOCAL_SERVICE_PAGES).map(
+      (page) => `/services/${page.slug}`,
+    );
+
+    const services = render(
+      <HelmetProvider>
+        <MemoryRouter>
+          <LanguageProvider>
+            <Services />
+          </LanguageProvider>
+        </MemoryRouter>
+      </HelmetProvider>,
+    );
+    expect(paths.every((path) => services.container.querySelector(`a[href="${path}"]`))).toBe(true);
+    services.unmount();
+
+    const footer = render(
+      <MemoryRouter>
+        <LanguageProvider>
+          <Footer />
+        </LanguageProvider>
+      </MemoryRouter>,
+    );
+    expect(paths.every((path) => footer.container.querySelector(`a[href="${path}"]`))).toBe(true);
   });
 
   it.each([

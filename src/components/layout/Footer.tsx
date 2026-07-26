@@ -3,21 +3,30 @@ import { Link } from 'react-router-dom';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { CLINIC_INFO } from '@/lib/constants';
+import { LOCAL_SERVICE_PAGES } from '@/content/localServicePages';
 import { Phone, MessageCircle, Heart } from 'lucide-react';
 import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
-import { usePublishedNavigation } from '@/hooks/usePublishedNavigation';
+
+const coreFooterLinks = [
+  { href: '/', ms: 'Utama', en: 'Home' },
+  { href: '/services', ms: 'Perkhidmatan', en: 'Services' },
+  { href: '/doctors', ms: 'Doktor', en: 'Doctors' },
+  { href: '/appointment', ms: 'Temujanji', en: 'Appointment' },
+  { href: '/health-tips', ms: 'Tip Kesihatan', en: 'Health Tips' },
+];
+
+const localServiceHubs = Object.values(LOCAL_SERVICE_PAGES);
 
 export function Footer() {
   const { language } = useLanguage();
   const { user, isStaffOrAdmin } = useAuth();
-  const managedNavigation = usePublishedNavigation();
   return (
     <footer className="relative bg-primary text-primary-foreground overflow-hidden">
       <div className="container relative z-10 py-14 md:py-20">
         <div className="mb-10">
           <img src={logoKlinikAwfa} alt="Klinik Awfa Logo" className="h-14 w-auto brightness-0 invert opacity-90" />
         </div>
-        <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
           {/* Appointment CTA */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -107,6 +116,27 @@ export function Footer() {
               "Klinik Keluarga Anda"
             </p>
           </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="space-y-5"
+          >
+            <h3 className="text-2xl font-bold">Rawatan di Kuantan</h3>
+            <nav aria-label="Perkhidmatan pilihan" className="flex flex-col gap-3">
+              {localServiceHubs.map((service) => (
+                <Link
+                  key={service.slug}
+                  to={`/services/${service.slug}`}
+                  className="text-primary-foreground/80 transition-colors hover:text-primary-foreground"
+                >
+                  {service.heading}
+                </Link>
+              ))}
+            </nav>
+          </motion.div>
         </div>
 
         {/* Bottom bar */}
@@ -127,9 +157,9 @@ export function Footer() {
               <p>© {new Date().getFullYear()} {CLINIC_INFO.name}. All rights reserved.</p>
             </div>
             <div className="flex flex-wrap justify-center gap-6">
-              {managedNavigation?.filter((item) => !item.parentId).slice(0, 6).map((item) => (
-                <Link key={item.id} to={item.href} className="hover:text-primary-foreground transition-colors">
-                  {language === 'en' ? item.labelEn || item.labelMs : item.labelMs}
+              {coreFooterLinks.map((item) => (
+                <Link key={item.href} to={item.href} className="hover:text-primary-foreground transition-colors">
+                  {language === 'en' ? item.en : item.ms}
                 </Link>
               ))}
               <Link to="/privacy" className="hover:text-primary-foreground transition-colors">

@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { SERVICES, CLINIC_INFO } from '@/lib/constants';
+import { LOCAL_SERVICE_PAGES } from '@/content/localServicePages';
 import { 
   Stethoscope, 
   Thermometer, 
@@ -48,6 +49,8 @@ const iconMap: Record<string, React.ElementType> = {
   CoughingBaby: CoughingBabyIcon,
   Banana: BananaIcon,
 };
+
+const localServiceHubs = Object.values(LOCAL_SERVICE_PAGES);
 
 export default function Services() {
   const { language, t } = useLanguage();
@@ -109,6 +112,32 @@ export default function Services() {
                 </Card>
               );
             })}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-muted/30 py-16 md:py-20">
+        <div className="container">
+          <div className="mx-auto max-w-4xl">
+            <h2 className="mb-3 text-center">
+              {language === 'ms' ? 'Rawatan pilihan di Kuantan' : 'Featured care in Kuantan'}
+            </h2>
+            <p className="mx-auto mb-8 max-w-2xl text-center text-muted-foreground">
+              {language === 'ms'
+                ? 'Ketahui maklumat lanjut tentang rawatan berikut sebelum membuat temujanji.'
+                : 'Learn more about these services before booking an appointment.'}
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {localServiceHubs.map((service) => (
+                <Link
+                  key={service.slug}
+                  to={`/services/${service.slug}`}
+                  className="rounded-xl border border-border bg-background p-5 font-semibold text-primary shadow-sm transition-colors hover:border-primary hover:bg-primary/5"
+                >
+                  {service.heading}
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
       </section>

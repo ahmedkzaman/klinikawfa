@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
 import { createElement, type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -19,6 +20,8 @@ import {
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { DEFAULT_HOME_CONTENT } from "@/features/website-cms/home/homeDefaults";
 import { homeContentSchema } from "@/features/website-cms/schemas/home";
+import { LOCAL_SERVICE_PAGES } from "@/content/localServicePages";
+import { getSeoRoute } from "@/lib/website/seoRoutes";
 import Index from "@/pages/Index";
 
 vi.stubGlobal(
@@ -174,6 +177,34 @@ afterEach(() => {
 });
 
 describe("DEFAULT_HOME_CONTENT", () => {
+  it("uses the approved homepage title and links to every local service hub", async () => {
+    const indexShell = readFileSync("index.html", "utf8");
+    expect(indexShell).toContain(
+      "<title>Klinik Awfa KotaSAS | Klinik Keluarga di Kuantan</title>",
+    );
+    expect(getSeoRoute("/").title).toBe(
+      "Klinik Awfa KotaSAS | Klinik Keluarga di Kuantan",
+    );
+
+    let rendered: ReturnType<typeof render> | undefined;
+    await act(async () => {
+      rendered = render(
+        createElement(
+          MemoryRouter,
+          null,
+          createElement(LanguageProvider, null, createElement(Index)),
+        ),
+      );
+    });
+
+    const paths = Object.values(LOCAL_SERVICE_PAGES).map(
+      (page) => `/services/${page.slug}`,
+    );
+    expect(paths.every((path) => rendered!.container.querySelector(`a[href="${path}"]`))).toBe(
+      true,
+    );
+  });
+
   it("preserves the exact current Home content snapshot", () => {
     expect(homeContentSchema.parse(DEFAULT_HOME_CONTENT)).toEqual(
       DEFAULT_HOME_CONTENT,
@@ -793,13 +824,16 @@ describe("data-driven Home renderer", () => {
         : DEFAULT_HOME_CONTENT[id].title.ms,
     );
 
-    expect(sections).toHaveLength(expectedHeadings.length);
-    sections.forEach((section, index) => {
+    expect(sections).toHaveLength(expectedHeadings.length + 1);
+    sections.slice(0, expectedHeadings.length).forEach((section, index) => {
       expect(
         within(section as HTMLElement).getByRole("heading", {
           name: expectedHeadings[index],
         }),
       ).toBeInTheDocument();
     });
+    expect(within(sections.at(-1) as HTMLElement).getByRole("heading", {
+      name: "Rawatan di Klinik Awfa",
+    })).toBeInTheDocument();
   });
 });
