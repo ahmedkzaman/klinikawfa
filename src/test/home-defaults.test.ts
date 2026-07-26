@@ -123,6 +123,7 @@ vi.mock("@/components/layout", () => ({
 
 vi.mock("@/components/seo", () => ({
   SEOHead: () => null,
+  SchemaMarkup: () => null,
 }));
 
 vi.mock("@/components/home", async () => {
