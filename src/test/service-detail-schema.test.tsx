@@ -39,10 +39,13 @@ vi.mock('@/components/seo/SEOHead', () => ({ SEOHead: () => null }));
 afterEach(() => cleanup());
 
 describe('ServiceDetail structured data', () => {
-  it('publishes the current public service page, provider, and breadcrumb schemas', async () => {
+  it.each([
+    ['/services/rawatan-umum', 'https://klinikawfa.com/services/rawatan-umum'],
+    ['/services/rawatan-am', 'https://klinikawfa.com/services/rawatan-am'],
+  ])('publishes schemas for the current public route %s', async (route, expectedUrl) => {
     render(
       <HelmetProvider>
-        <MemoryRouter initialEntries={['/services/rawatan-umum']}>
+        <MemoryRouter initialEntries={[route]}>
           <LanguageProvider>
             <Routes>
               <Route path="/services/:slug" element={<ServiceDetail />} />
@@ -59,10 +62,11 @@ describe('ServiceDetail structured data', () => {
         .map((script) => JSON.parse(script.textContent || '{}'));
 
       expect(schemas).toEqual(expect.arrayContaining([
-        expect.objectContaining({ '@type': 'WebPage', url: 'https://klinikawfa.com/services/rawatan-am' }),
+        expect.objectContaining({ '@type': 'WebPage', url: expectedUrl }),
         expect.objectContaining({
           '@type': 'Service',
           name: 'Rawatan Am',
+          url: expectedUrl,
           provider: { '@id': 'https://klinikawfa.com/#clinic' },
         }),
         expect.objectContaining({
@@ -70,7 +74,7 @@ describe('ServiceDetail structured data', () => {
           itemListElement: expect.arrayContaining([
             expect.objectContaining({ name: 'Utama', item: 'https://klinikawfa.com/' }),
             expect.objectContaining({ name: 'Perkhidmatan', item: 'https://klinikawfa.com/services' }),
-            expect.objectContaining({ name: 'Rawatan Am', item: 'https://klinikawfa.com/services/rawatan-am' }),
+            expect.objectContaining({ name: 'Rawatan Am', item: expectedUrl }),
           ]),
         }),
       ]));
