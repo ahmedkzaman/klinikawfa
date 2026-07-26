@@ -149,11 +149,11 @@ const App = () => (
               <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/services" element={<Services />} />
-              <Route path="/services/rawatan-telinga-kuantan" element={<LocalServicePage />} />
-              <Route path="/services/minor-surgery-kutil-kuantan" element={<LocalServicePage />} />
-              <Route path="/services/swab-test-demam-kuantan" element={<LocalServicePage />} />
-              <Route path="/services/pengurusan-berat-badan-kuantan" element={<LocalServicePage />} />
-              <Route path="/services/sunat-kuantan" element={<LocalServicePage />} />
+              <Route path="/services/rawatan-telinga-kuantan" element={<LocalServicePage slug="rawatan-telinga-kuantan" />} />
+              <Route path="/services/minor-surgery-kutil-kuantan" element={<LocalServicePage slug="minor-surgery-kutil-kuantan" />} />
+              <Route path="/services/swab-test-demam-kuantan" element={<LocalServicePage slug="swab-test-demam-kuantan" />} />
+              <Route path="/services/pengurusan-berat-badan-kuantan" element={<LocalServicePage slug="pengurusan-berat-badan-kuantan" />} />
+              <Route path="/services/sunat-kuantan" element={<LocalServicePage slug="sunat-kuantan" />} />
               <Route path="/services/:slug" element={<ServiceDetail />} />
               <Route path="/doctors" element={<Doctors />} />
               <Route path="/doctor-on-duty" element={<DoctorOnDuty />} />

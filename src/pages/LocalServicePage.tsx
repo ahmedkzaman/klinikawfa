@@ -1,5 +1,5 @@
 import { CalendarDays, CheckCircle2, MapPin, MessageCircle, ShieldCheck } from 'lucide-react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout';
 import { SchemaMarkup, SEOHead } from '@/components/seo';
 import { Button } from '@/components/ui/button';
@@ -12,9 +12,12 @@ import {
 } from '@/lib/website/clinicSchema';
 import { canonicalUrl } from '@/lib/website/seoRoutes';
 
-export default function LocalServicePage() {
-  const { slug } = useParams<{ slug: string }>();
-  const content = slug ? LOCAL_SERVICE_PAGES[slug] : undefined;
+interface LocalServicePageProps {
+  slug: string;
+}
+
+export default function LocalServicePage({ slug }: LocalServicePageProps) {
+  const content = LOCAL_SERVICE_PAGES[slug];
 
   if (!content) {
     return <Navigate to="/services" replace />;
