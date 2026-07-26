@@ -38,7 +38,7 @@ describe('buildClinicAlerts', () => {
       inventory: { outOfStockCount: 0, belowReorderCount: 0, expiring60DaysCount: 0 },
       dataQuality: { completedWithoutPayment: 1, panelVisitWithoutPanel: 0, consultationWithoutFee: 0 },
     };
-    expect(buildClinicAlerts(metrics).find((alert) => alert.id === 'missing-payment')?.href)
-      .toBe('/clinic/queue?focus=missing-payment');
+    expect(buildClinicAlerts(metrics, '2026-07-26').find((alert) => alert.id === 'missing-payment')?.href)
+      .toBe('/clinic/queue?focus=missing-payment&date=2026-07-26');
   });
 });

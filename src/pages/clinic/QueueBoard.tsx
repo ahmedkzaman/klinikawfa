@@ -141,7 +141,9 @@ function QueueCard({ entry, onClick }: { entry: QueueEntryWithJoins; onClick: ()
 
 export default function QueueBoard() {
   useTickEveryMinute();
-  const [selectedDate, setSelectedDate] = useState(() => todayInputValue());
+  const [selectedDate, setSelectedDate] = useState(() =>
+    new URLSearchParams(window.location.search).get("date") ?? todayInputValue(),
+  );
   const [searchParams] = useSearchParams();
   const missingPaymentFocus = searchParams.get("focus") === "missing-payment";
   const [highlightMissingPayment, setHighlightMissingPayment] = useState(missingPaymentFocus);

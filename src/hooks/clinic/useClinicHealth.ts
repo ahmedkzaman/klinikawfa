@@ -20,7 +20,7 @@ export function useClinicHealth(startDate: Date, endDate: Date) {
       });
       if (error) throw error;
       const score = scoreClinicHealth(data);
-      return { metrics: data, score, alerts: data ? buildClinicAlerts(data) : [] };
+      return { metrics: data, score, alerts: data ? buildClinicAlerts(data, endKey) : [] };
     },
   });
 }
