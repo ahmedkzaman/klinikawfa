@@ -32,3 +32,4 @@ stress-tests/node_modules/
 .env.*
 !.env.example
 !.env.*.example
+.worktrees/
