@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { differenceInCalendarDays, format, subDays } from 'date-fns';
+import { differenceInCalendarDays, endOfMonth, format, startOfMonth, startOfQuarter, startOfYear, subDays } from 'date-fns';
 import {
   Bar,
   CartesianGrid,
@@ -61,6 +61,7 @@ import { ScoreboardsTab } from '@/components/clinic/insight/ScoreboardsTab';
 import { LeaderboardsTab } from '@/components/clinic/insight/LeaderboardsTab';
 import { ValuationTab } from '@/components/clinic/insight/ValuationTab';
 import { BankHealthTab } from '@/components/clinic/insight/BankHealthTab';
+import { ClinicHealthTab } from '@/components/clinic/insight/ClinicHealthTab';
 
 const SEGMENT_COLORS = [chartColors.emerald, chartColors.blue, chartColors.slate];
 const MAX_RANGE_DAYS = 365;
@@ -167,6 +168,15 @@ export default function Insight() {
   const startDate = range?.from ?? subDays(new Date(), 29);
   const endDate = range?.to ?? new Date();
 
+  const quickRanges = [
+    ['Today', new Date(), new Date()],
+    ['This week', subDays(new Date(), new Date().getDay()), new Date()],
+    ['This month', startOfMonth(new Date()), new Date()],
+    ['Last month', startOfMonth(subDays(startOfMonth(new Date()), 1)), endOfMonth(subDays(startOfMonth(new Date()), 1))],
+    ['This quarter', startOfQuarter(new Date()), new Date()],
+    ['Year to date', startOfYear(new Date()), new Date()],
+  ] as const;
+
   const { data, isLoading, isError, error } = useFinancialInsights(startDate, endDate);
   const {
     data: salesData,
@@ -231,6 +241,9 @@ export default function Insight() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex flex-wrap gap-1">
+              {quickRanges.map(([label, from, to]) => <Button key={label} variant="ghost" onClick={() => setRange({ from, to })} className="h-8 px-2 text-xs text-slate-600">{label}</Button>)}
+            </div>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -288,9 +301,10 @@ export default function Insight() {
           </div>
         </div>
 
-        <Tabs defaultValue="overview" className="w-full space-y-4">
+        <Tabs defaultValue="clinic-health" className="w-full space-y-4">
           <Card className={cn(bento, 'p-2')}>
             <TabsList className="flex flex-wrap h-auto gap-1 bg-transparent p-0">
+              <TabsTrigger value="clinic-health" className={TAB_TRIGGER}>Clinic Health</TabsTrigger>
               <TabsTrigger value="overview" className={TAB_TRIGGER}>Overview</TabsTrigger>
               <TabsTrigger value="scoreboards" className={TAB_TRIGGER}>Scoreboards</TabsTrigger>
               <TabsTrigger value="leaderboards" className={TAB_TRIGGER}>Leaderboards</TabsTrigger>
@@ -298,6 +312,10 @@ export default function Insight() {
               <TabsTrigger value="health" className={TAB_TRIGGER}>Bank Health</TabsTrigger>
             </TabsList>
           </Card>
+
+          <TabsContent value="clinic-health" className="mt-0">
+            <ClinicHealthTab startDate={startDate} endDate={endDate} />
+          </TabsContent>
 
           <TabsContent value="overview" className="space-y-4 mt-0">
             {isError && (
