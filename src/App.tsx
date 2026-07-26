@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 
@@ -124,6 +124,8 @@ import { ReviewsEditorList, ReviewWebsiteEditor } from "./pages/editor/Reviews";
 import { NavigationEditor } from "./pages/editor/Navigation";
 import GeneralPage from "./pages/GeneralPage";
 import { GoogleAnalyticsController } from "./features/analytics/GoogleAnalyticsController";
+import { SEOHead } from "./components/seo";
+import { getSeoRoute, isProtectedFromIndex } from "./lib/website/seoRoutes";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -134,6 +136,14 @@ const queryClient = new QueryClient({
   },
 });
 
+function RouteSeoGuard() {
+  const location = useLocation();
+  if (!isProtectedFromIndex(location.pathname)) return null;
+
+  const route = getSeoRoute(location.pathname);
+  return <SEOHead title={route.title} description={route.description} noIndex noFollow />;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
@@ -142,6 +152,7 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
+            <RouteSeoGuard />
             <GoogleAnalyticsController>
               <Routes>
               <Route path="/" element={<Index />} />
