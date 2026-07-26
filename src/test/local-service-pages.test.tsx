@@ -136,6 +136,14 @@ describe('local SEO service pages', () => {
       await screen.findByRole('heading', { level: 1, name: expectedHeading }),
     ).toBeInTheDocument();
     expect(window.location.pathname).toBe(path);
+    expect(screen.getByText('Disemak oleh Klinik Awfa')).toBeVisible();
+    expect(screen.getByText('2026-07-27')).toMatchObject({
+      tagName: 'TIME',
+    });
+    expect(screen.getByText('2026-07-27')).toHaveAttribute(
+      'datetime',
+      '2026-07-27',
+    );
   });
 
   it('renders the complete sunat hub at its explicit local route', async () => {

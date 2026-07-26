@@ -36,14 +36,20 @@ const ROUTES: Record<string, SeoRouteDefinition> = {
   },
 };
 
-const PUBLIC_ROUTE_FAMILIES = [
+const STATIC_PUBLIC_ROUTES = new Set([
+  '/',
   '/services',
   '/doctors',
   '/doctor-on-duty',
   '/appointment',
   '/gallery',
   '/health-tips',
-  '/pages',
+]);
+
+const PUBLIC_CONTENT_ROUTE_PATTERNS = [
+  /^\/services\/[a-z0-9]+(?:-[a-z0-9]+)*$/,
+  /^\/health-tips\/[a-z0-9]+(?:-[a-z0-9]+)*$/,
+  /^\/pages\/[a-z0-9]+(?:-[a-z0-9]+)*$/,
 ] as const;
 
 const PUBLIC_FALLBACK: SeoRouteDefinition = {
@@ -72,8 +78,9 @@ export function isProtectedFromIndex(pathname: string): boolean {
 }
 
 function isPublicRoute(path: string): boolean {
-  return PUBLIC_ROUTE_FAMILIES.some(
-    (family) => path === family || path.startsWith(`${family}/`),
+  return (
+    STATIC_PUBLIC_ROUTES.has(path) ||
+    PUBLIC_CONTENT_ROUTE_PATTERNS.some((pattern) => pattern.test(path))
   );
 }
 

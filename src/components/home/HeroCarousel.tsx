@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, type MouseEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { CLINIC_INFO } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Calendar, MessageCircle, Phone } from 'lucide-react';
@@ -118,30 +117,28 @@ export function HeroCarousel({ content, preview = false }: HeroCarouselProps) {
 
       <div className="container relative z-10">
         <div className="mx-auto max-w-4xl text-center">
-          {/* Clinic badge */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
+          {/* Stable clinic heading */}
+          <motion.h1
+            initial={false}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="mb-6 inline-flex items-center border-l-2 border-primary pl-3 text-sm font-semibold uppercase tracking-[0.16em] text-primary"
+            className="mb-6 text-4xl font-bold tracking-tight md:text-5xl lg:text-6xl xl:text-7xl"
           >
-            {CLINIC_INFO.name}
-          </motion.div>
+            <span className="gradient-text">Klinik Awfa KotaSAS, Kuantan</span>
+          </motion.h1>
 
-          {/* Main title */}
+          {/* Rotating supporting title */}
           <AnimatePresence mode="wait">
-            <motion.h1
+            <motion.h2
               key={`title-${safeCurrentSlide}`}
-              initial={{ opacity: 0, y: 30, scale: 0.95 }}
+              initial={preview ? false : { opacity: 0, y: 30, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -20, scale: 0.95 }}
               transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-              className="mb-6 text-4xl font-bold tracking-tight md:text-5xl lg:text-6xl xl:text-7xl"
+              className="mb-6 text-2xl font-semibold tracking-tight md:text-3xl lg:text-4xl"
             >
-              <span className="gradient-text">
-                {localized(slide.title)}
-              </span>
-            </motion.h1>
+              {localized(slide.title)}
+            </motion.h2>
           </AnimatePresence>
 
           {/* Subtitle */}

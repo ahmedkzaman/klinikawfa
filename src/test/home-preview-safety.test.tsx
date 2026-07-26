@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -110,6 +110,34 @@ describe("projectHomePreview", () => {
 });
 
 describe("HeroCarousel preview safety", () => {
+  it("keeps one stable clinic H1 while carousel titles change", async () => {
+    renderHero();
+
+    expect(
+      screen.getByRole("heading", {
+        level: 1,
+        name: "Klinik Awfa KotaSAS, Kuantan",
+      }),
+    ).toBeVisible();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Klinik Keluarga Anda" }),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next slide" }));
+
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "Buka Setiap Hari" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", {
+        level: 1,
+        name: "Klinik Awfa KotaSAS, Kuantan",
+      }),
+    ).toBeVisible();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  });
+
   it("renders safely when a transient watched value has no slides", () => {
     const content = structuredClone(DEFAULT_HOME_CONTENT.hero);
     content.slides = [];

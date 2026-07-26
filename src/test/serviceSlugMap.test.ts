@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { resolveServiceCategorySlug, SERVICE_CATEGORY_SLUG_MAP } from "@/lib/serviceSlugMap";
+import {
+  resolveCanonicalServiceSlug,
+  resolveServiceCategorySlug,
+  SERVICE_CATEGORY_SLUG_MAP,
+} from "@/lib/serviceSlugMap";
 import { SERVICES } from "@/lib/constants";
 
 const DB_SLUGS = ["rawatan-am", "prosedur-minor", "pemeriksaan-kesihatan"] as const;
@@ -61,5 +65,20 @@ describe("resolveServiceCategorySlug", () => {
     for (const v of Object.values(SERVICE_CATEGORY_SLUG_MAP)) {
       expect(allowed.has(v)).toBe(true);
     }
+  });
+
+  it.each([
+    ["rawatan-umum", "rawatan-umum"],
+    ["rawatan-am", "rawatan-umum"],
+    ["sakit-tekak-selsema-demam", "rawatan-umum"],
+    ["ujian-pantas", "rawatan-umum"],
+    ["prosedur-kecil", "prosedur-kecil"],
+    ["prosedur-minor", "prosedur-kecil"],
+    ["penjagaan-telinga", "prosedur-kecil"],
+    ["khatan", "prosedur-kecil"],
+    ["pemeriksaan-kesihatan", "pemeriksaan-kesihatan"],
+    ["pemeriksaan-darah", "pemeriksaan-kesihatan"],
+  ])("consolidates %s on the category canonical %s", (slug, canonicalSlug) => {
+    expect(resolveCanonicalServiceSlug(slug)).toBe(canonicalSlug);
   });
 });

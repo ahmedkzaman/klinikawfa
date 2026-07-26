@@ -33,4 +33,22 @@ describe('SEO route policy', () => {
       'https://klinikawfa.com/services/telinga-kuantan',
     );
   });
+
+  it.each([
+    '/services/rawatan-umum',
+    '/health-tips/penjagaan-demam',
+    '/pages/tentang-klinik',
+  ])('allows a valid one-segment public content route %s', (path) => {
+    expect(getSeoRoute(path)).toMatchObject({ index: true, follow: true });
+  });
+
+  it.each([
+    '/pages',
+    '/pages/tentang-klinik/pasukan',
+    '/services/rawatan-umum/lebihan',
+    '/health-tips/penjagaan-demam/lebihan',
+    '/doctors/lebihan',
+  ])('keeps malformed or non-page route %s out of search', (path) => {
+    expect(getSeoRoute(path)).toMatchObject({ index: false, follow: false });
+  });
 });

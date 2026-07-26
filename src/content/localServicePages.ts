@@ -16,6 +16,11 @@ export interface LocalServicePageContent {
   reviewedByLabel: string;
 }
 
+export const LOCAL_SERVICE_REVIEW = {
+  organization: 'Klinik Awfa',
+  date: '2026-07-27',
+} as const;
+
 export const LOCAL_SERVICE_PAGES: Record<string, LocalServicePageContent> = {
   'rawatan-telinga-kuantan': {
     slug: 'rawatan-telinga-kuantan',

@@ -10,7 +10,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, CheckCircle, Calendar, AlertTriangle } from "lucide-react";
 // GHSA-v3m3-f69x-jf25: Quill HTML export must pass through the shared sanitizer.
 import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
-import { resolveServiceCategorySlug } from "@/lib/serviceSlugMap";
+import {
+  resolveCanonicalServiceSlug,
+  resolveServiceCategorySlug,
+} from "@/lib/serviceSlugMap";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { buildBreadcrumbSchema, buildServiceSchema, buildWebPageSchema } from "@/lib/website/clinicSchema";
 
@@ -101,7 +104,8 @@ export default function ServiceDetail() {
   const description = language === "en" ? service.description_en || service.description_ms || service.description : service.description_ms || service.description;
   const callToAction = language === "en" ? service.call_to_action_en || service.call_to_action_ms || service.call_to_action : service.call_to_action_ms || service.call_to_action;
   const serviceItems = language === "en" && service.services_list_en?.length ? service.services_list_en : service.services_list_ms?.length ? service.services_list_ms : service.services_list;
-  const servicePath = `/services/${slug ?? service.slug}`;
+  const canonicalSlug = resolveCanonicalServiceSlug(slug) ?? service.slug;
+  const servicePath = `/services/${canonicalSlug}`;
   const schemaDescription = stripHtml(description).substring(0, 160);
   const schemas = [
     buildWebPageSchema({ path: servicePath, name: title, description: schemaDescription }),

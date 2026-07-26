@@ -86,6 +86,11 @@ jobs:
           cp dist/index.html dist/404.html
           routes=(
             services
+            services/rawatan-telinga-kuantan
+            services/minor-surgery-kutil-kuantan
+            services/swab-test-demam-kuantan
+            services/pengurusan-berat-badan-kuantan
+            services/sunat-kuantan
             services/rawatan-umum
             services/sakit-tekak-selsema-demam
             services/ujian-pantas
@@ -173,6 +178,11 @@ jobs:
           test -f dist/index.html
           test -f dist/404.html
           test -f dist/services/index.html
+          test -f dist/services/rawatan-telinga-kuantan/index.html
+          test -f dist/services/minor-surgery-kutil-kuantan/index.html
+          test -f dist/services/swab-test-demam-kuantan/index.html
+          test -f dist/services/pengurusan-berat-badan-kuantan/index.html
+          test -f dist/services/sunat-kuantan/index.html
           test -f dist/editor/index.html
           test -f dist/CNAME
           test "$(cat dist/CNAME)" = "klinikawfa.com"

@@ -62,4 +62,20 @@ describe('RouteSeoGuard', () => {
       );
     });
   });
+
+  it.each([
+    '/pages',
+    '/pages/tentang-klinik/pasukan',
+    '/services/rawatan-umum/lebihan',
+    '/health-tips/penjagaan-demam/lebihan',
+  ])('emits noindex metadata for malformed public route %s', async (path) => {
+    renderGuardedRoute(path);
+
+    await waitFor(() => {
+      expect(document.head.querySelector('meta[name="robots"]')).toHaveAttribute(
+        'content',
+        'noindex, nofollow',
+      );
+    });
+  });
 });

@@ -183,7 +183,7 @@ describe("DEFAULT_HOME_CONTENT", () => {
   it("uses the approved homepage title and links to every local service hub", async () => {
     const indexShell = readFileSync("index.html", "utf8");
     expect(indexShell).toContain(
-      "<title>Klinik Awfa KotaSAS | Klinik Keluarga di Kuantan</title>",
+      '<title data-rh="true">Klinik Awfa KotaSAS | Klinik Keluarga di Kuantan</title>',
     );
     expect(indexShell).toContain(
       'content="3.871944656053272;103.27734116870465"',

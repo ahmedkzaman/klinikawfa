@@ -3,7 +3,7 @@ import { Link, Navigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout';
 import { SchemaMarkup, SEOHead } from '@/components/seo';
 import { Button } from '@/components/ui/button';
-import { LOCAL_SERVICE_PAGES } from '@/content/localServicePages';
+import { LOCAL_SERVICE_PAGES, LOCAL_SERVICE_REVIEW } from '@/content/localServicePages';
 import { CLINIC_INFO } from '@/lib/constants';
 import {
   buildBreadcrumbSchema,
@@ -181,6 +181,13 @@ export default function LocalServicePage({ slug }: LocalServicePageProps) {
 
           <div className="rounded-2xl border border-primary/20 bg-primary/5 p-6">
             <ShieldCheck className="h-6 w-6 text-primary" aria-hidden="true" />
+            <p className="mt-3 text-sm font-semibold leading-6">
+              Disemak oleh {LOCAL_SERVICE_REVIEW.organization}
+            </p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              Tarikh semakan:{' '}
+              <time dateTime={LOCAL_SERVICE_REVIEW.date}>{LOCAL_SERVICE_REVIEW.date}</time>
+            </p>
             <p className="mt-3 text-sm font-medium leading-6">{content.reviewedByLabel}</p>
           </div>
         </aside>

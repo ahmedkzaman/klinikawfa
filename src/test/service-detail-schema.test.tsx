@@ -34,15 +34,22 @@ vi.mock('@/components/layout/MainLayout', () => ({
   MainLayout: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
 }));
 
-vi.mock('@/components/seo/SEOHead', () => ({ SEOHead: () => null }));
-
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  document.head.innerHTML = '';
+});
 
 describe('ServiceDetail structured data', () => {
   it.each([
     ['/services/rawatan-umum', 'https://klinikawfa.com/services/rawatan-umum'],
-    ['/services/rawatan-am', 'https://klinikawfa.com/services/rawatan-am'],
-  ])('publishes schemas for the current public route %s', async (route, expectedUrl) => {
+    ['/services/rawatan-am', 'https://klinikawfa.com/services/rawatan-umum'],
+    ['/services/ujian-pantas', 'https://klinikawfa.com/services/rawatan-umum'],
+    ['/services/prosedur-kecil', 'https://klinikawfa.com/services/prosedur-kecil'],
+    ['/services/prosedur-minor', 'https://klinikawfa.com/services/prosedur-kecil'],
+    ['/services/penjagaan-telinga', 'https://klinikawfa.com/services/prosedur-kecil'],
+    ['/services/pemeriksaan-kesihatan', 'https://klinikawfa.com/services/pemeriksaan-kesihatan'],
+    ['/services/pemeriksaan-darah', 'https://klinikawfa.com/services/pemeriksaan-kesihatan'],
+  ])('publishes one category canonical and matching schemas for %s', async (route, expectedUrl) => {
     render(
       <HelmetProvider>
         <MemoryRouter initialEntries={[route]}>
@@ -58,6 +65,11 @@ describe('ServiceDetail structured data', () => {
     expect(await screen.findByRole('heading', { name: 'Rawatan Am' })).toBeInTheDocument();
 
     await waitFor(() => {
+      expect(document.head.querySelector('link[rel="canonical"]')).toHaveAttribute(
+        'href',
+        expectedUrl,
+      );
+
       const schemas = Array.from(document.head.querySelectorAll('script[type="application/ld+json"]'))
         .map((script) => JSON.parse(script.textContent || '{}'));
 

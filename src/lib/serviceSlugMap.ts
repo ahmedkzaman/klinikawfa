@@ -31,3 +31,15 @@ export function resolveServiceCategorySlug(slug: string | undefined): string | u
   if (!slug) return undefined;
   return SERVICE_CATEGORY_SLUG_MAP[slug] ?? slug;
 }
+
+const SERVICE_CATEGORY_CANONICAL_SLUGS: Record<string, string> = {
+  'rawatan-am': 'rawatan-umum',
+  'prosedur-minor': 'prosedur-kecil',
+  'pemeriksaan-kesihatan': 'pemeriksaan-kesihatan',
+};
+
+export function resolveCanonicalServiceSlug(slug: string | undefined): string | undefined {
+  const categorySlug = resolveServiceCategorySlug(slug);
+  if (!categorySlug) return undefined;
+  return SERVICE_CATEGORY_CANONICAL_SLUGS[categorySlug] ?? slug;
+}

@@ -11,6 +11,14 @@ const cnamePath = resolve(repoRoot, "public/CNAME");
 const readWorkflow = () => readFileSync(workflowPath, "utf8");
 
 describe("GitHub Pages hosting", () => {
+  const localSeoRoutes = [
+    "services/rawatan-telinga-kuantan",
+    "services/minor-surgery-kutil-kuantan",
+    "services/swab-test-demam-kuantan",
+    "services/pengurusan-berat-badan-kuantan",
+    "services/sunat-kuantan",
+  ];
+
   const fixedClinicRoutes = [
     "clinic",
     "clinic/queue",
@@ -99,5 +107,14 @@ describe("GitHub Pages hosting", () => {
     expect(workflow).toContain('for route in "${routes[@]}"; do');
     expect(workflow).toContain('mkdir -p "dist/${route}"');
     expect(workflow).toContain('cp dist/index.html "dist/${route}/index.html"');
+  });
+
+  it("prepares and validates a static Pages artifact for every local SEO hub", () => {
+    const workflow = readWorkflow().replaceAll("\r\n", "\n");
+
+    for (const route of localSeoRoutes) {
+      expect(workflow).toContain(`\n            ${route}\n`);
+      expect(workflow).toContain(`test -f dist/${route}/index.html`);
+    }
   });
 });
