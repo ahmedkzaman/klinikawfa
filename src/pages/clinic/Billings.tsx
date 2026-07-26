@@ -23,6 +23,7 @@ import {
   formatPaymentMethod,
   paymentMethodBadgeClass,
 } from '@/lib/clinic/paymentMethod';
+import { reconcileBillingSubtotal } from '@/lib/clinic/billingLedgerTotals';
 import { Badge } from '@/components/ui/badge';
 import type { ConsultationRow, ConsultationItemRow } from '@/types/clinic';
 
@@ -38,6 +39,7 @@ interface LedgerEntry {
   subtotal: number;
   paid: number;
   outstanding: number;
+  unitemizedAdditionalCharges: number;
   latestPaymentType: 'self_pay' | 'panel' | 'insurance';
   latestMethod: string | null;
   latestPaymentId: string | null;
@@ -194,6 +196,7 @@ export default function Billings() {
           subtotal: itemsByQueue[qe.id] ?? 0,
           paid: amt,
           outstanding: 0,
+          unitemizedAdditionalCharges: 0,
           latestPaymentType: pType,
           latestMethod: p.payment_method ?? null,
           latestPaymentId: p.id,
@@ -204,6 +207,9 @@ export default function Billings() {
 
     const list = Array.from(byQueue.values());
     list.forEach((e) => {
+      const reconciled = reconcileBillingSubtotal(e.subtotal, e.paid);
+      e.subtotal = reconciled.subtotal;
+      e.unitemizedAdditionalCharges = reconciled.unitemizedAdditionalCharges;
       e.outstanding = Math.max(e.subtotal - e.paid, 0);
     });
     return list;
@@ -439,6 +445,14 @@ export default function Billings() {
                 </span>
                 <span className="text-sm tabular-nums text-slate-600">
                   RM {subtotal.toFixed(2)}
+                  {!grouped && e.unitemizedAdditionalCharges > 0 && (
+                    <span
+                      className="block text-[10px] text-amber-600"
+                      title="Additional charge was collected but was not itemized in this legacy visit."
+                    >
+                      Includes RM {e.unitemizedAdditionalCharges.toFixed(2)} other fees
+                    </span>
+                  )}
                 </span>
                 <span className="text-sm tabular-nums text-slate-600">
                   RM {paid.toFixed(2)}
