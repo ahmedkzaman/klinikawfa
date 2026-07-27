@@ -272,7 +272,10 @@ if (@($unsafe.blocking) -notcontains 'public.patients.name') { throw 'Populated 
     expect(
       runGuardProbe(String.raw`
 Import-RunnerFunction Get-ForeignKeyAuditSql
-$postgresBin = 'C:\Users\ahmed\Documents\Codex\tools\postgresql\17.10\pgsql\bin'
+$postgresBin = $env:POSTGRES_BIN
+if ([string]::IsNullOrWhiteSpace($postgresBin)) {
+  $postgresBin = 'C:\Users\ahmed\Documents\Codex\tools\postgresql\17.10\pgsql\bin'
+}
 $root = Join-Path ([IO.Path]::GetTempPath()) ('cutover-fk-audit-' + [Guid]::NewGuid().ToString('N'))
 $data = Join-Path $root 'data'
 $log = Join-Path $root 'postgres.log'

@@ -669,7 +669,8 @@ $targetBootstrapIndex=$rehearseText.IndexOf('new-localdatabase -database $target
 $firstRestoreIndex=$rehearseText.IndexOf('restore-tocselection')
 if($sourceBootstrapIndex -lt 0 -or $targetBootstrapIndex -lt 0 -or $firstRestoreIndex -lt 0 -or $sourceBootstrapIndex -ge $firstRestoreIndex -or $targetBootstrapIndex -ge $firstRestoreIndex){throw 'Rehearse does not bootstrap both disposable databases before the first owner-replaying restore.'}
 
-$postgresBin='C:\Users\ahmed\Documents\Codex\tools\postgresql\17.10\pgsql\bin'
+$postgresBin=$env:POSTGRES_BIN
+if([string]::IsNullOrWhiteSpace($postgresBin)){$postgresBin='C:\Users\ahmed\Documents\Codex\tools\postgresql\17.10\pgsql\bin'}
 Import-RunnerFunction New-LocalDatabase
 $script:capturedBootstrapSql=$null
 $script:capturedCreateDatabase=$null
