@@ -7,6 +7,14 @@ describe('buildMalayAnnouncement', () => {
       .toBe('Panggilan untuk Siti Aminah, sila ke Bilik 2 sekarang.');
   });
 
+  it('converts an all-uppercase MyKad name to natural speech casing', () => {
+    expect(buildMalayAnnouncement({
+      callBy: 'name',
+      display: 'MUHAMMAD IZZAT BIN MOHD ADNIN',
+      roomLabel: 'Bilik 2',
+    })).toBe('Panggilan untuk Muhammad Izzat bin Mohd Adnin, sila ke Bilik 2 sekarang.');
+  });
+
   it('calls a queue number when the TV is configured for numbers', () => {
     expect(buildMalayAnnouncement({ callBy: 'number', display: 'A-12', roomLabel: 'Kaunter Utama' }))
       .toBe('Nombor giliran A-12, sila ke Kaunter Utama sekarang.');
