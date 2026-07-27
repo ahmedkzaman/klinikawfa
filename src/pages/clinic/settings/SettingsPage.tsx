@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Sliders, Users, Archive, Package, ChevronRight, Stethoscope, Shield, Tag, FileText, FileEdit, Tv, Coins, Building2, Boxes, UserPlus } from 'lucide-react';
+import { Sliders, Users, Archive, Package, ChevronRight, Stethoscope, Shield, Tag, FileText, FileEdit, Tv, Coins, Building2, Boxes, UserPlus, LockKeyhole } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -36,10 +36,11 @@ const SECTIONS: { key: SectionKey; title: string; description: string }[] = [
 ];
 
 export default function SettingsPage() {
-  const { isAdmin, isSpecialAdmin, isOpsOrAdmin, isOpsStaff } = useAuth();
+  const { isAdmin, isSpecialAdmin, isDoctorAdmin, isOpsOrAdmin, isOpsStaff } = useAuth();
   const adminAccess = isAdmin || isSpecialAdmin;
 
   const cards: SettingsCard[] = [
+    { href: '/clinic/settings/permissions', title: 'Clinic Permissions', description: 'Control access by clinic role.', icon: LockKeyhole, visible: adminAccess || isDoctorAdmin, group: 'access' },
     {
       href: '/clinic/settings/clinic-profile',
       title: 'Clinic Profile',

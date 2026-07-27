@@ -93,6 +93,7 @@ import DocumentSettings from "./pages/clinic/settings/DocumentSettings";
 import DocumentTemplates from "./pages/clinic/settings/DocumentTemplates";
 import QueueSettings from "./pages/clinic/settings/QueueSettings";
 import ProcurementSettings from "./pages/clinic/settings/ProcurementSettings";
+import ClinicPermissionsSettings from "./pages/clinic/settings/ClinicPermissionsSettings";
 import Appointments from "./pages/clinic/Appointments";
 import QueueTV from "./pages/tv/QueueTV";
 
@@ -432,7 +433,8 @@ const App = () => (
                       <UserManagementSettings />
                     </ClinicProtectedRoute>
                   }
-                />
+                  />
+                  <Route path="settings/permissions" element={<ClinicPermissionsSettings />} />
                 <Route
                   path="settings/locum-registration"
                   element={
