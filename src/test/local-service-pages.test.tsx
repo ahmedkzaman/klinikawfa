@@ -199,7 +199,7 @@ describe('local SEO service pages', () => {
       );
       expect(document.head.querySelector('link[rel="canonical"]')).toHaveAttribute(
         'href',
-        'https://klinikawfa.com/services/sunat-kuantan',
+        'https://klinikawfa.com/services/sunat-kuantan/',
       );
 
       const schemas = Array.from(
@@ -211,20 +211,20 @@ describe('local SEO service pages', () => {
             '@type': 'WebPage',
             name: LOCAL_SERVICE_PAGES['sunat-kuantan'].heading,
             description: LOCAL_SERVICE_PAGES['sunat-kuantan'].metaDescription,
-            url: 'https://klinikawfa.com/services/sunat-kuantan',
+            url: 'https://klinikawfa.com/services/sunat-kuantan/',
           }),
           expect.objectContaining({
             '@type': 'Service',
             name: LOCAL_SERVICE_PAGES['sunat-kuantan'].heading,
             description: LOCAL_SERVICE_PAGES['sunat-kuantan'].metaDescription,
-            url: 'https://klinikawfa.com/services/sunat-kuantan',
+            url: 'https://klinikawfa.com/services/sunat-kuantan/',
           }),
           expect.objectContaining({
             '@type': 'BreadcrumbList',
             itemListElement: expect.arrayContaining([
               expect.objectContaining({
                 name: LOCAL_SERVICE_PAGES['sunat-kuantan'].heading,
-                item: 'https://klinikawfa.com/services/sunat-kuantan',
+                item: 'https://klinikawfa.com/services/sunat-kuantan/',
               }),
             ]),
           }),

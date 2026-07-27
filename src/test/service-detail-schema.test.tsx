@@ -41,14 +41,14 @@ afterEach(() => {
 
 describe('ServiceDetail structured data', () => {
   it.each([
-    ['/services/rawatan-umum', 'https://klinikawfa.com/services/rawatan-umum'],
-    ['/services/rawatan-am', 'https://klinikawfa.com/services/rawatan-umum'],
-    ['/services/ujian-pantas', 'https://klinikawfa.com/services/rawatan-umum'],
-    ['/services/prosedur-kecil', 'https://klinikawfa.com/services/prosedur-kecil'],
-    ['/services/prosedur-minor', 'https://klinikawfa.com/services/prosedur-kecil'],
-    ['/services/penjagaan-telinga', 'https://klinikawfa.com/services/prosedur-kecil'],
-    ['/services/pemeriksaan-kesihatan', 'https://klinikawfa.com/services/pemeriksaan-kesihatan'],
-    ['/services/pemeriksaan-darah', 'https://klinikawfa.com/services/pemeriksaan-kesihatan'],
+    ['/services/rawatan-umum', 'https://klinikawfa.com/services/rawatan-umum/'],
+    ['/services/rawatan-am', 'https://klinikawfa.com/services/rawatan-umum/'],
+    ['/services/ujian-pantas', 'https://klinikawfa.com/services/rawatan-umum/'],
+    ['/services/prosedur-kecil', 'https://klinikawfa.com/services/prosedur-kecil/'],
+    ['/services/prosedur-minor', 'https://klinikawfa.com/services/prosedur-kecil/'],
+    ['/services/penjagaan-telinga', 'https://klinikawfa.com/services/prosedur-kecil/'],
+    ['/services/pemeriksaan-kesihatan', 'https://klinikawfa.com/services/pemeriksaan-kesihatan/'],
+    ['/services/pemeriksaan-darah', 'https://klinikawfa.com/services/pemeriksaan-kesihatan/'],
   ])('publishes one category canonical and matching schemas for %s', async (route, expectedUrl) => {
     render(
       <HelmetProvider>
@@ -85,7 +85,7 @@ describe('ServiceDetail structured data', () => {
           '@type': 'BreadcrumbList',
           itemListElement: expect.arrayContaining([
             expect.objectContaining({ name: 'Utama', item: 'https://klinikawfa.com/' }),
-            expect.objectContaining({ name: 'Perkhidmatan', item: 'https://klinikawfa.com/services' }),
+            expect.objectContaining({ name: 'Perkhidmatan', item: 'https://klinikawfa.com/services/' }),
             expect.objectContaining({ name: 'Rawatan Am', item: expectedUrl }),
           ]),
         }),

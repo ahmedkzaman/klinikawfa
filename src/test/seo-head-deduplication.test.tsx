@@ -105,7 +105,7 @@ describe('SEO fallback head hydration', () => {
       );
       expect(document.head.querySelector('link[rel="canonical"]')).toHaveAttribute(
         'href',
-        'https://klinikawfa.com/services/sunat-kuantan',
+        'https://klinikawfa.com/services/sunat-kuantan/',
       );
       expectOneManagedTagOfEachKind();
     });

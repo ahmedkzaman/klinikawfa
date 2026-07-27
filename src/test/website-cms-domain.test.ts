@@ -44,7 +44,7 @@ describe("website CMS domain", () => {
         ...result,
         canonicalUrl: "https://klinikawfa.com/services/?from=home#details",
       }).canonicalUrl,
-    ).toBe("https://klinikawfa.com/services");
+    ).toBe("https://klinikawfa.com/services/");
   });
 
   it("normalizes safe list defaults and restricts page sizes", () => {

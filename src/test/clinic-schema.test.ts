@@ -58,8 +58,8 @@ describe('Klinik Awfa structured data', () => {
     expect(buildWebPageSchema({ path: '/services', name: 'Perkhidmatan Klinik Awfa' })).toMatchObject({
       '@context': 'https://schema.org',
       '@type': 'WebPage',
-      '@id': 'https://klinikawfa.com/services',
-      url: 'https://klinikawfa.com/services',
+      '@id': 'https://klinikawfa.com/services/',
+      url: 'https://klinikawfa.com/services/',
       name: 'Perkhidmatan Klinik Awfa',
       about: { '@id': CLINIC_ENTITY_ID },
     });
@@ -80,8 +80,8 @@ describe('Klinik Awfa structured data', () => {
     expect(schema).toMatchObject({
       '@context': 'https://schema.org',
       '@type': 'Service',
-      '@id': 'https://klinikawfa.com/services/rawatan-telinga#service',
-      url: 'https://klinikawfa.com/services/rawatan-telinga',
+      '@id': 'https://klinikawfa.com/services/rawatan-telinga/#service',
+      url: 'https://klinikawfa.com/services/rawatan-telinga/',
       provider: { '@id': CLINIC_ENTITY_ID },
     });
     expect(withoutDescription).not.toHaveProperty('description');
@@ -96,7 +96,7 @@ describe('Klinik Awfa structured data', () => {
       '@type': 'BreadcrumbList',
       itemListElement: [
         { '@type': 'ListItem', position: 1, name: 'Utama', item: 'https://klinikawfa.com/' },
-        { '@type': 'ListItem', position: 2, name: 'Perkhidmatan', item: 'https://klinikawfa.com/services' },
+        { '@type': 'ListItem', position: 2, name: 'Perkhidmatan', item: 'https://klinikawfa.com/services/' },
       ],
     });
   });
