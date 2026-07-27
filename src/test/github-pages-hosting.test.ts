@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
@@ -123,9 +123,27 @@ describe("GitHub Pages hosting", () => {
 
   it("stamps route-specific SEO tags into copied GitHub Pages HTML", () => {
     const distFixture = mkdtempSync(resolve(tmpdir(), "klinikawfa-pages-"));
+    const indexHtml = [
+      "<!doctype html>",
+      '<html lang="ms">',
+      "<head>",
+      "<title>Klinik Awfa KotaSAS | Klinik Keluarga di Kuantan</title>",
+      '<meta name="description" content="Homepage description" />',
+      '<meta name="robots" content="index, follow" />',
+      '<link rel="canonical" href="https://klinikawfa.com/" />',
+      '<meta property="og:title" content="Klinik Awfa KotaSAS | Klinik Keluarga di Kuantan" />',
+      '<meta property="og:description" content="Homepage description" />',
+      '<meta property="og:url" content="https://klinikawfa.com/" />',
+      '<meta property="og:image" content="https://klinikawfa.com/klinik-awfa-exterior.webp" />',
+      '<meta name="twitter:title" content="Klinik Awfa KotaSAS | Klinik Keluarga di Kuantan" />',
+      '<meta name="twitter:description" content="Homepage description" />',
+      "</head>",
+      "<body></body>",
+      "</html>",
+    ].join("\n");
 
     try {
-      cpSync(resolve(repoRoot, "dist"), distFixture, { recursive: true });
+      writeFileSync(resolve(distFixture, "index.html"), indexHtml);
       for (const route of ["services", ...localSeoRoutes]) {
         const target = resolve(distFixture, route);
         mkdirSync(target, { recursive: true });
