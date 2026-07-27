@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -7,6 +9,7 @@ const testDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(testDir, "../..");
 const workflowPath = resolve(repoRoot, ".github/workflows/deploy-pages.yml");
 const cnamePath = resolve(repoRoot, "public/CNAME");
+const seoPrepareScriptPath = resolve(repoRoot, "scripts/prepare-public-seo-pages.mjs");
 
 const readWorkflow = () => readFileSync(workflowPath, "utf8");
 
@@ -115,6 +118,51 @@ describe("GitHub Pages hosting", () => {
     for (const route of localSeoRoutes) {
       expect(workflow).toContain(`\n            ${route}\n`);
       expect(workflow).toContain(`test -f dist/${route}/index.html`);
+    }
+  });
+
+  it("stamps route-specific SEO tags into copied GitHub Pages HTML", () => {
+    const distFixture = mkdtempSync(resolve(tmpdir(), "klinikawfa-pages-"));
+
+    try {
+      cpSync(resolve(repoRoot, "dist"), distFixture, { recursive: true });
+      for (const route of ["services", ...localSeoRoutes]) {
+        const target = resolve(distFixture, route);
+        mkdirSync(target, { recursive: true });
+        cpSync(resolve(distFixture, "index.html"), resolve(target, "index.html"));
+        expect(readFileSync(resolve(target, "index.html"), "utf8")).toContain(
+          "Klinik Awfa KotaSAS | Klinik Keluarga di Kuantan",
+        );
+      }
+
+      execFileSync(process.execPath, [seoPrepareScriptPath, distFixture], {
+        cwd: repoRoot,
+        stdio: "pipe",
+      });
+
+      const rawatanTelinga = readFileSync(
+        resolve(distFixture, "services/rawatan-telinga-kuantan/index.html"),
+        "utf8",
+      );
+      expect(rawatanTelinga).toContain(
+        '<title data-rh="true">Rawatan Telinga Kuantan | Klinik Awfa KotaSAS</title>',
+      );
+      expect(rawatanTelinga).toContain(
+        '<link data-rh="true" rel="canonical" href="https://klinikawfa.com/services/rawatan-telinga-kuantan/" />',
+      );
+      expect(rawatanTelinga).toContain(
+        '<meta data-rh="true" name="robots" content="index, follow" />',
+      );
+
+      const sunat = readFileSync(resolve(distFixture, "services/sunat-kuantan/index.html"), "utf8");
+      expect(sunat).toContain(
+        '<title data-rh="true">Sunat Bayi, Kanak-kanak &amp; Dewasa Kuantan | Klinik Awfa</title>',
+      );
+      expect(sunat).toContain(
+        '<link data-rh="true" rel="canonical" href="https://klinikawfa.com/services/sunat-kuantan/" />',
+      );
+    } finally {
+      rmSync(distFixture, { recursive: true, force: true });
     }
   });
 });

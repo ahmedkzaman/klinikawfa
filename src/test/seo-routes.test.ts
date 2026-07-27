@@ -30,7 +30,7 @@ describe('SEO route policy', () => {
 
   it('normalizes query strings and trailing slashes in canonicals', () => {
     expect(canonicalUrl('/services/telinga-kuantan/?from=home')).toBe(
-      'https://klinikawfa.com/services/telinga-kuantan',
+      'https://klinikawfa.com/services/telinga-kuantan/',
     );
   });
 

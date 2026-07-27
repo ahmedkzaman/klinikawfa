@@ -95,7 +95,9 @@ export function getSeoRoute(pathname: string): SeoRouteDefinition {
 }
 
 export function canonicalUrl(pathname: string): string {
-  return `${SITE_ORIGIN}${normalizedPath(pathname)}`;
+  const path = normalizedPath(pathname);
+  const canonicalPath = path !== '/' && isPublicRoute(path) ? `${path}/` : path;
+  return `${SITE_ORIGIN}${canonicalPath}`;
 }
 
 export function normalizeCanonicalUrl(value: string): string | null {

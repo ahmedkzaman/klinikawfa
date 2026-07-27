@@ -175,6 +175,7 @@ jobs:
             mkdir -p "dist/${route}"
             cp dist/index.html "dist/${route}/index.html"
           done
+          node scripts/prepare-public-seo-pages.mjs dist
           test -f dist/index.html
           test -f dist/404.html
           test -f dist/services/index.html
