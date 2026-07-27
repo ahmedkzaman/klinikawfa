@@ -10,7 +10,9 @@ import { buildMalayAnnouncement } from '@/lib/tv/malayAnnouncement';
 import {
   applyTtsGain,
   applyTtsPlaybackSettings,
+  buildGoogleCloudMalayTtsRequest,
   buildGoogleMalayTtsUrl,
+  decodeBase64Audio,
   selectMalaySpeechVoice,
   waitForSpeechVoices,
 } from '@/lib/tv/speechVoice';
@@ -188,20 +190,14 @@ export default function QueueTV() {
       if (typeof window === 'undefined') return;
 
       if (isMalay) {
-        try {
-          const { data, error } = await supabase.functions.invoke('google-malay-tts', {
-            body: { text },
-          });
-          if (error || !(data instanceof Blob)) {
-            throw error ?? new Error('Invalid Malay TTS audio');
-          }
+        const playAmplifiedBuffer = async (audioBytes: ArrayBuffer) => {
           if (!audioCtxRef.current) {
             audioCtxRef.current = new (window.AudioContext ||
               (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
           }
           const ctx = audioCtxRef.current;
           if (ctx.state === 'suspended') await ctx.resume();
-          const buffer = await ctx.decodeAudioData(await data.arrayBuffer());
+          const buffer = await ctx.decodeAudioData(audioBytes);
           const source = ctx.createBufferSource();
           const gain = ctx.createGain();
           source.buffer = buffer;
@@ -216,6 +212,30 @@ export default function QueueTV() {
               reject(startError);
             }
           });
+        };
+
+        try {
+          const { data, error } = await supabase.functions.invoke('generate-tts', {
+            body: buildGoogleCloudMalayTtsRequest(text),
+          });
+          const audioContent = (data as { audioContent?: unknown } | null)?.audioContent;
+          if (error || typeof audioContent !== 'string' || !audioContent) {
+            throw error ?? new Error('Invalid Google Cloud TTS audio');
+          }
+          await playAmplifiedBuffer(decodeBase64Audio(audioContent));
+          return;
+        } catch (cloudError) {
+          console.warn('Google Cloud Malay TTS unavailable; using relay fallback', cloudError);
+        }
+
+        try {
+          const { data, error } = await supabase.functions.invoke('google-malay-tts', {
+            body: { text },
+          });
+          if (error || !(data instanceof Blob)) {
+            throw error ?? new Error('Invalid Malay TTS audio');
+          }
+          await playAmplifiedBuffer(await data.arrayBuffer());
           return;
         } catch (googleError) {
           console.warn('Amplified Malay TTS unavailable; using direct fallback', googleError);

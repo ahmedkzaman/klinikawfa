@@ -3,6 +3,8 @@ import {
   applyTtsGain,
   applyTtsPlaybackSettings,
   buildGoogleMalayTtsUrl,
+  buildGoogleCloudMalayTtsRequest,
+  decodeBase64Audio,
   selectMalaySpeechVoice,
 } from '@/lib/tv/speechVoice';
 
@@ -38,6 +40,20 @@ describe('Malay TV caller voice selection', () => {
     applyTtsGain(gainNode);
 
     expect(gainNode.gain.value).toBe(2);
+  });
+
+  it('requests the official Malaysian Wavenet voice', () => {
+    expect(buildGoogleCloudMalayTtsRequest('panggilan untuk siti aminah')).toEqual({
+      text: 'panggilan untuk siti aminah',
+      languageCode: 'ms-MY',
+      voiceName: 'ms-MY-Wavenet-C',
+    });
+  });
+
+  it('decodes Google Cloud base64 audio into bytes', () => {
+    const bytes = new Uint8Array(decodeBase64Audio('AQID'));
+
+    expect([...bytes]).toEqual([1, 2, 3]);
   });
 
   it('prioritizes an exact Malaysian Malay voice over an English default', () => {

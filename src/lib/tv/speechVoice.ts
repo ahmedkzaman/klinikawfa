@@ -11,6 +11,23 @@ export function buildGoogleMalayTtsUrl(text: string): string {
   return url.toString();
 }
 
+export function buildGoogleCloudMalayTtsRequest(text: string) {
+  return {
+    text,
+    languageCode: 'ms-MY',
+    voiceName: 'ms-MY-Wavenet-C',
+  };
+}
+
+export function decodeBase64Audio(audioContent: string): ArrayBuffer {
+  const binary = atob(audioContent);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes.buffer;
+}
+
 export function applyTtsPlaybackSettings(
   audio: Pick<HTMLAudioElement, 'volume' | 'playbackRate'>,
 ): void {
