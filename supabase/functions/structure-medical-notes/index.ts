@@ -91,7 +91,10 @@ Deno.serve(withAuth<Body, Record<string, unknown>>(
 
     if (!response.ok) {
       console.error(`[${FN}] ai_provider_error`, response.status);
-      if (response.status === 429) throw new HttpError(429, "Rate limited");
+      if (response.status === 401 || response.status === 403) {
+        throw new HttpError(502, "AI provider authentication failed. Check the OpenAI API key.");
+      }
+      if (response.status === 429) throw new HttpError(429, "OpenAI quota or rate limit reached");
       if (response.status === 402) throw new HttpError(502, "Upstream failed");
       throw new HttpError(502, "Upstream failed");
     }
