@@ -283,7 +283,7 @@ function PastVisitCard({
 export default function ConsultationDetail() {
   const { queueEntryId } = useParams<{ queueEntryId: string }>();
   const navigate = useNavigate();
-  const { isLocum } = useAuth();
+  const { isLocum, isDoctorAdmin } = useAuth();
   const { data: doctor } = useCurrentDoctor();
   const { settings: clinicSettings } = useClinicSettings();
   const { data: entries = [] } = useConsultationQueueEntries();
@@ -538,6 +538,17 @@ export default function ConsultationDetail() {
       toast.error('Doctor profile missing or consultation not created — contact admin');
       return;
     }
+    if (!isDoctorAdmin) {
+      const missing = [
+        !caseNote.trim() && 'consultation notes',
+        !diagnosisId && !diagnosisText.trim() && 'diagnosis',
+        !dispenseNote.trim() && 'dispense note',
+      ].filter(Boolean) as string[];
+      if (missing.length > 0) {
+        toast.error(`Please fill in: ${missing.join(', ')}`);
+        return;
+      }
+    }
     await updateConsultation.mutateAsync({
       id: consultationId,
       case_note: caseNote,
@@ -591,6 +602,17 @@ export default function ConsultationDetail() {
     if (!consultationId) {
       toast.error('Consultation not found');
       return;
+    }
+    if (!isDoctorAdmin) {
+      const missing = [
+        !caseNote.trim() && 'consultation notes',
+        !diagnosisId && !diagnosisText.trim() && 'diagnosis',
+        !dispenseNote.trim() && 'dispense note',
+      ].filter(Boolean) as string[];
+      if (missing.length > 0) {
+        toast.error(`Please fill in: ${missing.join(', ')}`);
+        return;
+      }
     }
     await updateConsultation.mutateAsync({
       id: consultationId,
