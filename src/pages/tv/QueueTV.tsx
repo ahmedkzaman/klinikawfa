@@ -7,6 +7,7 @@ import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { Slider } from '@/components/ui/slider';
 import { buildMalayAnnouncement } from '@/lib/tv/malayAnnouncement';
+import { selectMalaySpeechVoice, waitForSpeechVoices } from '@/lib/tv/speechVoice';
 
 interface CallEvent {
   id: string;
@@ -181,12 +182,14 @@ export default function QueueTV() {
       // Browser speech synthesis is free and keeps patient names on the TV device.
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
       window.speechSynthesis.cancel();
+      const voices = await waitForSpeechVoices(window.speechSynthesis);
+      const preferredVoice = isMalay
+        ? selectMalaySpeechVoice(voices)
+        : voices.find((voice) => voice.lang.toLowerCase().startsWith('en'));
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = lang;
+      utterance.lang = preferredVoice?.lang ?? lang;
       utterance.rate = isMalay ? 0.9 : 0.95;
       utterance.pitch = 1.05;
-      const voices = window.speechSynthesis.getVoices();
-      const preferredVoice = voices.find((voice) => voice.lang.toLowerCase().startsWith(lang.toLowerCase().slice(0, 2)));
       if (preferredVoice) utterance.voice = preferredVoice;
 
       await new Promise<void>((resolve) => {
