@@ -11,6 +11,13 @@ export function buildGoogleMalayTtsUrl(text: string): string {
   return url.toString();
 }
 
+export function applyTtsPlaybackSettings(
+  audio: Pick<HTMLAudioElement, 'volume' | 'playbackRate'>,
+): void {
+  audio.volume = 1;
+  audio.playbackRate = 1.2;
+}
+
 export function selectMalaySpeechVoice(
   voices: SpeechSynthesisVoice[],
 ): SpeechSynthesisVoice | null {

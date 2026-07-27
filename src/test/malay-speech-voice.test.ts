@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyTtsPlaybackSettings,
   buildGoogleMalayTtsUrl,
   selectMalaySpeechVoice,
 } from '@/lib/tv/speechVoice';
@@ -19,6 +20,15 @@ describe('Malay TV caller voice selection', () => {
     expect(url.hostname).toBe('translate.google.com');
     expect(url.searchParams.get('tl')).toBe('ms');
     expect(url.searchParams.get('q')).toBe('Panggilan untuk Nur Aisyah.');
+  });
+
+  it('plays Google announcements at full volume and a faster rate', () => {
+    const audio = { volume: 0.4, playbackRate: 1 };
+
+    applyTtsPlaybackSettings(audio);
+
+    expect(audio.volume).toBe(1);
+    expect(audio.playbackRate).toBe(1.2);
   });
 
   it('prioritizes an exact Malaysian Malay voice over an English default', () => {

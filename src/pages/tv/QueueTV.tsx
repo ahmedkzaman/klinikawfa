@@ -8,6 +8,7 @@ import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { Slider } from '@/components/ui/slider';
 import { buildMalayAnnouncement } from '@/lib/tv/malayAnnouncement';
 import {
+  applyTtsPlaybackSettings,
   buildGoogleMalayTtsUrl,
   selectMalaySpeechVoice,
   waitForSpeechVoices,
@@ -189,6 +190,7 @@ export default function QueueTV() {
         try {
           const googleAudio = new Audio(buildGoogleMalayTtsUrl(text));
           googleAudio.preload = 'auto';
+          applyTtsPlaybackSettings(googleAudio);
           await new Promise<void>((resolve, reject) => {
             googleAudio.onended = () => resolve();
             googleAudio.onerror = () => reject(new Error('Google Malay TTS failed'));
@@ -208,8 +210,9 @@ export default function QueueTV() {
         : voices.find((voice) => voice.lang.toLowerCase().startsWith('en'));
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = preferredVoice?.lang ?? lang;
-      utterance.rate = isMalay ? 0.9 : 0.95;
+      utterance.rate = isMalay ? 1.1 : 1.05;
       utterance.pitch = 1.05;
+      utterance.volume = 1;
       if (preferredVoice) utterance.voice = preferredVoice;
 
       await new Promise<void>((resolve) => {
