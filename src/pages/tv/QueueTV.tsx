@@ -8,6 +8,7 @@ import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { Slider } from '@/components/ui/slider';
 import { buildMalayAnnouncement } from '@/lib/tv/malayAnnouncement';
 import {
+  applyTtsGain,
   applyTtsPlaybackSettings,
   buildGoogleMalayTtsUrl,
   selectMalaySpeechVoice,
@@ -188,17 +189,49 @@ export default function QueueTV() {
 
       if (isMalay) {
         try {
-          const googleAudio = new Audio(buildGoogleMalayTtsUrl(text));
-          googleAudio.preload = 'auto';
-          applyTtsPlaybackSettings(googleAudio);
+          const { data, error } = await supabase.functions.invoke('google-malay-tts', {
+            body: { text },
+          });
+          if (error || !(data instanceof Blob)) {
+            throw error ?? new Error('Invalid Malay TTS audio');
+          }
+          if (!audioCtxRef.current) {
+            audioCtxRef.current = new (window.AudioContext ||
+              (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+          }
+          const ctx = audioCtxRef.current;
+          if (ctx.state === 'suspended') await ctx.resume();
+          const buffer = await ctx.decodeAudioData(await data.arrayBuffer());
+          const source = ctx.createBufferSource();
+          const gain = ctx.createGain();
+          source.buffer = buffer;
+          source.playbackRate.value = 1.2;
+          applyTtsGain(gain);
+          source.connect(gain).connect(ctx.destination);
           await new Promise<void>((resolve, reject) => {
-            googleAudio.onended = () => resolve();
-            googleAudio.onerror = () => reject(new Error('Google Malay TTS failed'));
-            googleAudio.play().catch(reject);
+            source.onended = () => resolve();
+            try {
+              source.start();
+            } catch (startError) {
+              reject(startError);
+            }
           });
           return;
         } catch (googleError) {
-          console.warn('Google Malay TTS unavailable; using browser fallback', googleError);
+          console.warn('Amplified Malay TTS unavailable; using direct fallback', googleError);
+          try {
+            const googleAudio = new Audio(buildGoogleMalayTtsUrl(text));
+            googleAudio.preload = 'auto';
+            applyTtsPlaybackSettings(googleAudio);
+            await new Promise<void>((resolve, reject) => {
+              googleAudio.onended = () => resolve();
+              googleAudio.onerror = () => reject(new Error('Google Malay TTS failed'));
+              googleAudio.play().catch(reject);
+            });
+            return;
+          } catch (directError) {
+            console.warn('Google Malay TTS unavailable; using browser fallback', directError);
+          }
         }
       }
 

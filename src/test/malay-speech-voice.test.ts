@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyTtsGain,
   applyTtsPlaybackSettings,
   buildGoogleMalayTtsUrl,
   selectMalaySpeechVoice,
@@ -29,6 +30,14 @@ describe('Malay TV caller voice selection', () => {
 
     expect(audio.volume).toBe(1);
     expect(audio.playbackRate).toBe(1.2);
+  });
+
+  it('amplifies decoded announcements by two times', () => {
+    const gainNode = { gain: { value: 1 } };
+
+    applyTtsGain(gainNode);
+
+    expect(gainNode.gain.value).toBe(2);
   });
 
   it('prioritizes an exact Malaysian Malay voice over an English default', () => {

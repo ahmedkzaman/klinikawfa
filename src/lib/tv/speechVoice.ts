@@ -18,6 +18,12 @@ export function applyTtsPlaybackSettings(
   audio.playbackRate = 1.2;
 }
 
+export function applyTtsGain(
+  gainNode: Pick<GainNode, 'gain'>,
+): void {
+  gainNode.gain.value = 2;
+}
+
 export function selectMalaySpeechVoice(
   voices: SpeechSynthesisVoice[],
 ): SpeechSynthesisVoice | null {
