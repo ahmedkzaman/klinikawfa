@@ -928,6 +928,7 @@ export default function ConsultationDetail() {
               <CardContent className="p-5 space-y-4">
                 <div className="flex items-center gap-3">
                   <h2 className={`${bentoHeader} mb-0 mr-auto`}>CONSULTATION NOTES</h2>
+                  {!isLocum && (
                   <Button
                     type="button"
                     size="sm"
@@ -939,6 +940,7 @@ export default function ConsultationDetail() {
                     <Sparkles className="mr-2 h-4 w-4" />
                     {isStructuringNotes ? 'Structuring…' : 'Structure notes'}
                   </Button>
+                  )}
                 </div>
                 <Textarea
                   value={caseNote}

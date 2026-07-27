@@ -31,7 +31,10 @@ Deno.serve(withAuth<Body, Record<string, unknown>>(
     allowedRoles: ["clinical", "admin", "special_admin"],
     maxBytes: 20 * 1024,
   },
-  async (body, { userId }) => {
+  async (body, { userId, role }) => {
+    if (role === "locum") {
+      throw new HttpError(403, "Medical-note structuring is unavailable for locum doctors");
+    }
     const transcript = typeof body?.transcript === "string" ? body.transcript.trim() : "";
     if (!transcript) {
       throw new HttpError(400, "Invalid request");
