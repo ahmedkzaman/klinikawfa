@@ -17,6 +17,7 @@ import {
   Trash2,
   FileText,
   FilePlus2,
+  Sparkles,
 } from 'lucide-react';
 import {
   Dialog,
@@ -25,6 +26,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -353,6 +355,7 @@ export default function ConsultationDetail() {
   });
 
   const [caseNote, setCaseNote] = useState('');
+  const [isStructuringNotes, setIsStructuringNotes] = useState(false);
   const [dispenseNote, setDispenseNote] = useState('');
   const [diagnosisText, setDiagnosisText] = useState('');
   const [diagnosisId, setDiagnosisId] = useState<string | null>(null);
@@ -543,6 +546,45 @@ export default function ConsultationDetail() {
       diagnosis_text: diagnosisText,
     });
     toast.success('Consultation notes saved');
+  };
+
+  const handleStructureWrittenNotes = async () => {
+    const transcript = caseNote.trim();
+    if (!transcript) {
+      toast.error('Write consultation notes first');
+      return;
+    }
+
+    setIsStructuringNotes(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('structure-medical-notes', {
+        body: { transcript },
+      });
+      if (error) throw new Error(error.message || 'Unable to structure notes');
+
+      const labels: Array<[string, string | undefined]> = [
+        ['Chief Complaint', data?.chief_complaint],
+        ['History of Present Illness', data?.history_present_illness],
+        ['Past Medical History', data?.past_medical_history],
+        ['Family History', data?.family_history],
+        ['Allergies', data?.allergies],
+        ['Social History', data?.social_history],
+        ['Examination Findings', data?.examination_findings],
+        ['Assessment', data?.assessment],
+        ['Plan', data?.plan],
+      ];
+      const structured = labels
+        .filter(([, value]) => typeof value === 'string' && value.trim())
+        .map(([label, value]) => `${label}:\n${value?.trim()}`)
+        .join('\n\n');
+      if (!structured) throw new Error('No structured notes were returned');
+      setCaseNote(structured);
+      toast.success('Notes structured. Review before saving.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to structure notes');
+    } finally {
+      setIsStructuringNotes(false);
+    }
   };
 
   const handleUpdateClinicalNotes = async () => {
@@ -884,7 +926,20 @@ export default function ConsultationDetail() {
             {/* Consultation Notes — document canvas */}
             <Card className={bento}>
               <CardContent className="p-5 space-y-4">
-                <h2 className={bentoHeader}>CONSULTATION NOTES</h2>
+                <div className="flex items-center gap-3">
+                  <h2 className={`${bentoHeader} mb-0 mr-auto`}>CONSULTATION NOTES</h2>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleStructureWrittenNotes}
+                    disabled={!canEdit || isStructuringNotes || !caseNote.trim()}
+                    title="Organize the written notes into clinical sections"
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    {isStructuringNotes ? 'Structuring…' : 'Structure notes'}
+                  </Button>
+                </div>
                 <Textarea
                   value={caseNote}
                   onChange={(e) => setCaseNote(e.target.value)}
