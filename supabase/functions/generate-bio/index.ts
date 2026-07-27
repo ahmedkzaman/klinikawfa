@@ -20,8 +20,8 @@ Deno.serve(withAuth<GenerateBioRequest, { bio_ms: string; bio_en: string }>(
     maxBytes: 8 * 1024,
   },
   async (body, { userId }) => {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) {
       console.error(`[${FN}] missing_api_key`);
       throw new HttpError(500, "Internal error");
     }
@@ -82,14 +82,14 @@ ${additional_notes ? `Additional Notes to Include: ${additional_notes}` : ""}
 
 Remember: Create warm, professional, flowery prose. Do NOT use "specialist" or "pakar" terms.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: Deno.env.get("OPENAI_BIO_MODEL") ?? "gpt-4o-mini",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -98,9 +98,9 @@ Remember: Create warm, professional, flowery prose. Do NOT use "specialist" or "
     });
 
     if (!response.ok) {
-      console.error(`[${FN}] ai_gateway_error`, response.status);
+      console.error(`[${FN}] ai_provider_error`, response.status);
       if (response.status === 429) throw new HttpError(429, "Rate limited");
-      if (response.status === 402) throw new HttpError(402, "AI credits exhausted");
+      if (response.status === 402) throw new HttpError(502, "Upstream failed");
       throw new HttpError(502, "Upstream failed");
     }
 

@@ -99,9 +99,9 @@ serve(async (req) => {
     // role through the service client.
     await requireRole(req, ["ops", "admin", "special_admin"]);
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY is not configured");
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) {
+      console.error("OPENAI_API_KEY is not configured");
       throw new Error("AI service is not configured");
     }
 
@@ -137,15 +137,15 @@ Remember:
 
 Write both Malay and English versions with genuine emotional connection.`;
 
-    console.log("Calling Lovable AI Gateway...");
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    console.log("Calling OpenAI...");
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: Deno.env.get("OPENAI_BLOG_MODEL") ?? "gpt-4o-mini",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -157,7 +157,7 @@ Write both Malay and English versions with genuine emotional connection.`;
 
     if (!response.ok) {
       // Never log the upstream body: it can echo prompts or provider details.
-      console.error("generate_blog_gateway_failed", { status: response.status });
+      console.error("generate_blog_provider_failed", { status: response.status });
       
       if (response.status === 429) {
         return new Response(
@@ -165,13 +165,6 @@ Write both Malay and English versions with genuine emotional connection.`;
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please contact support." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
       throw new Error(`AI service error: ${response.status}`);
     }
 

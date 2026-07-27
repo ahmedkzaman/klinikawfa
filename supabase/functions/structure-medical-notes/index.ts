@@ -37,23 +37,25 @@ Deno.serve(withAuth<Body, Record<string, unknown>>(
       throw new HttpError(400, "Invalid request");
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) {
       console.error(`[${FN}] missing_api_key`);
       throw new HttpError(500, "Internal error");
     }
 
+    const model = Deno.env.get("OPENAI_MEDICAL_NOTES_MODEL") ?? "gpt-4o-mini";
+
     // Never log transcript content (PHI). Only length + caller id.
     console.log(`[${FN}] invoked by ${userId} len=${transcript.length}`);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: `Please analyze this medical consultation transcript and extract structured clinical notes:\n\n${transcript}` },
@@ -88,9 +90,9 @@ Deno.serve(withAuth<Body, Record<string, unknown>>(
     });
 
     if (!response.ok) {
-      console.error(`[${FN}] ai_gateway_error`, response.status);
+      console.error(`[${FN}] ai_provider_error`, response.status);
       if (response.status === 429) throw new HttpError(429, "Rate limited");
-      if (response.status === 402) throw new HttpError(402, "AI credits exhausted");
+      if (response.status === 402) throw new HttpError(502, "Upstream failed");
       throw new HttpError(502, "Upstream failed");
     }
 
