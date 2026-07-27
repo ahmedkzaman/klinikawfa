@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Volume2, Tv as TvIcon } from 'lucide-react';
+import { Volume2, VolumeX, Tv as TvIcon } from 'lucide-react';
 import ReactPlayer from 'react-player';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
@@ -16,6 +16,10 @@ import {
   selectMalaySpeechVoice,
   waitForSpeechVoices,
 } from '@/lib/tv/speechVoice';
+import {
+  createInitialTvVideoAudioState,
+  toggleTvVideoMuted,
+} from '@/lib/tv/videoAudio';
 
 interface CallEvent {
   id: string;
@@ -49,7 +53,9 @@ export default function QueueTV() {
   const [started, setStarted] = useState(isPreview);
   const { settings } = useClinicSettings();
   const [recentCalls, setRecentCalls] = useState<CallEvent[]>([]);
-  const [videoVolume, setVideoVolume] = useState(0.5);
+  const [videoAudio, setVideoAudio] = useState(
+    createInitialTvVideoAudioState,
+  );
   const queueRef = useRef<CallEvent[]>([]);
   const playingRef = useRef(false);
   
@@ -350,20 +356,36 @@ export default function QueueTV() {
                 src={`https://www.youtube.com/watch?v=${ytId}`}
                 playing
                 loop
-                muted={isPreview}
-                volume={videoVolume}
+                muted={isPreview || videoAudio.muted}
+                volume={videoAudio.volume}
                 width="100%"
                 height="100%"
                 controls={false}
               />
               {!isPreview && (
                 <div className="absolute bottom-4 left-4 w-56 px-4 py-2 rounded-full bg-black/40 backdrop-blur-md border border-white/10 flex items-center gap-3 z-10">
-                  <Volume2 className="h-4 w-4 text-white/80 shrink-0" />
+                  <button
+                    type="button"
+                    aria-label={videoAudio.muted ? 'Unmute video' : 'Mute video'}
+                    onClick={() => setVideoAudio(toggleTvVideoMuted)}
+                    className="shrink-0 text-white/80 hover:text-white"
+                  >
+                    {videoAudio.muted ? (
+                      <VolumeX className="h-4 w-4" />
+                    ) : (
+                      <Volume2 className="h-4 w-4" />
+                    )}
+                  </button>
                   <Slider
-                    value={[videoVolume]}
+                    value={[videoAudio.volume]}
                     max={1}
                     step={0.05}
-                    onValueChange={(v) => setVideoVolume(v[0])}
+                    onValueChange={(v) =>
+                      setVideoAudio((current) => ({
+                        ...current,
+                        volume: v[0],
+                      }))
+                    }
                   />
                 </div>
               )}
