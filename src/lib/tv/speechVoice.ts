@@ -2,6 +2,15 @@ function normalizedLanguage(language: string): string {
   return language.trim().toLowerCase().replace('_', '-');
 }
 
+export function buildGoogleMalayTtsUrl(text: string): string {
+  const url = new URL('https://translate.google.com/translate_tts');
+  url.searchParams.set('ie', 'UTF-8');
+  url.searchParams.set('client', 'tw-ob');
+  url.searchParams.set('tl', 'ms');
+  url.searchParams.set('q', text);
+  return url.toString();
+}
+
 export function selectMalaySpeechVoice(
   voices: SpeechSynthesisVoice[],
 ): SpeechSynthesisVoice | null {

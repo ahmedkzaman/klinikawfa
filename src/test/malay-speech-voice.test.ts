@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { selectMalaySpeechVoice } from '@/lib/tv/speechVoice';
+import {
+  buildGoogleMalayTtsUrl,
+  selectMalaySpeechVoice,
+} from '@/lib/tv/speechVoice';
 
 const voice = (name: string, lang: string, localService = true) => ({
   name,
@@ -10,6 +13,14 @@ const voice = (name: string, lang: string, localService = true) => ({
 });
 
 describe('Malay TV caller voice selection', () => {
+  it('builds a Google Malay TTS request with encoded announcement text', () => {
+    const url = new URL(buildGoogleMalayTtsUrl('Panggilan untuk Nur Aisyah.'));
+
+    expect(url.hostname).toBe('translate.google.com');
+    expect(url.searchParams.get('tl')).toBe('ms');
+    expect(url.searchParams.get('q')).toBe('Panggilan untuk Nur Aisyah.');
+  });
+
   it('prioritizes an exact Malaysian Malay voice over an English default', () => {
     const selected = selectMalaySpeechVoice([
       voice('Microsoft Zira', 'en-US'),

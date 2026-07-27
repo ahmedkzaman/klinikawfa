@@ -7,7 +7,11 @@ import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { Slider } from '@/components/ui/slider';
 import { buildMalayAnnouncement } from '@/lib/tv/malayAnnouncement';
-import { selectMalaySpeechVoice, waitForSpeechVoices } from '@/lib/tv/speechVoice';
+import {
+  buildGoogleMalayTtsUrl,
+  selectMalaySpeechVoice,
+  waitForSpeechVoices,
+} from '@/lib/tv/speechVoice';
 
 interface CallEvent {
   id: string;
@@ -179,8 +183,24 @@ export default function QueueTV() {
           : `Queue number ${next.display}, please proceed to ${next.roomLabel} now.`);
 
     try {
-      // Browser speech synthesis is free and keeps patient names on the TV device.
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+      if (typeof window === 'undefined') return;
+
+      if (isMalay) {
+        try {
+          const googleAudio = new Audio(buildGoogleMalayTtsUrl(text));
+          googleAudio.preload = 'auto';
+          await new Promise<void>((resolve, reject) => {
+            googleAudio.onended = () => resolve();
+            googleAudio.onerror = () => reject(new Error('Google Malay TTS failed'));
+            googleAudio.play().catch(reject);
+          });
+          return;
+        } catch (googleError) {
+          console.warn('Google Malay TTS unavailable; using browser fallback', googleError);
+        }
+      }
+
+      if (!('speechSynthesis' in window)) return;
       window.speechSynthesis.cancel();
       const voices = await waitForSpeechVoices(window.speechSynthesis);
       const preferredVoice = isMalay
