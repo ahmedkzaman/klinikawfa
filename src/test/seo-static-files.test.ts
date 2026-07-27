@@ -16,11 +16,11 @@ const protectedPrefixes = [
 ] as const;
 
 const localServiceHubs = [
-  '/services/rawatan-telinga-kuantan',
-  '/services/minor-surgery-kutil-kuantan',
-  '/services/swab-test-demam-kuantan',
-  '/services/pengurusan-berat-badan-kuantan',
-  '/services/sunat-kuantan',
+  '/services/rawatan-telinga-kuantan/',
+  '/services/minor-surgery-kutil-kuantan/',
+  '/services/swab-test-demam-kuantan/',
+  '/services/pengurusan-berat-badan-kuantan/',
+  '/services/sunat-kuantan/',
 ] as const;
 
 describe('production SEO static files', () => {
