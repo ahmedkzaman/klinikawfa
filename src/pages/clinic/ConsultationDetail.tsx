@@ -112,6 +112,7 @@ import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { useVisitConsultationFee } from '@/hooks/clinic/useVisitConsultationFee';
 import { getConsultationAccess } from '@/lib/clinic/consultationAccess';
+import { getRecordedDiagnosisLabels } from '@/lib/clinic/diagnosisDisplay';
 
 const PRICE_TIERS = ['SELF PAY', 'PANEL'];
 
@@ -421,6 +422,19 @@ export default function ConsultationDetail() {
   );
 
   const { diagnoses: diagnosisCatalog = [] } = useDiagnoses();
+  const recordedDiagnosisLabels = useMemo(() => {
+    const structuredDiagnosis = (
+      consultation as
+        | { diagnoses?: { name?: string | null } | null }
+        | null
+        | undefined
+    )?.diagnoses?.name;
+
+    return getRecordedDiagnosisLabels({
+      structuredDiagnosis,
+      diagnosisText,
+    });
+  }, [consultation, diagnosisText]);
 
   /**
    * Append-not-overwrite copy of a past diagnosis into today's form state.
@@ -1029,15 +1043,35 @@ export default function ConsultationDetail() {
                     <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       Diagnosis
                     </Label>
-                    <MultiDiagnosisPicker
-                      diagnosisId={diagnosisId}
-                      diagnosisText={diagnosisText}
-                      disabled={!access.canEdit}
-                      onChange={({ diagnosis_id, diagnosis_text }) => {
-                        setDiagnosisId(diagnosis_id);
-                        setDiagnosisText(diagnosis_text);
-                      }}
-                    />
+                    {isCrossDoctorReadOnly ? (
+                      recordedDiagnosisLabels.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {recordedDiagnosisLabels.map((diagnosis) => (
+                            <Badge
+                              key={diagnosis.toLocaleLowerCase()}
+                              variant="secondary"
+                              className="font-normal"
+                            >
+                              {diagnosis}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-slate-500">
+                          No diagnosis recorded
+                        </p>
+                      )
+                    ) : (
+                      <MultiDiagnosisPicker
+                        diagnosisId={diagnosisId}
+                        diagnosisText={diagnosisText}
+                        disabled={!access.canEdit}
+                        onChange={({ diagnosis_id, diagnosis_text }) => {
+                          setDiagnosisId(diagnosis_id);
+                          setDiagnosisText(diagnosis_text);
+                        }}
+                      />
+                    )}
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">

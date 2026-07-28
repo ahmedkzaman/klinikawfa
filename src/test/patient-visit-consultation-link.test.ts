@@ -6,8 +6,17 @@ const source = readFileSync(
   'src/components/patients/PatientProfileSheet.tsx',
   'utf8',
 );
+const historyHookSource = readFileSync(
+  'src/hooks/patients/usePatientVisitHistory.ts',
+  'utf8',
+);
 
 describe('patient visit consultation links', () => {
+  it('includes the structured diagnosis in visit history', () => {
+    expect(historyHookSource).toContain('diagnoses:diagnosis_id');
+    expect(source).toContain('getRecordedDiagnosisLabels');
+  });
+
   it.each(['resident_doctor', 'doctor_admin'] as const)(
     'allows %s to open the exact visit consultation',
     (role) => {

@@ -15,6 +15,10 @@ export interface PatientVisitConsultation {
   diagnosis_text: string | null;
   case_note: string | null;
   dispense_note: string | null;
+  diagnoses:
+    | { id: string; name: string }
+    | { id: string; name: string }[]
+    | null;
   doctors: { id: string; name: string } | { id: string; name: string }[] | null;
   /**
    * Active line items for this consultation (soft-deleted excluded). Powers
@@ -62,6 +66,7 @@ export function usePatientVisitHistory(patientId: string | null) {
           id, created_at, queue_sequence, clinic_status, visit_notes,
           consultations:consultations!consultations_queue_entry_id_fkey (
             id, doctor_id, diagnosis_text, case_note, dispense_note,
+            diagnoses:diagnosis_id ( id, name ),
             doctors:doctor_id ( id, name ),
             consultation_items!left ( id, item_name, quantity, price, deleted_at ),
             consultation_attachments ( count )

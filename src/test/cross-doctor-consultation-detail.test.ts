@@ -16,6 +16,8 @@ describe('cross-doctor consultation detail', () => {
     expect(source).toContain('isCrossDoctorReadOnly');
     expect(source).toContain('Read-only consultation');
     expect(source).toContain('access.canView');
+    expect(source).toContain('recordedDiagnosisLabels');
+    expect(source).toContain('No diagnosis recorded');
   });
 
   it('guards mutation and automatic-creation paths', () => {

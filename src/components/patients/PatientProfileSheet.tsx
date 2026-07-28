@@ -35,6 +35,7 @@ import type { PatientRow, ClinicStatus } from '@/types/clinic';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 import { useAuth } from '@/contexts/AuthContext';
 import { canReadCrossDoctorNotes } from '@/lib/clinic/consultationAccess';
+import { getRecordedDiagnosisLabels } from '@/lib/clinic/diagnosisDisplay';
 
 /**
  * Lazy attachment list — calls `useConsultationAttachments` only when
@@ -138,22 +139,24 @@ function VisitRow({
     : null;
 
   const doctorName = doctor?.name ?? '—';
+  const structuredDiagnosis = consultation
+    ? Array.isArray(consultation.diagnoses)
+      ? consultation.diagnoses[0]?.name ?? null
+      : consultation.diagnoses?.name ?? null
+    : null;
+  const diagnosisPills = canViewClinicalNotes
+    ? getRecordedDiagnosisLabels({
+        structuredDiagnosis,
+        diagnosisText: consultation?.diagnosis_text,
+      })
+    : [];
   const clinicalNote = canViewClinicalNotes
-    ? consultation?.case_note?.trim() ||
-      consultation?.diagnosis_text?.trim() ||
-      ''
+    ? consultation?.case_note?.trim() || diagnosisPills.join(', ') || ''
     : '';
   const dispenseNote = canViewClinicalNotes
     ? consultation?.dispense_note?.trim() ?? ''
     : '';
   const billingItems = consultation?.consultation_items ?? [];
-
-  const diagnosisPills = (canViewClinicalNotes
-    ? consultation?.diagnosis_text ?? ''
-    : '')
-    .split(/[,;]+/)
-    .map((d) => d.trim())
-    .filter(Boolean);
 
   const attachmentCount = getAttachmentCount(consultation);
   const Chevron = isExpanded ? ChevronUp : ChevronDown;
