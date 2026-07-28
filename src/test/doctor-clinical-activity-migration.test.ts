@@ -6,6 +6,7 @@ describe('doctor clinical activity report migration', () => {
   const migrationsDirectory = resolve(process.cwd(), 'supabase/migrations');
   const baseMigrationName = '20260728113618_add_doctor_clinical_activity_report.sql';
   const hardeningMigrationName = '20260728124247_harden_doctor_clinical_activity_report.sql';
+  const doctorNameFixMigrationName = '20260728144223_fix_doctor_clinical_activity_names.sql';
 
   it('reconciles the base migration filename with production history', () => {
     const migrationFiles = readdirSync(migrationsDirectory)
@@ -47,10 +48,18 @@ describe('doctor clinical activity report migration', () => {
     expect(sql).toMatch(
       /case\s+when\s+c\.doctor_id\s+is\s+null\s+then\s+'Unassigned'\s+else\s+coalesce\(\s*nullif\(btrim\(profile\.full_name\),\s*''\),\s*nullif\(btrim\(doctor\.name\),\s*''\),\s*'Unknown doctor'\s*\)\s+end/i,
     );
-    expect(sql).toMatch(/doctor\.user_id\s*=\s*c\.doctor_id/i);
     expect(sql).toMatch(
       /order\s+by\s+activity\.activity_date,\s*activity\.activity_kind,\s*activity\.activity_id/i,
     );
+  });
+
+  it('resolves consultation doctor records to their linked profile names', () => {
+    const sql = readFileSync(join(migrationsDirectory, doctorNameFixMigrationName), 'utf8');
+
+    expect(sql.match(/doctor\.id\s*=\s*c\.doctor_id/gi)).toHaveLength(2);
+    expect(sql.match(/profile\.id\s*=\s*doctor\.user_id/gi)).toHaveLength(2);
+    expect(sql).not.toMatch(/doctor\.user_id\s*=\s*c\.doctor_id/i);
+    expect(sql).not.toMatch(/profile\.id\s*=\s*c\.doctor_id/i);
   });
 
   it('preserves authorization, sensitive-field boundaries, classifications, and filters in the hardening migration', () => {
