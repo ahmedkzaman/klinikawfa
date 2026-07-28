@@ -1,9 +1,11 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { createElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { sumActiveBillingLines, billingFinancialState } from '@/lib/clinic/billingLedgerTotals';
+import { isCompletedVisitUnpaid } from '@/lib/clinic/queuePaymentFocus';
+import { classifyFinancialSegment } from '@/hooks/clinic/useFinancialInsights';
+import { aggregatePanelClaimsSummary } from '@/hooks/clinic/usePanelClaims';
 
 const receiptPayment = {
   id: 'payment-card-90',
@@ -44,7 +46,7 @@ vi.mock('@/integrations/supabase/client', () => ({
         select: () => chain,
         eq: () => chain,
         is: () => table === 'payments'
-          ? Promise.resolve({ data: [{ amount: 40 }, { amount: 80 }], error: null })
+          ? Promise.resolve({ data: [{ amount: 90 }], error: null })
           : chain,
         order: () => Promise.resolve({ data: activeCorrectedItems, error: null }),
         maybeSingle: () => Promise.resolve({ data: receiptPayment, error: null }),
@@ -56,46 +58,21 @@ vi.mock('@/integrations/supabase/client', () => ({
 
 import { PrintReceiptDialog } from '@/components/clinic/billing/PrintReceiptDialog';
 
-const reportingMigration = readFileSync(
-  join(
-    process.cwd(),
-    'supabase/migrations/20260728153000_reconcile_completed_bill_financial_reporting.sql',
-  ),
-  'utf8',
-);
-const receipt = readFileSync(
-  join(process.cwd(), 'src/components/clinic/billing/PrintReceiptDialog.tsx'),
-  'utf8',
-);
-const queueBoard = readFileSync(
-  join(process.cwd(), 'src/pages/clinic/QueueBoard.tsx'),
-  'utf8',
-);
-
 describe('completed-bill financial reporting', () => {
-  it('reconciles the RM 120 corrected bill in every reporting view', () => {
-    // Medicine 60 + procedure 50 + other charge 15 - discount 10 + tax 5.
-    // The historical adjustment row is soft-deleted and must not contribute.
-    expect(reportingMigration).toMatch(/create or replace view public\.insight_financials_view/i);
-    expect(reportingMigration).toMatch(/ci\.price\s*\*\s*ci\.quantity/i);
-    expect(reportingMigration).toMatch(/ci\.unit_cost\s*\*\s*ci\.quantity/i);
-    expect(reportingMigration).toMatch(/ci\.deleted_at is null/i);
-    expect(reportingMigration).not.toMatch(/dispensed_qty/i);
-    expect(reportingMigration).toMatch(/create or replace function public\.get_clinic_health_metrics/i);
-    expect(reportingMigration).toMatch(
-      /sum\(greatest\(amount - coalesce\(received_amount, 0\), 0\)\) filter \(where status = any \(array\['pending', 'submitted', 'approved'\]/i,
-    );
-  });
-
-  it('prints the corrected billed quantity and current payment balance', () => {
-    expect(receipt).toMatch(/select\('item_name, quantity, price, item_id'\)/i);
-    expect(receipt).toMatch(/const qty\s*=\s*Number\(r\.quantity \?\? 0\)/i);
-    expect(receipt).not.toMatch(/dispensed_qty/i);
-  });
-
-  it('uses billed quantities in the Queue Board completed-visit panel', () => {
-    expect(queueBoard).toMatch(/sumActiveBillingLines\(completedVisitItems\)/);
-    expect(queueBoard).toMatch(/const qty = Number\(item\.quantity \?\? 0\)/);
+  it('reconciles the active RM120 corrected bill across financial consumers', () => {
+    const total = sumActiveBillingLines([
+      { price: 30, quantity: 2 }, { price: 50, quantity: 1 },
+      { price: 15, quantity: 1 }, { price: -10, quantity: 1 },
+      { price: 5, quantity: 1 }, { price: 99, quantity: 1, deletedAt: 'voided' },
+    ]);
+    expect(total).toBe(120);
+    expect(billingFinancialState(total, 90)).toEqual({ subtotal: 120, paid: 90, outstanding: 30, creditDue: 0 });
+    expect(classifyFinancialSegment('card')).toBe('Self-Pay');
+    expect(isCompletedVisitUnpaid([{ id: 'card-90', amount: 90 }])).toBe(false);
+    expect(aggregatePanelClaimsSummary([{ status: 'approved', amount: 120, received_amount: 90, is_overdue: false }]))
+      .toMatchObject({ outstandingSum: 30, creditDueSum: 0 });
+    expect(aggregatePanelClaimsSummary([{ status: 'received', amount: 120, received_amount: 130, is_overdue: false }]))
+      .toMatchObject({ outstandingSum: 0, creditDueSum: 10 });
   });
 
   it('renders the corrected RM 120 receipt with the replacement card payment', async () => {
@@ -115,8 +92,8 @@ describe('completed-bill financial reporting', () => {
     expect(await screen.findByText('Invoice Total (RM)')).toBeVisible();
     expect(screen.getAllByText('120.00').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('90.00')).toBeVisible();
-    expect(screen.getAllByText('30.00')).toHaveLength(1);
-    expect(screen.queryByText('Balance Remaining (RM)')).not.toBeInTheDocument();
+    expect(screen.getAllByText('30.00')).toHaveLength(2);
+    expect(screen.getByText('Balance Remaining (RM)')).toBeVisible();
     expect(screen.getByText(/Card/i)).toBeVisible();
     expect(screen.queryByText(/Cash/i)).not.toBeInTheDocument();
   });
