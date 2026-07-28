@@ -42,6 +42,7 @@ import { CheckInWalkInDialog } from "@/components/clinic/CheckInWalkInDialog";
 import { RegisterAndCheckInDialog } from "@/components/clinic/RegisterAndCheckInDialog";
 import { VitalsEntryDialog } from "@/components/clinic/VitalsEntryDialog";
 import { CancelQueueEntryDialog } from "@/components/clinic/CancelQueueEntryDialog";
+import { SessionAttachmentsStrip } from "@/components/clinic/consultation/SessionAttachmentsStrip";
 import { SettleDebtModal } from "@/components/clinic/billing/SettleDebtModal";
 import {
   QUEUE_COLUMNS,
@@ -212,7 +213,6 @@ export default function QueueBoard() {
     "";
   const completedVisitDispenseNote = completedConsultation?.dispense_note?.trim() ?? "";
   const completedVisitItems = completedConsultation?.consultation_items ?? [];
-  const completedAttachmentCount = completedConsultation?.consultation_attachments?.[0]?.count ?? 0;
 
   const handleCardClick = (entry: QueueEntryWithJoins) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -436,7 +436,7 @@ export default function QueueBoard() {
               {cancelledToday.length === 0 ? (
                 <p className="text-xs text-slate-400 text-center py-6">No cancellations today.</p>
               ) : (
-                cancelledToday.map((entry: any) => (
+                cancelledToday.map((entry) => (
                   <div
                     key={entry.id}
                     className="flex items-center justify-between p-3 bg-white rounded-lg border shadow-sm"
@@ -553,11 +553,17 @@ export default function QueueBoard() {
                 )}
               </section>
 
-              <p className="px-1 text-sm text-slate-500">
-                {completedAttachmentCount > 0
-                  ? `${completedAttachmentCount} attachment${completedAttachmentCount === 1 ? "" : "s"} on this visit.`
-                  : "No attachments on this visit."}
-              </p>
+              <section className={cn(bento, "p-4")}>
+                <p className="text-xs font-semibold uppercase text-slate-500">
+                  Clinical Attachments
+                </p>
+                <div className="mt-3">
+                  <SessionAttachmentsStrip
+                    consultationId={completedConsultation?.id}
+                    canEdit={false}
+                  />
+                </div>
+              </section>
             </div>
           ) : (
             <p className="mt-6 rounded-xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-400">

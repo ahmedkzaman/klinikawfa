@@ -1,9 +1,12 @@
-import { Image as ImageIcon, Paperclip, Trash2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Image as ImageIcon, Paperclip, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   useConsultationAttachments,
   useDeleteAttachment,
+  useUploadAttachment,
   type ConsultationAttachment,
 } from '@/hooks/clinic/useAttachments';
 
@@ -12,102 +15,157 @@ interface SessionAttachmentsStripProps {
   canEdit: boolean;
 }
 
-/**
- * Compact pill-row of files staff have uploaded to the active consultation.
- * Designed to live directly under the Dispense Note in the doctor's view so
- * they see new lab results / photos in real time.
- */
 export function SessionAttachmentsStrip({
   consultationId,
   canEdit,
 }: SessionAttachmentsStripProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [remark, setRemark] = useState('');
   const { data: attachments = [], isLoading } =
     useConsultationAttachments(consultationId);
   const del = useDeleteAttachment();
+  const upload = useUploadAttachment(consultationId);
 
   if (!consultationId) return null;
 
-  if (isLoading) {
-    return (
-      <p className="text-xs text-slate-400">Loading session attachments…</p>
-    );
-  }
+  const resetUpload = () => {
+    setSelectedFile(null);
+    setRemark('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
-  if (attachments.length === 0) {
-    return (
-      <p className="text-xs text-slate-400">No files uploaded yet.</p>
-    );
-  }
+  const handleUpload = async () => {
+    if (!selectedFile) return;
+    try {
+      await upload.mutateAsync({
+        file: selectedFile,
+        remark: remark.trim() || undefined,
+      });
+      resetUpload();
+      toast.success('Clinical attachment uploaded');
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to upload attachment',
+      );
+    }
+  };
 
-  const handleDelete = async (a: ConsultationAttachment) => {
-    if (!a.consultation_id) return;
-    if (!window.confirm(`Remove "${a.file_name}" from this session?`)) return;
+  const handleDelete = async (attachment: ConsultationAttachment) => {
+    if (!attachment.consultation_id) return;
+    if (!window.confirm(`Remove "${attachment.file_name}" from this session?`)) {
+      return;
+    }
     try {
       await del.mutateAsync({
-        id: a.id,
-        file_path: a.file_path,
-        consultation_id: a.consultation_id,
+        id: attachment.id,
+        file_path: attachment.file_path,
+        consultation_id: attachment.consultation_id,
       });
       toast.success('Attachment removed');
-    } catch (err) {
-      toast.error((err as Error).message || 'Failed to remove attachment');
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to remove attachment',
+      );
     }
   };
 
   return (
-    <div className="flex flex-wrap gap-2">
-      {attachments.map((a) => {
-        const isImage = (a.content_type ?? '').startsWith('image/');
-        const Icon = isImage ? ImageIcon : Paperclip;
-        return (
-          <div
-            key={a.id}
-            className="inline-flex items-center gap-2 rounded-full bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 text-xs transition-colors"
+    <div className="space-y-3">
+      {canEdit && (
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+          <Input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,application/pdf"
+            aria-label="Clinical attachment"
+            onChange={(event) =>
+              setSelectedFile(event.target.files?.[0] ?? null)
+            }
+          />
+          <Input
+            value={remark}
+            onChange={(event) => setRemark(event.target.value)}
+            placeholder="Optional note"
+            aria-label="Attachment note"
+          />
+          <Button
+            type="button"
+            onClick={handleUpload}
+            disabled={!selectedFile || upload.isPending}
           >
-            <Icon className="h-3.5 w-3.5 text-slate-500 shrink-0" />
-            <span
-              className="truncate max-w-[180px] font-medium text-slate-700"
-              title={a.remark ? `${a.file_name} — ${a.remark}` : a.file_name}
-            >
-              {a.file_name}
-            </span>
-            {a.remark && (
-              <span
-                className="truncate max-w-[160px] text-slate-500 italic"
-                title={a.remark}
-              >
-                · {a.remark}
-              </span>
-            )}
+            <Upload className="mr-2 h-4 w-4" />
+            {upload.isPending ? 'Uploading...' : 'Upload'}
+          </Button>
+          <p className="text-xs text-slate-400 sm:col-span-3">
+            Images or PDF, up to 5 MB.
+          </p>
+        </div>
+      )}
 
-            {a.signedUrl ? (
-              <a
-                href={a.signedUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-semibold text-blue-600 hover:underline shrink-0"
+      {isLoading ? (
+        <p className="text-xs text-slate-400">Loading session attachments...</p>
+      ) : attachments.length === 0 ? (
+        <p className="text-xs text-slate-400">No files uploaded yet.</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {attachments.map((attachment) => {
+            const isImage = (attachment.content_type ?? '').startsWith('image/');
+            const Icon = isImage ? ImageIcon : Paperclip;
+            return (
+              <div
+                key={attachment.id}
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs transition-colors hover:bg-slate-100"
               >
-                View
-              </a>
-            ) : (
-              <span className="text-slate-400 shrink-0">Unavailable</span>
-            )}
-            {canEdit && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 -mr-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full"
-                onClick={() => handleDelete(a)}
-                disabled={del.isPending}
-                aria-label={`Remove ${a.file_name}`}
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            )}
-          </div>
-        );
-      })}
+                <Icon className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                <span
+                  className="max-w-[180px] truncate font-medium text-slate-700"
+                  title={
+                    attachment.remark
+                      ? `${attachment.file_name} - ${attachment.remark}`
+                      : attachment.file_name
+                  }
+                >
+                  {attachment.file_name}
+                </span>
+                {attachment.remark && (
+                  <span
+                    className="max-w-[160px] truncate italic text-slate-500"
+                    title={attachment.remark}
+                  >
+                    {attachment.remark}
+                  </span>
+                )}
+                {attachment.signedUrl ? (
+                  <a
+                    href={attachment.signedUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 font-semibold text-blue-600 hover:underline"
+                  >
+                    View
+                  </a>
+                ) : (
+                  <span className="shrink-0 text-slate-400">Unavailable</span>
+                )}
+                {canEdit && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="-mr-1 h-5 w-5 rounded-full text-slate-400 hover:bg-red-50 hover:text-red-600"
+                    onClick={() => handleDelete(attachment)}
+                    disabled={del.isPending}
+                    aria-label={`Remove ${attachment.file_name}`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
