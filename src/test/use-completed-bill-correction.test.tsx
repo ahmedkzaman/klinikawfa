@@ -4,11 +4,19 @@ import type { PropsWithChildren } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const rpc = vi.hoisted(() => vi.fn());
+const audit = vi.hoisted(() => {
+  const order = vi.fn();
+  const eq = vi.fn(() => ({ order }));
+  const select = vi.fn(() => ({ eq }));
+  const from = vi.fn(() => ({ select }));
+  return { from, select, eq, order };
+});
 
-vi.mock('@/integrations/supabase/client', () => ({ supabase: { rpc } }));
+vi.mock('@/integrations/supabase/client', () => ({ supabase: { rpc, from: audit.from } }));
 
 import {
   useCompletedBillCorrectionContext,
+  useCompletedBillCorrectionHistory,
   useCorrectCompletedBill,
 } from '@/hooks/clinic/useCompletedBillCorrection';
 
@@ -82,6 +90,26 @@ function createWrapper(queryClient: QueryClient) {
 describe('completed bill correction hooks', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('loads immutable audit history with its before and after financial totals', async () => {
+    audit.order.mockResolvedValue({
+      data: [{
+        id: 'audit-1', actor_id: 'actor-1', created_at: '2026-07-28T09:15:00.000Z', reason: 'Correct fee',
+        before_state: { total: 50 }, after_state: { total: 75 },
+      }],
+      error: null,
+    });
+    const queryClient = createQueryClient();
+    const { result } = renderHook(() => useCompletedBillCorrectionHistory('queue-1'), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(audit.from).toHaveBeenCalledWith('completed_bill_correction_audit');
+    expect(result.current.data).toEqual([{
+      id: 'audit-1', actorId: 'actor-1', createdAt: '2026-07-28T09:15:00.000Z', reason: 'Correct fee', beforeTotal: 50, afterTotal: 75,
+    }]);
   });
 
   it('loads and maps correction context with the server fingerprint', async () => {
@@ -227,6 +255,7 @@ describe('completed bill correction hooks', () => {
       ['clinic', 'patient-visit-history'],
       ['debt', 'unpaid-visits'],
       ['completed-bill-correction-context', 'queue-1'],
+      ['completed-bill-correction-history', 'queue-1'],
     ]);
   });
 

@@ -41,6 +41,7 @@ export interface CompletedBillCorrectionDialogProps {
   queueEntryId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCorrected?: () => void | Promise<void>;
 }
 
 const money = (value: number) => `RM ${value.toFixed(2)}`;
@@ -70,6 +71,7 @@ export function CompletedBillCorrectionDialog({
   queueEntryId,
   open,
   onOpenChange,
+  onCorrected,
 }: CompletedBillCorrectionDialogProps) {
   const contextQuery = useCompletedBillCorrectionContext(queueEntryId, open);
   const correctBill = useCorrectCompletedBill();
@@ -173,6 +175,7 @@ export function CompletedBillCorrectionDialog({
     try {
       await correctBill.mutateAsync(toCompletedBillCorrectionPayload(context, draft));
       toast.success('Completed bill corrected');
+      await onCorrected?.();
       onOpenChange(false);
     } catch (error) {
       setSubmissionError(error instanceof Error ? error.message : 'Correction failed.');

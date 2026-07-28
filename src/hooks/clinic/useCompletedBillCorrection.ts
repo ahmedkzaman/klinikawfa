@@ -20,8 +20,21 @@ export interface CompletedBillCorrectionResult {
   fingerprint: string;
 }
 
+export interface CompletedBillCorrectionHistoryEntry {
+  id: string;
+  actorId: string;
+  createdAt: string;
+  reason: string;
+  beforeTotal: number;
+  afterTotal: number;
+}
+
 const CORRECTION_CONTEXT_KEY = (queueEntryId: string) => [
   'completed-bill-correction-context',
+  queueEntryId,
+] as const;
+const CORRECTION_HISTORY_KEY = (queueEntryId: string) => [
+  'completed-bill-correction-history',
   queueEntryId,
 ] as const;
 
@@ -56,6 +69,7 @@ const INVALIDATED_QUERY_KEYS = [
   () => ['clinic', 'patient-visit-history'] as const,
   () => ['debt', 'unpaid-visits'] as const,
   (queueEntryId: string) => CORRECTION_CONTEXT_KEY(queueEntryId),
+  (queueEntryId: string) => CORRECTION_HISTORY_KEY(queueEntryId),
 ] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -225,6 +239,28 @@ function parseCorrectionResult(value: unknown): CompletedBillCorrectionResult {
   return { auditId, fingerprint };
 }
 
+function totalFromAuditState(value: unknown): number | null {
+  if (!isRecord(value)) return null;
+  return finiteNumber(value.total);
+}
+
+function parseCorrectionHistory(value: unknown): CompletedBillCorrectionHistoryEntry[] {
+  if (!Array.isArray(value)) throw new Error('Completed bill correction history is invalid.');
+  return value.map((entry) => {
+    if (!isRecord(entry)) throw new Error('Completed bill correction history is invalid.');
+    const id = requiredString(entry.id);
+    const actorId = requiredString(entry.actor_id);
+    const createdAt = requiredString(entry.created_at);
+    const reason = requiredString(entry.reason);
+    const beforeTotal = totalFromAuditState(entry.before_state);
+    const afterTotal = totalFromAuditState(entry.after_state);
+    if (id === null || actorId === null || createdAt === null || reason === null || beforeTotal === null || afterTotal === null) {
+      throw new Error('Completed bill correction history is invalid.');
+    }
+    return { id, actorId, createdAt, reason, beforeTotal, afterTotal };
+  });
+}
+
 function toCompletedBillCorrectionError(error: unknown): Error {
   if (!isRecord(error)) return error instanceof Error ? error : new Error('Correction failed.');
 
@@ -279,6 +315,27 @@ export function useCorrectCompletedBill(): UseMutationResult<
       INVALIDATED_QUERY_KEYS.forEach((getKey) => {
         queryClient.invalidateQueries({ queryKey: getKey(payload.p_queue_entry_id) });
       });
+    },
+  });
+}
+
+/** Read-only audit history. Callers must enable this only for roles allowed by the audit RLS policy. */
+export function useCompletedBillCorrectionHistory(
+  queueEntryId: string | null,
+): UseQueryResult<CompletedBillCorrectionHistoryEntry[]> {
+  const trimmedQueueEntryId = queueEntryId?.trim() ?? '';
+
+  return useQuery({
+    queryKey: CORRECTION_HISTORY_KEY(trimmedQueueEntryId),
+    enabled: Boolean(trimmedQueueEntryId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('completed_bill_correction_audit')
+        .select('id, actor_id, created_at, reason, before_state, after_state')
+        .eq('queue_entry_id', trimmedQueueEntryId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return parseCorrectionHistory(data ?? []);
     },
   });
 }

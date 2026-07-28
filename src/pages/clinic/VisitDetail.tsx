@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { format } from 'date-fns';
@@ -12,6 +12,10 @@ import { useQueueEntry } from '@/hooks/clinic/useQueueEntries';
 import { useConsultation } from '@/hooks/clinic/useConsultations';
 import { useConsultationItems } from '@/hooks/clinic/useConsultationItems';
 import { usePayments } from '@/hooks/clinic/usePayments';
+import { useCompletedBillCorrectionHistory } from '@/hooks/clinic/useCompletedBillCorrection';
+import { CompletedBillCorrectionDialog } from '@/components/clinic/visit/CompletedBillCorrectionDialog';
+import { useAuth } from '@/contexts/AuthContext';
+import { canCorrectCompletedBill } from '@/lib/clinic/completedBillCorrection';
 import { cn } from '@/lib/utils';
 import { toMalayTitleCase } from '@/lib/textCase';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
@@ -32,11 +36,32 @@ import {
 export default function VisitDetail() {
   const { queueEntryId } = useParams<{ queueEntryId: string }>();
   const navigate = useNavigate();
+  const { role } = useAuth();
+  const [correctionOpen, setCorrectionOpen] = useState(false);
+  const [, setBillingRevision] = useState(0);
 
   const { data: entry, isLoading } = useQueueEntry(queueEntryId);
   const { data: consultation } = useConsultation(queueEntryId);
-  const { data: items = [] } = useConsultationItems(consultation?.id);
-  const { data: payments = [] } = usePayments(queueEntryId);
+  const { data: items = [], refetch: refetchItems } = useConsultationItems(consultation?.id);
+  const { data: payments = [], refetch: refetchPayments } = usePayments(queueEntryId);
+  const canCorrect =
+    entry?.clinic_status === 'completed' &&
+    consultation?.status === 'completed' &&
+    canCorrectCompletedBill(role);
+  // This mirrors the current audit-table SELECT policy. The correction allowlist
+  // is intentionally broader than audit visibility, so disallowed queries never
+  // produce an avoidable RLS error for staff or doctor-admin users.
+  const canReadCorrectionHistory = role === 'operations' || role === 'admin' || role === 'special_admin';
+  const correctionHistory = useCompletedBillCorrectionHistory(
+    canReadCorrectionHistory && entry?.clinic_status === 'completed' ? queueEntryId ?? null : null,
+  );
+
+  const refreshBilling = useCallback(async () => {
+    const refreshes = [refetchItems(), refetchPayments()];
+    if (canReadCorrectionHistory) refreshes.push(correctionHistory.refetch());
+    await Promise.all(refreshes);
+    setBillingRevision((revision) => revision + 1);
+  }, [canReadCorrectionHistory, correctionHistory, refetchItems, refetchPayments]);
 
   const subtotal = useMemo(
     () =>
@@ -114,6 +139,12 @@ export default function VisitDetail() {
             </p>
           </div>
           <StatusBadge status={entry.clinic_status} />
+          {consultation?.status && <StatusBadge status={consultation.status} />}
+          {canCorrect && (
+            <Button type="button" variant="outline" onClick={() => setCorrectionOpen(true)}>
+              Edit completed bill
+            </Button>
+          )}
         </div>
 
         {/* 3-column workspace (read-only) */}
@@ -162,6 +193,29 @@ export default function VisitDetail() {
               patientDob={patient?.date_of_birth ?? null}
             />
             <AttachmentsCard consultationId={consultation?.id} />
+            {canReadCorrectionHistory && (
+              <section className={cn(bento, 'p-4 space-y-3')} aria-labelledby="bill-correction-history-heading">
+                <h2 id="bill-correction-history-heading" className={bentoHeader}>Bill correction history</h2>
+                {correctionHistory.isError ? (
+                  <p role="alert" className="text-sm text-muted-foreground">Correction history is currently unavailable.</p>
+                ) : correctionHistory.isLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading correction history…</p>
+                ) : correctionHistory.data?.length ? (
+                  <div className="space-y-3">
+                    {correctionHistory.data.map((correction) => (
+                      <article key={correction.id} className="rounded-lg border border-slate-100 p-3 text-sm space-y-1">
+                        <p className="font-medium text-slate-800">{correction.reason}</p>
+                        <p className="text-xs text-slate-500">Actor: {correction.actorId}</p>
+                        <p className="text-xs text-slate-500">{format(new Date(correction.createdAt), 'd MMM yyyy, h:mm a')}</p>
+                        <p className="text-sm text-slate-700 tabular-nums">RM {correction.beforeTotal.toFixed(2)} → RM {correction.afterTotal.toFixed(2)}</p>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No bill corrections have been recorded.</p>
+                )}
+              </section>
+            )}
           </div>
 
           <BillingDetailsColumn
@@ -172,6 +226,14 @@ export default function VisitDetail() {
           />
         </div>
       </div>
+      {canCorrect && queueEntryId && (
+        <CompletedBillCorrectionDialog
+          queueEntryId={queueEntryId}
+          open={correctionOpen}
+          onOpenChange={setCorrectionOpen}
+          onCorrected={refreshBilling}
+        />
+      )}
     </div>
   );
 }

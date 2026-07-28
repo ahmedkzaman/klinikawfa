@@ -196,6 +196,28 @@ describe('CompletedBillCorrectionDialog', () => {
     ]);
   });
 
+  it('blocks an unknown legacy payment method until the user selects a supported method', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    contextHook.mockReturnValue({
+      data: {
+        ...context,
+        payments: [{ ...context.payments[0], paymentMethod: 'Legacy terminal voucher' }],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    correctBillHook.mockReturnValue({ mutateAsync, isPending: false });
+    renderDialog();
+
+    await screen.findByRole('heading', { name: 'Correct completed bill' });
+    fireEvent.change(screen.getByLabelText('Correction reason'), { target: { value: 'Correct payment record' } });
+
+    expect(screen.getByText('Choose Cash, QR Pay, Card, Online Transfer, or Panel.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Confirm correction' })).toBeDisabled();
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['Consultation quantity', '1.5', 'Quantity must be a whole number no greater than 1000000.'],
     ['Tax (%)', '101', 'Tax must be between 0 and 100 percent.'],

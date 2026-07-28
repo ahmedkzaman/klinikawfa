@@ -116,7 +116,13 @@ export function BillingDetailsColumn({
     () => payments.reduce((acc, p) => acc + Number(p.amount ?? 0), 0),
     [payments],
   );
-  const outstanding = Math.max(total - paid, 0);
+  const balance = total - paid;
+  const outstanding = Math.max(balance, 0);
+  const financialState = balance > 0
+    ? { label: 'Outstanding', amount: balance, highlight: true }
+    : balance < 0
+      ? { label: 'Refund/Credit Due', amount: Math.abs(balance), highlight: true }
+      : { label: 'Paid', amount: 0, highlight: false };
 
   const handleVoid = async (id: string) => {
     if (!confirm('Void this payment? This action is logged.')) return;
@@ -246,10 +252,10 @@ export function BillingDetailsColumn({
           <Row label="Total" value={`RM ${total.toFixed(2)}`} bold />
           <Row label="Paid" value={`RM ${paid.toFixed(2)}`} muted />
           <Row
-            label="Outstanding"
-            value={`RM ${outstanding.toFixed(2)}`}
+            label={financialState.label}
+            value={`RM ${financialState.amount.toFixed(2)}`}
             bold
-            highlight={outstanding > 0}
+            highlight={financialState.highlight}
           />
         </div>
 
