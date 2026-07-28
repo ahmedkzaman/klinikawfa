@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { sumActiveBillingLines } from '@/lib/clinic/billingLedgerTotals';
 
 export function formatRm(n: number): string {
   return `RM ${n.toLocaleString('en-MY', {
@@ -88,11 +89,16 @@ export function usePatientOutstanding(patientId: string | undefined | null) {
         consultations.map((c) => [c.id, c.queue_entry_id ?? null]),
       );
 
+      const itemsByEntry = new Map<string, Array<{ price: number | string | null; quantity: number | null }>>();
       for (const it of itemsRes.data ?? []) {
         const entryId = consultationToEntry.get(it.consultation_id as string);
         if (!entryId) continue;
-        const line = Number(it.price ?? 0) * Number(it.quantity ?? 0);
-        visitTotalByEntry.set(entryId, (visitTotalByEntry.get(entryId) ?? 0) + line);
+        const lines = itemsByEntry.get(entryId) ?? [];
+        lines.push({ price: it.price, quantity: it.quantity });
+        itemsByEntry.set(entryId, lines);
+      }
+      for (const [entryId, lines] of itemsByEntry) {
+        visitTotalByEntry.set(entryId, sumActiveBillingLines(lines));
       }
 
       const patientPaidByEntry = new Map<string, number>();

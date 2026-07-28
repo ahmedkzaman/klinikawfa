@@ -59,6 +59,7 @@ import { calculateClinicalAge } from "@/lib/clinic/clinicalAge";
 import { isCashVisit, isCompletedVisitUnpaid } from "@/lib/clinic/queuePaymentFocus";
 import { getRecordedDiagnosisLabels } from "@/lib/clinic/diagnosisDisplay";
 import { formatPaymentMethod } from "@/lib/clinic/paymentMethod";
+import { sumActiveBillingLines } from "@/lib/clinic/billingLedgerTotals";
 
 function useTickEveryMinute() {
   const [, setTick] = useState(0);
@@ -231,14 +232,7 @@ export default function QueueBoard() {
     [completedConsultation?.consultation_items],
   );
   const completedVisitSubtotal = useMemo(
-    () =>
-      completedVisitItems.reduce((total, item) => {
-        const quantity =
-          item.item_id && item.dispensed_qty != null
-            ? Number(item.dispensed_qty)
-            : Number(item.quantity ?? 0);
-        return total + quantity * Number(item.price ?? 0);
-      }, 0),
+    () => sumActiveBillingLines(completedVisitItems),
     [completedVisitItems],
   );
   const completedVisitPaid = useMemo(
@@ -605,10 +599,7 @@ export default function QueueBoard() {
                 ) : (
                   <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white">
                     {completedVisitItems.map((item) => {
-                      const qty =
-                        item.item_id && item.dispensed_qty != null
-                          ? Number(item.dispensed_qty)
-                          : Number(item.quantity ?? 0);
+                      const qty = Number(item.quantity ?? 0);
                       const price = Number(item.price ?? 0);
                       return (
                         <div key={item.id} className="flex items-start justify-between gap-4 border-b border-slate-100 px-3 py-3 last:border-b-0">

@@ -14,6 +14,7 @@ import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 import { downloadReceiptPdf, printReceipt } from '@/lib/clinic/printReceipt';
+import { sumActiveBillingLines } from '@/lib/clinic/billingLedgerTotals';
 import { ReceiptTemplate, type ReceiptData } from './ReceiptTemplate';
 
 interface Props {
@@ -54,19 +55,15 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
       if (pay.consultation_id) {
         const { data: rows, error: itemsErr } = await supabase
           .from('consultation_items')
-          .select('item_name, quantity, price, dispensed_qty, item_id')
+          .select('item_name, quantity, price, item_id')
           .eq('consultation_id', pay.consultation_id)
           .is('deleted_at', null)
           .order('created_at', { ascending: true });
         if (itemsErr) throw itemsErr;
         items = (rows ?? []).map((r) => {
-          const qty =
-            r.dispensed_qty != null && r.item_id
-              ? Number(r.dispensed_qty)
-              : Number(r.quantity ?? 0);
+          const qty = Number(r.quantity ?? 0);
           const unit = Number(r.price ?? 0);
-          const lineTotal = unit * qty;
-          subtotal += lineTotal;
+          const lineTotal = sumActiveBillingLines([{ price: unit, quantity: qty }]);
           return {
             name: r.item_name,
             quantity: qty,
@@ -74,6 +71,7 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
             line_total: lineTotal,
           };
         });
+        subtotal = sumActiveBillingLines(rows ?? []);
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

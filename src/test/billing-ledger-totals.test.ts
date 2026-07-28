@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { reconcileBillingSubtotal } from '@/lib/clinic/billingLedgerTotals';
+import {
+  reconcileBillingSubtotal,
+  sumActiveBillingLines,
+} from '@/lib/clinic/billingLedgerTotals';
 
 describe('reconcileBillingSubtotal', () => {
   it('includes a legacy additional charge when paid exceeds saved line items', () => {
@@ -14,5 +17,16 @@ describe('reconcileBillingSubtotal', () => {
       subtotal: 130,
       unitemizedAdditionalCharges: 0,
     });
+  });
+
+  it('uses every active corrected billing line, including adjustments, at billed quantity', () => {
+    expect(sumActiveBillingLines([
+      { price: 30, quantity: 2, deletedAt: null }, // medicine RM 60
+      { price: 50, quantity: 1, deletedAt: null }, // procedure RM 50
+      { price: 15, quantity: 1, deletedAt: null }, // other charge RM 15
+      { price: -10, quantity: 1, deletedAt: null }, // discount RM -10
+      { price: 5, quantity: 1, deletedAt: null }, // tax RM 5
+      { price: 99, quantity: 1, deletedAt: '2026-07-28T00:00:00Z' },
+    ])).toBe(120);
   });
 });

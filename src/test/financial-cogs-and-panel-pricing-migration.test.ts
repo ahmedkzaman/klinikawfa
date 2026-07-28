@@ -9,6 +9,13 @@ const migration = readFileSync(
   ),
   'utf8',
 );
+const completedBillReportingMigration = readFileSync(
+  join(
+    process.cwd(),
+    'supabase/migrations/20260728153000_reconcile_completed_bill_financial_reporting.sql',
+  ),
+  'utf8',
+);
 const triggerSecurityMigration = readFileSync(
   join(
     process.cwd(),
@@ -25,7 +32,7 @@ describe('financial COGS and panel pricing migration', () => {
     );
   });
 
-  it('reports COGS for completed queue visits using the dispensed quantity', () => {
+  it('keeps the legacy financial view available before the correction follow-up migration', () => {
     expect(migration).toContain(
       "(c.status = 'completed' OR qe.clinic_status = 'completed')",
     );
@@ -35,6 +42,17 @@ describe('financial COGS and panel pricing migration', () => {
     expect(migration).toMatch(
       /ci\.price\s*\*\s*COALESCE\(ci\.dispensed_qty,\s*ci\.quantity\)/i,
     );
+  });
+
+  it('reports corrected completed bills at billed quantity while preserving COGS', () => {
+    expect(completedBillReportingMigration).toMatch(
+      /ci\.price\s*\*\s*ci\.quantity/i,
+    );
+    expect(completedBillReportingMigration).toMatch(
+      /ci\.unit_cost\s*\*\s*ci\.quantity/i,
+    );
+    expect(completedBillReportingMigration).not.toMatch(/dispensed_qty/i);
+    expect(completedBillReportingMigration).toMatch(/ci\.deleted_at is null/i);
   });
 
   it('keeps the financial view subject to caller RLS', () => {

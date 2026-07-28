@@ -23,7 +23,10 @@ import {
   formatPaymentMethod,
   paymentMethodBadgeClass,
 } from '@/lib/clinic/paymentMethod';
-import { reconcileBillingSubtotal } from '@/lib/clinic/billingLedgerTotals';
+import {
+  reconcileBillingSubtotal,
+  sumActiveBillingLines,
+} from '@/lib/clinic/billingLedgerTotals';
 import { Badge } from '@/components/ui/badge';
 import type { ConsultationRow, ConsultationItemRow } from '@/types/clinic';
 
@@ -141,14 +144,18 @@ export default function Billings() {
         .is('deleted_at', null);
       if (iErr) throw iErr;
 
+      const linesByConsultation: Record<
+        string,
+        Array<Pick<ConsultationItemRow, 'price' | 'quantity'>>
+      > = {};
+      (items ?? []).forEach((it: Pick<ConsultationItemRow, 'consultation_id' | 'price' | 'quantity'>) => {
+        (linesByConsultation[it.consultation_id] ??= []).push(it);
+      });
+
       const totalsByConsultation: Record<string, number> = {};
-      (items ?? []).forEach(
-        (it: Pick<ConsultationItemRow, 'consultation_id' | 'price' | 'quantity'>) => {
-          totalsByConsultation[it.consultation_id] =
-            (totalsByConsultation[it.consultation_id] ?? 0) +
-            Number(it.price ?? 0) * Number(it.quantity ?? 0);
-        },
-      );
+      Object.entries(linesByConsultation).forEach(([consultationId, lines]) => {
+        totalsByConsultation[consultationId] = sumActiveBillingLines(lines);
+      });
 
       const totalsByQueue: Record<string, number> = {};
       (consultations ?? []).forEach(

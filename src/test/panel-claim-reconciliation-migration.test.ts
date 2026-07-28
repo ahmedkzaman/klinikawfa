@@ -6,6 +6,10 @@ const migrationPath = resolve(
   process.cwd(),
   'supabase/migrations/20260728093000_reconcile_panel_claims_on_checkout.sql',
 );
+const completedBillCorrectionMigrationPath = resolve(
+  process.cwd(),
+  'supabase/migrations/20260728150000_add_completed_bill_corrections.sql',
+);
 
 describe('panel claim checkout reconciliation migration', () => {
   test('creates or refreshes a pending claim from all active consultation items', () => {
@@ -16,6 +20,7 @@ describe('panel claim checkout reconciliation migration', () => {
     expect(migration).toMatch(/SUM\(ci\.price \* ci\.quantity\)/i);
     expect(migration).toMatch(/pc\.status = 'pending'/i);
     expect(migration).toMatch(/SET amount = v_total_amount/i);
+    expect(migration).toMatch(/ci\.deleted_at is null/i);
   });
 
   test('covers both consultation and queue completion paths idempotently', () => {
@@ -32,5 +37,18 @@ describe('panel claim checkout reconciliation migration', () => {
     expect(migration).toMatch(/UPDATE public\.consultations c[\s\S]*SET status = 'completed'/i);
     expect(migration).toMatch(/qe\.clinic_status = 'completed'/i);
     expect(migration).toMatch(/qe\.payment_method = 'panel'/i);
+  });
+
+  test('reconciles a corrected panel amount without changing claim lifecycle metadata', () => {
+    const correctionMigration = readFileSync(completedBillCorrectionMigrationPath, 'utf8');
+    const correction = correctionMigration.match(
+      /create or replace function public\.correct_completed_bill[\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+
+    expect(correction).toMatch(/v_panel_eligible_total := greatest\(v_total, 0\)/i);
+    expect(correction).toMatch(
+      /update public\.panel_claims\s+set amount = v_panel_eligible_total\s+where id = v_claim_id\s+and queue_entry_id = p_queue_entry_id/i,
+    );
+    expect(correctionMigration).toMatch(/'panel_credit_due'/i);
   });
 });
