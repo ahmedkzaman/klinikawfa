@@ -22,6 +22,17 @@ export function sumActiveBillingLines(lines: BillingLineTotalInput[]): number {
   }, 0));
 }
 
+export function billingFinancialState(total: number, paid: number) {
+  const subtotal = roundCurrency(Number(total) || 0);
+  const paidTotal = roundCurrency(Number(paid) || 0);
+  return {
+    subtotal,
+    paid: paidTotal,
+    outstanding: roundCurrency(Math.max(subtotal - paidTotal, 0)),
+    creditDue: roundCurrency(Math.max(paidTotal - subtotal, 0)),
+  };
+}
+
 export function reconcileBillingSubtotal(
   savedItemsSubtotal: number,
   paid: number,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   reconcileBillingSubtotal,
   sumActiveBillingLines,
+  billingFinancialState,
 } from '@/lib/clinic/billingLedgerTotals';
 
 describe('reconcileBillingSubtotal', () => {
@@ -17,6 +18,10 @@ describe('reconcileBillingSubtotal', () => {
       subtotal: 130,
       unitemizedAdditionalCharges: 0,
     });
+  });
+
+  it('keeps a corrected credit as credit rather than inventing a charge', () => {
+    expect(billingFinancialState(80, 90)).toEqual({ subtotal: 80, paid: 90, outstanding: 0, creditDue: 10 });
   });
 
   it('uses every active corrected billing line, including adjustments, at billed quantity', () => {

@@ -24,7 +24,7 @@ import {
   paymentMethodBadgeClass,
 } from '@/lib/clinic/paymentMethod';
 import {
-  reconcileBillingSubtotal,
+  billingFinancialState,
   sumActiveBillingLines,
 } from '@/lib/clinic/billingLedgerTotals';
 import { Badge } from '@/components/ui/badge';
@@ -42,6 +42,7 @@ interface LedgerEntry {
   subtotal: number;
   paid: number;
   outstanding: number;
+  creditDue: number;
   unitemizedAdditionalCharges: number;
   latestPaymentType: 'self_pay' | 'panel' | 'insurance';
   latestMethod: string | null;
@@ -52,6 +53,7 @@ interface GroupedEntry extends LedgerEntry {
   accumulatedSubtotal: number;
   accumulatedPaid: number;
   accumulatedOutstanding: number;
+  accumulatedCreditDue: number;
   visitCount: number;
   groupedQueueIds: string[];
 }
@@ -70,6 +72,7 @@ function groupOutstandingByPatient(rows: LedgerEntry[]): GroupedEntry[] {
         accumulatedSubtotal: e.subtotal,
         accumulatedPaid: e.paid,
         accumulatedOutstanding: e.outstanding,
+        accumulatedCreditDue: e.creditDue,
         visitCount: 1,
         groupedQueueIds: [e.queueEntryId],
       });
@@ -77,6 +80,7 @@ function groupOutstandingByPatient(rows: LedgerEntry[]): GroupedEntry[] {
       g.accumulatedSubtotal += e.subtotal;
       g.accumulatedPaid += e.paid;
       g.accumulatedOutstanding += e.outstanding;
+      g.accumulatedCreditDue += e.creditDue;
       g.visitCount += 1;
       g.groupedQueueIds.push(e.queueEntryId);
     }
@@ -203,6 +207,7 @@ export default function Billings() {
           subtotal: itemsByQueue[qe.id] ?? 0,
           paid: amt,
           outstanding: 0,
+          creditDue: 0,
           unitemizedAdditionalCharges: 0,
           latestPaymentType: pType,
           latestMethod: p.payment_method ?? null,
@@ -214,10 +219,11 @@ export default function Billings() {
 
     const list = Array.from(byQueue.values());
     list.forEach((e) => {
-      const reconciled = reconcileBillingSubtotal(e.subtotal, e.paid);
-      e.subtotal = reconciled.subtotal;
-      e.unitemizedAdditionalCharges = reconciled.unitemizedAdditionalCharges;
-      e.outstanding = Math.max(e.subtotal - e.paid, 0);
+      const state = billingFinancialState(e.subtotal, e.paid);
+      e.subtotal = state.subtotal;
+      e.outstanding = state.outstanding;
+      e.creditDue = state.creditDue;
+      e.unitemizedAdditionalCharges = 0;
     });
     return list;
   }, [ledger, itemsByQueue]);
@@ -422,6 +428,7 @@ export default function Billings() {
               const subtotal = grouped ? grouped.accumulatedSubtotal : e.subtotal;
               const paid = grouped ? grouped.accumulatedPaid : e.paid;
               const outstanding = grouped ? grouped.accumulatedOutstanding : e.outstanding;
+              const creditDue = grouped ? grouped.accumulatedCreditDue : e.creditDue;
               const visitCount = grouped?.visitCount ?? 1;
               return (
               <div
@@ -470,7 +477,7 @@ export default function Billings() {
                     outstanding > 0 ? 'text-rose-600 font-semibold' : 'text-slate-600',
                   )}
                 >
-                  RM {outstanding.toFixed(2)}
+                  {creditDue > 0 ? `Credit RM ${creditDue.toFixed(2)}` : `RM ${outstanding.toFixed(2)}`}
                 </span>
                 <span>
                   {e.paid > 0 || e.latestMethod ? (

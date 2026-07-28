@@ -8,7 +8,7 @@ SELECT
   ci.item_name,
   (timezone('Asia/Kuala_Lumpur', qe.created_at))::date AS visit_date,
   qe.created_at AS queue_entry_created_at,
-  qe.payment_method,
+  payment.payment_method,
   (ci.price * ci.quantity)::numeric AS revenue,
   (ci.unit_cost * ci.quantity)::numeric AS cogs,
   ((ci.price - ci.unit_cost) * ci.quantity)::numeric AS profit,
@@ -28,6 +28,14 @@ SELECT
 FROM public.consultation_items ci
 JOIN public.consultations c ON ci.consultation_id = c.id
 JOIN public.queue_entries qe ON c.queue_entry_id = qe.id
+LEFT JOIN LATERAL (
+  SELECT p.payment_method
+  FROM public.payments p
+  WHERE p.queue_entry_id = qe.id
+    AND p.deleted_at IS NULL
+  ORDER BY p.created_at DESC, p.id DESC
+  LIMIT 1
+) payment ON true
 LEFT JOIN public.doctors d ON c.doctor_id = d.id
 LEFT JOIN public.diagnoses dx ON c.diagnosis_id = dx.id
 LEFT JOIN public.patients p ON qe.patient_id = p.id
@@ -52,9 +60,9 @@ BEGIN
 
   SELECT jsonb_build_object(
     'financial', jsonb_build_object(
-      'revenue', COALESCE((SELECT SUM(ci.price * ci.quantity) FROM consultation_items ci JOIN consultations c ON c.id = ci.consultation_id JOIN queue_entries q ON q.id = c.queue_entry_id WHERE q.created_at::date BETWEEN _start_date AND _end_date AND c.status = 'completed' AND ci.deleted_at IS NULL), 0),
-      'profit', COALESCE((SELECT SUM((ci.price - ci.unit_cost) * ci.quantity) FROM consultation_items ci JOIN consultations c ON c.id = ci.consultation_id JOIN queue_entries q ON q.id = c.queue_entry_id WHERE q.created_at::date BETWEEN _start_date AND _end_date AND c.status = 'completed' AND ci.deleted_at IS NULL), 0),
-      'marginPct', COALESCE((SELECT 100 * SUM((ci.price - ci.unit_cost) * ci.quantity) / NULLIF(SUM(ci.price * ci.quantity), 0) FROM consultation_items ci JOIN consultations c ON c.id = ci.consultation_id JOIN queue_entries q ON q.id = c.queue_entry_id WHERE q.created_at::date BETWEEN _start_date AND _end_date AND c.status = 'completed' AND ci.deleted_at IS NULL), 0)
+      'revenue', COALESCE((SELECT SUM(ci.price * ci.quantity) FROM consultation_items ci JOIN consultations c ON c.id = ci.consultation_id JOIN queue_entries q ON q.id = c.queue_entry_id WHERE (timezone('Asia/Kuala_Lumpur', q.created_at))::date BETWEEN _start_date AND _end_date AND (c.status = 'completed' OR q.clinic_status = 'completed') AND c.deleted_at IS NULL AND ci.deleted_at IS NULL), 0),
+      'profit', COALESCE((SELECT SUM((ci.price - ci.unit_cost) * ci.quantity) FROM consultation_items ci JOIN consultations c ON c.id = ci.consultation_id JOIN queue_entries q ON q.id = c.queue_entry_id WHERE (timezone('Asia/Kuala_Lumpur', q.created_at))::date BETWEEN _start_date AND _end_date AND (c.status = 'completed' OR q.clinic_status = 'completed') AND c.deleted_at IS NULL AND ci.deleted_at IS NULL), 0),
+      'marginPct', COALESCE((SELECT 100 * SUM((ci.price - ci.unit_cost) * ci.quantity) / NULLIF(SUM(ci.price * ci.quantity), 0) FROM consultation_items ci JOIN consultations c ON c.id = ci.consultation_id JOIN queue_entries q ON q.id = c.queue_entry_id WHERE (timezone('Asia/Kuala_Lumpur', q.created_at))::date BETWEEN _start_date AND _end_date AND (c.status = 'completed' OR q.clinic_status = 'completed') AND c.deleted_at IS NULL AND ci.deleted_at IS NULL), 0)
     ),
     'visits', jsonb_build_object(
       'registered', (SELECT COUNT(*) FROM queue_entries WHERE created_at::date BETWEEN _start_date AND _end_date),
@@ -78,7 +86,7 @@ BEGIN
       'expiring60DaysCount', (SELECT COUNT(DISTINCT inventory_item_id) FROM inventory_item_batches WHERE quantity_remaining > 0 AND expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + 60)
     ),
     'dataQuality', jsonb_build_object(
-      'completedWithoutPayment', (SELECT COUNT(*) FROM queue_entries q WHERE q.created_at::date BETWEEN _start_date AND _end_date AND q.clinic_status = 'completed' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.queue_entry_id = q.id AND p.deleted_at IS NULL)),
+      'completedWithoutPayment', (SELECT COUNT(*) FROM queue_entries q WHERE (timezone('Asia/Kuala_Lumpur', q.created_at))::date BETWEEN _start_date AND _end_date AND q.clinic_status = 'completed' AND COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.queue_entry_id = q.id AND p.deleted_at IS NULL), 0) <= 0.005),
       'panelVisitWithoutPanel', (SELECT COUNT(*) FROM queue_entries WHERE created_at::date BETWEEN _start_date AND _end_date AND payment_method LIKE 'panel%' AND panel_id IS NULL),
       'consultationWithoutFee', (SELECT COUNT(*) FROM consultations c JOIN queue_entries q ON q.id = c.queue_entry_id WHERE q.created_at::date BETWEEN _start_date AND _end_date AND c.status = 'completed' AND NOT EXISTS (SELECT 1 FROM consultation_items ci WHERE ci.consultation_id = c.id AND ci.deleted_at IS NULL))
     )

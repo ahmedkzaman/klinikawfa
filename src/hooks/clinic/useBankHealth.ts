@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { differenceInCalendarDays, format, subDays } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 
-const LIQUID_METHODS = new Set(['cash', 'qr', 'credit_card', 'debit_card']);
+const LIQUID_METHODS = new Set(['cash', 'qr_pay', 'card', 'transfer']);
 const PROFIT_PER_VISIT_BENCHMARK = 80; // RM
 const GROWTH_CAP = 0.5; // ±50%
 
@@ -64,7 +64,7 @@ interface PeriodAggregate {
   doctorRevenue: Map<string, number>;
 }
 
-function aggregate(rows: ViewRow[]): PeriodAggregate {
+export function aggregateBankHealthRows(rows: ViewRow[]): PeriodAggregate {
   const acc: PeriodAggregate = {
     revenue: 0,
     profit: 0,
@@ -184,8 +184,8 @@ export function useBankHealth(startDate: Date, endDate: Date) {
         fetchPeriod(priorStartKey, priorEndKey),
       ]);
 
-      const currAgg = aggregate(currentRows);
-      const priorAgg = aggregate(priorRows);
+      const currAgg = aggregateBankHealthRows(currentRows);
+      const priorAgg = aggregateBankHealthRows(priorRows);
 
       // Growth based on raw revenue
       const growthPct =

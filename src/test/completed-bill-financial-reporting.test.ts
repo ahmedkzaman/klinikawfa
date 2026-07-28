@@ -43,13 +43,12 @@ vi.mock('@/integrations/supabase/client', () => ({
       const chain = {
         select: () => chain,
         eq: () => chain,
-        is: () => chain,
+        is: () => table === 'payments'
+          ? Promise.resolve({ data: [{ amount: 40 }, { amount: 80 }], error: null })
+          : chain,
         order: () => Promise.resolve({ data: activeCorrectedItems, error: null }),
         maybeSingle: () => Promise.resolve({ data: receiptPayment, error: null }),
       };
-      if (table === 'payments') {
-        chain.order = () => Promise.resolve({ data: [], error: null });
-      }
       return chain;
     },
   },
@@ -116,7 +115,8 @@ describe('completed-bill financial reporting', () => {
     expect(await screen.findByText('Invoice Total (RM)')).toBeVisible();
     expect(screen.getAllByText('120.00').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('90.00')).toBeVisible();
-    expect(screen.getAllByText('30.00').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('30.00')).toHaveLength(1);
+    expect(screen.queryByText('Balance Remaining (RM)')).not.toBeInTheDocument();
     expect(screen.getByText(/Card/i)).toBeVisible();
     expect(screen.queryByText(/Cash/i)).not.toBeInTheDocument();
   });

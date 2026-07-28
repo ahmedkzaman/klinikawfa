@@ -8,7 +8,8 @@ describe('isCompletedVisitUnpaid', () => {
 
   it('ignores soft-deleted payments', () => {
     expect(isCompletedVisitUnpaid([{ id: 'p1', deleted_at: '2026-07-26T00:00:00Z' }])).toBe(true);
-    expect(isCompletedVisitUnpaid([{ id: 'p2', deleted_at: null }])).toBe(false);
+    expect(isCompletedVisitUnpaid([{ id: 'p2', deleted_at: null, amount: 1 }])).toBe(false);
+    expect(isCompletedVisitUnpaid([{ id: 'p3', deleted_at: null, amount: 0 }])).toBe(true);
   });
 
   it('recognizes only cash visits without a panel', () => {

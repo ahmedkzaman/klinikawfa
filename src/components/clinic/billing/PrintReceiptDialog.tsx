@@ -50,6 +50,13 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
       if (error) throw error;
       if (!pay) return null;
 
+      const { data: queuePayments, error: paymentsErr } = await supabase
+        .from('payments')
+        .select('amount')
+        .eq('queue_entry_id', pay.queue_entry_id)
+        .is('deleted_at', null);
+      if (paymentsErr) throw paymentsErr;
+
       let items: ReceiptData['items'] = [];
       let subtotal = 0;
       if (pay.consultation_id) {
@@ -95,7 +102,9 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
         items,
         subtotal,
         invoiceTotal: subtotal,
-        balanceRemaining: Math.max(0, subtotal - Number(pay.amount ?? 0)),
+        balanceRemaining: Math.max(0, subtotal - (queuePayments ?? []).reduce(
+          (total, payment) => total + Number(payment.amount ?? 0), 0,
+        )),
       } satisfies ReceiptData;
     },
   });

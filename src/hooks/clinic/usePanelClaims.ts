@@ -47,6 +47,7 @@ export interface PanelClaimsSummary {
   rejectedSum: number;
   receivedSum: number;
   outstandingSum: number;
+  creditDueSum: number;
 }
 
 interface PanelClaimsPage {
@@ -135,7 +136,7 @@ const OUTSTANDING_STATUSES: PanelClaimStatus[] = [
   'approved',
 ];
 
-function aggregate(rows: SummaryRowRaw[]): PanelClaimsSummary {
+export function aggregatePanelClaimsSummary(rows: SummaryRowRaw[]): PanelClaimsSummary {
   const summary: PanelClaimsSummary = {
     pendingCount: 0,
     overdueCount: 0,
@@ -143,6 +144,7 @@ function aggregate(rows: SummaryRowRaw[]): PanelClaimsSummary {
     rejectedSum: 0,
     receivedSum: 0,
     outstandingSum: 0,
+    creditDueSum: 0,
   };
 
   for (const r of rows) {
@@ -168,7 +170,8 @@ function aggregate(rows: SummaryRowRaw[]): PanelClaimsSummary {
     }
 
     if (OUTSTANDING_STATUSES.includes(r.status)) {
-      summary.outstandingSum += amount;
+      summary.outstandingSum += Math.max(amount - (received ?? 0), 0);
+      summary.creditDueSum += Math.max((received ?? 0) - amount, 0);
     }
   }
 
@@ -184,7 +187,7 @@ export function usePanelClaimsSummary() {
         .from('panel_claims_view')
         .select('status, amount, received_amount, is_overdue');
       if (error) throw error;
-      return aggregate((data ?? []) as unknown as SummaryRowRaw[]);
+      return aggregatePanelClaimsSummary((data ?? []) as unknown as SummaryRowRaw[]);
     },
   });
 }
