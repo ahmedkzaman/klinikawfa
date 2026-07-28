@@ -35,6 +35,15 @@ const contextResponse = {
     payment_type: 'self_pay',
   }],
   panel_claim: null,
+  subtotal: 50,
+  discount_rm: 5,
+  tax_rm: 2.25,
+  tax_pct: 5,
+  total: 47.25,
+  paid: 50,
+  outstanding: 0,
+  credit_due: 2.75,
+  status: 'credit_due',
 };
 
 const payload = {
@@ -95,7 +104,39 @@ describe('completed bill correction hooks', () => {
       consultationId: 'consultation-1',
       items: [expect.objectContaining({ itemName: 'Consultation', remove: false })],
       payments: [expect.objectContaining({ paymentMethod: 'cash', paymentType: 'self_pay' })],
+      originalTotals: {
+        subtotal: 50,
+        discountRm: 5,
+        taxRm: 2.25,
+        taxPct: 5,
+        total: 47.25,
+        paid: 50,
+        outstanding: 0,
+        creditDue: 2.75,
+        status: 'credit_due',
+      },
     });
+  });
+
+  it('normalizes legacy payment methods returned by correction context', async () => {
+    rpc.mockResolvedValue({
+      data: {
+        ...contextResponse,
+        payments: [
+          { ...contextResponse.payments[0], payment_method: 'Credit/Debit Card' },
+          { ...contextResponse.payments[0], id: 'payment-2', payment_method: 'Panel: Acme Health' },
+        ],
+      },
+      error: null,
+    });
+    const queryClient = createQueryClient();
+    const { result } = renderHook(
+      () => useCompletedBillCorrectionContext('queue-1', true),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.payments.map((payment) => payment.paymentMethod)).toEqual(['card', 'panel']);
   });
 
   it('does not fetch correction context while the dialog is closed', async () => {

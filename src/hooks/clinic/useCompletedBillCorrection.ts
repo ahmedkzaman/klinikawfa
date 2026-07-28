@@ -8,6 +8,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import {
   toCompletedBillCorrectionPayload,
+  normalizeCompletedBillPaymentMethod,
   type BillAdjustmentKind,
   type CompletedBillCorrectionContext,
   type CompletedBillCorrectionItem,
@@ -138,7 +139,7 @@ function parsePayment(value: unknown): CompletedBillCorrectionPayment | null {
   const paymentType = requiredString(value.payment_type);
   if (id === null || amount === null || paymentMethod === null || paymentType === null) return null;
 
-  return { id, amount, paymentMethod, paymentType };
+  return { id, amount, paymentMethod: normalizeCompletedBillPaymentMethod(paymentMethod) ?? paymentMethod, paymentType };
 }
 
 function parsePanelClaim(value: unknown): CompletedBillCorrectionContext['panelClaim'] | undefined {
@@ -152,6 +153,24 @@ function parsePanelClaim(value: unknown): CompletedBillCorrectionContext['panelC
   if (id === null || status === null || amount === null || receivedAmount === undefined) return undefined;
 
   return { id, status, amount, receivedAmount };
+}
+
+function parseOriginalTotals(value: Record<string, unknown>): CompletedBillCorrectionContext['originalTotals'] | null {
+  const subtotal = finiteNumber(value.subtotal);
+  const discountRm = finiteNumber(value.discount_rm);
+  const taxRm = finiteNumber(value.tax_rm);
+  const taxPct = finiteNumber(value.tax_pct);
+  const total = finiteNumber(value.total);
+  const paid = finiteNumber(value.paid);
+  const outstanding = finiteNumber(value.outstanding);
+  const creditDue = finiteNumber(value.credit_due);
+  const status = value.status;
+  if (
+    subtotal === null || discountRm === null || taxRm === null || taxPct === null || total === null ||
+    paid === null || outstanding === null || creditDue === null ||
+    (status !== 'outstanding' && status !== 'paid' && status !== 'credit_due')
+  ) return null;
+  return { subtotal, discountRm, taxRm, taxPct, total, paid, outstanding, creditDue, status };
 }
 
 function invalidContextError(): Error {
@@ -169,6 +188,7 @@ function parseCorrectionContext(value: unknown): CompletedBillCorrectionContext 
   const items = value.items.map(parseItem);
   const payments = value.payments.map(parsePayment);
   const panelClaim = parsePanelClaim(value.panel_claim);
+  const originalTotals = parseOriginalTotals(value);
 
   if (
     queueEntryId === null ||
@@ -176,7 +196,8 @@ function parseCorrectionContext(value: unknown): CompletedBillCorrectionContext 
     fingerprint === null ||
     items.some((item) => item === null) ||
     payments.some((payment) => payment === null) ||
-    panelClaim === undefined
+    panelClaim === undefined ||
+    originalTotals === null
   ) {
     throw invalidContextError();
   }
@@ -187,6 +208,7 @@ function parseCorrectionContext(value: unknown): CompletedBillCorrectionContext 
     fingerprint,
     items: items as CompletedBillCorrectionItem[],
     payments: payments as CompletedBillCorrectionPayment[],
+    originalTotals,
     panelClaim,
   };
 }

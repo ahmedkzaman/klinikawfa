@@ -205,4 +205,28 @@ describe('completed bill correction migration', () => {
     expect(sql).not.toMatch(/\[\[:space:\]\]/i);
     expect(sql).not.toMatch(/trim\(p_reason\)/i);
   });
+
+  it('returns authoritative existing adjustments and totals so a correction cannot silently reset them', () => {
+    const migrationsDirectory = resolve(process.cwd(), 'supabase/migrations');
+    const [migration] = readdirSync(migrationsDirectory)
+      .filter((name) => name.endsWith('_add_completed_bill_corrections.sql'));
+    const sql = readFileSync(resolve(migrationsDirectory, migration), 'utf8');
+    const state = sql.match(
+      /create or replace function public\.completed_bill_correction_state[\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+    const context = sql.match(
+      /create or replace function public\.get_completed_bill_correction_context[\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+    const correction = sql.match(
+      /create or replace function public\.correct_completed_bill[\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+
+    expect(state).toMatch(/'discount_rm',\s*round\(totals\.discount_rm, 2\)/i);
+    expect(state).toMatch(/'tax_pct',/i);
+    expect(state).toMatch(/'total',\s*round\(totals\.total, 2\)/i);
+    expect(context).toMatch(/return v_state \|\| jsonb_build_object/i);
+    expect(correction).toMatch(/v_discount_rm := least\(round\(p_discount_rm, 2\)/i);
+    expect(correction).toMatch(/if v_discount_rm > 0 then[\s\S]*'Discount'/i);
+    expect(correction).toMatch(/if v_tax_rm > 0 then[\s\S]*'Tax'/i);
+  });
 });

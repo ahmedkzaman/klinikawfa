@@ -38,6 +38,10 @@ const context = {
     },
   ],
   payments: [{ id: 'payment-1', amount: 40, paymentMethod: 'cash', paymentType: 'self_pay' }],
+  originalTotals: {
+    subtotal: 80, discountRm: 0, taxRm: 0, taxPct: 0, total: 80,
+    paid: 40, outstanding: 40, creditDue: 0, status: 'outstanding' as const,
+  },
   panelClaim: { id: 'claim-1', status: 'approved', amount: 30, receivedAmount: 35 },
 };
 
@@ -119,6 +123,90 @@ describe('CompletedBillCorrectionDialog', () => {
     view.rerender(<CompletedBillCorrectionDialog queueEntryId="queue-2" open onOpenChange={vi.fn()} />);
 
     await waitFor(() => expect(screen.queryByLabelText('Consultation price (RM)')).not.toBeInTheDocument());
+  });
+
+  it('initializes a cached next queue exactly once after closing the prior queue', async () => {
+    contextHook.mockImplementation((queueEntryId: string) => ({
+      data: queueEntryId === 'queue-2'
+        ? { ...context, queueEntryId: 'queue-2', fingerprint: 'fingerprint-2', items: [{ ...context.items[0], price: 25 }, context.items[1]] }
+        : context,
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    }));
+    const view = renderDialog();
+    await screen.findByLabelText('Consultation price (RM)');
+
+    view.rerender(<CompletedBillCorrectionDialog queueEntryId="queue-2" open={false} onOpenChange={vi.fn()} />);
+    view.rerender(<CompletedBillCorrectionDialog queueEntryId="queue-2" open onOpenChange={vi.fn()} />);
+
+    expect(await screen.findByLabelText('Consultation price (RM)')).toHaveValue(25);
+  });
+
+  it('preserves server discount and tax while correcting an unrelated payment', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    const adjustedContext = {
+      ...context,
+      originalTotals: {
+        subtotal: 80, discountRm: 10, taxRm: 4.2, taxPct: 6, total: 74.2,
+        paid: 40, outstanding: 34.2, creditDue: 0, status: 'outstanding' as const,
+      },
+    };
+    contextHook.mockReturnValue({ data: adjustedContext, isLoading: false, isError: false, refetch: vi.fn() });
+    correctBillHook.mockReturnValue({ mutateAsync, isPending: false });
+    renderDialog();
+
+    await screen.findByRole('heading', { name: 'Correct completed bill' });
+    expect(screen.getByLabelText('Discount (RM)')).toHaveValue(10);
+    expect(screen.getByLabelText('Tax (%)')).toHaveValue(6);
+    expect(screen.getByText('Original total: RM 74.20')).toBeVisible();
+    fireEvent.change(screen.getByLabelText('Payment 1 amount (RM)'), { target: { value: '45' } });
+    fireEvent.change(screen.getByLabelText('Correction reason'), { target: { value: 'Correct payment' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm correction' }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(mutateAsync.mock.calls[0][0]).toMatchObject({ p_discount_rm: 10, p_tax_pct: 6 });
+  });
+
+  it('normalizes legacy and panel payments while correcting an unrelated field', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    contextHook.mockReturnValue({
+      data: {
+        ...context,
+        payments: [
+          { ...context.payments[0], paymentMethod: 'TNG / DuitNow QR' },
+          { ...context.payments[0], id: 'payment-2', amount: 0, paymentMethod: 'Panel: Acme Health' },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    correctBillHook.mockReturnValue({ mutateAsync, isPending: false });
+    renderDialog();
+
+    await screen.findByRole('heading', { name: 'Correct completed bill' });
+    fireEvent.change(screen.getByLabelText('Correction reason'), { target: { value: 'Correct payment note' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm correction' }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(mutateAsync.mock.calls[0][0].p_payments).toEqual([
+      { id: 'payment-1', amount: 40, payment_method: 'qr_pay' },
+      { id: 'payment-2', amount: 0, payment_method: 'panel' },
+    ]);
+  });
+
+  it.each([
+    ['Consultation quantity', '1.5', 'Quantity must be a whole number no greater than 1000000.'],
+    ['Tax (%)', '101', 'Tax must be between 0 and 100 percent.'],
+  ])('blocks server-invalid %s before confirmation', async (label, value, error) => {
+    renderDialog();
+    await screen.findByRole('heading', { name: 'Correct completed bill' });
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    fireEvent.change(screen.getByLabelText('Correction reason'), { target: { value: 'Correct payment' } });
+
+    expect(screen.getByText(error)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Confirm correction' })).toBeDisabled();
   });
 
   it('keeps dispensed-medicine removal disabled and enforces its quantity floor', async () => {

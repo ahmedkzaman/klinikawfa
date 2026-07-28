@@ -117,7 +117,7 @@ describe('completed bill corrections', () => {
       discountRm: -1,
       taxPct: Number.POSITIVE_INFINITY,
     })).toMatchObject({
-      'items.0.quantity': 'Quantity must be a finite non-negative number.',
+      'items.0.quantity': 'Quantity must be a whole number no greater than 1000000.',
       'items.0.price': 'Price must be a finite non-negative number.',
       'items.1.id': 'Item IDs must be unique.',
       'payments.0.paymentMethod': 'Enter a payment method for a positive payment.',
@@ -125,6 +125,61 @@ describe('completed bill corrections', () => {
       discountRm: 'Discount must be a finite non-negative number.',
       taxPct: 'Tax must be a finite non-negative number.',
     });
+  });
+
+  it('matches the correction RPC financial bounds before allowing a submission', () => {
+    expect(validateCompletedBillCorrection({
+      ...baseDraft,
+      discountRm: 100000000,
+      taxPct: 101,
+      items: [{ ...baseItem, quantity: 1.5, price: 100000000 }],
+      payments: [{ ...baseDraft.payments[0], amount: 1000000000 }],
+    })).toMatchObject({
+      discountRm: 'Discount cannot exceed RM 99999999.99.',
+      taxPct: 'Tax must be between 0 and 100 percent.',
+      'items.0.quantity': 'Quantity must be a whole number no greater than 1000000.',
+      'items.0.price': 'Price cannot exceed RM 99999999.99.',
+      'payments.0.amount': 'Payment amount cannot exceed RM 999999999.99.',
+    });
+  });
+
+  it('rejects a zero-quantity new configured charge before the RPC', () => {
+    expect(validateCompletedBillCorrection({
+      ...baseDraft,
+      items: [{
+        ...baseItem,
+        id: null,
+        quantity: 0,
+        adjustmentKind: 'other_charge',
+        chargeTypeId: 'charge-1',
+      }],
+    })).toMatchObject({
+      'items.0.quantity': 'A new other charge must have a quantity above zero.',
+    });
+  });
+
+  it('maps supported legacy and panel payment labels to the correction RPC vocabulary', () => {
+    const context: CompletedBillCorrectionContext = {
+      queueEntryId: 'queue-1', consultationId: 'consult-1', fingerprint: 'fingerprint',
+      items: [baseItem],
+      payments: [
+        { ...baseDraft.payments[0], paymentMethod: 'TNG / DuitNow QR' },
+        { ...baseDraft.payments[0], id: 'payment-2', paymentMethod: 'Panel: Acme Health' },
+      ],
+      originalTotals: {
+        subtotal: 80, discountRm: 0, taxRm: 0, taxPct: 0, total: 80,
+        paid: 80, outstanding: 0, creditDue: 0, status: 'paid',
+      },
+      panelClaim: null,
+    };
+
+    expect(toCompletedBillCorrectionPayload(context, {
+      ...baseDraft,
+      payments: context.payments,
+    }).p_payments).toEqual([
+      { id: 'payment-1', amount: 80, payment_method: 'qr_pay' },
+      { id: 'payment-2', amount: 80, payment_method: 'panel' },
+    ]);
   });
 
   it('treats payment UUID case variants as duplicates', () => {

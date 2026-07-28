@@ -60,20 +60,10 @@ function toDraft(context: NonNullable<ReturnType<typeof useCompletedBillCorrecti
       ...(item.id === null ? { clientKey: `loaded-charge-${index}` } : {}),
     })),
     payments: context.payments.map((payment) => ({ ...payment })),
-    discountRm: 0,
-    taxPct: 0,
+    discountRm: context.originalTotals.discountRm,
+    taxPct: context.originalTotals.taxPct,
     reason: '',
   };
-}
-
-/** The domain calculator deliberately accepts bill lines; adjustment metadata is immutable UI data. */
-function totalsFor(draft: CompletedBillCorrectionDraft) {
-  return calculateCompletedBillTotals({
-    ...draft,
-    items: draft.items.map((item) => (
-      item.adjustmentKind === 'other_charge' ? { ...item, adjustmentKind: null } : item
-    )),
-  });
 }
 
 export function CompletedBillCorrectionDialog({
@@ -85,7 +75,6 @@ export function CompletedBillCorrectionDialog({
   const correctBill = useCorrectCompletedBill();
   const { data: chargeTypes = [] } = useClinicChargeTypes({ activeOnly: true });
   const [draft, setDraft] = useState<CompletedBillCorrectionDraft | null>(null);
-  const [originalDraft, setOriginalDraft] = useState<CompletedBillCorrectionDraft | null>(null);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -99,8 +88,8 @@ export function CompletedBillCorrectionDialog({
 
   useEffect(() => {
     if (!open) {
+      activeQueueEntryId.current = queueEntryId;
       setDraft(null);
-      setOriginalDraft(null);
       setLoadedKey(null);
       setSubmissionError(null);
       return;
@@ -108,22 +97,19 @@ export function CompletedBillCorrectionDialog({
     if (activeQueueEntryId.current !== queueEntryId) {
       activeQueueEntryId.current = queueEntryId;
       setDraft(null);
-      setOriginalDraft(null);
       setLoadedKey(null);
       setSubmissionError(null);
-      return;
     }
     if (context?.queueEntryId === queueEntryId && contextKey !== loadedKey) {
       const nextDraft = toDraft(context);
       setDraft(nextDraft);
-      setOriginalDraft(nextDraft);
       setLoadedKey(contextKey);
       setSubmissionError(null);
     }
   }, [context, contextKey, loadedKey, open, queueEntryId]);
 
-  const totals = useMemo(() => draft && totalsFor(draft), [draft]);
-  const originalTotals = useMemo(() => originalDraft && totalsFor(originalDraft), [originalDraft]);
+  const totals = useMemo(() => draft && calculateCompletedBillTotals(draft), [draft]);
+  const originalTotals = context?.originalTotals;
   const errors = useMemo(() => draft ? validateCompletedBillCorrection(draft) : {}, [draft]);
   const isSubmitting = submitting || correctBill.isPending;
   const staleBill = submissionError === 'This bill changed after you opened it. Reload and try again.';
@@ -199,7 +185,6 @@ export function CompletedBillCorrectionDialog({
   function reloadBill() {
     setSubmissionError(null);
     setDraft(null);
-    setOriginalDraft(null);
     setLoadedKey(null);
     void contextQuery.refetch();
   }
@@ -264,6 +249,7 @@ export function CompletedBillCorrectionDialog({
                           id={`correction-item-${index}-quantity`}
                           type="number"
                           min={item.dispensedQty ?? 0}
+                          max="1000000"
                           step="1"
                           value={item.quantity}
                           disabled={isSubmitting}
@@ -279,6 +265,7 @@ export function CompletedBillCorrectionDialog({
                           id={`correction-item-${index}-price`}
                           type="number"
                           min="0"
+                          max="99999999.99"
                           step="0.01"
                           value={item.price}
                           disabled={isSubmitting}
@@ -333,9 +320,8 @@ export function CompletedBillCorrectionDialog({
               <h3 id="payments-heading" className="font-medium">Existing payments</h3>
               <p className="text-sm text-muted-foreground">To add a payment after correcting this bill, use Record Payment.</p>
               {draft.payments.map((payment, index) => {
-                const supportedMethods = PAYMENT_METHOD_OPTIONS.some((option) => option.value === payment.paymentMethod)
-                  ? PAYMENT_METHOD_OPTIONS
-                  : [...PAYMENT_METHOD_OPTIONS, { value: payment.paymentMethod, label: payment.paymentMethod === 'panel' ? 'Panel' : payment.paymentMethod }];
+                const hasSupportedMethod = PAYMENT_METHOD_OPTIONS.some((option) => option.value === payment.paymentMethod)
+                  || payment.paymentMethod === 'panel';
                 return (
                   <div key={payment.id} className="grid grid-cols-1 gap-3 rounded-md border p-3 sm:grid-cols-2">
                     <div className="space-y-1">
@@ -344,6 +330,7 @@ export function CompletedBillCorrectionDialog({
                         id={`correction-payment-${index}-amount`}
                         type="number"
                         min="0"
+                        max="999999999.99"
                         step="0.01"
                         value={payment.amount}
                         disabled={isSubmitting}
@@ -362,7 +349,9 @@ export function CompletedBillCorrectionDialog({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {supportedMethods.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}
+                          {!hasSupportedMethod && <SelectItem value={payment.paymentMethod} disabled>Choose a supported method</SelectItem>}
+                          {PAYMENT_METHOD_OPTIONS.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}
+                          <SelectItem value="panel">Panel</SelectItem>
                         </SelectContent>
                       </Select>
                       {errors[`payments.${index}.paymentMethod`] && <p className="text-sm text-destructive">{errors[`payments.${index}.paymentMethod`]}</p>}
@@ -375,12 +364,12 @@ export function CompletedBillCorrectionDialog({
             <section className="grid grid-cols-1 gap-3 sm:grid-cols-2" aria-label="Discount and tax">
               <div className="space-y-1">
                 <Label htmlFor="correction-discount">Discount (RM)</Label>
-                <Input id="correction-discount" type="number" min="0" step="0.01" value={draft.discountRm} disabled={isSubmitting} onChange={(event) => setDraft({ ...draft, discountRm: numberValue(event.target.value) })} />
+                <Input id="correction-discount" type="number" min="0" max="99999999.99" step="0.01" value={draft.discountRm} disabled={isSubmitting} onChange={(event) => setDraft({ ...draft, discountRm: numberValue(event.target.value) })} />
                 {errors.discountRm && <p className="text-sm text-destructive">{errors.discountRm}</p>}
               </div>
               <div className="space-y-1">
                 <Label htmlFor="correction-tax">Tax (%)</Label>
-                <Input id="correction-tax" type="number" min="0" step="0.01" value={draft.taxPct} disabled={isSubmitting} onChange={(event) => setDraft({ ...draft, taxPct: numberValue(event.target.value) })} />
+                <Input id="correction-tax" type="number" min="0" max="100" step="0.01" value={draft.taxPct} disabled={isSubmitting} onChange={(event) => setDraft({ ...draft, taxPct: numberValue(event.target.value) })} />
                 {errors.taxPct && <p className="text-sm text-destructive">{errors.taxPct}</p>}
               </div>
             </section>
