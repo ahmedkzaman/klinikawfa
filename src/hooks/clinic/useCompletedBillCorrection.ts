@@ -38,6 +38,7 @@ const INVALIDATED_QUERY_KEYS = [
   () => ['consultation_items'] as const,
   (queueEntryId: string) => ['payments', queueEntryId] as const,
   () => ['payments_ledger'] as const,
+  () => ['clinic', 'queue-entries'] as const,
   (queueEntryId: string) => ['clinic', 'queue-entry', queueEntryId] as const,
   (queueEntryId: string) => ['clinic', 'completed-visit-detail', queueEntryId] as const,
   () => ['patient_outstanding'] as const,

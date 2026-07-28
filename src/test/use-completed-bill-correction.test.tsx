@@ -169,6 +169,7 @@ describe('completed bill correction hooks', () => {
       ['consultation_items'],
       ['payments', 'queue-1'],
       ['payments_ledger'],
+      ['clinic', 'queue-entries'],
       ['clinic', 'queue-entry', 'queue-1'],
       ['clinic', 'completed-visit-detail', 'queue-1'],
       ['patient_outstanding'],
