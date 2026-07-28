@@ -1,12 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { PropsWithChildren } from 'react';
 
 const useQuery = vi.hoisted(() => vi.fn());
 const rpc = vi.hoisted(() => vi.fn());
 
-vi.mock('@tanstack/react-query', () => ({ useQuery }));
+vi.mock('@tanstack/react-query', async () => ({
+  ...(await vi.importActual<typeof import('@tanstack/react-query')>('@tanstack/react-query')),
+  useQuery,
+}));
 vi.mock('@/integrations/supabase/client', () => ({ supabase: { rpc } }));
 
 import { useDoctorClinicalActivity } from '@/hooks/clinic/useDoctorClinicalActivity';
+
+const { useQuery: realUseQuery } = await vi.importActual<typeof import('@tanstack/react-query')>(
+  '@tanstack/react-query',
+);
 
 const dates = [new Date('2026-07-01T12:00:00'), new Date('2026-07-31T12:00:00')] as const;
 
@@ -71,6 +81,23 @@ describe('useDoctorClinicalActivity', () => {
     };
 
     await expect(queryFn()).rejects.toBe(error);
+  });
+
+  it('exposes an RPC failure through the React Query error state', async () => {
+    const error = new Error('RPC unavailable');
+    rpc.mockResolvedValue({ data: null, error });
+    useQuery.mockImplementation(realUseQuery);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useDoctorClinicalActivity(...dates), { wrapper });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).toBe(error);
   });
 
   it('returns no summaries for an empty RPC response', async () => {
