@@ -79,7 +79,7 @@ export function calculateCompletedBillTotals(
 ): CompletedBillTotals {
   const subtotalCents = draft.items
     .filter((item) => !item.remove && item.adjustmentKind === null)
-    .reduce((sum, item) => sum + cents(item.price) * item.quantity, 0);
+    .reduce((sum, item) => sum + Math.round(cents(item.price) * item.quantity), 0);
   const discountCents = Math.min(cents(draft.discountRm), subtotalCents);
   const taxableCents = subtotalCents - discountCents;
   const taxCents = Math.round(taxableCents * draft.taxPct / 100);

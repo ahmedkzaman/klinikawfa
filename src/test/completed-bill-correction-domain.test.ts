@@ -74,6 +74,23 @@ describe('completed bill corrections', () => {
     expect(overpaid.status).toBe('credit_due');
   });
 
+  it('rounds a fractional quantity line total to whole cents', () => {
+    expect(calculateCompletedBillTotals({
+      ...baseDraft,
+      items: [{ ...baseItem, quantity: 0.5, price: 0.01 }],
+      payments: [{ ...baseDraft.payments[0], amount: 0.01 }],
+    })).toEqual({
+      subtotal: 0.01,
+      discountRm: 0,
+      taxRm: 0,
+      total: 0.01,
+      paid: 0.01,
+      outstanding: 0,
+      creditDue: 0,
+      status: 'paid',
+    });
+  });
+
   it('rejects an empty reason and invalid dispensed medicine corrections', () => {
     expect(validateCompletedBillCorrection({ ...baseDraft, reason: '  ' })).toMatchObject({
       reason: 'Enter a correction reason of at least 3 characters.',
