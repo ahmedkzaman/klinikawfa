@@ -5,6 +5,10 @@ import {
   isProcedureScoreboardRow,
   normalizeProcedureName,
 } from '@/lib/clinic/procedureRoi';
+import {
+  rankMedicationsByDispensedVisits,
+  type MedicationDispenseRow,
+} from '@/lib/clinic/medicationVisitRanking';
 
 // View not yet in generated types — same loose-cast pattern as useFinancialInsights.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -46,8 +50,7 @@ export interface DiagnosisRank {
 
 export interface MedicationRank {
   itemName: string;
-  totalRevenue: number;
-  totalQuantity: number; // line-item occurrences (qty not exposed yet)
+  dispensedVisitCount: number;
 }
 
 export interface ProcedureROI {
@@ -88,6 +91,32 @@ export function useScoreboards(startDate: Date, endDate: Date) {
       if (servicesQuery.error) throw servicesQuery.error;
 
       const rows: ViewRow[] = (financialQuery.data ?? []) as ViewRow[];
+      const medicationRows = rows.filter((row) => row.kind === 'medication');
+      const medicationItemIds = [...new Set(medicationRows.map((row) => row.id))];
+      const medicationDetails = new Map<
+        string,
+        {
+          item_id: string | null;
+          quantity: number | string | null;
+          dispensed_qty: number | string | null;
+        }
+      >();
+
+      for (let offset = 0; offset < medicationItemIds.length; offset += 200) {
+        const itemIds = medicationItemIds.slice(offset, offset + 200);
+        const detailsQuery = await db
+          .from('consultation_items')
+          .select('id, item_id, quantity, dispensed_qty')
+          .in('id', itemIds)
+          .is('deleted_at', null);
+
+        if (detailsQuery.error) throw detailsQuery.error;
+
+        for (const detail of detailsQuery.data ?? []) {
+          medicationDetails.set(detail.id, detail);
+        }
+      }
+
       const serviceCategories = new Map<string, string>(
         ((servicesQuery.data ?? []) as Array<{ name: string | null; category: string | null }>)
           .filter((service) => service.name && service.category)
@@ -110,9 +139,6 @@ export function useScoreboards(startDate: Date, endDate: Date) {
         encounters: Set<string>;
       };
       const diagnosisMap = new Map<string, DiagnosisAcc>();
-
-      type MedicationAcc = { revenue: number; quantity: number };
-      const medicationMap = new Map<string, MedicationAcc>();
 
       type ProcedureAcc = {
         revenue: number;
@@ -156,15 +182,6 @@ export function useScoreboards(startDate: Date, endDate: Date) {
         dxAcc.encounters.add(r.queue_entry_id);
         diagnosisMap.set(dxKey, dxAcc);
 
-        // Medications (revenue + frequency proxy)
-        if (r.kind === 'medication') {
-          const medAcc =
-            medicationMap.get(r.item_name) ?? ({ revenue: 0, quantity: 0 } as MedicationAcc);
-          medAcc.revenue += rev;
-          medAcc.quantity += 1;
-          medicationMap.set(r.item_name, medAcc);
-        }
-
         // Procedure ROI (services only)
         if (isProcedureScoreboardRow(r, serviceCategories)) {
           const procAcc =
@@ -203,14 +220,22 @@ export function useScoreboards(startDate: Date, endDate: Date) {
         .sort((a, b) => b.encounters - a.encounters)
         .slice(0, 10);
 
-      const topMedications: MedicationRank[] = Array.from(medicationMap.entries())
-        .map(([itemName, v]) => ({
-          itemName,
-          totalRevenue: v.revenue,
-          totalQuantity: v.quantity,
-        }))
-        .sort((a, b) => b.totalRevenue - a.totalRevenue)
-        .slice(0, 10);
+      const topMedications: MedicationRank[] = rankMedicationsByDispensedVisits(
+        medicationRows.flatMap((row): MedicationDispenseRow[] => {
+          const detail = medicationDetails.get(row.id);
+          if (!detail) return [];
+
+          return [
+            {
+              itemId: detail.item_id,
+              itemName: row.item_name,
+              queueEntryId: row.queue_entry_id,
+              quantity: detail.quantity,
+              dispensedQuantity: detail.dispensed_qty,
+            },
+          ];
+        }),
+      );
 
       const procedureRoi: ProcedureROI[] = Array.from(procedureMap.entries())
         .map(([itemName, v]) => ({

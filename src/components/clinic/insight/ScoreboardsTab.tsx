@@ -71,7 +71,7 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
     () =>
       (data?.topMedications ?? []).map((m) => ({
         name: m.itemName,
-        Revenue: Number(m.totalRevenue.toFixed(2)),
+        'Patient Visits': m.dispensedVisitCount,
       })),
     [data?.topMedications],
   );
@@ -201,7 +201,7 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
           <CardContent className="p-6">
             <div className="mb-3">
               <h3 className={cn(bentoHeader, 'mb-1')}>Top 10 Medications</h3>
-              <p className="text-xs text-slate-500">By revenue</p>
+              <p className="text-xs text-slate-500">By patient visits dispensed</p>
             </div>
             {medicationsChartData.length === 0 ? (
               <EmptyMini label="No medications dispensed." />
@@ -219,7 +219,7 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
                       stroke={chartAxisStroke}
                       tick={{ fill: chartTickFill }}
                       fontSize={11}
-                      tickFormatter={(v) => `RM ${v}`}
+                      allowDecimals={false}
                     />
                     <YAxis
                       type="category"
@@ -230,11 +230,12 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
                       width={140}
                       tickFormatter={(v: string) => (v.length > 22 ? `${v.slice(0, 22)}…` : v)}
                     />
-                    <Tooltip
-                      contentStyle={chartTooltipStyle}
-                      formatter={(value: number) => formatRM(value)}
+                    <Tooltip contentStyle={chartTooltipStyle} />
+                    <Bar
+                      dataKey="Patient Visits"
+                      fill={chartColors.emerald}
+                      radius={[0, 6, 6, 0]}
                     />
-                    <Bar dataKey="Revenue" fill={chartColors.emerald} radius={[0, 6, 6, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
