@@ -6265,6 +6265,22 @@ export type Database = {
         Args: { p_queue_entry_id: string }
         Returns: Json
       }
+      get_completed_bill_correction_history: {
+        Args: {
+          p_before_created_at?: string | null
+          p_before_id?: string | null
+          p_limit?: number
+          p_queue_entry_id: string
+        }
+        Returns: {
+          actor_id: string
+          after_total: number
+          before_total: number
+          created_at: string
+          id: string
+          reason: string
+        }[]
+      }
       get_doctor_id_for_user: { Args: { _user_id: string }; Returns: string }
       get_doctors_on_duty: {
         Args: { _date?: string }

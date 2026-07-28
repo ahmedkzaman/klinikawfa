@@ -45,7 +45,7 @@ const context = {
   panelClaim: { id: 'claim-1', status: 'approved', amount: 30, receivedAmount: 35 },
 };
 
-function renderDialog(onOpenChange = vi.fn()) {
+function renderDialog(onOpenChange = vi.fn(), onCorrected?: () => void | Promise<void>) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   function Wrapper({ children }: PropsWithChildren) {
     return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
@@ -53,7 +53,7 @@ function renderDialog(onOpenChange = vi.fn()) {
   return {
     onOpenChange,
     ...render(
-      <CompletedBillCorrectionDialog queueEntryId="queue-1" open onOpenChange={onOpenChange} />,
+      <CompletedBillCorrectionDialog queueEntryId="queue-1" open onOpenChange={onOpenChange} onCorrected={onCorrected} />,
       { wrapper: Wrapper },
     ),
   };
@@ -259,6 +259,22 @@ describe('CompletedBillCorrectionDialog', () => {
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(toastSuccess).toHaveBeenCalledWith('Completed bill corrected');
+  });
+
+  it('closes as successful when a post-commit refresh fails', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    const onCorrected = vi.fn().mockRejectedValue(new Error('Refresh unavailable'));
+    correctBillHook.mockReturnValue({ mutateAsync, isPending: false });
+    const { onOpenChange } = renderDialog(vi.fn(), onCorrected);
+
+    await screen.findByRole('heading', { name: 'Correct completed bill' });
+    fireEvent.change(screen.getByLabelText('Correction reason'), { target: { value: 'Correct payment' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm correction' }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(toastSuccess).toHaveBeenCalledWith('Completed bill corrected');
+    expect(screen.queryByText('Refresh unavailable')).not.toBeInTheDocument();
   });
 
   it('keeps the dialog open and offers reload when the bill is stale', async () => {

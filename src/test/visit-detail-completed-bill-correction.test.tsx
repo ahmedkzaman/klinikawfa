@@ -11,6 +11,7 @@ const history = vi.hoisted(() => ({
   isError: false,
   refetch: vi.fn(),
 }));
+const historyHook = vi.hoisted(() => vi.fn());
 const refetchItems = vi.hoisted(() => vi.fn());
 const refetchPayments = vi.hoisted(() => vi.fn());
 
@@ -68,7 +69,10 @@ vi.mock('@/components/clinic/visit/CompletedBillCorrectionDialog', () => ({
   ) : null,
 }));
 vi.mock('@/hooks/clinic/useCompletedBillCorrection', () => ({
-  useCompletedBillCorrectionHistory: () => history,
+  useCompletedBillCorrectionHistory: (queueEntryId: string | null) => {
+    historyHook(queueEntryId);
+    return history;
+  },
 }));
 
 import VisitDetail from '@/pages/clinic/VisitDetail';
@@ -87,6 +91,7 @@ describe('completed visit bill correction', () => {
     history.isLoading = false;
     history.isError = false;
     history.refetch.mockReset();
+    historyHook.mockReset();
     refetchItems.mockReset();
     refetchPayments.mockReset();
   });
@@ -115,6 +120,12 @@ describe('completed visit bill correction', () => {
     expect(screen.queryByRole('button', { name: 'Edit completed bill' })).not.toBeInTheDocument();
   });
 
+  it('hides completed bill correction for a non-completed consultation even for an allowed role', () => {
+    visit.consultationStatus = 'with_doctor';
+    renderVisit();
+    expect(screen.queryByRole('button', { name: 'Edit completed bill' })).not.toBeInTheDocument();
+  });
+
   it('refreshes corrected billing values without changing completed status badges', async () => {
     renderVisit();
     expect(screen.getByText('Items total: RM 50.00')).toBeVisible();
@@ -130,8 +141,10 @@ describe('completed visit bill correction', () => {
     expect(screen.getAllByText('completed')).toHaveLength(2);
   });
 
-  it('shows immutable financial correction history only to roles permitted by audit RLS', () => {
-    auth.role = 'operations';
+  it.each(['ops_staff', 'operations', 'staff', 'admin', 'special_admin', 'doctor_admin'])(
+    'shows immutable financial correction history to %s',
+    (role) => {
+    auth.role = role;
     history.data = [{
       id: 'audit-1', actorId: 'actor-1', createdAt: '2026-07-28T09:15:00.000Z', reason: 'Correct consultation fee', beforeTotal: 50, afterTotal: 75,
     }];
@@ -140,14 +153,16 @@ describe('completed visit bill correction', () => {
     expect(screen.getByText('Correct consultation fee')).toBeVisible();
     expect(screen.getByText('RM 50.00 → RM 75.00')).toBeVisible();
     expect(screen.getByText('Actor: actor-1')).toBeVisible();
+    expect(historyHook).toHaveBeenCalledWith('queue-1');
   });
 
-  it('does not request or show correction history to a correction role excluded by audit RLS', () => {
-    auth.role = 'ops_staff';
+  it('does not request or show correction history to a correction-denied role', () => {
+    auth.role = 'purchaser';
     history.data = [{
       id: 'audit-1', actorId: 'actor-1', createdAt: '2026-07-28T09:15:00.000Z', reason: 'Correct consultation fee', beforeTotal: 50, afterTotal: 75,
     }];
     renderVisit();
     expect(screen.queryByRole('heading', { name: 'Bill correction history' })).not.toBeInTheDocument();
+    expect(historyHook).toHaveBeenCalledWith(null);
   });
 });

@@ -12,12 +12,12 @@ import { BillingDetailsColumn } from '@/components/clinic/visit/BillingDetailsCo
 
 const item = { id: 'item-1', item_name: 'Consultation', quantity: 1, price: 100, item_id: null } as ConsultationItemRow;
 
-function renderBilling(amount: number) {
+function renderBilling(amount: number, billingItem = item) {
   render(
     <BillingDetailsColumn
       queueEntryId="queue-1"
       consultationId="consultation-1"
-      items={[item]}
+      items={[billingItem]}
       payments={[{ id: 'payment-1', amount, payment_method: 'cash', payment_type: 'self_pay', created_at: '2026-07-28T09:00:00.000Z' } as PaymentRow]}
     />,
   );
@@ -32,5 +32,15 @@ describe('BillingDetailsColumn financial state', () => {
     renderBilling(amount);
     expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     expect(screen.getByText(value)).toBeVisible();
+  });
+
+  it('uses a medicine line’s corrected billed quantity rather than its dispensed quantity', () => {
+    const correctedMedicine = {
+      id: 'medicine-1', item_name: 'Medicine', quantity: 3, price: 10, item_id: 'catalog-1', dispensed_qty: 2,
+    } as ConsultationItemRow;
+    renderBilling(30, correctedMedicine);
+    expect(screen.getAllByText('Paid').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('RM 30.00').length).toBeGreaterThanOrEqual(3);
+    expect(screen.queryByText('Refund/Credit Due')).not.toBeInTheDocument();
   });
 });

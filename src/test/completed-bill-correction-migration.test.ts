@@ -179,12 +179,36 @@ describe('completed bill correction migration', () => {
       /revoke all privileges on table public\.completed_bill_correction_audit from public,\s*anon,\s*authenticated/i,
     );
     expect(sql).toMatch(
-      /grant select on table public\.completed_bill_correction_audit to authenticated/i,
+      /create policy "completed_bill_correction_audit_correction_reader"[\s\S]*can_correct_completed_bill\(auth\.uid\(\)\)/i,
     );
+    expect(sql).not.toMatch(/grant select on table public\.completed_bill_correction_audit to authenticated/i);
     expect(sql).toMatch(/has_table_privilege\(\s*'anon'[\s\S]*'truncate'\s*\)/i);
     expect(sql).toMatch(
       /has_table_privilege\(\s*'authenticated'[\s\S]*'truncate'\s*\)/i,
     );
+  });
+
+  it('exposes bounded financial audit summaries through an authorized fixed-search-path RPC only', () => {
+    const migrationsDirectory = resolve(process.cwd(), 'supabase/migrations');
+    const [migration] = readdirSync(migrationsDirectory)
+      .filter((name) => name.endsWith('_add_completed_bill_corrections.sql'));
+    const sql = readFileSync(resolve(migrationsDirectory, migration), 'utf8');
+    const history = sql.match(
+      /create or replace function public\.get_completed_bill_correction_history[\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+
+    expect(history).toMatch(/returns table[\s\S]*before_total numeric[\s\S]*after_total numeric/i);
+    expect(history).toMatch(/security definer/i);
+    expect(history).toMatch(/set search_path\s*=\s*public,\s*pg_temp/i);
+    expect(history).toMatch(/can_correct_completed_bill\(auth\.uid\(\)\)/i);
+    expect(history).toMatch(/p_limit integer default 25/i);
+    expect(history).toMatch(/p_limit not between 1 and 100/i);
+    expect(history).toMatch(/audit\.created_at desc,\s*audit\.id desc/i);
+    expect(history).toMatch(/before_state->>'total'/i);
+    expect(history).toMatch(/after_state->>'total'/i);
+    expect(sql).toMatch(/revoke all on function public\.get_completed_bill_correction_history[\s\S]*from public[\s\S]*from anon[\s\S]*grant execute on function public\.get_completed_bill_correction_history[\s\S]*to authenticated/i);
+    expect(sql).toMatch(/v_history_config text\[\]/i);
+    expect(sql).toMatch(/postflight_history_rpc_not_hardened/i);
   });
 
   it('normalizes every whitespace class before validating and storing reasons', () => {

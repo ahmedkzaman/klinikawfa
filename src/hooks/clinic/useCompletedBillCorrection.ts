@@ -239,11 +239,6 @@ function parseCorrectionResult(value: unknown): CompletedBillCorrectionResult {
   return { auditId, fingerprint };
 }
 
-function totalFromAuditState(value: unknown): number | null {
-  if (!isRecord(value)) return null;
-  return finiteNumber(value.total);
-}
-
 function parseCorrectionHistory(value: unknown): CompletedBillCorrectionHistoryEntry[] {
   if (!Array.isArray(value)) throw new Error('Completed bill correction history is invalid.');
   return value.map((entry) => {
@@ -252,8 +247,8 @@ function parseCorrectionHistory(value: unknown): CompletedBillCorrectionHistoryE
     const actorId = requiredString(entry.actor_id);
     const createdAt = requiredString(entry.created_at);
     const reason = requiredString(entry.reason);
-    const beforeTotal = totalFromAuditState(entry.before_state);
-    const afterTotal = totalFromAuditState(entry.after_state);
+    const beforeTotal = finiteNumber(entry.before_total);
+    const afterTotal = finiteNumber(entry.after_total);
     if (id === null || actorId === null || createdAt === null || reason === null || beforeTotal === null || afterTotal === null) {
       throw new Error('Completed bill correction history is invalid.');
     }
@@ -329,11 +324,12 @@ export function useCompletedBillCorrectionHistory(
     queryKey: CORRECTION_HISTORY_KEY(trimmedQueueEntryId),
     enabled: Boolean(trimmedQueueEntryId),
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('completed_bill_correction_audit')
-        .select('id, actor_id, created_at, reason, before_state, after_state')
-        .eq('queue_entry_id', trimmedQueueEntryId)
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.rpc('get_completed_bill_correction_history', {
+        p_queue_entry_id: trimmedQueueEntryId,
+        p_limit: 25,
+        p_before_created_at: null,
+        p_before_id: null,
+      });
       if (error) throw error;
       return parseCorrectionHistory(data ?? []);
     },

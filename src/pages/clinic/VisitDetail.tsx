@@ -48,10 +48,7 @@ export default function VisitDetail() {
     entry?.clinic_status === 'completed' &&
     consultation?.status === 'completed' &&
     canCorrectCompletedBill(role);
-  // This mirrors the current audit-table SELECT policy. The correction allowlist
-  // is intentionally broader than audit visibility, so disallowed queries never
-  // produce an avoidable RLS error for staff or doctor-admin users.
-  const canReadCorrectionHistory = role === 'operations' || role === 'admin' || role === 'special_admin';
+  const canReadCorrectionHistory = canCorrectCompletedBill(role);
   const correctionHistory = useCompletedBillCorrectionHistory(
     canReadCorrectionHistory && entry?.clinic_status === 'completed' ? queueEntryId ?? null : null,
   );

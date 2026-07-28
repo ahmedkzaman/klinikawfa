@@ -85,12 +85,6 @@ CREATE INDEX completed_bill_correction_audit_consultation_created_idx
 ALTER TABLE public.completed_bill_correction_audit ENABLE ROW LEVEL SECURITY;
 
 REVOKE ALL PRIVILEGES ON TABLE public.completed_bill_correction_audit FROM PUBLIC, anon, authenticated;
-GRANT SELECT ON TABLE public.completed_bill_correction_audit TO authenticated;
-
-CREATE POLICY "completed_bill_correction_audit_admin_read"
-  ON public.completed_bill_correction_audit
-  FOR SELECT TO authenticated
-  USING (public.is_ops_or_admin(auth.uid()));
 
 -- This owner-only table is a capability scoped to one database transaction,
 -- backend, consultation, and authenticated actor. Client roles cannot create a
@@ -152,6 +146,74 @@ $function$;
 ALTER FUNCTION public.can_correct_completed_bill(uuid) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.can_correct_completed_bill(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.can_correct_completed_bill(uuid) TO authenticated;
+
+-- Keep the immutable table inaccessible to clinic clients. The policy uses the
+-- same server capability as correction, while the narrow SECURITY DEFINER RPC
+-- below is the only client-readable history projection.
+CREATE POLICY "completed_bill_correction_audit_correction_reader"
+  ON public.completed_bill_correction_audit
+  FOR SELECT TO authenticated
+  USING (public.can_correct_completed_bill(auth.uid()));
+
+CREATE OR REPLACE FUNCTION public.get_completed_bill_correction_history(
+  p_queue_entry_id uuid,
+  p_limit integer DEFAULT 25,
+  p_before_created_at timestamptz DEFAULT NULL,
+  p_before_id uuid DEFAULT NULL
+)
+RETURNS TABLE (
+  id uuid,
+  actor_id uuid,
+  created_at timestamptz,
+  reason text,
+  before_total numeric,
+  after_total numeric
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $function$
+BEGIN
+  IF NOT public.can_correct_completed_bill(auth.uid()) THEN
+    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_limit NOT BETWEEN 1 AND 100 THEN
+    RAISE EXCEPTION 'HISTORY_PAGE_SIZE_INVALID' USING ERRCODE = '22023';
+  END IF;
+
+  IF (p_before_created_at IS NULL) <> (p_before_id IS NULL) THEN
+    RAISE EXCEPTION 'HISTORY_CURSOR_INVALID' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    audit.id,
+    audit.actor_id,
+    audit.created_at,
+    audit.reason,
+    round((audit.before_state->>'total')::numeric, 2) AS before_total,
+    round((audit.after_state->>'total')::numeric, 2) AS after_total
+  FROM public.completed_bill_correction_audit audit
+  WHERE audit.queue_entry_id = p_queue_entry_id
+    AND (
+      p_before_created_at IS NULL
+      OR (audit.created_at, audit.id) < (p_before_created_at, p_before_id)
+    )
+  ORDER BY audit.created_at DESC, audit.id DESC
+  LIMIT p_limit;
+END;
+$function$;
+
+ALTER FUNCTION public.get_completed_bill_correction_history(uuid, integer, timestamptz, uuid)
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.get_completed_bill_correction_history(uuid, integer, timestamptz, uuid)
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_completed_bill_correction_history(uuid, integer, timestamptz, uuid)
+  FROM anon;
+GRANT EXECUTE ON FUNCTION public.get_completed_bill_correction_history(uuid, integer, timestamptz, uuid)
+  TO authenticated;
 
 -- Every consultation-item statement, checkout, and completed-bill correction
 -- takes this transaction lock before any row lock. A statement-level trigger is
@@ -1577,6 +1639,8 @@ DO $postflight$
 DECLARE
   v_context oid :=
     to_regprocedure('public.get_completed_bill_correction_context(uuid)');
+  v_history oid :=
+    to_regprocedure('public.get_completed_bill_correction_history(uuid,integer,timestamptz,uuid)');
   v_correction oid :=
     to_regprocedure(
       'public.correct_completed_bill(uuid,text,text,jsonb,jsonb,numeric,numeric)'
@@ -1598,6 +1662,7 @@ DECLARE
   v_inventory_trigger oid :=
     to_regprocedure('public.trg_consultation_items_inventory()');
   v_context_config text[];
+  v_history_config text[];
   v_correction_config text[];
   v_active_payment_checkout_config text[];
 BEGIN
@@ -1613,6 +1678,7 @@ BEGIN
   END IF;
 
   IF v_context IS NULL
+     OR v_history IS NULL
      OR v_correction IS NULL
      OR v_checkout IS NULL
      OR v_active_payment_checkout IS NULL THEN
@@ -1683,12 +1749,12 @@ BEGIN
     RAISE EXCEPTION 'POSTFLIGHT_AUDIT_MUTATION_PRIVILEGE';
   END IF;
 
-  IF NOT has_table_privilege(
+  IF has_table_privilege(
     'authenticated',
     'public.completed_bill_correction_audit',
     'SELECT'
   ) THEN
-    RAISE EXCEPTION 'POSTFLIGHT_AUDIT_SELECT_MISSING';
+    RAISE EXCEPTION 'POSTFLIGHT_AUDIT_SELECT_EXPOSED';
   END IF;
 
   IF EXISTS (
@@ -1697,10 +1763,11 @@ BEGIN
     CROSS JOIN LATERAL aclexplode(
       COALESCE(p.proacl, acldefault('f', p.proowner))
     ) acl
-    WHERE p.oid IN (v_context, v_correction, v_active_payment_checkout)
+    WHERE p.oid IN (v_context, v_history, v_correction, v_active_payment_checkout)
       AND acl.grantee = 0
       AND acl.privilege_type = 'EXECUTE'
   ) OR has_function_privilege('anon', v_context, 'EXECUTE')
+     OR has_function_privilege('anon', v_history, 'EXECUTE')
      OR has_function_privilege('anon', v_correction, 'EXECUTE')
      OR has_function_privilege(
        'anon',
@@ -1711,6 +1778,7 @@ BEGIN
   END IF;
 
   IF NOT has_function_privilege('authenticated', v_context, 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', v_history, 'EXECUTE')
      OR NOT has_function_privilege('authenticated', v_correction, 'EXECUTE')
      OR NOT has_function_privilege(
        'authenticated',
@@ -1742,6 +1810,18 @@ BEGIN
        'search_path=public, pg_temp' = ANY(COALESCE(v_context_config, ARRAY[]::text[]))
      ) THEN
     RAISE EXCEPTION 'POSTFLIGHT_CONTEXT_RPC_NOT_HARDENED';
+  END IF;
+
+  SELECT p.proconfig
+    INTO v_history_config
+  FROM pg_proc p
+  WHERE p.oid = v_history
+    AND p.prosecdef;
+  IF NOT FOUND
+     OR NOT (
+       'search_path=public, pg_temp' = ANY(COALESCE(v_history_config, ARRAY[]::text[]))
+     ) THEN
+    RAISE EXCEPTION 'POSTFLIGHT_HISTORY_RPC_NOT_HARDENED';
   END IF;
 
   SELECT p.proconfig

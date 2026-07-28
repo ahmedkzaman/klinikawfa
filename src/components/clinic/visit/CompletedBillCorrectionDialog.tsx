@@ -174,15 +174,16 @@ export function CompletedBillCorrectionDialog({
     setSubmissionError(null);
     try {
       await correctBill.mutateAsync(toCompletedBillCorrectionPayload(context, draft));
-      toast.success('Completed bill corrected');
-      await onCorrected?.();
-      onOpenChange(false);
     } catch (error) {
       setSubmissionError(error instanceof Error ? error.message : 'Correction failed.');
+      return;
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
     }
+    toast.success('Completed bill corrected');
+    onOpenChange(false);
+    void Promise.resolve(onCorrected?.()).catch(() => undefined);
   }
 
   function reloadBill() {

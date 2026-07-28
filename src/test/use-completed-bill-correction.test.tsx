@@ -4,15 +4,8 @@ import type { PropsWithChildren } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const rpc = vi.hoisted(() => vi.fn());
-const audit = vi.hoisted(() => {
-  const order = vi.fn();
-  const eq = vi.fn(() => ({ order }));
-  const select = vi.fn(() => ({ eq }));
-  const from = vi.fn(() => ({ select }));
-  return { from, select, eq, order };
-});
 
-vi.mock('@/integrations/supabase/client', () => ({ supabase: { rpc, from: audit.from } }));
+vi.mock('@/integrations/supabase/client', () => ({ supabase: { rpc } }));
 
 import {
   useCompletedBillCorrectionContext,
@@ -93,10 +86,9 @@ describe('completed bill correction hooks', () => {
   });
 
   it('loads immutable audit history with its before and after financial totals', async () => {
-    audit.order.mockResolvedValue({
+    rpc.mockResolvedValue({
       data: [{
-        id: 'audit-1', actor_id: 'actor-1', created_at: '2026-07-28T09:15:00.000Z', reason: 'Correct fee',
-        before_state: { total: 50 }, after_state: { total: 75 },
+        id: 'audit-1', actor_id: 'actor-1', created_at: '2026-07-28T09:15:00.000Z', reason: 'Correct fee', before_total: 50, after_total: 75,
       }],
       error: null,
     });
@@ -106,7 +98,9 @@ describe('completed bill correction hooks', () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(audit.from).toHaveBeenCalledWith('completed_bill_correction_audit');
+    expect(rpc).toHaveBeenCalledWith('get_completed_bill_correction_history', {
+      p_queue_entry_id: 'queue-1', p_limit: 25, p_before_created_at: null, p_before_id: null,
+    });
     expect(result.current.data).toEqual([{
       id: 'audit-1', actorId: 'actor-1', createdAt: '2026-07-28T09:15:00.000Z', reason: 'Correct fee', beforeTotal: 50, afterTotal: 75,
     }]);
