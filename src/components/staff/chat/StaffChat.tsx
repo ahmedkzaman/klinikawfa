@@ -241,17 +241,26 @@ export function StaffChat() {
     const text = draft.trim();
     if (!text || !myId || sending) return;
     setSending(true);
-    const { error } = await supabase.from('staff_messages').insert({
-      sender_id: myId,
-      sender_name: displayName,
-      content: text,
-      receiver_id: activeChat === 'global' ? null : activeChat,
-    });
+    const { data, error } = await supabase
+      .from('staff_messages')
+      .insert({
+        sender_id: myId,
+        sender_name: displayName,
+        content: text,
+        receiver_id: activeChat === 'global' ? null : activeChat,
+      })
+      .select('*')
+      .single();
     setSending(false);
     if (error) {
       toast.error('Failed to send message');
       return;
     }
+    setMessages((prev) =>
+      prev.some((message) => message.id === data.id)
+        ? prev
+        : [...prev, data as StaffMessage]
+    );
     setDraft('');
   };
 
