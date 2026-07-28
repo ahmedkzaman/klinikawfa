@@ -208,9 +208,22 @@ export default function QueueBoard() {
 
   const completedVisitNote =
     completedConsultation?.case_note?.trim() ||
-    completedConsultation?.diagnosis_text?.trim() ||
     completedVisit?.visit_notes?.trim() ||
     "";
+  const completedVisitDiagnosis = useMemo(() => {
+    const diagnoses = completedConsultation?.diagnoses;
+    const structuredDiagnosis = Array.isArray(diagnoses)
+      ? diagnoses[0]?.name?.trim()
+      : diagnoses?.name?.trim();
+    return (
+      completedConsultation?.diagnosis_text?.trim() ||
+      structuredDiagnosis ||
+      ""
+    );
+  }, [
+    completedConsultation?.diagnoses,
+    completedConsultation?.diagnosis_text,
+  ]);
   const completedVisitDispenseNote = completedConsultation?.dispense_note?.trim() ?? "";
   const completedVisitItems = completedConsultation?.consultation_items ?? [];
 
@@ -504,6 +517,17 @@ export default function QueueBoard() {
                     Completed
                   </span>
                 </div>
+              </section>
+
+              <section className={cn(bento, "p-4")}>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Diagnosis</p>
+                {completedVisitDiagnosis ? (
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+                    {completedVisitDiagnosis}
+                  </p>
+                ) : (
+                  <p className="mt-3 text-sm text-slate-400">No diagnosis recorded for this visit.</p>
+                )}
               </section>
 
               <section className={cn(bento, "p-4")}>

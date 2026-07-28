@@ -10,6 +10,10 @@ const consultationDetail = readFileSync(
   'utf8',
 );
 const queueBoard = readFileSync('src/pages/clinic/QueueBoard.tsx', 'utf8');
+const queueEntries = readFileSync(
+  'src/hooks/clinic/useQueueEntries.ts',
+  'utf8',
+);
 
 describe('consultation clinical attachments', () => {
   it('lets an editing doctor upload images and PDFs from consultation notes', () => {
@@ -29,5 +33,15 @@ describe('consultation clinical attachments', () => {
       'consultationId={completedConsultation?.id}',
     );
     expect(queueBoard).toContain('canEdit={false}');
+  });
+
+  it('shows diagnosis separately from clinical notes for completed visits', () => {
+    expect(queueEntries).toContain('diagnoses:diagnosis_id ( id, name )');
+    expect(queueBoard).toContain('completedVisitDiagnosis');
+    expect(queueBoard).toContain('>Diagnosis</p>');
+    expect(queueBoard).toContain('No diagnosis recorded for this visit.');
+    expect(queueBoard).not.toContain(
+      'completedConsultation?.case_note?.trim() ||\n    completedConsultation?.diagnosis_text?.trim()',
+    );
   });
 });

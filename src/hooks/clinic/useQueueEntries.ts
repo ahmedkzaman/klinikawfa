@@ -277,6 +277,10 @@ export function useQueueEntry(id?: string) {
 type CompletedVisitConsultation = {
   id: string;
   diagnosis_text: string | null;
+  diagnoses:
+    | { id: string; name: string }
+    | { id: string; name: string }[]
+    | null;
   case_note: string | null;
   dispense_note: string | null;
   doctors: { id: string; name: string } | { id: string; name: string }[] | null;
@@ -308,6 +312,7 @@ export function useCompletedVisitDetail(queueEntryId: string | null) {
           doctors:assigned_doctor_id ( id, name, avatar_url ),
           consultations:consultations!consultations_queue_entry_id_fkey (
             id, diagnosis_text, case_note, dispense_note,
+            diagnoses:diagnosis_id ( id, name ),
             doctors:doctor_id ( id, name ),
             consultation_items!left ( id, item_name, quantity, price, deleted_at ),
             consultation_attachments ( count )
