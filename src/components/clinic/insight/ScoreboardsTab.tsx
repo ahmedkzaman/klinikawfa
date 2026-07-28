@@ -157,6 +157,8 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
         </CardContent>
       </Card>
 
+      <DoctorClinicalActivity startDate={startDate} endDate={endDate} />
+
       {/* 2. Top Diagnoses + Top Medications */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className={bento}>
@@ -283,7 +285,9 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
         </>
       )}
 
-      <DoctorClinicalActivity startDate={startDate} endDate={endDate} />
+      {(isError || isLoading || !hasData) && (
+        <DoctorClinicalActivity startDate={startDate} endDate={endDate} />
+      )}
     </div>
   );
 }

@@ -67,4 +67,31 @@ describe('ScoreboardsTab doctor clinical activity integration', () => {
 
     expect(screen.getByText('Failed to load doctor clinical activity: Doctor report unavailable')).toBeInTheDocument();
   });
+
+  it('places doctor clinical activity immediately after Doctor Performance in normal scoreboard data', () => {
+    useScoreboardsMock.mockReturnValue({
+      data: {
+        doctors: [{
+          doctorId: 'doctor-a', doctorName: 'Dr A', uniquePatients: 1, totalRevenue: 100,
+          totalCogs: 20, totalProfit: 80, revenuePerPatient: 100, marginPct: 80,
+        }],
+        topDiagnoses: [],
+        topMedications: [],
+        procedureRoi: [],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    render(<ScoreboardsTab {...dates} />);
+
+    expect(screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual([
+      'Doctor Performance',
+      'Doctor Clinical Activity',
+      'Top 10 Diagnoses',
+      'Top 10 Medications',
+      'Procedure ROI',
+    ]);
+  });
 });
