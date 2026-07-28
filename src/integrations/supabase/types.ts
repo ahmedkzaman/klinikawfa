@@ -6065,6 +6065,22 @@ export type Database = {
       available_quantity: { Args: { _item_id: string }; Returns: number }
       can_view_insights: { Args: { _user_id: string }; Returns: boolean }
       can_view_inventory_costs: { Args: { _user_id: string }; Returns: boolean }
+      get_doctor_clinical_activity: {
+        Args: { _start_date: string; _end_date: string }
+        Returns: Array<{
+          activity_id: string
+          activity_kind: string
+          activity_date: string
+          activity_name: string
+          consultation_id: string
+          queue_entry_id: string
+          queue_created_at: string
+          queue_sequence: number
+          doctor_id: string | null
+          doctor_name: string
+          patient_name: string
+        }>
+      }
       checkout_visit: {
         Args: {
           p_amount_paid: number
