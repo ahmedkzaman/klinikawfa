@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 describe('doctor clinical activity report migration', () => {
   const migrationsDirectory = resolve(process.cwd(), 'supabase/migrations');
   const baseMigrationName = '20260728113618_add_doctor_clinical_activity_report.sql';
-  const hardeningMigrationName = '20260728122132_harden_doctor_clinical_activity_report.sql';
+  const hardeningMigrationName = '20260728124247_harden_doctor_clinical_activity_report.sql';
 
   it('reconciles the base migration filename with production history', () => {
     const migrationFiles = readdirSync(migrationsDirectory)
