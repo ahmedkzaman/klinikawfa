@@ -72,5 +72,11 @@ export type QueueEntryWithJoins = QueueEntryRow & {
     | null;
   rooms?: { id: string; label: string } | null;
   insurance_providers?: { id: string; name: string } | null;
-  payments?: Array<{ id: string; amount?: number; deleted_at?: string | null }> | null;
+  payments?: Array<{
+    id: string;
+    amount?: number;
+    payment_method?: string | null;
+    payment_type?: string | null;
+    deleted_at?: string | null;
+  }> | null;
 };

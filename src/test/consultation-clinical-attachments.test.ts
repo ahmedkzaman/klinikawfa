@@ -46,4 +46,17 @@ describe('consultation clinical attachments', () => {
       'completedConsultation?.case_note?.trim() ||\n    completedConsultation?.diagnosis_text?.trim()',
     );
   });
+
+  it('shows a complete billing summary for completed visits', () => {
+    expect(queueEntries).toContain(
+      'payments ( id, amount, payment_method, payment_type, deleted_at )',
+    );
+    expect(queueEntries).toContain('dispensed_qty, item_id');
+    expect(queueBoard).toContain('completedVisitSubtotal');
+    expect(queueBoard).toContain('completedVisitOutstanding');
+    expect(queueBoard).toContain('completedVisitPaymentMethods');
+    expect(queueBoard).toContain('Subtotal');
+    expect(queueBoard).toContain('Outstanding');
+    expect(queueBoard).toContain('Payment Method');
+  });
 });

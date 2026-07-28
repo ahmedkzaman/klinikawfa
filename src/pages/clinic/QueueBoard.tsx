@@ -58,6 +58,7 @@ import { bento, pageInner, pageShell, primaryBtn, secondaryBtn, softBadge } from
 import { calculateClinicalAge } from "@/lib/clinic/clinicalAge";
 import { isCashVisit, isCompletedVisitUnpaid } from "@/lib/clinic/queuePaymentFocus";
 import { getRecordedDiagnosisLabels } from "@/lib/clinic/diagnosisDisplay";
+import { formatPaymentMethod } from "@/lib/clinic/paymentMethod";
 
 function useTickEveryMinute() {
   const [, setTick] = useState(0);
@@ -225,7 +226,47 @@ export default function QueueBoard() {
     completedConsultation?.diagnosis_text,
   ]);
   const completedVisitDispenseNote = completedConsultation?.dispense_note?.trim() ?? "";
-  const completedVisitItems = completedConsultation?.consultation_items ?? [];
+  const completedVisitItems = useMemo(
+    () => completedConsultation?.consultation_items ?? [],
+    [completedConsultation?.consultation_items],
+  );
+  const completedVisitSubtotal = useMemo(
+    () =>
+      completedVisitItems.reduce((total, item) => {
+        const quantity =
+          item.item_id && item.dispensed_qty != null
+            ? Number(item.dispensed_qty)
+            : Number(item.quantity ?? 0);
+        return total + quantity * Number(item.price ?? 0);
+      }, 0),
+    [completedVisitItems],
+  );
+  const completedVisitPaid = useMemo(
+    () =>
+      (completedVisit?.payments ?? []).reduce(
+        (total, payment) => total + Number(payment.amount ?? 0),
+        0,
+      ),
+    [completedVisit?.payments],
+  );
+  const completedVisitOutstanding = Math.max(
+    completedVisitSubtotal - completedVisitPaid,
+    0,
+  );
+  const completedVisitPaymentMethods = useMemo(() => {
+    const methods = (completedVisit?.payments ?? [])
+      .filter(
+        (payment) =>
+          Boolean(payment.payment_method) || Number(payment.amount ?? 0) > 0,
+      )
+      .map((payment) =>
+        formatPaymentMethod(payment.payment_method, Number(payment.amount ?? 0)),
+      );
+    if (methods.length === 0 && completedVisit?.payment_method) {
+      methods.push(formatPaymentMethod(completedVisit.payment_method));
+    }
+    return Array.from(new Set(methods));
+  }, [completedVisit?.payment_method, completedVisit?.payments]);
 
   const handleCardClick = (entry: QueueEntryWithJoins) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -564,7 +605,10 @@ export default function QueueBoard() {
                 ) : (
                   <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white">
                     {completedVisitItems.map((item) => {
-                      const qty = Number(item.quantity ?? 0);
+                      const qty =
+                        item.item_id && item.dispensed_qty != null
+                          ? Number(item.dispensed_qty)
+                          : Number(item.quantity ?? 0);
                       const price = Number(item.price ?? 0);
                       return (
                         <div key={item.id} className="flex items-start justify-between gap-4 border-b border-slate-100 px-3 py-3 last:border-b-0">
@@ -580,6 +624,39 @@ export default function QueueBoard() {
                         </div>
                       );
                     })}
+                    <div className="space-y-2 border-t border-slate-200 bg-slate-50 px-3 py-3 text-sm">
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-slate-600">Subtotal</span>
+                        <span className="font-semibold tabular-nums text-slate-900">
+                          {formatRM(completedVisitSubtotal)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-slate-600">Paid</span>
+                        <span className="font-semibold tabular-nums text-emerald-700">
+                          {formatRM(completedVisitPaid)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-slate-600">Outstanding</span>
+                        <span className={cn(
+                          "font-semibold tabular-nums",
+                          completedVisitOutstanding > 0.005
+                            ? "text-rose-700"
+                            : "text-slate-900",
+                        )}>
+                          {formatRM(completedVisitOutstanding)}
+                        </span>
+                      </div>
+                      <div className="flex items-start justify-between gap-4">
+                        <span className="text-slate-600">Payment Method</span>
+                        <span className="text-right font-medium text-slate-900">
+                          {completedVisitPaymentMethods.length > 0
+                            ? completedVisitPaymentMethods.join(", ")
+                            : "Not recorded"}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 )}
               </section>

@@ -289,6 +289,8 @@ type CompletedVisitConsultation = {
     item_name: string;
     quantity: number;
     price: number;
+    dispensed_qty?: number | null;
+    item_id?: string | null;
     deleted_at?: string | null;
   }> | null;
   consultation_attachments?: { count: number }[] | null;
@@ -310,11 +312,12 @@ export function useCompletedVisitDetail(queueEntryId: string | null) {
           *,
           patients ( * ),
           doctors:assigned_doctor_id ( id, name, avatar_url ),
+          payments ( id, amount, payment_method, payment_type, deleted_at ),
           consultations:consultations!consultations_queue_entry_id_fkey (
             id, diagnosis_text, case_note, dispense_note,
             diagnoses:diagnosis_id ( id, name ),
             doctors:doctor_id ( id, name ),
-            consultation_items!left ( id, item_name, quantity, price, deleted_at ),
+            consultation_items!left ( id, item_name, quantity, price, dispensed_qty, item_id, deleted_at ),
             consultation_attachments ( count )
           )
         `,
@@ -327,6 +330,9 @@ export function useCompletedVisitDetail(queueEntryId: string | null) {
 
       const [entry] = await attachInsuranceProviderDirectory([data]);
       const detail = entry as CompletedVisitDetail;
+      detail.payments = (detail.payments ?? []).filter(
+        (payment) => !payment.deleted_at,
+      );
       const consultations = Array.isArray(detail.consultations)
         ? detail.consultations
         : detail.consultations
