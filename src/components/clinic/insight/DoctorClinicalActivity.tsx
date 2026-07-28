@@ -238,7 +238,7 @@ function ActivityRows({
               <TableCell className="text-slate-700">{row.activityName}</TableCell>
               <TableCell className="text-slate-600">{row.patientName}</TableCell>
               <TableCell className="text-right">
-                <a className="text-blue-600 hover:underline" href={`/clinic/visit/${row.queueEntryId}`}>
+                <a className="text-blue-600 hover:underline" href={`/clinic/visits/${row.queueEntryId}`}>
                   {queueNo}
                 </a>
               </TableCell>

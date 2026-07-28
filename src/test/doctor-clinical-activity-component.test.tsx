@@ -152,7 +152,7 @@ describe('DoctorClinicalActivity', () => {
     expect(screen.getByText('Dressing')).toBeInTheDocument();
     expect(screen.queryByText('Medical certificate')).not.toBeInTheDocument();
     expect(screen.queryByText('Badrul Patient')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '260727-01' })).toHaveAttribute('href', '/clinic/visit/queue-a');
+    expect(screen.getByRole('link', { name: '260727-01' })).toHaveAttribute('href', '/clinic/visits/queue-a');
 
     fireEvent.click(screen.getByRole('tab', { name: 'Documents' }));
     expect(screen.getByText('Medical certificate')).toBeInTheDocument();
