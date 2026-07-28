@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { format } from 'date-fns';
 
 import { Button } from '@/components/ui/button';
@@ -35,6 +35,10 @@ export function DoctorClinicalActivity({ startDate, endDate }: DoctorClinicalAct
   const { data, isLoading, isError, error } = useDoctorClinicalActivity(startDate, endDate);
   const [expandedDoctorKey, setExpandedDoctorKey] = useState<string | null>(null);
 
+  useEffect(() => {
+    setExpandedDoctorKey(null);
+  }, [startDate.getTime(), endDate.getTime()]);
+
   const exportCsv = (summaries: DoctorActivitySummary[], doctor?: DoctorActivitySummary) => {
     const csv = doctorClinicalActivityCsv(summaries, doctor?.doctorId);
     const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
@@ -45,7 +49,7 @@ export function DoctorClinicalActivity({ startDate, endDate }: DoctorClinicalAct
       .trim()
       .replace(/[^a-z0-9]+/gi, '-')
       .replace(/^-|-$/g, '')
-      .toLowerCase();
+      .toLowerCase() || 'doctor';
 
     anchor.href = url;
     anchor.download = doctor

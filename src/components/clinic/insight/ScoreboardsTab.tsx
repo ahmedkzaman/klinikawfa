@@ -76,44 +76,36 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
     [data?.topMedications],
   );
 
-  if (isError) {
-    return (
-      <Card className={bento}>
-        <CardContent className="py-6 text-sm text-rose-600">
-          Failed to load scoreboards: {(error as Error)?.message ?? 'Unknown error'}
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (isLoading) {
-    return <ScoreboardsSkeleton />;
-  }
-
   const hasData =
     (data?.doctors.length ?? 0) > 0 ||
     (data?.topDiagnoses.length ?? 0) > 0 ||
     (data?.topMedications.length ?? 0) > 0 ||
     (data?.procedureRoi.length ?? 0) > 0;
 
-  if (!hasData) {
-    return (
-      <Card className={bento}>
-        <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="rounded-2xl bg-blue-50 p-4 mb-3">
-            <Inbox className="h-8 w-8 text-blue-600" />
-          </div>
-          <h3 className="text-base font-semibold text-slate-900">No scoreboard data</h3>
-          <p className="text-sm text-slate-500 mt-1 max-w-sm">
-            No completed consultations were recorded in the selected date range.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <div className="space-y-4">
+      {isError ? (
+        <Card className={bento}>
+          <CardContent className="py-6 text-sm text-rose-600">
+            Failed to load scoreboards: {(error as Error)?.message ?? 'Unknown error'}
+          </CardContent>
+        </Card>
+      ) : isLoading ? (
+        <ScoreboardsSkeleton />
+      ) : !hasData ? (
+        <Card className={bento}>
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="rounded-2xl bg-blue-50 p-4 mb-3">
+              <Inbox className="h-8 w-8 text-blue-600" />
+            </div>
+            <h3 className="text-base font-semibold text-slate-900">No scoreboard data</h3>
+            <p className="text-sm text-slate-500 mt-1 max-w-sm">
+              No completed consultations were recorded in the selected date range.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
       {/* 1. Doctor Performance */}
       <Card className={bento}>
         <CardContent className="p-6">
@@ -164,8 +156,6 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
           )}
         </CardContent>
       </Card>
-
-      <DoctorClinicalActivity startDate={startDate} endDate={endDate} />
 
       {/* 2. Top Diagnoses + Top Medications */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -290,6 +280,10 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
           )}
         </CardContent>
       </Card>
+        </>
+      )}
+
+      <DoctorClinicalActivity startDate={startDate} endDate={endDate} />
     </div>
   );
 }

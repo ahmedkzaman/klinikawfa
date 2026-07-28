@@ -2,7 +2,10 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DoctorClinicalActivity } from '@/components/clinic/insight/DoctorClinicalActivity';
-import type { DoctorActivitySummary } from '@/lib/clinic/doctorClinicalActivity';
+import {
+  doctorClinicalActivityCsv,
+  type DoctorActivitySummary,
+} from '@/lib/clinic/doctorClinicalActivity';
 
 const { useDoctorClinicalActivityMock } = vi.hoisted(() => ({
   useDoctorClinicalActivityMock: vi.fn(),
@@ -157,6 +160,23 @@ describe('DoctorClinicalActivity', () => {
     expect(screen.queryByText('Aminah Patient')).not.toBeInTheDocument();
   });
 
+  it('collapses details when the reporting date range changes', () => {
+    const { rerender } = renderActivity();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dr A' }));
+    expect(screen.getByText('Dressing')).toBeInTheDocument();
+
+    rerender(
+      <DoctorClinicalActivity
+        startDate={new Date('2026-08-01T00:00:00.000Z')}
+        endDate={new Date('2026-08-31T00:00:00.000Z')}
+      />,
+    );
+
+    expect(screen.queryByText('Dressing')).not.toBeInTheDocument();
+    expect(screen.queryByText('Aminah Patient')).not.toBeInTheDocument();
+  });
+
   it('expands unassigned activity using the shared null doctor key', () => {
     renderActivity();
 
@@ -169,7 +189,10 @@ describe('DoctorClinicalActivity', () => {
 
   it('exports all doctors or a selected doctor as separate CSV downloads', async () => {
     const createObjectURL = vi.fn(() => 'blob:doctor-clinical-activity');
-    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const downloads: string[] = [];
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+      downloads.push(this.download);
+    });
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
 
@@ -180,10 +203,48 @@ describe('DoctorClinicalActivity', () => {
 
     const allDoctorsCsv = createObjectURL.mock.calls[0][0] as Blob;
     const drACsv = createObjectURL.mock.calls[1][0] as Blob;
+    expect(downloads).toEqual([
+      'doctor-clinical-activity-2026-07-01-to-2026-07-31.csv',
+      'doctor-clinical-activity-dr-a-2026-07-01-to-2026-07-31.csv',
+    ]);
+    expect(allDoctorsCsv.size).toBe(
+      new TextEncoder().encode(doctorClinicalActivityCsv(summaries)).length + 3,
+    );
     await expect(readBlob(allDoctorsCsv)).resolves.toContain('"Dr B"');
     await expect(readBlob(allDoctorsCsv)).resolves.toContain('"Unassigned"');
     await expect(readBlob(drACsv)).resolves.toContain('"Dr A"');
     await expect(readBlob(drACsv)).resolves.not.toContain('"Dr B"');
+    click.mockRestore();
+  });
+
+  it('uses a stable fallback filename for a doctor name without Latin characters', () => {
+    const createObjectURL = vi.fn(() => 'blob:doctor-clinical-activity');
+    const downloads: string[] = [];
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+      downloads.push(this.download);
+    });
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+    useDoctorClinicalActivityMock.mockReturnValue({
+      data: [{
+        ...summaries[0],
+        doctorId: 'doctor-non-latin',
+        doctorName: '李医生',
+        rows: summaries[0].rows.map((row) => ({
+          ...row,
+          doctorId: 'doctor-non-latin',
+          doctorName: '李医生',
+        })),
+      }],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderActivity();
+    fireEvent.click(screen.getByRole('button', { name: 'Export 李医生' }));
+
+    expect(downloads).toEqual(['doctor-clinical-activity-doctor-2026-07-01-to-2026-07-31.csv']);
     click.mockRestore();
   });
 });
