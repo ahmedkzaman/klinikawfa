@@ -29,6 +29,7 @@ type ActiveChat = 'global' | string;
 const CHAT_CHANNEL = 'chat-room';
 const PRESENCE_CHANNEL = 'online-users';
 const PAGE_SIZE = 100;
+let chatAudioContext: AudioContext | null = null;
 
 function formatTime(iso: string) {
   try {
@@ -38,32 +39,50 @@ function formatTime(iso: string) {
   }
 }
 
-function playAlarmBeep() {
+function getChatAudioContext() {
+  if (chatAudioContext) return chatAudioContext;
+  const Ctx =
+    window.AudioContext ||
+    (window as typeof window & { webkitAudioContext?: typeof AudioContext })
+      .webkitAudioContext;
+  if (!Ctx) return null;
+  chatAudioContext = new Ctx();
+  return chatAudioContext;
+}
+
+function unlockChatSound() {
   try {
-    const Ctx =
-      (window as any).AudioContext || (window as any).webkitAudioContext;
-    if (!Ctx) return;
-    const ctx: AudioContext = new Ctx();
+    const ctx = getChatAudioContext();
+    if (ctx?.state === 'suspended') void ctx.resume();
+  } catch {
+    // Audio is optional; browsers without Web Audio can continue normally.
+  }
+}
+
+function playIncomingChirp() {
+  try {
+    const ctx = getChatAudioContext();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') void ctx.resume();
     const now = ctx.currentTime;
-    const pattern = [880, 1175, 880];
+    const pattern = [1568, 1976, 2349];
     pattern.forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.type = 'sine';
+      osc.type = 'triangle';
       osc.frequency.value = freq;
-      const start = now + i * 0.18;
-      const end = start + 0.16;
+      const start = now + i * 0.1;
+      const end = start + 0.09;
       gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(0.35, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.45, start + 0.015);
       gain.gain.exponentialRampToValueAtTime(0.0001, end);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start(start);
       osc.stop(end + 0.02);
     });
-    setTimeout(() => ctx.close().catch(() => {}), 900);
   } catch {
-    // ignore
+    // Audio is optional; chat delivery must never depend on it.
   }
 }
 
@@ -90,6 +109,18 @@ export function StaffChat() {
   useEffect(() => { openRef.current = open; }, [open]);
   useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
   useEffect(() => { myIdRef.current = myId; }, [myId]);
+
+  // Browsers allow notification audio after the first user gesture.
+  useEffect(() => {
+    if (!eligible) return;
+    const unlock = () => unlockChatSound();
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('keydown', unlock, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, [eligible]);
 
   // Reset unread when opening
   useEffect(() => {
@@ -160,9 +191,9 @@ export function StaffChat() {
           // Determine which chat this message belongs to
           const chatKey: ActiveChat = row.receiver_id === null ? 'global' : row.sender_id;
           const isViewing = openRef.current && activeChatRef.current === chatKey;
+          playIncomingChirp();
           if (!isViewing) {
             setUnreadCount((c) => c + 1);
-            playAlarmBeep();
           }
         }
       )
@@ -301,7 +332,13 @@ export function StaffChat() {
   if (!eligible) return null;
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) unlockChatSound();
+        setOpen(nextOpen);
+      }}
+    >
       <SheetTrigger asChild>
         <Button
           size="icon"

@@ -34,8 +34,13 @@ const profileQuery = {
   })),
 };
 
+let realtimeInsertHandler: ((payload: { new: typeof insertedMessage }) => void) | null = null;
+
 const channel = {
-  on: vi.fn(() => channel),
+  on: vi.fn((event: string, config: unknown, callback?: typeof realtimeInsertHandler) => {
+    if (event === 'postgres_changes' && callback) realtimeInsertHandler = callback;
+    return channel;
+  }),
   subscribe: vi.fn((callback?: (status: string) => void) => {
     callback?.('SUBSCRIBED');
     return channel;
@@ -71,6 +76,7 @@ import { StaffChat } from '@/components/staff/chat/StaffChat';
 describe('StaffChat sending', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    realtimeInsertHandler = null;
     Element.prototype.scrollIntoView = vi.fn();
   });
 
@@ -87,5 +93,45 @@ describe('StaffChat sending', () => {
     await waitFor(() => {
       expect(screen.getByText('Kaunter dua sila ambil perhatian')).toBeInTheDocument();
     });
+  });
+
+  it('chirps for an incoming message even while its chat is open', async () => {
+    const oscillatorStart = vi.fn();
+    const audioContext = {
+      currentTime: 1,
+      state: 'running',
+      destination: {},
+      resume: vi.fn(async () => undefined),
+      createOscillator: vi.fn(() => ({
+        type: 'sine',
+        frequency: { value: 0 },
+        connect: vi.fn(),
+        start: oscillatorStart,
+        stop: vi.fn(),
+      })),
+      createGain: vi.fn(() => ({
+        gain: {
+          setValueAtTime: vi.fn(),
+          exponentialRampToValueAtTime: vi.fn(),
+        },
+        connect: vi.fn(),
+      })),
+    };
+    window.AudioContext = vi.fn(() => audioContext) as unknown as typeof AudioContext;
+
+    render(<StaffChat />);
+    fireEvent.click(screen.getByRole('button', { name: /open staff chat/i }));
+
+    await waitFor(() => expect(realtimeInsertHandler).not.toBeNull());
+    realtimeInsertHandler?.({
+      new: {
+        ...insertedMessage,
+        id: 'incoming-1',
+        sender_id: 'user-2',
+        sender_name: 'Nurse Awfa',
+      },
+    });
+
+    expect(oscillatorStart).toHaveBeenCalledTimes(3);
   });
 });
