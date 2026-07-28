@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Stethoscope, Search, Phone, AlertCircle } from 'lucide-react';
+import { Stethoscope, Search, Phone, AlertCircle, CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
 import { RoomPickerDialog } from '@/components/clinic/consultation/RoomPickerDialog';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,7 @@ import {
   useConsultationQueueEntries,
   useCallPatient,
   useUpdateQueueEntry,
+  todayInputValue,
 } from '@/hooks/clinic/useQueueEntries';
 import { toMalayTitleCase } from '@/lib/textCase';
 import { useCurrentDoctor } from '@/hooks/clinic/useCurrentDoctor';
@@ -41,6 +42,11 @@ import {
   softInput,
 } from '@/lib/clinic/bentoTokens';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
+import {
+  canBrowseConsultationDates,
+  canListConsultationEntry,
+  getConsultationAccess,
+} from '@/lib/clinic/consultationAccess';
 
 const TAB_KEYS = ['waiting', 'serving', 'on_hold', 'dispensary', 'completed', 'all'] as const;
 
@@ -56,10 +62,13 @@ const TAB_STATUSES: Record<string, ClinicStatus[]> = {
 
 export default function Consultation() {
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { role } = useAuth();
+  const [selectedDate, setSelectedDate] = useState(todayInputValue);
+  const selectedDateIsToday = selectedDate === todayInputValue();
+  const canBrowseDates = canBrowseConsultationDates(role);
   const { data: doctor, isLoading: doctorLoading, error: doctorError } = useCurrentDoctor();
   const { data: entries = [], isLoading: queueLoading, error: queueError } =
-    useConsultationQueueEntries();
+    useConsultationQueueEntries(selectedDate);
   const callPatient = useCallPatient();
   const resumeQueue = useUpdateQueueEntry();
   const [tab, setTab] = useState('waiting');
@@ -73,20 +82,19 @@ export default function Consultation() {
     [entries],
   );
 
-  const doctorEntries = useMemo(() => {
-    if (!doctor) return [];
-    return allConsultationEntries.filter((e) => e.assigned_doctor_id === doctor.id);
-  }, [allConsultationEntries, doctor]);
-
-  const isAdminFallback =
-    isAdmin && doctor && doctorEntries.length === 0 && allConsultationEntries.length > 0;
-  const baseEntries = doctor
-    ? isAdminFallback
-      ? allConsultationEntries
-      : doctorEntries
-    : isAdmin
-      ? allConsultationEntries
-      : [];
+  const baseEntries = useMemo(
+    () =>
+      allConsultationEntries.filter((entry) =>
+        canListConsultationEntry({
+          role,
+          currentDoctorId: doctor?.id,
+          attendingDoctorId: entry.assigned_doctor_id,
+          queueStatus: entry.clinic_status,
+          selectedDateIsToday,
+        }),
+      ),
+    [allConsultationEntries, doctor?.id, role, selectedDateIsToday],
+  );
 
   const tabCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -98,6 +106,11 @@ export default function Consultation() {
     }
     return counts;
   }, [baseEntries]);
+
+  useEffect(() => {
+    setAutoSelected(false);
+    setTab(selectedDateIsToday ? 'waiting' : 'completed');
+  }, [selectedDateIsToday, selectedDate]);
 
   useEffect(() => {
     if (autoSelected || baseEntries.length === 0) return;
@@ -151,22 +164,10 @@ export default function Consultation() {
     );
   }
 
-  if (!doctor && !isAdmin) {
-    return (
-      <div className={pageShell}>
-        <div className={pageInner}>
-          <div className={cn(bento, 'p-5')}>
-            <h1 className="text-2xl font-semibold text-slate-800">Consultation</h1>
-            <p className="text-slate-500 text-sm mt-1">
-              You are not registered as a doctor.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const totalPatients = baseEntries.length;
+  const visibleTabs = selectedDateIsToday
+    ? TAB_KEYS
+    : (['completed', 'all'] as const);
 
   return (
     <div className={pageShell}>
@@ -184,19 +185,37 @@ export default function Consultation() {
               <h1 className="text-2xl font-semibold text-slate-800">Consultation</h1>
               <p className="text-slate-500 text-sm mt-0.5">
                 {totalPatients} patient{totalPatients !== 1 ? 's' : ''} total
-                {isAdminFallback && ' (admin view)'}
-                {!doctor && isAdmin && ' (admin view — all doctors)'}
+                {!selectedDateIsToday &&
+                  ` on ${format(new Date(`${selectedDate}T00:00:00`), 'd MMM yyyy')}`}
               </p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setShowSearch(!showSearch)}
-            className="rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-50"
-          >
-            <Search className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            {canBrowseDates && (
+              <div className="relative">
+                <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  type="date"
+                  aria-label="Consultation date"
+                  value={selectedDate}
+                  max={todayInputValue()}
+                  onChange={(event) =>
+                    setSelectedDate(event.target.value || todayInputValue())
+                  }
+                  className={cn(softInput, 'w-[170px] pl-9')}
+                />
+              </div>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowSearch(!showSearch)}
+              className="rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+              aria-label="Search consultations"
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         {showSearch && (
@@ -211,20 +230,11 @@ export default function Consultation() {
           </div>
         )}
 
-        {isAdminFallback && (
-          <Alert className="rounded-2xl border-blue-200 bg-blue-50/60 text-blue-900">
-            <AlertCircle className="h-4 w-4 text-blue-600" />
-            <AlertDescription>
-              No patients assigned to your doctor profile. Showing all consultation patients.
-            </AlertDescription>
-          </Alert>
-        )}
-
         {/* Pill tabs */}
         <div className={cn(bento, 'p-2')}>
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="bg-transparent h-auto p-0 flex flex-wrap gap-1">
-              {(['waiting', 'serving', 'on_hold', 'dispensary', 'completed', 'all'] as const).map(
+              {visibleTabs.map(
                 (key) => (
                   <TabsTrigger
                     key={key}
@@ -287,7 +297,17 @@ export default function Consultation() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((entry, i) => (
+                filtered.map((entry) => {
+                  const access = getConsultationAccess({
+                    role,
+                    currentDoctorId: doctor?.id,
+                    attendingDoctorId: entry.assigned_doctor_id,
+                    queueStatus: entry.clinic_status,
+                  });
+                  const canUseWorkflowActions =
+                    selectedDateIsToday && access.canEdit;
+
+                  return (
                   <TableRow key={entry.id} className="border-slate-100 hover:bg-slate-50/60">
                     <TableCell>
                       <div className="font-medium text-slate-800">{entry.patients?.name ? toMalayTitleCase(entry.patients.name) : '—'}</div>
@@ -330,7 +350,21 @@ export default function Consultation() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        {entry.clinic_status === 'on_hold' ? (
+                        {!access.canView ? (
+                          <span className="text-sm text-slate-400">—</span>
+                        ) : !canUseWorkflowActions ||
+                          entry.clinic_status === 'completed' ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className={secondaryBtn}
+                            onClick={() =>
+                              navigate(`/clinic/consultation/${entry.id}`)
+                            }
+                          >
+                            {access.isCrossDoctorReadOnly ? 'View notes' : 'View'}
+                          </Button>
+                        ) : entry.clinic_status === 'on_hold' ? (
                           <Button
                             size="sm"
                             className={primaryBtn}
@@ -388,7 +422,8 @@ export default function Consultation() {
                             View
                           </Button>
                         )}
-                        {doctor &&
+                        {canUseWorkflowActions &&
+                          doctor &&
                           ['registered', 'ready_for_doctor'].includes(entry.clinic_status) && (
                             <Button
                               size="sm"
@@ -407,7 +442,8 @@ export default function Consultation() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>

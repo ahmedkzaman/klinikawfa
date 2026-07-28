@@ -292,7 +292,7 @@ const App = () => (
                 <Route
                   path="consultation"
                   element={
-                    <ClinicProtectedRoute requiredRole="clinical">
+                    <ClinicProtectedRoute requiredRole="any_staff">
                       <Consultation />
                     </ClinicProtectedRoute>
                   }

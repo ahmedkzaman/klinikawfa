@@ -11,7 +11,7 @@ const CANCELLED_TODAY_QUERY_KEY = ["clinic", "queue-entries", "cancelled-today"]
 const COMPLETED_TODAY_QUERY_KEY = ["clinic", "queue-entries", "completed-today"] as const;
 let queueRealtimeSubscriberId = 0;
 
-function dateRangeForLocalDate(date: string) {
+export function dateRangeForLocalDate(date: string) {
   const start = new Date(`${date}T00:00:00`);
   const end = new Date(start);
   end.setDate(start.getDate() + 1);
@@ -21,7 +21,7 @@ function dateRangeForLocalDate(date: string) {
   };
 }
 
-function todayInputValue() {
+export function todayInputValue() {
   const today = new Date();
   const year = today.getFullYear();
   const month = String(today.getMonth() + 1).padStart(2, "0");
@@ -142,16 +142,12 @@ export function useQueueEntries(selectedDate = todayInputValue()) {
  * Includes today's entries and carry-overs from previous days.
  * Restored to fix production build errors.
  */
-export function useConsultationQueueEntries() {
+export function useConsultationQueueEntries(selectedDate = todayInputValue()) {
   const query = useQuery<QueueEntryWithJoins[]>({
-    queryKey: CONSULT_QUEUE_QUERY_KEY,
+    queryKey: [...CONSULT_QUEUE_QUERY_KEY, selectedDate],
     queryFn: async () => {
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
-
-      const activeStatuses = ACTIVE_STATUSES;
-
-      const { data, error } = await supabase
+      const { start, end } = dateRangeForLocalDate(selectedDate);
+      let queueQuery = supabase
         .from("queue_entries")
         .select(
           `
@@ -161,9 +157,18 @@ export function useConsultationQueueEntries() {
           rooms:assigned_room_id ( id, label )
         `,
         )
-        .is("deleted_at", null)
-        .or(`created_at.gte.${startOfDay.toISOString()},clinic_status.in.(${activeStatuses.join(",")})`)
-        .order("created_at", { ascending: true });
+        .is("deleted_at", null);
+
+      queueQuery =
+        selectedDate === todayInputValue()
+          ? queueQuery.or(
+              `created_at.gte.${start},clinic_status.in.(${ACTIVE_STATUSES.join(",")})`,
+            )
+          : queueQuery.gte("created_at", start).lt("created_at", end);
+
+      const { data, error } = await queueQuery.order("created_at", {
+        ascending: true,
+      });
 
       if (error) throw error;
       return attachInsuranceProviderDirectory(data ?? []);
@@ -499,5 +504,4 @@ export {
   CONSULT_QUEUE_QUERY_KEY,
   CANCELLED_TODAY_QUERY_KEY,
   COMPLETED_TODAY_QUERY_KEY,
-  todayInputValue,
 };
