@@ -13,6 +13,8 @@ import {
   buildGoogleCloudMalayTtsRequest,
   buildGoogleMalayTtsUrl,
   decodeBase64Audio,
+  MAX_TTS_VOLUME,
+  NORMAL_TTS_RATE,
   selectMalaySpeechVoice,
   waitForSpeechVoices,
 } from '@/lib/tv/speechVoice';
@@ -133,7 +135,7 @@ export default function QueueTV() {
     // or on error — whichever fires first — so the queue never hangs.
     try {
       const el = new Audio(CHIME_URL);
-      el.volume = 0.6;
+      el.volume = MAX_TTS_VOLUME;
       await el.play();
       await new Promise<void>((resolve) => {
         let settled = false;
@@ -207,7 +209,7 @@ export default function QueueTV() {
           const source = ctx.createBufferSource();
           const gain = ctx.createGain();
           source.buffer = buffer;
-          source.playbackRate.value = 1.2;
+          source.playbackRate.value = NORMAL_TTS_RATE;
           applyTtsGain(gain);
           source.connect(gain).connect(ctx.destination);
           await new Promise<void>((resolve, reject) => {
@@ -269,9 +271,9 @@ export default function QueueTV() {
         : voices.find((voice) => voice.lang.toLowerCase().startsWith('en'));
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = preferredVoice?.lang ?? lang;
-      utterance.rate = isMalay ? 1.1 : 1.05;
+      utterance.rate = NORMAL_TTS_RATE;
       utterance.pitch = 1.05;
-      utterance.volume = 1;
+      utterance.volume = MAX_TTS_VOLUME;
       if (preferredVoice) utterance.voice = preferredVoice;
 
       await new Promise<void>((resolve) => {

@@ -2,6 +2,10 @@ function normalizedLanguage(language: string): string {
   return language.trim().toLowerCase().replace('_', '-');
 }
 
+export const NORMAL_TTS_RATE = 1;
+export const MAX_TTS_VOLUME = 1;
+export const TTS_GAIN_MULTIPLIER = 3;
+
 export function buildGoogleMalayTtsUrl(text: string): string {
   const url = new URL('https://translate.google.com/translate_tts');
   url.searchParams.set('ie', 'UTF-8');
@@ -31,14 +35,14 @@ export function decodeBase64Audio(audioContent: string): ArrayBuffer {
 export function applyTtsPlaybackSettings(
   audio: Pick<HTMLAudioElement, 'volume' | 'playbackRate'>,
 ): void {
-  audio.volume = 1;
-  audio.playbackRate = 1.2;
+  audio.volume = MAX_TTS_VOLUME;
+  audio.playbackRate = NORMAL_TTS_RATE;
 }
 
 export function applyTtsGain(
   gainNode: Pick<GainNode, 'gain'>,
 ): void {
-  gainNode.gain.value = 2;
+  gainNode.gain.value = TTS_GAIN_MULTIPLIER;
 }
 
 export function selectMalaySpeechVoice(

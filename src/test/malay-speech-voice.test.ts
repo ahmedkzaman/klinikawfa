@@ -5,7 +5,10 @@ import {
   buildGoogleMalayTtsUrl,
   buildGoogleCloudMalayTtsRequest,
   decodeBase64Audio,
+  MAX_TTS_VOLUME,
+  NORMAL_TTS_RATE,
   selectMalaySpeechVoice,
+  TTS_GAIN_MULTIPLIER,
 } from '@/lib/tv/speechVoice';
 
 const voice = (name: string, lang: string, localService = true) => ({
@@ -25,21 +28,24 @@ describe('Malay TV caller voice selection', () => {
     expect(url.searchParams.get('q')).toBe('Panggilan untuk Nur Aisyah.');
   });
 
-  it('plays Google announcements at full volume and a faster rate', () => {
-    const audio = { volume: 0.4, playbackRate: 1 };
+  it('plays Google announcements at normal speed and maximum volume', () => {
+    const audio = { volume: 0.4, playbackRate: 1.2 };
 
     applyTtsPlaybackSettings(audio);
 
-    expect(audio.volume).toBe(1);
-    expect(audio.playbackRate).toBe(1.2);
+    expect(audio.volume).toBe(MAX_TTS_VOLUME);
+    expect(audio.playbackRate).toBe(NORMAL_TTS_RATE);
+    expect(MAX_TTS_VOLUME).toBe(1);
+    expect(NORMAL_TTS_RATE).toBe(1);
   });
 
-  it('amplifies decoded announcements by two times', () => {
+  it('applies the maximum configured caller amplification', () => {
     const gainNode = { gain: { value: 1 } };
 
     applyTtsGain(gainNode);
 
-    expect(gainNode.gain.value).toBe(2);
+    expect(gainNode.gain.value).toBe(TTS_GAIN_MULTIPLIER);
+    expect(TTS_GAIN_MULTIPLIER).toBe(3);
   });
 
   it('requests the official Malaysian Wavenet voice', () => {
