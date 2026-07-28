@@ -32,6 +32,7 @@ import {
 } from '@/lib/clinic/bentoTokens';
 
 import { useScoreboards } from '@/hooks/clinic/useScoreboards';
+import { DoctorClinicalActivity } from './DoctorClinicalActivity';
 
 interface Props {
   startDate: Date;
@@ -163,6 +164,8 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
           )}
         </CardContent>
       </Card>
+
+      <DoctorClinicalActivity startDate={startDate} endDate={endDate} />
 
       {/* 2. Top Diagnoses + Top Medications */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
