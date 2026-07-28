@@ -69,7 +69,13 @@ const ALLOWED = new Set<CompletedBillCorrectionRole>([
 const cents = (value: number) => Math.round(value * 100);
 const money = (value: number) => value / 100;
 const isNonNegativeFinite = (value: number) => Number.isFinite(value) && value >= 0;
-const normalizeReason = (reason: string) => reason.replace(/\s+/g, ' ').trim();
+const REASON_WHITESPACE = new RegExp(
+  '[\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a'
+    + '\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]+',
+  'g',
+);
+const normalizeReason = (reason: string) =>
+  reason.replace(REASON_WHITESPACE, ' ').trim();
 
 export function canCorrectCompletedBill(role: string | null): boolean {
   return role !== null && ALLOWED.has(role as CompletedBillCorrectionRole);

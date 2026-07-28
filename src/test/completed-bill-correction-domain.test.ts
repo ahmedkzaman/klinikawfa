@@ -158,6 +158,24 @@ describe('completed bill corrections', () => {
     }).p_reason).toBe('Correct payment method');
   });
 
+  it('rejects Unicode whitespace-only reasons and normalizes Unicode separators', () => {
+    expect(validateCompletedBillCorrection({
+      ...baseDraft,
+      reason: '\u00a0\u2003\ufeff',
+    })).toMatchObject({
+      reason: 'Enter a correction reason of at least 3 characters.',
+    });
+
+    const context: CompletedBillCorrectionContext = {
+      queueEntryId: 'queue-1', consultationId: 'consult-1', fingerprint: 'fingerprint',
+      items: [baseItem], payments: baseDraft.payments, panelClaim: null,
+    };
+    expect(toCompletedBillCorrectionPayload(context, {
+      ...baseDraft,
+      reason: '\u00a0Correct\u2003payment\u202fmethod\ufeff',
+    }).p_reason).toBe('Correct payment method');
+  });
+
   it('creates a trimmed RPC payload without dispensing data', () => {
     const context: CompletedBillCorrectionContext = {
       queueEntryId: 'queue-1', consultationId: 'consult-1', fingerprint: 'expected-fingerprint',

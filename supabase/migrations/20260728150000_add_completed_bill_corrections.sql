@@ -24,16 +24,53 @@ CREATE INDEX consultation_items_clinic_charge_type_id_idx
   ON public.consultation_items (clinic_charge_type_id)
   WHERE clinic_charge_type_id IS NOT NULL;
 
+-- PostgreSQL POSIX character classes depend on the database locale for
+-- non-ASCII characters. Build the Unicode whitespace set explicitly so the
+-- stored reason invariant is identical under C and Unicode-aware collations.
+CREATE OR REPLACE FUNCTION public.normalize_completed_bill_correction_reason(
+  _reason text
+)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+SET search_path = public, pg_temp
+AS $function$
+  SELECT btrim(
+    regexp_replace(
+      coalesce(_reason, ''),
+      '['
+        || chr(9) || chr(10) || chr(11) || chr(12) || chr(13) || chr(32)
+        || chr(133) || chr(160) || chr(5760)
+        || chr(8192) || chr(8193) || chr(8194) || chr(8195)
+        || chr(8196) || chr(8197) || chr(8198) || chr(8199)
+        || chr(8200) || chr(8201) || chr(8202)
+        || chr(8232) || chr(8233) || chr(8239) || chr(8287)
+        || chr(12288) || chr(65279)
+        || ']+',
+      ' ',
+      'g'
+    )
+  );
+$function$;
+
+ALTER FUNCTION public.normalize_completed_bill_correction_reason(text)
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION
+  public.normalize_completed_bill_correction_reason(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION
+  public.normalize_completed_bill_correction_reason(text) FROM anon;
+REVOKE ALL ON FUNCTION
+  public.normalize_completed_bill_correction_reason(text) FROM authenticated;
+
 CREATE TABLE public.completed_bill_correction_audit (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   queue_entry_id uuid NOT NULL REFERENCES public.queue_entries(id),
   consultation_id uuid NOT NULL REFERENCES public.consultations(id),
   actor_id uuid NOT NULL REFERENCES auth.users(id),
   reason text NOT NULL CHECK (
-    length(
-      btrim(regexp_replace(reason, '[[:space:]]+', ' ', 'g'))
-    ) >= 3
-    AND reason = btrim(regexp_replace(reason, '[[:space:]]+', ' ', 'g'))
+    length(public.normalize_completed_bill_correction_reason(reason)) >= 3
+    AND reason = public.normalize_completed_bill_correction_reason(reason)
   ),
   before_state jsonb NOT NULL,
   after_state jsonb NOT NULL,
@@ -116,6 +153,205 @@ ALTER FUNCTION public.can_correct_completed_bill(uuid) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.can_correct_completed_bill(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.can_correct_completed_bill(uuid) TO authenticated;
 
+-- Every consultation-item statement, checkout, and completed-bill correction
+-- takes this transaction lock before any row lock. A statement-level trigger is
+-- necessary because a row-level BEFORE trigger runs after UPDATE has locked the
+-- item row, which would invert checkout's queue-first order. The fixed key
+-- serializes this rare financial boundary globally and avoids key collisions.
+CREATE OR REPLACE FUNCTION public.lock_completed_bill_item_mutation_boundary()
+RETURNS void
+LANGUAGE sql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $function$
+  SELECT pg_advisory_xact_lock(17291, 20260728);
+$function$;
+
+ALTER FUNCTION public.lock_completed_bill_item_mutation_boundary()
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.lock_completed_bill_item_mutation_boundary()
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.lock_completed_bill_item_mutation_boundary()
+  FROM anon;
+REVOKE ALL ON FUNCTION public.lock_completed_bill_item_mutation_boundary()
+  FROM authenticated;
+
+CREATE OR REPLACE FUNCTION public.serialize_consultation_item_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $function$
+BEGIN
+  PERFORM public.lock_completed_bill_item_mutation_boundary();
+  RETURN NULL;
+END;
+$function$;
+
+ALTER FUNCTION public.serialize_consultation_item_mutation() OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.serialize_consultation_item_mutation()
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.serialize_consultation_item_mutation()
+  FROM anon;
+REVOKE ALL ON FUNCTION public.serialize_consultation_item_mutation()
+  FROM authenticated;
+
+DROP TRIGGER IF EXISTS serialize_consultation_item_mutation
+  ON public.consultation_items;
+CREATE TRIGGER serialize_consultation_item_mutation
+  BEFORE INSERT OR UPDATE ON public.consultation_items
+  FOR EACH STATEMENT
+  EXECUTE FUNCTION public.serialize_consultation_item_mutation();
+
+-- Checkout historically locked the queue before inserting optional item rows.
+-- Acquire the shared statement boundary first so checkout and every item writer
+-- cannot interleave. Parent locks inside the row guard remain queue then
+-- consultation, matching checkout and correction.
+CREATE OR REPLACE FUNCTION public.checkout_visit(
+  p_queue_entry_id uuid,
+  p_consultation_id uuid,
+  p_total_amount numeric,
+  p_amount_paid numeric,
+  p_payment_method text,
+  p_payment_type text DEFAULT 'self_pay'::text,
+  p_panel_provider_id uuid DEFAULT NULL::uuid,
+  p_other_charges jsonb DEFAULT '[]'::jsonb,
+  p_notes text DEFAULT NULL::text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $function$
+DECLARE
+  v_qe record;
+  v_payment_id uuid;
+  v_status text;
+  v_charge jsonb;
+  v_method text := p_payment_method;
+BEGIN
+  IF NOT public.is_staff_or_admin(auth.uid()) THEN
+    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_queue_entry_id IS NULL THEN
+    RAISE EXCEPTION 'QUEUE_ENTRY_REQUIRED' USING ERRCODE = 'P0001';
+  END IF;
+  IF p_total_amount IS NULL OR p_total_amount < 0 THEN
+    RAISE EXCEPTION 'INVALID_TOTAL' USING ERRCODE = 'P0001';
+  END IF;
+  IF p_amount_paid IS NULL OR p_amount_paid < 0 THEN
+    RAISE EXCEPTION 'INVALID_AMOUNT' USING ERRCODE = 'P0001';
+  END IF;
+  IF p_amount_paid > p_total_amount THEN
+    RAISE EXCEPTION 'OVERPAYMENT' USING ERRCODE = 'P0001';
+  END IF;
+  IF p_payment_type NOT IN ('self_pay', 'panel') THEN
+    RAISE EXCEPTION 'INVALID_PAYMENT_TYPE' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF p_amount_paid = 0 THEN
+    v_method := NULL;
+  ELSIF v_method IS NULL OR length(trim(v_method)) = 0 THEN
+    RAISE EXCEPTION 'PAYMENT_METHOD_REQUIRED' USING ERRCODE = 'P0001';
+  END IF;
+
+  PERFORM public.lock_completed_bill_item_mutation_boundary();
+
+  SELECT id, clinic_status
+    INTO v_qe
+  FROM public.queue_entries
+  WHERE id = p_queue_entry_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'QUEUE_ENTRY_NOT_FOUND' USING ERRCODE = 'P0001';
+  END IF;
+  IF v_qe.clinic_status = 'completed' THEN
+    RAISE EXCEPTION 'ALREADY_COMPLETED' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF p_consultation_id IS NOT NULL
+     AND p_other_charges IS NOT NULL
+     AND jsonb_typeof(p_other_charges) = 'array' THEN
+    FOR v_charge IN SELECT * FROM jsonb_array_elements(p_other_charges)
+    LOOP
+      IF coalesce(trim(v_charge->>'name'), '') = '' THEN
+        CONTINUE;
+      END IF;
+      INSERT INTO public.consultation_items (
+        consultation_id,
+        item_name,
+        quantity,
+        price
+      )
+      VALUES (
+        p_consultation_id,
+        v_charge->>'name',
+        1,
+        coalesce((v_charge->>'amount')::numeric, 0)
+      );
+    END LOOP;
+  END IF;
+
+  IF p_amount_paid > 0 THEN
+    INSERT INTO public.payments (
+      queue_entry_id,
+      consultation_id,
+      payment_type,
+      payment_method,
+      amount,
+      notes
+    )
+    VALUES (
+      p_queue_entry_id,
+      p_consultation_id,
+      p_payment_type,
+      v_method,
+      p_amount_paid,
+      p_notes
+    )
+    RETURNING id INTO v_payment_id;
+  END IF;
+
+  v_status := CASE
+    WHEN p_amount_paid >= p_total_amount THEN 'paid'
+    ELSE 'partial'
+  END;
+
+  IF p_consultation_id IS NOT NULL THEN
+    UPDATE public.consultations
+    SET status = 'completed'
+    WHERE id = p_consultation_id
+      AND status <> 'completed';
+  END IF;
+
+  UPDATE public.queue_entries
+  SET clinic_status = 'completed'
+  WHERE id = p_queue_entry_id;
+
+  RETURN jsonb_build_object(
+    'payment_id', v_payment_id,
+    'status', v_status,
+    'balance_due', greatest(p_total_amount - p_amount_paid, 0)
+  );
+END;
+$function$;
+
+ALTER FUNCTION public.checkout_visit(
+  uuid, uuid, numeric, numeric, text, text, uuid, jsonb, text
+) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.checkout_visit(
+  uuid, uuid, numeric, numeric, text, text, uuid, jsonb, text
+) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.checkout_visit(
+  uuid, uuid, numeric, numeric, text, text, uuid, jsonb, text
+) FROM anon;
+GRANT EXECUTE ON FUNCTION public.checkout_visit(
+  uuid, uuid, numeric, numeric, text, text, uuid, jsonb, text
+) TO authenticated;
+
 -- Existing SECURITY DEFINER dispensary helpers bypass RLS. This table trigger
 -- therefore makes the correction guard the mandatory boundary for every
 -- completed consultation-item insert or update, regardless of the calling path.
@@ -126,29 +362,50 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $function$
 DECLARE
+  v_queue_entry_id uuid;
   v_consultation_status text;
   v_queue_status text;
 BEGIN
   IF TG_OP = 'UPDATE'
-     AND OLD.consultation_id IS DISTINCT FROM NEW.consultation_id
-     AND EXISTS (
-       SELECT 1
-       FROM public.consultations c
-       JOIN public.queue_entries qe ON qe.id = c.queue_entry_id
-       WHERE c.id = OLD.consultation_id
-         AND (c.status = 'completed' OR qe.clinic_status = 'completed')
-     ) THEN
-    RAISE EXCEPTION 'COMPLETED_BILL_CORRECTION_REQUIRED'
+     AND OLD.consultation_id IS DISTINCT FROM NEW.consultation_id THEN
+    RAISE EXCEPTION 'CONSULTATION_ITEM_REPARENT_FORBIDDEN'
       USING ERRCODE = '42501';
   END IF;
 
-  SELECT c.status, qe.clinic_status
-    INTO v_consultation_status, v_queue_status
+  -- Resolve without deleted filters: soft deletion must never reopen a
+  -- completed bill to legacy SECURITY DEFINER helpers.
+  SELECT c.queue_entry_id
+    INTO v_queue_entry_id
   FROM public.consultations c
-  JOIN public.queue_entries qe ON qe.id = c.queue_entry_id
+  WHERE c.id = NEW.consultation_id;
+  IF NOT FOUND OR v_queue_entry_id IS NULL THEN
+    RAISE EXCEPTION 'CONSULTATION_ITEM_PARENT_STATE_UNRESOLVED'
+      USING ERRCODE = '23503';
+  END IF;
+
+  -- Parent lock order is queue then consultation, matching checkout and the
+  -- correction RPC. The statement advisory lock was already taken before the
+  -- item row, so this cannot deadlock against their parent-first row locks.
+  SELECT qe.clinic_status
+    INTO v_queue_status
+  FROM public.queue_entries qe
+  WHERE qe.id = v_queue_entry_id
+  FOR UPDATE;
+  IF NOT FOUND OR v_queue_status IS NULL THEN
+    RAISE EXCEPTION 'CONSULTATION_ITEM_PARENT_STATE_UNRESOLVED'
+      USING ERRCODE = '23503';
+  END IF;
+
+  SELECT c.status
+    INTO v_consultation_status
+  FROM public.consultations c
   WHERE c.id = NEW.consultation_id
-    AND c.deleted_at IS NULL
-    AND qe.deleted_at IS NULL;
+    AND c.queue_entry_id = v_queue_entry_id
+  FOR UPDATE;
+  IF NOT FOUND OR v_consultation_status IS NULL THEN
+    RAISE EXCEPTION 'CONSULTATION_ITEM_PARENT_STATE_UNRESOLVED'
+      USING ERRCODE = '23503';
+  END IF;
 
   IF v_consultation_status = 'completed'
      OR v_queue_status = 'completed' THEN
@@ -209,8 +466,6 @@ BEGIN
       AND guard_row.consultation_id = NEW.consultation_id
       AND guard_row.actor_id = auth.uid()
       AND public.can_correct_completed_bill(auth.uid())
-      AND c.deleted_at IS NULL
-      AND qe.deleted_at IS NULL
       AND c.status = 'completed'
       AND qe.clinic_status = 'completed'
   ) THEN
@@ -550,12 +805,12 @@ BEGIN
   IF NOT public.can_correct_completed_bill(auth.uid()) THEN
     RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
   END IF;
-  v_reason := btrim(
-    regexp_replace(coalesce(p_reason, ''), '[[:space:]]+', ' ', 'g')
-  );
+  v_reason := public.normalize_completed_bill_correction_reason(p_reason);
   IF length(v_reason) < 3 THEN
     RAISE EXCEPTION 'CORRECTION_REASON_REQUIRED' USING ERRCODE = '22023';
   END IF;
+
+  PERFORM public.lock_completed_bill_item_mutation_boundary();
 
   -- Lock the complete bill in one deterministic order.
   PERFORM 1
@@ -1184,6 +1439,14 @@ DECLARE
     to_regprocedure(
       'public.correct_completed_bill(uuid,text,text,jsonb,jsonb,numeric,numeric)'
     );
+  v_checkout oid :=
+    to_regprocedure(
+      'public.checkout_visit(uuid,uuid,numeric,numeric,text,text,uuid,jsonb,text)'
+    );
+  v_boundary_lock oid :=
+    to_regprocedure('public.lock_completed_bill_item_mutation_boundary()');
+  v_item_serializer oid :=
+    to_regprocedure('public.serialize_consultation_item_mutation()');
   v_item_guard oid :=
     to_regprocedure('public.guard_completed_bill_item_mutation()');
   v_inventory_trigger oid :=
@@ -1202,7 +1465,7 @@ BEGIN
     RAISE EXCEPTION 'POSTFLIGHT_AUDIT_RLS_DISABLED';
   END IF;
 
-  IF v_context IS NULL OR v_correction IS NULL THEN
+  IF v_context IS NULL OR v_correction IS NULL OR v_checkout IS NULL THEN
     RAISE EXCEPTION 'POSTFLIGHT_CORRECTION_RPC_MISSING';
   END IF;
 
@@ -1326,6 +1589,8 @@ BEGIN
        '%completed_bill_correction_guard%'
      OR pg_get_functiondef(v_inventory_trigger) NOT ILIKE
        '%can_correct_completed_bill(auth.uid())%'
+     OR pg_get_functiondef(v_inventory_trigger) ILIKE '%c.deleted_at%'
+     OR pg_get_functiondef(v_inventory_trigger) ILIKE '%qe.deleted_at%'
      OR NOT EXISTS (
        SELECT 1
        FROM pg_trigger t
@@ -1338,11 +1603,37 @@ BEGIN
     RAISE EXCEPTION 'POSTFLIGHT_INVENTORY_GUARD_MISSING';
   END IF;
 
+  IF v_boundary_lock IS NULL
+     OR pg_get_functiondef(v_boundary_lock) NOT ILIKE
+       '%pg_advisory_xact_lock(17291, 20260728)%'
+     OR v_item_serializer IS NULL
+     OR pg_get_functiondef(v_item_serializer) NOT ILIKE
+       '%lock_completed_bill_item_mutation_boundary()%'
+     OR pg_get_functiondef(v_checkout) NOT ILIKE
+       '%lock_completed_bill_item_mutation_boundary()%'
+     OR pg_get_functiondef(v_correction) NOT ILIKE
+       '%lock_completed_bill_item_mutation_boundary()%'
+     OR NOT EXISTS (
+       SELECT 1
+       FROM pg_trigger t
+       WHERE t.tgrelid = 'public.consultation_items'::regclass
+         AND t.tgname = 'serialize_consultation_item_mutation'
+         AND t.tgfoid = v_item_serializer
+         AND (t.tgtype & 1) = 0
+         AND NOT t.tgisinternal
+         AND t.tgenabled <> 'D'
+     ) THEN
+    RAISE EXCEPTION 'POSTFLIGHT_ITEM_MUTATION_SERIALIZATION_MISSING';
+  END IF;
+
   IF v_item_guard IS NULL
      OR pg_get_functiondef(v_item_guard) NOT ILIKE
        '%COMPLETED_BILL_CORRECTION_REQUIRED%'
      OR pg_get_functiondef(v_item_guard) NOT ILIKE
        '%completed_bill_correction_guard%'
+     OR pg_get_functiondef(v_item_guard) NOT ILIKE '%FOR UPDATE%'
+     OR pg_get_functiondef(v_item_guard) ILIKE '%c.deleted_at%'
+     OR pg_get_functiondef(v_item_guard) ILIKE '%qe.deleted_at%'
      OR NOT EXISTS (
        SELECT 1
        FROM pg_trigger t

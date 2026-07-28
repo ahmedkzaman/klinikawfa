@@ -71,6 +71,59 @@ describe('completed bill correction migration', () => {
     expect(triggerReplacement).toMatch(/release_inventory/i);
   });
 
+  it('protects soft-deleted completed parents and fails closed when parents cannot resolve', () => {
+    const migrationsDirectory = resolve(process.cwd(), 'supabase/migrations');
+    const [migration] = readdirSync(migrationsDirectory)
+      .filter((name) => name.endsWith('_add_completed_bill_corrections.sql'));
+    const sql = readFileSync(resolve(migrationsDirectory, migration), 'utf8');
+    const itemGuard = sql.match(
+      /create or replace function public\.guard_completed_bill_item_mutation[\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+    const inventoryGuard = (
+      sql.match(
+        /create or replace function public\.trg_consultation_items_inventory[\s\S]*?\$function\$;/i,
+      )?.[0] ?? ''
+    ).split(/if tg_op/i)[0];
+
+    expect(itemGuard).toMatch(/consultation_item_parent_state_unresolved/i);
+    expect(itemGuard).toMatch(/c\.status = 'completed'|v_consultation_status = 'completed'/i);
+    expect(itemGuard).toMatch(/qe\.clinic_status|v_queue_status/i);
+    expect(itemGuard).not.toMatch(/c\.deleted_at|qe\.deleted_at/i);
+    expect(inventoryGuard).not.toMatch(/c\.deleted_at|qe\.deleted_at/i);
+  });
+
+  it('serializes item mutation and checkout before taking deterministic parent locks', () => {
+    const migrationsDirectory = resolve(process.cwd(), 'supabase/migrations');
+    const [migration] = readdirSync(migrationsDirectory)
+      .filter((name) => name.endsWith('_add_completed_bill_corrections.sql'));
+    const sql = readFileSync(resolve(migrationsDirectory, migration), 'utf8');
+    const itemGuard = sql.match(
+      /create or replace function public\.guard_completed_bill_item_mutation[\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+    const checkout = sql.match(
+      /create or replace function public\.checkout_visit[\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+    const correction = sql.match(
+      /create or replace function public\.correct_completed_bill[\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+
+    expect(sql).toMatch(
+      /create or replace function public\.lock_completed_bill_item_mutation_boundary[\s\S]*pg_advisory_xact_lock/i,
+    );
+    expect(sql).toMatch(
+      /create trigger serialize_consultation_item_mutation[\s\S]*before insert or update on public\.consultation_items[\s\S]*for each statement/i,
+    );
+    expect(itemGuard).toMatch(
+      /from public\.queue_entries[\s\S]*for update[\s\S]*from public\.consultations[\s\S]*for update/i,
+    );
+    expect(checkout).toMatch(
+      /lock_completed_bill_item_mutation_boundary\(\)[\s\S]*from public\.queue_entries[\s\S]*for update/i,
+    );
+    expect(correction).toMatch(
+      /lock_completed_bill_item_mutation_boundary\(\)[\s\S]*from public\.queue_entries[\s\S]*for update/i,
+    );
+  });
+
   it('canonicalizes payment UUIDs before duplicate and full-set validation', () => {
     const migrationsDirectory = resolve(process.cwd(), 'supabase/migrations');
     const [migration] = readdirSync(migrationsDirectory)
@@ -116,11 +169,15 @@ describe('completed bill correction migration', () => {
     const sql = readFileSync(resolve(migrationsDirectory, migration), 'utf8');
 
     expect(sql).toMatch(
-      /v_reason\s*:=\s*btrim\(\s*regexp_replace\(\s*coalesce\(p_reason,\s*''\),\s*'\[\[:space:\]\]\+',\s*' ',\s*'g'\s*\)\s*\)/i,
+      /create or replace function public\.normalize_completed_bill_correction_reason[\s\S]*chr\(160\)[\s\S]*chr\(8195\)[\s\S]*chr\(8239\)[\s\S]*chr\(65279\)/i,
     );
     expect(sql).toMatch(
-      /reason text not null check\s*\(\s*length\(\s*btrim\(\s*regexp_replace\(/i,
+      /v_reason\s*:=\s*public\.normalize_completed_bill_correction_reason\(p_reason\)/i,
     );
+    expect(sql).toMatch(
+      /reason text not null check[\s\S]*normalize_completed_bill_correction_reason\(reason\)/i,
+    );
+    expect(sql).not.toMatch(/\[\[:space:\]\]/i);
     expect(sql).not.toMatch(/trim\(p_reason\)/i);
   });
 });
