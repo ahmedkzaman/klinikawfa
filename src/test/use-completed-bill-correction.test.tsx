@@ -109,6 +109,45 @@ describe('completed bill correction hooks', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
+  it('does not fetch correction context for a whitespace-only queue-entry ID', async () => {
+    const queryClient = createQueryClient();
+    const { result } = renderHook(
+      () => useCompletedBillCorrectionContext('   ', true),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    await waitFor(() => expect(result.current.fetchStatus).toBe('idle'));
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('keeps a pending panel claim reimbursement as null', async () => {
+    rpc.mockResolvedValue({
+      data: {
+        ...contextResponse,
+        panel_claim: {
+          id: 'claim-1',
+          status: 'pending',
+          amount: 50,
+          received_amount: null,
+        },
+      },
+      error: null,
+    });
+    const queryClient = createQueryClient();
+    const { result } = renderHook(
+      () => useCompletedBillCorrectionContext('queue-1', true),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.panelClaim).toEqual({
+      id: 'claim-1',
+      status: 'pending',
+      amount: 50,
+      receivedAmount: null,
+    });
+  });
+
   it('submits the exact guarded payload and invalidates affected billing views', async () => {
     rpc.mockResolvedValue({
       data: { audit_id: 'audit-1', fingerprint: 'fingerprint-2' },
@@ -127,15 +166,25 @@ describe('completed bill correction hooks', () => {
     expect(rpc).toHaveBeenCalledWith('correct_completed_bill', payload);
     expect(invalidateQueries.mock.calls.map(([filters]) => filters.queryKey)).toEqual([
       ['consultation', 'queue-1'],
-      ['consultation-items'],
+      ['consultation_items'],
       ['payments', 'queue-1'],
+      ['payments_ledger'],
       ['clinic', 'queue-entry', 'queue-1'],
       ['clinic', 'completed-visit-detail', 'queue-1'],
-      ['clinic', 'patient-financials'],
-      ['clinic', 'financial-insights'],
-      ['clinic', 'doctor-clinical-activity'],
+      ['patient_outstanding'],
+      ['financial-insights'],
+      ['sales-insights'],
+      ['doctor-clinical-activity'],
+      ['patient-ltv'],
       ['panel_claims'],
-      ['billing'],
+      ['panel_claims_summary'],
+      ['panel_claim_items', 'queue-1'],
+      ['ledger_item_totals'],
+      ['receipt_payload'],
+      ['consultation_history'],
+      ['clinic', 'patient-visit-history'],
+      ['debt', 'unpaid-visits'],
+      ['completed-bill-correction-context', 'queue-1'],
     ]);
   });
 

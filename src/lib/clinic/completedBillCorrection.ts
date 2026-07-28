@@ -39,7 +39,7 @@ export interface CompletedBillCorrectionContext {
     id: string;
     status: string;
     amount: number;
-    receivedAmount: number;
+    receivedAmount: number | null;
   } | null;
 }
 

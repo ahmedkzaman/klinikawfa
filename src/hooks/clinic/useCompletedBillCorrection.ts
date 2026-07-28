@@ -35,15 +35,25 @@ const CORRECTION_ERROR_MESSAGES: Record<string, string> = {
 
 const INVALIDATED_QUERY_KEYS = [
   (queueEntryId: string) => ['consultation', queueEntryId] as const,
-  () => ['consultation-items'] as const,
+  () => ['consultation_items'] as const,
   (queueEntryId: string) => ['payments', queueEntryId] as const,
+  () => ['payments_ledger'] as const,
   (queueEntryId: string) => ['clinic', 'queue-entry', queueEntryId] as const,
   (queueEntryId: string) => ['clinic', 'completed-visit-detail', queueEntryId] as const,
-  () => ['clinic', 'patient-financials'] as const,
-  () => ['clinic', 'financial-insights'] as const,
-  () => ['clinic', 'doctor-clinical-activity'] as const,
+  () => ['patient_outstanding'] as const,
+  () => ['financial-insights'] as const,
+  () => ['sales-insights'] as const,
+  () => ['doctor-clinical-activity'] as const,
+  () => ['patient-ltv'] as const,
   () => ['panel_claims'] as const,
-  () => ['billing'] as const,
+  () => ['panel_claims_summary'] as const,
+  (queueEntryId: string) => ['panel_claim_items', queueEntryId] as const,
+  () => ['ledger_item_totals'] as const,
+  () => ['receipt_payload'] as const,
+  () => ['consultation_history'] as const,
+  () => ['clinic', 'patient-visit-history'] as const,
+  () => ['debt', 'unpaid-visits'] as const,
+  (queueEntryId: string) => CORRECTION_CONTEXT_KEY(queueEntryId),
 ] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -137,8 +147,8 @@ function parsePanelClaim(value: unknown): CompletedBillCorrectionContext['panelC
   const id = requiredString(value.id);
   const status = requiredString(value.status);
   const amount = finiteNumber(value.amount);
-  const receivedAmount = finiteNumber(value.received_amount);
-  if (id === null || status === null || amount === null || receivedAmount === null) return undefined;
+  const receivedAmount = nullableFiniteNumber(value.received_amount);
+  if (id === null || status === null || amount === null || receivedAmount === undefined) return undefined;
 
   return { id, status, amount, receivedAmount };
 }
@@ -212,12 +222,14 @@ export function useCompletedBillCorrectionContext(
   queueEntryId: string | null,
   enabled: boolean,
 ): UseQueryResult<CompletedBillCorrectionContext> {
+  const trimmedQueueEntryId = queueEntryId?.trim() ?? '';
+
   return useQuery({
-    queryKey: CORRECTION_CONTEXT_KEY(queueEntryId ?? ''),
-    enabled: enabled && queueEntryId !== null,
+    queryKey: CORRECTION_CONTEXT_KEY(trimmedQueueEntryId),
+    enabled: enabled && Boolean(trimmedQueueEntryId),
     queryFn: async () => {
       const { data, error } = await supabase.rpc('get_completed_bill_correction_context', {
-        p_queue_entry_id: queueEntryId!,
+        p_queue_entry_id: trimmedQueueEntryId,
       });
       if (error) throw toCompletedBillCorrectionError(error);
 
