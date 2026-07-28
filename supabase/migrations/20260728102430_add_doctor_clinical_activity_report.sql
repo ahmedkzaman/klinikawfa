@@ -52,7 +52,7 @@ BEGIN
   INNER JOIN public.queue_entries AS qe
     ON qe.id = c.queue_entry_id
   INNER JOIN public.services AS s
-    ON s.id = ci.item_id
+    ON s.id = ci.service_id
   LEFT JOIN public.doctors AS doctor
     ON doctor.id = c.doctor_id
   LEFT JOIN public.profiles AS profile
@@ -63,8 +63,8 @@ BEGIN
     AND ci.deleted_at IS NULL
     AND c.deleted_at IS NULL
     AND c.status = 'completed'
-    AND (qe.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-      BETWEEN _start_date AND _end_date
+    AND qe.created_at >= (_start_date::timestamp AT TIME ZONE 'Asia/Kuala_Lumpur')
+    AND qe.created_at < ((_end_date + 1)::timestamp AT TIME ZONE 'Asia/Kuala_Lumpur')
 
   UNION ALL
 
@@ -101,8 +101,8 @@ BEGIN
   WHERE lower(coalesce(cd.type, '')) IN ('mc', 'quarantine', 'referral')
     AND c.deleted_at IS NULL
     AND c.status = 'completed'
-    AND (cd.created_at AT TIME ZONE 'Asia/Kuala_Lumpur')::date
-      BETWEEN _start_date AND _end_date;
+    AND cd.created_at >= (_start_date::timestamp AT TIME ZONE 'Asia/Kuala_Lumpur')
+    AND cd.created_at < ((_end_date + 1)::timestamp AT TIME ZONE 'Asia/Kuala_Lumpur');
 END;
 $$;
 

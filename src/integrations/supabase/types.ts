@@ -6075,7 +6075,7 @@ export type Database = {
           consultation_id: string
           queue_entry_id: string
           queue_created_at: string
-          queue_sequence: number
+          queue_sequence: number | null
           doctor_id: string | null
           doctor_name: string
           patient_name: string
