@@ -49,6 +49,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { FollowUpScheduler } from '@/components/clinic/patient/FollowUpScheduler';
 import {
   useConsultationQueueEntries,
+  useQueueEntry,
   useUpdateQueueEntry,
 } from '@/hooks/clinic/useQueueEntries';
 import { useCurrentDoctor } from '@/hooks/clinic/useCurrentDoctor';
@@ -110,6 +111,7 @@ import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { useVisitConsultationFee } from '@/hooks/clinic/useVisitConsultationFee';
+import { getConsultationAccess } from '@/lib/clinic/consultationAccess';
 
 const PRICE_TIERS = ['SELF PAY', 'PANEL'];
 
@@ -283,10 +285,15 @@ function PastVisitCard({
 export default function ConsultationDetail() {
   const { queueEntryId } = useParams<{ queueEntryId: string }>();
   const navigate = useNavigate();
-  const { isLocum, isDoctorAdmin } = useAuth();
+  const { role, isLocum, isDoctorAdmin } = useAuth();
   const { data: doctor } = useCurrentDoctor();
   const { settings: clinicSettings } = useClinicSettings();
   const { data: entries = [] } = useConsultationQueueEntries();
+  const {
+    data: entry,
+    isLoading: entryLoading,
+    error: entryError,
+  } = useQueueEntry(queueEntryId);
   const updateQueue = useUpdateQueueEntry();
   const { data: rooms = [] } = useRooms();
   const { getPreference, isLoading: preferencesLoading } = useClinicPreferences();
@@ -297,10 +304,6 @@ export default function ConsultationDetail() {
   const hasCreatedConsultRef = useRef(false);
   const hasSeededFeeRef = useRef(false);
 
-  const entry = useMemo(
-    () => entries.find((e) => e.id === queueEntryId),
-    [entries, queueEntryId],
-  );
   const patient = entry?.patients;
   const isPanel =
     !!(entry as { panel_id?: string | null } | undefined)?.panel_id ||
@@ -318,6 +321,14 @@ export default function ConsultationDetail() {
   const { data: consultation, isLoading: consultLoading } = useConsultation(queueEntryId);
   const createConsultation = useCreateConsultation();
   const updateConsultation = useUpdateConsultation();
+  const access = getConsultationAccess({
+    role,
+    currentDoctorId: doctor?.id,
+    attendingDoctorId: consultation?.doctor_id ?? entry?.assigned_doctor_id,
+    consultationStatus: consultation?.status,
+    queueStatus: entry?.clinic_status,
+  });
+  const { isCrossDoctorReadOnly } = access;
 
   const isLocked =
     consultation?.status === 'completed' ||
@@ -362,11 +373,12 @@ export default function ConsultationDetail() {
 
   const consultationId = (consultation as { id?: string } | null)?.id;
   const { isLockedByOther, canEdit, forceUnlock } = useConsultationLock(
-    consultation as
+    (access.canEdit ? consultation : null) as
       | { id?: string; locked_by?: string | null; status?: string }
       | null
       | undefined,
   );
+  const canEditWorkspace = access.canEdit && canEdit;
   const { data: items = [] } = useConsultationItems(consultationId);
   const { data: attachedDocs = [] } = useConsultationDocuments(consultationId);
   const [issuingTemplate, setIssuingTemplate] = useState<DocumentTemplate | null>(null);
@@ -418,6 +430,7 @@ export default function ConsultationDetail() {
    * Case-insensitive duplicate guard prevents repeated chips.
    */
   const handleCopyDiagnosis = ({ diagnosis_id, name }: CopyDiagnosisPayload) => {
+    if (!access.canEdit) return;
     const trimmed = name.trim();
     if (!trimmed) return;
 
@@ -467,6 +480,7 @@ export default function ConsultationDetail() {
     if (preferencesLoading || consultationFeeLoading) return;
     if (consultLoading) return;
     if (!entry || !doctor) return;
+    if (!access.canEdit) return;
     if (consultation) return;
     if (hasCreatedConsultRef.current) return;
 
@@ -499,7 +513,7 @@ export default function ConsultationDetail() {
       },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preferencesLoading, consultationFeeLoading, consultLoading, consultation, entry, doctor, resolvedConsultationFee, cashConsultationFee]);
+  }, [preferencesLoading, consultationFeeLoading, consultLoading, consultation, entry, doctor, resolvedConsultationFee, cashConsultationFee, access.canEdit]);
 
   useEffect(() => {
     if (consultation) {
@@ -534,6 +548,7 @@ export default function ConsultationDetail() {
   }, [vitals?.id]);
 
   const handleSaveNotes = async () => {
+    if (!access.canEdit) return;
     if (!consultationId) {
       toast.error('Doctor profile missing or consultation not created — contact admin');
       return;
@@ -560,6 +575,7 @@ export default function ConsultationDetail() {
   };
 
   const handleStructureWrittenNotes = async () => {
+    if (!access.canEdit) return;
     const transcript = caseNote.trim();
     if (!transcript) {
       toast.error('Write consultation notes first');
@@ -599,6 +615,7 @@ export default function ConsultationDetail() {
   };
 
   const handleUpdateClinicalNotes = async () => {
+    if (!access.canEdit) return;
     if (!consultationId) {
       toast.error('Consultation not found');
       return;
@@ -624,6 +641,7 @@ export default function ConsultationDetail() {
   };
 
   const handleSaveVitals = async () => {
+    if (!access.canEdit) return;
     if (!entry || !patient?.id) {
       toast.error('Missing patient or queue data');
       return;
@@ -665,6 +683,7 @@ export default function ConsultationDetail() {
       };
     }[],
   ) => {
+    if (!access.canEdit) return;
     if (!consultationId) {
       toast.error('Doctor profile missing or consultation not created — contact admin');
       return;
@@ -705,6 +724,7 @@ export default function ConsultationDetail() {
   };
 
   const handleSendToDispensary = async () => {
+    if (!access.canEdit) return;
     if (isLocked) {
       toast.error('This consultation is completed and cannot be modified');
       return;
@@ -733,6 +753,7 @@ export default function ConsultationDetail() {
   };
 
   const handlePutOnHold = async () => {
+    if (!access.canEdit) return;
     if (isLocked) {
       toast.error('This consultation is completed and cannot be modified');
       return;
@@ -767,6 +788,7 @@ export default function ConsultationDetail() {
   };
 
   const handleCallIn = async (roomId: string, roomLabel: string) => {
+    if (!access.canEdit) return;
     if (!entry || !patient || !doctor) return;
     await updateQueue.mutateAsync({
       id: entry.id,
@@ -849,12 +871,32 @@ export default function ConsultationDetail() {
   // Suppress unused inventory warning — kept for parity / future categorization
   void inventoryItems;
 
-  if (!entry || !patient) {
+  if (entryLoading || consultLoading) {
     return (
       <div className="space-y-5 max-w-7xl mx-auto">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-96 w-full" />
       </div>
+    );
+  }
+
+  if (entryError || !entry || !patient) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>Consultation visit not found.</AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (!access.canView) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          You do not have permission to view this consultation.
+        </AlertDescription>
+      </Alert>
     );
   }
 
@@ -896,6 +938,7 @@ export default function ConsultationDetail() {
             <span className="text-xs text-slate-500">
               Waiting: {formatDistanceToNow(new Date(entry.created_at))}
             </span>
+            {access.canEdit && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -919,6 +962,7 @@ export default function ConsultationDetail() {
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
+            )}
           </div>
           <StatusBadge status={entry.clinic_status} />
         </div>
@@ -934,14 +978,22 @@ export default function ConsultationDetail() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* MAIN — Workspace (right on desktop, first on mobile) */}
           <main className="order-1 lg:order-2 lg:col-span-8 space-y-4 flex flex-col pb-24 relative">
-            {isLocked && (
+            {isCrossDoctorReadOnly ? (
+              <Alert className="border-blue-200 bg-blue-50 text-blue-900">
+                <FileText className="h-4 w-4 text-blue-600" />
+                <AlertDescription>
+                  Read-only consultation. This visit was attended by{' '}
+                  {consultation?.doctors?.name ?? entry.doctors?.name ?? 'another doctor'}.
+                </AlertDescription>
+              </Alert>
+            ) : isLocked ? (
               <Alert className="border-emerald-200 bg-emerald-50 text-emerald-900">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                 <AlertDescription>
                   This consultation is completed. Changes are limited to clinical documentation only.
                 </AlertDescription>
               </Alert>
-            )}
+            ) : null}
             {isLockedByOther && (
               <ConsultationLockBanner onForceUnlock={forceUnlock} />
             )}
@@ -956,7 +1008,7 @@ export default function ConsultationDetail() {
                     size="sm"
                     variant="outline"
                     onClick={handleStructureWrittenNotes}
-                    disabled={!canEdit || isStructuringNotes || !caseNote.trim()}
+                    disabled={!canEditWorkspace || isStructuringNotes || !caseNote.trim()}
                     title="Organize the written notes into clinical sections"
                   >
                     <Sparkles className="mr-2 h-4 w-4" />
@@ -967,6 +1019,7 @@ export default function ConsultationDetail() {
                 <Textarea
                   value={caseNote}
                   onChange={(e) => setCaseNote(e.target.value)}
+                  readOnly={isCrossDoctorReadOnly}
                   placeholder="Write consultation notes…"
                   className="min-h-[400px] resize-y bg-slate-50 border-transparent focus-visible:bg-white focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-200 rounded-xl p-4 text-base leading-relaxed text-slate-800"
                 />
@@ -978,6 +1031,7 @@ export default function ConsultationDetail() {
                     <MultiDiagnosisPicker
                       diagnosisId={diagnosisId}
                       diagnosisText={diagnosisText}
+                      disabled={!access.canEdit}
                       onChange={({ diagnosis_id, diagnosis_text }) => {
                         setDiagnosisId(diagnosis_id);
                         setDiagnosisText(diagnosis_text);
@@ -991,6 +1045,7 @@ export default function ConsultationDetail() {
                     <Textarea
                       value={dispenseNote}
                       onChange={(e) => setDispenseNote(e.target.value)}
+                      readOnly={isCrossDoctorReadOnly}
                       placeholder="Notes for dispensary staff…"
                       rows={3}
                       className={softInput}
@@ -1002,7 +1057,7 @@ export default function ConsultationDetail() {
                     </Label>
                     <SessionAttachmentsStrip
                       consultationId={consultationId}
-                      canEdit={canEdit}
+                      canEdit={canEditWorkspace}
                     />
                   </div>
                 </div>
@@ -1026,7 +1081,7 @@ export default function ConsultationDetail() {
                   <Button
                     size="sm"
                     onClick={() => setBulkDialogOpen(true)}
-                    disabled={!canEdit}
+                    disabled={!canEditWorkspace}
                     className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
                   >
                     <Plus className="h-3 w-3 mr-1" /> Add in bulk
@@ -1070,9 +1125,10 @@ export default function ConsultationDetail() {
                         item={item as TreatmentItemCardItem}
                         priceTiers={PRICE_TIERS}
                         isPanel={isPanel}
-                        disabled={!canEdit}
-                        canEditPrice={!isLocum}
+                        disabled={!canEditWorkspace}
+                        canEditPrice={access.canEdit && !isLocum}
                         onRemove={async () => {
+                          if (!access.canEdit) return;
                           if (!consultationId) return;
                           try {
                             await removeItem.mutateAsync({ id: item.id, consultationId });
@@ -1083,6 +1139,7 @@ export default function ConsultationDetail() {
                         }}
                         onSavingChange={handleItemSavingChange}
                         onSave={async (updates) => {
+                          if (!access.canEdit) return;
                           if (!consultationId) return;
                           try {
                             await updateItem.mutateAsync({
@@ -1125,7 +1182,7 @@ export default function ConsultationDetail() {
                     size="sm"
                     variant="outline"
                     onClick={() => setPickerOpen(true)}
-                    disabled={!consultationId || !patient?.id}
+                    disabled={!access.canEdit || !consultationId || !patient?.id}
                     className="gap-1.5"
                   >
                     <FilePlus2 className="h-4 w-4" />
@@ -1157,7 +1214,7 @@ export default function ConsultationDetail() {
                           >
                             View / Print
                           </Button>
-                          {!isLocked && (
+                          {!isLocked && access.canEdit && (
                             <>
                               <Button
                                 size="icon"
@@ -1187,6 +1244,7 @@ export default function ConsultationDetail() {
               </CardContent>
             </Card>
 
+            {!isCrossDoctorReadOnly && (
             <div className="sticky bottom-4 z-10 bg-white/90 backdrop-blur-md border border-slate-100 rounded-2xl shadow-lg p-4 flex items-center justify-between gap-3 flex-wrap">
               <div className="text-sm">
                 <span className="text-slate-500">Total</span>{' '}
@@ -1229,6 +1287,7 @@ export default function ConsultationDetail() {
                 )}
               </div>
             </div>
+            )}
           </main>
 
           {/* ASIDE — Context (left on desktop, second on mobile) */}
@@ -1324,6 +1383,7 @@ export default function ConsultationDetail() {
                     size="sm"
                     variant="outline"
                     onClick={() => setShowVitalForm(!showVitalForm)}
+                    disabled={!access.canEdit}
                     className="rounded-lg"
                   >
                     {showVitalForm ? (
@@ -1388,6 +1448,7 @@ export default function ConsultationDetail() {
                           <Input
                             type="number"
                             value={vitalForm[k]}
+                            disabled={!access.canEdit}
                             onChange={(e) =>
                               setVitalForm((f) => ({ ...f, [k]: e.target.value }))
                             }
@@ -1399,7 +1460,7 @@ export default function ConsultationDetail() {
                     <Button
                       size="sm"
                       onClick={handleSaveVitals}
-                      disabled={recordVitals.isPending}
+                      disabled={!access.canEdit || recordVitals.isPending}
                       className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
                     >
                       <Save className="h-3 w-3 mr-1" /> Save Vitals
@@ -1484,7 +1545,7 @@ export default function ConsultationDetail() {
               </CardContent>
             </Card>
 
-            {entry?.patient_id && (
+            {entry?.patient_id && access.canEdit && (
               <FollowUpScheduler
                 patientId={entry.patient_id}
                 defaultDoctorId={consultation?.doctor_id ?? null}
