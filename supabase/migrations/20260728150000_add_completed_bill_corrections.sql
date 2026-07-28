@@ -352,6 +352,148 @@ GRANT EXECUTE ON FUNCTION public.checkout_visit(
   uuid, uuid, numeric, numeric, text, text, uuid, jsonb, text
 ) TO authenticated;
 
+-- The compact billing dialog has no item-creation payload, so keep its active
+-- checkout path narrow: lock the complete visit, record exactly one tender
+-- row (including the existing zero-amount panel marker), and complete both
+-- parents in the same transaction.
+CREATE OR REPLACE FUNCTION public.record_payment_and_complete_visit(
+  p_queue_entry_id uuid,
+  p_consultation_id uuid,
+  p_payment_type text,
+  p_payment_method text,
+  p_amount numeric,
+  p_notes text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $function$
+DECLARE
+  v_queue_status text;
+  v_consultation_status text;
+  v_payment_id uuid;
+  v_amount numeric;
+  v_payment_method text;
+BEGIN
+  IF NOT public.is_staff_or_admin(auth.uid()) THEN
+    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
+  END IF;
+  IF p_queue_entry_id IS NULL THEN
+    RAISE EXCEPTION 'QUEUE_ENTRY_REQUIRED' USING ERRCODE = '22023';
+  END IF;
+  IF p_payment_type IS NULL
+     OR p_payment_type NOT IN ('self_pay', 'panel') THEN
+    RAISE EXCEPTION 'INVALID_PAYMENT_TYPE' USING ERRCODE = '22023';
+  END IF;
+
+  v_payment_method := btrim(coalesce(p_payment_method, ''));
+  IF p_amount IS NULL
+     OR p_amount::text IN ('NaN', 'Infinity', '-Infinity') THEN
+    RAISE EXCEPTION 'INVALID_PAYMENT_AMOUNT' USING ERRCODE = '22023';
+  END IF;
+  v_amount := round(p_amount, 2);
+  IF v_amount < 0 OR v_amount > 999999999.99 THEN
+    RAISE EXCEPTION 'INVALID_PAYMENT_AMOUNT' USING ERRCODE = '22023';
+  END IF;
+  IF length(v_payment_method) = 0 THEN
+    RAISE EXCEPTION 'PAYMENT_METHOD_REQUIRED' USING ERRCODE = '22023';
+  END IF;
+
+  -- Global statement boundary first, then the same deterministic parent/item/
+  -- payment order used by the other completed-bill mutation paths.
+  PERFORM public.lock_completed_bill_item_mutation_boundary();
+
+  SELECT qe.clinic_status
+    INTO v_queue_status
+  FROM public.queue_entries qe
+  WHERE qe.id = p_queue_entry_id
+    AND qe.deleted_at IS NULL
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'QUEUE_ENTRY_NOT_FOUND' USING ERRCODE = '22023';
+  END IF;
+  IF v_queue_status = 'completed' THEN
+    RAISE EXCEPTION 'ALREADY_COMPLETED' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_consultation_id IS NOT NULL THEN
+    SELECT c.status
+      INTO v_consultation_status
+    FROM public.consultations c
+    WHERE c.id = p_consultation_id
+      AND c.queue_entry_id = p_queue_entry_id
+      AND c.deleted_at IS NULL
+    FOR UPDATE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'CONSULTATION_NOT_IN_VISIT' USING ERRCODE = '22023';
+    END IF;
+
+    PERFORM 1
+    FROM public.consultation_items ci
+    WHERE ci.consultation_id = p_consultation_id
+      AND ci.deleted_at IS NULL
+    ORDER BY ci.id
+    FOR UPDATE;
+  END IF;
+
+  PERFORM 1
+  FROM public.payments p
+  WHERE p.queue_entry_id = p_queue_entry_id
+    AND p.deleted_at IS NULL
+  ORDER BY p.id
+  FOR UPDATE;
+
+  INSERT INTO public.payments (
+    queue_entry_id,
+    consultation_id,
+    payment_type,
+    payment_method,
+    amount,
+    notes
+  )
+  VALUES (
+    p_queue_entry_id,
+    p_consultation_id,
+    p_payment_type,
+    v_payment_method,
+    v_amount,
+    nullif(p_notes, '')
+  )
+  RETURNING id INTO v_payment_id;
+
+  IF p_consultation_id IS NOT NULL THEN
+    UPDATE public.consultations
+    SET status = 'completed'
+    WHERE id = p_consultation_id
+      AND status <> 'completed';
+  END IF;
+
+  UPDATE public.queue_entries
+  SET clinic_status = 'completed'
+  WHERE id = p_queue_entry_id;
+
+  RETURN jsonb_build_object(
+    'payment_id', v_payment_id,
+    'amount', v_amount,
+    'status', 'completed'
+  );
+END;
+$function$;
+
+ALTER FUNCTION public.record_payment_and_complete_visit(
+  uuid, uuid, text, text, numeric, text
+) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.record_payment_and_complete_visit(
+  uuid, uuid, text, text, numeric, text
+) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.record_payment_and_complete_visit(
+  uuid, uuid, text, text, numeric, text
+) FROM anon;
+GRANT EXECUTE ON FUNCTION public.record_payment_and_complete_visit(
+  uuid, uuid, text, text, numeric, text
+) TO authenticated;
+
 -- Existing SECURITY DEFINER dispensary helpers bypass RLS. This table trigger
 -- therefore makes the correction guard the mandatory boundary for every
 -- completed consultation-item insert or update, regardless of the calling path.
@@ -1443,6 +1585,10 @@ DECLARE
     to_regprocedure(
       'public.checkout_visit(uuid,uuid,numeric,numeric,text,text,uuid,jsonb,text)'
     );
+  v_active_payment_checkout oid :=
+    to_regprocedure(
+      'public.record_payment_and_complete_visit(uuid,uuid,text,text,numeric,text)'
+    );
   v_boundary_lock oid :=
     to_regprocedure('public.lock_completed_bill_item_mutation_boundary()');
   v_item_serializer oid :=
@@ -1453,6 +1599,7 @@ DECLARE
     to_regprocedure('public.trg_consultation_items_inventory()');
   v_context_config text[];
   v_correction_config text[];
+  v_active_payment_checkout_config text[];
 BEGIN
   IF NOT EXISTS (
     SELECT 1
@@ -1465,7 +1612,10 @@ BEGIN
     RAISE EXCEPTION 'POSTFLIGHT_AUDIT_RLS_DISABLED';
   END IF;
 
-  IF v_context IS NULL OR v_correction IS NULL OR v_checkout IS NULL THEN
+  IF v_context IS NULL
+     OR v_correction IS NULL
+     OR v_checkout IS NULL
+     OR v_active_payment_checkout IS NULL THEN
     RAISE EXCEPTION 'POSTFLIGHT_CORRECTION_RPC_MISSING';
   END IF;
 
@@ -1547,16 +1697,26 @@ BEGIN
     CROSS JOIN LATERAL aclexplode(
       COALESCE(p.proacl, acldefault('f', p.proowner))
     ) acl
-    WHERE p.oid IN (v_context, v_correction)
+    WHERE p.oid IN (v_context, v_correction, v_active_payment_checkout)
       AND acl.grantee = 0
       AND acl.privilege_type = 'EXECUTE'
   ) OR has_function_privilege('anon', v_context, 'EXECUTE')
-     OR has_function_privilege('anon', v_correction, 'EXECUTE') THEN
+     OR has_function_privilege('anon', v_correction, 'EXECUTE')
+     OR has_function_privilege(
+       'anon',
+       v_active_payment_checkout,
+       'EXECUTE'
+     ) THEN
     RAISE EXCEPTION 'POSTFLIGHT_PUBLIC_RPC_EXECUTE';
   END IF;
 
   IF NOT has_function_privilege('authenticated', v_context, 'EXECUTE')
-     OR NOT has_function_privilege('authenticated', v_correction, 'EXECUTE') THEN
+     OR NOT has_function_privilege('authenticated', v_correction, 'EXECUTE')
+     OR NOT has_function_privilege(
+       'authenticated',
+       v_active_payment_checkout,
+       'EXECUTE'
+     ) THEN
     RAISE EXCEPTION 'POSTFLIGHT_AUTHENTICATED_RPC_EXECUTE_MISSING';
   END IF;
 
@@ -1582,6 +1742,29 @@ BEGIN
        'search_path=public, pg_temp' = ANY(COALESCE(v_context_config, ARRAY[]::text[]))
      ) THEN
     RAISE EXCEPTION 'POSTFLIGHT_CONTEXT_RPC_NOT_HARDENED';
+  END IF;
+
+  SELECT p.proconfig
+    INTO v_active_payment_checkout_config
+  FROM pg_proc p
+  WHERE p.oid = v_active_payment_checkout
+    AND p.prosecdef;
+  IF NOT FOUND
+     OR NOT (
+       'search_path=public, pg_temp' = ANY(
+         COALESCE(v_active_payment_checkout_config, ARRAY[]::text[])
+       )
+     )
+     OR pg_get_functiondef(v_active_payment_checkout) NOT ILIKE
+       '%lock_completed_bill_item_mutation_boundary()%'
+     OR strpos(
+       lower(pg_get_functiondef(v_active_payment_checkout)),
+       'lock_completed_bill_item_mutation_boundary()'
+     ) > strpos(
+       lower(pg_get_functiondef(v_active_payment_checkout)),
+       'insert into public.payments'
+     ) THEN
+    RAISE EXCEPTION 'POSTFLIGHT_ACTIVE_PAYMENT_CHECKOUT_NOT_HARDENED';
   END IF;
 
   IF v_inventory_trigger IS NULL
@@ -1610,6 +1793,8 @@ BEGIN
      OR pg_get_functiondef(v_item_serializer) NOT ILIKE
        '%lock_completed_bill_item_mutation_boundary()%'
      OR pg_get_functiondef(v_checkout) NOT ILIKE
+       '%lock_completed_bill_item_mutation_boundary()%'
+     OR pg_get_functiondef(v_active_payment_checkout) NOT ILIKE
        '%lock_completed_bill_item_mutation_boundary()%'
      OR pg_get_functiondef(v_correction) NOT ILIKE
        '%lock_completed_bill_item_mutation_boundary()%'

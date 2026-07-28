@@ -814,6 +814,7 @@ export default function DispenseCheckout() {
             consultationId={consultation?.id ?? null}
             items={items}
             payments={payments}
+            completeVisitOnPayment
             showOtherCharges
             onChargesChange={handleChargesChange}
           />

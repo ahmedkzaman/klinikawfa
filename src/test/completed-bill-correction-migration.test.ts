@@ -124,6 +124,31 @@ describe('completed bill correction migration', () => {
     );
   });
 
+  it('records tender and completes the active visit in one locked server transaction', () => {
+    const migrationsDirectory = resolve(process.cwd(), 'supabase/migrations');
+    const [migration] = readdirSync(migrationsDirectory)
+      .filter((name) => name.endsWith('_add_completed_bill_corrections.sql'));
+    const sql = readFileSync(resolve(migrationsDirectory, migration), 'utf8');
+    const activePaymentCheckout = sql.match(
+      /create or replace function public\.record_payment_and_complete_visit[\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+
+    expect(activePaymentCheckout).toMatch(/security definer/i);
+    expect(activePaymentCheckout).toMatch(
+      /set search_path\s*=\s*public,\s*pg_temp/i,
+    );
+    expect(activePaymentCheckout).toMatch(/is_staff_or_admin\(auth\.uid\(\)\)/i);
+    expect(activePaymentCheckout).toMatch(
+      /lock_completed_bill_item_mutation_boundary\(\)[\s\S]*from public\.queue_entries[\s\S]*for update[\s\S]*from public\.consultations[\s\S]*for update[\s\S]*from public\.consultation_items[\s\S]*for update[\s\S]*from public\.payments[\s\S]*for update/i,
+    );
+    expect(activePaymentCheckout).toMatch(
+      /insert into public\.payments[\s\S]*update public\.consultations[\s\S]*status = 'completed'[\s\S]*update public\.queue_entries[\s\S]*clinic_status = 'completed'/i,
+    );
+    expect(sql).toMatch(
+      /revoke all on function public\.record_payment_and_complete_visit[\s\S]*from public[\s\S]*from anon[\s\S]*grant execute on function public\.record_payment_and_complete_visit[\s\S]*to authenticated/i,
+    );
+  });
+
   it('canonicalizes payment UUIDs before duplicate and full-set validation', () => {
     const migrationsDirectory = resolve(process.cwd(), 'supabase/migrations');
     const [migration] = readdirSync(migrationsDirectory)

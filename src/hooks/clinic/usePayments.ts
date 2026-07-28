@@ -118,6 +118,40 @@ export function useRecordPayment() {
   });
 }
 
+export function useRecordPaymentAndCompleteVisit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      queue_entry_id: string;
+      consultation_id: string | null;
+      payment_type: string;
+      payment_method: string;
+      amount: number;
+      notes?: string | null;
+    }) => {
+      const { data, error } = await supabase.rpc(
+        'record_payment_and_complete_visit',
+        {
+          p_queue_entry_id: input.queue_entry_id,
+          p_consultation_id: input.consultation_id,
+          p_payment_type: input.payment_type,
+          p_payment_method: input.payment_method,
+          p_amount: input.amount,
+          p_notes: input.notes ?? null,
+        },
+      );
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: PAYMENTS_KEY(vars.queue_entry_id) });
+      qc.invalidateQueries({ queryKey: LEDGER_KEY });
+      qc.invalidateQueries({ queryKey: ['consultation'] });
+      qc.invalidateQueries({ queryKey: ['clinic'] });
+    },
+  });
+}
+
 export function useVoidPayment() {
   const qc = useQueryClient();
   return useMutation({

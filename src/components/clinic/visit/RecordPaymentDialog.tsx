@@ -36,9 +36,10 @@ import {
 } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
-import { useRecordPayment } from '@/hooks/clinic/usePayments';
-import { useUpdateConsultation } from '@/hooks/clinic/useConsultations';
-import { useUpdateQueueEntry } from '@/hooks/clinic/useQueueEntries';
+import {
+  useRecordPayment,
+  useRecordPaymentAndCompleteVisit,
+} from '@/hooks/clinic/usePayments';
 
 type PaymentType = 'self_pay' | 'panel';
 
@@ -52,23 +53,18 @@ interface Props {
   queueEntryId: string;
   consultationId: string | null;
   defaultAmount: number;
+  /** Active dispensary visits complete atomically; completed records stay payment-only. */
+  completeVisitOnPayment?: boolean;
   /** Canonical method code (cash | qr_pay | card | transfer) to pre-select for self-pay. */
   defaultPaymentMethod?: string;
 }
 
 
 /**
- * Atomic checkout dialog.
+ * Payment dialog with an atomic server checkout mode for active visits.
  *
- * Flow on submit:
- *   1. Insert payment row (self-pay or panel).
- *   2. If consultationId is present, mark the consultation `completed`.
- *   3. Set the queue entry's `clinic_status` to `completed`.
- *   4. Toast, close, and navigate back to the Queue Board.
- *
- * If any step fails the dialog stays open with form state intact so the staff
- * can retry — this is intentional rather than a true DB transaction because
- * each operation is idempotent against re-running it once.
+ * Completed visit records use the existing insert-only additional-payment path.
+ * On failure the dialog remains open with form state intact for a safe retry.
  */
 export function RecordPaymentDialog({
   open,
@@ -76,14 +72,14 @@ export function RecordPaymentDialog({
   queueEntryId,
   consultationId,
   defaultAmount,
+  completeVisitOnPayment = false,
   defaultPaymentMethod,
 }: Props) {
 
   const navigate = useNavigate();
   const { data: providers = [] } = useInsuranceProviders({ activeOnly: true });
   const recordPayment = useRecordPayment();
-  const updateConsultation = useUpdateConsultation();
-  const updateQueueEntry = useUpdateQueueEntry();
+  const recordPaymentAndCompleteVisit = useRecordPaymentAndCompleteVisit();
 
   const [paymentType, setPaymentType] = useState<PaymentType>('self_pay');
   const [selfPayMethod, setSelfPayMethod] = useState<string>('');
@@ -124,10 +120,9 @@ export function RecordPaymentDialog({
     [providers, providerId],
   );
 
-  const isSubmitting =
-    recordPayment.isPending ||
-    updateConsultation.isPending ||
-    updateQueueEntry.isPending;
+  const isSubmitting = completeVisitOnPayment
+    ? recordPaymentAndCompleteVisit.isPending
+    : recordPayment.isPending;
 
   const numericAmountPreview = parseFloat(amount);
   const submitDisabled =
@@ -137,11 +132,7 @@ export function RecordPaymentDialog({
 
   const submittingLabel = recordPayment.isPending
     ? 'Recording payment…'
-    : updateConsultation.isPending
-      ? 'Completing visit…'
-      : updateQueueEntry.isPending
-        ? 'Checking out…'
-        : 'Processing…';
+    : 'Processing…';
 
   async function handleSubmit() {
     // ── Validation ───────────────────────────────────────────────────────────
@@ -175,31 +166,28 @@ export function RecordPaymentDialog({
         : `Provider: ${selectedProvider.name}`;
     }
 
-    // ── Atomic 3-step flow — short-circuits on first failure ─────────────────
+    // Active checkout is one server transaction. Completed visits retain the
+    // insert-only additional-payment path.
     try {
-      // 1. Insert payment row
-      await recordPayment.mutateAsync({
-        queue_entry_id: queueEntryId,
-        consultation_id: consultationId,
-        payment_type: paymentType,
-        payment_method: resolvedMethodLabel,
-        amount: numericAmount,
-        notes: finalNotes || null,
-      });
-
-      // 2. Mark consultation completed (only if one exists)
-      if (consultationId) {
-        await updateConsultation.mutateAsync({
-          id: consultationId,
-          status: 'completed',
+      if (completeVisitOnPayment) {
+        await recordPaymentAndCompleteVisit.mutateAsync({
+          queue_entry_id: queueEntryId,
+          consultation_id: consultationId,
+          payment_type: paymentType,
+          payment_method: resolvedMethodLabel,
+          amount: numericAmount,
+          notes: finalNotes || null,
+        });
+      } else {
+        await recordPayment.mutateAsync({
+          queue_entry_id: queueEntryId,
+          consultation_id: consultationId,
+          payment_type: paymentType,
+          payment_method: resolvedMethodLabel,
+          amount: numericAmount,
+          notes: finalNotes || null,
         });
       }
-
-      // 3. Check out queue entry
-      await updateQueueEntry.mutateAsync({
-        id: queueEntryId,
-        clinic_status: 'completed',
-      });
 
       toast.success('Payment recorded · Patient checked out');
       onOpenChange(false);

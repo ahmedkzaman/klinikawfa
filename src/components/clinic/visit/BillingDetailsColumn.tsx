@@ -37,6 +37,7 @@ interface Props {
   consultationId: string | null;
   items: ConsultationItemRow[];
   payments: PaymentRow[];
+  completeVisitOnPayment?: boolean;
   /** When true, render the "Other Charges" picker. Selections are NOT
    *  persisted on toggle — parent commits them at checkout via onChargesChange. */
   showOtherCharges?: boolean;
@@ -54,6 +55,7 @@ export function BillingDetailsColumn({
   consultationId,
   items,
   payments,
+  completeVisitOnPayment = false,
   showOtherCharges = false,
   onChargesChange,
 }: Props) {
@@ -359,7 +361,7 @@ export function BillingDetailsColumn({
         consultationId={consultationId}
         defaultAmount={outstanding}
         defaultPaymentMethod={paymentMethod}
-
+        completeVisitOnPayment={completeVisitOnPayment}
       />
 
       <PrintReceiptDialog

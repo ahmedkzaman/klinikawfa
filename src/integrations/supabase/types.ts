@@ -6176,6 +6176,17 @@ export type Database = {
         }
         Returns: Json
       }
+      record_payment_and_complete_visit: {
+        Args: {
+          p_amount: number
+          p_consultation_id: string | null
+          p_notes?: string | null
+          p_payment_method: string
+          p_payment_type: string
+          p_queue_entry_id: string
+        }
+        Returns: Json
+      }
       remove_consultation_item_dispensary: {
         Args: {
           p_consultation_id: string
