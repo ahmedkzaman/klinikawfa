@@ -545,7 +545,7 @@ export default function ConsultationDetail() {
         respiratory_rate: vitals.respiratory_rate?.toString() ?? '',
       });
     }
-  }, [vitals?.id]);
+  }, [vitals]);
 
   const handleSaveNotes = async () => {
     if (!access.canEdit) return;
@@ -782,8 +782,9 @@ export default function ConsultationDetail() {
 
       toast.success(`${patient?.name ?? 'Patient'} placed on hold`);
       navigate(isLocum ? '/clinic/queue' : '/clinic/consultation', { replace: true });
-    } catch (error: any) {
-      toast.error(`Failed to place on hold: ${error.message || 'Unknown error'}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Failed to place on hold: ${message}`);
     }
   };
 
