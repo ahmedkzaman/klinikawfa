@@ -37,7 +37,9 @@ describe('consultation clinical attachments', () => {
 
   it('shows diagnosis separately from clinical notes for completed visits', () => {
     expect(queueEntries).toContain('diagnoses:diagnosis_id ( id, name )');
-    expect(queueBoard).toContain('completedVisitDiagnosis');
+    expect(queueBoard).toContain('getRecordedDiagnosisLabels');
+    expect(queueBoard).toContain('completedVisitDiagnoses');
+    expect(queueBoard).toContain('completedVisitDiagnoses.map');
     expect(queueBoard).toContain('>Diagnosis</p>');
     expect(queueBoard).toContain('No diagnosis recorded for this visit.');
     expect(queueBoard).not.toContain(

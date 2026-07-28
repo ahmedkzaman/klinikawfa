@@ -57,6 +57,7 @@ import { formatQueueNo } from "@/lib/clinic/queueNumber";
 import { bento, pageInner, pageShell, primaryBtn, secondaryBtn, softBadge } from "@/lib/clinic/bentoTokens";
 import { calculateClinicalAge } from "@/lib/clinic/clinicalAge";
 import { isCashVisit, isCompletedVisitUnpaid } from "@/lib/clinic/queuePaymentFocus";
+import { getRecordedDiagnosisLabels } from "@/lib/clinic/diagnosisDisplay";
 
 function useTickEveryMinute() {
   const [, setTick] = useState(0);
@@ -210,16 +211,15 @@ export default function QueueBoard() {
     completedConsultation?.case_note?.trim() ||
     completedVisit?.visit_notes?.trim() ||
     "";
-  const completedVisitDiagnosis = useMemo(() => {
+  const completedVisitDiagnoses = useMemo(() => {
     const diagnoses = completedConsultation?.diagnoses;
     const structuredDiagnosis = Array.isArray(diagnoses)
       ? diagnoses[0]?.name?.trim()
       : diagnoses?.name?.trim();
-    return (
-      completedConsultation?.diagnosis_text?.trim() ||
-      structuredDiagnosis ||
-      ""
-    );
+    return getRecordedDiagnosisLabels({
+      structuredDiagnosis,
+      diagnosisText: completedConsultation?.diagnosis_text,
+    });
   }, [
     completedConsultation?.diagnoses,
     completedConsultation?.diagnosis_text,
@@ -521,10 +521,17 @@ export default function QueueBoard() {
 
               <section className={cn(bento, "p-4")}>
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Diagnosis</p>
-                {completedVisitDiagnosis ? (
-                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
-                    {completedVisitDiagnosis}
-                  </p>
+                {completedVisitDiagnoses.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {completedVisitDiagnoses.map((diagnosis) => (
+                      <span
+                        key={diagnosis.toLowerCase()}
+                        className={cn(softBadge, "border-teal-200 bg-teal-50 text-teal-800")}
+                      >
+                        {diagnosis}
+                      </span>
+                    ))}
+                  </div>
                 ) : (
                   <p className="mt-3 text-sm text-slate-400">No diagnosis recorded for this visit.</p>
                 )}
