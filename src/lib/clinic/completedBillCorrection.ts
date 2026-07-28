@@ -69,6 +69,7 @@ const ALLOWED = new Set<CompletedBillCorrectionRole>([
 const cents = (value: number) => Math.round(value * 100);
 const money = (value: number) => value / 100;
 const isNonNegativeFinite = (value: number) => Number.isFinite(value) && value >= 0;
+const normalizeReason = (reason: string) => reason.replace(/\s+/g, ' ').trim();
 
 export function canCorrectCompletedBill(role: string | null): boolean {
   return role !== null && ALLOWED.has(role as CompletedBillCorrectionRole);
@@ -104,7 +105,7 @@ export function validateCompletedBillCorrection(
   draft: CompletedBillCorrectionDraft,
 ): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (draft.reason.trim().length < 3) {
+  if (normalizeReason(draft.reason).length < 3) {
     errors.reason = 'Enter a correction reason of at least 3 characters.';
   }
   if (!isNonNegativeFinite(draft.discountRm)) {
@@ -138,14 +139,15 @@ export function validateCompletedBillCorrection(
   const paymentIds = new Set<string>();
   draft.payments.forEach((payment, index) => {
     const field = `payments.${index}`;
+    const normalizedId = payment.id.toLowerCase();
     if (!isNonNegativeFinite(payment.amount)) {
       errors[`${field}.amount`] = 'Payment amount must be a finite non-negative number.';
     }
     if (payment.amount > 0 && payment.paymentMethod.trim().length === 0) {
       errors[`${field}.paymentMethod`] = 'Enter a payment method for a positive payment.';
     }
-    if (paymentIds.has(payment.id)) errors[`${field}.id`] = 'Payment IDs must be unique.';
-    paymentIds.add(payment.id);
+    if (paymentIds.has(normalizedId)) errors[`${field}.id`] = 'Payment IDs must be unique.';
+    paymentIds.add(normalizedId);
   });
 
   return errors;
@@ -158,7 +160,7 @@ export function toCompletedBillCorrectionPayload(
   return {
     p_queue_entry_id: context.queueEntryId,
     p_expected_fingerprint: context.fingerprint,
-    p_reason: draft.reason.trim(),
+    p_reason: normalizeReason(draft.reason),
     p_items: draft.items.map((item) => ({
       id: item.id,
       quantity: item.quantity,
@@ -169,7 +171,7 @@ export function toCompletedBillCorrectionPayload(
       item_name: item.itemName,
     })),
     p_payments: draft.payments.map((payment) => ({
-      id: payment.id,
+      id: payment.id.toLowerCase(),
       amount: payment.amount,
       payment_method: payment.paymentMethod.trim(),
     })),

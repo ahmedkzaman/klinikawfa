@@ -127,6 +127,37 @@ describe('completed bill corrections', () => {
     });
   });
 
+  it('treats payment UUID case variants as duplicates', () => {
+    const paymentId = 'a0b1c2d3-e4f5-4678-9abc-def012345678';
+    expect(validateCompletedBillCorrection({
+      ...baseDraft,
+      payments: [
+        { ...baseDraft.payments[0], id: paymentId },
+        { ...baseDraft.payments[0], id: paymentId.toUpperCase() },
+      ],
+    })).toMatchObject({
+      'payments.1.id': 'Payment IDs must be unique.',
+    });
+  });
+
+  it('rejects whitespace-only reasons and normalizes reason whitespace in the payload', () => {
+    expect(validateCompletedBillCorrection({
+      ...baseDraft,
+      reason: '\t\n \r',
+    })).toMatchObject({
+      reason: 'Enter a correction reason of at least 3 characters.',
+    });
+
+    const context: CompletedBillCorrectionContext = {
+      queueEntryId: 'queue-1', consultationId: 'consult-1', fingerprint: 'fingerprint',
+      items: [baseItem], payments: baseDraft.payments, panelClaim: null,
+    };
+    expect(toCompletedBillCorrectionPayload(context, {
+      ...baseDraft,
+      reason: ' \tCorrect\n  payment\r\nmethod ',
+    }).p_reason).toBe('Correct payment method');
+  });
+
   it('creates a trimmed RPC payload without dispensing data', () => {
     const context: CompletedBillCorrectionContext = {
       queueEntryId: 'queue-1', consultationId: 'consult-1', fingerprint: 'expected-fingerprint',

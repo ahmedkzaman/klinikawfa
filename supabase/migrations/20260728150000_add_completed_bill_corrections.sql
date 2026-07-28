@@ -29,7 +29,12 @@ CREATE TABLE public.completed_bill_correction_audit (
   queue_entry_id uuid NOT NULL REFERENCES public.queue_entries(id),
   consultation_id uuid NOT NULL REFERENCES public.consultations(id),
   actor_id uuid NOT NULL REFERENCES auth.users(id),
-  reason text NOT NULL CHECK (length(trim(reason)) >= 3),
+  reason text NOT NULL CHECK (
+    length(
+      btrim(regexp_replace(reason, '[[:space:]]+', ' ', 'g'))
+    ) >= 3
+    AND reason = btrim(regexp_replace(reason, '[[:space:]]+', ' ', 'g'))
+  ),
   before_state jsonb NOT NULL,
   after_state jsonb NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
@@ -42,10 +47,32 @@ CREATE INDEX completed_bill_correction_audit_consultation_created_idx
 
 ALTER TABLE public.completed_bill_correction_audit ENABLE ROW LEVEL SECURITY;
 
+REVOKE ALL PRIVILEGES ON TABLE public.completed_bill_correction_audit FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON TABLE public.completed_bill_correction_audit TO authenticated;
+
 CREATE POLICY "completed_bill_correction_audit_admin_read"
   ON public.completed_bill_correction_audit
   FOR SELECT TO authenticated
   USING (public.is_ops_or_admin(auth.uid()));
+
+-- This owner-only table is a capability scoped to one database transaction,
+-- backend, consultation, and authenticated actor. Client roles cannot create a
+-- guard row, so another SECURITY DEFINER path cannot impersonate this RPC.
+CREATE TABLE public.completed_bill_correction_guard (
+  transaction_id bigint NOT NULL,
+  backend_pid integer NOT NULL,
+  consultation_id uuid NOT NULL REFERENCES public.consultations(id),
+  actor_id uuid NOT NULL REFERENCES auth.users(id),
+  PRIMARY KEY (
+    transaction_id,
+    backend_pid,
+    consultation_id,
+    actor_id
+  )
+);
+
+ALTER TABLE public.completed_bill_correction_guard ENABLE ROW LEVEL SECURITY;
+REVOKE ALL PRIVILEGES ON TABLE public.completed_bill_correction_guard FROM PUBLIC, anon, authenticated;
 
 CREATE OR REPLACE FUNCTION public.prevent_completed_bill_audit_change()
 RETURNS trigger
@@ -88,6 +115,160 @@ $function$;
 ALTER FUNCTION public.can_correct_completed_bill(uuid) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.can_correct_completed_bill(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.can_correct_completed_bill(uuid) TO authenticated;
+
+-- Existing SECURITY DEFINER dispensary helpers bypass RLS. This table trigger
+-- therefore makes the correction guard the mandatory boundary for every
+-- completed consultation-item insert or update, regardless of the calling path.
+CREATE OR REPLACE FUNCTION public.guard_completed_bill_item_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $function$
+DECLARE
+  v_consultation_status text;
+  v_queue_status text;
+BEGIN
+  IF TG_OP = 'UPDATE'
+     AND OLD.consultation_id IS DISTINCT FROM NEW.consultation_id
+     AND EXISTS (
+       SELECT 1
+       FROM public.consultations c
+       JOIN public.queue_entries qe ON qe.id = c.queue_entry_id
+       WHERE c.id = OLD.consultation_id
+         AND (c.status = 'completed' OR qe.clinic_status = 'completed')
+     ) THEN
+    RAISE EXCEPTION 'COMPLETED_BILL_CORRECTION_REQUIRED'
+      USING ERRCODE = '42501';
+  END IF;
+
+  SELECT c.status, qe.clinic_status
+    INTO v_consultation_status, v_queue_status
+  FROM public.consultations c
+  JOIN public.queue_entries qe ON qe.id = c.queue_entry_id
+  WHERE c.id = NEW.consultation_id
+    AND c.deleted_at IS NULL
+    AND qe.deleted_at IS NULL;
+
+  IF v_consultation_status = 'completed'
+     OR v_queue_status = 'completed' THEN
+    IF v_consultation_status IS DISTINCT FROM 'completed'
+       OR v_queue_status IS DISTINCT FROM 'completed'
+       OR NOT public.can_correct_completed_bill(auth.uid())
+       OR NOT EXISTS (
+         SELECT 1
+         FROM public.completed_bill_correction_guard guard_row
+         WHERE guard_row.transaction_id = txid_current()
+           AND guard_row.backend_pid = pg_backend_pid()
+           AND guard_row.consultation_id = NEW.consultation_id
+           AND guard_row.actor_id = auth.uid()
+       ) THEN
+      RAISE EXCEPTION 'COMPLETED_BILL_CORRECTION_REQUIRED'
+        USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
+
+ALTER FUNCTION public.guard_completed_bill_item_mutation() OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.guard_completed_bill_item_mutation() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.guard_completed_bill_item_mutation() FROM anon;
+REVOKE ALL ON FUNCTION public.guard_completed_bill_item_mutation()
+  FROM authenticated;
+
+DROP TRIGGER IF EXISTS guard_completed_bill_item_mutation
+  ON public.consultation_items;
+CREATE TRIGGER guard_completed_bill_item_mutation
+  BEFORE INSERT OR UPDATE ON public.consultation_items
+  FOR EACH ROW
+  EXECUTE FUNCTION public.guard_completed_bill_item_mutation();
+
+-- The legacy allocation trigger predates completed-bill corrections. A guarded
+-- correction must not reserve/release inventory that checkout already committed.
+CREATE OR REPLACE FUNCTION public.trg_consultation_items_inventory()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $function$
+DECLARE
+  v_item_id uuid;
+  v_old_item_id uuid;
+  v_diff integer;
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.completed_bill_correction_guard guard_row
+    JOIN public.consultations c
+      ON c.id = guard_row.consultation_id
+    JOIN public.queue_entries qe ON qe.id = c.queue_entry_id
+    WHERE guard_row.transaction_id = txid_current()
+      AND guard_row.backend_pid = pg_backend_pid()
+      AND guard_row.consultation_id = NEW.consultation_id
+      AND guard_row.actor_id = auth.uid()
+      AND public.can_correct_completed_bill(auth.uid())
+      AND c.deleted_at IS NULL
+      AND qe.deleted_at IS NULL
+      AND c.status = 'completed'
+      AND qe.clinic_status = 'completed'
+  ) THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.deleted_at IS NULL THEN
+      v_item_id := public._resolve_inventory_item_id(NEW.item_name);
+      IF v_item_id IS NOT NULL THEN
+        PERFORM public.reserve_inventory(v_item_id, NEW.quantity);
+      END IF;
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'UPDATE' THEN
+    IF OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL THEN
+      v_item_id := public._resolve_inventory_item_id(OLD.item_name);
+      IF v_item_id IS NOT NULL THEN
+        PERFORM public.release_inventory(v_item_id, OLD.quantity);
+      END IF;
+      RETURN NEW;
+    END IF;
+
+    IF OLD.deleted_at IS NULL AND NEW.deleted_at IS NULL THEN
+      IF OLD.item_name = NEW.item_name THEN
+        v_item_id := public._resolve_inventory_item_id(NEW.item_name);
+        IF v_item_id IS NOT NULL THEN
+          v_diff := NEW.quantity - OLD.quantity;
+          IF v_diff > 0 THEN
+            PERFORM public.reserve_inventory(v_item_id, v_diff);
+          ELSIF v_diff < 0 THEN
+            PERFORM public.release_inventory(v_item_id, -v_diff);
+          END IF;
+        END IF;
+      ELSE
+        v_old_item_id := public._resolve_inventory_item_id(OLD.item_name);
+        IF v_old_item_id IS NOT NULL THEN
+          PERFORM public.release_inventory(v_old_item_id, OLD.quantity);
+        END IF;
+        v_item_id := public._resolve_inventory_item_id(NEW.item_name);
+        IF v_item_id IS NOT NULL THEN
+          PERFORM public.reserve_inventory(v_item_id, NEW.quantity);
+        END IF;
+      END IF;
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
+
+ALTER FUNCTION public.trg_consultation_items_inventory() OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.trg_consultation_items_inventory() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.trg_consultation_items_inventory() FROM anon;
+REVOKE ALL ON FUNCTION public.trg_consultation_items_inventory() FROM authenticated;
 
 -- One deterministic state builder is shared by the context and mutation RPCs. It is
 -- not client-callable; callers only receive it after the role/visit guards.
@@ -354,6 +535,7 @@ DECLARE
   v_amount numeric;
   v_payment_method text;
   v_charge_name text;
+  v_reason text;
   v_existing_count integer;
   v_payload_existing_count integer;
   v_subtotal numeric;
@@ -368,7 +550,10 @@ BEGIN
   IF NOT public.can_correct_completed_bill(auth.uid()) THEN
     RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
   END IF;
-  IF length(trim(coalesce(p_reason, ''))) < 3 THEN
+  v_reason := btrim(
+    regexp_replace(coalesce(p_reason, ''), '[[:space:]]+', ' ', 'g')
+  );
+  IF length(v_reason) < 3 THEN
     RAISE EXCEPTION 'CORRECTION_REASON_REQUIRED' USING ERRCODE = '22023';
   END IF;
 
@@ -604,18 +789,6 @@ BEGIN
     RAISE EXCEPTION 'ITEM_SET_MISMATCH' USING ERRCODE = '22023';
   END IF;
 
-  IF EXISTS (
-    SELECT 1
-    FROM (
-      SELECT element->>'id' AS id
-      FROM jsonb_array_elements(p_payments) element
-      GROUP BY element->>'id'
-      HAVING count(*) > 1
-    ) duplicates
-  ) THEN
-    RAISE EXCEPTION 'DUPLICATE_PAYMENT_ID' USING ERRCODE = '22023';
-  END IF;
-
   FOR v_payment IN SELECT value FROM jsonb_array_elements(p_payments)
   LOOP
     IF jsonb_typeof(v_payment->'id') IS DISTINCT FROM 'string'
@@ -646,14 +819,52 @@ BEGIN
     END IF;
   END LOOP;
 
+  -- UUID text is case-insensitive after casting; duplicate and coverage checks
+  -- must therefore operate on canonical UUID values, not raw JSON strings.
+  IF EXISTS (
+    SELECT 1
+    FROM (
+      SELECT (element->>'id')::uuid AS id
+      FROM jsonb_array_elements(p_payments) element
+      GROUP BY (element->>'id')::uuid
+      HAVING count(*) > 1
+    ) duplicates
+  ) THEN
+    RAISE EXCEPTION 'DUPLICATE_PAYMENT_ID' USING ERRCODE = '22023';
+  END IF;
+
   SELECT count(*)
     INTO v_existing_count
   FROM public.payments p
   WHERE p.queue_entry_id = p_queue_entry_id
     AND p.deleted_at IS NULL;
-  IF v_existing_count <> jsonb_array_length(p_payments) THEN
+  IF v_existing_count <> jsonb_array_length(p_payments)
+     OR EXISTS (
+       SELECT 1
+       FROM public.payments p
+       WHERE p.queue_entry_id = p_queue_entry_id
+         AND p.deleted_at IS NULL
+         AND NOT EXISTS (
+           SELECT 1
+           FROM jsonb_array_elements(p_payments) element
+           WHERE (element->>'id')::uuid = p.id
+         )
+     ) THEN
     RAISE EXCEPTION 'PAYMENT_SET_MISMATCH' USING ERRCODE = '22023';
   END IF;
+
+  INSERT INTO public.completed_bill_correction_guard (
+    transaction_id,
+    backend_pid,
+    consultation_id,
+    actor_id
+  )
+  VALUES (
+    txid_current(),
+    pg_backend_pid(),
+    v_consultation_id,
+    auth.uid()
+  );
 
   -- Existing item edits are deliberately limited to billing fields and a
   -- soft-delete marker. dispensed_qty and all clinical/inventory columns stay
@@ -779,6 +990,12 @@ BEGIN
     );
   END IF;
 
+  DELETE FROM public.completed_bill_correction_guard
+  WHERE transaction_id = txid_current()
+    AND backend_pid = pg_backend_pid()
+    AND consultation_id = v_consultation_id
+    AND actor_id = auth.uid();
+
   FOR v_payment IN SELECT value FROM jsonb_array_elements(p_payments)
   LOOP
     v_payment_id := (v_payment->>'id')::uuid;
@@ -791,7 +1008,7 @@ BEGIN
         notes = concat_ws(
           E'\n',
           nullif(notes, ''),
-          'Completed bill corrected: ' || trim(p_reason)
+          'Completed bill corrected: ' || v_reason
         )
     WHERE id = v_payment_id
       AND queue_entry_id = p_queue_entry_id
@@ -843,7 +1060,7 @@ BEGIN
     p_queue_entry_id,
     v_consultation_id,
     auth.uid(),
-    trim(p_reason),
+    v_reason,
     v_before_state,
     v_after_state
   )
@@ -879,6 +1096,8 @@ CREATE POLICY "consultation_items_noncompleted_update"
   FOR UPDATE TO authenticated
   USING (
     deleted_at IS NULL
+    AND billing_adjustment_kind IS NULL
+    AND clinic_charge_type_id IS NULL
     AND public.can_edit_dispensary_prices(auth.uid())
     AND EXISTS (
       SELECT 1
@@ -892,7 +1111,9 @@ CREATE POLICY "consultation_items_noncompleted_update"
     )
   )
   WITH CHECK (
-    public.can_edit_dispensary_prices(auth.uid())
+    billing_adjustment_kind IS NULL
+    AND clinic_charge_type_id IS NULL
+    AND public.can_edit_dispensary_prices(auth.uid())
     AND EXISTS (
       SELECT 1
       FROM public.consultations c
@@ -913,7 +1134,9 @@ CREATE POLICY "consultation_items_noncompleted_insert"
   ON public.consultation_items
   FOR INSERT TO authenticated
   WITH CHECK (
-    public.is_staff_or_clinical(auth.uid())
+    billing_adjustment_kind IS NULL
+    AND clinic_charge_type_id IS NULL
+    AND public.is_staff_or_clinical(auth.uid())
     AND EXISTS (
       SELECT 1
       FROM public.consultations c
@@ -961,6 +1184,10 @@ DECLARE
     to_regprocedure(
       'public.correct_completed_bill(uuid,text,text,jsonb,jsonb,numeric,numeric)'
     );
+  v_item_guard oid :=
+    to_regprocedure('public.guard_completed_bill_item_mutation()');
+  v_inventory_trigger oid :=
+    to_regprocedure('public.trg_consultation_items_inventory()');
   v_context_config text[];
   v_correction_config text[];
 BEGIN
@@ -977,6 +1204,78 @@ BEGIN
 
   IF v_context IS NULL OR v_correction IS NULL THEN
     RAISE EXCEPTION 'POSTFLIGHT_CORRECTION_RPC_MISSING';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relname = 'completed_bill_correction_guard'
+      AND c.relrowsecurity
+  ) OR has_table_privilege(
+    'anon',
+    'public.completed_bill_correction_guard',
+    'SELECT, INSERT, UPDATE, DELETE, TRUNCATE'
+  ) OR has_table_privilege(
+    'authenticated',
+    'public.completed_bill_correction_guard',
+    'SELECT, INSERT, UPDATE, DELETE, TRUNCATE'
+  ) THEN
+    RAISE EXCEPTION 'POSTFLIGHT_CORRECTION_GUARD_EXPOSED';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_class c
+    CROSS JOIN LATERAL aclexplode(
+      COALESCE(c.relacl, acldefault('r', c.relowner))
+    ) acl
+    WHERE c.oid = 'public.completed_bill_correction_audit'::regclass
+      AND acl.grantee = 0
+      AND acl.privilege_type IN ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE')
+  ) OR has_table_privilege(
+    'anon',
+    'public.completed_bill_correction_audit',
+    'INSERT'
+  ) OR has_table_privilege(
+    'anon',
+    'public.completed_bill_correction_audit',
+    'UPDATE'
+  ) OR has_table_privilege(
+    'anon',
+    'public.completed_bill_correction_audit',
+    'DELETE'
+  ) OR has_table_privilege(
+    'anon',
+    'public.completed_bill_correction_audit',
+    'TRUNCATE'
+  ) OR has_table_privilege(
+    'authenticated',
+    'public.completed_bill_correction_audit',
+    'INSERT'
+  ) OR has_table_privilege(
+    'authenticated',
+    'public.completed_bill_correction_audit',
+    'UPDATE'
+  ) OR has_table_privilege(
+    'authenticated',
+    'public.completed_bill_correction_audit',
+    'DELETE'
+  ) OR has_table_privilege(
+    'authenticated',
+    'public.completed_bill_correction_audit',
+    'TRUNCATE'
+  ) THEN
+    RAISE EXCEPTION 'POSTFLIGHT_AUDIT_MUTATION_PRIVILEGE';
+  END IF;
+
+  IF NOT has_table_privilege(
+    'authenticated',
+    'public.completed_bill_correction_audit',
+    'SELECT'
+  ) THEN
+    RAISE EXCEPTION 'POSTFLIGHT_AUDIT_SELECT_MISSING';
   END IF;
 
   IF EXISTS (
@@ -1022,6 +1321,40 @@ BEGIN
     RAISE EXCEPTION 'POSTFLIGHT_CONTEXT_RPC_NOT_HARDENED';
   END IF;
 
+  IF v_inventory_trigger IS NULL
+     OR pg_get_functiondef(v_inventory_trigger) NOT ILIKE
+       '%completed_bill_correction_guard%'
+     OR pg_get_functiondef(v_inventory_trigger) NOT ILIKE
+       '%can_correct_completed_bill(auth.uid())%'
+     OR NOT EXISTS (
+       SELECT 1
+       FROM pg_trigger t
+       WHERE t.tgrelid = 'public.consultation_items'::regclass
+         AND t.tgname = 'consultation_items_inventory_aiu'
+         AND t.tgfoid = v_inventory_trigger
+         AND NOT t.tgisinternal
+         AND t.tgenabled <> 'D'
+     ) THEN
+    RAISE EXCEPTION 'POSTFLIGHT_INVENTORY_GUARD_MISSING';
+  END IF;
+
+  IF v_item_guard IS NULL
+     OR pg_get_functiondef(v_item_guard) NOT ILIKE
+       '%COMPLETED_BILL_CORRECTION_REQUIRED%'
+     OR pg_get_functiondef(v_item_guard) NOT ILIKE
+       '%completed_bill_correction_guard%'
+     OR NOT EXISTS (
+       SELECT 1
+       FROM pg_trigger t
+       WHERE t.tgrelid = 'public.consultation_items'::regclass
+         AND t.tgname = 'guard_completed_bill_item_mutation'
+         AND t.tgfoid = v_item_guard
+         AND NOT t.tgisinternal
+         AND t.tgenabled <> 'D'
+     ) THEN
+    RAISE EXCEPTION 'POSTFLIGHT_COMPLETED_ITEM_GUARD_MISSING';
+  END IF;
+
   IF EXISTS (
     SELECT 1
     FROM pg_policies p
@@ -1035,6 +1368,35 @@ BEGIN
       )
   ) THEN
     RAISE EXCEPTION 'POSTFLIGHT_RAW_COMPLETED_UPDATE_POLICY';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_policies p
+    WHERE p.schemaname = 'public'
+      AND p.tablename = 'consultation_items'
+      AND p.cmd = 'UPDATE'
+      AND (
+        p.qual IS NULL
+        OR p.qual NOT ILIKE '%billing_adjustment_kind%'
+        OR p.qual NOT ILIKE '%clinic_charge_type_id%'
+        OR p.with_check IS NULL
+        OR p.with_check NOT ILIKE '%billing_adjustment_kind%'
+        OR p.with_check NOT ILIKE '%clinic_charge_type_id%'
+      )
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_policies p
+    WHERE p.schemaname = 'public'
+      AND p.tablename = 'consultation_items'
+      AND p.cmd = 'INSERT'
+      AND (
+        p.with_check IS NULL
+        OR p.with_check NOT ILIKE '%billing_adjustment_kind%'
+        OR p.with_check NOT ILIKE '%clinic_charge_type_id%'
+      )
+  ) THEN
+    RAISE EXCEPTION 'POSTFLIGHT_RAW_ADJUSTMENT_POLICY';
   END IF;
 END;
 $postflight$;
