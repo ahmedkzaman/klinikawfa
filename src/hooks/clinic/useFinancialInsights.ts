@@ -68,9 +68,9 @@ interface ViewRow {
   queue_entry_created_at: string;
 }
 
-const SELF_PAY_KEYS = ['cash', 'card', 'fpx', 'qr', 'tng', 'self', 'self-pay', 'selfpay'];
+const SELF_PAY_KEYS = ['cash', 'card', 'transfer', 'fpx', 'qr_pay', 'qr', 'tng', 'self', 'self-pay', 'selfpay'];
 
-function classifySegment(method: string | null): string {
+export function classifyFinancialSegment(method: string | null): string {
   if (!method) return 'Self-Pay';
   const m = method.toLowerCase();
   if (SELF_PAY_KEYS.some((k) => m.includes(k))) return 'Self-Pay';
@@ -181,7 +181,7 @@ export function useFinancialInsights(startDate: Date, endDate: Date) {
           revenue: 0,
           profit: 0,
           queueIds: new Set<string>(),
-          segment: classifySegment(r.payment_method),
+          segment: classifyFinancialSegment(r.payment_method),
         };
         seg.revenue += rev;
         seg.profit += profit;

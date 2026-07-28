@@ -202,6 +202,7 @@ export default function PanelClaims() {
                   { label: 'Rejected', dot: 'bg-red-500', val: summary?.rejectedSum ?? 0 },
                   { label: 'Received', dot: 'bg-teal-500', val: summary?.receivedSum ?? 0 },
                   { label: 'Outstanding', dot: 'bg-amber-500', val: summary?.outstandingSum ?? 0 },
+                  { label: 'Credit Due', dot: 'bg-violet-500', val: summary?.creditDueSum ?? 0 },
                 ].map((row) => (
                   <div
                     key={row.label}

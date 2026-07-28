@@ -169,9 +169,11 @@ export function aggregatePanelClaimsSummary(rows: SummaryRowRaw[]): PanelClaimsS
         break;
     }
 
+    if (r.status !== 'cancelled' && r.status !== 'rejected') {
+      summary.creditDueSum += Math.max((received ?? 0) - amount, 0);
+    }
     if (OUTSTANDING_STATUSES.includes(r.status)) {
       summary.outstandingSum += Math.max(amount - (received ?? 0), 0);
-      summary.creditDueSum += Math.max((received ?? 0) - amount, 0);
     }
   }
 
