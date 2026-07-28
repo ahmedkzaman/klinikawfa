@@ -1,4 +1,5 @@
 import type { Database } from '@/integrations/supabase/types';
+import type { BillAdjustmentKind } from '@/lib/clinic/completedBillCorrection';
 
 // Row aliases — single import surface for clinic features.
 export type PatientRow = Database['public']['Tables']['patients']['Row'];
@@ -7,6 +8,13 @@ export type QueueEntryRow = Database['public']['Tables']['queue_entries']['Row']
 export type AppointmentRow = Database['public']['Tables']['appointments']['Row'];
 export type ConsultationRow = Database['public']['Tables']['consultations']['Row'];
 export type ConsultationItemRow = Database['public']['Tables']['consultation_items']['Row'];
+export type ConsultationItemWithBillingAdjustment = Omit<
+  ConsultationItemRow,
+  'billing_adjustment_kind'
+> & {
+  billing_adjustment_kind: BillAdjustmentKind | null;
+  clinic_charge_type_id: string | null;
+};
 export type PaymentRow = Database['public']['Tables']['payments']['Row'];
 
 /** Mirrors the DB enum `clinic_status`. Keep in sync. */

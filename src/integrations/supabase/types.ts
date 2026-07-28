@@ -1316,6 +1316,8 @@ export type Database = {
       }
       consultation_items: {
         Row: {
+          billing_adjustment_kind: string | null
+          clinic_charge_type_id: string | null
           consultation_id: string
           created_at: string
           deleted_at: string | null
@@ -1342,6 +1344,8 @@ export type Database = {
           unit_cost: number
         }
         Insert: {
+          billing_adjustment_kind?: string | null
+          clinic_charge_type_id?: string | null
           consultation_id: string
           created_at?: string
           deleted_at?: string | null
@@ -1368,6 +1372,8 @@ export type Database = {
           unit_cost?: number
         }
         Update: {
+          billing_adjustment_kind?: string | null
+          clinic_charge_type_id?: string | null
           consultation_id?: string
           created_at?: string
           deleted_at?: string | null
@@ -1394,6 +1400,13 @@ export type Database = {
           unit_cost?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "consultation_items_clinic_charge_type_id_fkey"
+            columns: ["clinic_charge_type_id"]
+            isOneToOne: false
+            referencedRelation: "clinic_charge_types"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "consultation_items_consultation_id_fkey"
             columns: ["consultation_id"]
@@ -1448,6 +1461,54 @@ export type Database = {
             columns: ["service_id"]
             isOneToOne: false
             referencedRelation: "services_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      completed_bill_correction_audit: {
+        Row: {
+          actor_id: string
+          after_state: Json
+          before_state: Json
+          consultation_id: string
+          created_at: string
+          id: string
+          queue_entry_id: string
+          reason: string
+        }
+        Insert: {
+          actor_id: string
+          after_state: Json
+          before_state: Json
+          consultation_id: string
+          created_at?: string
+          id?: string
+          queue_entry_id: string
+          reason: string
+        }
+        Update: {
+          actor_id?: string
+          after_state?: Json
+          before_state?: Json
+          consultation_id?: string
+          created_at?: string
+          id?: string
+          queue_entry_id?: string
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "completed_bill_correction_audit_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: false
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "completed_bill_correction_audit_queue_entry_id_fkey"
+            columns: ["queue_entry_id"]
+            isOneToOne: false
+            referencedRelation: "queue_entries"
             referencedColumns: ["id"]
           },
         ]
@@ -5977,6 +6038,26 @@ export type Database = {
       }
     }
     Functions: {
+      can_correct_completed_bill: {
+        Args: { _user_id: string }
+        Returns: boolean
+      }
+      completed_bill_correction_state: {
+        Args: { p_consultation_id: string; p_queue_entry_id: string }
+        Returns: Json
+      }
+      correct_completed_bill: {
+        Args: {
+          p_discount_rm: number
+          p_expected_fingerprint: string
+          p_items: Json
+          p_payments: Json
+          p_queue_entry_id: string
+          p_reason: string
+          p_tax_pct: number
+        }
+        Returns: Json
+      }
       discard_unstored_website_media: {
         Args: { p_media_id: string }
         Returns: undefined
@@ -6168,6 +6249,10 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      get_completed_bill_correction_context: {
+        Args: { p_queue_entry_id: string }
+        Returns: Json
       }
       get_doctor_id_for_user: { Args: { _user_id: string }; Returns: string }
       get_doctors_on_duty: {
