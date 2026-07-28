@@ -10,6 +10,7 @@ import {
 import type { Database } from '@/integrations/supabase/types';
 
 type DoctorClinicalActivityRpcRow = Database['public']['Functions']['get_doctor_clinical_activity']['Returns'][number];
+const RPC_PAGE_SIZE = 1_000;
 
 const activityKinds: readonly DoctorActivityKind[] = [
   'procedure',
@@ -33,7 +34,7 @@ function mapDoctorActivityRow(row: DoctorClinicalActivityRpcRow): DoctorActivity
     consultationId: row.consultation_id,
     queueEntryId: row.queue_entry_id,
     queueCreatedAt: row.queue_created_at,
-    queueSequence: row.queue_sequence ?? 0,
+    queueSequence: row.queue_sequence,
     doctorId: row.doctor_id,
     doctorName: row.doctor_name,
     patientName: row.patient_name,
@@ -50,14 +51,24 @@ export function useDoctorClinicalActivity(
   return useQuery<DoctorActivitySummary[], Error>({
     queryKey: ['doctor-clinical-activity', startKey, endKey],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_doctor_clinical_activity', {
-        _start_date: startKey,
-        _end_date: endKey,
-      });
-      if (error) throw error;
+      const rpcRows: DoctorClinicalActivityRpcRow[] = [];
+
+      for (let from = 0; ; from += RPC_PAGE_SIZE) {
+        const { data, error } = await supabase
+          .rpc('get_doctor_clinical_activity', {
+            _start_date: startKey,
+            _end_date: endKey,
+          })
+          .range(from, from + RPC_PAGE_SIZE - 1);
+        if (error) throw error;
+
+        const page = data ?? [];
+        rpcRows.push(...page);
+        if (page.length < RPC_PAGE_SIZE) break;
+      }
 
       return aggregateDoctorClinicalActivity(
-        (data ?? [])
+        rpcRows
           .map(mapDoctorActivityRow)
           .filter((row): row is DoctorActivityRow => row !== null),
       );

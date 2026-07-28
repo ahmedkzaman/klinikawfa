@@ -50,6 +50,7 @@ describe('ScoreboardsTab doctor clinical activity integration', () => {
     render(<ScoreboardsTab {...dates} />);
 
     expect(screen.getByText('No scoreboard data')).toBeInTheDocument();
+    expect(screen.getByText('No legacy scoreboard metrics were found for the selected date range.')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Doctor Clinical Activity' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Dr A' })).toBeInTheDocument();
   });

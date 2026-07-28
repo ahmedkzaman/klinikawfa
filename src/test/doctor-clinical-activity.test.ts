@@ -82,8 +82,66 @@ describe('doctorClinicalActivityCsv', () => {
 
     expect(csv).toBe(
       'Doctor,Date,Activity Type,Activity Name,Patient,Queue Number\r\n' +
-      '"Dr ""A""","2026-07-28T09:00:00.000Z","procedure","Review, follow-up","Patient One","1"',
+      '"Dr ""A""","2026-07-28T09:00:00.000Z","procedure","Review, follow-up","Patient One","260728-01"',
     );
+  });
+
+  it.each([
+    ['equals', '=2+2'],
+    ['plus', '+SUM(A1:A2)'],
+    ['minus', '-10+20'],
+    ['at sign', '@cmd'],
+    ['tab', '\tformula'],
+    ['carriage return', '\rformula'],
+    ['line feed', '\nformula'],
+  ])('neutralizes a text cell beginning with %s before CSV quoting', (_label, dangerousValue) => {
+    const csv = doctorClinicalActivityCsv(aggregateDoctorClinicalActivity([
+      row({ doctorName: dangerousValue }),
+    ]));
+
+    expect(csv.split('\r\n').slice(1).join('\r\n')).toContain(
+      `"'${dangerousValue.replaceAll('"', '""')}"`,
+    );
+  });
+
+  it('quotes commas, quotes, and embedded newlines after formula neutralization', () => {
+    const csv = doctorClinicalActivityCsv(aggregateDoctorClinicalActivity([
+      row({
+        activityName: '=Review, "urgent"\nnext line',
+        patientName: 'Patient, "One"\nSecond line',
+      }),
+    ]));
+
+    expect(csv).toContain('"\'=Review, ""urgent""\nnext line"');
+    expect(csv).toContain('"Patient, ""One""\nSecond line"');
+  });
+
+  it('uses the same date-qualified queue label for CSV rows and never fabricates a null sequence', () => {
+    const csv = doctorClinicalActivityCsv(aggregateDoctorClinicalActivity([
+      row({
+        activityId: 'day-one',
+        activityDate: '2026-07-27',
+        queueCreatedAt: '2026-07-27T09:00:00.000Z',
+        queueSequence: 1,
+      }),
+      row({
+        activityId: 'day-two',
+        activityDate: '2026-07-28',
+        queueCreatedAt: '2026-07-28T09:00:00.000Z',
+        queueSequence: 1,
+      }),
+      row({
+        activityId: 'missing-sequence',
+        activityDate: '2026-07-29',
+        queueCreatedAt: '2026-07-29T09:00:00.000Z',
+        queueSequence: null,
+      }),
+    ]));
+
+    expect(csv).toContain('"260727-01"');
+    expect(csv).toContain('"260728-01"');
+    expect(csv).toContain('"—"');
+    expect(csv).not.toContain('"0"');
   });
 
   it('uses null as an explicit filter for unassigned activity', () => {

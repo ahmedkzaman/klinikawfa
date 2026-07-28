@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useState } from 'react';
 import { format } from 'date-fns';
 
 import { Button } from '@/components/ui/button';
@@ -16,11 +16,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useDoctorClinicalActivity } from '@/hooks/clinic/useDoctorClinicalActivity';
 import { bento, bentoHeader } from '@/lib/clinic/bentoTokens';
 import {
+  doctorActivityQueueLabel,
   doctorClinicalActivityCsv,
   type DoctorActivityRow,
   type DoctorActivitySummary,
 } from '@/lib/clinic/doctorClinicalActivity';
-import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { cn } from '@/lib/utils';
 
 interface DoctorClinicalActivityProps {
@@ -30,14 +30,16 @@ interface DoctorClinicalActivityProps {
 
 const TH = 'text-[11px] font-semibold text-slate-500 uppercase tracking-wider';
 const TR = 'border-slate-100';
+const documentTypeLabels = {
+  mc: 'Medical Certificate',
+  quarantine: 'Quarantine',
+  referral: 'Referral',
+} as const;
 
 export function DoctorClinicalActivity({ startDate, endDate }: DoctorClinicalActivityProps) {
   const { data, isLoading, isError, error } = useDoctorClinicalActivity(startDate, endDate);
-  const [expandedDoctorKey, setExpandedDoctorKey] = useState<string | null>(null);
-
-  useEffect(() => {
-    setExpandedDoctorKey(null);
-  }, [startDate.getTime(), endDate.getTime()]);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const rangeKey = `${format(startDate, 'yyyy-MM-dd')}:${format(endDate, 'yyyy-MM-dd')}`;
 
   const exportCsv = (summaries: DoctorActivitySummary[], doctor?: DoctorActivitySummary) => {
     const csv = doctorClinicalActivityCsv(summaries, doctor?.doctorId);
@@ -61,7 +63,7 @@ export function DoctorClinicalActivity({ startDate, endDate }: DoctorClinicalAct
 
   if (isLoading) {
     return (
-      <Card className={bento}>
+      <Card className={bento} role="status" aria-label="Loading doctor clinical activity">
         <CardContent className="p-6 space-y-3">
           <Skeleton className="h-4 w-52" />
           <Skeleton className="h-[180px] w-full" />
@@ -72,7 +74,7 @@ export function DoctorClinicalActivity({ startDate, endDate }: DoctorClinicalAct
 
   if (isError) {
     return (
-      <Card className={bento}>
+      <Card className={bento} role="alert">
         <CardContent className="py-6 text-sm text-rose-600">
           Failed to load doctor clinical activity: {error?.message ?? 'Unknown error'}
         </CardContent>
@@ -118,7 +120,8 @@ export function DoctorClinicalActivity({ startDate, endDate }: DoctorClinicalAct
             <TableBody>
               {data.map((summary) => {
                 const doctorKey = summary.doctorId ?? '__unassigned__';
-                const isExpanded = expandedDoctorKey === doctorKey;
+                const doctorExpansionKey = `${rangeKey}:${doctorKey}`;
+                const isExpanded = expandedKey === doctorExpansionKey;
 
                 return (
                   <Fragment key={doctorKey}>
@@ -128,7 +131,7 @@ export function DoctorClinicalActivity({ startDate, endDate }: DoctorClinicalAct
                           variant="ghost"
                           className="h-auto w-full justify-start p-0 font-medium text-slate-800 hover:bg-transparent hover:text-slate-950"
                           aria-expanded={isExpanded}
-                          onClick={() => setExpandedDoctorKey(isExpanded ? null : doctorKey)}
+                          onClick={() => setExpandedKey(isExpanded ? null : doctorExpansionKey)}
                         >
                           {summary.doctorName}
                         </Button>
@@ -153,7 +156,7 @@ export function DoctorClinicalActivity({ startDate, endDate }: DoctorClinicalAct
                     {isExpanded ? (
                       <TableRow className={TR}>
                         <TableCell colSpan={6} className="bg-slate-50 p-4">
-                          <ActivityDetails doctorKey={doctorKey} summary={summary} />
+                          <ActivityDetails key={doctorExpansionKey} summary={summary} />
                         </TableCell>
                       </TableRow>
                     ) : null}
@@ -168,13 +171,15 @@ export function DoctorClinicalActivity({ startDate, endDate }: DoctorClinicalAct
   );
 }
 
-function ActivityDetails({ doctorKey, summary }: { doctorKey: string; summary: DoctorActivitySummary }) {
+function ActivityDetails({ summary }: { summary: DoctorActivitySummary }) {
   const procedures = summary.rows.filter((row) => row.activityKind === 'procedure');
   const documents = summary.rows.filter((row) => row.activityKind !== 'procedure');
-  const [activeTab, setActiveTab] = useState('procedures');
+  const [activeTab, setActiveTab] = useState(
+    procedures.length === 0 && documents.length > 0 ? 'documents' : 'procedures',
+  );
 
   return (
-    <Tabs key={doctorKey} value={activeTab} onValueChange={setActiveTab}>
+    <Tabs value={activeTab} onValueChange={setActiveTab}>
       <TabsList className="h-9">
         <TabsTrigger value="procedures" onClick={() => setActiveTab('procedures')}>
           Procedures
@@ -184,16 +189,24 @@ function ActivityDetails({ doctorKey, summary }: { doctorKey: string; summary: D
         </TabsTrigger>
       </TabsList>
       <TabsContent value="procedures">
-        <ActivityRows rows={procedures} emptyLabel="No procedures recorded." />
+        <ActivityRows rows={procedures} emptyLabel="No procedures recorded." kind="procedures" />
       </TabsContent>
       <TabsContent value="documents">
-        <ActivityRows rows={documents} emptyLabel="No documents recorded." />
+        <ActivityRows rows={documents} emptyLabel="No documents recorded." kind="documents" />
       </TabsContent>
     </Tabs>
   );
 }
 
-function ActivityRows({ rows, emptyLabel }: { rows: DoctorActivityRow[]; emptyLabel: string }) {
+function ActivityRows({
+  rows,
+  emptyLabel,
+  kind,
+}: {
+  rows: DoctorActivityRow[];
+  emptyLabel: string;
+  kind: 'procedures' | 'documents';
+}) {
   if (rows.length === 0) {
     return <p className="py-4 text-sm text-slate-400">{emptyLabel}</p>;
   }
@@ -202,16 +215,26 @@ function ActivityRows({ rows, emptyLabel }: { rows: DoctorActivityRow[]; emptyLa
     <Table>
       <TableHeader>
         <TableRow className={cn(TR, 'hover:bg-transparent')}>
-          <TableHead className={TH}>Activity</TableHead>
+          <TableHead className={TH}>Date</TableHead>
+          {kind === 'documents' ? <TableHead className={TH}>Type</TableHead> : null}
+          <TableHead className={TH}>
+            {kind === 'documents' ? 'Document Name' : 'Procedure'}
+          </TableHead>
           <TableHead className={TH}>Patient</TableHead>
           <TableHead className={cn(TH, 'text-right')}>Queue</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {rows.map((row) => {
-          const queueNo = formatQueueNo(row.queueCreatedAt, row.queueSequence);
+          const queueNo = doctorActivityQueueLabel(row);
           return (
             <TableRow key={row.activityId} className={TR}>
+              <TableCell className="whitespace-nowrap text-slate-600">{row.activityDate}</TableCell>
+              {kind === 'documents' && row.activityKind !== 'procedure' ? (
+                <TableCell className="text-slate-600">
+                  {documentTypeLabels[row.activityKind]}
+                </TableCell>
+              ) : null}
               <TableCell className="text-slate-700">{row.activityName}</TableCell>
               <TableCell className="text-slate-600">{row.patientName}</TableCell>
               <TableCell className="text-right">

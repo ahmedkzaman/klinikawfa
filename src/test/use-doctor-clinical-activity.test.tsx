@@ -42,7 +42,8 @@ describe('useDoctorClinicalActivity', () => {
   });
 
   it('calls the typed RPC with date keys and maps its snake_case row before aggregation', async () => {
-    rpc.mockResolvedValue({ data: [rpcRow()], error: null });
+    const range = vi.fn().mockResolvedValue({ data: [rpcRow()], error: null });
+    rpc.mockReturnValue({ range });
 
     const { queryKey, queryFn } = useDoctorClinicalActivity(...dates) as unknown as {
       queryKey: unknown[];
@@ -70,11 +71,12 @@ describe('useDoctorClinicalActivity', () => {
       _start_date: '2026-07-01',
       _end_date: '2026-07-31',
     });
+    expect(range).toHaveBeenCalledWith(0, 999);
   });
 
   it('rejects an RPC error unchanged', async () => {
     const error = new Error('RPC unavailable');
-    rpc.mockResolvedValue({ data: null, error });
+    rpc.mockReturnValue({ range: vi.fn().mockResolvedValue({ data: null, error }) });
 
     const { queryFn } = useDoctorClinicalActivity(...dates) as unknown as {
       queryFn: () => Promise<unknown>;
@@ -85,7 +87,7 @@ describe('useDoctorClinicalActivity', () => {
 
   it('exposes an RPC failure through the React Query error state', async () => {
     const error = new Error('RPC unavailable');
-    rpc.mockResolvedValue({ data: null, error });
+    rpc.mockReturnValue({ range: vi.fn().mockResolvedValue({ data: null, error }) });
     useQuery.mockImplementation(realUseQuery);
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -101,7 +103,7 @@ describe('useDoctorClinicalActivity', () => {
   });
 
   it('returns no summaries for an empty RPC response', async () => {
-    rpc.mockResolvedValue({ data: [], error: null });
+    rpc.mockReturnValue({ range: vi.fn().mockResolvedValue({ data: [], error: null }) });
 
     const { queryFn } = useDoctorClinicalActivity(...dates) as unknown as {
       queryFn: () => Promise<unknown>;
@@ -111,12 +113,68 @@ describe('useDoctorClinicalActivity', () => {
   });
 
   it('excludes unknown activity kinds from aggregation', async () => {
-    rpc.mockResolvedValue({ data: [rpcRow({ activity_kind: 'other' })], error: null });
+    rpc.mockReturnValue({
+      range: vi.fn().mockResolvedValue({ data: [rpcRow({ activity_kind: 'other' })], error: null }),
+    });
 
     const { queryFn } = useDoctorClinicalActivity(...dates) as unknown as {
       queryFn: () => Promise<unknown>;
     };
 
     await expect(queryFn()).resolves.toEqual([]);
+  });
+
+  it('loads all RPC pages before aggregating more than 1,000 rows', async () => {
+    const rows = Array.from({ length: 1_001 }, (_, index) => rpcRow({
+      activity_id: `activity-${index}`,
+      activity_kind: index === 1_000 ? 'mc' : 'procedure',
+      activity_name: index === 1_000 ? 'Medical certificate' : `Procedure ${index}`,
+      queue_sequence: index + 1,
+    }));
+    const range = vi.fn((from: number, to: number) => Promise.resolve({
+      data: rows.slice(from, to + 1),
+      error: null,
+    }));
+    rpc.mockReturnValue({ range });
+
+    const { queryFn } = useDoctorClinicalActivity(...dates) as unknown as {
+      queryFn: () => Promise<Array<{ rows: unknown[] }>>;
+    };
+
+    const result = await queryFn();
+    expect(result).toEqual([
+      expect.objectContaining({
+        doctorId: 'doctor-1',
+        procedures: 1_000,
+        mc: 1,
+        totalDocuments: 1,
+        rows: expect.arrayContaining([
+          expect.objectContaining({ activityId: 'activity-999', activityName: 'Procedure 999' }),
+          expect.objectContaining({ activityId: 'activity-1000', activityName: 'Medical certificate' }),
+        ]),
+      }),
+    ]);
+    expect(result[0].rows).toHaveLength(1_001);
+    expect(range).toHaveBeenCalledWith(0, 999);
+    expect(range).toHaveBeenCalledWith(1_000, 1_999);
+  });
+
+  it('preserves a nullable queue sequence instead of coercing it to zero', async () => {
+    rpc.mockReturnValue({
+      range: vi.fn().mockResolvedValue({
+        data: [rpcRow({ queue_sequence: null })],
+        error: null,
+      }),
+    });
+
+    const { queryFn } = useDoctorClinicalActivity(...dates) as unknown as {
+      queryFn: () => Promise<unknown>;
+    };
+
+    await expect(queryFn()).resolves.toEqual([
+      expect.objectContaining({
+        rows: [expect.objectContaining({ queueSequence: null })],
+      }),
+    ]);
   });
 });

@@ -98,6 +98,7 @@ describe('DoctorClinicalActivity', () => {
   it('shows loading, error, and empty states without misleading activity data', () => {
     useDoctorClinicalActivityMock.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
     const { rerender } = renderActivity();
+    expect(screen.getByRole('status')).toBeInTheDocument();
     expect(document.querySelectorAll('[class*="animate-pulse"]')).toHaveLength(2);
 
     useDoctorClinicalActivityMock.mockReturnValue({
@@ -112,7 +113,9 @@ describe('DoctorClinicalActivity', () => {
         endDate={new Date('2026-07-31T00:00:00.000Z')}
       />,
     );
-    expect(screen.getByText('Failed to load doctor clinical activity: Report unavailable')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Failed to load doctor clinical activity: Report unavailable',
+    );
 
     useDoctorClinicalActivityMock.mockReturnValue({ data: [], isLoading: false, isError: false, error: null });
     rerender(
@@ -158,6 +161,82 @@ describe('DoctorClinicalActivity', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dr B' }));
     expect(screen.getByText('Badrul Patient')).toBeInTheDocument();
     expect(screen.queryByText('Aminah Patient')).not.toBeInTheDocument();
+  });
+
+  it('shows exact dates and a separate human-readable type and name for every document kind', () => {
+    useDoctorClinicalActivityMock.mockReturnValue({
+      data: [{
+        doctorId: 'doctor-detail',
+        doctorName: 'Dr Detail',
+        procedures: 1,
+        mc: 1,
+        quarantine: 1,
+        referral: 1,
+        totalDocuments: 3,
+        rows: [
+          {
+            activityId: 'procedure-detail', activityKind: 'procedure', activityDate: '2026-07-21',
+            activityName: 'Wound dressing', consultationId: 'consultation-1', queueEntryId: 'queue-1',
+            queueCreatedAt: '2026-07-21T09:00:00.000Z', queueSequence: 1, doctorId: 'doctor-detail',
+            doctorName: 'Dr Detail', patientName: 'Procedure Patient',
+          },
+          {
+            activityId: 'mc-detail', activityKind: 'mc', activityDate: '2026-07-22',
+            activityName: 'Medical certificate', consultationId: 'consultation-2', queueEntryId: 'queue-2',
+            queueCreatedAt: '2026-07-22T09:00:00.000Z', queueSequence: 2, doctorId: 'doctor-detail',
+            doctorName: 'Dr Detail', patientName: 'MC Patient',
+          },
+          {
+            activityId: 'quarantine-detail', activityKind: 'quarantine', activityDate: '2026-07-23',
+            activityName: 'Home isolation fallback', consultationId: 'consultation-3', queueEntryId: 'queue-3',
+            queueCreatedAt: '2026-07-23T09:00:00.000Z', queueSequence: null, doctorId: 'doctor-detail',
+            doctorName: 'Dr Detail', patientName: 'Quarantine Patient',
+          },
+          {
+            activityId: 'referral-detail', activityKind: 'referral', activityDate: '2026-07-24',
+            activityName: 'Cardiology referral', consultationId: 'consultation-4', queueEntryId: 'queue-4',
+            queueCreatedAt: '2026-07-24T09:00:00.000Z', queueSequence: 1, doctorId: 'doctor-detail',
+            doctorName: 'Dr Detail', patientName: 'Referral Patient',
+          },
+        ],
+      }],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderActivity();
+    fireEvent.click(screen.getByRole('button', { name: 'Dr Detail' }));
+
+    const procedureRow = screen.getByText('Wound dressing').closest('tr')!;
+    expect(within(procedureRow).getByText('2026-07-21')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Documents' }));
+    const mcRow = screen.getByText('Medical certificate').closest('tr')!;
+    const quarantineRow = screen.getByText('Home isolation fallback').closest('tr')!;
+    const referralRow = screen.getByText('Cardiology referral').closest('tr')!;
+    expect(within(mcRow).getByText('2026-07-22')).toBeInTheDocument();
+    expect(within(mcRow).getByText('Medical Certificate')).toBeInTheDocument();
+    expect(within(quarantineRow).getByText('2026-07-23')).toBeInTheDocument();
+    expect(within(quarantineRow).getByText('Quarantine')).toBeInTheDocument();
+    expect(within(quarantineRow).getByRole('link', { name: '—' })).toBeInTheDocument();
+    expect(within(referralRow).getByText('2026-07-24')).toBeInTheDocument();
+    expect(within(referralRow).getByText('Referral')).toBeInTheDocument();
+  });
+
+  it('opens the Documents tab by default for a documents-only doctor', () => {
+    useDoctorClinicalActivityMock.mockReturnValue({
+      data: [summaries[2]],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderActivity();
+    fireEvent.click(screen.getByRole('button', { name: 'Unassigned' }));
+
+    expect(screen.getByRole('tab', { name: 'Documents' })).toHaveAttribute('data-state', 'active');
+    expect(screen.getByText('Quarantine order')).toBeInTheDocument();
   });
 
   it('collapses details when the reporting date range changes', () => {

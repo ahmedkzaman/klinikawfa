@@ -1,3 +1,5 @@
+import { formatQueueNo } from '@/lib/clinic/queueNumber';
+
 export type DoctorActivityKind = 'procedure' | 'mc' | 'quarantine' | 'referral';
 
 export interface DoctorActivityRow {
@@ -8,7 +10,7 @@ export interface DoctorActivityRow {
   consultationId: string;
   queueEntryId: string;
   queueCreatedAt: string;
-  queueSequence: number;
+  queueSequence: number | null;
   doctorId: string | null;
   doctorName: string;
   patientName: string;
@@ -73,7 +75,20 @@ export function aggregateDoctorClinicalActivity(
     });
 }
 
-const csvField = (value: string | number): string => `"${String(value).replaceAll('"', '""')}"`;
+const dangerousCsvPrefix = /^[=+\-@\t\r\n]/;
+
+const csvField = (value: string | number): string => {
+  const serialized = typeof value === 'string' && dangerousCsvPrefix.test(value)
+    ? `'${value}`
+    : String(value);
+  return `"${serialized.replaceAll('"', '""')}"`;
+};
+
+export function doctorActivityQueueLabel(
+  row: Pick<DoctorActivityRow, 'queueCreatedAt' | 'queueSequence'>,
+): string {
+  return formatQueueNo(row.queueCreatedAt, row.queueSequence);
+}
 
 export function doctorClinicalActivityCsv(
   summaries: DoctorActivitySummary[],
@@ -89,7 +104,7 @@ export function doctorClinicalActivityCsv(
       row.activityKind,
       row.activityName,
       row.patientName,
-      row.queueSequence,
+      doctorActivityQueueLabel(row),
     ].map(csvField).join(',')),
   );
 

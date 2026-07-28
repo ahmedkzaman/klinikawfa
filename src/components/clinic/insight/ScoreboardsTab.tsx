@@ -100,7 +100,7 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
             </div>
             <h3 className="text-base font-semibold text-slate-900">No scoreboard data</h3>
             <p className="text-sm text-slate-500 mt-1 max-w-sm">
-              No completed consultations were recorded in the selected date range.
+              No legacy scoreboard metrics were found for the selected date range.
             </p>
           </CardContent>
         </Card>
