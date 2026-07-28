@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
   ChevronDown,
@@ -32,6 +33,8 @@ import {
 import { useConsultationAttachments } from '@/hooks/clinic/useAttachments';
 import type { PatientRow, ClinicStatus } from '@/types/clinic';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
+import { useAuth } from '@/contexts/AuthContext';
+import { canReadCrossDoctorNotes } from '@/lib/clinic/consultationAccess';
 
 /**
  * Lazy attachment list — calls `useConsultationAttachments` only when
@@ -111,7 +114,15 @@ function capitalize(value: string | null | undefined): string {
  * from the parent visit-history query (a single PostgREST aggregate), so the
  * badge is free even for collapsed rows.
  */
-function VisitRow({ row }: { row: PatientVisitHistoryRow }) {
+function VisitRow({
+  row,
+  canViewClinicalNotes,
+  onOpenConsultation,
+}: {
+  row: PatientVisitHistoryRow;
+  canViewClinicalNotes: boolean;
+  onOpenConsultation: (queueEntryId: string) => void;
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const consultation: PatientVisitConsultation | null = Array.isArray(
@@ -127,15 +138,19 @@ function VisitRow({ row }: { row: PatientVisitHistoryRow }) {
     : null;
 
   const doctorName = doctor?.name ?? '—';
-  const clinicalNote =
-    consultation?.case_note?.trim() ||
-    consultation?.diagnosis_text?.trim() ||
-    row.visit_notes?.trim() ||
-    '';
-  const dispenseNote = consultation?.dispense_note?.trim() ?? '';
+  const clinicalNote = canViewClinicalNotes
+    ? consultation?.case_note?.trim() ||
+      consultation?.diagnosis_text?.trim() ||
+      ''
+    : '';
+  const dispenseNote = canViewClinicalNotes
+    ? consultation?.dispense_note?.trim() ?? ''
+    : '';
   const billingItems = consultation?.consultation_items ?? [];
 
-  const diagnosisPills = (consultation?.diagnosis_text ?? '')
+  const diagnosisPills = (canViewClinicalNotes
+    ? consultation?.diagnosis_text ?? ''
+    : '')
     .split(/[,;]+/)
     .map((d) => d.trim())
     .filter(Boolean);
@@ -263,8 +278,19 @@ function VisitRow({ row }: { row: PatientVisitHistoryRow }) {
             )}
           </div>
 
-          {consultation?.id && (
+          {canViewClinicalNotes && consultation?.id && (
             <VisitAttachmentList consultationId={consultation.id} />
+          )}
+
+          {canViewClinicalNotes && consultation?.id && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenConsultation(row.id)}
+            >
+              View consultation
+            </Button>
           )}
         </div>
       )}
@@ -285,6 +311,9 @@ export function PatientProfileSheet({
   onClose,
   onRegisterVisit,
 }: PatientProfileSheetProps) {
+  const navigate = useNavigate();
+  const { role } = useAuth();
+  const canViewClinicalNotes = canReadCrossDoctorNotes(role);
   const [currentPatient, setCurrentPatient] = useState<PatientRow | null>(patient);
   const [isEditOpen, setIsEditOpen] = useState(false);
 
@@ -379,7 +408,15 @@ export function PatientProfileSheet({
             ) : (
               <ul className="space-y-2">
                 {visits.map((row) => (
-                  <VisitRow key={row.id} row={row} />
+                  <VisitRow
+                    key={row.id}
+                    row={row}
+                    canViewClinicalNotes={canViewClinicalNotes}
+                    onOpenConsultation={(queueEntryId) => {
+                      onClose();
+                      navigate(`/clinic/consultation/${queueEntryId}`);
+                    }}
+                  />
                 ))}
               </ul>
             )}
