@@ -13,4 +13,21 @@ describe('clinic health metrics migration', () => {
       expect(sql).toContain(`'${key}'`);
     }
   });
+
+  it('counts active panels from the real status column, not a removed is_active column', () => {
+    const sql = readFileSync(
+      resolve(
+        process.cwd(),
+        'supabase/migrations/20260729100212_fix_clinic_health_panel_status.sql',
+      ),
+      'utf8',
+    );
+
+    expect(sql).toMatch(
+      /insurance_providers\s+WHERE\s+status\s*=\s*'active'/i,
+    );
+    expect(sql).not.toMatch(
+      /insurance_providers\s+WHERE\s+is_active/i,
+    );
+  });
 });
