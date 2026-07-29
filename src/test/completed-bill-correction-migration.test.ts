@@ -253,4 +253,42 @@ describe('completed bill correction migration', () => {
     expect(correction).toMatch(/if v_discount_rm > 0 then[\s\S]*'Discount'/i);
     expect(correction).toMatch(/if v_tax_rm > 0 then[\s\S]*'Tax'/i);
   });
+
+  it('covers every feature-owned foreign key and the required audit query paths', () => {
+    const migrationsDirectory = resolve(process.cwd(), 'supabase/migrations');
+    const [baseMigration] = readdirSync(migrationsDirectory)
+      .filter((name) => name.endsWith('_add_completed_bill_corrections.sql'));
+    const [indexMigration] = readdirSync(migrationsDirectory)
+      .filter((name) =>
+        name.endsWith('_index_completed_bill_correction_foreign_keys.sql'),
+      );
+
+    expect(baseMigration).toBeDefined();
+    expect(indexMigration).toBeDefined();
+
+    const baseSql = readFileSync(
+      resolve(migrationsDirectory, baseMigration),
+      'utf8',
+    );
+    const indexSql = readFileSync(
+      resolve(migrationsDirectory, indexMigration),
+      'utf8',
+    );
+
+    expect(baseSql).toMatch(
+      /completed_bill_correction_audit_queue_created_idx[\s\S]*queue_entry_id,\s*created_at desc/i,
+    );
+    expect(baseSql).toMatch(
+      /completed_bill_correction_audit_consultation_created_idx[\s\S]*consultation_id,\s*created_at desc/i,
+    );
+    expect(indexSql).toMatch(
+      /completed_bill_correction_audit_actor_id_idx[\s\S]*completed_bill_correction_audit\s*\(actor_id\)/i,
+    );
+    expect(indexSql).toMatch(
+      /completed_bill_correction_guard_consultation_id_idx[\s\S]*completed_bill_correction_guard\s*\(consultation_id\)/i,
+    );
+    expect(indexSql).toMatch(
+      /completed_bill_correction_guard_actor_id_idx[\s\S]*completed_bill_correction_guard\s*\(actor_id\)/i,
+    );
+  });
 });
