@@ -10,8 +10,8 @@
   patient names, identity numbers, phone numbers, or clinical notes were read.
 - All data-path checks used fixed synthetic UUIDs under
   `70000000-0000-4000-8000-*` and names prefixed `TEST ONLY`.
-- The fixture ran inside a PL/pgSQL exception subtransaction that deliberately
-  rolled back after producing its report. A separate cleanup query confirmed
+- The fixture ran inside one explicit transaction and executed `ROLLBACK`
+  before producing its report. A separate cleanup query confirmed
   zero matching rows in auth users, patients, queues, consultations, items,
   payments, claims, inventory, panels, charge types, and correction audits.
 
@@ -78,7 +78,9 @@ The exact tracked harness is
 - executes the public RPCs after `SET LOCAL ROLE authenticated`;
 - sets `request.jwt.claim.role = authenticated` and changes the synthetic
   `request.jwt.claim.sub` for every matrix actor;
-- contains assertions for every result listed below;
+- contains fail-closed assertions for every result listed below, including
+  exact row counts before value checks, `INTO STRICT` lookups, and
+  `IS DISTINCT FROM` comparisons so missing rows and `NULL` values cannot pass;
 - contains no `COMMIT`; and
 - executes `RESET ROLE; ROLLBACK;` before returning its result.
 
@@ -114,6 +116,25 @@ Sanitized staging result:
   "transaction_end": "ROLLBACK"
 }
 ```
+
+The rerun explicitly proved:
+
+- an invalid payment correction left both the fingerprint and exact audit
+  count unchanged;
+- the completed cash visit retained exactly one queue and consultation row,
+  both still `completed`, while the persisted payment changed to exactly
+  RM40/`qr_pay` and then RM70/`card`;
+- the inventory item existed exactly once with unchanged stock/allocation and
+  exactly zero matching inventory transactions;
+- writer A persisted price RM13 and exactly one audit row, while rejected
+  writer B persisted neither price RM14 nor an audit row;
+- the panel claim existed exactly once with amount RM80, status `received`,
+  approved RM100, received RM120, and panel credit RM40;
+- the cash history projection contained exactly 10 rows and the selected
+  correction had the exact actor, reason, before-total RM61, and after-total
+  RM60.50 summary; and
+- the atomic checkout left both visit rows `completed` and exactly one active
+  RM25 cash tender before and after the rejected duplicate attempt.
 
 ## Functional evidence
 

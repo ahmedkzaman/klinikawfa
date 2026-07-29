@@ -311,24 +311,47 @@ DECLARE
   v_result jsonb;
   v_before_fingerprint text;
   v_audit_count integer;
+  v_audit_before_atomic integer;
+  v_audit_before_stale integer;
+  v_current_count integer;
   v_stock integer;
   v_allocated integer;
   v_tx_count integer;
   v_price numeric;
-  v_claim jsonb;
+  v_payment_amount numeric;
+  v_payment_method text;
+  v_queue_status text;
+  v_consultation_status text;
+  v_cash_audit_id uuid;
+  v_history_reason text;
+  v_history_before_total numeric;
+  v_history_after_total numeric;
+  v_claim_amount numeric;
+  v_claim_status text;
+  v_claim_received numeric;
+  v_claim_approved numeric;
 BEGIN
   PERFORM set_config(
     'request.jwt.claim.sub',
     '70000000-0000-4000-8000-000000000001',
     true
   );
+  SELECT count(*) INTO v_current_count
+  FROM public.inventory_items
+  WHERE id = '70000000-0000-4000-8000-000000000401';
+  IF v_current_count IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'INVENTORY_ROW_MISMATCH';
+  END IF;
   SELECT stock, allocated_quantity
-  INTO v_stock, v_allocated
+  INTO STRICT v_stock, v_allocated
   FROM public.inventory_items
   WHERE id = '70000000-0000-4000-8000-000000000401';
   SELECT count(*) INTO v_tx_count
   FROM public.inventory_transactions
   WHERE inventory_item_id = '70000000-0000-4000-8000-000000000401';
+  IF v_tx_count IS DISTINCT FROM 0 THEN
+    RAISE EXCEPTION 'INVENTORY_TRANSACTION_COUNT_MISMATCH';
+  END IF;
 
   FOREACH v_actor IN ARRAY v_allowed_actors LOOP
     PERFORM set_config('request.jwt.claim.sub', v_actor::text, true);
@@ -465,20 +488,46 @@ BEGIN
     ),
     v_context->'payments', 0, 0
   );
+  SELECT count(*) INTO v_current_count
+  FROM public.inventory_items
+  WHERE id = '70000000-0000-4000-8000-000000000401';
+  IF v_current_count IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'INVENTORY_ROW_MISMATCH';
+  END IF;
   IF (SELECT stock FROM public.inventory_items
-      WHERE id = '70000000-0000-4000-8000-000000000401') <> v_stock
+      WHERE id = '70000000-0000-4000-8000-000000000401')
+        IS DISTINCT FROM v_stock
      OR (SELECT allocated_quantity FROM public.inventory_items
-         WHERE id = '70000000-0000-4000-8000-000000000401') <> v_allocated
-     OR (SELECT count(*) FROM public.inventory_transactions
-         WHERE inventory_item_id =
-           '70000000-0000-4000-8000-000000000401') <> v_tx_count THEN
+         WHERE id = '70000000-0000-4000-8000-000000000401')
+        IS DISTINCT FROM v_allocated THEN
     RAISE EXCEPTION 'INVENTORY_CHANGED';
+  END IF;
+  SELECT count(*) INTO v_current_count
+  FROM public.inventory_transactions
+  WHERE inventory_item_id = '70000000-0000-4000-8000-000000000401';
+  IF v_current_count IS DISTINCT FROM v_tx_count THEN
+    RAISE EXCEPTION 'INVENTORY_TRANSACTION_COUNT_MISMATCH';
+  END IF;
+  SELECT qe.clinic_status, c.status
+  INTO STRICT v_queue_status, v_consultation_status
+  FROM public.queue_entries qe
+  JOIN public.consultations c ON c.queue_entry_id = qe.id
+  WHERE qe.id = '70000000-0000-4000-8000-000000000201'
+    AND c.id = '70000000-0000-4000-8000-000000000301';
+  IF v_queue_status IS DISTINCT FROM 'completed'
+     OR v_consultation_status IS DISTINCT FROM 'completed' THEN
+    RAISE EXCEPTION 'COMPLETED_VISIT_STATE_CHANGED';
   END IF;
 
   v_context := public.get_completed_bill_correction_context(
     '70000000-0000-4000-8000-000000000201'
   );
   v_before_fingerprint := v_context->>'fingerprint';
+  SELECT count(*) INTO v_audit_before_atomic
+  FROM public.get_completed_bill_correction_history(
+    '70000000-0000-4000-8000-000000000201',
+    100, NULL, NULL
+  );
   SELECT jsonb_agg(value || '{"remove":false}'::jsonb)
   INTO v_items
   FROM jsonb_array_elements(v_context->'items');
@@ -508,8 +557,22 @@ BEGIN
   END;
   IF public.get_completed_bill_correction_context(
     '70000000-0000-4000-8000-000000000201'
-  )->>'fingerprint' <> v_before_fingerprint THEN
+  )->>'fingerprint' IS DISTINCT FROM v_before_fingerprint THEN
     RAISE EXCEPTION 'ATOMIC_ROLLBACK_FAILED';
+  END IF;
+  SELECT count(*) INTO v_current_count
+  FROM public.get_completed_bill_correction_history(
+    '70000000-0000-4000-8000-000000000201',
+    100, NULL, NULL
+  );
+  IF v_current_count IS DISTINCT FROM v_audit_before_atomic
+     OR (SELECT count(*)
+         FROM public.get_completed_bill_correction_history(
+           '70000000-0000-4000-8000-000000000201',
+           100, NULL, NULL
+         )
+         WHERE reason = 'TEST atomic rollback') IS DISTINCT FROM 0 THEN
+    RAISE EXCEPTION 'ATOMIC_ROLLBACK_AUDIT_CHANGED';
   END IF;
 
   v_context := public.get_completed_bill_correction_context(
@@ -521,6 +584,11 @@ BEGIN
   SELECT jsonb_agg(value || '{"remove":false}'::jsonb)
   INTO v_items
   FROM jsonb_array_elements(v_context->'items');
+  SELECT count(*) INTO v_audit_before_stale
+  FROM public.get_completed_bill_correction_history(
+    '70000000-0000-4000-8000-000000000201',
+    100, NULL, NULL
+  );
   PERFORM public.correct_completed_bill(
     '70000000-0000-4000-8000-000000000201',
     v_context->>'fingerprint',
@@ -559,7 +627,33 @@ BEGIN
   SELECT price INTO v_price
   FROM public.consultation_items
   WHERE id = '70000000-0000-4000-8000-000000000501';
-  IF v_price <> 13 THEN RAISE EXCEPTION 'STALE_OVERWRITE'; END IF;
+  SELECT count(*) INTO v_current_count
+  FROM public.consultation_items
+  WHERE id = '70000000-0000-4000-8000-000000000501';
+  IF v_current_count IS DISTINCT FROM 1
+     OR v_price IS DISTINCT FROM 13 THEN
+    RAISE EXCEPTION 'STALE_WRITER_A_STATE_MISMATCH';
+  END IF;
+  SELECT count(*) INTO v_current_count
+  FROM public.get_completed_bill_correction_history(
+    '70000000-0000-4000-8000-000000000201',
+    100, NULL, NULL
+  );
+  IF v_current_count IS DISTINCT FROM v_audit_before_stale + 1
+     OR (SELECT count(*)
+         FROM public.get_completed_bill_correction_history(
+           '70000000-0000-4000-8000-000000000201',
+           100, NULL, NULL
+         )
+         WHERE reason = 'TEST writer A') IS DISTINCT FROM 1
+     OR (SELECT count(*)
+         FROM public.get_completed_bill_correction_history(
+           '70000000-0000-4000-8000-000000000201',
+           100, NULL, NULL
+         )
+         WHERE reason = 'TEST stale writer B') IS DISTINCT FROM 0 THEN
+    RAISE EXCEPTION 'STALE_WRITER_A_STATE_MISMATCH';
+  END IF;
 
   v_context := public.get_completed_bill_correction_context(
     '70000000-0000-4000-8000-000000000201'
@@ -593,14 +687,45 @@ BEGIN
      OR v_result->>'status' <> 'outstanding' THEN
     RAISE EXCEPTION 'CASH_OUTSTANDING_FAILED';
   END IF;
-  IF (
-    SELECT before_total <> 61 OR after_total <> 60.5
-    FROM public.get_completed_bill_correction_history(
-      '70000000-0000-4000-8000-000000000201',
-      100, NULL, NULL
-    )
-    WHERE id = (v_result->>'audit_id')::uuid
-  ) OR (v_result->>'paid')::numeric <> 40 THEN
+  v_cash_audit_id := (v_result->>'audit_id')::uuid;
+  SELECT count(*) INTO v_current_count
+  FROM public.payments
+  WHERE id = '70000000-0000-4000-8000-000000000601'
+    AND queue_entry_id = '70000000-0000-4000-8000-000000000201'
+    AND consultation_id = '70000000-0000-4000-8000-000000000301'
+    AND deleted_at IS NULL;
+  IF v_current_count IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'CORRECTED_PAYMENT_ROW_MISMATCH';
+  END IF;
+  SELECT amount, payment_method
+  INTO STRICT v_payment_amount, v_payment_method
+  FROM public.payments
+  WHERE id = '70000000-0000-4000-8000-000000000601'
+    AND deleted_at IS NULL;
+  IF v_payment_amount IS DISTINCT FROM 40
+     OR v_payment_method IS DISTINCT FROM 'qr_pay' THEN
+    RAISE EXCEPTION 'CORRECTED_PAYMENT_ROW_MISMATCH';
+  END IF;
+  SELECT count(*) INTO v_current_count
+  FROM public.get_completed_bill_correction_history(
+    '70000000-0000-4000-8000-000000000201',
+    100, NULL, NULL
+  )
+  WHERE id = v_cash_audit_id;
+  IF v_current_count IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'AUDIT_SNAPSHOT_FAILED';
+  END IF;
+  SELECT reason, before_total, after_total
+  INTO STRICT v_history_reason, v_history_before_total, v_history_after_total
+  FROM public.get_completed_bill_correction_history(
+    '70000000-0000-4000-8000-000000000201',
+    100, NULL, NULL
+  )
+  WHERE id = v_cash_audit_id;
+  IF v_history_reason IS DISTINCT FROM 'TEST cash outstanding'
+     OR v_history_before_total IS DISTINCT FROM 61
+     OR v_history_after_total IS DISTINCT FROM 60.5
+     OR (v_result->>'paid')::numeric IS DISTINCT FROM 40 THEN
     RAISE EXCEPTION 'AUDIT_SNAPSHOT_FAILED';
   END IF;
 
@@ -623,6 +748,15 @@ BEGIN
      OR v_result->>'status' <> 'credit_due' THEN
     RAISE EXCEPTION 'CASH_CREDIT_FAILED';
   END IF;
+  SELECT count(*) INTO v_current_count
+  FROM public.payments
+  WHERE id = '70000000-0000-4000-8000-000000000601'
+    AND amount = 70
+    AND payment_method = 'card'
+    AND deleted_at IS NULL;
+  IF v_current_count IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'CORRECTED_PAYMENT_ROW_MISMATCH';
+  END IF;
 
   v_context := public.get_completed_bill_correction_context(
     '70000000-0000-4000-8000-000000000202'
@@ -637,22 +771,43 @@ BEGIN
     'TEST panel reconciliation',
     v_items, v_context->'payments', 0, 0
   );
-  SELECT to_jsonb(pc) INTO v_claim
+  SELECT count(*) INTO v_current_count
   FROM public.panel_claims pc
   WHERE pc.id = '70000000-0000-4000-8000-000000000901';
-  IF (v_claim->>'amount')::numeric <> 80
-     OR v_claim->>'status' <> 'received'
-     OR (v_claim->>'received_amount')::numeric <> 120
-     OR (v_claim->>'approved_amount')::numeric <> 100
-     OR (v_result->>'panel_credit_due')::numeric <> 40 THEN
-    RAISE EXCEPTION 'PANEL_RECONCILIATION_FAILED';
+  IF v_current_count IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'PANEL_CLAIM_ROW_MISMATCH';
+  END IF;
+  SELECT amount, status, received_amount, approved_amount
+  INTO STRICT
+    v_claim_amount, v_claim_status, v_claim_received, v_claim_approved
+  FROM public.panel_claims
+  WHERE id = '70000000-0000-4000-8000-000000000901';
+  IF v_claim_amount IS DISTINCT FROM 80
+     OR v_claim_status IS DISTINCT FROM 'received'
+     OR v_claim_received IS DISTINCT FROM 120
+     OR v_claim_approved IS DISTINCT FROM 100
+     OR (v_result->>'panel_credit_due')::numeric IS DISTINCT FROM 40 THEN
+    RAISE EXCEPTION 'PANEL_CLAIM_ROW_MISMATCH';
   END IF;
 
-  IF (SELECT count(*) FROM public.get_completed_bill_correction_history(
+  SELECT count(*) INTO v_current_count
+  FROM public.get_completed_bill_correction_history(
     '70000000-0000-4000-8000-000000000201',
     100, NULL, NULL
-  )) < 10 THEN
-    RAISE EXCEPTION 'HISTORY_PROJECTION_FAILED';
+  );
+  IF v_current_count IS DISTINCT FROM 10
+     OR (SELECT count(*)
+         FROM public.get_completed_bill_correction_history(
+           '70000000-0000-4000-8000-000000000201',
+           100, NULL, NULL
+         )
+         WHERE id = v_cash_audit_id
+           AND actor_id =
+             '70000000-0000-4000-8000-000000000001'
+           AND reason = 'TEST cash outstanding'
+           AND before_total = 61
+           AND after_total = 60.5) IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'HISTORY_PROJECTION_EXACT_MISMATCH';
   END IF;
 
   -- The checkout RPC itself executes through the authenticated API role.
@@ -661,10 +816,25 @@ BEGIN
     '70000000-0000-4000-8000-000000000303',
     'self_pay', 'cash', 25, 'TEST ONLY ATOMIC CHECKOUT'
   );
-  IF (SELECT count(*) FROM public.payments
-      WHERE queue_entry_id =
-        '70000000-0000-4000-8000-000000000203') <> 1 THEN
-    RAISE EXCEPTION 'ATOMIC_CHECKOUT_FAILED';
+  SELECT qe.clinic_status, c.status
+  INTO STRICT v_queue_status, v_consultation_status
+  FROM public.queue_entries qe
+  JOIN public.consultations c ON c.queue_entry_id = qe.id
+  WHERE qe.id = '70000000-0000-4000-8000-000000000203'
+    AND c.id = '70000000-0000-4000-8000-000000000303';
+  SELECT count(*), min(amount), min(payment_method)
+  INTO v_current_count, v_payment_amount, v_payment_method
+  FROM public.payments
+  WHERE queue_entry_id = '70000000-0000-4000-8000-000000000203'
+    AND consultation_id = '70000000-0000-4000-8000-000000000303'
+    AND payment_type = 'self_pay'
+    AND deleted_at IS NULL;
+  IF v_queue_status IS DISTINCT FROM 'completed'
+     OR v_consultation_status IS DISTINCT FROM 'completed'
+     OR v_current_count IS DISTINCT FROM 1
+     OR v_payment_amount IS DISTINCT FROM 25
+     OR v_payment_method IS DISTINCT FROM 'cash' THEN
+    RAISE EXCEPTION 'ATOMIC_CHECKOUT_STATE_MISMATCH';
   END IF;
   BEGIN
     PERFORM public.record_payment_and_complete_visit(
@@ -676,6 +846,26 @@ BEGIN
   EXCEPTION WHEN SQLSTATE '22023' THEN
     IF SQLERRM <> 'ALREADY_COMPLETED' THEN RAISE; END IF;
   END;
+  SELECT qe.clinic_status, c.status
+  INTO STRICT v_queue_status, v_consultation_status
+  FROM public.queue_entries qe
+  JOIN public.consultations c ON c.queue_entry_id = qe.id
+  WHERE qe.id = '70000000-0000-4000-8000-000000000203'
+    AND c.id = '70000000-0000-4000-8000-000000000303';
+  SELECT count(*), min(amount), min(payment_method)
+  INTO v_current_count, v_payment_amount, v_payment_method
+  FROM public.payments
+  WHERE queue_entry_id = '70000000-0000-4000-8000-000000000203'
+    AND consultation_id = '70000000-0000-4000-8000-000000000303'
+    AND payment_type = 'self_pay'
+    AND deleted_at IS NULL;
+  IF v_queue_status IS DISTINCT FROM 'completed'
+     OR v_consultation_status IS DISTINCT FROM 'completed'
+     OR v_current_count IS DISTINCT FROM 1
+     OR v_payment_amount IS DISTINCT FROM 25
+     OR v_payment_method IS DISTINCT FROM 'cash' THEN
+    RAISE EXCEPTION 'DUPLICATE_CHECKOUT_STATE_CHANGED';
+  END IF;
 END
 $verify$;
 

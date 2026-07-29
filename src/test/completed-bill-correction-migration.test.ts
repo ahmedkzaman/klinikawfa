@@ -330,9 +330,22 @@ describe('completed bill correction migration', () => {
     expect(harness).toMatch(/dispensed_medicine_remove/i);
     expect(harness).toMatch(/payment_not_in_visit/i);
     expect(harness).toMatch(/stale_bill/i);
-    expect(harness).toMatch(/panel_reconciliation_failed/i);
+    expect(harness).toMatch(/panel_claim_row_mismatch/i);
     expect(harness).toMatch(/audit_snapshot_failed/i);
     expect(harness).toMatch(/already_completed/i);
+    [
+      'ATOMIC_ROLLBACK_AUDIT_CHANGED',
+      'CORRECTED_PAYMENT_ROW_MISMATCH',
+      'PANEL_CLAIM_ROW_MISMATCH',
+      'COMPLETED_VISIT_STATE_CHANGED',
+      'INVENTORY_ROW_MISMATCH',
+      'INVENTORY_TRANSACTION_COUNT_MISMATCH',
+      'STALE_WRITER_A_STATE_MISMATCH',
+      'HISTORY_PROJECTION_EXACT_MISMATCH',
+      'ATOMIC_CHECKOUT_STATE_MISMATCH',
+      'DUPLICATE_CHECKOUT_STATE_CHANGED',
+    ].forEach((marker) => expect(harness).toContain(marker));
+    expect(harness).toMatch(/is distinct from/i);
     expect(harness).toMatch(
       /reset role\s*;\s*rollback\s*;\s*select jsonb_build_object/i,
     );
