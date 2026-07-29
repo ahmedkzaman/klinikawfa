@@ -141,6 +141,28 @@ CREATE INDEX consultation_items_source_document_type_idx
   ON public.consultation_items (source_document_type)
   WHERE source_document_type IS NOT NULL;
 
+-- Owner-only capability proving that a linked fee mutation came from the
+-- document lifecycle trigger in this transaction and backend.
+CREATE TABLE public.consultation_document_fee_guard (
+  transaction_id bigint NOT NULL,
+  backend_pid integer NOT NULL,
+  source_document_id uuid NOT NULL
+    REFERENCES public.consultation_documents(id),
+  actor_id uuid NOT NULL REFERENCES auth.users(id),
+  PRIMARY KEY (
+    transaction_id,
+    backend_pid,
+    source_document_id,
+    actor_id
+  )
+);
+
+ALTER TABLE public.consultation_document_fee_guard
+  ENABLE ROW LEVEL SECURITY;
+REVOKE ALL PRIVILEGES
+  ON TABLE public.consultation_document_fee_guard
+  FROM PUBLIC, anon, authenticated;
+
 CREATE OR REPLACE FUNCTION public.guard_consultation_item_source_document()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -148,11 +170,40 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $function$
 BEGIN
-  IF TG_OP = 'UPDATE'
-     AND (
-       OLD.source_document_id IS DISTINCT FROM NEW.source_document_id
+  IF TG_OP = 'UPDATE' AND OLD.source_document_id IS NOT NULL THEN
+    IF OLD.deleted_at IS NOT NULL
+       OR NEW.deleted_at IS NULL
+       OR NEW.deleted_by IS DISTINCT FROM auth.uid()
+       OR OLD.consultation_id IS DISTINCT FROM NEW.consultation_id
+       OR OLD.item_name IS DISTINCT FROM NEW.item_name
+       OR OLD.quantity IS DISTINCT FROM NEW.quantity
+       OR OLD.price IS DISTINCT FROM NEW.price
+       OR OLD.unit_cost IS DISTINCT FROM NEW.unit_cost
+       OR OLD.item_id IS DISTINCT FROM NEW.item_id
+       OR OLD.service_id IS DISTINCT FROM NEW.service_id
+       OR OLD.package_id IS DISTINCT FROM NEW.package_id
+       OR OLD.billing_adjustment_kind IS DISTINCT FROM
+         NEW.billing_adjustment_kind
+       OR OLD.clinic_charge_type_id IS DISTINCT FROM
+         NEW.clinic_charge_type_id
+       OR OLD.source_document_id IS DISTINCT FROM NEW.source_document_id
        OR OLD.source_document_type IS DISTINCT FROM NEW.source_document_type
-     ) THEN
+       OR NOT EXISTS (
+         SELECT 1
+         FROM public.consultation_document_fee_guard guard_row
+         WHERE guard_row.transaction_id = txid_current()
+           AND guard_row.backend_pid = pg_backend_pid()
+           AND guard_row.source_document_id = OLD.source_document_id
+           AND guard_row.actor_id = auth.uid()
+       ) THEN
+      RAISE EXCEPTION 'DOCUMENT_FEE_ITEM_IMMUTABLE'
+        USING ERRCODE = '42501';
+    END IF;
+  ELSIF TG_OP = 'UPDATE'
+        AND (
+          OLD.source_document_id IS DISTINCT FROM NEW.source_document_id
+          OR OLD.source_document_type IS DISTINCT FROM NEW.source_document_type
+        ) THEN
     RAISE EXCEPTION 'SOURCE_DOCUMENT_METADATA_IMMUTABLE'
       USING ERRCODE = '42501';
   END IF;
@@ -180,10 +231,49 @@ REVOKE ALL ON FUNCTION public.guard_consultation_item_source_document()
   FROM PUBLIC, anon, authenticated;
 
 CREATE TRIGGER guard_consultation_item_source_document
-  BEFORE INSERT OR UPDATE OF source_document_id, source_document_type
+  BEFORE INSERT OR UPDATE
   ON public.consultation_items
   FOR EACH ROW
   EXECUTE FUNCTION public.guard_consultation_item_source_document();
+
+CREATE OR REPLACE FUNCTION public.guard_billed_consultation_document_reassignment()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $function$
+BEGIN
+  IF (
+       OLD.consultation_id IS DISTINCT FROM NEW.consultation_id
+       OR OLD.patient_id IS DISTINCT FROM NEW.patient_id
+       OR OLD.type IS DISTINCT FROM NEW.type
+       OR OLD.created_by IS DISTINCT FROM NEW.created_by
+     )
+     AND EXISTS (
+       SELECT 1
+       FROM public.consultation_items ci
+       WHERE ci.source_document_id = OLD.id
+         AND ci.deleted_at IS NULL
+     ) THEN
+    RAISE EXCEPTION 'BILLED_DOCUMENT_IMMUTABLE'
+      USING ERRCODE = '42501';
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
+
+ALTER FUNCTION public.guard_billed_consultation_document_reassignment()
+  OWNER TO postgres;
+REVOKE ALL
+  ON FUNCTION public.guard_billed_consultation_document_reassignment()
+  FROM PUBLIC, anon, authenticated;
+
+CREATE TRIGGER guard_billed_consultation_document_reassignment
+  BEFORE UPDATE OF consultation_id, patient_id, type, created_by
+  ON public.consultation_documents
+  FOR EACH ROW
+  EXECUTE FUNCTION public.guard_billed_consultation_document_reassignment();
 
 CREATE OR REPLACE FUNCTION public.sync_consultation_document_fee()
 RETURNS trigger
@@ -371,13 +461,30 @@ BEGIN
         USING ERRCODE = '23505';
     END IF;
   ELSE
+    INSERT INTO public.consultation_document_fee_guard (
+      transaction_id,
+      backend_pid,
+      source_document_id,
+      actor_id
+    )
+    VALUES (
+      txid_current(),
+      pg_backend_pid(),
+      v_document_id,
+      auth.uid()
+    );
+
     UPDATE public.consultation_items
     SET deleted_at = now(),
         deleted_by = auth.uid()
     WHERE source_document_id = v_document_id
-      AND consultation_id = v_consultation_id
-      AND source_document_type = v_document_type
       AND deleted_at IS NULL;
+
+    DELETE FROM public.consultation_document_fee_guard
+    WHERE transaction_id = txid_current()
+      AND backend_pid = pg_backend_pid()
+      AND source_document_id = v_document_id
+      AND actor_id = auth.uid();
   END IF;
 
   IF v_completed THEN
@@ -556,6 +663,12 @@ BEGIN
     IF NOT FOUND
        OR v_document.consultation_id IS DISTINCT FROM _consultation_id
        OR v_document.patient_id IS DISTINCT FROM _patient_id
+       OR v_document.template_id IS DISTINCT FROM _template_id
+       OR v_document.template_name IS DISTINCT FROM btrim(_template_name)
+       OR v_document.type IS DISTINCT FROM v_document_type
+       OR v_document.content IS DISTINCT FROM _content
+       OR v_document.paper_size IS DISTINCT FROM btrim(_paper_size)
+       OR v_document.orientation IS DISTINCT FROM btrim(_orientation)
        OR v_document.created_by IS DISTINCT FROM auth.uid() THEN
       RAISE EXCEPTION 'DOCUMENT_ID_CONFLICT' USING ERRCODE = '23505';
     END IF;

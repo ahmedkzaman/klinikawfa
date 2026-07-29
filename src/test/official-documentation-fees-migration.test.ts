@@ -57,6 +57,82 @@ describe('official documentation fees migration', () => {
     expect(sql).toContain('Official Documentation Fees');
   });
 
+  it('prevents reassignment of documents that already have an active fee', () => {
+    const guard = sql.match(
+      /create or replace function public\.guard_billed_consultation_document_reassignment[\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+
+    expect(guard).toMatch(/old\.id/i);
+    expect(guard).toMatch(/consultation_items/i);
+    expect(guard).toMatch(/deleted_at is null/i);
+    expect(guard).toMatch(/old\.consultation_id is distinct from new\.consultation_id/i);
+    expect(guard).toMatch(/old\.patient_id is distinct from new\.patient_id/i);
+    expect(guard).toMatch(/old\.type is distinct from new\.type/i);
+    expect(guard).toMatch(/old\.created_by is distinct from new\.created_by/i);
+    expect(guard).toMatch(/BILLED_DOCUMENT_IMMUTABLE/i);
+    expect(sql).toMatch(
+      /create trigger guard_billed_consultation_document_reassignment[\s\S]*before update of consultation_id,\s*patient_id,\s*type,\s*created_by[\s\S]*execute function public\.guard_billed_consultation_document_reassignment\(\)/i,
+    );
+    expect(sql).toMatch(
+      /revoke all\s+on function public\.guard_billed_consultation_document_reassignment\(\)\s*from public,\s*anon,\s*authenticated/i,
+    );
+  });
+
+  it('rejects direct linked-fee mutations and reverses only by immutable source id', () => {
+    const itemGuard = sql.match(
+      /create or replace function public\.guard_consultation_item_source_document[\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+    const sync = sql.match(
+      /create or replace function public\.sync_consultation_document_fee[\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+    const reversal = sync.match(
+      /update public\.consultation_items[\s\S]*?where[\s\S]*?;/i,
+    )?.[0] ?? '';
+
+    expect(itemGuard).toMatch(/old\.source_document_id is not null/i);
+    for (const field of [
+      'consultation_id',
+      'item_name',
+      'quantity',
+      'price',
+      'unit_cost',
+      'item_id',
+      'service_id',
+      'package_id',
+      'billing_adjustment_kind',
+      'clinic_charge_type_id',
+      'source_document_id',
+      'source_document_type',
+    ]) {
+      expect(itemGuard).toMatch(
+        new RegExp(
+          `old\\.${field} is distinct from\\s+new\\.${field}`,
+          'i',
+        ),
+      );
+    }
+    expect(itemGuard).toMatch(/consultation_document_fee_guard/i);
+    expect(itemGuard).toMatch(/DOCUMENT_FEE_ITEM_IMMUTABLE/i);
+    expect(sql).toMatch(
+      /create table public\.consultation_document_fee_guard[\s\S]*primary key[\s\S]*transaction_id[\s\S]*backend_pid[\s\S]*source_document_id[\s\S]*actor_id/i,
+    );
+    expect(sql).toMatch(
+      /alter table public\.consultation_document_fee_guard\s+enable row level security/i,
+    );
+    expect(sql).toMatch(
+      /revoke all privileges\s+on table public\.consultation_document_fee_guard\s+from public,\s*anon,\s*authenticated/i,
+    );
+    expect(sql).toMatch(
+      /create trigger guard_consultation_item_source_document[\s\S]*before insert or update[\s\S]*execute function public\.guard_consultation_item_source_document\(\)/i,
+    );
+
+    expect(reversal).toMatch(
+      /where source_document_id = v_document_id\s+and deleted_at is null/i,
+    );
+    expect(reversal).not.toMatch(/and consultation_id\s*=/i);
+    expect(reversal).not.toMatch(/and source_document_type\s*=/i);
+  });
+
   it('issues and voids the document and charge through guarded locked transactions', () => {
     const issue = sql.match(
       /create or replace function public\.issue_consultation_document_with_fee[\s\S]*?\$function\$;/i,
@@ -72,6 +148,22 @@ describe('official documentation fees migration', () => {
     expect(issue).toMatch(/for update/i);
     expect(issue).toMatch(
       /insert into public\.consultation_documents[\s\S]*on conflict \(id\) do nothing/i,
+    );
+    expect(issue).toMatch(
+      /v_document\.template_id is distinct from _template_id/i,
+    );
+    expect(issue).toMatch(
+      /v_document\.template_name is distinct from btrim\(_template_name\)/i,
+    );
+    expect(issue).toMatch(
+      /v_document\.type is distinct from v_document_type/i,
+    );
+    expect(issue).toMatch(/v_document\.content is distinct from _content/i);
+    expect(issue).toMatch(
+      /v_document\.paper_size is distinct from btrim\(_paper_size\)/i,
+    );
+    expect(issue).toMatch(
+      /v_document\.orientation is distinct from btrim\(_orientation\)/i,
     );
 
     expect(voidDocument).toMatch(/returns void/i);
