@@ -291,4 +291,66 @@ describe('completed bill correction migration', () => {
       /completed_bill_correction_guard_actor_id_idx[\s\S]*completed_bill_correction_guard\s*\(actor_id\)/i,
     );
   });
+
+  it('pins exact migration history and ships a rollback-only authenticated staging harness', () => {
+    const migrationsDirectory = resolve(process.cwd(), 'supabase/migrations');
+    const migrationNames = readdirSync(migrationsDirectory);
+
+    expect(migrationNames).toContain(
+      '20260728150000_add_completed_bill_corrections.sql',
+    );
+    expect(migrationNames).toContain(
+      '20260728153000_reconcile_completed_bill_financial_reporting.sql',
+    );
+    expect(migrationNames).toContain(
+      '20260729003007_index_completed_bill_correction_foreign_keys.sql',
+    );
+
+    const harness = readFileSync(
+      resolve(process.cwd(), 'supabase/tests/completed_bill_corrections.sql'),
+      'utf8',
+    );
+    const historyRepair = readFileSync(
+      resolve(
+        process.cwd(),
+        'supabase/tests/completed_bill_correction_staging_history_repair.sql',
+      ),
+      'utf8',
+    );
+
+    expect(harness).toMatch(/^\s*begin\s*;/im);
+    expect(harness).toMatch(/set local role authenticated\s*;/i);
+    expect(harness).toMatch(
+      /set_config\(\s*'request\.jwt\.claim\.sub'/i,
+    );
+    expect(harness).toMatch(
+      /set_config\(\s*'request\.jwt\.claim\.role',\s*'authenticated'/i,
+    );
+    expect(harness).toMatch(/quantity_below_dispensed/i);
+    expect(harness).toMatch(/dispensed_medicine_remove/i);
+    expect(harness).toMatch(/payment_not_in_visit/i);
+    expect(harness).toMatch(/stale_bill/i);
+    expect(harness).toMatch(/panel_reconciliation_failed/i);
+    expect(harness).toMatch(/audit_snapshot_failed/i);
+    expect(harness).toMatch(/already_completed/i);
+    expect(harness).toMatch(
+      /reset role\s*;\s*rollback\s*;\s*select jsonb_build_object/i,
+    );
+    expect(harness).not.toMatch(/^\s*commit\s*;/im);
+
+    expect(historyRepair).toMatch(
+      /staging_history_source_mismatch[\s\S]*staging_history_target_version_already_exists/i,
+    );
+    expect(historyRepair).toMatch(
+      /when '20260729002310' then '20260728150000'/i,
+    );
+    expect(historyRepair).toMatch(
+      /when '20260729002320' then '20260728153000'/i,
+    );
+    expect(historyRepair).toMatch(
+      /when '20260729003026' then '20260729003007'/i,
+    );
+    expect(historyRepair).toMatch(/get diagnostics v_changed_count = row_count/i);
+    expect(historyRepair).toMatch(/staging_history_repair_postcondition/i);
+  });
 });

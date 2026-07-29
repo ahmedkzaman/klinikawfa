@@ -23,15 +23,22 @@ The exact SQL from these local migrations was applied in order:
 2. `20260728153000_reconcile_completed_bill_financial_reporting.sql`
 3. `20260729003007_index_completed_bill_correction_foreign_keys.sql`
 
-The Supabase migration service recorded them with these staging versions:
+The Supabase migration service initially assigned application-time versions.
+Without rerunning any DDL, the staging-only history repair in
+`supabase/tests/completed_bill_correction_staging_history_repair.sql` mapped
+those rows to the committed filename versions inside one transaction. It
+checked all three source `(version, name)` pairs, required all target versions
+to be absent, rejected duplicate feature names, asserted exactly three updated
+rows, and verified all three postconditions before commit.
 
-1. `20260729002310` — `add_completed_bill_corrections`
-2. `20260729002320` — `reconcile_completed_bill_financial_reporting`
-3. `20260729003026` — `index_completed_bill_correction_foreign_keys`
+Final staging history exactly matches the repository:
 
-The first two version timestamps differ from their local filename timestamps
-because the staging migration API assigns an application-time version. Their
-names and applied SQL match the local migrations.
+1. `20260728150000` — `add_completed_bill_corrections`
+2. `20260728153000` — `reconcile_completed_bill_financial_reporting`
+3. `20260729003007` — `index_completed_bill_correction_foreign_keys`
+
+Post-repair evidence: 206 total migrations, zero duplicate versions, zero
+duplicate completed-bill-correction names, latest version `20260729003007`.
 
 ## Synthetic fixture IDs
 
@@ -55,6 +62,58 @@ names and applied SQL match the local migrations.
 | Charge type | `70000000-0000-4000-8000-000000000701` |
 | Panel | `70000000-0000-4000-8000-000000000801` |
 | Panel claim | `70000000-0000-4000-8000-000000000901` |
+
+The role matrix uses synthetic actors
+`70000000-0000-4000-8000-000000000001`–`006` and
+`70000000-0000-4000-8000-000000000011`–`016`.
+
+## Reproducible authenticated harness
+
+The exact tracked harness is
+`supabase/tests/completed_bill_corrections.sql`. It:
+
+- begins an explicit transaction;
+- creates only fixed `TEST ONLY` auth accounts, roles, and clinical/financial
+  fixtures;
+- executes the public RPCs after `SET LOCAL ROLE authenticated`;
+- sets `request.jwt.claim.role = authenticated` and changes the synthetic
+  `request.jwt.claim.sub` for every matrix actor;
+- contains assertions for every result listed below;
+- contains no `COMMIT`; and
+- executes `RESET ROLE; ROLLBACK;` before returning its result.
+
+Sanitized staging result:
+
+```json
+{
+  "status": "pass",
+  "database_role": "authenticated",
+  "jwt_claims": "synthetic",
+  "allowed_roles": [
+    "ops_staff",
+    "operations",
+    "staff",
+    "admin",
+    "special_admin",
+    "doctor_admin"
+  ],
+  "denied_roles": [
+    "locum",
+    "resident_doctor",
+    "purchaser",
+    "staff_nurse",
+    "website_editor",
+    "guest"
+  ],
+  "medicine_inventory": "pass",
+  "atomic_rollback": "pass",
+  "stale_fingerprint": "pass",
+  "cash_panel_reconciliation": "pass",
+  "audit_history": "pass",
+  "atomic_checkout": "pass",
+  "transaction_end": "ROLLBACK"
+}
+```
 
 ## Functional evidence
 
@@ -165,6 +224,7 @@ Advisor references:
 
 ## Cleanup result
 
-Post-test counts for every synthetic fixture category were `0`, including the
-audit table. No synthetic patient, auth account, financial row, inventory row,
-or clinical row remains in staging.
+Post-test counts for every synthetic fixture category were `0`: auth users,
+user roles, patients, queues, consultations, items, payments, claims, inventory,
+panels, charge types, and correction audits. No synthetic patient, auth
+account, financial row, inventory row, or clinical row remains in staging.
