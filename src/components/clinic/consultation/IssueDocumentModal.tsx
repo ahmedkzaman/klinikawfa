@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FileText, Save, Clock } from 'lucide-react';
 import {
   Dialog,
@@ -25,6 +25,7 @@ import {
 } from '@/hooks/clinic/useClinicDocuments';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { useCurrentDoctor } from '@/hooks/clinic/useCurrentDoctor';
+import { useClinicDocumentFees } from '@/hooks/clinic/useClinicDocumentFees';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 import { ConsultationDocumentPage } from '@/components/clinic/consultation/ConsultationDocumentPage';
 
@@ -55,15 +56,18 @@ export function IssueDocumentModal({
 }: Props) {
   const { settings } = useClinicSettings();
   const { data: doctor } = useCurrentDoctor();
+  const { data: documentFees = [] } = useClinicDocumentFees();
   const addDoc = useAddConsultationDocument();
   const updateDoc = useUpdateConsultationDocument();
   const [content, setContent] = useState('');
   const [timeIn, setTimeIn] = useState('');
   const [timeOut, setTimeOut] = useState('');
+  const issueDocumentId = useRef<string | null>(null);
 
   const isEdit = !!existingDoc;
   const docType = existingDoc?.type ?? template?.type ?? null;
   const isTimeslip = docType === 'timeslip';
+  const documentFee = documentFees.find((fee) => fee.documentType === docType);
 
   const formatTime12h = (hhmm: string): string => {
     if (!hhmm) return '______';
@@ -101,6 +105,7 @@ export function IssueDocumentModal({
     if (!isOpen) {
       setTimeIn('');
       setTimeOut('');
+      issueDocumentId.current = null;
       return;
     }
     if (!existingDoc) {
@@ -111,6 +116,12 @@ export function IssueDocumentModal({
       setTimeIn('');
     }
   }, [isOpen, existingDoc]);
+
+  useEffect(() => {
+    if (isOpen && !isEdit && !issueDocumentId.current) {
+      issueDocumentId.current = crypto.randomUUID();
+    }
+  }, [isEdit, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -146,7 +157,10 @@ export function IssueDocumentModal({
       return;
     }
     if (!consultationId || !patient?.id || !template) return;
+    const documentId = issueDocumentId.current ?? crypto.randomUUID();
+    issueDocumentId.current = documentId;
     await addDoc.mutateAsync({
+      id: documentId,
       consultation_id: consultationId,
       patient_id: patient.id,
       template_id: template.id,
@@ -179,6 +193,13 @@ export function IssueDocumentModal({
             Edit the dedicated document content and preview it below the
             clinic-wide document header.
           </DialogDescription>
+          {documentFee && (
+            <p className="mt-1 text-sm text-slate-600">
+              {isEdit
+                ? 'Fee already linked — saving changes will not charge it again.'
+                : `Official Documentation Fees · RM${documentFee.amount.toFixed(2)}`}
+            </p>
+          )}
         </DialogHeader>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0 p-4">
