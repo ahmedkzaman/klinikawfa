@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils';
 import { escapeHtml } from '@/lib/security';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { ConsultationDocumentPage } from '@/components/clinic/consultation/ConsultationDocumentPage';
+import { DocumentFeeSettings } from '@/components/clinic/settings/DocumentFeeSettings';
 
 const PREVIEW_DICTIONARY: Record<string, string> = {
   '{{patient_name}}': 'Ahmad bin Ali',
@@ -197,6 +198,8 @@ export default function DocumentTemplateBuilder() {
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-8rem)]">
+      <DocumentFeeSettings />
+
       {/* TOP BAR */}
       <div className="flex items-center justify-between gap-3 px-1">
         <div className="flex items-center gap-2 min-w-0">
