@@ -1,5 +1,6 @@
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { readFileSync } from 'node:fs';
 import type { PropsWithChildren } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { IssueDocumentModal } from '@/components/clinic/consultation/IssueDocumentModal';
@@ -384,5 +385,12 @@ describe('official documentation document lifecycle', () => {
       'attempt-uuid-2',
     ]);
     randomUUID.mockRestore();
+  });
+
+  it('does not mutate issue-attempt refs during rendering', () => {
+    const source = readFileSync('src/components/clinic/consultation/IssueDocumentModal.tsx', 'utf8');
+    const renderPhase = source.slice(0, source.indexOf('const handleSave'));
+
+    expect(renderPhase).not.toMatch(/\.current\s*=/);
   });
 });

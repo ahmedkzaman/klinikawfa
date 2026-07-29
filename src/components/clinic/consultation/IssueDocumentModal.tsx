@@ -62,23 +62,7 @@ export function IssueDocumentModal({
   const [content, setContent] = useState('');
   const [timeIn, setTimeIn] = useState('');
   const [timeOut, setTimeOut] = useState('');
-  const issueDocumentId = useRef<string | null>(null);
-  const issueAttemptContext = `${consultationId ?? ''}:${patient?.id ?? ''}:${template?.id ?? ''}`;
-  const previousIssueAttemptContext = useRef(issueAttemptContext);
-
-  const resetIssueAttempt = () => {
-    issueDocumentId.current = null;
-  };
-
-  if (previousIssueAttemptContext.current !== issueAttemptContext) {
-    previousIssueAttemptContext.current = issueAttemptContext;
-    resetIssueAttempt();
-  }
-
-  const closeIssueAttempt = () => {
-    resetIssueAttempt();
-    onClose();
-  };
+  const issueAttempt = useRef<{ context: string; id: string | null }>({ context: '', id: null });
 
   const isEdit = !!existingDoc;
   const docType = existingDoc?.type ?? template?.type ?? null;
@@ -170,8 +154,11 @@ export function IssueDocumentModal({
       return;
     }
     if (!consultationId || !patient?.id || !template) return;
-    const documentId = issueDocumentId.current ?? crypto.randomUUID();
-    issueDocumentId.current = documentId;
+    const context = `${consultationId}:${patient.id}:${template.id}`;
+    const documentId = issueAttempt.current.context === context
+      ? issueAttempt.current.id ?? crypto.randomUUID()
+      : crypto.randomUUID();
+    issueAttempt.current = { context, id: documentId };
     try {
       await addDoc.mutateAsync({
         id: documentId,
@@ -189,6 +176,15 @@ export function IssueDocumentModal({
       // The mutation hook already presents the save error to the user.
     }
   };
+
+  function resetIssueAttempt() {
+    issueAttempt.current = { context: '', id: null };
+  }
+
+  function closeIssueAttempt() {
+    resetIssueAttempt();
+    onClose();
+  }
 
   const isPending = isEdit ? updateDoc.isPending : addDoc.isPending;
   const saveDisabled = isEdit
