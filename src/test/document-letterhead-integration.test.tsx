@@ -61,6 +61,10 @@ vi.mock('@/hooks/clinic/useCurrentDoctor', () => ({
   useCurrentDoctor: () => ({ data: { name: 'Dr Test' } }),
 }));
 
+vi.mock('@/hooks/clinic/useClinicDocumentFees', () => ({
+  useClinicDocumentFees: () => ({ data: [], isLoading: false }),
+}));
+
 vi.mock('@/hooks/clinic/useClinicDocuments', () => ({
     useAddConsultationDocument: () => ({
       mutateAsync,

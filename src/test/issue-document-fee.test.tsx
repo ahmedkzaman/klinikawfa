@@ -138,6 +138,7 @@ describe('official documentation document lifecycle', () => {
       ['clinic', 'queue-entries'],
       ['clinic', 'queue-entry'],
       ['clinic', 'completed-visit-detail'],
+      ['patient_outstanding'],
       ['financial-insights'],
       ['sales-insights'],
       ['clinic-health'],
@@ -146,6 +147,7 @@ describe('official documentation document lifecycle', () => {
       ['panel_claim_items'],
       ['ledger_item_totals'],
       ['receipt_payload'],
+      ['consultation_history'],
     ]);
   });
 
@@ -220,5 +222,167 @@ describe('official documentation document lifecycle', () => {
     );
 
     expect(screen.queryByText(/Official Documentation Fees/)).not.toBeInTheDocument();
+  });
+
+  it('retries a failed issue with the same caller-supplied document ID', async () => {
+    const randomUUID = vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('attempt-uuid-1')
+      .mockReturnValueOnce('attempt-uuid-2');
+    rpc
+      .mockResolvedValueOnce({ data: null, error: new Error('Request timed out') })
+      .mockResolvedValueOnce({ data: existingDocument, error: null });
+    const queryClient = createQueryClient();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <IssueDocumentModal
+          isOpen
+          onClose={() => undefined}
+          template={template}
+          patient={{ id: 'patient-1', name: 'Patient Test' }}
+          consultationId="consultation-1"
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save to Consultation' }));
+    await waitFor(() => expect(rpc).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Save to Consultation' }));
+    await waitFor(() => expect(rpc).toHaveBeenCalledTimes(2));
+
+    expect(rpc.mock.calls.map(([, args]) => args._document_id)).toEqual([
+      'attempt-uuid-1',
+      'attempt-uuid-1',
+    ]);
+    randomUUID.mockRestore();
+  });
+
+  it('starts a fresh ID after closing and reopening an issue attempt', async () => {
+    const randomUUID = vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('attempt-uuid-1')
+      .mockReturnValueOnce('attempt-uuid-2');
+    rpc
+      .mockResolvedValueOnce({ data: null, error: new Error('Request timed out') })
+      .mockResolvedValueOnce({ data: existingDocument, error: null });
+    const queryClient = createQueryClient();
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <IssueDocumentModal
+          isOpen
+          onClose={onClose}
+          template={template}
+          patient={{ id: 'patient-1', name: 'Patient Test' }}
+          consultationId="consultation-1"
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save to Consultation' }));
+    await waitFor(() => expect(rpc).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <IssueDocumentModal
+          isOpen
+          onClose={onClose}
+          template={template}
+          patient={{ id: 'patient-1', name: 'Patient Test' }}
+          consultationId="consultation-1"
+        />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save to Consultation' }));
+    await waitFor(() => expect(rpc).toHaveBeenCalledTimes(2));
+
+    expect(rpc.mock.calls.map(([, args]) => args._document_id)).toEqual([
+      'attempt-uuid-1',
+      'attempt-uuid-2',
+    ]);
+    randomUUID.mockRestore();
+  });
+
+  it('starts a fresh ID after a successful issue closes the attempt', async () => {
+    const randomUUID = vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('attempt-uuid-1')
+      .mockReturnValueOnce('attempt-uuid-2');
+    rpc.mockResolvedValue({ data: existingDocument, error: null });
+    const queryClient = createQueryClient();
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <IssueDocumentModal
+          isOpen
+          onClose={onClose}
+          template={template}
+          patient={{ id: 'patient-1', name: 'Patient Test' }}
+          consultationId="consultation-1"
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save to Consultation' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <IssueDocumentModal
+          isOpen
+          onClose={onClose}
+          template={template}
+          patient={{ id: 'patient-1', name: 'Patient Test' }}
+          consultationId="consultation-1"
+        />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save to Consultation' }));
+    await waitFor(() => expect(rpc).toHaveBeenCalledTimes(2));
+
+    expect(rpc.mock.calls.map(([, args]) => args._document_id)).toEqual([
+      'attempt-uuid-1',
+      'attempt-uuid-2',
+    ]);
+    randomUUID.mockRestore();
+  });
+
+  it('starts a fresh ID when the issue attempt context changes', async () => {
+    const randomUUID = vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('attempt-uuid-1')
+      .mockReturnValueOnce('attempt-uuid-2');
+    rpc
+      .mockResolvedValueOnce({ data: null, error: new Error('Request timed out') })
+      .mockResolvedValueOnce({ data: existingDocument, error: null });
+    const queryClient = createQueryClient();
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <IssueDocumentModal
+          isOpen
+          onClose={() => undefined}
+          template={template}
+          patient={{ id: 'patient-1', name: 'Patient Test' }}
+          consultationId="consultation-1"
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save to Consultation' }));
+    await waitFor(() => expect(rpc).toHaveBeenCalledTimes(1));
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <IssueDocumentModal
+          isOpen
+          onClose={() => undefined}
+          template={{ ...template, id: 'template-2' }}
+          patient={{ id: 'patient-1', name: 'Patient Test' }}
+          consultationId="consultation-1"
+        />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save to Consultation' }));
+    await waitFor(() => expect(rpc).toHaveBeenCalledTimes(2));
+
+    expect(rpc.mock.calls.map(([, args]) => args._document_id)).toEqual([
+      'attempt-uuid-1',
+      'attempt-uuid-2',
+    ]);
+    randomUUID.mockRestore();
   });
 });

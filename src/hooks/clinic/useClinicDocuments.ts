@@ -73,6 +73,7 @@ function invalidateDocumentBillingQueries(qc: ReturnType<typeof useQueryClient>,
   qc.invalidateQueries({ queryKey: ['clinic', 'queue-entries'] });
   qc.invalidateQueries({ queryKey: ['clinic', 'queue-entry'] });
   qc.invalidateQueries({ queryKey: ['clinic', 'completed-visit-detail'] });
+  qc.invalidateQueries({ queryKey: ['patient_outstanding'] });
   qc.invalidateQueries({ queryKey: ['financial-insights'] });
   qc.invalidateQueries({ queryKey: ['sales-insights'] });
   qc.invalidateQueries({ queryKey: ['clinic-health'] });
@@ -81,6 +82,7 @@ function invalidateDocumentBillingQueries(qc: ReturnType<typeof useQueryClient>,
   qc.invalidateQueries({ queryKey: ['panel_claim_items'] });
   qc.invalidateQueries({ queryKey: ['ledger_item_totals'] });
   qc.invalidateQueries({ queryKey: ['receipt_payload'] });
+  qc.invalidateQueries({ queryKey: ['consultation_history'] });
 }
 
 export function useDocumentTemplates() {

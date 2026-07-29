@@ -63,6 +63,22 @@ export function IssueDocumentModal({
   const [timeIn, setTimeIn] = useState('');
   const [timeOut, setTimeOut] = useState('');
   const issueDocumentId = useRef<string | null>(null);
+  const issueAttemptContext = `${consultationId ?? ''}:${patient?.id ?? ''}:${template?.id ?? ''}`;
+  const previousIssueAttemptContext = useRef(issueAttemptContext);
+
+  const resetIssueAttempt = () => {
+    issueDocumentId.current = null;
+  };
+
+  if (previousIssueAttemptContext.current !== issueAttemptContext) {
+    previousIssueAttemptContext.current = issueAttemptContext;
+    resetIssueAttempt();
+  }
+
+  const closeIssueAttempt = () => {
+    resetIssueAttempt();
+    onClose();
+  };
 
   const isEdit = !!existingDoc;
   const docType = existingDoc?.type ?? template?.type ?? null;
@@ -105,7 +121,6 @@ export function IssueDocumentModal({
     if (!isOpen) {
       setTimeIn('');
       setTimeOut('');
-      issueDocumentId.current = null;
       return;
     }
     if (!existingDoc) {
@@ -116,12 +131,6 @@ export function IssueDocumentModal({
       setTimeIn('');
     }
   }, [isOpen, existingDoc]);
-
-  useEffect(() => {
-    if (isOpen && !isEdit && !issueDocumentId.current) {
-      issueDocumentId.current = crypto.randomUUID();
-    }
-  }, [isEdit, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -148,29 +157,37 @@ export function IssueDocumentModal({
 
   const handleSave = async () => {
     if (isEdit && existingDoc) {
-      await updateDoc.mutateAsync({
-        id: existingDoc.id,
-        consultation_id: existingDoc.consultation_id,
-        content,
-      });
-      onClose();
+      try {
+        await updateDoc.mutateAsync({
+          id: existingDoc.id,
+          consultation_id: existingDoc.consultation_id,
+          content,
+        });
+        closeIssueAttempt();
+      } catch {
+        // The mutation hook already presents the save error to the user.
+      }
       return;
     }
     if (!consultationId || !patient?.id || !template) return;
     const documentId = issueDocumentId.current ?? crypto.randomUUID();
     issueDocumentId.current = documentId;
-    await addDoc.mutateAsync({
-      id: documentId,
-      consultation_id: consultationId,
-      patient_id: patient.id,
-      template_id: template.id,
-      template_name: template.name,
-      type: template.type,
-      content,
-      paper_size: paperSize,
-      orientation,
-    });
-    onClose();
+    try {
+      await addDoc.mutateAsync({
+        id: documentId,
+        consultation_id: consultationId,
+        patient_id: patient.id,
+        template_id: template.id,
+        template_name: template.name,
+        type: template.type,
+        content,
+        paper_size: paperSize,
+        orientation,
+      });
+      closeIssueAttempt();
+    } catch {
+      // The mutation hook already presents the save error to the user.
+    }
   };
 
   const isPending = isEdit ? updateDoc.isPending : addDoc.isPending;
@@ -179,7 +196,7 @@ export function IssueDocumentModal({
     : !consultationId || !patient?.id || isPending;
 
   return (
-    <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={isOpen} onOpenChange={(v) => !v && closeIssueAttempt()}>
       <DialogContent className="max-w-6xl h-[85vh] flex flex-col p-0">
         <DialogHeader className="px-6 pt-6 pb-3 border-b">
           <DialogTitle className="flex items-center gap-2">
@@ -260,7 +277,7 @@ export function IssueDocumentModal({
         </div>
 
         <div className="border-t px-6 py-3 flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={closeIssueAttempt}>
             Cancel
           </Button>
           <Button
