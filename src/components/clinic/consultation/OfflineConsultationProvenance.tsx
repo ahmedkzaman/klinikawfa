@@ -10,19 +10,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { Doctor } from '@/hooks/clinic/useDoctors';
+import type { EligibleOfflineDoctor } from '@/hooks/clinic/useOfflineConsultationApproval';
+import { format } from 'date-fns';
 
 type OfflineApprovalStatus = 'pending' | 'returned' | 'approved' | null;
 
 type OfflineConsultationProvenanceProps = {
-  doctors: Doctor[];
+  doctors: EligibleOfflineDoctor[];
   doctorId: string;
   currentDoctorName?: string | null;
   originalConsultedAt: string;
   enteringStaffName: string;
+  enteredAt?: string | null;
   approvalStatus: OfflineApprovalStatus;
   returnReason: string | null;
   approvedByName: string | null;
+  approvedAt?: string | null;
   disabled: boolean;
   onDoctorChange: (doctorId: string) => void;
   onOriginalConsultedAtChange: (value: string) => void;
@@ -40,9 +43,11 @@ export function OfflineConsultationProvenance({
   currentDoctorName,
   originalConsultedAt,
   enteringStaffName,
+  enteredAt,
   approvalStatus,
   returnReason,
   approvedByName,
+  approvedAt,
   disabled,
   onDoctorChange,
   onOriginalConsultedAtChange,
@@ -120,6 +125,11 @@ export function OfflineConsultationProvenance({
             <UserRound className="h-4 w-4 text-slate-400" />
             <span>{enteringStaffName}</span>
           </div>
+          {enteredAt && (
+            <p className="text-xs text-slate-500">
+              Entered {format(new Date(enteredAt), 'd MMM yyyy, HH:mm')}
+            </p>
+          )}
         </div>
 
         <div className="space-y-1.5">
@@ -132,6 +142,11 @@ export function OfflineConsultationProvenance({
             )}
             <span>{approvedByName ?? 'Not approved'}</span>
           </div>
+          {approvedAt && (
+            <p className="text-xs text-slate-500">
+              Approved {format(new Date(approvedAt), 'd MMM yyyy, HH:mm')}
+            </p>
+          )}
         </div>
       </div>
 

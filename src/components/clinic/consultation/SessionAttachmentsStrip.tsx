@@ -13,11 +13,13 @@ import {
 interface SessionAttachmentsStripProps {
   consultationId: string | null | undefined;
   canEdit: boolean;
+  onBeforeMutation?: () => Promise<boolean>;
 }
 
 export function SessionAttachmentsStrip({
   consultationId,
   canEdit,
+  onBeforeMutation,
 }: SessionAttachmentsStripProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -38,6 +40,7 @@ export function SessionAttachmentsStrip({
   const handleUpload = async () => {
     if (!selectedFile) return;
     try {
+      if (onBeforeMutation && !(await onBeforeMutation())) return;
       await upload.mutateAsync({
         file: selectedFile,
         remark: remark.trim() || undefined,
@@ -57,6 +60,7 @@ export function SessionAttachmentsStrip({
       return;
     }
     try {
+      if (onBeforeMutation && !(await onBeforeMutation())) return;
       await del.mutateAsync({
         id: attachment.id,
         file_path: attachment.file_path,

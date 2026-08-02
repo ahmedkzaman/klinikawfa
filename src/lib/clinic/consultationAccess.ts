@@ -54,6 +54,7 @@ export type ConsultationListAccessInput = {
   attendingDoctorId: string | null | undefined;
   queueStatus: ClinicStatus;
   selectedDateIsToday: boolean;
+  offlineEntryEligible?: boolean;
 };
 
 export function canListConsultationEntry(input: ConsultationListAccessInput) {
@@ -65,11 +66,49 @@ export function canListConsultationEntry(input: ConsultationListAccessInput) {
     return input.selectedDateIsToday && ownEntry;
   }
 
+  if (input.role === 'ops_staff') {
+    return input.offlineEntryEligible === true;
+  }
+
   if (input.queueStatus === 'completed') {
     return canBrowseConsultationDates(input.role);
   }
 
   return input.selectedDateIsToday && ownEntry;
+}
+
+const DISPENSARY_SOURCE_STATUSES = new Set<ClinicStatus>([
+  'registered',
+  'ready_for_doctor',
+  'with_doctor',
+  'on_hold',
+]);
+
+export function canProceedConsultationToDispensary(
+  consultationStatus: string | null | undefined,
+  queueStatus: ClinicStatus | null | undefined,
+) {
+  return consultationStatus !== 'completed'
+    && !!queueStatus
+    && DISPENSARY_SOURCE_STATUSES.has(queueStatus);
+}
+
+export function getConsultationDocumentAccess(input: {
+  isOfflineEditor: boolean;
+  canEditWorkspace: boolean;
+  liveCanEdit: boolean;
+  liveIsLocked: boolean;
+}) {
+  if (input.isOfflineEditor) {
+    return {
+      canIssue: input.canEditWorkspace,
+      canEditOrVoid: input.canEditWorkspace,
+    };
+  }
+  return {
+    canIssue: input.liveCanEdit,
+    canEditOrVoid: input.liveCanEdit && !input.liveIsLocked,
+  };
 }
 
 export type OfflineConsultationAccessInput = {

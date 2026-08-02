@@ -23,6 +23,37 @@ export type ReviewOfflineConsultationInput = {
 export type OfflineConsultationAuditEntry =
   Database['public']['Functions']['get_offline_consultation_audit']['Returns'][number];
 
+export type EligibleOfflineDoctor = {
+  id: string;
+  user_id: string;
+  name: string;
+  status: 'active';
+  on_duty: true;
+  avatar_url: string | null;
+};
+
+export type OfflineConsultationEntryState = {
+  consultation_id: string;
+  queue_entry_id: string;
+  doctor_id: string;
+  doctor_name: string;
+  approval_status: 'pending' | 'returned' | 'approved';
+  approval_revision: number;
+  entered_by_name: string;
+  entered_at: string;
+  approved_by_name: string | null;
+  approved_at: string | null;
+  return_reason: string | null;
+  consultation_status: string;
+  queue_status: string;
+};
+
+type RpcResult = { data: unknown; error: { message: string } | null };
+const offlineRpc = supabase.rpc as unknown as (
+  name: string,
+  args?: Record<string, unknown>,
+) => Promise<RpcResult>;
+
 type OfflineConsultation = Database['public']['Tables']['consultations']['Row'];
 
 function invalidateOfflineConsultationQueries(
@@ -90,6 +121,83 @@ export function useOfflineConsultationAudit(consultationId: string | null | unde
       });
       if (error) throw error;
       return data ?? [];
+    },
+  });
+}
+
+export function useOfflineConsultationEntryVisits(
+  start: string,
+  end: string,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['offline_consultation_entry_visits', start, end],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await offlineRpc('list_offline_consultation_entry_visits', {
+        p_start: start,
+        p_end: end,
+      });
+      if (error) throw new Error(error.message);
+      return new Set(((data ?? []) as { queue_entry_id: string }[]).map((row) => row.queue_entry_id));
+    },
+  });
+}
+
+export function useEligibleOfflineConsultationDoctors(enabled: boolean) {
+  return useQuery({
+    queryKey: ['eligible_offline_consultation_doctors'],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await offlineRpc('list_eligible_offline_consultation_doctors');
+      if (error) throw new Error(error.message);
+      return (data ?? []) as EligibleOfflineDoctor[];
+    },
+  });
+}
+
+export function useOfflineConsultationEntryState(
+  consultationId: string | null | undefined,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['offline_consultation_entry_state', consultationId],
+    enabled: enabled && !!consultationId,
+    refetchInterval: 5_000,
+    queryFn: async () => {
+      const { data, error } = await offlineRpc('get_offline_consultation_entry_state', {
+        p_consultation_id: consultationId!,
+      });
+      if (error) throw new Error(error.message);
+      return ((data ?? []) as OfflineConsultationEntryState[])[0] ?? null;
+    },
+  });
+}
+
+export async function assertOfflineConsultationEditable(consultationId: string) {
+  const { error } = await offlineRpc('assert_offline_consultation_editable', {
+    p_consultation_id: consultationId,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export function useProceedOfflineConsultationToDispensary() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ consultationId, expectedRevision }: {
+      consultationId: string;
+      expectedRevision: number;
+    }) => {
+      const { data, error } = await offlineRpc('proceed_offline_consultation_to_dispensary', {
+        p_consultation_id: consultationId,
+        p_expected_revision: expectedRevision,
+      });
+      if (error) throw new Error(error.message);
+      return data as string;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['consultation_queue'] });
+      queryClient.invalidateQueries({ queryKey: ['offline_consultation_entry_visits'] });
     },
   });
 }

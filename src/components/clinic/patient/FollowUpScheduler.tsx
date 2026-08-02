@@ -17,6 +17,8 @@ interface FollowUpSchedulerProps {
   patientId: string;
   defaultReason?: string;
   defaultDoctorId?: string | null;
+  sourceConsultationId?: string | null;
+  onBeforeBook?: () => Promise<boolean>;
 }
 
 /**
@@ -28,6 +30,8 @@ export function FollowUpScheduler({
   patientId,
   defaultReason = 'Follow-up',
   defaultDoctorId = null,
+  sourceConsultationId = null,
+  onBeforeBook,
 }: FollowUpSchedulerProps) {
   const { data: future = [], isLoading } = usePatientFutureAppointments(patientId);
   const createAppt = useCreateClinicAppointment();
@@ -55,12 +59,14 @@ export function FollowUpScheduler({
   const handleBook = async () => {
     if (!canSubmit) return;
     try {
+      if (onBeforeBook && !(await onBeforeBook())) return;
       await createAppt.mutateAsync({
         patient_id: patientId,
         doctor_id: defaultDoctorId ?? null,
         appointment_date: date,
         appointment_time: time,
         notes: reason.trim() || 'Follow-up',
+        source_consultation_id: sourceConsultationId,
       });
       toast.success('Follow-up appointment booked');
       setDate('');

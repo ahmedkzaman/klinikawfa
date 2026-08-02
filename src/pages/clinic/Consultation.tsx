@@ -47,6 +47,7 @@ import {
   canListConsultationEntry,
   getConsultationAccess,
 } from '@/lib/clinic/consultationAccess';
+import { useOfflineConsultationEntryVisits } from '@/hooks/clinic/useOfflineConsultationApproval';
 
 const TAB_KEYS = ['waiting', 'serving', 'on_hold', 'dispensary', 'completed', 'all'] as const;
 
@@ -69,6 +70,21 @@ export default function Consultation() {
   const { data: doctor, isLoading: doctorLoading, error: doctorError } = useCurrentDoctor();
   const { data: entries = [], isLoading: queueLoading, error: queueError } =
     useConsultationQueueEntries(selectedDate);
+  const offlineVisitWindow = useMemo(() => {
+    const start = new Date(`${selectedDate}T00:00:00`);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    return { start: start.toISOString(), end: end.toISOString() };
+  }, [selectedDate]);
+  const {
+    data: eligibleOfflineVisitIds = new Set<string>(),
+    isLoading: offlineVisitsLoading,
+    error: offlineVisitsError,
+  } = useOfflineConsultationEntryVisits(
+    offlineVisitWindow.start,
+    offlineVisitWindow.end,
+    role === 'ops_staff',
+  );
   const callPatient = useCallPatient();
   const resumeQueue = useUpdateQueueEntry();
   const [tab, setTab] = useState('waiting');
@@ -91,9 +107,10 @@ export default function Consultation() {
           attendingDoctorId: entry.assigned_doctor_id,
           queueStatus: entry.clinic_status,
           selectedDateIsToday,
+          offlineEntryEligible: eligibleOfflineVisitIds.has(entry.id),
         }),
       ),
-    [allConsultationEntries, doctor?.id, role, selectedDateIsToday],
+    [allConsultationEntries, doctor?.id, eligibleOfflineVisitIds, role, selectedDateIsToday],
   );
 
   const tabCounts = useMemo(() => {
@@ -134,7 +151,7 @@ export default function Consultation() {
     return list;
   }, [baseEntries, tab, search]);
 
-  if (doctorLoading || queueLoading) {
+  if (doctorLoading || queueLoading || (role === 'ops_staff' && offlineVisitsLoading)) {
     return (
       <div className={pageShell}>
         <div className={pageInner}>
@@ -145,7 +162,7 @@ export default function Consultation() {
     );
   }
 
-  if (doctorError || queueError) {
+  if (doctorError || queueError || offlineVisitsError) {
     return (
       <div className={pageShell}>
         <div className={pageInner}>
@@ -156,7 +173,9 @@ export default function Consultation() {
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
               Failed to load data:{' '}
-              {(doctorError as Error)?.message || (queueError as Error)?.message}
+              {(doctorError as Error)?.message ||
+                (queueError as Error)?.message ||
+                (offlineVisitsError as Error)?.message}
             </AlertDescription>
           </Alert>
         </div>

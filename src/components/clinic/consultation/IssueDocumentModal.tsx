@@ -44,6 +44,9 @@ interface Props {
   patient: PatientLite | null;
   consultationId: string | null;
   existingDoc?: ConsultationDocument | null;
+  canEdit?: boolean;
+  onBeforeSave?: () => Promise<boolean>;
+  doctorOverride?: { id: string; name: string } | null;
 }
 
 export function IssueDocumentModal({
@@ -53,6 +56,9 @@ export function IssueDocumentModal({
   patient,
   consultationId,
   existingDoc,
+  canEdit = true,
+  onBeforeSave,
+  doctorOverride,
 }: Props) {
   const { settings } = useClinicSettings();
   const { data: doctor } = useCurrentDoctor();
@@ -89,7 +95,7 @@ export function IssueDocumentModal({
       '{{current_date}}': new Date().toLocaleDateString('en-MY'),
       '{{date}}': new Date().toLocaleDateString('en-MY'),
       '{{clinic_name}}': settings?.clinic_name ?? 'Klinik Awfa',
-      '{{doctor_name}}': doctor?.name ?? '',
+      '{{doctor_name}}': doctorOverride?.name ?? doctor?.name ?? '',
       '{{diagnosis}}': '',
       '{{mc_days}}': '',
       '{{mc_start}}': '',
@@ -97,7 +103,7 @@ export function IssueDocumentModal({
       '{{time_in}}': formatTime12h(timeIn),
       '{{time_out}}': formatTime12h(timeOut),
     }),
-    [patient, settings, doctor, timeIn, timeOut],
+    [patient, settings, doctorOverride, doctor, timeIn, timeOut],
   );
 
   // Reset time fields and auto-populate on open
@@ -140,6 +146,8 @@ export function IssueDocumentModal({
   const displayName = existingDoc?.template_name ?? template?.name ?? 'Document';
 
   const handleSave = async () => {
+    if (!canEdit) return;
+    if (onBeforeSave && !(await onBeforeSave())) return;
     if (isEdit && existingDoc) {
       try {
         await updateDoc.mutateAsync({
@@ -187,9 +195,9 @@ export function IssueDocumentModal({
   }
 
   const isPending = isEdit ? updateDoc.isPending : addDoc.isPending;
-  const saveDisabled = isEdit
+  const saveDisabled = !canEdit || (isEdit
     ? isPending
-    : !consultationId || !patient?.id || isPending;
+    : !consultationId || !patient?.id || isPending);
 
   return (
     <Dialog open={isOpen} onOpenChange={(v) => !v && closeIssueAttempt()}>
@@ -235,6 +243,7 @@ export function IssueDocumentModal({
                     value={timeIn}
                     onChange={(e) => setTimeIn(e.target.value)}
                     className="h-8 text-sm"
+                    disabled={!canEdit}
                   />
                 </div>
                 <div className="space-y-1">
@@ -244,6 +253,7 @@ export function IssueDocumentModal({
                     value={timeOut}
                     onChange={(e) => setTimeOut(e.target.value)}
                     className="h-8 text-sm"
+                    disabled={!canEdit}
                   />
                 </div>
               </div>
@@ -251,6 +261,7 @@ export function IssueDocumentModal({
             <Textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
+              disabled={!canEdit}
               className="flex-1 p-4 border-0 focus-visible:ring-0 rounded-none font-mono text-sm leading-relaxed resize-none"
               placeholder="Document content…"
             />

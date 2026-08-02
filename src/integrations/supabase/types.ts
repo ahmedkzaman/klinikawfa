@@ -778,6 +778,7 @@ export type Database = {
           id: string
           notes: string | null
           patient_id: string
+          source_consultation_id: string | null
           source_appointment_id: string | null
           status: Database["public"]["Enums"]["clinic_appointment_status"]
           updated_at: string
@@ -790,6 +791,7 @@ export type Database = {
           id?: string
           notes?: string | null
           patient_id: string
+          source_consultation_id?: string | null
           source_appointment_id?: string | null
           status?: Database["public"]["Enums"]["clinic_appointment_status"]
           updated_at?: string
@@ -802,6 +804,7 @@ export type Database = {
           id?: string
           notes?: string | null
           patient_id?: string
+          source_consultation_id?: string | null
           source_appointment_id?: string | null
           status?: Database["public"]["Enums"]["clinic_appointment_status"]
           updated_at?: string
@@ -819,6 +822,13 @@ export type Database = {
             columns: ["patient_id"]
             isOneToOne: false
             referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clinic_appointments_source_consultation_id_fkey"
+            columns: ["source_consultation_id"]
+            isOneToOne: false
+            referencedRelation: "consultations"
             referencedColumns: ["id"]
           },
           {

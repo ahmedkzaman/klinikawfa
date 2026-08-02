@@ -113,16 +113,21 @@ import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { useVisitConsultationFee } from '@/hooks/clinic/useVisitConsultationFee';
 import {
+  canProceedConsultationToDispensary,
   getConsultationAccess,
+  getConsultationDocumentAccess,
   getOfflineConsultationAccess,
 } from '@/lib/clinic/consultationAccess';
 import { getRecordedDiagnosisLabels } from '@/lib/clinic/diagnosisDisplay';
-import { useDoctors } from '@/hooks/clinic/useDoctors';
 import {
-  useOfflineConsultationAudit,
+  assertOfflineConsultationEditable,
+  useEligibleOfflineConsultationDoctors,
+  useOfflineConsultationEntryState,
+  useProceedOfflineConsultationToDispensary,
   useSaveOfflineConsultation,
 } from '@/hooks/clinic/useOfflineConsultationApproval';
 import { OfflineConsultationProvenance } from '@/components/clinic/consultation/OfflineConsultationProvenance';
+import type { ClinicStatus } from '@/types/clinic';
 
 const PRICE_TIERS = ['SELF PAY', 'PANEL'];
 
@@ -309,7 +314,8 @@ export default function ConsultationDetail() {
     routeState?.offlineConsultationEntry === true &&
     routeState.queueEntryId === queueEntryId;
   const { data: doctor } = useCurrentDoctor();
-  const { data: doctors = [] } = useDoctors();
+  const { data: eligibleOfflineDoctors = [] } =
+    useEligibleOfflineConsultationDoctors(role === 'ops_staff');
   const { settings: clinicSettings } = useClinicSettings();
   const { data: entries = [] } = useConsultationQueueEntries();
   const {
@@ -342,6 +348,15 @@ export default function ConsultationDetail() {
   } = useVisitConsultationFee(panelId, cashConsultationFee);
 
   const { data: consultation, isLoading: consultLoading } = useConsultation(queueEntryId);
+  const consultationId = (consultation as { id?: string } | null)?.id;
+  const isOfflineRecord = consultation?.entry_source === 'offline_transcription';
+  const {
+    data: offlineEntryState,
+    refetch: refetchOfflineEntryState,
+  } = useOfflineConsultationEntryState(
+    consultationId,
+    role === 'ops_staff' && isOfflineRecord,
+  );
   const createConsultation = useCreateConsultation();
   const updateConsultation = useUpdateConsultation();
   const saveOfflineConsultation = useSaveOfflineConsultation();
@@ -357,9 +372,8 @@ export default function ConsultationDetail() {
     currentDoctorId: doctor?.id,
     attendingDoctorId: consultation?.doctor_id ?? entry?.assigned_doctor_id,
     entrySource: consultation?.entry_source,
-    approvalStatus: consultation?.approval_status,
+    approvalStatus: offlineEntryState?.approval_status ?? consultation?.approval_status,
   });
-  const isOfflineRecord = consultation?.entry_source === 'offline_transcription';
   const canUseOfflineEditor =
     requestedOfflineEntry &&
     role === 'ops_staff' &&
@@ -370,8 +384,7 @@ export default function ConsultationDetail() {
   const isCrossDoctorReadOnly = !canUseOfflineEditor && access.isCrossDoctorReadOnly;
 
   const isLocked =
-    consultation?.status === 'completed' ||
-    entry?.clinic_status === 'completed';
+    consultation?.status === 'completed' || entry?.clinic_status === 'completed';
 
   // Tracks which treatment-item cards have unflushed auto-saves in flight.
   const pendingSavesRef = useRef<Set<string>>(new Set());
@@ -417,9 +430,12 @@ export default function ConsultationDetail() {
   const canContinueOfflineOperationalFlow =
     canUseOfflineEditor &&
     hasSavedOfflineConsultation &&
-    (offlineAccess.canContinueOperationalFlow || lastSavedOfflineStatus === 'pending');
+    (offlineAccess.canContinueOperationalFlow || lastSavedOfflineStatus === 'pending') &&
+    canProceedConsultationToDispensary(
+      offlineEntryState?.consultation_status ?? consultation?.status,
+      (offlineEntryState?.queue_status ?? entry?.clinic_status) as ClinicStatus | undefined,
+    );
 
-  const consultationId = (consultation as { id?: string } | null)?.id;
   const { isLockedByOther, canEdit, forceUnlock } = useConsultationLock(
     (access.canEdit ? consultation : null) as
       | { id?: string; locked_by?: string | null; status?: string }
@@ -427,7 +443,12 @@ export default function ConsultationDetail() {
       | undefined,
   );
   const canEditWorkspace = canEditClinical && (canUseOfflineEditor || canEdit);
-  const canMutateAttachments = canEditWorkspace;
+  const documentAccess = getConsultationDocumentAccess({
+    isOfflineEditor: canUseOfflineEditor,
+    canEditWorkspace,
+    liveCanEdit: access.canEdit,
+    liveIsLocked: isLocked,
+  });
   const { data: items = [] } = useConsultationItems(consultationId);
   const { data: attachedDocs = [] } = useConsultationDocuments(consultationId);
   const [issuingTemplate, setIssuingTemplate] = useState<DocumentTemplate | null>(null);
@@ -440,34 +461,47 @@ export default function ConsultationDetail() {
   const addItem = useAddConsultationItem();
   const removeItem = useRemoveConsultationItem();
   const updateItem = useUpdateConsultationItem();
-  const { data: offlineAudit = [] } = useOfflineConsultationAudit(
-    isOfflineRecord ? consultationId : null,
-  );
-  const activeDoctors = useMemo(
-    () =>
-      doctors.filter(
-        (doctor) =>
-          doctor.status === 'active' &&
-          doctor.on_duty &&
-          Boolean(doctor.user_id),
-      ),
-    [doctors],
-  );
-  const enteringStaffName = useMemo(() => {
-    const submitted = offlineAudit.find((audit) => audit.action === 'submitted');
-    return (
-      submitted?.actor_name ||
+  const enteringStaffName =
+    offlineEntryState?.entered_by_name ||
       (user?.user_metadata?.full_name as string | undefined) ||
       user?.email ||
-      'Operations staff'
-    );
-  }, [offlineAudit, user]);
-  const approvedByName = useMemo(() => {
-    for (let index = offlineAudit.length - 1; index >= 0; index -= 1) {
-      if (offlineAudit[index].action === 'approved') return offlineAudit[index].actor_name;
+      'Operations staff';
+  const approvedByName = offlineEntryState?.approved_by_name ?? null;
+  const proceedOfflineConsultation = useProceedOfflineConsultationToDispensary();
+
+  const guardOfflineMutation = async () => {
+    if (!canUseOfflineEditor) return true;
+    if (!consultationId) {
+      toast.error('Save the consultation before adding related clinical data.');
+      return false;
     }
-    return null;
-  }, [offlineAudit]);
+    try {
+      await assertOfflineConsultationEditable(consultationId);
+      const refreshed = await refetchOfflineEntryState();
+      const status = refreshed.data?.approval_status;
+      if (status !== 'pending' && status !== 'returned') {
+        throw new Error('offline_consultation_not_editable');
+      }
+      return true;
+    } catch {
+      setPickerOpen(false);
+      setIssuingTemplate(null);
+      setEditingDoc(null);
+      setVoidingDoc(null);
+      toast.error('This offline consultation is no longer editable.');
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    if (!canUseOfflineEditor || canEditClinical) return;
+    setPickerOpen(false);
+    setIssuingTemplate(null);
+    setEditingDoc(null);
+    setVoidingDoc(null);
+    setBulkDialogOpen(false);
+    setShowVitalForm(false);
+  }, [canEditClinical, canUseOfflineEditor]);
 
   // Use the cost-free safe view so locum doctors (blocked from the base
   // inventory_items table) can still populate the picker. Cost data is not
@@ -626,7 +660,7 @@ export default function ConsultationDetail() {
     if (!canUseOfflineEditor) return;
 
     const existingDoctorId = consultation?.doctor_id ?? '';
-    const assignedActiveDoctorId = activeDoctors.some(
+    const assignedActiveDoctorId = eligibleOfflineDoctors.some(
       (activeDoctor) => activeDoctor.id === entry?.assigned_doctor_id,
     )
       ? entry?.assigned_doctor_id ?? ''
@@ -641,7 +675,7 @@ export default function ConsultationDetail() {
       );
     }
   }, [
-    activeDoctors,
+    eligibleOfflineDoctors,
     canUseOfflineEditor,
     consultation?.doctor_id,
     consultation?.original_consulted_at,
@@ -686,7 +720,7 @@ export default function ConsultationDetail() {
         toast.error('The selected clinic visit no longer exists.');
         return;
       }
-      if (!activeDoctors.some((activeDoctor) => activeDoctor.id === offlineDoctorId)) {
+      if (!eligibleOfflineDoctors.some((activeDoctor) => activeDoctor.id === offlineDoctorId)) {
         toast.error('Select an active consulting doctor.');
         return;
       }
@@ -694,6 +728,7 @@ export default function ConsultationDetail() {
         toast.error('Enter the original consultation date and time.');
         return;
       }
+      if (consultationId && !(await guardOfflineMutation())) return;
 
       try {
         const saved = await saveOfflineConsultation.mutateAsync({
@@ -705,7 +740,10 @@ export default function ConsultationDetail() {
           diagnosisText,
           dispenseNote,
           expectedRevision:
-            lastSavedOfflineRevision ?? consultation?.approval_revision ?? 0,
+            lastSavedOfflineRevision ??
+            offlineEntryState?.approval_revision ??
+            consultation?.approval_revision ??
+            0,
         });
         setHasSavedOfflineConsultation(true);
         setLastSavedOfflineStatus(saved.approval_status);
@@ -817,6 +855,7 @@ export default function ConsultationDetail() {
 
   const handleSaveVitals = async () => {
     if (!canEditClinical) return;
+    if (!(await guardOfflineMutation())) return;
     if (!entry || !patient?.id) {
       toast.error('Missing patient or queue data');
       return;
@@ -859,6 +898,7 @@ export default function ConsultationDetail() {
     }[],
   ) => {
     if (!canEditClinical) return;
+    if (!(await guardOfflineMutation())) return;
     if (!consultationId) {
       toast.error('Doctor profile missing or consultation not created — contact admin');
       return;
@@ -900,10 +940,19 @@ export default function ConsultationDetail() {
 
   const handleSendToDispensary = async () => {
     if (canUseOfflineEditor) {
-      if (!canContinueOfflineOperationalFlow || !entry) return;
-      await updateQueue.mutateAsync({
-        id: entry.id,
-        clinic_status: 'sent_to_dispensary',
+      if (!canContinueOfflineOperationalFlow || !entry || !consultationId) return;
+      const refreshed = await refetchOfflineEntryState();
+      const fresh = refreshed.data;
+      if (!fresh || !canProceedConsultationToDispensary(
+        fresh.consultation_status,
+        fresh.queue_status as ClinicStatus,
+      )) {
+        toast.error('This visit cannot proceed to dispensary from its current state.');
+        return;
+      }
+      await proceedOfflineConsultation.mutateAsync({
+        consultationId,
+        expectedRevision: fresh.approval_revision,
       });
       toast.success('Sent to dispensary');
       navigate('/clinic/consultation', { replace: true });
@@ -911,7 +960,7 @@ export default function ConsultationDetail() {
     }
 
     if (!access.canEdit) return;
-    if (isLocked) {
+    if (!canProceedConsultationToDispensary(consultation?.status, entry?.clinic_status)) {
       toast.error('This consultation is completed and cannot be modified');
       return;
     }
@@ -1186,17 +1235,23 @@ export default function ConsultationDetail() {
 
         {canUseOfflineEditor && (
           <OfflineConsultationProvenance
-            doctors={activeDoctors}
+            doctors={eligibleOfflineDoctors}
             doctorId={offlineDoctorId}
             currentDoctorName={consultation?.doctors?.name ?? entry.doctors?.name ?? null}
             originalConsultedAt={originalConsultedAt}
             enteringStaffName={enteringStaffName}
+            enteredAt={offlineEntryState?.entered_at}
             approvalStatus={
-              (consultation?.approval_status as 'pending' | 'returned' | 'approved' | null) ??
+              ((offlineEntryState?.approval_status ?? consultation?.approval_status) as
+                | 'pending'
+                | 'returned'
+                | 'approved'
+                | null) ??
               null
             }
-            returnReason={consultation?.return_reason ?? null}
+            returnReason={offlineEntryState?.return_reason ?? consultation?.return_reason ?? null}
             approvedByName={approvedByName}
+            approvedAt={offlineEntryState?.approved_at}
             disabled={!canEditClinical || saveOfflineConsultation.isPending}
             onDoctorChange={handleOfflineDoctorChange}
             onOriginalConsultedAtChange={(value) => {
@@ -1325,6 +1380,7 @@ export default function ConsultationDetail() {
                     <SessionAttachmentsStrip
                       consultationId={consultationId}
                       canEdit={canEditWorkspace}
+                      onBeforeMutation={guardOfflineMutation}
                     />
                   </div>
                 </div>
@@ -1397,6 +1453,7 @@ export default function ConsultationDetail() {
                         onRemove={async () => {
                           if (!canEditClinical) return;
                           if (!consultationId) return;
+                          if (!(await guardOfflineMutation())) return;
                           try {
                             await removeItem.mutateAsync({ id: item.id, consultationId });
                             toast.success('Item removed');
@@ -1408,6 +1465,7 @@ export default function ConsultationDetail() {
                         onSave={async (updates) => {
                           if (!canEditClinical) return;
                           if (!consultationId) return;
+                          if (!(await guardOfflineMutation())) return;
                           try {
                             await updateItem.mutateAsync({
                               id: item.id,
@@ -1449,7 +1507,7 @@ export default function ConsultationDetail() {
                     size="sm"
                     variant="outline"
                     onClick={() => setPickerOpen(true)}
-                    disabled={!canMutateAttachments || !consultationId || !patient?.id}
+                    disabled={!documentAccess.canIssue || !consultationId || !patient?.id}
                     className="gap-1.5"
                   >
                     <FilePlus2 className="h-4 w-4" />
@@ -1481,7 +1539,7 @@ export default function ConsultationDetail() {
                           >
                             View / Print
                           </Button>
-                          {canMutateAttachments && (
+                          {documentAccess.canEditOrVoid && (
                             <>
                               <Button
                                 size="icon"
@@ -1840,7 +1898,11 @@ export default function ConsultationDetail() {
             {entry?.patient_id && canEditClinical && (
               <FollowUpScheduler
                 patientId={entry.patient_id}
-                defaultDoctorId={consultation?.doctor_id ?? null}
+                defaultDoctorId={
+                  canUseOfflineEditor ? offlineDoctorId || null : consultation?.doctor_id ?? null
+                }
+                sourceConsultationId={canUseOfflineEditor ? consultationId ?? null : null}
+                onBeforeBook={guardOfflineMutation}
               />
             )}
           </aside>
@@ -1852,8 +1914,10 @@ export default function ConsultationDetail() {
           onInsert={handleBulkInsert}
           isPanel={(entry?.payment_method ?? '').startsWith('panel')}
           onIssueDocument={(tpl) => {
-            if (!canMutateAttachments) return;
-            setIssuingTemplate(tpl);
+            if (!documentAccess.canIssue) return;
+            void guardOfflineMutation().then((allowed) => {
+              if (allowed) setIssuingTemplate(tpl);
+            });
           }}
         />
 
@@ -1867,6 +1931,13 @@ export default function ConsultationDetail() {
           existingDoc={editingDoc}
           patient={patient?.id ? (patient as { id: string; name?: string | null; national_id?: string | null; phone?: string | null; date_of_birth?: string | null }) : null}
           consultationId={consultationId ?? null}
+          canEdit={documentAccess.canIssue || (!!editingDoc && documentAccess.canEditOrVoid)}
+          onBeforeSave={guardOfflineMutation}
+          doctorOverride={
+            canUseOfflineEditor
+              ? eligibleOfflineDoctors.find((candidate) => candidate.id === offlineDoctorId) ?? null
+              : null
+          }
         />
 
         <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
@@ -1885,9 +1956,12 @@ export default function ConsultationDetail() {
                     key={tpl.id}
                     type="button"
                     onClick={() => {
-                      if (!canMutateAttachments) return;
-                      setPickerOpen(false);
-                      setIssuingTemplate(tpl);
+                      if (!documentAccess.canIssue) return;
+                      void guardOfflineMutation().then((allowed) => {
+                        if (!allowed) return;
+                        setPickerOpen(false);
+                        setIssuingTemplate(tpl);
+                      });
                     }}
                     className="w-full text-left rounded-lg border border-slate-100 hover:border-slate-300 hover:bg-slate-50 px-3 py-2.5 flex items-center gap-3 transition-colors"
                   >
@@ -1921,7 +1995,8 @@ export default function ConsultationDetail() {
               <AlertDialogAction
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 onClick={async () => {
-                  if (!canMutateAttachments || !voidingDoc) return;
+                  if (!documentAccess.canEditOrVoid || !voidingDoc) return;
+                  if (!(await guardOfflineMutation())) return;
                   await deleteDoc.mutateAsync({
                     id: voidingDoc.id,
                     consultation_id: voidingDoc.consultation_id,

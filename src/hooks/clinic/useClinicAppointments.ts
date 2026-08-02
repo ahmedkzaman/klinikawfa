@@ -82,6 +82,7 @@ export interface CreateClinicAppointmentInput {
   appointment_date: string; // YYYY-MM-DD
   appointment_time: string; // HH:MM
   notes?: string | null;
+  source_consultation_id?: string | null;
 }
 
 /**
@@ -100,6 +101,7 @@ export function useCreateClinicAppointment() {
           appointment_date: input.appointment_date,
           appointment_time: input.appointment_time,
           notes: input.notes ?? null,
+          source_consultation_id: input.source_consultation_id ?? null,
         })
         .select()
         .single();

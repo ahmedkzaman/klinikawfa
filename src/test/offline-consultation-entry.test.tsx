@@ -1,14 +1,24 @@
-import { readFileSync } from 'node:fs';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { OfflineConsultationProvenance } from '@/components/clinic/consultation/OfflineConsultationProvenance';
+import { FollowUpScheduler } from '@/components/clinic/patient/FollowUpScheduler';
+import {
+  canListConsultationEntry,
+  canProceedConsultationToDispensary,
+  getConsultationDocumentAccess,
+  getConsultationAccess,
+  type ConsultationListAccessInput,
+} from '@/lib/clinic/consultationAccess';
 
-const consultationSource = readFileSync('src/pages/clinic/Consultation.tsx', 'utf8');
-const detailSource = readFileSync('src/pages/clinic/ConsultationDetail.tsx', 'utf8');
-const provenanceSource = readFileSync(
-  'src/components/clinic/consultation/OfflineConsultationProvenance.tsx',
-  'utf8',
-);
+const appointmentMutation = vi.hoisted(() => vi.fn());
+
+vi.mock('@/hooks/clinic/useClinicAppointments', () => ({
+  usePatientFutureAppointments: () => ({ data: [], isLoading: false }),
+  useCreateClinicAppointment: () => ({
+    mutateAsync: appointmentMutation,
+    isPending: false,
+  }),
+}));
 
 const doctors = [
   {
@@ -24,84 +34,94 @@ const doctors = [
 ];
 
 describe('operations offline consultation entry', () => {
-  it('shows a role-only list action with explicit visit and date route state', () => {
-    expect(consultationSource).toContain("role === 'ops_staff'");
-    expect(consultationSource).toContain('Enter offline consultation');
-    expect(consultationSource).toContain('offlineConsultationEntry: true');
-    expect(consultationSource).toContain('queueEntryId: entry.id');
-    expect(consultationSource).toContain('selectedDate');
+  it('lists a server-authorized active visit for operations staff', () => {
+    const input = {
+      role: 'ops_staff',
+      currentDoctorId: null,
+      attendingDoctorId: 'doctor-active',
+      queueStatus: 'with_doctor',
+      selectedDateIsToday: true,
+      offlineEntryEligible: true,
+    } satisfies ConsultationListAccessInput & { offlineEntryEligible: boolean };
+
+    expect(canListConsultationEntry(input)).toBe(true);
   });
 
-  it('rejects offline-entry route state for every non-operations-staff role', () => {
-    expect(detailSource).toContain("requestedOfflineEntry && role !== 'ops_staff'");
-    expect(detailSource).toContain('Offline consultation entry is only available to operations staff.');
+  it('does not grant operations staff general cross-doctor clinical visibility', () => {
+    expect(
+      getConsultationAccess({
+        role: 'ops_staff',
+        currentDoctorId: null,
+        attendingDoctorId: 'doctor-active',
+        consultationStatus: 'completed',
+        queueStatus: 'completed',
+      }),
+    ).toMatchObject({ canView: false, canEdit: false });
   });
 
-  it('renders distinct provenance fields and returned-review context', () => {
+  it('never proceeds a completed or downstream visit to dispensary', () => {
+    expect(canProceedConsultationToDispensary('in_progress', 'with_doctor')).toBe(true);
+    expect(canProceedConsultationToDispensary('completed', 'with_doctor')).toBe(false);
+    expect(canProceedConsultationToDispensary('in_progress', 'completed')).toBe(false);
+    expect(canProceedConsultationToDispensary('in_progress', 'sent_to_dispensary')).toBe(false);
+  });
+
+  it('keeps live issue-new and edit/void gates independent', () => {
+    expect(
+      getConsultationDocumentAccess({
+        isOfflineEditor: false,
+        canEditWorkspace: false,
+        liveCanEdit: true,
+        liveIsLocked: true,
+      }),
+    ).toEqual({ canIssue: true, canEditOrVoid: false });
+  });
+
+  it('renders authoritative staff identities and approval timestamps', () => {
     render(
       <OfflineConsultationProvenance
         doctors={doctors}
         doctorId="doctor-active"
         originalConsultedAt="2026-08-01T09:30"
-        enteringStaffName="Operations Staff"
-        approvalStatus="returned"
-        returnReason="Clarify the diagnosis."
-        approvedByName={null}
-        disabled={false}
+        enteringStaffName="Original Operations Staff"
+        enteredAt="2026-08-01T10:00:00.000Z"
+        approvalStatus="approved"
+        returnReason={null}
+        approvedByName="Dr Reviewer"
+        approvedAt="2026-08-01T11:00:00.000Z"
+        disabled
         onDoctorChange={vi.fn()}
         onOriginalConsultedAtChange={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Original Operations Staff')).toBeInTheDocument();
+    expect(screen.getByText(/Entered 1 Aug 2026/)).toBeInTheDocument();
+    expect(screen.getByText('Dr Reviewer')).toBeInTheDocument();
+    expect(screen.getByText(/Approved 1 Aug 2026/)).toBeInTheDocument();
+  });
+
+  it('guards follow-up booking and propagates the selected consulting doctor', async () => {
+    const onBeforeBook = vi.fn().mockResolvedValue(true);
+    appointmentMutation.mockResolvedValueOnce({ id: 'appointment-1' });
+    render(
+      <FollowUpScheduler
+        patientId="patient-1"
+        defaultDoctorId="doctor-selected"
+        sourceConsultationId="consultation-1"
+        onBeforeBook={onBeforeBook}
       />,
     );
 
-    expect(screen.getByText('Offline consultation provenance')).toBeInTheDocument();
-    expect(screen.getByText('Consulting doctor')).toBeInTheDocument();
-    expect(screen.getByText('Original consultation date and time')).toBeInTheDocument();
-    expect(screen.getByText('Entering staff')).toBeInTheDocument();
-    expect(screen.getByText('Operations Staff')).toBeInTheDocument();
-    expect(screen.getByText('Returned')).toBeInTheDocument();
-    expect(screen.getByText('Clarify the diagnosis.')).toBeInTheDocument();
-    expect(screen.getByText('Approved by')).toBeInTheDocument();
-  });
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-08-10' } });
+    fireEvent.change(screen.getByLabelText('Time'), { target: { value: '09:30' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Book Appointment' }));
 
-  it('uses eligible active doctors and requires doctor and original time before saving', () => {
-    expect(detailSource).toContain('useDoctors()');
-    expect(detailSource).toContain("doctor.status === 'active'");
-    expect(detailSource).toContain('doctor.on_duty');
-    expect(detailSource).toContain('doctor.user_id');
-    expect(detailSource).toContain('Select an active consulting doctor.');
-    expect(detailSource).toContain('Enter the original consultation date and time.');
-  });
-
-  it('uses the guarded save hook and approval-specific save text', () => {
-    expect(detailSource).toContain('useSaveOfflineConsultation');
-    expect(detailSource).toContain('saveOfflineConsultation.mutateAsync');
-    expect(detailSource).toContain('Save for doctor approval');
-    expect(detailSource).toContain('Resubmit for approval');
-  });
-
-  it('applies offline clinical editability to notes, diagnoses, treatments, and attachments', () => {
-    expect(detailSource).toContain('getOfflineConsultationAccess');
-    expect(detailSource).toContain('canEditClinical');
-    expect(detailSource).toContain('readOnly={!canEditClinical}');
-    expect(detailSource).toContain('disabled={!canEditClinical}');
-    expect(detailSource).toContain('canEdit={canEditWorkspace}');
-    expect(detailSource).toContain('canEditPrice={canEditClinical && !isLocum}');
-    expect(detailSource).toContain('if (!canEditClinical) return;');
-    expect(detailSource).toContain('canMutateAttachments');
-    expect(provenanceSource).not.toContain('<Card');
-  });
-
-  it('prompts before changing doctor on an existing pending record', () => {
-    expect(detailSource).toContain('handleOfflineDoctorChange');
-    expect(detailSource).toContain('window.confirm');
-    expect(detailSource).toContain('Change the consulting doctor for this pending record?');
-  });
-
-  it('locks approved staff edits but preserves post-save operational continuation', () => {
-    expect(detailSource).toContain('offlineAccess.canEditTranscription');
-    expect(detailSource).toContain('offlineAccess.canContinueOperationalFlow');
-    expect(detailSource).toContain('Proceed to dispensary');
-    expect(detailSource).toContain('hasSavedOfflineConsultation');
-    expect(detailSource).not.toContain("approval_status: 'completed'");
+    await waitFor(() => expect(onBeforeBook).toHaveBeenCalledOnce());
+    expect(appointmentMutation).toHaveBeenCalledWith(expect.objectContaining({
+      patient_id: 'patient-1',
+      doctor_id: 'doctor-selected',
+      source_consultation_id: 'consultation-1',
+    }));
   });
 });
