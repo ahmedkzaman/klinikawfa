@@ -65,7 +65,7 @@
 - Create: `src/test/financial-control-report-migration.test.ts`
 
 **Interfaces:**
-- Consumes: `consultations`, `consultation_items`, `queue_entries`, `payments`, `panel_claims`, `completed_bill_corrections`, `patients`, `doctors`, `insurance_providers`, and `public.can_view_insights(uuid)`.
+- Consumes: `consultations`, `consultation_items`, `queue_entries`, `payments`, `panel_claims`, `completed_bill_correction_audit` through the existing correction-state boundary, `patients`, `doctors`, `insurance_providers`, and `public.can_view_insights(uuid)`.
 - Produces: private SQL function `private.financial_control_visit_facts(date,date,date)` used only by public report RPCs.
 
 - [ ] **Step 1: Write the failing migration contract test**
