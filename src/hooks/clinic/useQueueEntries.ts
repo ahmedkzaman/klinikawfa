@@ -296,6 +296,21 @@ type CompletedVisitConsultation = {
   consultation_attachments?: { count: number }[] | null;
 };
 
+type CompletedTodayDoctor = NonNullable<QueueEntryWithJoins['doctors']>;
+
+type CompletedTodayConsultation = {
+  doctors: CompletedTodayDoctor | CompletedTodayDoctor[] | null;
+};
+
+function completedTodayConsultingDoctor(
+  consultations: CompletedTodayConsultation | CompletedTodayConsultation[] | null | undefined,
+): CompletedTodayDoctor | null {
+  const consultation = Array.isArray(consultations) ? consultations[0] : consultations;
+  const doctor = consultation?.doctors;
+
+  return Array.isArray(doctor) ? doctor[0] ?? null : doctor ?? null;
+}
+
 export type CompletedVisitDetail = QueueEntryWithJoins & {
   consultations: CompletedVisitConsultation | CompletedVisitConsultation[] | null;
 };
@@ -490,7 +505,9 @@ export function useCompletedTodayEntries(selectedDate = todayInputValue(), enabl
           `
           *,
           patients ( name, phone ),
-          doctors:assigned_doctor_id ( name )
+          consultations:consultations!consultations_queue_entry_id_fkey (
+            doctors:doctor_id ( id, name, avatar_url )
+          )
         `,
         )
         .eq("clinic_status", "completed")
@@ -500,7 +517,17 @@ export function useCompletedTodayEntries(selectedDate = todayInputValue(), enabl
         .order("updated_at", { ascending: false });
 
       if (error) throw error;
-      return attachInsuranceProviderDirectory(data ?? []);
+      const entries = await attachInsuranceProviderDirectory(data ?? []);
+
+      return entries.map((entry) => {
+        const consultingDoctor = completedTodayConsultingDoctor(
+          (entry as QueueEntryWithJoins & {
+            consultations?: CompletedTodayConsultation | CompletedTodayConsultation[] | null;
+          }).consultations,
+        );
+
+        return consultingDoctor ? { ...entry, doctors: consultingDoctor } : entry;
+      });
     },
     staleTime: 30_000,
   });

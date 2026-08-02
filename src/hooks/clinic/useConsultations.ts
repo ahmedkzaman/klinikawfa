@@ -107,7 +107,7 @@ export function usePatientConsultationHistory(patientId: string | undefined) {
       const { data, error } = await supabase
         .from('consultations')
         .select(
-          '*, diagnoses(id, name), doctors(id, name, avatar_url), consultation_items(*)',
+          '*, diagnoses(id, name), doctors:doctor_id(id, name, avatar_url), consultation_items(*)',
         )
         .eq('patient_id', patientId!)
         .eq('status', 'completed')
