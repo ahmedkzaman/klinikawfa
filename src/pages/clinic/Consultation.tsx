@@ -350,7 +350,23 @@ export default function Consultation() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        {!access.canView ? (
+                        {role === 'ops_staff' ? (
+                          <Button
+                            size="sm"
+                            className={primaryBtn}
+                            onClick={() =>
+                              navigate(`/clinic/consultation/${entry.id}`, {
+                                state: {
+                                  offlineConsultationEntry: true,
+                                  queueEntryId: entry.id,
+                                  selectedDate,
+                                },
+                              })
+                            }
+                          >
+                            Enter offline consultation
+                          </Button>
+                        ) : !access.canView ? (
                           <span className="text-sm text-slate-400">—</span>
                         ) : !canUseWorkflowActions ||
                           entry.clinic_status === 'completed' ? (

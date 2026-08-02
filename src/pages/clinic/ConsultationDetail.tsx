@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Save,
@@ -18,6 +18,7 @@ import {
   FileText,
   FilePlus2,
   Sparkles,
+  AlertCircle,
 } from 'lucide-react';
 import {
   Dialog,
@@ -111,8 +112,17 @@ import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { useVisitConsultationFee } from '@/hooks/clinic/useVisitConsultationFee';
-import { getConsultationAccess } from '@/lib/clinic/consultationAccess';
+import {
+  getConsultationAccess,
+  getOfflineConsultationAccess,
+} from '@/lib/clinic/consultationAccess';
 import { getRecordedDiagnosisLabels } from '@/lib/clinic/diagnosisDisplay';
+import { useDoctors } from '@/hooks/clinic/useDoctors';
+import {
+  useOfflineConsultationAudit,
+  useSaveOfflineConsultation,
+} from '@/hooks/clinic/useOfflineConsultationApproval';
+import { OfflineConsultationProvenance } from '@/components/clinic/consultation/OfflineConsultationProvenance';
 
 const PRICE_TIERS = ['SELF PAY', 'PANEL'];
 
@@ -286,8 +296,20 @@ function PastVisitCard({
 export default function ConsultationDetail() {
   const { queueEntryId } = useParams<{ queueEntryId: string }>();
   const navigate = useNavigate();
-  const { role, isLocum, isDoctorAdmin } = useAuth();
+  const location = useLocation();
+  const { role, user, isLocum, isDoctorAdmin } = useAuth();
+  const routeState = location.state as
+    | {
+        offlineConsultationEntry?: boolean;
+        queueEntryId?: string;
+        selectedDate?: string;
+      }
+    | null;
+  const requestedOfflineEntry =
+    routeState?.offlineConsultationEntry === true &&
+    routeState.queueEntryId === queueEntryId;
   const { data: doctor } = useCurrentDoctor();
+  const { data: doctors = [] } = useDoctors();
   const { settings: clinicSettings } = useClinicSettings();
   const { data: entries = [] } = useConsultationQueueEntries();
   const {
@@ -322,6 +344,7 @@ export default function ConsultationDetail() {
   const { data: consultation, isLoading: consultLoading } = useConsultation(queueEntryId);
   const createConsultation = useCreateConsultation();
   const updateConsultation = useUpdateConsultation();
+  const saveOfflineConsultation = useSaveOfflineConsultation();
   const access = getConsultationAccess({
     role,
     currentDoctorId: doctor?.id,
@@ -329,7 +352,22 @@ export default function ConsultationDetail() {
     consultationStatus: consultation?.status,
     queueStatus: entry?.clinic_status,
   });
-  const { isCrossDoctorReadOnly } = access;
+  const offlineAccess = getOfflineConsultationAccess({
+    role,
+    currentDoctorId: doctor?.id,
+    attendingDoctorId: consultation?.doctor_id ?? entry?.assigned_doctor_id,
+    entrySource: consultation?.entry_source,
+    approvalStatus: consultation?.approval_status,
+  });
+  const isOfflineRecord = consultation?.entry_source === 'offline_transcription';
+  const canUseOfflineEditor =
+    requestedOfflineEntry &&
+    role === 'ops_staff' &&
+    (offlineAccess.canEnter || isOfflineRecord);
+  const canEditClinical = canUseOfflineEditor
+    ? offlineAccess.canEnter || offlineAccess.canEditTranscription
+    : access.canEdit;
+  const isCrossDoctorReadOnly = !canUseOfflineEditor && access.isCrossDoctorReadOnly;
 
   const isLocked =
     consultation?.status === 'completed' ||
@@ -371,6 +409,15 @@ export default function ConsultationDetail() {
   const [dispenseNote, setDispenseNote] = useState('');
   const [diagnosisText, setDiagnosisText] = useState('');
   const [diagnosisId, setDiagnosisId] = useState<string | null>(null);
+  const [offlineDoctorId, setOfflineDoctorId] = useState('');
+  const [originalConsultedAt, setOriginalConsultedAt] = useState('');
+  const [hasSavedOfflineConsultation, setHasSavedOfflineConsultation] = useState(false);
+  const [lastSavedOfflineStatus, setLastSavedOfflineStatus] = useState<string | null>(null);
+  const [lastSavedOfflineRevision, setLastSavedOfflineRevision] = useState<number | null>(null);
+  const canContinueOfflineOperationalFlow =
+    canUseOfflineEditor &&
+    hasSavedOfflineConsultation &&
+    (offlineAccess.canContinueOperationalFlow || lastSavedOfflineStatus === 'pending');
 
   const consultationId = (consultation as { id?: string } | null)?.id;
   const { isLockedByOther, canEdit, forceUnlock } = useConsultationLock(
@@ -379,7 +426,8 @@ export default function ConsultationDetail() {
       | null
       | undefined,
   );
-  const canEditWorkspace = access.canEdit && canEdit;
+  const canEditWorkspace = canEditClinical && (canUseOfflineEditor || canEdit);
+  const canMutateAttachments = canEditWorkspace;
   const { data: items = [] } = useConsultationItems(consultationId);
   const { data: attachedDocs = [] } = useConsultationDocuments(consultationId);
   const [issuingTemplate, setIssuingTemplate] = useState<DocumentTemplate | null>(null);
@@ -392,6 +440,34 @@ export default function ConsultationDetail() {
   const addItem = useAddConsultationItem();
   const removeItem = useRemoveConsultationItem();
   const updateItem = useUpdateConsultationItem();
+  const { data: offlineAudit = [] } = useOfflineConsultationAudit(
+    isOfflineRecord ? consultationId : null,
+  );
+  const activeDoctors = useMemo(
+    () =>
+      doctors.filter(
+        (doctor) =>
+          doctor.status === 'active' &&
+          doctor.on_duty &&
+          Boolean(doctor.user_id),
+      ),
+    [doctors],
+  );
+  const enteringStaffName = useMemo(() => {
+    const submitted = offlineAudit.find((audit) => audit.action === 'submitted');
+    return (
+      submitted?.actor_name ||
+      (user?.user_metadata?.full_name as string | undefined) ||
+      user?.email ||
+      'Operations staff'
+    );
+  }, [offlineAudit, user]);
+  const approvedByName = useMemo(() => {
+    for (let index = offlineAudit.length - 1; index >= 0; index -= 1) {
+      if (offlineAudit[index].action === 'approved') return offlineAudit[index].actor_name;
+    }
+    return null;
+  }, [offlineAudit]);
 
   // Use the cost-free safe view so locum doctors (blocked from the base
   // inventory_items table) can still populate the picker. Cost data is not
@@ -444,7 +520,7 @@ export default function ConsultationDetail() {
    * Case-insensitive duplicate guard prevents repeated chips.
    */
   const handleCopyDiagnosis = ({ diagnosis_id, name }: CopyDiagnosisPayload) => {
-    if (!access.canEdit) return;
+    if (!canEditClinical) return;
     const trimmed = name.trim();
     if (!trimmed) return;
 
@@ -460,6 +536,7 @@ export default function ConsultationDetail() {
       .map((t) => t.trim().toLowerCase())
       .filter(Boolean);
     if (tokens.includes(trimmed.toLowerCase())) return;
+    if (canUseOfflineEditor) setHasSavedOfflineConsultation(false);
 
     if (!currentDisplay) {
       if (diagnosis_id) {
@@ -546,6 +623,33 @@ export default function ConsultationDetail() {
   }, [consultationId]);
 
   useEffect(() => {
+    if (!canUseOfflineEditor) return;
+
+    const existingDoctorId = consultation?.doctor_id ?? '';
+    const assignedActiveDoctorId = activeDoctors.some(
+      (activeDoctor) => activeDoctor.id === entry?.assigned_doctor_id,
+    )
+      ? entry?.assigned_doctor_id ?? ''
+      : '';
+    if (existingDoctorId || assignedActiveDoctorId) {
+      setOfflineDoctorId(existingDoctorId || assignedActiveDoctorId);
+    }
+
+    if (consultation?.original_consulted_at) {
+      setOriginalConsultedAt(
+        format(new Date(consultation.original_consulted_at), "yyyy-MM-dd'T'HH:mm"),
+      );
+    }
+  }, [
+    activeDoctors,
+    canUseOfflineEditor,
+    consultation?.doctor_id,
+    consultation?.original_consulted_at,
+    consultationId,
+    entry?.assigned_doctor_id,
+  ]);
+
+  useEffect(() => {
     if (vitals) {
       setVitalForm({
         height_cm: vitals.height_cm?.toString() ?? '',
@@ -561,8 +665,64 @@ export default function ConsultationDetail() {
     }
   }, [vitals]);
 
+  const handleOfflineDoctorChange = (nextDoctorId: string) => {
+    if (
+      (consultation?.approval_status === 'pending' || lastSavedOfflineStatus === 'pending') &&
+      offlineDoctorId &&
+      nextDoctorId !== offlineDoctorId &&
+      !window.confirm('Change the consulting doctor for this pending record?')
+    ) {
+      return;
+    }
+    setOfflineDoctorId(nextDoctorId);
+    setHasSavedOfflineConsultation(false);
+  };
+
   const handleSaveNotes = async () => {
-    if (!access.canEdit) return;
+    if (!canEditClinical) return;
+
+    if (canUseOfflineEditor) {
+      if (!entry) {
+        toast.error('The selected clinic visit no longer exists.');
+        return;
+      }
+      if (!activeDoctors.some((activeDoctor) => activeDoctor.id === offlineDoctorId)) {
+        toast.error('Select an active consulting doctor.');
+        return;
+      }
+      if (!originalConsultedAt) {
+        toast.error('Enter the original consultation date and time.');
+        return;
+      }
+
+      try {
+        const saved = await saveOfflineConsultation.mutateAsync({
+          queueEntryId: entry.id,
+          doctorId: offlineDoctorId,
+          originalConsultedAt: new Date(originalConsultedAt).toISOString(),
+          caseNote,
+          diagnosisId,
+          diagnosisText,
+          dispenseNote,
+          expectedRevision:
+            lastSavedOfflineRevision ?? consultation?.approval_revision ?? 0,
+        });
+        setHasSavedOfflineConsultation(true);
+        setLastSavedOfflineStatus(saved.approval_status);
+        setLastSavedOfflineRevision(saved.approval_revision);
+        toast.success(
+          consultation?.approval_status === 'returned'
+            ? 'Consultation resubmitted for doctor approval'
+            : 'Consultation saved for doctor approval',
+        );
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : 'Offline consultation could not be saved.',
+        );
+      }
+      return;
+    }
+
     if (!consultationId) {
       toast.error('Doctor profile missing or consultation not created — contact admin');
       return;
@@ -589,7 +749,7 @@ export default function ConsultationDetail() {
   };
 
   const handleStructureWrittenNotes = async () => {
-    if (!access.canEdit) return;
+    if (!canEditClinical) return;
     const transcript = caseNote.trim();
     if (!transcript) {
       toast.error('Write consultation notes first');
@@ -620,6 +780,7 @@ export default function ConsultationDetail() {
         .join('\n\n');
       if (!structured) throw new Error('No structured notes were returned');
       setCaseNote(structured);
+      if (canUseOfflineEditor) setHasSavedOfflineConsultation(false);
       toast.success('Notes structured. Review before saving.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to structure notes');
@@ -629,7 +790,7 @@ export default function ConsultationDetail() {
   };
 
   const handleUpdateClinicalNotes = async () => {
-    if (!access.canEdit) return;
+    if (!canEditClinical) return;
     if (!consultationId) {
       toast.error('Consultation not found');
       return;
@@ -655,7 +816,7 @@ export default function ConsultationDetail() {
   };
 
   const handleSaveVitals = async () => {
-    if (!access.canEdit) return;
+    if (!canEditClinical) return;
     if (!entry || !patient?.id) {
       toast.error('Missing patient or queue data');
       return;
@@ -697,7 +858,7 @@ export default function ConsultationDetail() {
       };
     }[],
   ) => {
-    if (!access.canEdit) return;
+    if (!canEditClinical) return;
     if (!consultationId) {
       toast.error('Doctor profile missing or consultation not created — contact admin');
       return;
@@ -738,6 +899,17 @@ export default function ConsultationDetail() {
   };
 
   const handleSendToDispensary = async () => {
+    if (canUseOfflineEditor) {
+      if (!canContinueOfflineOperationalFlow || !entry) return;
+      await updateQueue.mutateAsync({
+        id: entry.id,
+        clinic_status: 'sent_to_dispensary',
+      });
+      toast.success('Sent to dispensary');
+      navigate('/clinic/consultation', { replace: true });
+      return;
+    }
+
     if (!access.canEdit) return;
     if (isLocked) {
       toast.error('This consultation is completed and cannot be modified');
@@ -904,7 +1076,29 @@ export default function ConsultationDetail() {
     );
   }
 
-  if (!access.canView) {
+  if (requestedOfflineEntry && role !== 'ops_staff') {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          Offline consultation entry is only available to operations staff.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (requestedOfflineEntry && role === 'ops_staff' && !canUseOfflineEditor) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          This visit is not available for offline consultation entry.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (!access.canView && !canUseOfflineEditor) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
@@ -958,6 +1152,7 @@ export default function ConsultationDetail() {
               <DropdownMenuTrigger asChild>
                 <Button
                   size="sm"
+                  disabled={!access.canEdit}
                   className="gap-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   <Phone className="h-3 w-3" /> Call In <ChevronDown className="h-3 w-3" />
@@ -989,6 +1184,28 @@ export default function ConsultationDetail() {
 
         <VisitRemarksBanner remarks={(entry as { visit_remarks?: string | null } | undefined)?.visit_remarks} />
 
+        {canUseOfflineEditor && (
+          <OfflineConsultationProvenance
+            doctors={activeDoctors}
+            doctorId={offlineDoctorId}
+            currentDoctorName={consultation?.doctors?.name ?? entry.doctors?.name ?? null}
+            originalConsultedAt={originalConsultedAt}
+            enteringStaffName={enteringStaffName}
+            approvalStatus={
+              (consultation?.approval_status as 'pending' | 'returned' | 'approved' | null) ??
+              null
+            }
+            returnReason={consultation?.return_reason ?? null}
+            approvedByName={approvedByName}
+            disabled={!canEditClinical || saveOfflineConsultation.isPending}
+            onDoctorChange={handleOfflineDoctorChange}
+            onOriginalConsultedAtChange={(value) => {
+              setOriginalConsultedAt(value);
+              setHasSavedOfflineConsultation(false);
+            }}
+          />
+        )}
+
         {/* Split-pane: workspace first in DOM (mobile), context second; visual order flipped on lg */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* MAIN — Workspace (right on desktop, first on mobile) */}
@@ -1001,7 +1218,14 @@ export default function ConsultationDetail() {
                   {consultation?.doctors?.name ?? entry.doctors?.name ?? 'another doctor'}.
                 </AlertDescription>
               </Alert>
-            ) : isLocked ? (
+            ) : canUseOfflineEditor && offlineAccess.isLockedForStaff ? (
+              <Alert className="border-emerald-200 bg-emerald-50 text-emerald-900">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <AlertDescription>
+                  This offline consultation was approved. Clinical changes are disabled.
+                </AlertDescription>
+              </Alert>
+            ) : isLocked && !canUseOfflineEditor ? (
               <Alert className="border-emerald-200 bg-emerald-50 text-emerald-900">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                 <AlertDescription>
@@ -1033,8 +1257,11 @@ export default function ConsultationDetail() {
                 </div>
                 <Textarea
                   value={caseNote}
-                  onChange={(e) => setCaseNote(e.target.value)}
-                  readOnly={isCrossDoctorReadOnly}
+                  onChange={(e) => {
+                    setCaseNote(e.target.value);
+                    if (canUseOfflineEditor) setHasSavedOfflineConsultation(false);
+                  }}
+                  readOnly={!canEditClinical}
                   placeholder="Write consultation notes…"
                   className="min-h-[400px] resize-y bg-slate-50 border-transparent focus-visible:bg-white focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-200 rounded-xl p-4 text-base leading-relaxed text-slate-800"
                 />
@@ -1065,10 +1292,11 @@ export default function ConsultationDetail() {
                       <MultiDiagnosisPicker
                         diagnosisId={diagnosisId}
                         diagnosisText={diagnosisText}
-                        disabled={!access.canEdit}
+                        disabled={!canEditClinical}
                         onChange={({ diagnosis_id, diagnosis_text }) => {
                           setDiagnosisId(diagnosis_id);
                           setDiagnosisText(diagnosis_text);
+                          if (canUseOfflineEditor) setHasSavedOfflineConsultation(false);
                         }}
                       />
                     )}
@@ -1079,8 +1307,12 @@ export default function ConsultationDetail() {
                     </Label>
                     <Textarea
                       value={dispenseNote}
-                      onChange={(e) => setDispenseNote(e.target.value)}
+                      onChange={(e) => {
+                        setDispenseNote(e.target.value);
+                        if (canUseOfflineEditor) setHasSavedOfflineConsultation(false);
+                      }}
                       readOnly={isCrossDoctorReadOnly}
+                      disabled={!canEditClinical && !isCrossDoctorReadOnly}
                       placeholder="Notes for dispensary staff…"
                       rows={3}
                       className={softInput}
@@ -1161,9 +1393,9 @@ export default function ConsultationDetail() {
                         priceTiers={PRICE_TIERS}
                         isPanel={isPanel}
                         disabled={!canEditWorkspace}
-                        canEditPrice={access.canEdit && !isLocum}
+                        canEditPrice={canEditClinical && !isLocum}
                         onRemove={async () => {
-                          if (!access.canEdit) return;
+                          if (!canEditClinical) return;
                           if (!consultationId) return;
                           try {
                             await removeItem.mutateAsync({ id: item.id, consultationId });
@@ -1174,7 +1406,7 @@ export default function ConsultationDetail() {
                         }}
                         onSavingChange={handleItemSavingChange}
                         onSave={async (updates) => {
-                          if (!access.canEdit) return;
+                          if (!canEditClinical) return;
                           if (!consultationId) return;
                           try {
                             await updateItem.mutateAsync({
@@ -1217,7 +1449,7 @@ export default function ConsultationDetail() {
                     size="sm"
                     variant="outline"
                     onClick={() => setPickerOpen(true)}
-                    disabled={!access.canEdit || !consultationId || !patient?.id}
+                    disabled={!canMutateAttachments || !consultationId || !patient?.id}
                     className="gap-1.5"
                   >
                     <FilePlus2 className="h-4 w-4" />
@@ -1249,7 +1481,7 @@ export default function ConsultationDetail() {
                           >
                             View / Print
                           </Button>
-                          {!isLocked && access.canEdit && (
+                          {canMutateAttachments && (
                             <>
                               <Button
                                 size="icon"
@@ -1290,14 +1522,39 @@ export default function ConsultationDetail() {
               <div className="flex flex-wrap gap-2 justify-end">
                 <Button
                   variant="outline"
-                  onClick={isLocked ? handleUpdateClinicalNotes : handleSaveNotes}
-                  disabled={updateConsultation.isPending}
+                  onClick={
+                    canUseOfflineEditor
+                      ? handleSaveNotes
+                      : isLocked
+                        ? handleUpdateClinicalNotes
+                        : handleSaveNotes
+                  }
+                  disabled={
+                    canUseOfflineEditor
+                      ? !canEditClinical || saveOfflineConsultation.isPending
+                      : updateConsultation.isPending
+                  }
                   className="rounded-xl"
                 >
                   <Save className="h-4 w-4 mr-1" />
-                  {isLocked ? 'Update Clinical Notes' : 'Save Draft'}
+                  {canUseOfflineEditor
+                    ? consultation?.approval_status === 'returned'
+                      ? 'Resubmit for approval'
+                      : 'Save for doctor approval'
+                    : isLocked
+                      ? 'Update Clinical Notes'
+                      : 'Save Draft'}
                 </Button>
-                {!isLocked && (
+                {canContinueOfflineOperationalFlow && (
+                  <Button
+                    onClick={handleSendToDispensary}
+                    disabled={updateQueue.isPending || pendingSaveCount > 0}
+                    className="px-8 py-6 rounded-xl text-base font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+                  >
+                    {pendingSaveCount > 0 ? 'Savingâ€¦' : 'Proceed to dispensary'}
+                  </Button>
+                )}
+                {!canUseOfflineEditor && !isLocked && (
                   <>
                     <Button
                       variant="outline"
@@ -1418,7 +1675,7 @@ export default function ConsultationDetail() {
                     size="sm"
                     variant="outline"
                     onClick={() => setShowVitalForm(!showVitalForm)}
-                    disabled={!access.canEdit}
+                    disabled={!canEditClinical}
                     className="rounded-lg"
                   >
                     {showVitalForm ? (
@@ -1483,7 +1740,7 @@ export default function ConsultationDetail() {
                           <Input
                             type="number"
                             value={vitalForm[k]}
-                            disabled={!access.canEdit}
+                            disabled={!canEditClinical}
                             onChange={(e) =>
                               setVitalForm((f) => ({ ...f, [k]: e.target.value }))
                             }
@@ -1495,7 +1752,7 @@ export default function ConsultationDetail() {
                     <Button
                       size="sm"
                       onClick={handleSaveVitals}
-                      disabled={!access.canEdit || recordVitals.isPending}
+                      disabled={!canEditClinical || recordVitals.isPending}
                       className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
                     >
                       <Save className="h-3 w-3 mr-1" /> Save Vitals
@@ -1524,7 +1781,7 @@ export default function ConsultationDetail() {
                         <PastVisitCard
                           key={(c as { id: string }).id}
                           visit={c as PastVisit}
-                          onCopyDiagnosis={canEdit ? handleCopyDiagnosis : undefined}
+                          onCopyDiagnosis={canEditWorkspace ? handleCopyDiagnosis : undefined}
                         />
                       ))}
                     </div>
@@ -1580,7 +1837,7 @@ export default function ConsultationDetail() {
               </CardContent>
             </Card>
 
-            {entry?.patient_id && access.canEdit && (
+            {entry?.patient_id && canEditClinical && (
               <FollowUpScheduler
                 patientId={entry.patient_id}
                 defaultDoctorId={consultation?.doctor_id ?? null}
@@ -1594,7 +1851,10 @@ export default function ConsultationDetail() {
           onOpenChange={setBulkDialogOpen}
           onInsert={handleBulkInsert}
           isPanel={(entry?.payment_method ?? '').startsWith('panel')}
-          onIssueDocument={(tpl) => setIssuingTemplate(tpl)}
+          onIssueDocument={(tpl) => {
+            if (!canMutateAttachments) return;
+            setIssuingTemplate(tpl);
+          }}
         />
 
         <IssueDocumentModal
@@ -1625,6 +1885,7 @@ export default function ConsultationDetail() {
                     key={tpl.id}
                     type="button"
                     onClick={() => {
+                      if (!canMutateAttachments) return;
                       setPickerOpen(false);
                       setIssuingTemplate(tpl);
                     }}
@@ -1660,7 +1921,7 @@ export default function ConsultationDetail() {
               <AlertDialogAction
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 onClick={async () => {
-                  if (!voidingDoc) return;
+                  if (!canMutateAttachments || !voidingDoc) return;
                   await deleteDoc.mutateAsync({
                     id: voidingDoc.id,
                     consultation_id: voidingDoc.consultation_id,
