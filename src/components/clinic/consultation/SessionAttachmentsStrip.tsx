@@ -14,19 +14,21 @@ interface SessionAttachmentsStripProps {
   consultationId: string | null | undefined;
   canEdit: boolean;
   onBeforeMutation?: () => Promise<boolean>;
+  offlineConsultationId?: string | null;
 }
 
 export function SessionAttachmentsStrip({
   consultationId,
   canEdit,
   onBeforeMutation,
+  offlineConsultationId,
 }: SessionAttachmentsStripProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [remark, setRemark] = useState('');
   const { data: attachments = [], isLoading } =
     useConsultationAttachments(consultationId);
-  const del = useDeleteAttachment();
+  const del = useDeleteAttachment({ offlineConsultationId });
   const upload = useUploadAttachment(consultationId);
 
   if (!consultationId) return null;

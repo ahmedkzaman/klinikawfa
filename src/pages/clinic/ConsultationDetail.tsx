@@ -357,6 +357,8 @@ export default function ConsultationDetail() {
     consultationId,
     role === 'ops_staff' && isOfflineRecord,
   );
+  const effectiveOfflineApprovalStatus =
+    offlineEntryState?.approval_status ?? consultation?.approval_status;
   const createConsultation = useCreateConsultation();
   const updateConsultation = useUpdateConsultation();
   const saveOfflineConsultation = useSaveOfflineConsultation();
@@ -372,7 +374,7 @@ export default function ConsultationDetail() {
     currentDoctorId: doctor?.id,
     attendingDoctorId: consultation?.doctor_id ?? entry?.assigned_doctor_id,
     entrySource: consultation?.entry_source,
-    approvalStatus: offlineEntryState?.approval_status ?? consultation?.approval_status,
+    approvalStatus: effectiveOfflineApprovalStatus,
   });
   const canUseOfflineEditor =
     requestedOfflineEntry &&
@@ -701,7 +703,7 @@ export default function ConsultationDetail() {
 
   const handleOfflineDoctorChange = (nextDoctorId: string) => {
     if (
-      (consultation?.approval_status === 'pending' || lastSavedOfflineStatus === 'pending') &&
+      (effectiveOfflineApprovalStatus === 'pending' || lastSavedOfflineStatus === 'pending') &&
       offlineDoctorId &&
       nextDoctorId !== offlineDoctorId &&
       !window.confirm('Change the consulting doctor for this pending record?')
@@ -749,7 +751,7 @@ export default function ConsultationDetail() {
         setLastSavedOfflineStatus(saved.approval_status);
         setLastSavedOfflineRevision(saved.approval_revision);
         toast.success(
-          consultation?.approval_status === 'returned'
+          effectiveOfflineApprovalStatus === 'returned'
             ? 'Consultation resubmitted for doctor approval'
             : 'Consultation saved for doctor approval',
         );
@@ -1242,7 +1244,7 @@ export default function ConsultationDetail() {
             enteringStaffName={enteringStaffName}
             enteredAt={offlineEntryState?.entered_at}
             approvalStatus={
-              ((offlineEntryState?.approval_status ?? consultation?.approval_status) as
+              (effectiveOfflineApprovalStatus as
                 | 'pending'
                 | 'returned'
                 | 'approved'
@@ -1381,6 +1383,7 @@ export default function ConsultationDetail() {
                       consultationId={consultationId}
                       canEdit={canEditWorkspace}
                       onBeforeMutation={guardOfflineMutation}
+                      offlineConsultationId={canUseOfflineEditor ? consultationId : null}
                     />
                   </div>
                 </div>
@@ -1596,7 +1599,7 @@ export default function ConsultationDetail() {
                 >
                   <Save className="h-4 w-4 mr-1" />
                   {canUseOfflineEditor
-                    ? consultation?.approval_status === 'returned'
+                    ? effectiveOfflineApprovalStatus === 'returned'
                       ? 'Resubmit for approval'
                       : 'Save for doctor approval'
                     : isLocked

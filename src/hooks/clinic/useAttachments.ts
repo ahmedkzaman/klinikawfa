@@ -136,7 +136,9 @@ export function useConsultationAttachments(
  * the per-consultation attachment list AND the patient visit-history query
  * (so the joined attachment-count badge stays in sync).
  */
-export function useDeleteAttachment() {
+export function useDeleteAttachment(options?: {
+  offlineConsultationId?: string | null;
+}) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (row: {
@@ -144,6 +146,27 @@ export function useDeleteAttachment() {
       file_path: string;
       consultation_id: string;
     }) => {
+      if (options?.offlineConsultationId) {
+        if (row.consultation_id !== options.offlineConsultationId) {
+          throw new Error('Attachment consultation does not match the offline editor.');
+        }
+        const { data: authorizedPath, error: rpcErr } = await supabase.rpc(
+          'delete_offline_consultation_attachment',
+          {
+            p_attachment_id: row.id,
+            p_consultation_id: options.offlineConsultationId,
+          },
+        );
+        if (rpcErr) throw rpcErr;
+        if (!authorizedPath) throw new Error('Attachment path was not returned.');
+
+        const { error: storageErr } = await supabase.storage
+          .from(BUCKET)
+          .remove([authorizedPath]);
+        if (storageErr) throw storageErr;
+        return { ...row, file_path: authorizedPath };
+      }
+
       // Storage first — if this fails the DB row stays so the UI still
       // shows the file (and the user can retry). If the DB delete fails
       // after, the file is already gone but a stale row will surface as

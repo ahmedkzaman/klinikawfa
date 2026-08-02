@@ -6227,6 +6227,10 @@ export type Database = {
       available_quantity: { Args: { _item_id: string }; Returns: number }
       can_view_insights: { Args: { _user_id: string }; Returns: boolean }
       can_view_inventory_costs: { Args: { _user_id: string }; Returns: boolean }
+      delete_offline_consultation_attachment: {
+        Args: { p_attachment_id: string; p_consultation_id: string }
+        Returns: string
+      }
       get_doctor_clinical_activity: {
         Args: { _start_date: string; _end_date: string }
         Returns: Array<{
