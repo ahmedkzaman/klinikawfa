@@ -15,6 +15,22 @@ export interface ConsultationAttachment {
   signedUrl: string | null;
 }
 
+type UploadAttachmentOptions = {
+  offlineConsultationId?: string | null;
+};
+
+type OfflineAttachmentReservation = {
+  reservation_id: string;
+  file_path: string;
+  expires_at: string;
+};
+
+type OfflineAttachmentUploadResolution = {
+  status: 'finalized' | 'cleanup_required' | 'cancelled';
+  file_path: string;
+  attachment_id: string | null;
+};
+
 
 /**
  * Strip path separators and collapse runs of whitespace so storage keys stay
@@ -31,7 +47,10 @@ function sanitizeFileName(name: string): string {
  * - Enforces a 5MB size limit.
  * - Path layout: `<consultationId>/<timestamp>_<safeName>`.
  */
-export function useUploadAttachment(consultationId: string | null | undefined) {
+export function useUploadAttachment(
+  consultationId: string | null | undefined,
+  options?: UploadAttachmentOptions,
+) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (args: File | { file: File; remark?: string | null }) => {
@@ -45,6 +64,96 @@ export function useUploadAttachment(consultationId: string | null | undefined) {
       }
       if (file.size > MAX_BYTES) {
         throw new Error('File exceeds 5MB limit');
+      }
+
+      const offlineConsultationId = options?.offlineConsultationId;
+      if (offlineConsultationId) {
+        if (offlineConsultationId !== consultationId) {
+          throw new Error('Attachment consultation does not match the offline editor.');
+        }
+
+        const { data: reservationRows, error: reservationError } = await supabase.rpc(
+          'reserve_offline_consultation_attachment',
+          {
+            p_consultation_id: offlineConsultationId,
+            p_file_name: file.name,
+            p_content_type: file.type || null,
+            p_file_size: file.size,
+            p_remark: remark,
+          },
+        );
+        if (reservationError) throw reservationError;
+
+        const reservation = (reservationRows ?? [])[0] as
+          | OfflineAttachmentReservation
+          | undefined;
+        if (!reservation) {
+          throw new Error('Attachment upload reservation was not returned.');
+        }
+
+        const resolveFailedUpload = async () => {
+          const { data: resolutionRows, error: resolutionError } = await supabase.rpc(
+            'cancel_offline_consultation_attachment_upload',
+            { p_reservation_id: reservation.reservation_id },
+          );
+          if (resolutionError) throw resolutionError;
+          return (resolutionRows ?? [])[0] as
+            | OfflineAttachmentUploadResolution
+            | undefined;
+        };
+
+        try {
+          const { error: uploadError } = await supabase.storage
+            .from(BUCKET)
+            .upload(reservation.file_path, file, {
+              contentType: file.type || undefined,
+              upsert: false,
+            });
+          if (uploadError) throw uploadError;
+
+          const { data, error: finalizeError } = await supabase.rpc(
+            'finalize_offline_consultation_attachment',
+            { p_reservation_id: reservation.reservation_id },
+          );
+          if (finalizeError) throw finalizeError;
+          if (!data) throw new Error('Attachment metadata was not finalized.');
+          return data;
+        } catch (uploadError) {
+          let resolution: OfflineAttachmentUploadResolution | undefined;
+          try {
+            resolution = await resolveFailedUpload();
+          } catch {
+            throw uploadError;
+          }
+
+          if (resolution?.status === 'finalized' && resolution.attachment_id) {
+            return {
+              id: resolution.attachment_id,
+              consultation_id: offlineConsultationId,
+              file_path: resolution.file_path,
+              file_name: file.name,
+              content_type: file.type || null,
+              created_at: new Date().toISOString(),
+              remark,
+              signedUrl: null,
+            } satisfies ConsultationAttachment;
+          }
+
+          if (resolution?.status === 'cleanup_required') {
+            const { error: cleanupError } = await supabase.storage
+              .from(BUCKET)
+              .remove([resolution.file_path]);
+            if (!cleanupError) {
+              try {
+                await resolveFailedUpload();
+              } catch {
+                // The object is gone; the durable cleanup row can be reconciled later.
+              }
+            }
+          }
+
+          throw uploadError;
+        }
       }
 
       const safeName = sanitizeFileName(file.name);

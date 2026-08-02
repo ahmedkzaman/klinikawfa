@@ -10,7 +10,7 @@ export type SaveOfflineConsultationInput = {
   diagnosisId: string | null;
   diagnosisText: string;
   dispenseNote: string;
-  expectedRevision: number;
+  expectedRevision: number | null;
 };
 
 export type ReviewOfflineConsultationInput = {
@@ -30,7 +30,7 @@ export type EligibleOfflineDoctor = {
   user_id: string;
   name: string;
   status: 'active';
-  on_duty: true;
+  on_duty: boolean;
   avatar_url: string | null;
 };
 

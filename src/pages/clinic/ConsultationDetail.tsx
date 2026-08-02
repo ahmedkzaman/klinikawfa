@@ -353,6 +353,7 @@ export default function ConsultationDetail() {
   const isOfflineRecord = consultation?.entry_source === 'offline_transcription';
   const {
     data: offlineEntryState,
+    isLoading: offlineEntryStateLoading,
     refetch: refetchOfflineEntryState,
   } = useOfflineConsultationEntryState(
     consultationId,
@@ -377,10 +378,15 @@ export default function ConsultationDetail() {
     entrySource: consultation?.entry_source,
     approvalStatus: effectiveOfflineApprovalStatus,
   });
+  const hasAuthorizedOfflineEntryState =
+    offlineEntryState?.consultation_id === consultationId &&
+    offlineEntryState?.queue_entry_id === queueEntryId;
   const canUseOfflineEditor =
-    requestedOfflineEntry &&
     role === 'ops_staff' &&
-    (offlineAccess.canEnter || isOfflineRecord);
+    (
+      (requestedOfflineEntry && offlineAccess.canEnter) ||
+      (isOfflineRecord && hasAuthorizedOfflineEntryState)
+    );
   const isSelectedOfflineDoctor =
     role === 'resident_doctor' &&
     !!doctor?.id &&
@@ -755,9 +761,11 @@ export default function ConsultationDetail() {
           dispenseNote,
           expectedRevision:
             lastSavedOfflineRevision ??
-            offlineEntryState?.approval_revision ??
-            consultation?.approval_revision ??
-            0,
+            (consultationId
+              ? offlineEntryState?.approval_revision ??
+                consultation?.approval_revision ??
+                0
+              : null),
         });
         setHasSavedOfflineConsultation(true);
         setLastSavedOfflineStatus(saved.approval_status);
@@ -1121,7 +1129,11 @@ export default function ConsultationDetail() {
   // Suppress unused inventory warning — kept for parity / future categorization
   void inventoryItems;
 
-  if (entryLoading || consultLoading) {
+  if (
+    entryLoading ||
+    consultLoading ||
+    (role === 'ops_staff' && isOfflineRecord && offlineEntryStateLoading)
+  ) {
     return (
       <div className="space-y-5 max-w-7xl mx-auto">
         <Skeleton className="h-8 w-48" />

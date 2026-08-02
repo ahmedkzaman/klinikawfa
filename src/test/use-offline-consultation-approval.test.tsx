@@ -65,7 +65,7 @@ describe('offline consultation approval hooks', () => {
         diagnosisId: null,
         diagnosisText: 'Viral illness',
         dispenseNote: 'Hydration advice',
-        expectedRevision: 0,
+        expectedRevision: null,
       });
     });
 
@@ -77,7 +77,7 @@ describe('offline consultation approval hooks', () => {
       p_diagnosis_id: null,
       p_diagnosis_text: 'Viral illness',
       p_dispense_note: 'Hydration advice',
-      p_expected_revision: 0,
+      p_expected_revision: null,
     });
     const [, payload] = rpc.mock.calls[0];
     expect(payload).not.toHaveProperty('entered_by');

@@ -6,6 +6,7 @@ import { getOfflineConsultationAccess } from '@/lib/clinic/consultationAccess';
 const test = vi.hoisted(() => ({
   deleteAttachment: vi.fn(),
   uploadAttachment: vi.fn(),
+  useUploadAttachment: vi.fn(),
   attachments: [{
     id: 'attachment-1',
     consultation_id: 'consultation-1',
@@ -25,13 +26,17 @@ vi.mock('sonner', () => ({
 vi.mock('@/hooks/clinic/useAttachments', () => ({
   useConsultationAttachments: () => ({ data: test.attachments, isLoading: false }),
   useDeleteAttachment: () => ({ mutateAsync: test.deleteAttachment, isPending: false }),
-  useUploadAttachment: () => ({ mutateAsync: test.uploadAttachment, isPending: false }),
+  useUploadAttachment: test.useUploadAttachment,
 }));
 
 describe('SessionAttachmentsStrip mutation boundary', () => {
   beforeEach(() => {
     test.deleteAttachment.mockReset().mockResolvedValue(undefined);
     test.uploadAttachment.mockReset().mockResolvedValue(undefined);
+    test.useUploadAttachment.mockReset().mockReturnValue({
+      mutateAsync: test.uploadAttachment,
+      isPending: false,
+    });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
@@ -54,9 +59,13 @@ describe('SessionAttachmentsStrip mutation boundary', () => {
         consultationId="consultation-1"
         canEdit
         canMutate={access.canEditTranscription}
+        offlineConsultationId="consultation-1"
       />,
     );
 
+    expect(test.useUploadAttachment).toHaveBeenCalledWith('consultation-1', {
+      offlineConsultationId: 'consultation-1',
+    });
     expect(screen.getByLabelText('Clinical attachment')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Remove outage-note.pdf' }));
     await waitFor(() => expect(test.deleteAttachment).toHaveBeenCalledWith({

@@ -6231,6 +6231,18 @@ export type Database = {
         Args: { p_attachment_id: string; p_consultation_id: string }
         Returns: string
       }
+      cancel_offline_consultation_attachment_upload: {
+        Args: { p_reservation_id: string }
+        Returns: Array<{
+          attachment_id: string | null
+          file_path: string
+          status: string
+        }>
+      }
+      finalize_offline_consultation_attachment: {
+        Args: { p_reservation_id: string }
+        Returns: Database["public"]["Tables"]["consultation_attachments"]["Row"]
+      }
       get_doctor_clinical_activity: {
         Args: { _start_date: string; _end_date: string }
         Returns: Array<{
@@ -6490,11 +6502,25 @@ export type Database = {
           p_diagnosis_text: string
           p_dispense_note: string
           p_doctor_id: string
-          p_expected_revision: number
+          p_expected_revision: number | null
           p_original_consulted_at: string
           p_queue_entry_id: string
         }
         Returns: Database["public"]["Tables"]["consultations"]["Row"]
+      }
+      reserve_offline_consultation_attachment: {
+        Args: {
+          p_consultation_id: string
+          p_content_type: string | null
+          p_file_name: string
+          p_file_size: number
+          p_remark?: string | null
+        }
+        Returns: Array<{
+          expires_at: string
+          file_path: string
+          reservation_id: string
+        }>
       }
       save_client_invoice_items: {
         Args: { _invoice_id: string; _items: Json }

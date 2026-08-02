@@ -9,7 +9,7 @@ const test = vi.hoisted(() => {
     user_id: 'doctor-user-1',
     name: 'Dr Eligible',
     status: 'active' as const,
-    on_duty: true as const,
+    on_duty: true,
     avatar_url: null,
   };
   const entry = {
@@ -305,8 +305,57 @@ describe('offline consultation pages', () => {
       doctorId: 'doctor-1',
       originalConsultedAt: new Date('2026-08-01T09:30').toISOString(),
       caseNote: 'Offline note payload',
-      expectedRevision: 0,
+      expectedRevision: null,
     })));
+  });
+
+  it('reopens a server-authorized pending or returned editor after refresh and direct navigation', async () => {
+    const initial = render(<ConsultationDetail />);
+    expect(await screen.findByRole('button', { name: 'Save for doctor approval' })).toBeEnabled();
+
+    initial.unmount();
+    test.state.locationState = null;
+    render(<ConsultationDetail />);
+
+    const save = await screen.findByRole('button', { name: 'Save for doctor approval' });
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+    await waitFor(() => expect(test.save).toHaveBeenCalledWith(expect.objectContaining({
+      queueEntryId: 'queue-1',
+      expectedRevision: 3,
+    })));
+
+    cleanup();
+    test.state.offlineState = {
+      ...test.state.offlineState!,
+      approval_status: 'returned',
+      return_reason: 'Clarify the historical diagnosis',
+    };
+    render(<ConsultationDetail />);
+    expect(await screen.findByRole('button', { name: 'Resubmit for approval' })).toBeEnabled();
+    expect(screen.getByText('Clarify the historical diagnosis')).toBeInTheDocument();
+  });
+
+  it('does not turn durable offline entry state into cross-doctor access', () => {
+    test.state.locationState = null;
+    test.state.role = 'resident_doctor';
+    test.state.currentDoctor = { ...test.doctor, id: 'doctor-2', user_id: 'doctor-user-2' };
+
+    render(<ConsultationDetail />);
+
+    expect(screen.getByText('You do not have permission to view this consultation.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save for doctor approval' })).not.toBeInTheDocument();
+  });
+
+  it('accepts an active historical doctor who is no longer on duty', async () => {
+    test.state.consultation = null;
+    test.state.offlineState = null;
+    test.state.eligibleDoctors = [{ ...test.doctor, on_duty: false }];
+
+    render(<ConsultationDetail />);
+
+    expect(await screen.findByText('Dr Eligible')).toBeInTheDocument();
+    expect(screen.queryByText('No active consulting doctors are available.')).not.toBeInTheDocument();
   });
 
   it('renders returned resubmission and locks approved clinical controls', async () => {

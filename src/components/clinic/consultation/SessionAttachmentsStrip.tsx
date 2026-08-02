@@ -31,7 +31,7 @@ export function SessionAttachmentsStrip({
   const { data: attachments = [], isLoading } =
     useConsultationAttachments(consultationId);
   const del = useDeleteAttachment({ offlineConsultationId });
-  const upload = useUploadAttachment(consultationId);
+  const upload = useUploadAttachment(consultationId, { offlineConsultationId });
 
   if (!consultationId) return null;
 
