@@ -27,6 +27,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install PostgreSQL runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql
+          echo "POSTGRES_BIN=$(pg_config --bindir)" >> "$GITHUB_ENV"
+
       - name: Lint changed files
         run: npm run lint:changed
 
@@ -34,6 +40,8 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Unit tests
+        env:
+          REQUIRE_POSTGRES_TEST: "1"
         run: npm test
 
       - name: Build

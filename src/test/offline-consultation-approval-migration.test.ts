@@ -1,22 +1,61 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { delimiter, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const migrationPath = resolve(
   process.cwd(),
   'supabase/migrations/20260802190000_add_offline_consultation_approval.sql',
 );
+const securityGatePath = resolve(process.cwd(), '.github/workflows/security-gate.yml');
 const sql = existsSync(migrationPath) ? readFileSync(migrationPath, 'utf8') : '';
-const postgresBin = process.env.POSTGRES_BIN
-  ?? 'C:/Users/ahmed/Documents/Codex/tools/postgresql/17.10/pgsql/bin';
-const postgresTools = {
-  initdb: join(postgresBin, 'initdb.exe'),
-  pgCtl: join(postgresBin, 'pg_ctl.exe'),
-  psql: join(postgresBin, 'psql.exe'),
+const securityGate = existsSync(securityGatePath) ? readFileSync(securityGatePath, 'utf8') : '';
+type PostgresToolName = 'initdb' | 'pgCtl' | 'psql';
+type PostgresTools = Record<PostgresToolName, string>;
+
+const windowsBundledPostgresBin = 'C:/Users/ahmed/Documents/Codex/tools/postgresql/17.10/pgsql/bin';
+const executableNames: Record<PostgresToolName, string> = {
+  initdb: 'initdb',
+  pgCtl: 'pg_ctl',
+  psql: 'psql',
 };
-const hasBundledPostgres = Object.values(postgresTools).every(existsSync);
+
+function findPostgresTool(tool: PostgresToolName): string {
+  const configuredBin = process.env.POSTGRES_BIN;
+  const candidateDirectories = configuredBin
+    ? [configuredBin]
+    : [
+        ...(process.platform === 'win32' ? [windowsBundledPostgresBin] : []),
+        ...(process.env.PATH ?? '').split(delimiter).filter(Boolean),
+      ];
+  const candidateNames = process.platform === 'win32'
+    ? [`${executableNames[tool]}.exe`, executableNames[tool]]
+    : [executableNames[tool]];
+
+  for (const directory of candidateDirectories) {
+    for (const candidateName of candidateNames) {
+      const candidate = join(directory, candidateName);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+
+  return '';
+}
+
+function requirePostgresRuntime(required: boolean, tools: PostgresTools) {
+  if (required && Object.values(tools).some((tool) => !tool)) {
+    throw new Error('REQUIRE_POSTGRES_TEST=1 requires initdb, pg_ctl, and psql');
+  }
+}
+
+const postgresTools: PostgresTools = {
+  initdb: findPostgresTool('initdb'),
+  pgCtl: findPostgresTool('pgCtl'),
+  psql: findPostgresTool('psql'),
+};
+const hasPostgresRuntime = Object.values(postgresTools).every(Boolean);
+const requiresPostgresTest = process.env.REQUIRE_POSTGRES_TEST === '1' || process.env.CI === 'true';
 
 function runPostgresTool(tool: string, args: string[]) {
   return execFileSync(tool, args, { encoding: 'utf8', stdio: 'pipe' });
@@ -27,6 +66,20 @@ function runPostgresControl(args: string[]) {
 }
 
 describe('offline consultation approval migration', () => {
+  it('fails closed when a required PostgreSQL runtime is missing', () => {
+    const missingTools: PostgresTools = { initdb: '', pgCtl: '', psql: '' };
+
+    expect(() => requirePostgresRuntime(true, missingTools)).toThrow(
+      'REQUIRE_POSTGRES_TEST=1 requires initdb, pg_ctl, and psql',
+    );
+  });
+
+  it('provisions and requires PostgreSQL for the Security Gate test run', () => {
+    expect(securityGate).toMatch(/name: Install PostgreSQL runtime[\s\S]*sudo apt-get install -y postgresql/i);
+    expect(securityGate).toMatch(/POSTGRES_BIN=\$\(pg_config --bindir\)/i);
+    expect(securityGate).toMatch(/name: Unit tests[\s\S]*REQUIRE_POSTGRES_TEST:\s*["']?1["']?/i);
+  });
+
   it('creates the server-controlled approval state and immutable audit log', () => {
     expect(sql).toMatch(/add column if not exists entry_source text not null default 'live'/i);
     expect(sql).toMatch(/add column if not exists entered_by uuid references auth\.users\(id\)/i);
@@ -139,9 +192,10 @@ describe('offline consultation approval migration', () => {
     expect(sql).toMatch(/locum/i);
   });
 
-  it.skipIf(!hasBundledPostgres)(
+  it.skipIf(!hasPostgresRuntime && !requiresPostgresTest)(
     'executes the migration state machine against disposable PostgreSQL',
     () => {
+      requirePostgresRuntime(requiresPostgresTest, postgresTools);
       const root = mkdtempSync(join(tmpdir(), 'offline-consultation-'));
       const dataDirectory = join(root, 'data');
       const port = String(56000 + (process.pid % 1000));
