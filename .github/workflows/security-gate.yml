@@ -42,6 +42,7 @@ jobs:
       - name: Unit tests
         env:
           # PostgreSQL contract suites run one process at a time below.
+          CI: "false"
           POSTGRES_BIN: /nonexistent
         run: npm test
 
