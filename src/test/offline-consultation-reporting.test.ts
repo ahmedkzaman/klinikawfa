@@ -235,7 +235,7 @@ describe('offline consultation reporting attribution', () => {
 
       try {
         run(postgresTools.initdb, ['-D', dataDirectory, '-U', 'postgres', '-A', 'trust', '--no-locale', '-E', 'UTF8']);
-        control(['-D', dataDirectory, '-l', join(root, 'postgres.log'), '-o', `-h 127.0.0.1 -p ${port}`, '-w', 'start']);
+        control(['-D', dataDirectory, '-l', join(root, 'postgres.log'), '-o', `-h 127.0.0.1 -p ${port} -k ${root}`, '-w', 'start']);
         serverStarted = true;
         writeFileSync(bootstrapPath, `
 create schema auth;

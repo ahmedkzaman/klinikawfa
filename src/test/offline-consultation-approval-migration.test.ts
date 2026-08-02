@@ -243,7 +243,7 @@ describe('offline consultation approval migration', () => {
         ]);
         runPostgresControl([
           '-D', dataDirectory, '-l', join(root, 'postgres.log'),
-          '-o', `-h 127.0.0.1 -p ${port}`, '-w', 'start',
+          '-o', `-h 127.0.0.1 -p ${port} -k ${root}`, '-w', 'start',
         ]);
 
         writeFileSync(bootstrapPath, `

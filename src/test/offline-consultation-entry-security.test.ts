@@ -73,7 +73,7 @@ describe('offline consultation entry security boundary', () => {
 
       try {
         run(initdb, ['-D', data, '-U', 'postgres', '-A', 'trust', '--no-locale', '-E', 'UTF8']);
-        control(['-D', data, '-l', join(root, 'postgres.log'), '-o', `-h 127.0.0.1 -p ${port}`, '-w', 'start']);
+        control(['-D', data, '-l', join(root, 'postgres.log'), '-o', `-h 127.0.0.1 -p ${port} -k ${root}`, '-w', 'start']);
         writeFileSync(bootstrap, `
 create schema auth;
 create role anon nologin;

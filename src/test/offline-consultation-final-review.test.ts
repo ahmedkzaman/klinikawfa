@@ -117,7 +117,7 @@ describe('offline consultation final review contract', () => {
         control([
           '-D', data,
           '-l', join(root, 'postgres.log'),
-          '-o', `-h 127.0.0.1 -p ${port}`,
+          '-o', `-h 127.0.0.1 -p ${port} -k ${root}`,
           '-w', 'start',
         ]);
 
