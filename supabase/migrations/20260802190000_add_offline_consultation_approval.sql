@@ -161,17 +161,20 @@ AS $function$
 DECLARE
   v_protected_change boolean;
 BEGIN
-  v_protected_change := (TG_OP = 'INSERT' AND NEW.entry_source = 'offline_transcription')
-    OR NEW.entry_source IS DISTINCT FROM OLD.entry_source
-    OR NEW.entered_by IS DISTINCT FROM OLD.entered_by
-    OR NEW.original_consulted_at IS DISTINCT FROM OLD.original_consulted_at
-    OR NEW.approval_status IS DISTINCT FROM OLD.approval_status
-    OR NEW.approved_by IS DISTINCT FROM OLD.approved_by
-    OR NEW.approved_at IS DISTINCT FROM OLD.approved_at
-    OR NEW.returned_by IS DISTINCT FROM OLD.returned_by
-    OR NEW.returned_at IS DISTINCT FROM OLD.returned_at
-    OR NEW.return_reason IS DISTINCT FROM OLD.return_reason
-    OR NEW.approval_revision IS DISTINCT FROM OLD.approval_revision;
+  IF TG_OP = 'INSERT' THEN
+    v_protected_change := NEW.entry_source = 'offline_transcription';
+  ELSE
+    v_protected_change := NEW.entry_source IS DISTINCT FROM OLD.entry_source
+      OR NEW.entered_by IS DISTINCT FROM OLD.entered_by
+      OR NEW.original_consulted_at IS DISTINCT FROM OLD.original_consulted_at
+      OR NEW.approval_status IS DISTINCT FROM OLD.approval_status
+      OR NEW.approved_by IS DISTINCT FROM OLD.approved_by
+      OR NEW.approved_at IS DISTINCT FROM OLD.approved_at
+      OR NEW.returned_by IS DISTINCT FROM OLD.returned_by
+      OR NEW.returned_at IS DISTINCT FROM OLD.returned_at
+      OR NEW.return_reason IS DISTINCT FROM OLD.return_reason
+      OR NEW.approval_revision IS DISTINCT FROM OLD.approval_revision;
+  END IF;
 
   IF v_protected_change
      AND NOT public.offline_consultation_write_guard_active(NEW.id, auth.uid()) THEN
@@ -187,6 +190,24 @@ DROP TRIGGER IF EXISTS guard_offline_consultation_provenance ON public.consultat
 CREATE TRIGGER guard_offline_consultation_provenance
   BEFORE INSERT OR UPDATE ON public.consultations
   FOR EACH ROW EXECUTE FUNCTION public.guard_offline_consultation_provenance();
+
+CREATE OR REPLACE FUNCTION public.guard_consultation_approval_audit_immutable()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $function$
+BEGIN
+  RAISE EXCEPTION 'consultation_approval_audit_immutable'
+    USING ERRCODE = '42501';
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS guard_consultation_approval_audit_immutable
+  ON public.consultation_approval_audit;
+CREATE TRIGGER guard_consultation_approval_audit_immutable
+  BEFORE UPDATE OR DELETE ON public.consultation_approval_audit
+  FOR EACH ROW EXECUTE FUNCTION public.guard_consultation_approval_audit_immutable();
 
 -- Preserve the live completed-note lock while allowing only the guarded RPC
 -- to correct a returned offline record that has already been checked out.
@@ -227,6 +248,27 @@ CREATE POLICY consultations_offline_direct_update_denied
   USING (entry_source = 'live')
   WITH CHECK (entry_source = 'live' AND approval_status = 'not_required');
 
+CREATE OR REPLACE FUNCTION public.is_current_offline_consultation_doctor(
+  p_consultation_id uuid,
+  p_user_id uuid DEFAULT auth.uid()
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $function$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.consultations AS consultation
+    JOIN public.doctors AS doctor ON doctor.id = consultation.doctor_id
+    JOIN public.user_roles AS user_role ON user_role.user_id = doctor.user_id
+    WHERE consultation.id = p_consultation_id
+      AND doctor.user_id = p_user_id
+      AND user_role.role::text IN ('resident_doctor', 'doctor_admin')
+  );
+$function$;
+
 CREATE POLICY consultation_approval_audit_read
   ON public.consultation_approval_audit
   FOR SELECT
@@ -245,12 +287,9 @@ CREATE POLICY consultation_approval_audit_read
               WHERE user_id = auth.uid() AND role::text = 'ops_staff'
             )
           )
-          OR (
-            doctor.user_id = auth.uid()
-            AND NOT EXISTS (
-              SELECT 1 FROM public.user_roles
-              WHERE user_id = auth.uid() AND role::text = 'locum'
-            )
+          OR public.is_current_offline_consultation_doctor(
+            consultation.id,
+            auth.uid()
           )
           OR EXISTS (
             SELECT 1 FROM public.user_roles
@@ -326,10 +365,11 @@ BEGIN
   FOR KEY SHARE;
 
   IF NOT FOUND
-     OR NOT public.is_clinical(v_doctor.user_id)
-     OR EXISTS (
-       SELECT 1 FROM public.user_roles
-       WHERE user_id = v_doctor.user_id AND role::text = 'locum'
+     OR NOT EXISTS (
+       SELECT 1
+       FROM public.user_roles
+       WHERE user_id = v_doctor.user_id
+         AND role::text IN ('resident_doctor', 'doctor_admin')
      ) THEN
     RAISE EXCEPTION 'offline_consultation_ineligible_doctor'
       USING ERRCODE = '22023';
@@ -501,6 +541,8 @@ DECLARE
   v_reason text := nullif(btrim(p_reason), '');
   v_is_doctor_admin boolean;
   v_is_locum boolean;
+  v_is_ops_staff boolean;
+  v_is_selected_doctor boolean;
 BEGIN
   IF v_actor_id IS NULL THEN
     RAISE EXCEPTION 'not_authorized_offline_consultation_review'
@@ -526,21 +568,30 @@ BEGIN
     EXISTS (
       SELECT 1 FROM public.user_roles
       WHERE user_id = v_actor_id AND role::text = 'locum'
+    ),
+    EXISTS (
+      SELECT 1 FROM public.user_roles
+      WHERE user_id = v_actor_id AND role::text = 'ops_staff'
     )
-    INTO v_is_doctor_admin, v_is_locum;
+    INTO v_is_doctor_admin, v_is_locum, v_is_ops_staff;
+
+  v_is_selected_doctor := public.is_current_offline_consultation_doctor(
+    v_consultation.id,
+    v_actor_id
+  );
 
   IF v_is_locum THEN
     RAISE EXCEPTION 'locum_cannot_review_offline_consultation'
       USING ERRCODE = '42501';
   END IF;
 
+  IF v_is_ops_staff THEN
+    RAISE EXCEPTION 'not_authorized_offline_consultation_review'
+      USING ERRCODE = '42501';
+  END IF;
+
   IF NOT v_is_doctor_admin
-     AND NOT EXISTS (
-       SELECT 1
-       FROM public.doctors
-       WHERE id = v_consultation.doctor_id
-         AND user_id = v_actor_id
-     ) THEN
+     AND NOT v_is_selected_doctor THEN
     RAISE EXCEPTION 'not_authorized_offline_consultation_review'
       USING ERRCODE = '42501';
   END IF;
@@ -550,13 +601,17 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
-  IF p_expected_revision IS NOT NULL
-     AND v_consultation.approval_revision IS DISTINCT FROM p_expected_revision THEN
+  IF p_expected_revision IS NULL THEN
+    RAISE EXCEPTION 'offline_consultation_expected_revision_required'
+      USING ERRCODE = '22023';
+  END IF;
+
+  IF v_consultation.approval_revision IS DISTINCT FROM p_expected_revision THEN
     RAISE EXCEPTION 'stale_offline_consultation'
       USING ERRCODE = '40001';
   END IF;
 
-  IF v_action NOT IN ('approve', 'return') THEN
+  IF v_action IS NULL OR v_action NOT IN ('approve', 'return') THEN
     RAISE EXCEPTION 'offline_consultation_review_action_invalid'
       USING ERRCODE = '22023';
   END IF;
@@ -632,9 +687,9 @@ DECLARE
 BEGIN
   SELECT *
     INTO v_consultation
-  FROM public.consultations
-  WHERE id = p_consultation_id
-    AND deleted_at IS NULL;
+  FROM public.consultations AS consultation
+  WHERE consultation.id = p_consultation_id
+    AND consultation.deleted_at IS NULL;
 
   IF v_actor_id IS NULL
      OR NOT FOUND
@@ -651,15 +706,9 @@ BEGIN
         WHERE user_id = v_actor_id AND role::text = 'ops_staff'
       )
     )
-    OR EXISTS (
-      SELECT 1
-      FROM public.doctors
-      WHERE id = v_consultation.doctor_id
-        AND user_id = v_actor_id
-        AND NOT EXISTS (
-          SELECT 1 FROM public.user_roles
-          WHERE user_id = v_actor_id AND role::text = 'locum'
-        )
+    OR public.is_current_offline_consultation_doctor(
+      v_consultation.id,
+      v_actor_id
     )
     OR EXISTS (
       SELECT 1 FROM public.user_roles
@@ -687,7 +736,9 @@ ALTER FUNCTION public.offline_consultation_write_guard_active(uuid, uuid) OWNER 
 ALTER FUNCTION public.open_offline_consultation_write_guard(uuid, uuid) OWNER TO postgres;
 ALTER FUNCTION public.close_offline_consultation_write_guard(uuid, uuid) OWNER TO postgres;
 ALTER FUNCTION public.guard_offline_consultation_provenance() OWNER TO postgres;
+ALTER FUNCTION public.guard_consultation_approval_audit_immutable() OWNER TO postgres;
 ALTER FUNCTION public.guard_completed_consultation_notes() OWNER TO postgres;
+ALTER FUNCTION public.is_current_offline_consultation_doctor(uuid, uuid) OWNER TO postgres;
 ALTER FUNCTION public.save_offline_consultation(uuid, uuid, timestamptz, text, uuid, text, text, integer) OWNER TO postgres;
 ALTER FUNCTION public.review_offline_consultation(uuid, text, text, integer) OWNER TO postgres;
 ALTER FUNCTION public.get_offline_consultation_audit(uuid) OWNER TO postgres;
@@ -696,7 +747,9 @@ REVOKE ALL ON FUNCTION public.offline_consultation_write_guard_active(uuid, uuid
 REVOKE ALL ON FUNCTION public.open_offline_consultation_write_guard(uuid, uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.close_offline_consultation_write_guard(uuid, uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.guard_offline_consultation_provenance() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.guard_consultation_approval_audit_immutable() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.guard_completed_consultation_notes() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.is_current_offline_consultation_doctor(uuid, uuid) FROM PUBLIC, anon, authenticated;
 
 REVOKE ALL ON FUNCTION public.save_offline_consultation(uuid, uuid, timestamptz, text, uuid, text, text, integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.save_offline_consultation(uuid, uuid, timestamptz, text, uuid, text, text, integer) FROM anon;
