@@ -10,7 +10,9 @@ export function useConsultation(queueEntryId: string | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('consultations')
-        .select('*, diagnoses(id, name), doctors(id, name, avatar_url)')
+        .select(
+          '*, diagnoses(id, name), doctors(id, name, avatar_url), entry_source, entered_by, original_consulted_at, approval_status, approved_by, approved_at, returned_by, returned_at, return_reason, approval_revision',
+        )
         .eq('queue_entry_id', queueEntryId!)
         .is('deleted_at', null)
         .maybeSingle();

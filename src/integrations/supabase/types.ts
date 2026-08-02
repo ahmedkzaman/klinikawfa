@@ -1580,6 +1580,10 @@ export type Database = {
       }
       consultations: {
         Row: {
+          approval_revision: number
+          approval_status: string
+          approved_at: string | null
+          approved_by: string | null
           case_note: string
           created_at: string
           deleted_at: string | null
@@ -1588,15 +1592,25 @@ export type Database = {
           diagnosis_text: string
           dispense_note: string
           doctor_id: string | null
+          entered_by: string | null
+          entry_source: string
           id: string
           locked_at: string | null
           locked_by: string | null
+          original_consulted_at: string | null
           patient_id: string
           queue_entry_id: string
+          return_reason: string | null
+          returned_at: string | null
+          returned_by: string | null
           status: string
           updated_at: string
         }
         Insert: {
+          approval_revision?: number
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
           case_note?: string
           created_at?: string
           deleted_at?: string | null
@@ -1605,15 +1619,25 @@ export type Database = {
           diagnosis_text?: string
           dispense_note?: string
           doctor_id?: string | null
+          entered_by?: string | null
+          entry_source?: string
           id?: string
           locked_at?: string | null
           locked_by?: string | null
+          original_consulted_at?: string | null
           patient_id: string
           queue_entry_id: string
+          return_reason?: string | null
+          returned_at?: string | null
+          returned_by?: string | null
           status?: string
           updated_at?: string
         }
         Update: {
+          approval_revision?: number
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
           case_note?: string
           created_at?: string
           deleted_at?: string | null
@@ -1622,11 +1646,17 @@ export type Database = {
           diagnosis_text?: string
           dispense_note?: string
           doctor_id?: string | null
+          entered_by?: string | null
+          entry_source?: string
           id?: string
           locked_at?: string | null
           locked_by?: string | null
+          original_consulted_at?: string | null
           patient_id?: string
           queue_entry_id?: string
+          return_reason?: string | null
+          returned_at?: string | null
+          returned_by?: string | null
           status?: string
           updated_at?: string
         }
@@ -1664,6 +1694,47 @@ export type Database = {
             columns: ["queue_entry_id"]
             isOneToOne: false
             referencedRelation: "queue_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consultation_approval_audit: {
+        Row: {
+          action: string
+          actor_id: string
+          actor_name: string
+          consultation_id: string
+          created_at: string
+          id: string
+          reason: string | null
+          snapshot: Json
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          actor_name: string
+          consultation_id: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+          snapshot?: Json
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          actor_name?: string
+          consultation_id?: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+          snapshot?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultation_approval_audit_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: false
+            referencedRelation: "consultations"
             referencedColumns: ["id"]
           },
         ]
@@ -6162,6 +6233,17 @@ export type Database = {
           patient_name: string
         }>
       }
+      get_offline_consultation_audit: {
+        Args: { p_consultation_id: string }
+        Returns: Array<{
+          action: string
+          actor_id: string
+          actor_name: string
+          created_at: string
+          id: string
+          reason: string | null
+        }>
+      }
       checkout_visit: {
         Args: {
           p_amount_paid: number
@@ -6186,6 +6268,15 @@ export type Database = {
           p_queue_entry_id: string
         }
         Returns: Json
+      }
+      review_offline_consultation: {
+        Args: {
+          p_action: string
+          p_consultation_id: string
+          p_expected_revision?: number | null
+          p_reason?: string | null
+        }
+        Returns: Database["public"]["Tables"]["consultations"]["Row"]
       }
       remove_consultation_item_dispensary: {
         Args: {
@@ -6378,6 +6469,19 @@ export type Database = {
         Returns: undefined
       }
       safe_reset_queue_number_seq: { Args: never; Returns: undefined }
+      save_offline_consultation: {
+        Args: {
+          p_case_note: string
+          p_diagnosis_id: string | null
+          p_diagnosis_text: string
+          p_dispense_note: string
+          p_doctor_id: string
+          p_expected_revision: number
+          p_original_consulted_at: string
+          p_queue_entry_id: string
+        }
+        Returns: Database["public"]["Tables"]["consultations"]["Row"]
+      }
       save_client_invoice_items: {
         Args: { _invoice_id: string; _items: Json }
         Returns: undefined

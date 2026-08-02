@@ -71,3 +71,40 @@ export function canListConsultationEntry(input: ConsultationListAccessInput) {
 
   return input.selectedDateIsToday && ownEntry;
 }
+
+export type OfflineConsultationAccessInput = {
+  role: AppRole | null;
+  currentDoctorId: string | null | undefined;
+  attendingDoctorId: string | null | undefined;
+  entrySource: string | null | undefined;
+  approvalStatus: string | null | undefined;
+};
+
+/**
+ * UI-only state for offline transcription controls. The approval RPCs remain
+ * authoritative for every save, review, and state transition.
+ */
+export function getOfflineConsultationAccess(input: OfflineConsultationAccessInput) {
+  const isOfflineTranscription = input.entrySource === 'offline_transcription';
+  const isEditableStatus =
+    input.approvalStatus === 'pending' || input.approvalStatus === 'returned';
+  const isSelectedDoctor =
+    !!input.currentDoctorId && input.currentDoctorId === input.attendingDoctorId;
+  const isReviewRole =
+    input.role === 'resident_doctor' || input.role === 'doctor_admin';
+  const canEditTranscription =
+    input.role === 'ops_staff' && isOfflineTranscription && isEditableStatus;
+
+  return {
+    canEnter: input.role === 'ops_staff' && !input.entrySource,
+    canEditTranscription,
+    canReview:
+      isOfflineTranscription &&
+      input.approvalStatus === 'pending' &&
+      isReviewRole &&
+      (input.role === 'doctor_admin' || isSelectedDoctor),
+    isLockedForStaff:
+      input.role === 'ops_staff' && isOfflineTranscription && !canEditTranscription,
+    canContinueOperationalFlow: isOfflineTranscription && isEditableStatus,
+  };
+}
