@@ -66,3 +66,20 @@ not be completed locally: on this Windows runtime, its temporary server starts
 but the test process does not return during teardown. The local focused run
 therefore skips it unless `RUN_DISPOSABLE_POSTGRES_REPORTING_TEST=1`; this is
 the only blocked reporting path. No production database was contacted.
+
+## Fix Round 2
+
+- Updated the disposable PostgreSQL harness to apply the complete ordered
+  doctor-clinical-activity function chain: base report, hardening, then doctor
+  name fix. The financial reporting migration remains applied after that chain.
+- The RED run applied only the base function and failed with
+  `FINAL_ACTIVITY_RANGE_CAP_MISSING`, proving the test rejects an incomplete
+  deployed-function chain.
+- The GREEN run applied all three function migrations and passed all five
+  reporting tests. It verified the final 365-day range cap, consulting-doctor
+  name and ID, and financial inclusion for a completed `pending` offline
+  consultation.
+- Reworked Windows PostgreSQL control commands to use uncaptured `pg_ctl`
+  start/stop processes. Cleanup now removes its temporary directory only after
+  a confirmed stop; a stop failure throws immediately, so CI fails closed
+  rather than hanging. The local opt-in completed successfully.

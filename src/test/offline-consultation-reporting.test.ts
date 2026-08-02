@@ -213,24 +213,30 @@ describe('offline consultation reporting attribution', () => {
       const port = String(58000 + (process.pid % 1000));
       const bootstrapPath = join(root, 'bootstrap.sql');
       const assertionsPath = join(root, 'assertions.sql');
-      const activityMigration = resolve(
-        process.cwd(),
-        'supabase/migrations/20260728113618_add_doctor_clinical_activity_report.sql',
-      );
+      const activityMigrations = [
+        '20260728113618_add_doctor_clinical_activity_report.sql',
+        '20260728124247_harden_doctor_clinical_activity_report.sql',
+        '20260728144223_fix_doctor_clinical_activity_names.sql',
+      ].map((migration) => resolve(process.cwd(), 'supabase/migrations', migration));
       const financialMigration = resolve(
         process.cwd(),
         'supabase/migrations/20260728153000_reconcile_completed_bill_financial_reporting.sql',
       );
       const run = (tool: string, args: string[]) =>
         execFileSync(tool, args, { encoding: 'utf8', stdio: 'pipe' });
+      const control = (args: string[]) =>
+        execFileSync(postgresTools.pgCtl, args, { stdio: 'ignore', timeout: 20_000 });
       const psql = (path: string) => run(postgresTools.psql, [
         '-X', '-q', '-v', 'ON_ERROR_STOP=1', '-h', '127.0.0.1', '-p', port,
         '-U', 'postgres', '-d', 'postgres', '-f', path,
       ]);
+      let serverStarted = false;
+      let stopError: Error | null = null;
 
       try {
         run(postgresTools.initdb, ['-D', dataDirectory, '-U', 'postgres', '-A', 'trust', '--no-locale', '-E', 'UTF8']);
-        run(postgresTools.pgCtl, ['-D', dataDirectory, '-l', join(root, 'postgres.log'), '-o', `-h 127.0.0.1 -p ${port}`, '-w', 'start']);
+        control(['-D', dataDirectory, '-l', join(root, 'postgres.log'), '-o', `-h 127.0.0.1 -p ${port}`, '-w', 'start']);
+        serverStarted = true;
         writeFileSync(bootstrapPath, `
 create schema auth;
 create role anon nologin;
@@ -265,6 +271,12 @@ select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000004
 do $$
 declare v_activity_doctor uuid; v_activity_name text; v_financial_doctor uuid; v_revenue numeric;
 begin
+  begin
+    perform public.get_doctor_clinical_activity('2026-01-01', '2027-01-02');
+    raise exception 'FINAL_ACTIVITY_RANGE_CAP_MISSING';
+  exception when sqlstate '22023' then
+    if sqlerrm <> 'DATE_RANGE_TOO_LARGE' then raise; end if;
+  end;
   select doctor_id, doctor_name into v_activity_doctor, v_activity_name
   from public.get_doctor_clinical_activity('2026-08-03', '2026-08-03')
   where activity_id = '70000000-0000-4000-8000-000000000001';
@@ -277,21 +289,25 @@ end $$;
 `, 'utf8');
 
         psql(bootstrapPath);
-        psql(activityMigration);
+        activityMigrations.forEach(psql);
         psql(financialMigration);
         psql(assertionsPath);
       } finally {
-        try {
-          execFileSync(
-            postgresTools.pgCtl,
-            ['-D', dataDirectory, '-m', 'immediate', '-w', '-t', '10', 'stop'],
-            { stdio: 'ignore', timeout: 15_000 },
-          );
-        } catch {
-          // Startup failures are reported by the test command.
+        if (serverStarted) {
+          try {
+            execFileSync(
+              postgresTools.pgCtl,
+              ['-D', dataDirectory, '-m', 'immediate', '-w', '-t', '10', 'stop'],
+              { stdio: 'ignore', timeout: 15_000 },
+            );
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            stopError = new Error(`Failed to stop disposable PostgreSQL: ${message}`);
+          }
         }
-        rmSync(root, { recursive: true, force: true });
+        if (!stopError) rmSync(root, { recursive: true, force: true });
       }
+      if (stopError) throw stopError;
     },
     120_000,
   );
