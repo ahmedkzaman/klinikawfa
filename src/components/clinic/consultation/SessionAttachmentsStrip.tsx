@@ -13,6 +13,7 @@ import {
 interface SessionAttachmentsStripProps {
   consultationId: string | null | undefined;
   canEdit: boolean;
+  canMutate?: boolean;
   onBeforeMutation?: () => Promise<boolean>;
   offlineConsultationId?: string | null;
 }
@@ -20,6 +21,7 @@ interface SessionAttachmentsStripProps {
 export function SessionAttachmentsStrip({
   consultationId,
   canEdit,
+  canMutate = canEdit,
   onBeforeMutation,
   offlineConsultationId,
 }: SessionAttachmentsStripProps) {
@@ -78,7 +80,7 @@ export function SessionAttachmentsStrip({
 
   return (
     <div className="space-y-3">
-      {canEdit && (
+      {canEdit && canMutate && (
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
           <Input
             ref={fileInputRef}
@@ -154,7 +156,7 @@ export function SessionAttachmentsStrip({
                 ) : (
                   <span className="shrink-0 text-slate-400">Unavailable</span>
                 )}
-                {canEdit && (
+                {canEdit && canMutate && (
                   <Button
                     type="button"
                     variant="ghost"

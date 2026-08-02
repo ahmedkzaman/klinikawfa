@@ -207,6 +207,7 @@ vi.mock('@/components/clinic/consultation/VitalHistoryTrends', () => ({ VitalHis
 vi.mock('@/components/clinic/consultation/TreatmentItemCard', () => ({ TreatmentItemCard: () => null }));
 vi.mock('@/components/clinic/consultation/MultiDiagnosisPicker', () => ({ MultiDiagnosisPicker: () => null }));
 vi.mock('@/components/clinic/consultation/SessionAttachmentsStrip', () => ({ SessionAttachmentsStrip: () => null }));
+vi.mock('@/components/clinic/consultation/OfflineConsultationReview', () => ({ OfflineConsultationReview: () => null }));
 vi.mock('@/components/clinic/patient/FollowUpScheduler', () => ({ FollowUpScheduler: () => null }));
 
 describe('offline consultation pages', () => {

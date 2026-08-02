@@ -127,6 +127,7 @@ import {
   useSaveOfflineConsultation,
 } from '@/hooks/clinic/useOfflineConsultationApproval';
 import { OfflineConsultationProvenance } from '@/components/clinic/consultation/OfflineConsultationProvenance';
+import { OfflineConsultationReview } from '@/components/clinic/consultation/OfflineConsultationReview';
 import type { ClinicStatus } from '@/types/clinic';
 
 const PRICE_TIERS = ['SELF PAY', 'PANEL'];
@@ -380,10 +381,21 @@ export default function ConsultationDetail() {
     requestedOfflineEntry &&
     role === 'ops_staff' &&
     (offlineAccess.canEnter || isOfflineRecord);
-  const canEditClinical = canUseOfflineEditor
-    ? offlineAccess.canEnter || offlineAccess.canEditTranscription
-    : access.canEdit;
-  const isCrossDoctorReadOnly = !canUseOfflineEditor && access.isCrossDoctorReadOnly;
+  const isSelectedOfflineDoctor =
+    role === 'resident_doctor' &&
+    !!doctor?.id &&
+    doctor.id === consultation?.doctor_id;
+  const canViewOfflineReviewAudit =
+    isOfflineRecord &&
+    (canUseOfflineEditor || role === 'doctor_admin' || isSelectedOfflineDoctor);
+  const isOfflineReviewMode = isOfflineRecord && !canUseOfflineEditor;
+  const canEditClinical = isOfflineReviewMode
+    ? false
+    : canUseOfflineEditor
+      ? offlineAccess.canEnter || offlineAccess.canEditTranscription
+      : access.canEdit;
+  const isCrossDoctorReadOnly =
+    !canUseOfflineEditor && (access.isCrossDoctorReadOnly || isOfflineReviewMode);
 
   const isLocked =
     consultation?.status === 'completed' || entry?.clinic_status === 'completed';
@@ -439,14 +451,14 @@ export default function ConsultationDetail() {
     );
 
   const { isLockedByOther, canEdit, forceUnlock } = useConsultationLock(
-    (access.canEdit ? consultation : null) as
+    (access.canEdit && !isOfflineReviewMode ? consultation : null) as
       | { id?: string; locked_by?: string | null; status?: string }
       | null
       | undefined,
   );
   const canEditWorkspace = canEditClinical && (canUseOfflineEditor || canEdit);
   const documentAccess = getConsultationDocumentAccess({
-    isOfflineEditor: canUseOfflineEditor,
+    isOfflineEditor: isOfflineRecord,
     canEditWorkspace,
     liveCanEdit: access.canEdit,
     liveIsLocked: isLocked,
@@ -1149,7 +1161,7 @@ export default function ConsultationDetail() {
     );
   }
 
-  if (!access.canView && !canUseOfflineEditor) {
+  if (!access.canView && !canUseOfflineEditor && !canViewOfflineReviewAudit) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
@@ -1260,6 +1272,23 @@ export default function ConsultationDetail() {
               setOriginalConsultedAt(value);
               setHasSavedOfflineConsultation(false);
             }}
+          />
+        )}
+
+        {canViewOfflineReviewAudit && consultationId && (
+          <OfflineConsultationReview
+            consultationId={consultationId}
+            approvalStatus={
+              (effectiveOfflineApprovalStatus as
+                | 'pending'
+                | 'returned'
+                | 'approved'
+                | null) ?? null
+            }
+            approvalRevision={
+              offlineEntryState?.approval_revision ?? consultation?.approval_revision ?? 0
+            }
+            canReview={offlineAccess.canReview}
           />
         )}
 
@@ -1382,6 +1411,9 @@ export default function ConsultationDetail() {
                     <SessionAttachmentsStrip
                       consultationId={consultationId}
                       canEdit={canEditWorkspace}
+                      canMutate={
+                        isOfflineRecord ? offlineAccess.canEditTranscription : undefined
+                      }
                       onBeforeMutation={guardOfflineMutation}
                       offlineConsultationId={canUseOfflineEditor ? consultationId : null}
                     />
