@@ -41,8 +41,22 @@ jobs:
 
       - name: Unit tests
         env:
-          REQUIRE_POSTGRES_TEST: "1"
+          # PostgreSQL contract suites run one process at a time below.
+          POSTGRES_BIN: /nonexistent
         run: npm test
+
+      - name: PostgreSQL contract tests
+        env:
+          REQUIRE_POSTGRES_TEST: "1"
+        run: |
+          for test_file in \
+            src/test/offline-consultation-approval-migration.test.ts \
+            src/test/offline-consultation-entry-security.test.ts \
+            src/test/offline-consultation-reporting.test.ts \
+            src/test/offline-consultation-final-review.test.ts
+          do
+            npm test -- "$test_file"
+          done
 
       - name: Build
         env:
