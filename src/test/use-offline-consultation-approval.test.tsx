@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import type { PropsWithChildren } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useConsultation } from '@/hooks/clinic/useConsultations';
@@ -147,18 +147,20 @@ describe('offline consultation approval hooks', () => {
     expect(invalidateQueries).not.toHaveBeenCalled();
   });
 
-  it('reads the server-authored audit without exposing audit snapshots', async () => {
+  it('defensively keeps only the latest 50 projected audit fields', async () => {
     rpc.mockResolvedValueOnce({
-      data: [
-        {
-          id: 'audit-1',
+      data: Array.from({ length: 55 }, (_, index) => {
+        const eventNumber = index + 1;
+        return {
+          id: `audit-${eventNumber}`,
           action: 'submitted',
           actor_id: 'staff-1',
           actor_name: 'Staff One',
-          created_at: '2026-08-02T10:05:00.000Z',
+          created_at: new Date(Date.UTC(2026, 7, 2, 10, eventNumber)).toISOString(),
           reason: null,
-        },
-      ],
+          snapshot: { case_note: `private snapshot ${eventNumber}` },
+        };
+      }),
       error: null,
     });
     const queryClient = createQueryClient();
@@ -166,11 +168,100 @@ describe('offline consultation approval hooks', () => {
       wrapper: createWrapper(queryClient),
     });
 
-    await waitFor(() => expect(result.current.data).toHaveLength(1));
+    await waitFor(() => expect(result.current.data).toHaveLength(50));
     expect(rpc).toHaveBeenCalledWith('get_offline_consultation_audit', {
       p_consultation_id: 'consultation-1',
     });
+    expect(result.current.data?.[0].id).toBe('audit-6');
+    expect(result.current.data?.at(-1)?.id).toBe('audit-55');
     expect(result.current.data?.[0]).not.toHaveProperty('snapshot');
+  });
+
+  it('synchronizes active consultation, history, and audit queries after a real review mutation', async () => {
+    let consultationState = { ...savedConsultation };
+    let historyState = [{
+      id: savedConsultation.id,
+      approval_status: savedConsultation.approval_status,
+      approval_revision: savedConsultation.approval_revision,
+    }];
+    let auditState = [{
+      id: 'audit-submitted',
+      action: 'submitted',
+      actor_id: 'staff-1',
+      actor_name: 'Staff One',
+      created_at: '2026-08-02T10:00:00.000Z',
+      reason: null,
+    }];
+    const fetchHistory = vi.fn(async () => historyState);
+
+    maybeSingle.mockImplementation(async () => ({ data: consultationState, error: null }));
+    rpc.mockImplementation(async (name: string) => {
+      if (name === 'get_offline_consultation_audit') {
+        return { data: auditState, error: null };
+      }
+      if (name === 'review_offline_consultation') {
+        consultationState = {
+          ...consultationState,
+          approval_status: 'approved',
+          approval_revision: 1,
+        };
+        historyState = [{
+          id: consultationState.id,
+          approval_status: consultationState.approval_status,
+          approval_revision: consultationState.approval_revision,
+        }];
+        auditState = [
+          ...auditState,
+          {
+            id: 'audit-approved',
+            action: 'approved',
+            actor_id: 'doctor-1',
+            actor_name: 'Doctor One',
+            created_at: '2026-08-02T10:05:00.000Z',
+            reason: null,
+          },
+        ];
+        return { data: consultationState, error: null };
+      }
+      return { data: null, error: new Error(`Unexpected RPC: ${name}`) };
+    });
+
+    const queryClient = createQueryClient();
+    const { result } = renderHook(() => ({
+      consultation: useConsultation('queue-1'),
+      history: useQuery({
+        queryKey: ['consultation_history', 'patient-1'],
+        queryFn: fetchHistory,
+      }),
+      audit: useOfflineConsultationAudit('consultation-1'),
+      review: useReviewOfflineConsultation(),
+    }), { wrapper: createWrapper(queryClient) });
+
+    await waitFor(() => {
+      expect(result.current.consultation.data?.approval_status).toBe('pending');
+      expect(result.current.history.data?.[0].approval_status).toBe('pending');
+      expect(result.current.audit.data?.at(-1)?.action).toBe('submitted');
+    });
+
+    await act(async () => {
+      await result.current.review.mutateAsync({
+        consultationId: 'consultation-1',
+        action: 'approve',
+        expectedRevision: 0,
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.consultation.data?.approval_status).toBe('approved');
+      expect(result.current.consultation.data?.approval_revision).toBe(1);
+      expect(result.current.history.data?.[0].approval_status).toBe('approved');
+      expect(result.current.history.data?.[0].approval_revision).toBe(1);
+      expect(result.current.audit.data?.at(-1)?.action).toBe('approved');
+    });
+
+    expect(maybeSingle).toHaveBeenCalledTimes(2);
+    expect(fetchHistory).toHaveBeenCalledTimes(2);
+    expect(rpc.mock.calls.filter(([name]) => name === 'get_offline_consultation_audit')).toHaveLength(2);
   });
 
   it('selects offline provenance fields with a consultation record', async () => {

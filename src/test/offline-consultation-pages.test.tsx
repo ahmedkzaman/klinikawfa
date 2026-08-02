@@ -128,6 +128,7 @@ vi.mock('@/hooks/clinic/useCurrentDoctor', () => ({
 }));
 
 vi.mock('@/hooks/clinic/useOfflineConsultationApproval', () => ({
+  OFFLINE_CONSULTATION_AUDIT_LIMIT: 50,
   useOfflineConsultationEntryVisits: () => ({
     data: test.state.eligibleVisitIds,
     isLoading: false,

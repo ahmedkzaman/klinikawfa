@@ -23,6 +23,8 @@ export type ReviewOfflineConsultationInput = {
 export type OfflineConsultationAuditEntry =
   Database['public']['Functions']['get_offline_consultation_audit']['Returns'][number];
 
+export const OFFLINE_CONSULTATION_AUDIT_LIMIT = 50;
+
 export type EligibleOfflineDoctor = {
   id: string;
   user_id: string;
@@ -120,7 +122,16 @@ export function useOfflineConsultationAudit(consultationId: string | null | unde
         p_consultation_id: consultationId!,
       });
       if (error) throw error;
-      return data ?? [];
+      return (data ?? [])
+        .slice(-OFFLINE_CONSULTATION_AUDIT_LIMIT)
+        .map(({ id, action, actor_id, actor_name, created_at, reason }) => ({
+          id,
+          action,
+          actor_id,
+          actor_name,
+          created_at,
+          reason,
+        }));
     },
   });
 }

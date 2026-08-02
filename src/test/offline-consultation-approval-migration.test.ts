@@ -8,8 +8,15 @@ const migrationPath = resolve(
   process.cwd(),
   'supabase/migrations/20260802190000_add_offline_consultation_approval.sql',
 );
+const auditBoundMigrationPath = resolve(
+  process.cwd(),
+  'supabase/migrations/20260803010000_bound_offline_consultation_audit.sql',
+);
 const securityGatePath = resolve(process.cwd(), '.github/workflows/security-gate.yml');
 const sql = existsSync(migrationPath) ? readFileSync(migrationPath, 'utf8') : '';
+const auditBoundSql = existsSync(auditBoundMigrationPath)
+  ? readFileSync(auditBoundMigrationPath, 'utf8')
+  : '';
 const securityGate = existsSync(securityGatePath) ? readFileSync(securityGatePath, 'utf8') : '';
 type PostgresToolName = 'initdb' | 'pgCtl' | 'psql';
 type PostgresTools = Record<PostgresToolName, string>;
@@ -192,6 +199,29 @@ describe('offline consultation approval migration', () => {
     expect(sql).toMatch(/locum/i);
   });
 
+  it('adds a final hardened RPC contract returning only the newest 50 audit events chronologically', () => {
+    expect(existsSync(auditBoundMigrationPath)).toBe(true);
+    expect(auditBoundMigrationPath.localeCompare(migrationPath)).toBeGreaterThan(0);
+
+    const auditRpc = auditBoundSql.match(
+      /create or replace function public\.get_offline_consultation_audit[\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+
+    expect(auditRpc).toMatch(/returns table\(\s*id uuid,\s*action text,\s*actor_id uuid,\s*actor_name text,\s*created_at timestamptz,\s*reason text\s*\)/i);
+    expect(auditRpc).toMatch(/security definer/i);
+    expect(auditRpc).toMatch(/set search_path = pg_catalog, public/i);
+    expect(auditRpc).toMatch(/is_current_offline_consultation_doctor\(\s*v_consultation\.id,\s*v_actor_id\s*\)/i);
+    expect(auditRpc).toMatch(/role::text = 'doctor_admin'/i);
+    expect(auditRpc).toMatch(/not_authorized_offline_consultation_audit/i);
+    expect(auditRpc).toMatch(/order by audit\.created_at desc, audit\.id desc\s*limit 50/i);
+    expect(auditRpc).toMatch(/order by recent\.created_at, recent\.id/i);
+    expect(auditRpc).not.toMatch(/snapshot/i);
+    expect(auditBoundSql).toMatch(/alter function public\.get_offline_consultation_audit\(uuid\) owner to postgres/i);
+    expect(auditBoundSql).toMatch(/revoke all on function public\.get_offline_consultation_audit\(uuid\) from public/i);
+    expect(auditBoundSql).toMatch(/revoke all on function public\.get_offline_consultation_audit\(uuid\) from anon/i);
+    expect(auditBoundSql).toMatch(/grant execute on function public\.get_offline_consultation_audit\(uuid\) to authenticated/i);
+  });
+
   it.skipIf(!hasPostgresRuntime && !requiresPostgresTest)(
     'executes the migration state machine against disposable PostgreSQL',
     () => {
@@ -371,6 +401,42 @@ begin
 end
 $$;
 reset role;
+insert into public.consultation_approval_audit (
+  consultation_id, action, actor_id, actor_name, created_at, reason, snapshot
+)
+select current_setting('app.test.consultation_id')::uuid,
+       'updated',
+       '10000000-0000-4000-8000-000000000003',
+       'Doctor admin',
+       timestamptz '2099-01-01 00:00:00+00' + sequence_number * interval '1 minute',
+       null,
+       '{}'::jsonb
+from generate_series(1, 55) as sequence_number;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000003', true);
+do $$
+declare
+  v_id uuid := current_setting('app.test.consultation_id')::uuid;
+  v_created_at timestamptz[];
+  v_expected timestamptz[];
+begin
+  select array_agg(event.created_at)
+    into v_created_at
+  from public.get_offline_consultation_audit(v_id) as event;
+
+  select array_agg(timestamptz '2099-01-01 00:00:00+00' + sequence_number * interval '1 minute')
+    into v_expected
+  from generate_series(6, 55) as sequence_number;
+
+  if cardinality(v_created_at) <> 50 then
+    raise exception 'AUDIT_RESULT_NOT_BOUNDED';
+  end if;
+  if v_created_at is distinct from v_expected then
+    raise exception 'AUDIT_RESULT_NOT_NEWEST_CHRONOLOGICAL';
+  end if;
+end
+$$;
+reset role;
 do $$
 declare v_audit_id uuid := (select id from public.consultation_approval_audit limit 1);
 begin
@@ -393,6 +459,7 @@ rollback;
 
         psql(bootstrapPath);
         psql(migrationPath);
+        psql(auditBoundMigrationPath);
         psql(stateMachinePath);
       } finally {
         try {

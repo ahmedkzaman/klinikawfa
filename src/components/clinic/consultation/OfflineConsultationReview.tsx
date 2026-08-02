@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { CheckCircle2, Clock3, History, RotateCcw } from 'lucide-react';
@@ -19,12 +19,12 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  OFFLINE_CONSULTATION_AUDIT_LIMIT,
   useOfflineConsultationAudit,
   useReviewOfflineConsultation,
   type OfflineConsultationAuditEntry,
 } from '@/hooks/clinic/useOfflineConsultationApproval';
 
-const AUDIT_EVENT_LIMIT = 50;
 const STALE_REVIEW_MESSAGE =
   'This consultation changed. Reload and review the latest version.';
 
@@ -42,6 +42,11 @@ type OfflineConsultationReviewProps = {
   approvalStatus: 'pending' | 'returned' | 'approved' | null | undefined;
   approvalRevision: number;
   canReview: boolean;
+};
+
+type CompletedReview = {
+  consultationId: string;
+  revision: number;
 };
 
 function formatAuditTime(value: string) {
@@ -77,13 +82,26 @@ export function OfflineConsultationReview({
   const [returnReason, setReturnReason] = useState('');
   const [returnReasonError, setReturnReasonError] = useState<string | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
-  const [completedRevision, setCompletedRevision] = useState<number | null>(null);
+  const [completedReview, setCompletedReview] = useState<CompletedReview | null>(null);
+  const activeConsultationId = useRef(consultationId);
+  activeConsultationId.current = consultationId;
 
-  const visibleAudit = (audit.data ?? []).slice(-AUDIT_EVENT_LIMIT);
+  useEffect(() => {
+    setReturnDialogOpen(false);
+    setReturnReason('');
+    setReturnReasonError(null);
+    setReviewError(null);
+    setCompletedReview(null);
+  }, [consultationId]);
+
+  const visibleAudit = (audit.data ?? []).slice(-OFFLINE_CONSULTATION_AUDIT_LIMIT);
   const showReviewControls =
     canReview &&
     approvalStatus === 'pending' &&
-    completedRevision !== approvalRevision;
+    !(
+      completedReview?.consultationId === consultationId &&
+      completedReview.revision === approvalRevision
+    );
 
   const refreshAfterConflict = async () => {
     await Promise.allSettled([
@@ -97,6 +115,7 @@ export function OfflineConsultationReview({
   };
 
   const submitReview = async (action: 'approve' | 'return', reason: string | null) => {
+    const reviewedConsultationId = consultationId;
     setReviewError(null);
     try {
       await review.mutateAsync({
@@ -105,7 +124,12 @@ export function OfflineConsultationReview({
         reason,
         expectedRevision: approvalRevision,
       });
-      setCompletedRevision(approvalRevision);
+      if (activeConsultationId.current !== reviewedConsultationId) return false;
+
+      setCompletedReview({
+        consultationId: reviewedConsultationId,
+        revision: approvalRevision,
+      });
       void audit.refetch();
       toast.success(
         action === 'approve'
@@ -114,13 +138,28 @@ export function OfflineConsultationReview({
       );
       return true;
     } catch (error) {
+      if (activeConsultationId.current !== reviewedConsultationId) return false;
+
       if (isStaleReviewError(error)) {
+        if (action === 'return') {
+          setReturnDialogOpen(false);
+          setReturnReason('');
+          setReturnReasonError(null);
+        }
         setReviewError(STALE_REVIEW_MESSAGE);
         await refreshAfterConflict();
       } else {
         setReviewError('The review could not be completed. Try again.');
       }
       return false;
+    }
+  };
+
+  const handleReturnDialogOpenChange = (open: boolean) => {
+    setReturnDialogOpen(open);
+    if (!open) {
+      setReturnReason('');
+      setReturnReasonError(null);
     }
   };
 
@@ -227,7 +266,7 @@ export function OfflineConsultationReview({
         )}
       </div>
 
-      <AlertDialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
+      <AlertDialog open={returnDialogOpen} onOpenChange={handleReturnDialogOpenChange}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Return consultation for correction?</AlertDialogTitle>

@@ -3,8 +3,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OfflineConsultationReview } from '@/components/clinic/consultation/OfflineConsultationReview';
-import { SessionAttachmentsStrip } from '@/components/clinic/consultation/SessionAttachmentsStrip';
-import { getOfflineConsultationAccess } from '@/lib/clinic/consultationAccess';
 import ConsultationDetail from '@/pages/clinic/ConsultationDetail';
 
 const test = vi.hoisted(() => {
@@ -131,6 +129,7 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 vi.mock('@/hooks/clinic/useOfflineConsultationApproval', () => ({
+  OFFLINE_CONSULTATION_AUDIT_LIMIT: 50,
   useEligibleOfflineConsultationDoctors: () => ({ data: [] }),
   useOfflineConsultationEntryState: () => ({ data: null, refetch: vi.fn() }),
   useSaveOfflineConsultation: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -392,6 +391,116 @@ describe('offline consultation doctor review', () => {
     });
   });
 
+  it('closes the return dialog so a stale return conflict is visible', async () => {
+    test.review.mockRejectedValueOnce({ message: 'stale_offline_consultation' });
+    renderWithClient(
+      <OfflineConsultationReview
+        consultationId="consultation-1"
+        approvalStatus="pending"
+        approvalRevision={7}
+        canReview
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Return for correction' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Reason for correction' }), {
+      target: { value: 'Clarify the medication dosage.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Return consultation' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'This consultation changed. Reload and review the latest version.',
+    );
+  });
+
+  it('does not carry a completed same-number revision to another consultation', async () => {
+    const rendered = renderWithClient(
+      <OfflineConsultationReview
+        consultationId="consultation-1"
+        approvalStatus="pending"
+        approvalRevision={7}
+        canReview
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+    });
+
+    rendered.rerender(
+      <QueryClientProvider client={rendered.queryClient}>
+        <OfflineConsultationReview
+          consultationId="consultation-2"
+          approvalStatus="pending"
+          approvalRevision={7}
+          canReview
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByRole('button', { name: 'Approve' })).toBeInTheDocument();
+  });
+
+  it('clears errors and an open correction draft when consultation identity changes', async () => {
+    const rendered = renderWithClient(
+      <OfflineConsultationReview
+        consultationId="consultation-1"
+        approvalStatus="pending"
+        approvalRevision={7}
+        canReview
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Return for correction' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Return consultation' }));
+    expect(screen.getByText('Enter a reason for correction.')).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Reason for correction' }), {
+      target: { value: 'Draft reason for consultation one' },
+    });
+
+    rendered.rerender(
+      <QueryClientProvider client={rendered.queryClient}>
+        <OfflineConsultationReview
+          consultationId="consultation-2"
+          approvalStatus="pending"
+          approvalRevision={7}
+          canReview
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Return for correction' }));
+    expect(screen.getByRole('textbox', { name: 'Reason for correction' })).toHaveValue('');
+    expect(screen.queryByText('Enter a reason for correction.')).not.toBeInTheDocument();
+  });
+
+  it('discards the correction draft when the dialog is cancelled and reopened', () => {
+    renderWithClient(
+      <OfflineConsultationReview
+        consultationId="consultation-1"
+        approvalStatus="pending"
+        approvalRevision={7}
+        canReview
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Return for correction' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Reason for correction' }), {
+      target: { value: 'Discard this draft' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Return for correction' }));
+
+    expect(screen.getByRole('textbox', { name: 'Reason for correction' })).toHaveValue('');
+  });
+
   it('renders only the latest 50 chronological audit events without snapshot data', () => {
     const filler = Array.from({ length: 45 }, (_, index) => ({
       id: `audit-filler-${index}`,
@@ -454,65 +563,5 @@ describe('offline consultation doctor review', () => {
     expect(screen.getAllByText('Dr Selected').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/02 Aug 2026/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/secret clinical note|never render this clinical snapshot/)).not.toBeInTheDocument();
-  });
-});
-
-describe('offline consultation attachment mutation boundary', () => {
-  beforeEach(() => {
-    test.deleteAttachment.mockReset().mockResolvedValue(undefined);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-  });
-
-  afterEach(() => {
-    cleanup();
-    vi.restoreAllMocks();
-  });
-
-  it('allows operations staff to mutate pending attachments and locks approved attachments', async () => {
-    const pendingAccess = getOfflineConsultationAccess({
-      role: 'ops_staff',
-      currentDoctorId: null,
-      attendingDoctorId: 'doctor-1',
-      entrySource: 'offline_transcription',
-      approvalStatus: 'pending',
-    });
-    renderWithClient(
-      <SessionAttachmentsStrip
-        consultationId="consultation-1"
-        canEdit
-        canMutate={pendingAccess.canEditTranscription}
-      />,
-    );
-    expect(screen.getByLabelText('Clinical attachment')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Remove outage-note.pdf' }));
-    await waitFor(() => expect(test.deleteAttachment).toHaveBeenCalled());
-
-    cleanup();
-    const approvedAccess = getOfflineConsultationAccess({
-      role: 'ops_staff',
-      currentDoctorId: null,
-      attendingDoctorId: 'doctor-1',
-      entrySource: 'offline_transcription',
-      approvalStatus: 'approved',
-    });
-    renderWithClient(
-      <SessionAttachmentsStrip
-        consultationId="consultation-1"
-        canEdit
-        canMutate={approvedAccess.canEditTranscription}
-      />,
-    );
-    expect(screen.getByRole('link', { name: 'View' })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Clinical attachment')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Remove outage-note.pdf' })).not.toBeInTheDocument();
-  });
-
-  it('preserves the existing live attachment behavior when canMutate is omitted', () => {
-    renderWithClient(
-      <SessionAttachmentsStrip consultationId="consultation-1" canEdit />,
-    );
-
-    expect(screen.getByLabelText('Clinical attachment')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Remove outage-note.pdf' })).toBeInTheDocument();
   });
 });

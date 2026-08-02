@@ -1277,6 +1277,7 @@ export default function ConsultationDetail() {
 
         {canViewOfflineReviewAudit && consultationId && (
           <OfflineConsultationReview
+            key={consultationId}
             consultationId={consultationId}
             approvalStatus={
               (effectiveOfflineApprovalStatus as
