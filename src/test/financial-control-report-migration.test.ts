@@ -43,10 +43,17 @@ describe('canonical financial control visit facts migration', () => {
     expect(sql).toMatch(/create table private\.financial_visit_completion_events/i);
     expect(sql).toMatch(/create table private\.financial_payment_events/i);
     expect(sql).toMatch(/create table private\.financial_panel_claim_events/i);
+    expect(sql).toMatch(/create table private\.financial_zero_price_package_child_events/i);
     expect(sql).toMatch(/synthetic_backfill/i);
     expect(sql).toMatch(/attribution_complete/i);
     expect(sql).not.toMatch(/claim_updated_at[\s\S]*paid_in_period/i);
     expect(sql).not.toMatch(/create or replace function public\.get_financial_control_/i);
+
+    const factFunctionSql = sql.match(
+      /create or replace function private\.financial_control_visit_facts[\s\S]*?\$function\$;/i,
+    )?.[0];
+    expect(factFunctionSql).toBeDefined();
+    expect(factFunctionSql).not.toMatch(/public\.package_items/i);
   });
 
   it.skipIf(!requiresPostgresTest)(
@@ -253,6 +260,8 @@ insert into public.consultation_items values
   ('70000000-0000-4000-8000-000000000004', '60000000-0000-4000-8000-000000000002', 'Tax', null, null, null, 1, null, 5, 999, 'tax', null),
   ('70000000-0000-4000-8000-000000000005', '60000000-0000-4000-8000-000000000003', 'Package', null, null, '82000000-0000-4000-8000-000000000001', 1, null, 80, 30, null, null),
   ('70000000-0000-4000-8000-000000000009', '60000000-0000-4000-8000-000000000003', 'Included package medicine', '80000000-0000-4000-8000-000000000009', null, null, 1, 1, 0, 0, null, null),
+  ('70000000-0000-4000-8000-000000000010', '60000000-0000-4000-8000-000000000003', 'Independently charged duplicate medicine', '80000000-0000-4000-8000-000000000009', null, null, 1, 1, 25, 7, null, null),
+  ('70000000-0000-4000-8000-000000000011', '60000000-0000-4000-8000-000000000003', 'Independently charged missing-cost medicine', '80000000-0000-4000-8000-000000000011', null, null, 1, 1, 15, 0, null, null),
   ('70000000-0000-4000-8000-000000000006', '60000000-0000-4000-8000-000000000004', 'Panel service', null, '81000000-0000-4000-8000-000000000002', null, 1, null, 120, 20, null, null),
   ('70000000-0000-4000-8000-000000000007', '60000000-0000-4000-8000-000000000005', 'Partial medicine', '80000000-0000-4000-8000-000000000002', null, null, 5, 2, 10, 4, null, null),
   ('70000000-0000-4000-8000-000000000008', '60000000-0000-4000-8000-000000000005', 'Zero cost medicine', '80000000-0000-4000-8000-000000000003', null, null, 1, 1, 0, 0, null, null),
@@ -286,6 +295,15 @@ values
   ('50000000-0000-4000-8000-000000000003', '60000000-0000-4000-8000-000000000003', '2026-07-20 02:30:00+00', 'recorded', true),
   ('50000000-0000-4000-8000-000000000004', '60000000-0000-4000-8000-000000000004', '2026-08-01 02:30:00+00', 'recorded', true),
   ('50000000-0000-4000-8000-000000000005', '60000000-0000-4000-8000-000000000005', '2026-08-01 03:30:00+00', 'recorded', true);
+
+insert into private.financial_zero_price_package_child_events
+  (consultation_item_id, consultation_id, package_line_item_id, package_id,
+   package_item_id, completed_at, provenance)
+values
+  ('70000000-0000-4000-8000-000000000009', '60000000-0000-4000-8000-000000000003',
+   '70000000-0000-4000-8000-000000000005', '82000000-0000-4000-8000-000000000001',
+   'c0000000-0000-4000-8000-000000000001', '2026-07-20 02:30:00+00',
+   'recorded_at_completion');
 
 insert into private.financial_payment_events
   (payment_id, queue_entry_id, consultation_id, event_kind, amount_delta,
@@ -349,9 +367,22 @@ begin
   if (v_row.billed, v_row.paid_to_date, v_row.paid_in_period,
       v_row.older_debt_collected_in_period, v_row.cogs, v_row.outstanding,
       v_row.missing_cost_count, v_row.zero_price_count)
-     is distinct from (80::numeric, 50::numeric, 20::numeric,
-       20::numeric, 30::numeric, 30::numeric, 0, 0) then
+     is distinct from (120::numeric, 50::numeric, 20::numeric,
+       20::numeric, 37::numeric, 70::numeric, 2, 0) then
     raise exception 'OLDER_DEBT_FACT_MISMATCH: %', row_to_json(v_row);
+  end if;
+
+  delete from public.package_items
+  where id = 'c0000000-0000-4000-8000-000000000001';
+  insert into public.package_items values
+    ('c0000000-0000-4000-8000-000000000011', '82000000-0000-4000-8000-000000000001', '80000000-0000-4000-8000-000000000011', null);
+
+  select * into strict v_row
+  from private.financial_control_visit_facts('2026-08-01', '2026-08-03', '2026-08-03')
+  where queue_entry_id = '50000000-0000-4000-8000-000000000003';
+  if (v_row.cogs, v_row.missing_cost_count, v_row.zero_price_count)
+     is distinct from (37::numeric, 2, 0) then
+    raise exception 'PACKAGE_CATALOG_HISTORY_REWRITE: %', row_to_json(v_row);
   end if;
 
   select * into strict v_row
@@ -473,6 +504,11 @@ insert into public.queue_entries values
   ('50000000-0000-4000-8000-000000000095', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', '2026-08-03 07:00:00+00', null);
 insert into public.consultations values
   ('60000000-0000-4000-8000-000000000095', '50000000-0000-4000-8000-000000000095', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'in_progress', null);
+insert into public.consultation_items values
+  ('70000000-0000-4000-8000-000000000095', '60000000-0000-4000-8000-000000000095', 'Trigger package', null, null, '82000000-0000-4000-8000-000000000095', 1, null, 50, 20, null, null),
+  ('70000000-0000-4000-8000-000000000094', '60000000-0000-4000-8000-000000000095', 'Trigger included medicine', '80000000-0000-4000-8000-000000000095', null, null, 1, 1, 0, 0, null, null);
+insert into public.package_items values
+  ('c0000000-0000-4000-8000-000000000095', '82000000-0000-4000-8000-000000000095', '80000000-0000-4000-8000-000000000095', null);
 update public.queue_entries
 set clinic_status = 'completed'
 where id = '50000000-0000-4000-8000-000000000095';
@@ -507,6 +543,17 @@ begin
       and event.attribution_complete
   ) then
     raise exception 'COMPLETION_TRIGGER_EVENT_MISSING';
+  end if;
+
+  if not exists (
+    select 1
+    from private.financial_zero_price_package_child_events event
+    where event.consultation_item_id = '70000000-0000-4000-8000-000000000094'
+      and event.package_line_item_id = '70000000-0000-4000-8000-000000000095'
+      and event.package_item_id = 'c0000000-0000-4000-8000-000000000095'
+      and event.provenance = 'recorded_at_completion'
+  ) then
+    raise exception 'ZERO_PRICE_PACKAGE_CHILD_TRIGGER_EVENT_MISSING';
   end if;
 
   if (select sum(event.amount_delta)

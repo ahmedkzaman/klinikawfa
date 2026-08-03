@@ -63,6 +63,17 @@ CREATE TABLE private.financial_panel_claim_events (
   )
 );
 
+CREATE TABLE private.financial_zero_price_package_child_events (
+  consultation_item_id uuid PRIMARY KEY,
+  consultation_id uuid NOT NULL,
+  package_line_item_id uuid NOT NULL,
+  package_id uuid NOT NULL,
+  package_item_id uuid NOT NULL,
+  completed_at timestamptz NOT NULL,
+  provenance text NOT NULL CHECK (provenance = 'recorded_at_completion'),
+  recorded_at timestamptz NOT NULL DEFAULT statement_timestamp()
+);
+
 CREATE INDEX financial_visit_completion_completed_idx
   ON private.financial_visit_completion_events (completed_at, consultation_id)
   WHERE attribution_complete;
@@ -79,7 +90,8 @@ CREATE INDEX financial_panel_claim_queue_occurred_idx
 REVOKE ALL PRIVILEGES ON TABLE
   private.financial_visit_completion_events,
   private.financial_payment_events,
-  private.financial_panel_claim_events
+  private.financial_panel_claim_events,
+  private.financial_zero_price_package_child_events
 FROM PUBLIC, anon, authenticated;
 REVOKE ALL PRIVILEGES ON SEQUENCE
   private.financial_visit_completion_events_id_seq,
@@ -106,6 +118,9 @@ CREATE TRIGGER prevent_financial_payment_event_change
 CREATE TRIGGER prevent_financial_panel_claim_event_change
   BEFORE UPDATE OR DELETE ON private.financial_panel_claim_events
   FOR EACH ROW EXECUTE FUNCTION private.prevent_financial_event_change();
+CREATE TRIGGER prevent_financial_zero_price_package_child_event_change
+  BEFORE UPDATE OR DELETE ON private.financial_zero_price_package_child_events
+  FOR EACH ROW EXECUTE FUNCTION private.prevent_financial_event_change();
 
 CREATE OR REPLACE FUNCTION private.capture_financial_visit_completion_event()
 RETURNS trigger
@@ -118,6 +133,8 @@ DECLARE
   v_consultation_id uuid;
   v_queue_status text;
   v_consultation_status text;
+  v_completed_at timestamptz;
+  v_completion_inserted integer;
 BEGIN
   IF TG_TABLE_NAME = 'consultations' THEN
     v_consultation_id := NEW.id;
@@ -146,6 +163,7 @@ BEGIN
     AND c.deleted_at IS NULL;
 
   IF v_queue_status = 'completed' AND v_consultation_status = 'completed' THEN
+    v_completed_at := statement_timestamp();
     INSERT INTO private.financial_visit_completion_events (
       queue_entry_id,
       consultation_id,
@@ -156,11 +174,58 @@ BEGIN
     VALUES (
       v_queue_entry_id,
       v_consultation_id,
-      statement_timestamp(),
+      v_completed_at,
       'recorded',
       true
     )
     ON CONFLICT (consultation_id) DO NOTHING;
+
+    GET DIAGNOSTICS v_completion_inserted = ROW_COUNT;
+    IF v_completion_inserted = 1 THEN
+      INSERT INTO private.financial_zero_price_package_child_events (
+        consultation_item_id,
+        consultation_id,
+        package_line_item_id,
+        package_id,
+        package_item_id,
+        completed_at,
+        provenance
+      )
+      SELECT DISTINCT ON (child.id)
+        child.id,
+        child.consultation_id,
+        package_line.id,
+        package_line.package_id,
+        package_item.id,
+        v_completed_at,
+        'recorded_at_completion'
+      FROM public.consultation_items child
+      JOIN public.consultation_items package_line
+        ON package_line.consultation_id = child.consultation_id
+       AND package_line.id <> child.id
+       AND package_line.deleted_at IS NULL
+       AND package_line.package_id IS NOT NULL
+       AND package_line.price > 0
+       AND package_line.quantity > 0
+      JOIN public.package_items package_item
+        ON package_item.package_id = package_line.package_id
+       AND (
+         (child.item_id IS NOT NULL
+           AND package_item.inventory_item_id = child.item_id)
+         OR (child.service_id IS NOT NULL
+           AND package_item.service_id = child.service_id)
+       )
+      WHERE child.consultation_id = v_consultation_id
+        AND child.deleted_at IS NULL
+        AND child.price = 0
+        AND child.quantity > 0
+        AND (
+          child.billing_adjustment_kind IS NULL
+          OR child.billing_adjustment_kind = 'other_charge'
+        )
+      ORDER BY child.id, package_line.id, package_item.id
+      ON CONFLICT (consultation_item_id) DO NOTHING;
+    END IF;
   END IF;
 
   RETURN NEW;
@@ -634,18 +699,10 @@ BEGIN
           ci.*,
           EXISTS (
             SELECT 1
-            FROM public.consultation_items package_line
-            JOIN public.package_items package_item
-              ON package_item.package_id = package_line.package_id
-             AND (
-               package_item.inventory_item_id = ci.item_id
-               OR package_item.service_id = ci.service_id
-             )
-            WHERE package_line.consultation_id = ci.consultation_id
-              AND package_line.deleted_at IS NULL
-              AND package_line.package_id IS NOT NULL
-              AND package_line.price <> 0
-          ) AS is_charged_package_child
+            FROM private.financial_zero_price_package_child_events package_child
+            WHERE package_child.consultation_item_id = ci.id
+              AND package_child.consultation_id = ci.consultation_id
+          ) AS is_zero_price_package_child
         FROM public.consultation_items ci
         WHERE ci.consultation_id = visit.consultation_id
           AND ci.deleted_at IS NULL
@@ -668,15 +725,13 @@ BEGIN
             2
           )
         ) FILTER (
-          WHERE NOT item.is_charged_package_child
-            AND (
+          WHERE (
               item.billing_adjustment_kind IS NULL
               OR item.billing_adjustment_kind = 'other_charge'
             )
         ), 0)::numeric AS cogs,
         COUNT(*) FILTER (
-          WHERE NOT item.is_charged_package_child
-            AND item.item_id IS NOT NULL
+          WHERE item.item_id IS NOT NULL
             AND GREATEST(
               LEAST(
                 COALESCE(item.dispensed_qty, item.quantity),
@@ -687,7 +742,7 @@ BEGIN
             AND COALESCE(item.unit_cost, 0) <= 0
         )::integer AS missing_cost_count,
         COUNT(*) FILTER (
-          WHERE NOT item.is_charged_package_child
+          WHERE NOT item.is_zero_price_package_child
             AND item.price = 0
             AND (
               item.billing_adjustment_kind IS NULL
