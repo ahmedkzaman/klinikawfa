@@ -161,6 +161,17 @@ const detailResponse: FinancialControlDetailResponse = {
   },
 };
 
+const incompleteDetailTotals = {
+  billed: null,
+  paid: null,
+  outstanding: null,
+  cogs: null,
+  profit: null,
+  attributionComplete: false,
+  costComplete: false,
+  incompleteRows: 1,
+};
+
 const augustRange: DateRange = {
   from: new Date(2026, 7, 1, 12),
   to: new Date(2026, 7, 7, 12),
@@ -372,5 +383,89 @@ describe('useFinancialControlDetails', () => {
     useFinancialControlDetails(detailFilters());
 
     await expect(latestOptions().queryFn()).rejects.toThrow('Invalid financial control response');
+  });
+
+  it('accepts an attribution-incomplete visit row with unavailable count fields', async () => {
+    const incompleteVisitRow = {
+      ...detailResponse.rows[0],
+      billed: null,
+      paid: null,
+      paidInPeriod: null,
+      outstanding: null,
+      cogs: null,
+      profit: null,
+      marginPct: null,
+      discount: null,
+      tax: null,
+      refund: null,
+      corrections: null,
+      missingCostCount: null,
+      zeroPriceCount: null,
+      amount: null,
+      attributionComplete: false,
+      costComplete: false,
+    };
+    rpc.mockResolvedValue({
+      data: { ...detailResponse, rows: [incompleteVisitRow], totals: incompleteDetailTotals },
+      error: null,
+    });
+
+    useFinancialControlDetails(detailFilters());
+
+    await expect(latestOptions().queryFn()).resolves.toEqual({
+      ...detailResponse,
+      rows: [incompleteVisitRow],
+      totals: incompleteDetailTotals,
+    });
+  });
+
+  it('accepts an attribution-incomplete grouped row with unavailable count fields', async () => {
+    const groupedRow = {
+      queueEntryId: 'queue-1',
+      consultationId: null,
+      completedDate: '2026-08-01',
+      patientName: null,
+      doctorName: 'Dr One',
+      paymentType: null,
+      paymentMethod: null,
+      panelProviderName: null,
+      groupKey: 'unavailable',
+      groupLabel: 'Unavailable attribution',
+      billed: null,
+      paid: null,
+      outstanding: null,
+      cogs: null,
+      profit: null,
+      marginPct: null,
+      discount: null,
+      tax: null,
+      refund: null,
+      corrections: null,
+      missingCostCount: null,
+      zeroPriceCount: null,
+      amount: null,
+      alertKeys: [],
+      attributionComplete: false,
+      costComplete: false,
+      visitCount: 1,
+    };
+    rpc.mockResolvedValue({
+      data: { ...detailResponse, rows: [groupedRow], totals: incompleteDetailTotals },
+      error: null,
+    });
+
+    useFinancialControlDetails(detailFilters({ groupBy: 'doctor' }));
+
+    await expect(latestOptions().queryFn()).resolves.toEqual({
+      ...detailResponse,
+      rows: [{
+        ...groupedRow,
+        claimStatus: null,
+        claimCreatedDate: null,
+        claimDueDate: null,
+        paidInPeriod: null,
+      }],
+      totals: incompleteDetailTotals,
+    });
   });
 });

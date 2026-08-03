@@ -120,9 +120,9 @@ export interface FinancialControlDetailRow {
   discount: number | null;
   tax: number | null;
   refund: number | null;
-  corrections: number;
-  missingCostCount: number;
-  zeroPriceCount: number;
+  corrections: number | null;
+  missingCostCount: number | null;
+  zeroPriceCount: number | null;
   amount: number | null;
   alertKeys: FinancialControlAlertKey[];
   attributionComplete: boolean;
@@ -201,6 +201,10 @@ function isIntegerAtLeast(value: unknown, minimum: number): value is number {
   return Number.isInteger(value) && (value as number) >= minimum;
 }
 
+function isNullableIntegerAtLeast(value: unknown, minimum: number): value is number | null {
+  return value === null || isIntegerAtLeast(value, minimum);
+}
+
 function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === 'string';
 }
@@ -231,6 +235,10 @@ function hasNumber(record: Record<string, unknown>, key: string): boolean {
 
 function hasInteger(record: Record<string, unknown>, key: string, minimum = 0): boolean {
   return hasOwn(record, key) && isIntegerAtLeast(record[key], minimum);
+}
+
+function hasNullableInteger(record: Record<string, unknown>, key: string, minimum = 0): boolean {
+  return hasOwn(record, key) && isNullableIntegerAtLeast(record[key], minimum);
 }
 
 function hasBoolean(record: Record<string, unknown>, key: string): boolean {
@@ -343,9 +351,9 @@ function parseDetailRow(value: unknown): FinancialControlDetailRow {
       || !hasNullableNumber(value, 'discount')
       || !hasNullableNumber(value, 'tax')
       || !hasNullableNumber(value, 'refund')
-      || !hasInteger(value, 'corrections')
-      || !hasInteger(value, 'missingCostCount')
-      || !hasInteger(value, 'zeroPriceCount')
+      || !hasNullableInteger(value, 'corrections')
+      || !hasNullableInteger(value, 'missingCostCount')
+      || !hasNullableInteger(value, 'zeroPriceCount')
       || !hasNullableNumber(value, 'amount')
       || !Array.isArray(value.alertKeys) || !value.alertKeys.every(isAlertKey)
       || !hasBoolean(value, 'attributionComplete')

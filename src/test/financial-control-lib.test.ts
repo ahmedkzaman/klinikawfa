@@ -57,6 +57,9 @@ describe('financialControlRowsToCsv', () => {
         discount: 1.2,
         tax: 0,
         refund: 3,
+        corrections: null,
+        missingCostCount: null,
+        zeroPriceCount: null,
         amount: 1234.5,
         alertKeys: ['missing_cost', 'large_discount'],
         attributionComplete: false,
@@ -66,7 +69,7 @@ describe('financialControlRowsToCsv', () => {
 
     expect(csv).toBe(
       'Completed Date,Queue Entry ID,Consultation ID,Patient,Doctor,Payment Type,Payment Method,Panel Provider,Claim Status,Claim Created Date,Claim Due Date,Group,Billed,Paid,Paid In Period,Outstanding,COGS,Gross Profit,Margin %,Discount,Tax,Refund,Corrections,Missing Cost Count,Zero Price Count,Amount,Alerts,Attribution Complete,Cost Complete,Visit Count\r\n' +
-      '2026-08-01,queue-1,consultation-1,"Doe, ""Jane""\nFollow-up",Dr One,self_pay,card,,,,,"Unavailable\ncohort",1234.50,,9.00,1225.50,,,,1.20,0.00,3.00,0,0,0,1234.50,"missing_cost, large_discount",false,false,1',
+      '2026-08-01,queue-1,consultation-1,"Doe, ""Jane""\nFollow-up",Dr One,self_pay,card,,,,,"Unavailable\ncohort",1234.50,,9.00,1225.50,,,,1.20,0.00,3.00,,,,1234.50,"missing_cost, large_discount",false,false,1',
     );
   });
 
