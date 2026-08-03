@@ -305,8 +305,9 @@ describe('FinancialSummaryStrip', () => {
     );
 
     for (const [label, metric] of expected) {
-      fireEvent.click(screen.getByRole('button', { name: new RegExp(`${label} details`, 'i') }));
-      expect(onMetricSelect).toHaveBeenLastCalledWith(metric);
+      const trigger = screen.getByRole('button', { name: new RegExp(`${label} details`, 'i') });
+      fireEvent.click(trigger);
+      expect(onMetricSelect).toHaveBeenLastCalledWith(metric, trigger);
     }
     expect(screen.getByText('Average Bill').closest('button')).toBeNull();
   });
@@ -543,6 +544,53 @@ describe('FinancialControlTab alerts and drill-down', () => {
     await waitFor(() => expect(latestDetailFilters()).toMatchObject({ page: 1, pageSize: 100 }));
     expect(screen.getByText('Page 1 of 1')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+  });
+
+  it('resets detail pagination when the selected date range changes', async () => {
+    useFinancialControlDetailsMock.mockImplementation((filters: FinancialControlDetailFilters) => {
+      const isShortRange = filters.startDate.getDate() === 2;
+      return detailResult({
+        page: filters.page,
+        pageSize: filters.pageSize,
+        total: isShortRange ? 1 : 51,
+      });
+    });
+
+    const { rerender } = render(<FinancialControlTab {...dates} />);
+    fireEvent.click(screen.getByRole('button', { name: /Billed Revenue details/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(latestDetailFilters().page).toBe(2));
+
+    rerender(
+      <FinancialControlTab
+        startDate={new Date(2026, 7, 2, 12)}
+        endDate={new Date(2026, 7, 2, 12)}
+      />,
+    );
+
+    await waitFor(() => expect(latestDetailFilters()).toMatchObject({ page: 1 }));
+    const shortRangeCalls = useFinancialControlDetailsMock.mock.calls
+      .map(([filters]) => filters as FinancialControlDetailFilters)
+      .filter((filters) => filters.startDate.getDate() === 2);
+    expect(shortRangeCalls.every((filters) => filters.page === 1)).toBe(true);
+    expect(screen.getByText('Page 1 of 1')).toBeInTheDocument();
+    expect(screen.queryByText('Page 2 of 1')).not.toBeInTheDocument();
+  });
+
+  it('restores focus to the exact KPI and alert launchers after close or Escape', async () => {
+    render(<FinancialControlTab {...dates} />);
+
+    const kpi = screen.getByRole('button', { name: /Billed Revenue details/i });
+    fireEvent.click(kpi);
+    expect(await screen.findByRole('dialog', { name: 'Billed Revenue details' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(kpi).toHaveFocus());
+
+    const alertView = screen.getByRole('button', { name: 'View Overdue panel claim' });
+    fireEvent.click(alertView);
+    expect(await screen.findByRole('dialog', { name: 'Overdue panel claim details' })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Overdue panel claim details' }), { key: 'Escape' });
+    await waitFor(() => expect(alertView).toHaveFocus());
   });
 
   it('keeps summary and reconciliation visible for detail loading, zero rows, and errors', async () => {

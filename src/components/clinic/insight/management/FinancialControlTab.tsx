@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ReceiptText } from 'lucide-react';
 import { differenceInCalendarDays, format, subDays } from 'date-fns';
 
@@ -114,17 +114,39 @@ function LoadingState() {
 }
 
 export function FinancialControlTab({ startDate, endDate }: FinancialControlTabProps) {
+  const dateRangeKey = `${startDate.getTime()}:${endDate.getTime()}`;
   const [selectedMetric, setSelectedMetric] = useState<FinancialControlMetric>('billed_revenue');
   const [selectedAlert, setSelectedAlert] = useState<FinancialControlAlertKey | null>(null);
   const [groupBy, setGroupBy] = useState<FinancialControlGroupBy>('visit');
   const [page, setPage] = useState(1);
+  const [pageRangeKey, setPageRangeKey] = useState(dateRangeKey);
   const [pageSize, setPageSize] = useState(25);
   const [detailOpen, setDetailOpen] = useState(false);
+  const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
   const range = useMemo(() => ({ from: startDate, to: endDate }), [endDate, startDate]);
   const { data, isLoading, isError, error } = useFinancialControlSummary(range);
   const comparisonLabel = comparisonPeriodLabel(startDate, endDate);
+  const detailPage = pageRangeKey === dateRangeKey ? page : 1;
 
-  const openMetricDetails = (metric: FinancialControlMetric) => {
+  useEffect(() => {
+    if (pageRangeKey !== dateRangeKey) {
+      setPage(1);
+      setPageRangeKey(dateRangeKey);
+    }
+  }, [dateRangeKey, pageRangeKey]);
+
+  const closeDetail = (open: boolean) => {
+    setDetailOpen(open);
+    if (!open) {
+      const trigger = detailTriggerRef.current;
+      window.setTimeout(() => {
+        if (trigger && document.contains(trigger)) trigger.focus();
+      }, 0);
+    }
+  };
+
+  const openMetricDetails = (metric: FinancialControlMetric, trigger: HTMLButtonElement) => {
+    detailTriggerRef.current = trigger;
     setSelectedMetric(metric);
     setSelectedAlert(null);
     setGroupBy(metric === 'margin' ? 'medicine' : 'visit');
@@ -132,7 +154,8 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
     setDetailOpen(true);
   };
 
-  const openAlertDetails = (alertKey: FinancialControlAlertKey) => {
+  const openAlertDetails = (alertKey: FinancialControlAlertKey, trigger: HTMLButtonElement) => {
+    detailTriggerRef.current = trigger;
     setSelectedMetric('alerts');
     setSelectedAlert(alertKey);
     setGroupBy('visit');
@@ -217,14 +240,14 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
           {detailOpen && (
             <FinancialDetailSheet
               open={detailOpen}
-              onOpenChange={setDetailOpen}
+              onOpenChange={closeDetail}
               title={detailTitle}
               startDate={startDate}
               endDate={endDate}
               metric={selectedMetric}
               groupBy={groupBy}
               alertKey={selectedAlert}
-              page={page}
+              page={detailPage}
               pageSize={pageSize}
               onGroupByChange={changeGroup}
               onPageChange={setPage}

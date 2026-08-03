@@ -68,6 +68,65 @@ git diff --cached --check
 
 Exit code 0 before the implementation commit. No whitespace errors.
 
+## Fix Round 1 RED/GREEN
+
+### RED
+
+The two review regressions were run against the pre-fix Task 5 production code while
+keeping the new tests in place:
+
+```powershell
+npm.cmd test -- src/test/financial-control-components.test.tsx
+```
+
+Exit code 1. Vitest ran 18 tests: 16 passed and the 2 review regressions failed for
+the expected reasons. The changed date range continued to request page 2 instead of
+page 1, and closing the KPI detail sheet did not return focus to its launcher.
+
+The consolidated KPI trigger callback was also verified test-first:
+
+```powershell
+npm.cmd test -- src/test/financial-control-components.test.tsx -t "emits the exact metric"
+```
+
+Exit code 1. The callback received the metric but not the exact button element.
+
+### GREEN
+
+- Date-range identity is tracked alongside pagination. A range change immediately
+  supplies page 1 to the detail query, and an effect synchronizes the stored page
+  without setting state during render.
+- KPI and alert launcher callbacks each require and pass their exact button element.
+  The parent stores that single trigger reference and restores focus after either the
+  close button or Escape closes the sheet. No duplicate trigger callback remains.
+
+```powershell
+npm.cmd test -- src/test/financial-control-components.test.tsx
+```
+
+Exit code 0. One test file passed; 18 tests passed; 0 failed. Vitest test duration:
+3.59s.
+
+```powershell
+npx.cmd eslint src/components/clinic/insight/management src/test/financial-control-components.test.tsx
+```
+
+Exit code 0. No lint errors or warnings.
+
+```powershell
+npx.cmd tsc --noEmit
+```
+
+Exit code 0. No TypeScript errors.
+
+```powershell
+npm.cmd run build
+```
+
+Exit code 0. Vite transformed 5,306 modules and completed the production build in
+11.19s. Existing Browserslist, dependency, dynamic-import, chunk-size, and plugin
+timing warnings remain.
+
 ## Changed Files
 
 - `src/components/clinic/insight/management/FinancialAlertsTable.tsx`

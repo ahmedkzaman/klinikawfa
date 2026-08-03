@@ -18,7 +18,7 @@ import type {
 
 interface FinancialAlertsTableProps {
   alerts: FinancialControlAlert[];
-  onView: (alertKey: FinancialControlAlertKey) => void;
+  onView: (alertKey: FinancialControlAlertKey, trigger: HTMLButtonElement) => void;
 }
 
 const FINANCIAL_ALERT_LABELS: Record<FinancialControlAlertKey, string> = {
@@ -142,7 +142,7 @@ export function FinancialAlertsTable({ alerts, onView }: FinancialAlertsTablePro
                       variant="outline"
                       size="sm"
                       aria-label={`View ${label}`}
-                      onClick={() => onView(alert.key)}
+                      onClick={(event) => onView(alert.key, event.currentTarget)}
                       className="h-8 rounded-md px-3 text-xs focus-visible:ring-blue-600"
                     >
                       View

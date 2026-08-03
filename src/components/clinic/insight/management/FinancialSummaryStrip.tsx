@@ -15,7 +15,7 @@ interface FinancialSummaryStripProps {
   comparisonIncompleteVisits: number;
   comparisonMissingCostItems: number;
   selectedMetric: FinancialControlMetric;
-  onMetricSelect: (metric: FinancialControlMetric) => void;
+  onMetricSelect: (metric: FinancialControlMetric, trigger: HTMLButtonElement) => void;
 }
 
 interface MetricDefinition {
@@ -226,7 +226,10 @@ export function FinancialSummaryStrip({
               type="button"
               aria-label={`${definition.label} details`}
               aria-pressed={isSelected}
-              onClick={() => onMetricSelect(definition.metric as FinancialControlMetric)}
+              onClick={(event) => {
+                const metric = definition.metric as FinancialControlMetric;
+                onMetricSelect(metric, event.currentTarget);
+              }}
               className={cn(
                 'min-w-0 border-b border-r border-slate-100 p-4 text-left transition-colors',
                 'hover:bg-slate-50 focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600',
