@@ -30,8 +30,8 @@ function requirePostgresRuntime() {
   }
 }
 
-describe('canonical financial control visit facts migration', () => {
-  it('defines the private, permission-checked Malaysia-time fact contract', () => {
+describe('financial control reporting migration', () => {
+  it('defines the private facts and hardened public reporting contracts', () => {
     expect(existsSync(migrationPath)).toBe(true);
 
     const sql = readFileSync(migrationPath, 'utf8');
@@ -47,7 +47,13 @@ describe('canonical financial control visit facts migration', () => {
     expect(sql).toMatch(/synthetic_backfill/i);
     expect(sql).toMatch(/attribution_complete/i);
     expect(sql).not.toMatch(/claim_updated_at[\s\S]*paid_in_period/i);
-    expect(sql).not.toMatch(/create or replace function public\.get_financial_control_/i);
+    expect(sql).toMatch(/create or replace function public\.get_financial_control_summary[\s\S]*returns jsonb[\s\S]*security definer/i);
+    expect(sql).toMatch(/create or replace function public\.get_financial_control_details[\s\S]*returns jsonb[\s\S]*security definer/i);
+    expect(sql).toMatch(/_metric[\s\S]*'billed_revenue'[\s\S]*'duplicate_or_excess_payment'/i);
+    expect(sql).toMatch(/revoke all on function public\.get_financial_control_summary\(date,date,date,date,date\)[\s\S]*from public, anon/i);
+    expect(sql).toMatch(/grant execute on function public\.get_financial_control_summary\(date,date,date,date,date\)[\s\S]*to authenticated/i);
+    expect(sql).toMatch(/revoke all on function public\.get_financial_control_details\(date,date,date,text,text,text,integer,integer\)[\s\S]*from public, anon/i);
+    expect(sql).toMatch(/grant execute on function public\.get_financial_control_details\(date,date,date,text,text,text,integer,integer\)[\s\S]*to authenticated/i);
 
     const factFunctionSql = sql.match(
       /create or replace function private\.financial_control_visit_facts[\s\S]*?\$function\$;/i,
@@ -57,7 +63,7 @@ describe('canonical financial control visit facts migration', () => {
   });
 
   it.skipIf(!requiresPostgresTest)(
-    'reconciles canonical visit facts in disposable PostgreSQL',
+    'reconciles facts and public reports in disposable PostgreSQL',
     () => {
       requirePostgresRuntime();
       const root = mkdtempSync(join(tmpdir(), 'financial-control-facts-'));
@@ -160,7 +166,8 @@ create table public.panel_claims (
   received_amount numeric,
   status text not null,
   created_at timestamptz not null,
-  updated_at timestamptz not null
+  updated_at timestamptz not null,
+  due_date date
 );
 create table public.completed_bill_correction_audit (
   id uuid primary key,
@@ -213,6 +220,7 @@ insert into public.patients values
   ('20000000-0000-4000-8000-000000000003', 'Older Debt Patient'),
   ('20000000-0000-4000-8000-000000000004', 'Panel Patient'),
   ('20000000-0000-4000-8000-000000000005', 'Corrected Patient'),
+  ('20000000-0000-4000-8000-000000000006', 'Unsubmitted Panel Patient'),
   ('20000000-0000-4000-8000-000000000096', 'Legacy Patient');
 insert into public.doctors values
   ('30000000-0000-4000-8000-000000000001', 'Dr Finance');
@@ -230,7 +238,7 @@ insert into public.consultation_items values
 insert into public.payments values
   ('90000000-0000-4000-8000-000000000096', '50000000-0000-4000-8000-000000000096', '60000000-0000-4000-8000-000000000096', 'panel', 'panel', 10, '2026-07-01 03:00:00+00', null);
 insert into public.panel_claims values
-  ('a0000000-0000-4000-8000-000000000096', '50000000-0000-4000-8000-000000000096', '40000000-0000-4000-8000-000000000001', 100, 40, 'approved', '2026-07-01 03:00:00+00', '2026-07-10 03:00:00+00');
+  ('a0000000-0000-4000-8000-000000000096', '50000000-0000-4000-8000-000000000096', '40000000-0000-4000-8000-000000000001', 100, 40, 'approved', '2026-07-01 03:00:00+00', '2026-07-10 03:00:00+00', '2026-07-31');
 `, 'utf8');
 
         writeFileSync(fixturePath, `
@@ -245,6 +253,7 @@ insert into public.queue_entries values
   ('50000000-0000-4000-8000-000000000003', '20000000-0000-4000-8000-000000000003', 'completed', 'cash', null, '2026-07-20 02:00:00+00', null),
   ('50000000-0000-4000-8000-000000000004', '20000000-0000-4000-8000-000000000004', 'completed', 'panel', '40000000-0000-4000-8000-000000000001', '2026-08-03 02:00:00+00', null),
   ('50000000-0000-4000-8000-000000000005', '20000000-0000-4000-8000-000000000005', 'completed', 'card', null, '2026-08-03 03:00:00+00', null),
+  ('50000000-0000-4000-8000-000000000006', '20000000-0000-4000-8000-000000000006', 'completed', 'panel', '40000000-0000-4000-8000-000000000001', '2026-08-01 01:00:00+00', null),
   ('50000000-0000-4000-8000-000000000099', '20000000-0000-4000-8000-000000000001', 'completed', 'cash', null, '2026-08-03 03:00:00+00', '2026-08-03 04:00:00+00');
 insert into public.consultations values
   ('60000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'completed', null),
@@ -252,6 +261,7 @@ insert into public.consultations values
   ('60000000-0000-4000-8000-000000000003', '50000000-0000-4000-8000-000000000003', '20000000-0000-4000-8000-000000000003', '30000000-0000-4000-8000-000000000001', 'completed', null),
   ('60000000-0000-4000-8000-000000000004', '50000000-0000-4000-8000-000000000004', '20000000-0000-4000-8000-000000000004', '30000000-0000-4000-8000-000000000001', 'completed', null),
   ('60000000-0000-4000-8000-000000000005', '50000000-0000-4000-8000-000000000005', '20000000-0000-4000-8000-000000000005', '30000000-0000-4000-8000-000000000001', 'completed', null),
+  ('60000000-0000-4000-8000-000000000006', '50000000-0000-4000-8000-000000000006', '20000000-0000-4000-8000-000000000006', '30000000-0000-4000-8000-000000000001', 'completed', null),
   ('60000000-0000-4000-8000-000000000099', '50000000-0000-4000-8000-000000000099', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'completed', '2026-08-03 04:00:00+00');
 insert into public.consultation_items values
   ('70000000-0000-4000-8000-000000000001', '60000000-0000-4000-8000-000000000001', 'Full medicine', '80000000-0000-4000-8000-000000000001', null, null, 2, null, 30, 10, null, null),
@@ -265,6 +275,7 @@ insert into public.consultation_items values
   ('70000000-0000-4000-8000-000000000006', '60000000-0000-4000-8000-000000000004', 'Panel service', null, '81000000-0000-4000-8000-000000000002', null, 1, null, 120, 20, null, null),
   ('70000000-0000-4000-8000-000000000007', '60000000-0000-4000-8000-000000000005', 'Partial medicine', '80000000-0000-4000-8000-000000000002', null, null, 5, 2, 10, 4, null, null),
   ('70000000-0000-4000-8000-000000000008', '60000000-0000-4000-8000-000000000005', 'Zero cost medicine', '80000000-0000-4000-8000-000000000003', null, null, 1, 1, 0, 0, null, null),
+  ('70000000-0000-4000-8000-000000000012', '60000000-0000-4000-8000-000000000006', 'Loss-making panel service', null, '81000000-0000-4000-8000-000000000012', null, 1, null, 100, 120, null, null),
   ('70000000-0000-4000-8000-000000000099', '60000000-0000-4000-8000-000000000005', 'Deleted charge', null, null, null, 1, null, 999, 999, null, '2026-08-03 04:00:00+00');
 insert into public.payments values
   ('90000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000001', '60000000-0000-4000-8000-000000000001', 'self_pay', 'card', 60, '2026-08-01 03:00:00+00', null),
@@ -276,7 +287,8 @@ insert into public.payments values
   ('90000000-0000-4000-8000-000000000098', '50000000-0000-4000-8000-000000000001', '60000000-0000-4000-8000-000000000002', 'self_pay', 'cash', 777, '2026-08-03 05:30:00+00', null),
   ('90000000-0000-4000-8000-000000000099', '50000000-0000-4000-8000-000000000005', '60000000-0000-4000-8000-000000000005', 'self_pay', 'cash', 999, '2026-08-03 05:00:00+00', '2026-08-03 06:00:00+00');
 insert into public.panel_claims values
-  ('a0000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000004', '40000000-0000-4000-8000-000000000001', 120, 90, 'received', '2026-08-01 03:00:00+00', '2026-08-04 06:00:00+00');
+  ('a0000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000004', '40000000-0000-4000-8000-000000000001', 120, 90, 'received', '2026-08-01 03:00:00+00', '2026-08-04 06:00:00+00', '2026-08-02'),
+  ('a0000000-0000-4000-8000-000000000002', '50000000-0000-4000-8000-000000000006', '40000000-0000-4000-8000-000000000001', 100, 0, 'pending', '2026-07-30 03:00:00+00', '2026-07-30 03:00:00+00', null);
 insert into public.completed_bill_correction_audit values
   ('b0000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000005', '60000000-0000-4000-8000-000000000005', '{"total": 50, "paid": 50}', '{"total": 50, "paid": 30}', '2026-08-03 06:00:00+00');
 insert into public.package_items values
@@ -294,7 +306,8 @@ values
   ('50000000-0000-4000-8000-000000000002', '60000000-0000-4000-8000-000000000002', '2026-08-02 02:30:00+00', 'recorded', true),
   ('50000000-0000-4000-8000-000000000003', '60000000-0000-4000-8000-000000000003', '2026-07-20 02:30:00+00', 'recorded', true),
   ('50000000-0000-4000-8000-000000000004', '60000000-0000-4000-8000-000000000004', '2026-08-01 02:30:00+00', 'recorded', true),
-  ('50000000-0000-4000-8000-000000000005', '60000000-0000-4000-8000-000000000005', '2026-08-01 03:30:00+00', 'recorded', true);
+  ('50000000-0000-4000-8000-000000000005', '60000000-0000-4000-8000-000000000005', '2026-08-01 03:30:00+00', 'recorded', true),
+  ('50000000-0000-4000-8000-000000000006', '60000000-0000-4000-8000-000000000006', '2026-08-01 04:30:00+00', 'recorded', true);
 
 insert into private.financial_zero_price_package_child_events
   (consultation_item_id, consultation_id, package_line_item_id, package_id,
@@ -319,14 +332,15 @@ values
 
 insert into private.financial_panel_claim_events
   (panel_claim_id, queue_entry_id, panel_id, event_kind, amount,
-   received_amount, receipt_delta, status, occurred_at, provenance,
+   received_amount, receipt_delta, status, due_date, occurred_at, provenance,
    attribution_complete)
 values
-  ('a0000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000004', '40000000-0000-4000-8000-000000000001', 'claim_created', 120, 0, 0, 'pending', '2026-08-01 03:00:00+00', 'recorded', true),
-  ('a0000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000004', '40000000-0000-4000-8000-000000000001', 'receipt', 120, 30, 30, 'submitted', '2026-08-01 06:00:00+00', 'recorded', true),
-  ('a0000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000004', '40000000-0000-4000-8000-000000000001', 'receipt', 120, 50, 20, 'submitted', '2026-08-02 06:00:00+00', 'recorded', true),
-  ('a0000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000004', '40000000-0000-4000-8000-000000000001', 'claim_edit', 120, 50, 0, 'approved', '2026-08-03 06:00:00+00', 'recorded', true),
-  ('a0000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000004', '40000000-0000-4000-8000-000000000001', 'receipt', 120, 90, 40, 'received', '2026-08-04 06:00:00+00', 'recorded', true);
+  ('a0000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000004', '40000000-0000-4000-8000-000000000001', 'claim_created', 120, 0, 0, 'pending', '2026-08-02', '2026-08-01 03:00:00+00', 'recorded', true),
+  ('a0000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000004', '40000000-0000-4000-8000-000000000001', 'receipt', 120, 30, 30, 'submitted', '2026-08-02', '2026-08-01 06:00:00+00', 'recorded', true),
+  ('a0000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000004', '40000000-0000-4000-8000-000000000001', 'receipt', 120, 50, 20, 'submitted', '2026-08-02', '2026-08-02 06:00:00+00', 'recorded', true),
+  ('a0000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000004', '40000000-0000-4000-8000-000000000001', 'claim_edit', 120, 50, 0, 'approved', '2026-08-02', '2026-08-03 06:00:00+00', 'recorded', true),
+  ('a0000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000004', '40000000-0000-4000-8000-000000000001', 'receipt', 120, 90, 40, 'received', '2026-08-02', '2026-08-04 06:00:00+00', 'recorded', true),
+  ('a0000000-0000-4000-8000-000000000002', '50000000-0000-4000-8000-000000000006', '40000000-0000-4000-8000-000000000001', 'claim_created', 100, 0, 0, 'pending', null, '2026-07-30 03:00:00+00', 'recorded', true);
 `, 'utf8');
 
         writeFileSync(assertionsPath, `
@@ -339,7 +353,7 @@ declare
 begin
   select count(*) into v_count
   from private.financial_control_visit_facts('2026-08-01', '2026-08-03', '2026-08-03');
-  if v_count <> 6 then raise exception 'FACT_ROW_COUNT_MISMATCH: %', v_count; end if;
+  if v_count <> 7 then raise exception 'FACT_ROW_COUNT_MISMATCH: %', v_count; end if;
 
   select * into strict v_row
   from private.financial_control_visit_facts('2026-08-01', '2026-08-03', '2026-08-03')
@@ -404,6 +418,16 @@ begin
      is distinct from (50::numeric, 30::numeric, 30::numeric, 8::numeric, 20::numeric,
        20::numeric, 1, 1, 1) then
     raise exception 'CORRECTED_FACT_MISMATCH: %', row_to_json(v_row);
+  end if;
+
+  select * into strict v_row
+  from private.financial_control_visit_facts('2026-08-01', '2026-08-03', '2026-08-03')
+  where queue_entry_id = '50000000-0000-4000-8000-000000000006';
+  if (v_row.payment_type, v_row.billed, v_row.paid_to_date, v_row.cogs,
+      v_row.outstanding, v_row.panel_outstanding)
+     is distinct from ('panel'::text, 100::numeric, 0::numeric, 120::numeric,
+       100::numeric, 100::numeric) then
+    raise exception 'UNSUBMITTED_PANEL_FACT_MISMATCH: %', row_to_json(v_row);
   end if;
 
   select * into strict v_row
@@ -500,6 +524,277 @@ begin
   end;
 end $$;
 
+-- Two active, identical receipts four minutes apart make the duplicate predicate
+-- executable without changing the Task 1 fixture assertions above.
+insert into private.financial_payment_events
+  (payment_id, queue_entry_id, consultation_id, event_kind, amount_delta,
+   payment_type, payment_method, occurred_at, provenance, attribution_complete)
+values
+  ('90000000-0000-4000-8000-000000000011', '50000000-0000-4000-8000-000000000001', '60000000-0000-4000-8000-000000000001', 'receipt', 1, 'self_pay', 'card', '2026-08-02 10:00:00+00', 'recorded', true),
+  ('90000000-0000-4000-8000-000000000012', '50000000-0000-4000-8000-000000000001', '60000000-0000-4000-8000-000000000001', 'receipt', 1, 'self_pay', 'card', '2026-08-02 10:04:00+00', 'recorded', true);
+
+do $$
+declare
+  v_summary jsonb;
+  v_details jsonb;
+  v_alert_order text;
+  v_count integer;
+  v_value text;
+begin
+  v_summary := public.get_financial_control_summary(
+    '2026-08-01', '2026-08-03', '2026-07-29', '2026-07-31', '2026-08-03'
+  );
+
+  if not (v_summary ?& array['period', 'comparison', 'reconciliation', 'alerts', 'generated_at'])
+     or jsonb_typeof(v_summary->'period') <> 'object'
+     or jsonb_typeof(v_summary->'comparison') <> 'object'
+     or jsonb_typeof(v_summary->'reconciliation') <> 'object'
+     or jsonb_typeof(v_summary->'alerts') <> 'array'
+     or jsonb_typeof(v_summary->'generated_at') <> 'string' then
+    raise exception 'SUMMARY_SHAPE_MISMATCH: %', v_summary;
+  end if;
+
+  if not (v_summary->'period' ?& array[
+      'billedRevenue', 'cashCollected', 'cohortCollected', 'olderDebtCollected',
+      'collectionRate', 'cogs', 'grossProfit', 'grossMarginPct',
+      'cohortOutstanding', 'totalOutstanding', 'averageBill', 'completedVisits',
+      'attributionComplete', 'costComplete', 'incompleteVisits'
+    ]) then
+    raise exception 'SUMMARY_PERIOD_KEYS_MISSING: %', v_summary->'period';
+  end if;
+
+  if ((v_summary #>> '{period,billedRevenue}')::numeric,
+      (v_summary #>> '{period,cashCollected}')::numeric,
+      (v_summary #>> '{period,cohortCollected}')::numeric,
+      (v_summary #>> '{period,olderDebtCollected}')::numeric,
+      (v_summary #>> '{period,collectionRate}')::numeric,
+      (v_summary #>> '{period,cogs}')::numeric,
+      (v_summary #>> '{period,grossProfit}')::numeric,
+      (v_summary #>> '{period,grossMarginPct}')::numeric,
+      (v_summary #>> '{period,cohortOutstanding}')::numeric,
+      (v_summary #>> '{period,totalOutstanding}')::numeric,
+      (v_summary #>> '{period,averageBill}')::numeric,
+      (v_summary #>> '{period,completedVisits}')::integer,
+      (v_summary #>> '{period,incompleteVisits}')::integer)
+     is distinct from (
+       425::numeric, 212::numeric, 192::numeric, 20::numeric, 45.2::numeric,
+       193::numeric, 232::numeric, 54.6::numeric, 245::numeric, 315::numeric,
+       85::numeric, 5, 1
+     ) then
+    raise exception 'SUMMARY_PERIOD_TOTALS_MISMATCH: %', v_summary->'period';
+  end if;
+
+  if (v_summary #>> '{period,attributionComplete}')::boolean
+     or (v_summary #>> '{period,costComplete}')::boolean then
+    raise exception 'SUMMARY_INCOMPLETENESS_HIDDEN: %', v_summary->'period';
+  end if;
+  if (v_summary #> '{comparison,billedRevenue}') <> 'null'::jsonb
+     or (v_summary #>> '{comparison,attributionComplete}')::boolean
+     or (v_summary #>> '{comparison,incompleteVisits}')::integer <> 1 then
+    raise exception 'COMPARISON_INCOMPLETENESS_INVENTED_AMOUNT: %', v_summary->'comparison';
+  end if;
+
+  if ((v_summary #>> '{reconciliation,billedCohort}')::numeric,
+      (v_summary #>> '{reconciliation,cohortCollected}')::numeric,
+      (v_summary #>> '{reconciliation,olderDebtCollected}')::numeric,
+      (v_summary #>> '{reconciliation,discounts}')::numeric,
+      (v_summary #>> '{reconciliation,taxes}')::numeric,
+      (v_summary #>> '{reconciliation,refunds}')::numeric,
+      (v_summary #>> '{reconciliation,corrections}')::integer,
+      (v_summary #>> '{reconciliation,selfPayOutstanding}')::numeric,
+      (v_summary #>> '{reconciliation,panelOutstanding}')::numeric)
+     is distinct from (
+       425::numeric, 192::numeric, 20::numeric, 10::numeric, 5::numeric,
+       20::numeric, 1, 145::numeric, 170::numeric
+     ) then
+    raise exception 'RECONCILIATION_MISMATCH: %', v_summary->'reconciliation';
+  end if;
+
+  select string_agg(alert->>'key', ',' order by ordinal), count(*)
+    into v_alert_order, v_count
+  from jsonb_array_elements(v_summary->'alerts') with ordinality alerts(alert, ordinal);
+  if v_count <> 10
+     or v_alert_order <> 'duplicate_or_excess_payment,negative_margin,overdue_panel,unpaid_self_pay,unsubmitted_panel,missing_cost,payment_mismatch,refund_void_correction,large_discount,zero_price' then
+    raise exception 'ALERT_ORDER_MISMATCH: %', v_summary->'alerts';
+  end if;
+
+  if (select (alert->>'count')::integer from jsonb_array_elements(v_summary->'alerts') alert where alert->>'key' = 'unpaid_self_pay') <> 2
+     or (select (alert->>'count')::integer from jsonb_array_elements(v_summary->'alerts') alert where alert->>'key' = 'unsubmitted_panel') <> 1
+     or (select (alert->>'count')::integer from jsonb_array_elements(v_summary->'alerts') alert where alert->>'key' = 'overdue_panel') <> 1
+     or (select (alert->>'count')::integer from jsonb_array_elements(v_summary->'alerts') alert where alert->>'key' = 'missing_cost') <> 1
+     or (select (alert->>'count')::integer from jsonb_array_elements(v_summary->'alerts') alert where alert->>'key' = 'zero_price') <> 1
+     or (select (alert->>'count')::integer from jsonb_array_elements(v_summary->'alerts') alert where alert->>'key' = 'negative_margin') <> 1
+     or (select (alert->>'count')::integer from jsonb_array_elements(v_summary->'alerts') alert where alert->>'key' = 'large_discount') <> 1
+     or (select (alert->>'count')::integer from jsonb_array_elements(v_summary->'alerts') alert where alert->>'key' = 'refund_void_correction') <> 1
+     or (select (alert->>'count')::integer from jsonb_array_elements(v_summary->'alerts') alert where alert->>'key' = 'payment_mismatch') <> 5
+     or (select (alert->>'count')::integer from jsonb_array_elements(v_summary->'alerts') alert where alert->>'key' = 'duplicate_or_excess_payment') <> 1 then
+    raise exception 'ALERT_COUNTS_MISMATCH: %', v_summary->'alerts';
+  end if;
+
+  if exists (
+    select 1 from jsonb_array_elements(v_summary->'alerts') alert
+    where (alert->>'attributionComplete')::boolean
+       or (alert->>'incompleteRows')::integer <> 1
+  ) then
+    raise exception 'ALERT_INCOMPLETENESS_HIDDEN: %', v_summary->'alerts';
+  end if;
+
+  v_summary := public.get_financial_control_summary(
+    '2026-07-29', '2026-07-31', '2026-07-26', '2026-07-28', '2026-07-31'
+  );
+  if (v_summary #> '{period,billedRevenue}') <> 'null'::jsonb
+     or (v_summary #> '{reconciliation,billedCohort}') <> 'null'::jsonb
+     or (v_summary #>> '{reconciliation,attributionComplete}')::boolean then
+    raise exception 'EMPTY_KNOWN_COHORT_INVENTED_ZERO: %', v_summary;
+  end if;
+
+  v_details := public.get_financial_control_details(
+    '2026-08-01', '2026-08-03', '2026-08-03',
+    'billed_revenue', 'visit', null, 1, 2
+  );
+  if not (v_details ?& array['rows', 'total', 'page', 'pageSize', 'totals'])
+     or jsonb_typeof(v_details->'rows') <> 'array'
+     or (v_details->>'total')::integer <> 6
+     or (v_details->>'page')::integer <> 1
+     or (v_details->>'pageSize')::integer <> 2
+     or jsonb_array_length(v_details->'rows') <> 2 then
+    raise exception 'DETAIL_SHAPE_MISMATCH: %', v_details;
+  end if;
+  if v_details #>> '{rows,0,queueEntryId}' <> '50000000-0000-4000-8000-000000000004'
+     or v_details #>> '{rows,1,queueEntryId}' <> '50000000-0000-4000-8000-000000000006' then
+    raise exception 'DETAIL_ORDER_MISMATCH: %', v_details->'rows';
+  end if;
+  if ((v_details #>> '{totals,billed}')::numeric,
+      (v_details #>> '{totals,paid}')::numeric,
+      (v_details #>> '{totals,outstanding}')::numeric,
+      (v_details #>> '{totals,cogs}')::numeric,
+      (v_details #>> '{totals,profit}')::numeric,
+      (v_details #>> '{totals,incompleteRows}')::integer)
+     is distinct from (425::numeric, 192::numeric, 245::numeric, 193::numeric, 232::numeric, 1)
+     or (v_details #>> '{totals,attributionComplete}')::boolean then
+    raise exception 'DETAIL_TOTALS_MISMATCH: %', v_details->'totals';
+  end if;
+
+  v_details := public.get_financial_control_details(
+    '2026-08-01', '2026-08-03', '2026-08-03',
+    'billed_revenue', 'visit', null, 3, 2
+  );
+  if v_details #>> '{rows,1,queueEntryId}' <> '50000000-0000-4000-8000-000000000096'
+     or (v_details #> '{rows,1,billed}') <> 'null'::jsonb
+     or (v_details #>> '{rows,1,attributionComplete}')::boolean then
+    raise exception 'DETAIL_INCOMPLETE_ROW_MISMATCH: %', v_details->'rows';
+  end if;
+
+  v_details := public.get_financial_control_details(
+    '2026-08-01', '2026-08-03', '2026-08-03',
+    'billed_revenue', 'doctor', null, 1, 20
+  );
+  if (v_details->>'total')::integer <> 2
+     or v_details #>> '{rows,0,groupLabel}' <> 'Dr Finance'
+     or (v_details #>> '{rows,0,billed}')::numeric <> 425 then
+    raise exception 'DOCTOR_GROUP_MISMATCH: %', v_details;
+  end if;
+
+  v_details := public.get_financial_control_details(
+    '2026-08-01', '2026-08-03', '2026-08-03',
+    'billed_revenue', 'medicine', null, 1, 20
+  );
+  if not exists (
+    select 1 from jsonb_array_elements(v_details->'rows') row_value
+    where row_value->>'groupLabel' = 'Full medicine'
+      and (row_value->>'billed')::numeric = 60
+  ) then
+    raise exception 'MEDICINE_GROUP_MISMATCH: %', v_details;
+  end if;
+
+  v_details := public.get_financial_control_details(
+    '2026-08-01', '2026-08-03', '2026-08-03',
+    'alerts', 'visit', 'negative_margin', 1, 20
+  );
+  if v_details #>> '{rows,0,queueEntryId}' <> '50000000-0000-4000-8000-000000000006'
+     or not ((v_details #> '{rows,0,alertKeys}') ? 'negative_margin') then
+    raise exception 'ALERT_DETAIL_MISMATCH: %', v_details;
+  end if;
+
+  foreach v_value in array array[
+    'billed_revenue', 'cash_collected', 'cohort_outstanding',
+    'total_outstanding', 'cogs', 'gross_profit', 'adjustments', 'alerts', 'margin'
+  ] loop
+    perform public.get_financial_control_details(
+      '2026-08-01', '2026-08-03', '2026-08-03', v_value, 'visit', null, 1, 20
+    );
+  end loop;
+  foreach v_value in array array[
+    'visit', 'medicine', 'procedure', 'package',
+    'doctor', 'payment_type', 'panel_provider'
+  ] loop
+    perform public.get_financial_control_details(
+      '2026-08-01', '2026-08-03', '2026-08-03',
+      'billed_revenue', v_value, null, 1, 20
+    );
+  end loop;
+
+  begin
+    perform public.get_financial_control_details('2026-08-01', '2026-08-03', '2026-08-03', 'not_a_metric', 'visit', null, 1, 20);
+    raise exception 'INVALID_METRIC_ACCEPTED';
+  exception when sqlstate '22023' then null;
+  end;
+  begin
+    perform public.get_financial_control_details('2026-08-01', '2026-08-03', '2026-08-03', 'margin', 'not_a_group', null, 1, 20);
+    raise exception 'INVALID_GROUP_ACCEPTED';
+  exception when sqlstate '22023' then null;
+  end;
+  begin
+    perform public.get_financial_control_details('2026-08-01', '2026-08-03', '2026-08-03', 'alerts', 'visit', 'not_an_alert', 1, 20);
+    raise exception 'INVALID_ALERT_ACCEPTED';
+  exception when sqlstate '22023' then null;
+  end;
+  begin
+    perform public.get_financial_control_details('2026-08-01', '2026-08-03', '2026-08-03', 'margin', 'visit', null, 0, 20);
+    raise exception 'INVALID_PAGE_ACCEPTED';
+  exception when sqlstate '22023' then null;
+  end;
+  begin
+    perform public.get_financial_control_details('2026-08-01', '2026-08-03', '2026-08-03', 'margin', 'visit', null, 1, 101);
+    raise exception 'INVALID_PAGE_SIZE_ACCEPTED';
+  exception when sqlstate '22023' then null;
+  end;
+  begin
+    perform public.get_financial_control_summary('2026-08-03', '2026-08-01', '2026-07-29', '2026-07-31', '2026-08-03');
+    raise exception 'INVALID_SUMMARY_DATES_ACCEPTED';
+  exception when sqlstate '22023' then null;
+  end;
+end $$;
+
+select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000099', false);
+do $$
+begin
+  begin
+    perform public.get_financial_control_summary('2026-08-01', '2026-08-03', '2026-07-29', '2026-07-31', '2026-08-03');
+    raise exception 'UNAUTHORIZED_SUMMARY_ACCESS';
+  exception when sqlstate '42501' then null;
+  end;
+  begin
+    perform public.get_financial_control_details('2026-08-01', '2026-08-03', '2026-08-03', 'margin', 'visit', null, 1, 20);
+    raise exception 'UNAUTHORIZED_DETAIL_ACCESS';
+  exception when sqlstate '42501' then null;
+  end;
+end $$;
+
+select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', false);
+
+set role authenticated;
+do $$
+begin
+  perform public.get_financial_control_summary(
+    '2026-08-01', '2026-08-03', '2026-07-29', '2026-07-31', '2026-08-03'
+  );
+  perform public.get_financial_control_details(
+    '2026-08-01', '2026-08-03', '2026-08-03', 'margin', 'visit', null, 1, 20
+  );
+end $$;
+reset role;
+
 insert into public.queue_entries values
   ('50000000-0000-4000-8000-000000000095', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', '2026-08-03 07:00:00+00', null);
 insert into public.consultations values
@@ -523,7 +818,7 @@ set amount = 7
 where id = '90000000-0000-4000-8000-000000000095';
 
 insert into public.panel_claims values
-  ('a0000000-0000-4000-8000-000000000095', '50000000-0000-4000-8000-000000000095', '40000000-0000-4000-8000-000000000001', 100, 0, 'pending', statement_timestamp(), statement_timestamp());
+  ('a0000000-0000-4000-8000-000000000095', '50000000-0000-4000-8000-000000000095', '40000000-0000-4000-8000-000000000001', 100, 0, 'pending', statement_timestamp(), statement_timestamp(), null);
 update public.panel_claims
 set received_amount = 25,
     status = 'submitted'
@@ -595,6 +890,17 @@ begin
      or has_function_privilege('authenticated', 'private.financial_control_visit_facts(date,date,date)', 'execute')
      or has_function_privilege('public', 'private.financial_control_visit_facts(date,date,date)', 'execute') then
     raise exception 'PRIVATE_FACT_EXECUTE_EXPOSED';
+  end if;
+
+  if has_function_privilege('anon', 'public.get_financial_control_summary(date,date,date,date,date)', 'execute')
+     or has_function_privilege('public', 'public.get_financial_control_summary(date,date,date,date,date)', 'execute')
+     or not has_function_privilege('authenticated', 'public.get_financial_control_summary(date,date,date,date,date)', 'execute') then
+    raise exception 'SUMMARY_GRANTS_MISMATCH';
+  end if;
+  if has_function_privilege('anon', 'public.get_financial_control_details(date,date,date,text,text,text,integer,integer)', 'execute')
+     or has_function_privilege('public', 'public.get_financial_control_details(date,date,date,text,text,text,integer,integer)', 'execute')
+     or not has_function_privilege('authenticated', 'public.get_financial_control_details(date,date,date,text,text,text,integer,integer)', 'execute') then
+    raise exception 'DETAIL_GRANTS_MISMATCH';
   end if;
 end $$;
 `, 'utf8');

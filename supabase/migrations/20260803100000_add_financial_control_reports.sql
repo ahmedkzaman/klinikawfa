@@ -53,6 +53,7 @@ CREATE TABLE private.financial_panel_claim_events (
   received_amount numeric NOT NULL,
   receipt_delta numeric NOT NULL,
   status text NOT NULL,
+  due_date date,
   occurred_at timestamptz,
   provenance text NOT NULL CHECK (provenance IN ('recorded', 'synthetic_backfill')),
   attribution_complete boolean NOT NULL,
@@ -106,6 +107,585 @@ SET search_path = pg_catalog, public, private
 AS $function$
 BEGIN
   RAISE EXCEPTION 'FINANCIAL_EVENT_IMMUTABLE' USING ERRCODE = '42501';
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.get_financial_control_details(
+  _start_date date,
+  _end_date date,
+  _as_of_date date,
+  _metric text,
+  _group_by text,
+  _alert_key text,
+  _page integer,
+  _page_size integer
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private
+AS $function$
+DECLARE
+  v_result jsonb;
+BEGIN
+  IF auth.uid() IS NULL OR NOT public.can_view_insights(auth.uid()) THEN
+    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
+  END IF;
+
+  IF _start_date IS NULL OR _end_date IS NULL OR _as_of_date IS NULL THEN
+    RAISE EXCEPTION 'FINANCIAL_CONTROL_DATES_REQUIRED' USING ERRCODE = '22023';
+  END IF;
+  IF _start_date > _end_date THEN
+    RAISE EXCEPTION 'FINANCIAL_CONTROL_DATE_RANGE_REVERSED' USING ERRCODE = '22023';
+  END IF;
+  IF _as_of_date < _end_date THEN
+    RAISE EXCEPTION 'FINANCIAL_CONTROL_AS_OF_BEFORE_END' USING ERRCODE = '22023';
+  END IF;
+  IF (_end_date - _start_date) > 365 THEN
+    RAISE EXCEPTION 'FINANCIAL_CONTROL_DATE_RANGE_TOO_LARGE' USING ERRCODE = '22023';
+  END IF;
+  IF _metric IS NULL OR _metric NOT IN (
+    'billed_revenue', 'cash_collected', 'cohort_outstanding',
+    'total_outstanding', 'cogs', 'gross_profit', 'adjustments', 'alerts', 'margin'
+  ) THEN
+    RAISE EXCEPTION 'FINANCIAL_CONTROL_INVALID_METRIC' USING ERRCODE = '22023';
+  END IF;
+  IF _group_by IS NULL OR _group_by NOT IN (
+    'visit', 'medicine', 'procedure', 'package', 'doctor', 'payment_type', 'panel_provider'
+  ) THEN
+    RAISE EXCEPTION 'FINANCIAL_CONTROL_INVALID_GROUP' USING ERRCODE = '22023';
+  END IF;
+  IF _alert_key IS NOT NULL AND _alert_key NOT IN (
+    'unpaid_self_pay', 'unsubmitted_panel', 'overdue_panel', 'missing_cost',
+    'zero_price', 'negative_margin', 'large_discount', 'refund_void_correction',
+    'payment_mismatch', 'duplicate_or_excess_payment'
+  ) THEN
+    RAISE EXCEPTION 'FINANCIAL_CONTROL_INVALID_ALERT' USING ERRCODE = '22023';
+  END IF;
+  IF _page IS NULL OR _page < 1 THEN
+    RAISE EXCEPTION 'FINANCIAL_CONTROL_INVALID_PAGE' USING ERRCODE = '22023';
+  END IF;
+  IF _page_size IS NULL OR _page_size < 1 OR _page_size > 100 THEN
+    RAISE EXCEPTION 'FINANCIAL_CONTROL_INVALID_PAGE_SIZE' USING ERRCODE = '22023';
+  END IF;
+
+  IF _group_by = 'visit' THEN
+    WITH report_rows AS MATERIALIZED (
+      SELECT *
+      FROM private.financial_control_report_rows(_start_date, _end_date, _as_of_date)
+    ),
+    filtered AS MATERIALIZED (
+      SELECT
+        report.*,
+        CASE _metric
+          WHEN 'billed_revenue' THEN report.billed
+          WHEN 'cash_collected' THEN report.paid_in_period
+          WHEN 'cohort_outstanding' THEN report.outstanding
+          WHEN 'total_outstanding' THEN report.outstanding
+          WHEN 'cogs' THEN report.cogs
+          WHEN 'gross_profit' THEN report.billed - report.cogs
+          WHEN 'adjustments' THEN report.discount + report.tax + report.refund
+          WHEN 'alerts' THEN CASE COALESCE(_alert_key, '')
+            WHEN 'unpaid_self_pay' THEN report.outstanding
+            WHEN 'unsubmitted_panel' THEN report.panel_outstanding
+            WHEN 'overdue_panel' THEN report.panel_outstanding
+            WHEN 'missing_cost' THEN report.billed
+            WHEN 'zero_price' THEN 0
+            WHEN 'negative_margin' THEN GREATEST(report.cogs - report.billed, 0)
+            WHEN 'large_discount' THEN report.discount
+            WHEN 'refund_void_correction' THEN report.refund
+            WHEN 'payment_mismatch' THEN ABS(report.billed - report.paid_to_date)
+            WHEN 'duplicate_or_excess_payment' THEN
+              GREATEST(report.paid_to_date - report.billed, 0)
+            ELSE GREATEST(
+              report.outstanding,
+              ABS(report.billed - report.paid_to_date),
+              report.refund,
+              report.discount,
+              report.cogs - report.billed,
+              0
+            )
+          END
+          WHEN 'margin' THEN report.billed - report.cogs
+        END::numeric AS amount
+      FROM report_rows report
+      WHERE NOT report.attribution_complete
+         OR CASE _metric
+           WHEN 'billed_revenue' THEN report.is_cohort
+           WHEN 'cash_collected' THEN report.paid_in_period <> 0
+           WHEN 'cohort_outstanding' THEN report.is_cohort AND report.outstanding > 0.01
+           WHEN 'total_outstanding' THEN report.outstanding > 0.01
+           WHEN 'cogs' THEN report.is_cohort
+           WHEN 'gross_profit' THEN report.is_cohort
+           WHEN 'adjustments' THEN
+             report.discount <> 0 OR report.tax <> 0 OR report.refund <> 0
+               OR report.correction_count > 0
+           WHEN 'alerts' THEN report.is_cohort AND (
+             (_alert_key IS NULL AND cardinality(report.alert_keys) > 0)
+             OR _alert_key = ANY(report.alert_keys)
+           )
+           WHEN 'margin' THEN report.is_cohort
+         END
+    ),
+    ordered AS MATERIALIZED (
+      SELECT
+        filtered.*,
+        ROW_NUMBER() OVER (
+          ORDER BY amount DESC NULLS LAST,
+            completed_date DESC NULLS LAST,
+            queue_entry_id
+        ) AS row_number
+      FROM filtered
+    ),
+    totals AS (
+      SELECT
+        COUNT(*)::integer AS total,
+        COUNT(*) FILTER (WHERE NOT attribution_complete)::integer AS incomplete_rows,
+        SUM(billed) FILTER (WHERE attribution_complete) AS billed,
+        SUM(paid_to_date) FILTER (WHERE attribution_complete) AS paid,
+        SUM(outstanding) FILTER (WHERE attribution_complete) AS outstanding,
+        SUM(cogs) FILTER (WHERE attribution_complete) AS cogs,
+        SUM(billed - cogs) FILTER (WHERE attribution_complete) AS profit,
+        COALESCE(bool_and(cost_complete) FILTER (WHERE attribution_complete), true)
+          AS costs_complete
+      FROM filtered
+    ),
+    page_rows AS (
+      SELECT COALESCE(jsonb_agg(
+        jsonb_build_object(
+          'queueEntryId', queue_entry_id,
+          'consultationId', consultation_id,
+          'completedDate', completed_date,
+          'patientName', patient_name,
+          'doctorName', doctor_name,
+          'paymentType', payment_type,
+          'paymentMethod', payment_method,
+          'panelProviderName', panel_provider_name,
+          'claimStatus', claim_status,
+          'claimCreatedDate', claim_created_date,
+          'claimDueDate', claim_due_date,
+          'groupKey', queue_entry_id,
+          'groupLabel', patient_name,
+          'billed', billed,
+          'paid', paid_to_date,
+          'paidInPeriod', paid_in_period,
+          'outstanding', outstanding,
+          'cogs', cogs,
+          'profit', CASE WHEN billed IS NULL OR cogs IS NULL THEN NULL
+            ELSE round(billed - cogs, 2) END,
+          'marginPct', CASE WHEN cost_complete AND billed <> 0
+            THEN round((billed - cogs) * 100 / billed, 1) END,
+          'discount', discount,
+          'tax', tax,
+          'refund', refund,
+          'corrections', correction_count,
+          'missingCostCount', missing_cost_count,
+          'zeroPriceCount', zero_price_count,
+          'amount', round(amount, 2),
+          'alertKeys', to_jsonb(alert_keys),
+          'attributionComplete', attribution_complete,
+          'costComplete', cost_complete,
+          'visitCount', 1
+        )
+        ORDER BY row_number
+      ), '[]'::jsonb) AS rows
+      FROM ordered
+      WHERE row_number BETWEEN ((_page - 1) * _page_size + 1) AND (_page * _page_size)
+    )
+    SELECT jsonb_build_object(
+      'rows', page_rows.rows,
+      'total', totals.total,
+      'page', _page,
+      'pageSize', _page_size,
+      'totals', jsonb_build_object(
+        'billed', CASE WHEN totals.billed IS NULL AND totals.incomplete_rows > 0
+          THEN NULL ELSE round(COALESCE(totals.billed, 0), 2) END,
+        'paid', CASE WHEN totals.paid IS NULL AND totals.incomplete_rows > 0
+          THEN NULL ELSE round(COALESCE(totals.paid, 0), 2) END,
+        'outstanding', CASE WHEN totals.outstanding IS NULL AND totals.incomplete_rows > 0
+          THEN NULL ELSE round(COALESCE(totals.outstanding, 0), 2) END,
+        'cogs', CASE WHEN totals.cogs IS NULL AND totals.incomplete_rows > 0
+          THEN NULL ELSE round(COALESCE(totals.cogs, 0), 2) END,
+        'profit', CASE WHEN totals.profit IS NULL AND totals.incomplete_rows > 0
+          THEN NULL ELSE round(COALESCE(totals.profit, 0), 2) END,
+        'attributionComplete', totals.incomplete_rows = 0,
+        'costComplete', totals.incomplete_rows = 0 AND totals.costs_complete,
+        'incompleteRows', totals.incomplete_rows
+      )
+    ) INTO v_result
+    FROM totals CROSS JOIN page_rows;
+
+  ELSIF _group_by IN ('doctor', 'payment_type', 'panel_provider') THEN
+    WITH report_rows AS MATERIALIZED (
+      SELECT *
+      FROM private.financial_control_report_rows(_start_date, _end_date, _as_of_date)
+    ),
+    filtered AS MATERIALIZED (
+      SELECT
+        report.*,
+        CASE
+          WHEN NOT report.attribution_complete THEN 'unavailable'
+          WHEN _group_by = 'doctor' THEN COALESCE(report.doctor_id::text, 'unknown-doctor')
+          WHEN _group_by = 'payment_type' THEN COALESCE(report.payment_type, 'unknown-payment-type')
+          ELSE COALESCE(report.panel_provider_id::text, 'no-panel-provider')
+        END AS group_key,
+        CASE
+          WHEN NOT report.attribution_complete THEN 'Unavailable attribution'
+          WHEN _group_by = 'doctor' THEN report.doctor_name
+          WHEN _group_by = 'payment_type' THEN COALESCE(report.payment_type, 'Unknown payment type')
+          ELSE COALESCE(report.panel_provider_name, 'No panel provider')
+        END AS group_label,
+        CASE _metric
+          WHEN 'billed_revenue' THEN report.billed
+          WHEN 'cash_collected' THEN report.paid_in_period
+          WHEN 'cohort_outstanding' THEN report.outstanding
+          WHEN 'total_outstanding' THEN report.outstanding
+          WHEN 'cogs' THEN report.cogs
+          WHEN 'gross_profit' THEN report.billed - report.cogs
+          WHEN 'adjustments' THEN report.discount + report.tax + report.refund
+          WHEN 'alerts' THEN GREATEST(
+            report.outstanding,
+            ABS(report.billed - report.paid_to_date),
+            report.refund,
+            report.discount,
+            report.cogs - report.billed,
+            0
+          )
+          WHEN 'margin' THEN report.billed - report.cogs
+        END::numeric AS amount
+      FROM report_rows report
+      WHERE NOT report.attribution_complete
+         OR CASE _metric
+           WHEN 'billed_revenue' THEN report.is_cohort
+           WHEN 'cash_collected' THEN report.paid_in_period <> 0
+           WHEN 'cohort_outstanding' THEN report.is_cohort AND report.outstanding > 0.01
+           WHEN 'total_outstanding' THEN report.outstanding > 0.01
+           WHEN 'cogs' THEN report.is_cohort
+           WHEN 'gross_profit' THEN report.is_cohort
+           WHEN 'adjustments' THEN
+             report.discount <> 0 OR report.tax <> 0 OR report.refund <> 0
+               OR report.correction_count > 0
+           WHEN 'alerts' THEN report.is_cohort AND (
+             (_alert_key IS NULL AND cardinality(report.alert_keys) > 0)
+             OR _alert_key = ANY(report.alert_keys)
+           )
+           WHEN 'margin' THEN report.is_cohort
+         END
+    ),
+    grouped AS MATERIALIZED (
+      SELECT
+        group_key,
+        MIN(group_label) AS group_label,
+        (array_agg(queue_entry_id ORDER BY queue_entry_id))[1] AS queue_entry_id,
+        MAX(completed_date) AS completed_date,
+        COUNT(*)::integer AS visit_count,
+        bool_and(attribution_complete) AS attribution_complete,
+        bool_and(cost_complete) AS cost_complete,
+        SUM(billed) AS billed,
+        SUM(paid_to_date) AS paid,
+        SUM(outstanding) AS outstanding,
+        SUM(cogs) AS cogs,
+        SUM(billed - cogs) AS profit,
+        SUM(discount) AS discount,
+        SUM(tax) AS tax,
+        SUM(refund) AS refund,
+        SUM(correction_count)::integer AS corrections,
+        SUM(missing_cost_count)::integer AS missing_cost_count,
+        SUM(zero_price_count)::integer AS zero_price_count,
+        SUM(amount) AS amount
+      FROM filtered
+      GROUP BY group_key
+    ),
+    ordered AS MATERIALIZED (
+      SELECT grouped.*, ROW_NUMBER() OVER (
+        ORDER BY amount DESC NULLS LAST,
+          completed_date DESC NULLS LAST,
+          queue_entry_id
+      ) AS row_number
+      FROM grouped
+    ),
+    totals AS (
+      SELECT
+        COUNT(*)::integer AS total,
+        COUNT(*) FILTER (WHERE NOT attribution_complete)::integer AS incomplete_rows,
+        SUM(billed) FILTER (WHERE attribution_complete) AS billed,
+        SUM(paid) FILTER (WHERE attribution_complete) AS paid,
+        SUM(outstanding) FILTER (WHERE attribution_complete) AS outstanding,
+        SUM(cogs) FILTER (WHERE attribution_complete) AS cogs,
+        SUM(profit) FILTER (WHERE attribution_complete) AS profit,
+        COALESCE(bool_and(cost_complete) FILTER (WHERE attribution_complete), true)
+          AS costs_complete
+      FROM grouped
+    ),
+    page_rows AS (
+      SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'queueEntryId', queue_entry_id,
+        'consultationId', NULL,
+        'completedDate', completed_date,
+        'patientName', NULL,
+        'doctorName', CASE WHEN _group_by = 'doctor' THEN group_label END,
+        'paymentType', CASE WHEN _group_by = 'payment_type' THEN group_label END,
+        'paymentMethod', NULL,
+        'panelProviderName', CASE WHEN _group_by = 'panel_provider' THEN group_label END,
+        'groupKey', group_key,
+        'groupLabel', group_label,
+        'billed', round(billed, 2),
+        'paid', round(paid, 2),
+        'outstanding', round(outstanding, 2),
+        'cogs', round(cogs, 2),
+        'profit', round(profit, 2),
+        'marginPct', CASE WHEN cost_complete AND billed <> 0
+          THEN round(profit * 100 / billed, 1) END,
+        'discount', round(discount, 2),
+        'tax', round(tax, 2),
+        'refund', round(refund, 2),
+        'corrections', corrections,
+        'missingCostCount', missing_cost_count,
+        'zeroPriceCount', zero_price_count,
+        'amount', round(amount, 2),
+        'alertKeys', '[]'::jsonb,
+        'attributionComplete', attribution_complete,
+        'costComplete', cost_complete,
+        'visitCount', visit_count
+      ) ORDER BY row_number), '[]'::jsonb) AS rows
+      FROM ordered
+      WHERE row_number BETWEEN ((_page - 1) * _page_size + 1) AND (_page * _page_size)
+    )
+    SELECT jsonb_build_object(
+      'rows', page_rows.rows,
+      'total', totals.total,
+      'page', _page,
+      'pageSize', _page_size,
+      'totals', jsonb_build_object(
+        'billed', CASE WHEN totals.billed IS NULL AND totals.incomplete_rows > 0
+          THEN NULL ELSE round(COALESCE(totals.billed, 0), 2) END,
+        'paid', CASE WHEN totals.paid IS NULL AND totals.incomplete_rows > 0
+          THEN NULL ELSE round(COALESCE(totals.paid, 0), 2) END,
+        'outstanding', CASE WHEN totals.outstanding IS NULL AND totals.incomplete_rows > 0
+          THEN NULL ELSE round(COALESCE(totals.outstanding, 0), 2) END,
+        'cogs', CASE WHEN totals.cogs IS NULL AND totals.incomplete_rows > 0
+          THEN NULL ELSE round(COALESCE(totals.cogs, 0), 2) END,
+        'profit', CASE WHEN totals.profit IS NULL AND totals.incomplete_rows > 0
+          THEN NULL ELSE round(COALESCE(totals.profit, 0), 2) END,
+        'attributionComplete', totals.incomplete_rows = 0,
+        'costComplete', totals.incomplete_rows = 0 AND totals.costs_complete,
+        'incompleteRows', totals.incomplete_rows
+      )
+    ) INTO v_result
+    FROM totals CROSS JOIN page_rows;
+
+  ELSE
+    WITH report_rows AS MATERIALIZED (
+      SELECT *
+      FROM private.financial_control_report_rows(_start_date, _end_date, _as_of_date)
+    ),
+    filtered AS MATERIALIZED (
+      SELECT report.*
+      FROM report_rows report
+      WHERE NOT report.attribution_complete
+         OR CASE _metric
+           WHEN 'billed_revenue' THEN report.is_cohort
+           WHEN 'cash_collected' THEN report.paid_in_period <> 0
+           WHEN 'cohort_outstanding' THEN report.is_cohort AND report.outstanding > 0.01
+           WHEN 'total_outstanding' THEN report.outstanding > 0.01
+           WHEN 'cogs' THEN report.is_cohort
+           WHEN 'gross_profit' THEN report.is_cohort
+           WHEN 'adjustments' THEN
+             report.discount <> 0 OR report.tax <> 0 OR report.refund <> 0
+               OR report.correction_count > 0
+           WHEN 'alerts' THEN report.is_cohort AND (
+             (_alert_key IS NULL AND cardinality(report.alert_keys) > 0)
+             OR _alert_key = ANY(report.alert_keys)
+           )
+           WHEN 'margin' THEN report.is_cohort
+         END
+    ),
+    item_rows AS MATERIALIZED (
+      SELECT
+        report.queue_entry_id,
+        report.completed_date,
+        CASE
+          WHEN NOT report.attribution_complete THEN 'unavailable'
+          WHEN _group_by = 'medicine' THEN COALESCE(item.item_id::text, item.item_name)
+          WHEN _group_by = 'procedure' THEN COALESCE(item.service_id::text, item.item_name)
+          ELSE COALESCE(item.package_id::text, item.item_name)
+        END AS group_key,
+        CASE WHEN NOT report.attribution_complete
+          THEN 'Unavailable attribution' ELSE item.item_name END AS group_label,
+        report.attribution_complete,
+        CASE WHEN report.attribution_complete THEN
+          COALESCE(item.unit_cost, 0) > 0 OR item.item_id IS NULL
+        ELSE false END AS cost_complete,
+        CASE WHEN report.attribution_complete
+          THEN round(item.price * GREATEST(item.quantity, 0), 2) END::numeric AS billed,
+        CASE WHEN report.attribution_complete THEN round(
+          report.paid_to_date
+            * round(item.price * GREATEST(item.quantity, 0), 2)
+            / NULLIF(charge_total.total, 0),
+          2
+        ) END::numeric AS paid,
+        CASE WHEN report.attribution_complete THEN round(
+          report.outstanding
+            * round(item.price * GREATEST(item.quantity, 0), 2)
+            / NULLIF(charge_total.total, 0),
+          2
+        ) END::numeric AS outstanding,
+        CASE WHEN report.attribution_complete THEN round(
+          COALESCE(item.unit_cost, 0) * CASE
+            WHEN item.item_id IS NOT NULL THEN GREATEST(
+              LEAST(
+                COALESCE(item.dispensed_qty, item.quantity),
+                GREATEST(item.quantity, 0)
+              ),
+              0
+            )
+            ELSE GREATEST(item.quantity, 0)
+          END,
+          2
+        ) END::numeric AS cogs,
+        report.alert_keys
+      FROM filtered report
+      LEFT JOIN public.consultation_items item
+        ON item.consultation_id = report.consultation_id
+       AND item.deleted_at IS NULL
+       AND (
+         NOT report.attribution_complete
+         OR (_group_by = 'medicine' AND item.item_id IS NOT NULL)
+         OR (_group_by = 'procedure' AND item.service_id IS NOT NULL)
+         OR (_group_by = 'package' AND item.package_id IS NOT NULL)
+       )
+       AND (
+         item.billing_adjustment_kind IS NULL
+         OR item.billing_adjustment_kind = 'other_charge'
+       )
+      LEFT JOIN LATERAL (
+        SELECT SUM(round(charge.price * GREATEST(charge.quantity, 0), 2))::numeric AS total
+        FROM public.consultation_items charge
+        WHERE charge.consultation_id = report.consultation_id
+          AND charge.deleted_at IS NULL
+          AND (
+            charge.billing_adjustment_kind IS NULL
+            OR charge.billing_adjustment_kind = 'other_charge'
+          )
+      ) charge_total ON true
+      WHERE NOT report.attribution_complete OR item.id IS NOT NULL
+    ),
+    valued AS MATERIALIZED (
+      SELECT
+        item.*,
+        item.billed - item.cogs AS profit,
+        CASE _metric
+          WHEN 'billed_revenue' THEN item.billed
+          WHEN 'cash_collected' THEN item.paid
+          WHEN 'cohort_outstanding' THEN item.outstanding
+          WHEN 'total_outstanding' THEN item.outstanding
+          WHEN 'cogs' THEN item.cogs
+          WHEN 'gross_profit' THEN item.billed - item.cogs
+          WHEN 'adjustments' THEN 0
+          WHEN 'alerts' THEN GREATEST(item.outstanding, item.cogs - item.billed, 0)
+          WHEN 'margin' THEN item.billed - item.cogs
+        END::numeric AS amount
+      FROM item_rows item
+    ),
+    grouped AS MATERIALIZED (
+      SELECT
+        group_key,
+        MIN(group_label) AS group_label,
+        (array_agg(queue_entry_id ORDER BY queue_entry_id))[1] AS queue_entry_id,
+        MAX(completed_date) AS completed_date,
+        COUNT(*)::integer AS visit_count,
+        bool_and(attribution_complete) AS attribution_complete,
+        bool_and(cost_complete) AS cost_complete,
+        SUM(billed) AS billed,
+        SUM(paid) AS paid,
+        SUM(outstanding) AS outstanding,
+        SUM(cogs) AS cogs,
+        SUM(profit) AS profit,
+        SUM(amount) AS amount
+      FROM valued
+      GROUP BY group_key
+    ),
+    ordered AS MATERIALIZED (
+      SELECT grouped.*, ROW_NUMBER() OVER (
+        ORDER BY amount DESC NULLS LAST,
+          completed_date DESC NULLS LAST,
+          queue_entry_id
+      ) AS row_number
+      FROM grouped
+    ),
+    totals AS (
+      SELECT
+        COUNT(*)::integer AS total,
+        COUNT(*) FILTER (WHERE NOT attribution_complete)::integer AS incomplete_rows,
+        SUM(billed) FILTER (WHERE attribution_complete) AS billed,
+        SUM(paid) FILTER (WHERE attribution_complete) AS paid,
+        SUM(outstanding) FILTER (WHERE attribution_complete) AS outstanding,
+        SUM(cogs) FILTER (WHERE attribution_complete) AS cogs,
+        SUM(profit) FILTER (WHERE attribution_complete) AS profit,
+        COALESCE(bool_and(cost_complete) FILTER (WHERE attribution_complete), true)
+          AS costs_complete
+      FROM grouped
+    ),
+    page_rows AS (
+      SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'queueEntryId', queue_entry_id,
+        'consultationId', NULL,
+        'completedDate', completed_date,
+        'patientName', NULL,
+        'doctorName', NULL,
+        'paymentType', NULL,
+        'paymentMethod', NULL,
+        'panelProviderName', NULL,
+        'groupKey', group_key,
+        'groupLabel', group_label,
+        'billed', round(billed, 2),
+        'paid', round(paid, 2),
+        'outstanding', round(outstanding, 2),
+        'cogs', round(cogs, 2),
+        'profit', round(profit, 2),
+        'marginPct', CASE WHEN cost_complete AND billed <> 0
+          THEN round(profit * 100 / billed, 1) END,
+        'discount', 0,
+        'tax', 0,
+        'refund', 0,
+        'corrections', 0,
+        'missingCostCount', CASE WHEN cost_complete THEN 0 ELSE 1 END,
+        'zeroPriceCount', 0,
+        'amount', round(amount, 2),
+        'alertKeys', '[]'::jsonb,
+        'attributionComplete', attribution_complete,
+        'costComplete', cost_complete,
+        'visitCount', visit_count
+      ) ORDER BY row_number), '[]'::jsonb) AS rows
+      FROM ordered
+      WHERE row_number BETWEEN ((_page - 1) * _page_size + 1) AND (_page * _page_size)
+    )
+    SELECT jsonb_build_object(
+      'rows', page_rows.rows,
+      'total', totals.total,
+      'page', _page,
+      'pageSize', _page_size,
+      'totals', jsonb_build_object(
+        'billed', CASE WHEN totals.billed IS NULL AND totals.incomplete_rows > 0
+          THEN NULL ELSE round(COALESCE(totals.billed, 0), 2) END,
+        'paid', CASE WHEN totals.paid IS NULL AND totals.incomplete_rows > 0
+          THEN NULL ELSE round(COALESCE(totals.paid, 0), 2) END,
+        'outstanding', CASE WHEN totals.outstanding IS NULL AND totals.incomplete_rows > 0
+          THEN NULL ELSE round(COALESCE(totals.outstanding, 0), 2) END,
+        'cogs', CASE WHEN totals.cogs IS NULL AND totals.incomplete_rows > 0
+          THEN NULL ELSE round(COALESCE(totals.cogs, 0), 2) END,
+        'profit', CASE WHEN totals.profit IS NULL AND totals.incomplete_rows > 0
+          THEN NULL ELSE round(COALESCE(totals.profit, 0), 2) END,
+        'attributionComplete', totals.incomplete_rows = 0,
+        'costComplete', totals.incomplete_rows = 0 AND totals.costs_complete,
+        'incompleteRows', totals.incomplete_rows
+      )
+    ) INTO v_result
+    FROM totals CROSS JOIN page_rows;
+  END IF;
+
+  RETURN v_result;
 END;
 $function$;
 
@@ -340,6 +920,7 @@ BEGIN
     received_amount,
     receipt_delta,
     status,
+    due_date,
     occurred_at,
     provenance,
     attribution_complete
@@ -353,6 +934,7 @@ BEGIN
     v_after_received,
     v_delta,
     CASE WHEN TG_OP = 'DELETE' THEN 'cancelled' ELSE NEW.status::text END,
+    CASE WHEN TG_OP = 'DELETE' THEN OLD.due_date ELSE NEW.due_date END,
     statement_timestamp(),
     'recorded',
     true
@@ -435,6 +1017,7 @@ INSERT INTO private.financial_panel_claim_events (
   received_amount,
   receipt_delta,
   status,
+  due_date,
   occurred_at,
   provenance,
   attribution_complete
@@ -448,6 +1031,7 @@ SELECT
   COALESCE(pc.received_amount, 0),
   0,
   pc.status::text,
+  pc.due_date,
   NULL,
   'synthetic_backfill',
   false
@@ -870,3 +1454,658 @@ $function$;
 
 ALTER FUNCTION private.financial_control_visit_facts(date, date, date) OWNER TO postgres;
 REVOKE ALL ON FUNCTION private.financial_control_visit_facts(date,date,date) FROM PUBLIC, anon, authenticated;
+
+-- Shared visit-level predicates keep summary alerts and detail filters identical.
+CREATE OR REPLACE FUNCTION private.financial_control_report_rows(
+  _start_date date,
+  _end_date date,
+  _as_of_date date
+)
+RETURNS TABLE (
+  queue_entry_id uuid,
+  consultation_id uuid,
+  completed_date date,
+  patient_id uuid,
+  patient_name text,
+  doctor_id uuid,
+  doctor_name text,
+  payment_type text,
+  payment_method text,
+  panel_provider_id uuid,
+  panel_provider_name text,
+  billed numeric,
+  paid_to_date numeric,
+  paid_in_period numeric,
+  older_debt_collected_in_period numeric,
+  cogs numeric,
+  discount numeric,
+  tax numeric,
+  refund numeric,
+  outstanding numeric,
+  panel_outstanding numeric,
+  missing_cost_count integer,
+  zero_price_count integer,
+  correction_count integer,
+  claim_status text,
+  claim_created_date date,
+  claim_due_date date,
+  is_cohort boolean,
+  attribution_complete boolean,
+  cost_complete boolean,
+  alert_keys text[]
+)
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = pg_catalog, public, private
+AS $function$
+  WITH facts AS MATERIALIZED (
+    SELECT *
+    FROM private.financial_control_visit_facts(_start_date, _end_date, _as_of_date)
+  ),
+  claim_events AS MATERIALIZED (
+    SELECT event.*
+    FROM private.financial_panel_claim_events event
+    WHERE event.attribution_complete
+      AND event.occurred_at
+        < ((_as_of_date + 1)::timestamp AT TIME ZONE 'Asia/Kuala_Lumpur')
+  ),
+  claim_latest AS (
+    SELECT DISTINCT ON (event.queue_entry_id)
+      event.queue_entry_id,
+      event.panel_claim_id,
+      event.status,
+      event.due_date
+    FROM claim_events event
+    WHERE event.queue_entry_id IS NOT NULL
+    ORDER BY event.queue_entry_id, event.occurred_at DESC, event.id DESC
+  ),
+  claim_created AS (
+    SELECT
+      event.panel_claim_id,
+      MIN((timezone('Asia/Kuala_Lumpur', event.occurred_at))::date)
+        FILTER (WHERE event.event_kind = 'claim_created') AS created_date
+    FROM claim_events event
+    GROUP BY event.panel_claim_id
+  ),
+  payment_states AS MATERIALIZED (
+    SELECT
+      event.payment_id,
+      (array_agg(event.queue_entry_id ORDER BY event.occurred_at DESC, event.id DESC))[1]
+        AS queue_entry_id,
+      (array_agg(event.payment_type ORDER BY event.occurred_at DESC, event.id DESC))[1]
+        AS payment_type,
+      (array_agg(event.payment_method ORDER BY event.occurred_at DESC, event.id DESC))[1]
+        AS payment_method,
+      SUM(event.amount_delta)::numeric AS active_amount,
+      MIN(event.occurred_at) FILTER (WHERE event.event_kind = 'receipt') AS received_at
+    FROM private.financial_payment_events event
+    WHERE event.attribution_complete
+      AND event.occurred_at
+        < ((_as_of_date + 1)::timestamp AT TIME ZONE 'Asia/Kuala_Lumpur')
+    GROUP BY event.payment_id
+  ),
+  duplicate_visits AS (
+    SELECT
+      first_payment.queue_entry_id,
+      SUM(LEAST(first_payment.active_amount, second_payment.active_amount))::numeric
+        AS duplicate_amount
+    FROM payment_states first_payment
+    JOIN payment_states second_payment
+      ON first_payment.payment_id < second_payment.payment_id
+     AND first_payment.queue_entry_id = second_payment.queue_entry_id
+     AND first_payment.active_amount = second_payment.active_amount
+     AND first_payment.payment_type IS NOT DISTINCT FROM second_payment.payment_type
+     AND first_payment.payment_method IS NOT DISTINCT FROM second_payment.payment_method
+     AND ABS(EXTRACT(EPOCH FROM (
+       first_payment.received_at - second_payment.received_at
+     ))) <= 300
+    WHERE first_payment.queue_entry_id IS NOT NULL
+      AND first_payment.active_amount > 0
+      AND second_payment.active_amount > 0
+      AND first_payment.received_at IS NOT NULL
+      AND second_payment.received_at IS NOT NULL
+    GROUP BY first_payment.queue_entry_id
+  ),
+  enriched AS (
+    SELECT
+      fact.*,
+      completion.completed_at,
+      claim.status AS claim_status,
+      created.created_date AS claim_created_date,
+      claim.due_date AS claim_due_date,
+      duplicate_visit.duplicate_amount,
+      EXISTS (
+        SELECT 1
+        FROM private.financial_payment_events event
+        WHERE event.attribution_complete
+          AND event.event_kind IN ('correction', 'void', 'restoration')
+          AND (timezone('Asia/Kuala_Lumpur', event.occurred_at))::date
+            BETWEEN _start_date AND _end_date
+          AND (
+            (
+              event.queue_entry_id = fact.queue_entry_id
+              AND (
+                event.consultation_id IS NULL
+                OR event.consultation_id = fact.consultation_id
+              )
+            )
+            OR (
+              event.queue_entry_id IS NULL
+              AND event.consultation_id = fact.consultation_id
+            )
+          )
+      ) OR EXISTS (
+        SELECT 1
+        FROM private.financial_panel_claim_events event
+        WHERE event.attribution_complete
+          AND event.event_kind IN ('receipt_reversal', 'void')
+          AND event.queue_entry_id = fact.queue_entry_id
+          AND (timezone('Asia/Kuala_Lumpur', event.occurred_at))::date
+            BETWEEN _start_date AND _end_date
+      ) AS has_payment_change,
+      (
+        fact.completed_date IS NOT NULL
+        AND fact.billed IS NOT NULL
+        AND fact.paid_to_date IS NOT NULL
+        AND fact.paid_in_period IS NOT NULL
+        AND fact.older_debt_collected_in_period IS NOT NULL
+        AND fact.cogs IS NOT NULL
+        AND fact.discount IS NOT NULL
+        AND fact.tax IS NOT NULL
+        AND fact.refund IS NOT NULL
+        AND fact.outstanding IS NOT NULL
+        AND fact.panel_outstanding IS NOT NULL
+        AND fact.missing_cost_count IS NOT NULL
+        AND fact.zero_price_count IS NOT NULL
+        AND fact.correction_count IS NOT NULL
+      ) AS row_attribution_complete
+    FROM facts fact
+    LEFT JOIN private.financial_visit_completion_events completion
+      ON completion.queue_entry_id = fact.queue_entry_id
+     AND completion.consultation_id = fact.consultation_id
+    LEFT JOIN claim_latest claim ON claim.queue_entry_id = fact.queue_entry_id
+    LEFT JOIN claim_created created ON created.panel_claim_id = claim.panel_claim_id
+    LEFT JOIN duplicate_visits duplicate_visit
+      ON duplicate_visit.queue_entry_id = fact.queue_entry_id
+  ),
+  predicates AS (
+    SELECT
+      enriched.*,
+      enriched.completed_date BETWEEN _start_date AND _end_date AS row_is_cohort,
+      enriched.row_attribution_complete
+        AND COALESCE(enriched.missing_cost_count, 0) = 0 AS row_cost_complete,
+      array_remove(ARRAY[
+        CASE WHEN enriched.row_attribution_complete
+          AND enriched.payment_type <> 'panel'
+          AND enriched.outstanding > 0.01
+          AND enriched.completed_at <=
+            ((_as_of_date + 1)::timestamp AT TIME ZONE 'Asia/Kuala_Lumpur')
+              - interval '24 hours'
+          THEN 'unpaid_self_pay' END,
+        CASE WHEN enriched.row_attribution_complete
+          AND enriched.payment_type = 'panel'
+          AND enriched.claim_status = 'pending'
+          AND (
+            SELECT COUNT(*)
+            FROM generate_series(
+              enriched.claim_created_date + 1,
+              _as_of_date,
+              interval '1 day'
+            ) business_day(day_value)
+            WHERE EXTRACT(ISODOW FROM business_day.day_value) BETWEEN 1 AND 5
+          ) >= 2
+          THEN 'unsubmitted_panel' END,
+        CASE WHEN enriched.row_attribution_complete
+          AND enriched.payment_type = 'panel'
+          AND enriched.claim_status IN ('pending', 'submitted', 'approved')
+          AND enriched.claim_due_date < _as_of_date
+          THEN 'overdue_panel' END,
+        CASE WHEN enriched.row_attribution_complete
+          AND enriched.missing_cost_count > 0
+          THEN 'missing_cost' END,
+        CASE WHEN enriched.row_attribution_complete
+          AND enriched.zero_price_count > 0
+          THEN 'zero_price' END,
+        CASE WHEN enriched.row_attribution_complete
+          AND enriched.billed - enriched.cogs < -0.01
+          THEN 'negative_margin' END,
+        CASE WHEN enriched.row_attribution_complete
+          AND enriched.discount > 0
+          AND (
+            enriched.discount >= 50
+            OR (
+              enriched.billed + enriched.discount - enriched.tax > 0
+              AND enriched.discount >=
+                (enriched.billed + enriched.discount - enriched.tax) * 0.10
+            )
+          )
+          THEN 'large_discount' END,
+        CASE WHEN enriched.row_attribution_complete
+          AND (
+            enriched.refund > 0.01
+            OR enriched.correction_count > 0
+            OR enriched.has_payment_change
+          )
+          THEN 'refund_void_correction' END,
+        CASE WHEN enriched.row_attribution_complete
+          AND ABS(enriched.billed - enriched.paid_to_date) > 0.01
+          THEN 'payment_mismatch' END,
+        CASE WHEN enriched.row_attribution_complete
+          AND (
+            enriched.duplicate_amount > 0
+            OR enriched.paid_to_date - enriched.billed > 0.01
+          )
+          THEN 'duplicate_or_excess_payment' END
+      ], NULL)::text[] AS row_alert_keys
+    FROM enriched
+  )
+  SELECT
+    predicates.queue_entry_id,
+    predicates.consultation_id,
+    predicates.completed_date,
+    predicates.patient_id,
+    predicates.patient_name,
+    predicates.doctor_id,
+    predicates.doctor_name,
+    predicates.payment_type,
+    predicates.payment_method,
+    predicates.panel_provider_id,
+    predicates.panel_provider_name,
+    predicates.billed,
+    predicates.paid_to_date,
+    predicates.paid_in_period,
+    predicates.older_debt_collected_in_period,
+    predicates.cogs,
+    predicates.discount,
+    predicates.tax,
+    predicates.refund,
+    predicates.outstanding,
+    predicates.panel_outstanding,
+    predicates.missing_cost_count,
+    predicates.zero_price_count,
+    predicates.correction_count,
+    predicates.claim_status,
+    predicates.claim_created_date,
+    predicates.claim_due_date,
+    predicates.row_is_cohort,
+    predicates.row_attribution_complete,
+    predicates.row_cost_complete,
+    predicates.row_alert_keys
+  FROM predicates;
+$function$;
+
+ALTER FUNCTION private.financial_control_report_rows(date, date, date) OWNER TO postgres;
+REVOKE ALL ON FUNCTION private.financial_control_report_rows(date,date,date)
+  FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.get_financial_control_summary(
+  _start_date date,
+  _end_date date,
+  _comparison_start date,
+  _comparison_end date,
+  _as_of_date date
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private
+AS $function$
+BEGIN
+  IF auth.uid() IS NULL OR NOT public.can_view_insights(auth.uid()) THEN
+    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
+  END IF;
+
+  IF _start_date IS NULL OR _end_date IS NULL
+     OR _comparison_start IS NULL OR _comparison_end IS NULL
+     OR _as_of_date IS NULL THEN
+    RAISE EXCEPTION 'FINANCIAL_CONTROL_DATES_REQUIRED' USING ERRCODE = '22023';
+  END IF;
+  IF _start_date > _end_date OR _comparison_start > _comparison_end THEN
+    RAISE EXCEPTION 'FINANCIAL_CONTROL_DATE_RANGE_REVERSED' USING ERRCODE = '22023';
+  END IF;
+  IF _as_of_date < _end_date THEN
+    RAISE EXCEPTION 'FINANCIAL_CONTROL_AS_OF_BEFORE_END' USING ERRCODE = '22023';
+  END IF;
+  IF (_end_date - _start_date) > 365
+     OR (_comparison_end - _comparison_start) > 365 THEN
+    RAISE EXCEPTION 'FINANCIAL_CONTROL_DATE_RANGE_TOO_LARGE' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN (
+    WITH selected AS MATERIALIZED (
+      SELECT *
+      FROM private.financial_control_report_rows(_start_date, _end_date, _as_of_date)
+    ),
+    comparison_rows AS MATERIALIZED (
+      SELECT *
+      FROM private.financial_control_report_rows(
+        _comparison_start,
+        _comparison_end,
+        _comparison_end
+      )
+    ),
+    selected_stats AS MATERIALIZED (
+      SELECT
+        COUNT(*) FILTER (WHERE is_cohort AND attribution_complete)::integer
+          AS completed_visits,
+        COUNT(*) FILTER (WHERE NOT attribution_complete)::integer
+          AS incomplete_visits,
+        COALESCE(SUM(missing_cost_count) FILTER (
+          WHERE is_cohort AND attribution_complete
+        ), 0)::integer AS missing_cost_items,
+        SUM(billed) FILTER (WHERE is_cohort AND attribution_complete) AS billed_revenue,
+        SUM(paid_in_period) FILTER (WHERE attribution_complete) AS cash_collected,
+        SUM(paid_in_period) FILTER (WHERE is_cohort AND attribution_complete)
+          AS cohort_collected,
+        SUM(older_debt_collected_in_period) FILTER (WHERE attribution_complete)
+          AS older_debt_collected,
+        SUM(cogs) FILTER (WHERE is_cohort AND attribution_complete) AS cogs,
+        SUM(billed - cogs) FILTER (WHERE is_cohort AND attribution_complete)
+          AS gross_profit,
+        SUM(outstanding) FILTER (WHERE is_cohort AND attribution_complete)
+          AS cohort_outstanding,
+        SUM(outstanding) FILTER (WHERE attribution_complete) AS total_outstanding,
+        SUM(outstanding) FILTER (
+          WHERE attribution_complete AND payment_type <> 'panel'
+        ) AS self_pay_outstanding,
+        SUM(panel_outstanding) FILTER (
+          WHERE attribution_complete AND payment_type = 'panel'
+        ) AS panel_outstanding,
+        SUM(discount) FILTER (WHERE is_cohort AND attribution_complete) AS discounts,
+        SUM(tax) FILTER (WHERE is_cohort AND attribution_complete) AS taxes,
+        SUM(refund) FILTER (WHERE attribution_complete) AS refunds,
+        SUM(correction_count) FILTER (WHERE attribution_complete)::integer AS corrections
+      FROM selected
+    ),
+    comparison_stats AS MATERIALIZED (
+      SELECT
+        COUNT(*) FILTER (WHERE is_cohort AND attribution_complete)::integer
+          AS completed_visits,
+        COUNT(*) FILTER (WHERE NOT attribution_complete)::integer
+          AS incomplete_visits,
+        COALESCE(SUM(missing_cost_count) FILTER (
+          WHERE is_cohort AND attribution_complete
+        ), 0)::integer AS missing_cost_items,
+        SUM(billed) FILTER (WHERE is_cohort AND attribution_complete) AS billed_revenue,
+        SUM(paid_in_period) FILTER (WHERE attribution_complete) AS cash_collected,
+        SUM(paid_in_period) FILTER (WHERE is_cohort AND attribution_complete)
+          AS cohort_collected,
+        SUM(older_debt_collected_in_period) FILTER (WHERE attribution_complete)
+          AS older_debt_collected,
+        SUM(cogs) FILTER (WHERE is_cohort AND attribution_complete) AS cogs,
+        SUM(billed - cogs) FILTER (WHERE is_cohort AND attribution_complete)
+          AS gross_profit,
+        SUM(outstanding) FILTER (WHERE is_cohort AND attribution_complete)
+          AS cohort_outstanding,
+        SUM(outstanding) FILTER (WHERE attribution_complete) AS total_outstanding
+      FROM comparison_rows
+    ),
+    alert_definitions(alert_key, severity, urgency) AS (
+      VALUES
+        ('duplicate_or_excess_payment'::text, 'critical'::text, 1),
+        ('negative_margin', 'critical', 2),
+        ('overdue_panel', 'high', 3),
+        ('unpaid_self_pay', 'high', 4),
+        ('unsubmitted_panel', 'high', 5),
+        ('missing_cost', 'high', 6),
+        ('payment_mismatch', 'medium', 7),
+        ('refund_void_correction', 'medium', 8),
+        ('large_discount', 'medium', 9),
+        ('zero_price', 'low', 10)
+    ),
+    alerts AS (
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'key', definition.alert_key,
+          'severity', definition.severity,
+          'count', COALESCE(matched.match_count, 0),
+          'amount', round(COALESCE(matched.amount, 0), 2),
+          'oldestAgeDays', COALESCE(matched.oldest_age_days, 0),
+          'attributionComplete', stats.incomplete_visits = 0,
+          'incompleteRows', stats.incomplete_visits
+        )
+        ORDER BY definition.urgency
+      ) AS value
+      FROM alert_definitions definition
+      CROSS JOIN selected_stats stats
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(report.queue_entry_id)::integer AS match_count,
+          SUM(CASE definition.alert_key
+            WHEN 'unpaid_self_pay' THEN report.outstanding
+            WHEN 'unsubmitted_panel' THEN report.panel_outstanding
+            WHEN 'overdue_panel' THEN report.panel_outstanding
+            WHEN 'missing_cost' THEN report.billed
+            WHEN 'zero_price' THEN 0
+            WHEN 'negative_margin' THEN GREATEST(report.cogs - report.billed, 0)
+            WHEN 'large_discount' THEN report.discount
+            WHEN 'refund_void_correction' THEN report.refund
+            WHEN 'payment_mismatch' THEN ABS(report.billed - report.paid_to_date)
+            WHEN 'duplicate_or_excess_payment' THEN
+              GREATEST(report.paid_to_date - report.billed, 0)
+          END)::numeric AS amount,
+          MAX(_as_of_date - COALESCE(
+            report.claim_created_date,
+            report.completed_date
+          ))::integer AS oldest_age_days
+        FROM selected report
+        WHERE report.is_cohort
+          AND definition.alert_key = ANY(report.alert_keys)
+      ) matched ON true
+      GROUP BY stats.incomplete_visits
+    )
+    SELECT jsonb_build_object(
+      'period', jsonb_build_object(
+        'billedRevenue', CASE
+          WHEN period.completed_visits = 0 AND period.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(period.billed_revenue, 0), 2)
+        END,
+        'cashCollected', CASE
+          WHEN period.cash_collected IS NULL AND period.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(period.cash_collected, 0), 2)
+        END,
+        'cohortCollected', CASE
+          WHEN period.completed_visits = 0 AND period.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(period.cohort_collected, 0), 2)
+        END,
+        'olderDebtCollected', CASE
+          WHEN period.older_debt_collected IS NULL AND period.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(period.older_debt_collected, 0), 2)
+        END,
+        'collectionRate', CASE
+          WHEN period.billed_revenue > 0 THEN
+            round(COALESCE(period.cohort_collected, 0) * 100 / period.billed_revenue, 1)
+          WHEN period.completed_visits = 0 AND period.incomplete_visits > 0 THEN NULL
+          ELSE 0::numeric
+        END,
+        'cogs', CASE
+          WHEN period.completed_visits = 0 AND period.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(period.cogs, 0), 2)
+        END,
+        'grossProfit', CASE
+          WHEN period.completed_visits = 0 AND period.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(period.gross_profit, 0), 2)
+        END,
+        'grossMarginPct', CASE
+          WHEN period.billed_revenue > 0 THEN
+            round(COALESCE(period.gross_profit, 0) * 100 / period.billed_revenue, 1)
+          WHEN period.completed_visits = 0 AND period.incomplete_visits > 0 THEN NULL
+          ELSE 0::numeric
+        END,
+        'cohortOutstanding', CASE
+          WHEN period.completed_visits = 0 AND period.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(period.cohort_outstanding, 0), 2)
+        END,
+        'totalOutstanding', CASE
+          WHEN period.total_outstanding IS NULL AND period.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(period.total_outstanding, 0), 2)
+        END,
+        'averageBill', CASE
+          WHEN period.completed_visits > 0 THEN
+            round(period.billed_revenue / period.completed_visits, 2)
+          WHEN period.incomplete_visits > 0 THEN NULL
+          ELSE 0::numeric
+        END,
+        'completedVisits', period.completed_visits,
+        'attributionComplete', period.incomplete_visits = 0,
+        'costComplete', period.incomplete_visits = 0 AND period.missing_cost_items = 0,
+        'incompleteVisits', period.incomplete_visits,
+        'missingCostItems', period.missing_cost_items
+      ),
+      'comparison', jsonb_build_object(
+        'billedRevenue', CASE
+          WHEN comparison.completed_visits = 0 AND comparison.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(comparison.billed_revenue, 0), 2)
+        END,
+        'cashCollected', CASE
+          WHEN comparison.cash_collected IS NULL AND comparison.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(comparison.cash_collected, 0), 2)
+        END,
+        'cohortCollected', CASE
+          WHEN comparison.completed_visits = 0 AND comparison.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(comparison.cohort_collected, 0), 2)
+        END,
+        'olderDebtCollected', CASE
+          WHEN comparison.older_debt_collected IS NULL AND comparison.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(comparison.older_debt_collected, 0), 2)
+        END,
+        'collectionRate', CASE
+          WHEN comparison.billed_revenue > 0 THEN
+            round(COALESCE(comparison.cohort_collected, 0) * 100 / comparison.billed_revenue, 1)
+          WHEN comparison.completed_visits = 0 AND comparison.incomplete_visits > 0 THEN NULL
+          ELSE 0::numeric
+        END,
+        'cogs', CASE
+          WHEN comparison.completed_visits = 0 AND comparison.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(comparison.cogs, 0), 2)
+        END,
+        'grossProfit', CASE
+          WHEN comparison.completed_visits = 0 AND comparison.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(comparison.gross_profit, 0), 2)
+        END,
+        'grossMarginPct', CASE
+          WHEN comparison.billed_revenue > 0 THEN
+            round(COALESCE(comparison.gross_profit, 0) * 100 / comparison.billed_revenue, 1)
+          WHEN comparison.completed_visits = 0 AND comparison.incomplete_visits > 0 THEN NULL
+          ELSE 0::numeric
+        END,
+        'cohortOutstanding', CASE
+          WHEN comparison.completed_visits = 0 AND comparison.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(comparison.cohort_outstanding, 0), 2)
+        END,
+        'totalOutstanding', CASE
+          WHEN comparison.total_outstanding IS NULL AND comparison.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(comparison.total_outstanding, 0), 2)
+        END,
+        'averageBill', CASE
+          WHEN comparison.completed_visits > 0 THEN
+            round(comparison.billed_revenue / comparison.completed_visits, 2)
+          WHEN comparison.incomplete_visits > 0 THEN NULL
+          ELSE 0::numeric
+        END,
+        'completedVisits', comparison.completed_visits,
+        'attributionComplete', comparison.incomplete_visits = 0,
+        'costComplete', comparison.incomplete_visits = 0
+          AND comparison.missing_cost_items = 0,
+        'incompleteVisits', comparison.incomplete_visits,
+        'missingCostItems', comparison.missing_cost_items
+      ),
+      'reconciliation', jsonb_build_object(
+        'billedCohort', CASE
+          WHEN period.completed_visits = 0 AND period.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(period.billed_revenue, 0), 2)
+        END,
+        'cashCollected', round(COALESCE(period.cash_collected, 0), 2),
+        'cohortCollected', CASE
+          WHEN period.completed_visits = 0 AND period.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(period.cohort_collected, 0), 2)
+        END,
+        'olderDebtCollected', round(COALESCE(period.older_debt_collected, 0), 2),
+        'discounts', round(COALESCE(period.discounts, 0), 2),
+        'taxes', round(COALESCE(period.taxes, 0), 2),
+        'refunds', round(COALESCE(period.refunds, 0), 2),
+        'adjustments', round(
+          COALESCE(period.taxes, 0)
+            - COALESCE(period.discounts, 0)
+            - COALESCE(period.refunds, 0),
+          2
+        ),
+        'corrections', COALESCE(period.corrections, 0),
+        'cohortOutstanding', CASE
+          WHEN period.completed_visits = 0 AND period.incomplete_visits > 0 THEN NULL
+          ELSE round(COALESCE(period.cohort_outstanding, 0), 2)
+        END,
+        'selfPayOutstanding', round(COALESCE(period.self_pay_outstanding, 0), 2),
+        'panelOutstanding', round(COALESCE(period.panel_outstanding, 0), 2),
+        'totalOutstanding', round(COALESCE(period.total_outstanding, 0), 2),
+        'attributionComplete', period.incomplete_visits = 0,
+        'incompleteVisits', period.incomplete_visits
+      ),
+      'alerts', alert_rows.value,
+      'generated_at', statement_timestamp()
+    )
+    FROM selected_stats period
+    CROSS JOIN comparison_stats comparison
+    CROSS JOIN alerts alert_rows
+  );
+END;
+$function$;
+
+ALTER FUNCTION public.get_financial_control_summary(date, date, date, date, date)
+  OWNER TO postgres;
+ALTER FUNCTION public.get_financial_control_details(
+  date, date, date, text, text, text, integer, integer
+) OWNER TO postgres;
+
+REVOKE ALL ON FUNCTION public.get_financial_control_summary(date,date,date,date,date)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_financial_control_summary(date,date,date,date,date)
+  TO authenticated;
+REVOKE ALL ON FUNCTION public.get_financial_control_details(date,date,date,text,text,text,integer,integer)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_financial_control_details(date,date,date,text,text,text,integer,integer)
+  TO authenticated;
+
+-- Migration postflight: signatures, least privilege, private isolation, and the
+-- mandatory Insight gate must all survive future edits to this migration.
+DO $postflight$
+BEGIN
+  IF to_regprocedure('public.get_financial_control_summary(date,date,date,date,date)') IS NULL
+     OR to_regprocedure('public.get_financial_control_details(date,date,date,text,text,text,integer,integer)') IS NULL THEN
+    RAISE EXCEPTION 'FINANCIAL_CONTROL_RPC_SIGNATURE_MISSING';
+  END IF;
+
+  IF has_function_privilege('anon', 'public.get_financial_control_summary(date,date,date,date,date)', 'execute')
+     OR has_function_privilege('public', 'public.get_financial_control_summary(date,date,date,date,date)', 'execute')
+     OR NOT has_function_privilege('authenticated', 'public.get_financial_control_summary(date,date,date,date,date)', 'execute')
+     OR has_function_privilege('anon', 'public.get_financial_control_details(date,date,date,text,text,text,integer,integer)', 'execute')
+     OR has_function_privilege('public', 'public.get_financial_control_details(date,date,date,text,text,text,integer,integer)', 'execute')
+     OR NOT has_function_privilege('authenticated', 'public.get_financial_control_details(date,date,date,text,text,text,integer,integer)', 'execute') THEN
+    RAISE EXCEPTION 'FINANCIAL_CONTROL_RPC_GRANTS_INVALID';
+  END IF;
+
+  IF has_function_privilege('anon', 'private.financial_control_visit_facts(date,date,date)', 'execute')
+     OR has_function_privilege('authenticated', 'private.financial_control_visit_facts(date,date,date)', 'execute')
+     OR has_function_privilege('public', 'private.financial_control_visit_facts(date,date,date)', 'execute')
+     OR has_function_privilege('anon', 'private.financial_control_report_rows(date,date,date)', 'execute')
+     OR has_function_privilege('authenticated', 'private.financial_control_report_rows(date,date,date)', 'execute')
+     OR has_function_privilege('public', 'private.financial_control_report_rows(date,date,date)', 'execute') THEN
+    RAISE EXCEPTION 'FINANCIAL_CONTROL_PRIVATE_FUNCTION_EXPOSED';
+  END IF;
+
+  BEGIN
+    PERFORM public.get_financial_control_summary(
+      current_date,
+      current_date,
+      current_date - 1,
+      current_date - 1,
+      current_date
+    );
+    RAISE EXCEPTION 'FINANCIAL_CONTROL_INSIGHT_GATE_MISSING';
+  EXCEPTION WHEN SQLSTATE '42501' THEN
+    NULL;
+  END;
+END;
+$postflight$;
