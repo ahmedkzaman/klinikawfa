@@ -199,6 +199,21 @@ as $$
     from public.consultation_items ci
     where ci.consultation_id = p_consultation_id
       and ci.deleted_at is null
+  ), items as (
+    select coalesce(jsonb_agg(jsonb_build_object(
+      'id', ci.id,
+      'item_name', ci.item_name,
+      'quantity', ci.quantity,
+      'price', ci.price,
+      'item_id', ci.item_id,
+      'service_id', ci.service_id,
+      'package_id', ci.package_id,
+      'dispensed_qty', ci.dispensed_qty,
+      'adjustment_kind', ci.billing_adjustment_kind
+    ) order by ci.id), '[]'::jsonb) as value
+    from public.consultation_items ci
+    where ci.consultation_id = p_consultation_id
+      and ci.deleted_at is null
   ), paid as (
     select coalesce(sum(p.amount), 0)::numeric as paid
     from public.payments p
@@ -209,9 +224,10 @@ as $$
     'total', totals.total,
     'discount_rm', totals.discount_rm,
     'tax_rm', totals.tax_rm,
+    'items', items.value,
     'paid', paid.paid
   )
-  from totals cross join paid
+  from totals cross join items cross join paid
 $$;
 
 insert into public.patients values
@@ -300,14 +316,73 @@ alter table public.payments enable trigger capture_financial_payment_event;
 alter table public.panel_claims enable trigger capture_financial_panel_claim_event;
 
 insert into private.financial_visit_completion_events
-  (queue_entry_id, consultation_id, completed_at, provenance, attribution_complete)
-values
-  ('50000000-0000-4000-8000-000000000001', '60000000-0000-4000-8000-000000000001', '2026-07-31 16:05:00+00', 'recorded', true),
-  ('50000000-0000-4000-8000-000000000002', '60000000-0000-4000-8000-000000000002', '2026-08-02 02:30:00+00', 'recorded', true),
-  ('50000000-0000-4000-8000-000000000003', '60000000-0000-4000-8000-000000000003', '2026-07-20 02:30:00+00', 'recorded', true),
-  ('50000000-0000-4000-8000-000000000004', '60000000-0000-4000-8000-000000000004', '2026-08-01 02:30:00+00', 'recorded', true),
-  ('50000000-0000-4000-8000-000000000005', '60000000-0000-4000-8000-000000000005', '2026-08-01 03:30:00+00', 'recorded', true),
-  ('50000000-0000-4000-8000-000000000006', '60000000-0000-4000-8000-000000000006', '2026-08-01 04:30:00+00', 'recorded', true);
+  (queue_entry_id, consultation_id, completed_at, provenance, attribution_complete, item_state)
+select fixture.queue_entry_id, fixture.consultation_id, fixture.completed_at,
+  'recorded', true,
+  private.financial_control_completion_item_state(fixture.consultation_id)
+from (values
+  ('50000000-0000-4000-8000-000000000001'::uuid, '60000000-0000-4000-8000-000000000001'::uuid, '2026-07-31 16:05:00+00'::timestamptz),
+  ('50000000-0000-4000-8000-000000000002', '60000000-0000-4000-8000-000000000002', '2026-08-02 02:30:00+00'),
+  ('50000000-0000-4000-8000-000000000003', '60000000-0000-4000-8000-000000000003', '2026-07-20 02:30:00+00'),
+  ('50000000-0000-4000-8000-000000000004', '60000000-0000-4000-8000-000000000004', '2026-08-01 02:30:00+00'),
+  ('50000000-0000-4000-8000-000000000005', '60000000-0000-4000-8000-000000000005', '2026-08-01 03:30:00+00'),
+  ('50000000-0000-4000-8000-000000000006', '60000000-0000-4000-8000-000000000006', '2026-08-01 04:30:00+00')
+) fixture(queue_entry_id, consultation_id, completed_at);
+
+-- These live-row rewrites occur after the report date. Historical item detail and
+-- visit COGS must continue to use the completion/correction snapshots.
+insert into public.completed_bill_correction_audit
+select
+  'b0000000-0000-4000-8000-000000000011',
+  '50000000-0000-4000-8000-000000000001',
+  '60000000-0000-4000-8000-000000000001',
+  public.completed_bill_correction_state(
+    '50000000-0000-4000-8000-000000000001',
+    '60000000-0000-4000-8000-000000000001'
+  ),
+  '{"total": 0, "discount_rm": 0, "tax_rm": 0, "paid": 60, "items": []}'::jsonb,
+  '2026-08-04 04:00:00+00';
+insert into public.completed_bill_correction_audit
+select
+  'b0000000-0000-4000-8000-000000000012',
+  '50000000-0000-4000-8000-000000000002',
+  '60000000-0000-4000-8000-000000000002',
+  public.completed_bill_correction_state(
+    '50000000-0000-4000-8000-000000000002',
+    '60000000-0000-4000-8000-000000000002'
+  ),
+  jsonb_build_object(
+    'total', 200,
+    'discount_rm', 0,
+    'tax_rm', 0,
+    'paid', 40,
+    'items', jsonb_build_array(jsonb_build_object(
+      'id', '70000000-0000-4000-8000-000000000002',
+      'item_name', 'Rewritten procedure',
+      'quantity', 1,
+      'price', 200,
+      'item_id', null,
+      'service_id', null,
+      'package_id', null,
+      'dispensed_qty', null,
+      'adjustment_kind', null
+    ))
+  ),
+  '2026-08-04 04:05:00+00';
+
+update public.consultation_items
+set item_name = 'Rewritten and deleted medicine', item_id = null,
+  price = 600, unit_cost = 400, deleted_at = '2026-08-04 04:00:00+00'
+where id = '70000000-0000-4000-8000-000000000001';
+update public.consultation_items
+set item_name = 'Rewritten procedure', service_id = null, price = 200, unit_cost = 90
+where id = '70000000-0000-4000-8000-000000000002';
+update public.consultation_items
+set deleted_at = '2026-08-04 04:05:00+00'
+where id in (
+  '70000000-0000-4000-8000-000000000003',
+  '70000000-0000-4000-8000-000000000004'
+);
 
 insert into private.financial_zero_price_package_child_events
   (consultation_item_id, consultation_id, package_line_item_id, package_id,
@@ -540,6 +615,11 @@ declare
   v_alert_order text;
   v_count integer;
   v_value text;
+  v_group text;
+  v_alert text;
+  v_medicine_billed numeric;
+  v_procedure_billed numeric;
+  v_package_billed numeric;
 begin
   v_summary := public.get_financial_control_summary(
     '2026-08-01', '2026-08-03', '2026-07-29', '2026-07-31', '2026-08-03'
@@ -702,9 +782,107 @@ begin
   if not exists (
     select 1 from jsonb_array_elements(v_details->'rows') row_value
     where row_value->>'groupLabel' = 'Full medicine'
+      and row_value->>'groupKey' = '80000000-0000-4000-8000-000000000001'
       and (row_value->>'billed')::numeric = 60
+      and (row_value->>'cogs')::numeric = 20
   ) then
-    raise exception 'MEDICINE_GROUP_MISMATCH: %', v_details;
+    raise exception 'HISTORICAL_MEDICINE_GROUP_MISMATCH: %', v_details;
+  end if;
+  v_medicine_billed := (v_details #>> '{totals,billed}')::numeric;
+
+  v_details := public.get_financial_control_details(
+    '2026-08-01', '2026-08-03', '2026-08-03',
+    'billed_revenue', 'procedure', null, 1, 20
+  );
+  if not exists (
+    select 1 from jsonb_array_elements(v_details->'rows') row_value
+    where row_value->>'groupLabel' = 'Procedure'
+      and row_value->>'groupKey' = '81000000-0000-4000-8000-000000000001'
+      and (row_value->>'billed')::numeric = 95
+      and (row_value->>'discount')::numeric = 10
+      and (row_value->>'tax')::numeric = 5
+  ) then
+    raise exception 'NET_PROCEDURE_RECONCILIATION_MISMATCH: %', v_details;
+  end if;
+  if abs((v_details #>> '{totals,billed}')::numeric - 315) > 0.01 then
+    raise exception 'PROCEDURE_TOTALS_DO_NOT_RECONCILE: %', v_details->'totals';
+  end if;
+  v_procedure_billed := (v_details #>> '{totals,billed}')::numeric;
+
+  v_details := public.get_financial_control_details(
+    '2026-08-01', '2026-08-03', '2026-08-03',
+    'billed_revenue', 'package', null, 1, 20
+  );
+  select coalesce(sum((row_value->>'billed')::numeric), 0)
+    into v_package_billed
+  from jsonb_array_elements(v_details->'rows') row_value
+  where (row_value->>'attributionComplete')::boolean;
+  if abs(v_medicine_billed + v_procedure_billed + v_package_billed - 425) > 0.01 then
+    raise exception 'ITEM_GROUP_TOTALS_DO_NOT_RECONCILE: %, %, %',
+      v_medicine_billed, v_procedure_billed, v_package_billed;
+  end if;
+
+  v_details := public.get_financial_control_details(
+    '2026-08-02', '2026-08-02', '2026-08-03',
+    'cash_collected', 'medicine', null, 1, 100
+  );
+  if abs(coalesce((select sum((row_value->>'amount')::numeric)
+      from jsonb_array_elements(v_details->'rows') row_value
+      where row_value->>'groupKey' in (
+        '80000000-0000-4000-8000-000000000009',
+        '80000000-0000-4000-8000-000000000011'
+      )), 0) - 6.67) > 0.01 then
+    raise exception 'ITEM_PERIOD_CASH_USES_LIFETIME_TOTAL: %', v_details;
+  end if;
+
+  v_details := public.get_financial_control_details(
+    '2026-08-01', '2026-08-03', '2026-08-03',
+    'adjustments', 'procedure', null, 1, 20
+  );
+  if (v_details #>> '{rows,0,amount}')::numeric <> 15
+     or (v_details #>> '{rows,0,discount}')::numeric <> 10
+     or (v_details #>> '{rows,0,tax}')::numeric <> 5 then
+    raise exception 'ITEM_ADJUSTMENT_FIELDS_DISCARDED: %', v_details;
+  end if;
+
+  v_details := public.get_financial_control_details(
+    '2026-08-01', '2026-08-03', '2026-08-03',
+    'alerts', 'procedure', 'large_discount', 1, 20
+  );
+  if (v_details #>> '{rows,0,amount}')::numeric <> 10
+     or not ((v_details #> '{rows,0,alertKeys}') ? 'large_discount') then
+    raise exception 'ITEM_ALERT_PAYLOAD_MISMATCH: %', v_details;
+  end if;
+
+  foreach v_value in array array['doctor', 'payment_type'] loop
+    v_details := public.get_financial_control_details(
+      '2026-08-01', '2026-08-03', '2026-08-03',
+      'alerts', v_value, 'large_discount', 1, 20
+    );
+    if (v_details #>> '{rows,0,amount}')::numeric <> 10
+       or not ((v_details #> '{rows,0,alertKeys}') ? 'large_discount') then
+      raise exception 'DIMENSION_ALERT_PAYLOAD_MISMATCH (%): %', v_value, v_details;
+    end if;
+  end loop;
+
+  v_details := public.get_financial_control_details(
+    '2026-08-01', '2026-08-03', '2026-08-03',
+    'alerts', 'panel_provider', 'negative_margin', 1, 20
+  );
+  if (v_details #>> '{rows,0,amount}')::numeric <> 20
+     or not ((v_details #> '{rows,0,alertKeys}') ? 'negative_margin') then
+    raise exception 'PANEL_ALERT_PAYLOAD_MISMATCH: %', v_details;
+  end if;
+
+  v_details := public.get_financial_control_details(
+    '2026-08-01', '2026-08-03', '2026-08-03',
+    'alerts', 'medicine', 'refund_void_correction', 1, 20
+  );
+  if (v_details #>> '{rows,0,amount}')::numeric <> 20
+     or not ((v_details #> '{rows,0,alertKeys}') ? 'refund_void_correction')
+     or (v_details #>> '{rows,0,refund}')::numeric <> 20
+     or (v_details #>> '{rows,0,corrections}')::integer <> 1 then
+    raise exception 'ITEM_REFUND_CORRECTION_PAYLOAD_MISMATCH: %', v_details;
   end if;
 
   v_details := public.get_financial_control_details(
@@ -716,22 +894,48 @@ begin
     raise exception 'ALERT_DETAIL_MISMATCH: %', v_details;
   end if;
 
-  foreach v_value in array array[
-    'billed_revenue', 'cash_collected', 'cohort_outstanding',
-    'total_outstanding', 'cogs', 'gross_profit', 'adjustments', 'alerts', 'margin'
-  ] loop
-    perform public.get_financial_control_details(
-      '2026-08-01', '2026-08-03', '2026-08-03', v_value, 'visit', null, 1, 20
-    );
-  end loop;
-  foreach v_value in array array[
+  foreach v_group in array array[
     'visit', 'medicine', 'procedure', 'package',
     'doctor', 'payment_type', 'panel_provider'
   ] loop
-    perform public.get_financial_control_details(
-      '2026-08-01', '2026-08-03', '2026-08-03',
-      'billed_revenue', v_value, null, 1, 20
-    );
+    foreach v_value in array array[
+      'billed_revenue', 'cash_collected', 'cohort_outstanding',
+      'total_outstanding', 'cogs', 'gross_profit', 'adjustments', 'alerts', 'margin'
+    ] loop
+      v_details := public.get_financial_control_details(
+        '2026-08-01', '2026-08-03', '2026-08-03',
+        v_value, v_group, null, 1, 100
+      );
+      if jsonb_typeof(v_details->'rows') <> 'array'
+         or exists (
+           select 1 from jsonb_array_elements(v_details->'rows') row_value
+           where not (row_value ?& array[
+             'amount', 'discount', 'tax', 'refund', 'corrections', 'alertKeys'
+           ]) or jsonb_typeof(row_value->'alertKeys') <> 'array'
+         ) then
+        raise exception 'METRIC_GROUP_CONTRACT_MISMATCH (%, %): %',
+          v_value, v_group, v_details;
+      end if;
+    end loop;
+
+    foreach v_alert in array array[
+      'unpaid_self_pay', 'unsubmitted_panel', 'overdue_panel', 'missing_cost',
+      'zero_price', 'negative_margin', 'large_discount', 'refund_void_correction',
+      'payment_mismatch', 'duplicate_or_excess_payment'
+    ] loop
+      v_details := public.get_financial_control_details(
+        '2026-08-01', '2026-08-03', '2026-08-03',
+        'alerts', v_group, v_alert, 1, 100
+      );
+      if exists (
+        select 1 from jsonb_array_elements(v_details->'rows') row_value
+        where (row_value->>'attributionComplete')::boolean
+          and not ((row_value->'alertKeys') ? v_alert)
+      ) then
+        raise exception 'ALERT_GROUP_KEY_MISMATCH (%, %): %',
+          v_alert, v_group, v_details;
+      end if;
+    end loop;
   end loop;
 
   begin
@@ -764,6 +968,55 @@ begin
     raise exception 'INVALID_SUMMARY_DATES_ACCEPTED';
   exception when sqlstate '22023' then null;
   end;
+end $$;
+
+-- Equal-value groups from the same visit straddle a page boundary. The final
+-- group key must make both pages repeatable and non-overlapping.
+alter table public.queue_entries disable trigger capture_financial_visit_completion_from_queue;
+alter table public.consultations disable trigger capture_financial_visit_completion_from_consultation;
+insert into public.queue_entries values
+  ('50000000-0000-4000-8000-000000000007', '20000000-0000-4000-8000-000000000001', 'completed', 'cash', null, '2026-08-03 07:00:00+00', null);
+insert into public.consultations values
+  ('60000000-0000-4000-8000-000000000007', '50000000-0000-4000-8000-000000000007', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'completed', null);
+insert into public.consultation_items values
+  ('70000000-0000-4000-8000-000000000071', '60000000-0000-4000-8000-000000000007', 'Tie medicine A', '80000000-0000-4000-8000-000000000071', null, null, 1, 1, 50, 10, null, null),
+  ('70000000-0000-4000-8000-000000000072', '60000000-0000-4000-8000-000000000007', 'Tie medicine B', '80000000-0000-4000-8000-000000000072', null, null, 1, 1, 50, 10, null, null);
+insert into private.financial_visit_completion_events
+  (queue_entry_id, consultation_id, completed_at, provenance, attribution_complete, item_state)
+values (
+  '50000000-0000-4000-8000-000000000007',
+  '60000000-0000-4000-8000-000000000007',
+  '2026-08-03 07:30:00+00',
+  'recorded',
+  true,
+  private.financial_control_completion_item_state('60000000-0000-4000-8000-000000000007')
+);
+alter table public.queue_entries enable trigger capture_financial_visit_completion_from_queue;
+alter table public.consultations enable trigger capture_financial_visit_completion_from_consultation;
+
+do $$
+declare
+  v_page_2 jsonb;
+  v_page_2_repeat jsonb;
+  v_page_3 jsonb;
+begin
+  v_page_2 := public.get_financial_control_details(
+    '2026-08-01', '2026-08-03', '2026-08-03',
+    'billed_revenue', 'medicine', null, 2, 1
+  );
+  v_page_2_repeat := public.get_financial_control_details(
+    '2026-08-01', '2026-08-03', '2026-08-03',
+    'billed_revenue', 'medicine', null, 2, 1
+  );
+  v_page_3 := public.get_financial_control_details(
+    '2026-08-01', '2026-08-03', '2026-08-03',
+    'billed_revenue', 'medicine', null, 3, 1
+  );
+  if v_page_2 #>> '{rows,0,groupKey}' <> '80000000-0000-4000-8000-000000000071'
+     or v_page_3 #>> '{rows,0,groupKey}' <> '80000000-0000-4000-8000-000000000072'
+     or v_page_2 #>> '{rows,0,groupKey}' <> v_page_2_repeat #>> '{rows,0,groupKey}' then
+    raise exception 'ITEM_PAGE_TIE_UNSTABLE: %, %, %', v_page_2, v_page_2_repeat, v_page_3;
+  end if;
 end $$;
 
 select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000099', false);
@@ -888,7 +1141,13 @@ do $$
 begin
   if has_function_privilege('anon', 'private.financial_control_visit_facts(date,date,date)', 'execute')
      or has_function_privilege('authenticated', 'private.financial_control_visit_facts(date,date,date)', 'execute')
-     or has_function_privilege('public', 'private.financial_control_visit_facts(date,date,date)', 'execute') then
+     or has_function_privilege('public', 'private.financial_control_visit_facts(date,date,date)', 'execute')
+     or has_function_privilege('anon', 'private.financial_control_completion_item_state(uuid)', 'execute')
+     or has_function_privilege('authenticated', 'private.financial_control_completion_item_state(uuid)', 'execute')
+     or has_function_privilege('public', 'private.financial_control_completion_item_state(uuid)', 'execute')
+     or has_function_privilege('anon', 'private.financial_control_bill_state_as_of(uuid,uuid,date)', 'execute')
+     or has_function_privilege('authenticated', 'private.financial_control_bill_state_as_of(uuid,uuid,date)', 'execute')
+     or has_function_privilege('public', 'private.financial_control_bill_state_as_of(uuid,uuid,date)', 'execute') then
     raise exception 'PRIVATE_FACT_EXECUTE_EXPOSED';
   end if;
 

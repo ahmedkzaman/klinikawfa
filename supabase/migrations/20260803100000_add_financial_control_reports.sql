@@ -10,10 +10,14 @@ CREATE TABLE private.financial_visit_completion_events (
   completed_at timestamptz,
   provenance text NOT NULL CHECK (provenance IN ('recorded', 'synthetic_backfill')),
   attribution_complete boolean NOT NULL,
+  item_state jsonb,
   recorded_at timestamptz NOT NULL DEFAULT statement_timestamp(),
+  CHECK (item_state IS NULL OR jsonb_typeof(item_state) = 'array'),
   CHECK (
-    (attribution_complete AND completed_at IS NOT NULL AND provenance = 'recorded')
-    OR (NOT attribution_complete AND provenance = 'synthetic_backfill')
+    (attribution_complete AND completed_at IS NOT NULL
+      AND provenance = 'recorded' AND item_state IS NOT NULL)
+    OR (NOT attribution_complete AND provenance = 'synthetic_backfill'
+      AND item_state IS NULL)
   )
 );
 
@@ -108,6 +112,134 @@ AS $function$
 BEGIN
   RAISE EXCEPTION 'FINANCIAL_EVENT_IMMUTABLE' USING ERRCODE = '42501';
 END;
+$function$;
+
+CREATE OR REPLACE FUNCTION private.financial_control_completion_item_state(
+  _consultation_id uuid
+)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = pg_catalog, public, private
+AS $function$
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'id', item.id,
+    'item_name', item.item_name,
+    'quantity', item.quantity,
+    'price', item.price,
+    'item_id', item.item_id,
+    'service_id', item.service_id,
+    'package_id', item.package_id,
+    'dispensed_qty', item.dispensed_qty,
+    'unit_cost', item.unit_cost,
+    'adjustment_kind', item.billing_adjustment_kind
+  ) ORDER BY item.id), '[]'::jsonb)
+  FROM public.consultation_items item
+  WHERE item.consultation_id = _consultation_id
+    AND item.deleted_at IS NULL;
+$function$;
+
+CREATE OR REPLACE FUNCTION private.financial_control_bill_state_as_of(
+  _queue_entry_id uuid,
+  _consultation_id uuid,
+  _as_of_date date
+)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = pg_catalog, public, private
+AS $function$
+  WITH completion AS MATERIALIZED (
+    SELECT event.item_state
+    FROM private.financial_visit_completion_events event
+    WHERE event.queue_entry_id = _queue_entry_id
+      AND event.consultation_id = _consultation_id
+    LIMIT 1
+  ), completion_totals AS (
+    SELECT
+      COALESCE(SUM((item->>'price')::numeric * (item->>'quantity')::numeric), 0)
+        AS total,
+      GREATEST(-COALESCE(SUM((item->>'price')::numeric * (item->>'quantity')::numeric)
+        FILTER (WHERE item->>'adjustment_kind' = 'discount'), 0), 0) AS discount_rm,
+      GREATEST(COALESCE(SUM((item->>'price')::numeric * (item->>'quantity')::numeric)
+        FILTER (WHERE item->>'adjustment_kind' = 'tax'), 0), 0) AS tax_rm
+    FROM completion
+    CROSS JOIN LATERAL jsonb_array_elements(completion.item_state) item
+  ), selected AS MATERIALIZED (
+    SELECT
+      completion.item_state AS completion_items,
+      COALESCE(
+        (
+          SELECT audit.after_state
+          FROM public.completed_bill_correction_audit audit
+          WHERE audit.queue_entry_id = _queue_entry_id
+            AND audit.consultation_id = _consultation_id
+            AND audit.created_at
+              < ((_as_of_date + 1)::timestamp AT TIME ZONE 'Asia/Kuala_Lumpur')
+          ORDER BY audit.created_at DESC, audit.id DESC
+          LIMIT 1
+        ),
+        (
+          SELECT audit.before_state
+          FROM public.completed_bill_correction_audit audit
+          WHERE audit.queue_entry_id = _queue_entry_id
+            AND audit.consultation_id = _consultation_id
+            AND audit.created_at
+              >= ((_as_of_date + 1)::timestamp AT TIME ZONE 'Asia/Kuala_Lumpur')
+          ORDER BY audit.created_at, audit.id
+          LIMIT 1
+        ),
+        CASE WHEN completion.item_state IS NOT NULL THEN jsonb_build_object(
+          'total', totals.total,
+          'discount_rm', totals.discount_rm,
+          'tax_rm', totals.tax_rm,
+          'items', completion.item_state
+        ) END
+      ) AS bill_state
+    FROM completion
+    LEFT JOIN completion_totals totals ON true
+  ), enriched_items AS (
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'id', canonical.item->>'id',
+      'item_name', COALESCE(canonical.item->>'item_name', original.item->>'item_name'),
+      'quantity', (canonical.item->>'quantity')::numeric,
+      'price', (canonical.item->>'price')::numeric,
+      'item_id', COALESCE(canonical.item->>'item_id', original.item->>'item_id'),
+      'service_id', COALESCE(canonical.item->>'service_id', original.item->>'service_id'),
+      'package_id', COALESCE(canonical.item->>'package_id', original.item->>'package_id'),
+      'dispensed_qty', COALESCE(
+        (canonical.item->>'dispensed_qty')::numeric,
+        (original.item->>'dispensed_qty')::numeric
+      ),
+      'unit_cost', COALESCE(
+        (canonical.item->>'unit_cost')::numeric,
+        (original.item->>'unit_cost')::numeric,
+        0
+      ),
+      'adjustment_kind', COALESCE(
+        canonical.item->>'adjustment_kind',
+        canonical.item->>'billing_adjustment_kind',
+        original.item->>'adjustment_kind'
+      )
+    ) ORDER BY canonical.item->>'id'), '[]'::jsonb) AS value
+    FROM selected
+    CROSS JOIN LATERAL jsonb_array_elements(
+      COALESCE(selected.bill_state->'items', selected.completion_items, '[]'::jsonb)
+    ) canonical(item)
+    LEFT JOIN LATERAL (
+      SELECT completion_item AS item
+      FROM jsonb_array_elements(COALESCE(selected.completion_items, '[]'::jsonb)) completion_item
+      WHERE completion_item->>'id' = canonical.item->>'id'
+      LIMIT 1
+    ) original ON true
+  )
+  SELECT CASE WHEN selected.bill_state IS NULL THEN NULL ELSE
+    selected.bill_state || jsonb_build_object('items', enriched_items.value)
+  END
+  FROM selected
+  CROSS JOIN enriched_items;
 $function$;
 
 CREATE OR REPLACE FUNCTION public.get_financial_control_details(
@@ -344,14 +476,27 @@ BEGIN
           WHEN 'cogs' THEN report.cogs
           WHEN 'gross_profit' THEN report.billed - report.cogs
           WHEN 'adjustments' THEN report.discount + report.tax + report.refund
-          WHEN 'alerts' THEN GREATEST(
-            report.outstanding,
-            ABS(report.billed - report.paid_to_date),
-            report.refund,
-            report.discount,
-            report.cogs - report.billed,
-            0
-          )
+          WHEN 'alerts' THEN CASE _alert_key
+            WHEN 'unpaid_self_pay' THEN report.outstanding
+            WHEN 'unsubmitted_panel' THEN report.panel_outstanding
+            WHEN 'overdue_panel' THEN report.panel_outstanding
+            WHEN 'missing_cost' THEN report.billed
+            WHEN 'zero_price' THEN 0
+            WHEN 'negative_margin' THEN GREATEST(report.cogs - report.billed, 0)
+            WHEN 'large_discount' THEN report.discount
+            WHEN 'refund_void_correction' THEN report.refund
+            WHEN 'payment_mismatch' THEN ABS(report.billed - report.paid_to_date)
+            WHEN 'duplicate_or_excess_payment' THEN
+              GREATEST(report.paid_to_date - report.billed, 0)
+            ELSE GREATEST(
+              report.outstanding,
+              ABS(report.billed - report.paid_to_date),
+              report.refund,
+              report.discount,
+              report.cogs - report.billed,
+              0
+            )
+          END
           WHEN 'margin' THEN report.billed - report.cogs
         END::numeric AS amount
       FROM report_rows report
@@ -393,6 +538,10 @@ BEGIN
         SUM(correction_count)::integer AS corrections,
         SUM(missing_cost_count)::integer AS missing_cost_count,
         SUM(zero_price_count)::integer AS zero_price_count,
+        jsonb_path_query_array(
+          jsonb_agg(to_jsonb(alert_keys)),
+          '$[*][*]'
+        ) AS alert_keys,
         SUM(amount) AS amount
       FROM filtered
       GROUP BY group_key
@@ -444,7 +593,7 @@ BEGIN
         'missingCostCount', missing_cost_count,
         'zeroPriceCount', zero_price_count,
         'amount', round(amount, 2),
-        'alertKeys', '[]'::jsonb,
+        'alertKeys', to_jsonb(alert_keys),
         'attributionComplete', attribution_complete,
         'costComplete', cost_complete,
         'visitCount', visit_count
@@ -501,75 +650,152 @@ BEGIN
            WHEN 'margin' THEN report.is_cohort
          END
     ),
+    charge_lines AS MATERIALIZED (
+      SELECT
+        report.*,
+        value->>'id' AS line_id,
+        value->>'item_name' AS item_name,
+        NULLIF(value->>'item_id', '')::uuid AS item_id,
+        NULLIF(value->>'service_id', '')::uuid AS service_id,
+        NULLIF(value->>'package_id', '')::uuid AS package_id,
+        (value->>'quantity')::numeric AS quantity,
+        (value->>'dispensed_qty')::numeric AS dispensed_qty,
+        (value->>'price')::numeric AS price,
+        COALESCE((value->>'unit_cost')::numeric, 0) AS unit_cost,
+        round((value->>'price')::numeric * GREATEST((value->>'quantity')::numeric, 0), 2)
+          AS gross_line,
+        SUM(round(
+          (value->>'price')::numeric * GREATEST((value->>'quantity')::numeric, 0), 2
+        )) OVER (PARTITION BY report.queue_entry_id) AS gross_total,
+        ROW_NUMBER() OVER (
+          PARTITION BY report.queue_entry_id ORDER BY value->>'id'
+        ) AS line_number,
+        COUNT(*) OVER (PARTITION BY report.queue_entry_id) AS line_count
+      FROM filtered report
+      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(report.item_state, '[]'::jsonb)) value
+      WHERE report.attribution_complete
+        AND (
+          value->>'adjustment_kind' IS NULL
+          OR value->>'adjustment_kind' = 'other_charge'
+        )
+    ),
+    weighted AS MATERIALIZED (
+      SELECT
+        line.*,
+        CASE WHEN line.gross_total <> 0
+          THEN line.gross_line / line.gross_total
+          ELSE 1::numeric / line.line_count
+        END AS allocation_ratio
+      FROM charge_lines line
+    ),
+    preliminary AS MATERIALIZED (
+      SELECT
+        line.*,
+        round(line.billed * line.allocation_ratio, 2) AS preliminary_billed,
+        round(line.paid_to_date * line.allocation_ratio, 2) AS preliminary_paid,
+        round(line.paid_in_period * line.allocation_ratio, 2) AS preliminary_paid_in_period,
+        round(line.outstanding * line.allocation_ratio, 2) AS preliminary_outstanding,
+        round(line.discount * line.allocation_ratio, 2) AS preliminary_discount,
+        round(line.tax * line.allocation_ratio, 2) AS preliminary_tax,
+        round(line.refund * line.allocation_ratio, 2) AS preliminary_refund
+      FROM weighted line
+    ),
+    allocated AS MATERIALIZED (
+      SELECT
+        line.*,
+        CASE WHEN line.line_number = line.line_count THEN
+          line.billed - (
+            SUM(line.preliminary_billed) OVER (PARTITION BY line.queue_entry_id)
+              - line.preliminary_billed
+          ) ELSE line.preliminary_billed END AS allocated_billed,
+        CASE WHEN line.line_number = line.line_count THEN
+          line.paid_to_date - (
+            SUM(line.preliminary_paid) OVER (PARTITION BY line.queue_entry_id)
+              - line.preliminary_paid
+          ) ELSE line.preliminary_paid END AS allocated_paid,
+        CASE WHEN line.line_number = line.line_count THEN
+          line.paid_in_period - (
+            SUM(line.preliminary_paid_in_period) OVER (PARTITION BY line.queue_entry_id)
+              - line.preliminary_paid_in_period
+          ) ELSE line.preliminary_paid_in_period END AS allocated_paid_in_period,
+        CASE WHEN line.line_number = line.line_count THEN
+          line.outstanding - (
+            SUM(line.preliminary_outstanding) OVER (PARTITION BY line.queue_entry_id)
+              - line.preliminary_outstanding
+          ) ELSE line.preliminary_outstanding END AS allocated_outstanding,
+        CASE WHEN line.line_number = line.line_count THEN
+          line.discount - (
+            SUM(line.preliminary_discount) OVER (PARTITION BY line.queue_entry_id)
+              - line.preliminary_discount
+          ) ELSE line.preliminary_discount END AS allocated_discount,
+        CASE WHEN line.line_number = line.line_count THEN
+          line.tax - (
+            SUM(line.preliminary_tax) OVER (PARTITION BY line.queue_entry_id)
+              - line.preliminary_tax
+          ) ELSE line.preliminary_tax END AS allocated_tax,
+        CASE WHEN line.line_number = line.line_count THEN
+          line.refund - (
+            SUM(line.preliminary_refund) OVER (PARTITION BY line.queue_entry_id)
+              - line.preliminary_refund
+          ) ELSE line.preliminary_refund END AS allocated_refund
+      FROM preliminary line
+    ),
     item_rows AS MATERIALIZED (
       SELECT
-        report.queue_entry_id,
-        report.completed_date,
+        item.queue_entry_id,
+        item.completed_date,
         CASE
-          WHEN NOT report.attribution_complete THEN 'unavailable'
-          WHEN _group_by = 'medicine' THEN COALESCE(item.item_id::text, item.item_name)
-          WHEN _group_by = 'procedure' THEN COALESCE(item.service_id::text, item.item_name)
-          ELSE COALESCE(item.package_id::text, item.item_name)
+          WHEN _group_by = 'medicine' THEN item.item_id::text
+          WHEN _group_by = 'procedure' THEN item.service_id::text
+          ELSE item.package_id::text
         END AS group_key,
-        CASE WHEN NOT report.attribution_complete
-          THEN 'Unavailable attribution' ELSE item.item_name END AS group_label,
-        report.attribution_complete,
-        CASE WHEN report.attribution_complete THEN
-          COALESCE(item.unit_cost, 0) > 0 OR item.item_id IS NULL
-        ELSE false END AS cost_complete,
-        CASE WHEN report.attribution_complete
-          THEN round(item.price * GREATEST(item.quantity, 0), 2) END::numeric AS billed,
-        CASE WHEN report.attribution_complete THEN round(
-          report.paid_to_date
-            * round(item.price * GREATEST(item.quantity, 0), 2)
-            / NULLIF(charge_total.total, 0),
-          2
-        ) END::numeric AS paid,
-        CASE WHEN report.attribution_complete THEN round(
-          report.outstanding
-            * round(item.price * GREATEST(item.quantity, 0), 2)
-            / NULLIF(charge_total.total, 0),
-          2
-        ) END::numeric AS outstanding,
-        CASE WHEN report.attribution_complete THEN round(
-          COALESCE(item.unit_cost, 0) * CASE
-            WHEN item.item_id IS NOT NULL THEN GREATEST(
-              LEAST(
-                COALESCE(item.dispensed_qty, item.quantity),
-                GREATEST(item.quantity, 0)
-              ),
-              0
-            )
-            ELSE GREATEST(item.quantity, 0)
-          END,
-          2
-        ) END::numeric AS cogs,
-        report.alert_keys
-      FROM filtered report
-      LEFT JOIN public.consultation_items item
-        ON item.consultation_id = report.consultation_id
-       AND item.deleted_at IS NULL
-       AND (
-         NOT report.attribution_complete
-         OR (_group_by = 'medicine' AND item.item_id IS NOT NULL)
+        item.item_name AS group_label,
+        true AS attribution_complete,
+        item.item_id IS NULL OR item.unit_cost > 0 OR GREATEST(
+          LEAST(COALESCE(item.dispensed_qty, item.quantity), GREATEST(item.quantity, 0)), 0
+        ) = 0 AS cost_complete,
+        item.allocated_billed AS billed,
+        item.allocated_paid AS paid,
+        item.allocated_paid_in_period AS paid_in_period,
+        item.allocated_outstanding AS outstanding,
+        round(item.unit_cost * CASE WHEN item.item_id IS NOT NULL THEN GREATEST(
+          LEAST(COALESCE(item.dispensed_qty, item.quantity), GREATEST(item.quantity, 0)), 0
+        ) ELSE GREATEST(item.quantity, 0) END, 2) AS cogs,
+        item.allocated_discount AS discount,
+        item.allocated_tax AS tax,
+        item.allocated_refund AS refund,
+        CASE WHEN item.line_number = 1 THEN item.correction_count ELSE 0 END AS corrections,
+        CASE WHEN item.item_id IS NOT NULL
+          AND GREATEST(
+            LEAST(COALESCE(item.dispensed_qty, item.quantity), GREATEST(item.quantity, 0)), 0
+          ) > 0 AND item.unit_cost <= 0 THEN 1 ELSE 0 END AS missing_cost_count,
+        CASE WHEN item.price = 0
+          AND NOT EXISTS (
+            SELECT 1
+            FROM private.financial_zero_price_package_child_events package_child
+            WHERE package_child.consultation_item_id = item.line_id::uuid
+              AND package_child.consultation_id = item.consultation_id
+          )
+          AND CASE WHEN item.item_id IS NOT NULL THEN GREATEST(
+            LEAST(COALESCE(item.dispensed_qty, item.quantity), GREATEST(item.quantity, 0)), 0
+          ) ELSE GREATEST(item.quantity, 0) END > 0 THEN 1 ELSE 0 END AS zero_price_count,
+        item.alert_keys,
+        item.allocation_ratio,
+        item.billed AS visit_billed,
+        item.paid_to_date AS visit_paid,
+        item.panel_outstanding AS visit_panel_outstanding
+      FROM allocated item
+      WHERE (_group_by = 'medicine' AND item.item_id IS NOT NULL)
          OR (_group_by = 'procedure' AND item.service_id IS NOT NULL)
          OR (_group_by = 'package' AND item.package_id IS NOT NULL)
-       )
-       AND (
-         item.billing_adjustment_kind IS NULL
-         OR item.billing_adjustment_kind = 'other_charge'
-       )
-      LEFT JOIN LATERAL (
-        SELECT SUM(round(charge.price * GREATEST(charge.quantity, 0), 2))::numeric AS total
-        FROM public.consultation_items charge
-        WHERE charge.consultation_id = report.consultation_id
-          AND charge.deleted_at IS NULL
-          AND (
-            charge.billing_adjustment_kind IS NULL
-            OR charge.billing_adjustment_kind = 'other_charge'
-          )
-      ) charge_total ON true
-      WHERE NOT report.attribution_complete OR item.id IS NOT NULL
+      UNION ALL
+      SELECT
+        report.queue_entry_id, report.completed_date, 'unavailable',
+        'Unavailable attribution', false, false,
+        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+        0, 0, 0, report.alert_keys, NULL, NULL, NULL, NULL
+      FROM filtered report
+      WHERE NOT report.attribution_complete
     ),
     valued AS MATERIALIZED (
       SELECT
@@ -577,13 +803,28 @@ BEGIN
         item.billed - item.cogs AS profit,
         CASE _metric
           WHEN 'billed_revenue' THEN item.billed
-          WHEN 'cash_collected' THEN item.paid
+          WHEN 'cash_collected' THEN item.paid_in_period
           WHEN 'cohort_outstanding' THEN item.outstanding
           WHEN 'total_outstanding' THEN item.outstanding
           WHEN 'cogs' THEN item.cogs
           WHEN 'gross_profit' THEN item.billed - item.cogs
-          WHEN 'adjustments' THEN 0
-          WHEN 'alerts' THEN GREATEST(item.outstanding, item.cogs - item.billed, 0)
+          WHEN 'adjustments' THEN item.discount + item.tax + item.refund
+          WHEN 'alerts' THEN CASE _alert_key
+            WHEN 'unpaid_self_pay' THEN item.outstanding
+            WHEN 'unsubmitted_panel' THEN item.visit_panel_outstanding * item.allocation_ratio
+            WHEN 'overdue_panel' THEN item.visit_panel_outstanding * item.allocation_ratio
+            WHEN 'missing_cost' THEN item.billed
+            WHEN 'zero_price' THEN 0
+            WHEN 'negative_margin' THEN GREATEST(item.cogs - item.billed, 0)
+            WHEN 'large_discount' THEN item.discount
+            WHEN 'refund_void_correction' THEN item.refund
+            WHEN 'payment_mismatch' THEN
+              ABS(item.visit_billed - item.visit_paid) * item.allocation_ratio
+            WHEN 'duplicate_or_excess_payment' THEN
+              GREATEST(item.visit_paid - item.visit_billed, 0) * item.allocation_ratio
+            ELSE GREATEST(item.outstanding, item.cogs - item.billed,
+              item.discount, item.refund, 0)
+          END
           WHEN 'margin' THEN item.billed - item.cogs
         END::numeric AS amount
       FROM item_rows item
@@ -594,7 +835,7 @@ BEGIN
         MIN(group_label) AS group_label,
         (array_agg(queue_entry_id ORDER BY queue_entry_id))[1] AS queue_entry_id,
         MAX(completed_date) AS completed_date,
-        COUNT(*)::integer AS visit_count,
+        COUNT(DISTINCT queue_entry_id)::integer AS visit_count,
         bool_and(attribution_complete) AS attribution_complete,
         bool_and(cost_complete) AS cost_complete,
         SUM(billed) AS billed,
@@ -602,6 +843,16 @@ BEGIN
         SUM(outstanding) AS outstanding,
         SUM(cogs) AS cogs,
         SUM(profit) AS profit,
+        SUM(discount) AS discount,
+        SUM(tax) AS tax,
+        SUM(refund) AS refund,
+        SUM(corrections)::integer AS corrections,
+        SUM(missing_cost_count)::integer AS missing_cost_count,
+        SUM(zero_price_count)::integer AS zero_price_count,
+        jsonb_path_query_array(
+          jsonb_agg(to_jsonb(alert_keys)),
+          '$[*][*]'
+        ) AS alert_keys,
         SUM(amount) AS amount
       FROM valued
       GROUP BY group_key
@@ -610,7 +861,8 @@ BEGIN
       SELECT grouped.*, ROW_NUMBER() OVER (
         ORDER BY amount DESC NULLS LAST,
           completed_date DESC NULLS LAST,
-          queue_entry_id
+          queue_entry_id,
+          group_key
       ) AS row_number
       FROM grouped
     ),
@@ -646,14 +898,14 @@ BEGIN
         'profit', round(profit, 2),
         'marginPct', CASE WHEN cost_complete AND billed <> 0
           THEN round(profit * 100 / billed, 1) END,
-        'discount', 0,
-        'tax', 0,
-        'refund', 0,
-        'corrections', 0,
-        'missingCostCount', CASE WHEN cost_complete THEN 0 ELSE 1 END,
-        'zeroPriceCount', 0,
+        'discount', round(discount, 2),
+        'tax', round(tax, 2),
+        'refund', round(refund, 2),
+        'corrections', corrections,
+        'missingCostCount', missing_cost_count,
+        'zeroPriceCount', zero_price_count,
         'amount', round(amount, 2),
-        'alertKeys', '[]'::jsonb,
+        'alertKeys', to_jsonb(alert_keys),
         'attributionComplete', attribution_complete,
         'costComplete', cost_complete,
         'visitCount', visit_count
@@ -749,14 +1001,16 @@ BEGIN
       consultation_id,
       completed_at,
       provenance,
-      attribution_complete
+      attribution_complete,
+      item_state
     )
     VALUES (
       v_queue_entry_id,
       v_consultation_id,
       v_completed_at,
       'recorded',
-      true
+      true,
+      private.financial_control_completion_item_state(v_consultation_id)
     )
     ON CONFLICT (consultation_id) DO NOTHING;
 
@@ -945,10 +1199,16 @@ END;
 $function$;
 
 ALTER FUNCTION private.prevent_financial_event_change() OWNER TO postgres;
+ALTER FUNCTION private.financial_control_completion_item_state(uuid) OWNER TO postgres;
+ALTER FUNCTION private.financial_control_bill_state_as_of(uuid, uuid, date) OWNER TO postgres;
 ALTER FUNCTION private.capture_financial_visit_completion_event() OWNER TO postgres;
 ALTER FUNCTION private.capture_financial_payment_event() OWNER TO postgres;
 ALTER FUNCTION private.capture_financial_panel_claim_event() OWNER TO postgres;
 REVOKE ALL ON FUNCTION private.prevent_financial_event_change() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.financial_control_completion_item_state(uuid)
+  FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.financial_control_bill_state_as_of(uuid, uuid, date)
+  FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.capture_financial_visit_completion_event() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.capture_financial_payment_event() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.capture_financial_panel_claim_event() FROM PUBLIC, anon, authenticated;
@@ -972,9 +1232,10 @@ INSERT INTO private.financial_visit_completion_events (
   consultation_id,
   completed_at,
   provenance,
-  attribution_complete
+  attribution_complete,
+  item_state
 )
-SELECT qe.id, c.id, NULL, 'synthetic_backfill', false
+SELECT qe.id, c.id, NULL, 'synthetic_backfill', false, NULL
 FROM public.consultations c
 JOIN public.queue_entries qe ON qe.id = c.queue_entry_id
 WHERE c.deleted_at IS NULL
@@ -1127,31 +1388,10 @@ BEGIN
   visit_state AS MATERIALIZED (
     SELECT
       visit.*,
-      COALESCE(
-        (
-          SELECT audit.after_state
-          FROM public.completed_bill_correction_audit audit
-          WHERE audit.queue_entry_id = visit.queue_entry_id
-            AND audit.consultation_id = visit.consultation_id
-            AND audit.created_at
-              < ((_as_of_date + 1)::timestamp AT TIME ZONE 'Asia/Kuala_Lumpur')
-          ORDER BY audit.created_at DESC, audit.id DESC
-          LIMIT 1
-        ),
-        (
-          SELECT audit.before_state
-          FROM public.completed_bill_correction_audit audit
-          WHERE audit.queue_entry_id = visit.queue_entry_id
-            AND audit.consultation_id = visit.consultation_id
-            AND audit.created_at
-              >= ((_as_of_date + 1)::timestamp AT TIME ZONE 'Asia/Kuala_Lumpur')
-          ORDER BY audit.created_at, audit.id
-          LIMIT 1
-        ),
-        public.completed_bill_correction_state(
-          visit.queue_entry_id,
-          visit.consultation_id
-        )
+      private.financial_control_bill_state_as_of(
+        visit.queue_entry_id,
+        visit.consultation_id,
+        _as_of_date
       ) AS correction_state
     FROM completed_visits visit
   ),
@@ -1280,16 +1520,24 @@ BEGIN
     LEFT JOIN LATERAL (
       WITH item_rows AS (
         SELECT
-          ci.*,
+          (value->>'id')::uuid AS id,
+          visit.consultation_id,
+          NULLIF(value->>'item_id', '')::uuid AS item_id,
+          (value->>'quantity')::numeric AS quantity,
+          (value->>'dispensed_qty')::numeric AS dispensed_qty,
+          (value->>'price')::numeric AS price,
+          (value->>'unit_cost')::numeric AS unit_cost,
+          value->>'adjustment_kind' AS billing_adjustment_kind,
           EXISTS (
             SELECT 1
             FROM private.financial_zero_price_package_child_events package_child
-            WHERE package_child.consultation_item_id = ci.id
-              AND package_child.consultation_id = ci.consultation_id
+            WHERE package_child.consultation_item_id = (value->>'id')::uuid
+              AND package_child.consultation_id = visit.consultation_id
           ) AS is_zero_price_package_child
-        FROM public.consultation_items ci
-        WHERE ci.consultation_id = visit.consultation_id
-          AND ci.deleted_at IS NULL
+        FROM jsonb_array_elements(COALESCE(
+          visit.correction_state->'items',
+          '[]'::jsonb
+        )) value
       )
       SELECT
         COALESCE(SUM(
@@ -1492,7 +1740,8 @@ RETURNS TABLE (
   is_cohort boolean,
   attribution_complete boolean,
   cost_complete boolean,
-  alert_keys text[]
+  alert_keys text[],
+  item_state jsonb
 )
 LANGUAGE sql
 STABLE
@@ -1571,6 +1820,7 @@ AS $function$
     SELECT
       fact.*,
       completion.completed_at,
+      state.bill_state->'items' AS item_state,
       claim.status AS claim_status,
       created.created_date AS claim_created_date,
       claim.due_date AS claim_due_date,
@@ -1624,6 +1874,13 @@ AS $function$
     LEFT JOIN private.financial_visit_completion_events completion
       ON completion.queue_entry_id = fact.queue_entry_id
      AND completion.consultation_id = fact.consultation_id
+    LEFT JOIN LATERAL (
+      SELECT private.financial_control_bill_state_as_of(
+        fact.queue_entry_id,
+        fact.consultation_id,
+        _as_of_date
+      ) AS bill_state
+    ) state ON true
     LEFT JOIN claim_latest claim ON claim.queue_entry_id = fact.queue_entry_id
     LEFT JOIN claim_created created ON created.panel_claim_id = claim.panel_claim_id
     LEFT JOIN duplicate_visits duplicate_visit
@@ -1731,7 +1988,8 @@ AS $function$
     predicates.row_is_cohort,
     predicates.row_attribution_complete,
     predicates.row_cost_complete,
-    predicates.row_alert_keys
+    predicates.row_alert_keys,
+    predicates.item_state
   FROM predicates;
 $function$;
 
@@ -2091,7 +2349,13 @@ BEGIN
      OR has_function_privilege('public', 'private.financial_control_visit_facts(date,date,date)', 'execute')
      OR has_function_privilege('anon', 'private.financial_control_report_rows(date,date,date)', 'execute')
      OR has_function_privilege('authenticated', 'private.financial_control_report_rows(date,date,date)', 'execute')
-     OR has_function_privilege('public', 'private.financial_control_report_rows(date,date,date)', 'execute') THEN
+     OR has_function_privilege('public', 'private.financial_control_report_rows(date,date,date)', 'execute')
+     OR has_function_privilege('anon', 'private.financial_control_completion_item_state(uuid)', 'execute')
+     OR has_function_privilege('authenticated', 'private.financial_control_completion_item_state(uuid)', 'execute')
+     OR has_function_privilege('public', 'private.financial_control_completion_item_state(uuid)', 'execute')
+     OR has_function_privilege('anon', 'private.financial_control_bill_state_as_of(uuid,uuid,date)', 'execute')
+     OR has_function_privilege('authenticated', 'private.financial_control_bill_state_as_of(uuid,uuid,date)', 'execute')
+     OR has_function_privilege('public', 'private.financial_control_bill_state_as_of(uuid,uuid,date)', 'execute') THEN
     RAISE EXCEPTION 'FINANCIAL_CONTROL_PRIVATE_FUNCTION_EXPOSED';
   END IF;
 
