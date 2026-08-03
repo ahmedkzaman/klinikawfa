@@ -16,10 +16,15 @@ import type {
 
 const useFinancialControlSummaryMock = vi.hoisted(() => vi.fn());
 const useFinancialControlDetailsMock = vi.hoisted(() => vi.fn());
+const financialControlRpcMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/clinic/useFinancialControl', () => ({
   useFinancialControlSummary: useFinancialControlSummaryMock,
   useFinancialControlDetails: useFinancialControlDetailsMock,
+}));
+
+vi.mock('@/integrations/supabase/client', () => ({
+  supabase: { rpc: financialControlRpcMock },
 }));
 
 const period: FinancialControlPeriodSummary = {
@@ -165,6 +170,15 @@ function latestDetailFilters(): FinancialControlDetailFilters {
   return useFinancialControlDetailsMock.mock.calls.at(-1)?.[0] as FinancialControlDetailFilters;
 }
 
+function readBlob(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
+}
+
 function summaryResult(overrides: Record<string, unknown> = {}) {
   return {
     data: summary,
@@ -178,6 +192,7 @@ function summaryResult(overrides: Record<string, unknown> = {}) {
 describe('Financial Control Management shell', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    financialControlRpcMock.mockReset();
     useFinancialControlSummaryMock.mockReturnValue(summaryResult());
     useFinancialControlDetailsMock.mockImplementation((filters: FinancialControlDetailFilters) => detailResult({
       page: filters.page,
@@ -352,6 +367,7 @@ describe('FinancialSummaryStrip', () => {
 describe('FinancialControlTab summary and reconciliation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    financialControlRpcMock.mockReset();
     useFinancialControlSummaryMock.mockReturnValue(summaryResult());
     useFinancialControlDetailsMock.mockImplementation((filters: FinancialControlDetailFilters) => detailResult({
       page: filters.page,
@@ -448,6 +464,7 @@ describe('FinancialControlTab summary and reconciliation', () => {
 describe('FinancialControlTab alerts and drill-down', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    financialControlRpcMock.mockReset();
     useFinancialControlSummaryMock.mockReturnValue(summaryResult({
       data: { ...summary, alerts },
     }));
@@ -628,5 +645,192 @@ describe('FinancialControlTab alerts and drill-down', () => {
     expect(screen.queryByText('Private clinical note must never render')).not.toBeInTheDocument();
     expect(screen.queryByText('Private diagnosis must never render')).not.toBeInTheDocument();
     expect(screen.queryByText('private-document.pdf')).not.toBeInTheDocument();
+  });
+
+  it('downloads every filtered page with the current dates, metric, grouping, and page size', async () => {
+    useFinancialControlDetailsMock.mockImplementation((filters: FinancialControlDetailFilters) => detailResult({
+      rows: [detailRow],
+      total: 101,
+      page: filters.page,
+      pageSize: filters.pageSize,
+    }));
+    financialControlRpcMock.mockImplementation(async (_name: string, args: Record<string, unknown>) => {
+      const page = args._page as number;
+      const rows = Array.from({ length: page === 1 ? 100 : 1 }, (_, index) => ({
+        ...detailRow,
+        groupKey: `${page}-${index}`,
+        groupLabel: page === 1 && index === 0 ? '=Unsafe group' : `Group ${page}-${index}`,
+      }));
+      return {
+        data: detailResult({ rows, total: 101, page, pageSize: 100 }).data,
+        error: null,
+      };
+    });
+    const createObjectURL = vi.fn(() => 'blob:financial-control');
+    const downloads: string[] = [];
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+      downloads.push(this.download);
+    });
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+
+    render(<FinancialControlTab {...dates} />);
+    fireEvent.click(screen.getByRole('button', { name: /Gross Margin details/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Payment type' }));
+    fireEvent.change(screen.getByLabelText('Rows per page'), { target: { value: '100' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Export financial details as CSV' }));
+
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+    expect(financialControlRpcMock).toHaveBeenCalledTimes(2);
+    expect(financialControlRpcMock.mock.calls.map(([, args]) => args)).toEqual([
+      expect.objectContaining({
+        _start_date: '2026-08-01',
+        _end_date: '2026-08-07',
+        _metric: 'margin',
+        _group_by: 'payment_type',
+        _alert_key: null,
+        _page: 1,
+        _page_size: 100,
+      }),
+      expect.objectContaining({ _page: 2, _page_size: 100 }),
+    ]);
+    expect(downloads).toEqual([
+      'financial_control_2026-08-01_to_2026-08-07_margin_payment_type.csv',
+    ]);
+    const blob = createObjectURL.mock.calls[0][0] as Blob;
+    const csv = await readBlob(blob);
+    expect(blob.size).toBe(new TextEncoder().encode(csv).length + 3);
+    expect(csv).toContain('Group,Completed,Doctor,Payment,Billed,Paid,Outstanding,COGS,Profit,Margin,Links');
+    expect(csv).toContain("'=Unsafe group");
+    expect(csv).not.toContain('clinicalNotes');
+    expect(csv).not.toContain('Consultation ID');
+    expect(screen.getByRole('button', { name: 'Export financial details as CSV' })).toBeEnabled();
+    click.mockRestore();
+  });
+
+  it('passes the selected alert filter to the export request', async () => {
+    useFinancialControlDetailsMock.mockImplementation((filters: FinancialControlDetailFilters) => detailResult({
+      total: 26,
+      page: filters.page,
+      pageSize: filters.pageSize,
+    }));
+    financialControlRpcMock.mockImplementation(async (_name: string, args: Record<string, unknown>) => ({
+      data: detailResult({
+        rows: [detailRow],
+        total: 26,
+        page: args._page as number,
+        pageSize: 25,
+      }).data,
+      error: null,
+    }));
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:financial-control-alert') });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+
+    render(<FinancialControlTab {...dates} />);
+    fireEvent.click(screen.getByRole('button', { name: 'View Overdue panel claim' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Export financial details as CSV' }));
+
+    await waitFor(() => expect(financialControlRpcMock).toHaveBeenCalled());
+    expect(financialControlRpcMock.mock.calls[0][1]).toMatchObject({
+      _metric: 'alerts',
+      _group_by: 'visit',
+      _alert_key: 'overdue_panel',
+      _page_size: 25,
+    });
+    click.mockRestore();
+  });
+
+  it('shows a clear notice when an export is capped at 10,000 rows', async () => {
+    useFinancialControlDetailsMock.mockImplementation((filters: FinancialControlDetailFilters) => detailResult({
+      rows: [detailRow],
+      total: 10_001,
+      page: filters.page,
+      pageSize: filters.pageSize,
+    }));
+    financialControlRpcMock.mockImplementation(async (_name: string, args: Record<string, unknown>) => ({
+      data: detailResult({
+        rows: Array.from({ length: 100 }, (_, index) => ({
+          ...detailRow,
+          groupKey: `${args._page}-${index}`,
+        })),
+        total: 10_001,
+        page: args._page as number,
+        pageSize: 100,
+      }).data,
+      error: null,
+    }));
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:financial-control-cap') });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+
+    render(<FinancialControlTab {...dates} />);
+    fireEvent.click(screen.getByRole('button', { name: /Billed Revenue details/i }));
+    fireEvent.change(await screen.findByLabelText('Rows per page'), { target: { value: '100' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Export financial details as CSV' }));
+
+    expect(await screen.findByText('Export limited to the first 10,000 of 10,001 rows.')).toBeInTheDocument();
+    expect(financialControlRpcMock).toHaveBeenCalledTimes(100);
+    expect(financialControlRpcMock.mock.calls.at(-1)?.[1]).toMatchObject({ _page: 100, _page_size: 100 });
+  });
+
+  it('keeps detail data visible and retries only the failed summary query', async () => {
+    const retrySummary = vi.fn();
+    const { rerender } = render(<FinancialControlTab {...dates} />);
+    fireEvent.click(screen.getByRole('button', { name: /Billed Revenue details/i }));
+    expect(await screen.findByText('Aisyah Rahman')).toBeInTheDocument();
+
+    useFinancialControlSummaryMock.mockReturnValue(summaryResult({
+      data: undefined,
+      isError: true,
+      error: new Error('Summary refresh failed'),
+      refetch: retrySummary,
+    }));
+    rerender(<FinancialControlTab {...dates} />);
+
+    expect(screen.getByText('Aisyah Rahman')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry financial summary' }));
+    expect(retrySummary).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps summary data visible and retries only the failed detail query', async () => {
+    const retrySummary = vi.fn();
+    const retryDetails = vi.fn();
+    useFinancialControlSummaryMock.mockReturnValue(summaryResult({ refetch: retrySummary }));
+    useFinancialControlDetailsMock.mockReturnValue(detailResult({}, {
+      data: undefined,
+      isError: true,
+      error: new Error('Detail refresh failed'),
+      refetch: retryDetails,
+    }));
+
+    render(<FinancialControlTab {...dates} />);
+    fireEvent.click(screen.getByRole('button', { name: /Billed Revenue details/i }));
+
+    expect(screen.getByRole('region', { name: 'Financial control summary' })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry financial details' }));
+    expect(retryDetails).toHaveBeenCalledTimes(1);
+    expect(retrySummary).not.toHaveBeenCalled();
+  });
+
+  it('labels stale summary and detail data while retaining the server update time', async () => {
+    useFinancialControlSummaryMock.mockReturnValue(summaryResult({
+      isError: true,
+      error: new Error('Summary refresh failed'),
+      refetch: vi.fn(),
+    }));
+    useFinancialControlDetailsMock.mockReturnValue(detailResult({}, {
+      isError: true,
+      error: new Error('Detail refresh failed'),
+      refetch: vi.fn(),
+    }));
+
+    render(<FinancialControlTab {...dates} />);
+    expect(screen.getByText('Summary data is stale. Summary refresh failed')).toBeInTheDocument();
+    expect(screen.getByText('Last updated 7 Aug 2026, 12:15')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Billed Revenue details/i }));
+
+    expect(await screen.findByText('Detail data is stale. Detail refresh failed')).toBeInTheDocument();
+    expect(screen.getByText('Aisyah Rahman')).toBeInTheDocument();
   });
 });

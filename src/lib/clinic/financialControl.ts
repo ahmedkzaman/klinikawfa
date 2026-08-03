@@ -178,8 +178,18 @@ export interface FinancialControlDetailArguments {
   _page_size: number;
 }
 
+export interface FinancialControlExportResult {
+  rows: FinancialControlDetailRow[];
+  truncated: boolean;
+}
+
+export type FinancialControlExportPageFetcher = (
+  filters: FinancialControlDetailFilters,
+) => Promise<FinancialControlDetailResponse>;
+
 const INVALID_RESPONSE_MESSAGE = 'Invalid financial control response';
 const MAX_DATE_DIFFERENCE_DAYS = 365;
+export const FINANCIAL_CONTROL_EXPORT_MAX_ROWS = 10_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -464,36 +474,16 @@ export function getFinancialControlDetailArguments(
 }
 
 const CSV_HEADERS = [
-  'Completed Date',
-  'Queue Entry ID',
-  'Consultation ID',
-  'Patient',
+  'Completed',
   'Doctor',
-  'Payment Type',
-  'Payment Method',
-  'Panel Provider',
-  'Claim Status',
-  'Claim Created Date',
-  'Claim Due Date',
-  'Group',
+  'Payment',
   'Billed',
   'Paid',
-  'Paid In Period',
   'Outstanding',
   'COGS',
-  'Gross Profit',
-  'Margin %',
-  'Discount',
-  'Tax',
-  'Refund',
-  'Corrections',
-  'Missing Cost Count',
-  'Zero Price Count',
-  'Amount',
-  'Alerts',
-  'Attribution Complete',
-  'Cost Complete',
-  'Visit Count',
+  'Profit',
+  'Margin',
+  'Links',
 ] as const;
 
 function csvEscape(value: string): string {
@@ -501,47 +491,77 @@ function csvEscape(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
-function csvValue(value: string | number | boolean | null): string {
-  return value === null ? '' : csvEscape(String(value));
+function csvString(value: string | null): string {
+  if (value === null) return '';
+  const safeValue = /^[=+\-@]/.test(value) ? `'${value}` : value;
+  return csvEscape(safeValue);
 }
 
 function csvMoney(value: number | null): string {
   return value === null ? '' : value.toFixed(2);
 }
 
-export function financialControlRowsToCsv(rows: FinancialControlDetailRow[]): string {
+function csvMargin(value: number | null): string {
+  return value === null ? '' : `${value.toFixed(1)}%`;
+}
+
+function exportEntity(row: FinancialControlDetailRow, groupBy: FinancialControlGroupBy): string | null {
+  return groupBy === 'visit' ? row.patientName : row.groupLabel;
+}
+
+function exportPayment(row: FinancialControlDetailRow): string | null {
+  const primary = row.paymentType?.replaceAll('_', ' ') ?? null;
+  const secondary = row.paymentMethod?.replaceAll('_', ' ') ?? row.panelProviderName;
+  return [primary, secondary].filter((value): value is string => Boolean(value)).join(' / ') || null;
+}
+
+function exportLinks(row: FinancialControlDetailRow, groupBy: FinancialControlGroupBy): string | null {
+  if (groupBy !== 'visit' || !row.queueEntryId) return null;
+  return `/clinic/visits/${row.queueEntryId}\n/clinic/billings?queue=${encodeURIComponent(row.queueEntryId)}`;
+}
+
+export function financialControlRowsToCsv(
+  rows: FinancialControlDetailRow[],
+  groupBy: FinancialControlGroupBy = 'visit',
+): string {
+  const entityHeader = groupBy === 'visit' ? 'Patient / visit' : 'Group';
   const body = rows.map((row) => [
-    csvValue(row.completedDate),
-    csvValue(row.queueEntryId),
-    csvValue(row.consultationId),
-    csvValue(row.patientName),
-    csvValue(row.doctorName),
-    csvValue(row.paymentType),
-    csvValue(row.paymentMethod),
-    csvValue(row.panelProviderName),
-    csvValue(row.claimStatus),
-    csvValue(row.claimCreatedDate),
-    csvValue(row.claimDueDate),
-    csvValue(row.groupLabel),
+    csvString(exportEntity(row, groupBy)),
+    csvString(row.completedDate),
+    csvString(row.doctorName),
+    csvString(exportPayment(row)),
     csvMoney(row.billed),
     csvMoney(row.paid),
-    csvMoney(row.paidInPeriod),
     csvMoney(row.outstanding),
     csvMoney(row.cogs),
     csvMoney(row.profit),
-    csvValue(row.marginPct),
-    csvMoney(row.discount),
-    csvMoney(row.tax),
-    csvMoney(row.refund),
-    csvValue(row.corrections),
-    csvValue(row.missingCostCount),
-    csvValue(row.zeroPriceCount),
-    csvMoney(row.amount),
-    csvValue(row.alertKeys.join(', ')),
-    csvValue(row.attributionComplete),
-    csvValue(row.costComplete),
-    csvValue(row.visitCount),
+    csvMargin(row.marginPct),
+    csvString(exportLinks(row, groupBy)),
   ].join(','));
 
-  return [CSV_HEADERS.join(','), ...body].join('\r\n');
+  return `\uFEFF${[[entityHeader, ...CSV_HEADERS].join(','), ...body].join('\r\n')}`;
+}
+
+export function financialControlExportFilename(filters: FinancialControlDetailFilters): string {
+  return `financial_control_${dateKey(filters.startDate)}_to_${dateKey(filters.endDate)}_${filters.metric}_${filters.groupBy}.csv`;
+}
+
+export async function collectFinancialControlExportRows(
+  filters: FinancialControlDetailFilters,
+  total: number,
+  fetchPage: FinancialControlExportPageFetcher,
+): Promise<FinancialControlExportResult> {
+  const rowLimit = Math.min(total, FINANCIAL_CONTROL_EXPORT_MAX_ROWS);
+  const pageCount = Math.ceil(rowLimit / filters.pageSize);
+  const rows: FinancialControlDetailRow[] = [];
+
+  for (let page = 1; page <= pageCount; page += 1) {
+    const response = await fetchPage({ ...filters, page });
+    rows.push(...response.rows);
+  }
+
+  return {
+    rows: rows.slice(0, rowLimit),
+    truncated: total > FINANCIAL_CONTROL_EXPORT_MAX_ROWS,
+  };
 }

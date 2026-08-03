@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  collectFinancialControlExportRows,
+  financialControlExportFilename,
   financialControlRowsToCsv,
+  type FinancialControlDetailFilters,
+  type FinancialControlDetailResponse,
   type FinancialControlDetailRow,
 } from '@/lib/clinic/financialControl';
 
@@ -42,40 +46,127 @@ function detailRow(overrides: Partial<FinancialControlDetailRow> = {}): Financia
 }
 
 describe('financialControlRowsToCsv', () => {
-  it('serializes visible detail columns with RFC 4180 escaping and two-decimal money', () => {
+  it('exports only visible visit columns with a BOM, safe formulas, and two-decimal money', () => {
     const csv = financialControlRowsToCsv([
       detailRow({
-        patientName: 'Doe, "Jane"\nFollow-up',
-        groupLabel: 'Unavailable\ncohort',
+        patientName: '=HYPERLINK("https://example.test","Doe, Jane")\nFollow-up',
+        doctorName: '+SUM(1,1)',
+        paymentType: '-unsafe',
+        paymentMethod: '@command',
         billed: 1234.5,
         paid: null,
-        paidInPeriod: 9,
         outstanding: 1225.5,
         cogs: null,
         profit: null,
         marginPct: null,
-        discount: 1.2,
-        tax: 0,
-        refund: 3,
-        corrections: null,
-        missingCostCount: null,
-        zeroPriceCount: null,
-        amount: 1234.5,
-        alertKeys: ['missing_cost', 'large_discount'],
-        attributionComplete: false,
-        costComplete: false,
       }),
-    ]);
+    ], 'visit');
 
-    expect(csv).toBe(
-      'Completed Date,Queue Entry ID,Consultation ID,Patient,Doctor,Payment Type,Payment Method,Panel Provider,Claim Status,Claim Created Date,Claim Due Date,Group,Billed,Paid,Paid In Period,Outstanding,COGS,Gross Profit,Margin %,Discount,Tax,Refund,Corrections,Missing Cost Count,Zero Price Count,Amount,Alerts,Attribution Complete,Cost Complete,Visit Count\r\n' +
-      '2026-08-01,queue-1,consultation-1,"Doe, ""Jane""\nFollow-up",Dr One,self_pay,card,,,,,"Unavailable\ncohort",1234.50,,9.00,1225.50,,,,1.20,0.00,3.00,,,,1234.50,"missing_cost, large_discount",false,false,1',
+    expect(csv.charCodeAt(0)).toBe(0xfeff);
+    expect(csv).toContain(
+      'Patient / visit,Completed,Doctor,Payment,Billed,Paid,Outstanding,COGS,Profit,Margin,Links\r\n',
     );
+    expect(csv).toContain(
+      '"\'=HYPERLINK(""https://example.test"",""Doe, Jane"")\nFollow-up"',
+    );
+    expect(csv).toContain("'+SUM(1,1)");
+    expect(csv).toContain("'-unsafe / @command");
+    expect(csv).toContain(',1234.50,,1225.50,,,,');
+    expect(csv).not.toContain('Consultation ID');
+    expect(csv).not.toContain('Claim Status');
+    expect(csv).not.toContain('Missing Cost Count');
   });
 
-  it('returns the header row for an empty result', () => {
-    expect(financialControlRowsToCsv([])).toBe(
-      'Completed Date,Queue Entry ID,Consultation ID,Patient,Doctor,Payment Type,Payment Method,Panel Provider,Claim Status,Claim Created Date,Claim Due Date,Group,Billed,Paid,Paid In Period,Outstanding,COGS,Gross Profit,Margin %,Discount,Tax,Refund,Corrections,Missing Cost Count,Zero Price Count,Amount,Alerts,Attribution Complete,Cost Complete,Visit Count',
-    );
+  it('neutralizes grouped labels that begin with every spreadsheet formula character', () => {
+    for (const prefix of ['=', '+', '-', '@']) {
+      const csv = financialControlRowsToCsv([
+        detailRow({ groupLabel: `${prefix}unsafe` }),
+      ], 'medicine');
+
+      expect(csv).toContain(`\r\n'${prefix}unsafe,`);
+    }
+  });
+
+  it('builds the filename from local date, metric, and grouping filters', () => {
+    expect(financialControlExportFilename({
+      startDate: new Date(2026, 7, 1, 12),
+      endDate: new Date(2026, 7, 7, 12),
+      metric: 'alerts',
+      groupBy: 'panel_provider',
+      alertKey: 'overdue_panel',
+      page: 4,
+      pageSize: 50,
+    })).toBe('financial_control_2026-08-01_to_2026-08-07_alerts_panel_provider.csv');
+  });
+});
+
+describe('collectFinancialControlExportRows', () => {
+  const filters: FinancialControlDetailFilters = {
+    startDate: new Date(2026, 7, 1, 12),
+    endDate: new Date(2026, 7, 7, 12),
+    metric: 'alerts',
+    groupBy: 'visit',
+    alertKey: 'overdue_panel',
+    page: 2,
+    pageSize: 2,
+  };
+
+  function response(page: number, rows: FinancialControlDetailRow[], total: number): FinancialControlDetailResponse {
+    return {
+      rows,
+      total,
+      page,
+      pageSize: filters.pageSize,
+      totals: {
+        billed: null,
+        paid: null,
+        outstanding: null,
+        cogs: null,
+        profit: null,
+        attributionComplete: true,
+        costComplete: true,
+        incompleteRows: 0,
+      },
+    };
+  }
+
+  it('requests every filtered page sequentially from page one', async () => {
+    const fetchPage = vi.fn(async (pageFilters: FinancialControlDetailFilters) => response(
+      pageFilters.page,
+      pageFilters.page === 1
+        ? [detailRow({ groupKey: '1' }), detailRow({ groupKey: '2' })]
+        : pageFilters.page === 2
+          ? [detailRow({ groupKey: '3' }), detailRow({ groupKey: '4' })]
+          : [detailRow({ groupKey: '5' })],
+      5,
+    ));
+
+    const result = await collectFinancialControlExportRows(filters, 5, fetchPage);
+
+    expect(fetchPage.mock.calls.map(([pageFilters]) => pageFilters)).toEqual([
+      { ...filters, page: 1 },
+      { ...filters, page: 2 },
+      { ...filters, page: 3 },
+    ]);
+    expect(result.rows.map((row) => row.groupKey)).toEqual(['1', '2', '3', '4', '5']);
+    expect(result.truncated).toBe(false);
+  });
+
+  it('stops at 10,000 rows and never requests an unbounded page', async () => {
+    const cappedFilters = { ...filters, pageSize: 100 };
+    const fetchPage = vi.fn(async (pageFilters: FinancialControlDetailFilters) => response(
+      pageFilters.page,
+      Array.from({ length: 100 }, (_, index) => detailRow({
+        groupKey: `${pageFilters.page}-${index}`,
+      })),
+      10_001,
+    ));
+
+    const result = await collectFinancialControlExportRows(cappedFilters, 10_001, fetchPage);
+
+    expect(result.rows).toHaveLength(10_000);
+    expect(result.truncated).toBe(true);
+    expect(fetchPage).toHaveBeenCalledTimes(100);
+    expect(fetchPage.mock.calls.at(-1)?.[0]).toMatchObject({ page: 100, pageSize: 100 });
   });
 });

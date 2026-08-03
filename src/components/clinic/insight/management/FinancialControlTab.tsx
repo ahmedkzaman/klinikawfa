@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ReceiptText } from 'lucide-react';
+import { AlertTriangle, ReceiptText, RefreshCw } from 'lucide-react';
 import { differenceInCalendarDays, format, subDays } from 'date-fns';
 
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFinancialControlSummary } from '@/hooks/clinic/useFinancialControl';
 import type {
@@ -124,7 +125,8 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
   const [detailOpen, setDetailOpen] = useState(false);
   const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
   const range = useMemo(() => ({ from: startDate, to: endDate }), [endDate, startDate]);
-  const { data, isLoading, isError, error } = useFinancialControlSummary(range);
+  const summary = useFinancialControlSummary(range);
+  const { data, isLoading, isError, error } = summary;
   const comparisonLabel = comparisonPeriodLabel(startDate, endDate);
   const detailPage = pageRangeKey === dateRangeKey ? page : 1;
 
@@ -178,6 +180,10 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
     ? `${ALERT_LABELS[selectedAlert]} details`
     : `${METRIC_LABELS[selectedMetric]} details`;
 
+  const retrySummary = () => {
+    void summary.refetch();
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -194,12 +200,21 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
         )}
       </div>
 
-      {isError ? (
+      {isError && !data ? (
         <section role="alert" className="rounded-lg border border-rose-200 bg-white p-5">
           <h3 className="text-sm font-semibold text-rose-800">Financial control summary unavailable</h3>
           <p className="mt-1 text-xs text-rose-700">
             {(error as Error)?.message ?? 'Unknown error'}
           </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={retrySummary}
+            className="mt-3 h-9 rounded-md px-3 text-xs focus-visible:ring-blue-600"
+          >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            Retry financial summary
+          </Button>
         </section>
       ) : isLoading || !data ? (
         <LoadingState />
@@ -211,6 +226,23 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
         </section>
       ) : (
         <>
+          {isError && (
+            <div role="alert" className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-amber-900">
+                Summary data is stale. {(error as Error)?.message ?? 'Refresh failed'}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={retrySummary}
+                className="h-9 shrink-0 rounded-md bg-white px-3 text-xs focus-visible:ring-blue-600"
+              >
+                <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                Retry financial summary
+              </Button>
+            </div>
+          )}
+
           {(!data.period.attributionComplete || !data.period.costComplete) && (
             <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 sm:flex-row sm:items-center sm:gap-5">
               <AlertTriangle className="hidden h-4 w-4 shrink-0 sm:block" aria-hidden="true" />
@@ -236,25 +268,25 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
           <FinancialReconciliation reconciliation={data.reconciliation} />
 
           <FinancialAlertsTable alerts={data.alerts} onView={openAlertDetails} />
-
-          {detailOpen && (
-            <FinancialDetailSheet
-              open={detailOpen}
-              onOpenChange={closeDetail}
-              title={detailTitle}
-              startDate={startDate}
-              endDate={endDate}
-              metric={selectedMetric}
-              groupBy={groupBy}
-              alertKey={selectedAlert}
-              page={detailPage}
-              pageSize={pageSize}
-              onGroupByChange={changeGroup}
-              onPageChange={setPage}
-              onPageSizeChange={changePageSize}
-            />
-          )}
         </>
+      )}
+
+      {detailOpen && (
+        <FinancialDetailSheet
+          open={detailOpen}
+          onOpenChange={closeDetail}
+          title={detailTitle}
+          startDate={startDate}
+          endDate={endDate}
+          metric={selectedMetric}
+          groupBy={groupBy}
+          alertKey={selectedAlert}
+          page={detailPage}
+          pageSize={pageSize}
+          onGroupByChange={changeGroup}
+          onPageChange={setPage}
+          onPageSizeChange={changePageSize}
+        />
       )}
     </div>
   );

@@ -1,4 +1,5 @@
-import { LoaderCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Download, LoaderCircle, RefreshCw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -9,10 +10,16 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { useFinancialControlDetails } from '@/hooks/clinic/useFinancialControl';
-import type {
-  FinancialControlAlertKey,
-  FinancialControlGroupBy,
-  FinancialControlMetric,
+import { supabase } from '@/integrations/supabase/client';
+import {
+  collectFinancialControlExportRows,
+  financialControlExportFilename,
+  financialControlRowsToCsv,
+  getFinancialControlDetailArguments,
+  parseFinancialControlDetails,
+  type FinancialControlAlertKey,
+  type FinancialControlGroupBy,
+  type FinancialControlMetric,
 } from '@/lib/clinic/financialControl';
 import { FinancialMarginTable } from './FinancialMarginTable';
 
@@ -55,6 +62,9 @@ export function FinancialDetailSheet({
   onPageChange,
   onPageSizeChange,
 }: FinancialDetailSheetProps) {
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const detail = useFinancialControlDetails({
     startDate,
     endDate,
@@ -67,6 +77,61 @@ export function FinancialDetailSheet({
   const pageCount = detail.data ? Math.max(1, Math.ceil(detail.data.total / pageSize)) : 1;
   const canGoPrevious = page > 1;
   const canGoNext = Boolean(detail.data && page < pageCount);
+  const filters = {
+    startDate,
+    endDate,
+    metric,
+    groupBy,
+    alertKey,
+    page,
+    pageSize,
+  };
+
+  useEffect(() => {
+    setExportNotice(null);
+    setExportError(null);
+  }, [alertKey, endDate, groupBy, metric, pageSize, startDate]);
+
+  const retryDetails = () => {
+    void detail.refetch();
+  };
+
+  const exportCsv = async () => {
+    if (!detail.data || detail.data.total === 0 || isExporting) return;
+
+    setIsExporting(true);
+    setExportNotice(null);
+    setExportError(null);
+    try {
+      const fetchPage = async (pageFilters: typeof filters) => {
+        const args = getFinancialControlDetailArguments(pageFilters);
+        const { data, error } = await supabase.rpc('get_financial_control_details', args);
+        if (error) throw error;
+        return parseFinancialControlDetails(data);
+      };
+      const result = detail.data.page === 1 && detail.data.rows.length >= detail.data.total
+        ? { rows: detail.data.rows.slice(0, detail.data.total), truncated: false }
+        : await collectFinancialControlExportRows(filters, detail.data.total, fetchPage);
+      const csv = financialControlRowsToCsv(result.rows, groupBy);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = financialControlExportFilename(filters);
+      anchor.click();
+      URL.revokeObjectURL(url);
+
+      if (result.truncated) {
+        setExportNotice(
+          `Export limited to the first 10,000 of ${detail.data.total.toLocaleString('en-MY')} rows.`,
+        );
+      }
+    } catch (error) {
+      setExportError(`Export failed. ${(error as Error)?.message ?? 'Unknown error'}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <Sheet modal={false} open={open} onOpenChange={onOpenChange}>
@@ -81,12 +146,21 @@ export function FinancialDetailSheet({
           </SheetDescription>
         </SheetHeader>
 
-        {detail.isError ? (
+        {detail.isError && !detail.data ? (
           <div role="alert" className="mt-5 rounded-lg border border-rose-200 bg-white px-4 py-5">
             <h3 className="text-sm font-semibold text-rose-800">Financial details unavailable</h3>
             <p className="mt-1 text-xs text-rose-700">
               {(detail.error as Error)?.message ?? 'Unknown error'}
             </p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={retryDetails}
+              className="mt-3 h-9 rounded-md px-3 text-xs focus-visible:ring-blue-600"
+            >
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+              Retry financial details
+            </Button>
           </div>
         ) : detail.isLoading || !detail.data ? (
           <div
@@ -99,6 +173,56 @@ export function FinancialDetailSheet({
           </div>
         ) : (
           <div className="mt-5 space-y-4">
+            {detail.isError && (
+              <div role="alert" className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-amber-900">
+                  Detail data is stale. {(detail.error as Error)?.message ?? 'Refresh failed'}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={retryDetails}
+                  className="h-9 shrink-0 rounded-md bg-white px-3 text-xs focus-visible:ring-blue-600"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                  Retry financial details
+                </Button>
+              </div>
+            )}
+
+            <div className="flex min-h-9 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-[11px] text-slate-500">
+                {detail.data.total.toLocaleString('en-MY')} matching rows
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isExporting || detail.data.rows.length === 0}
+                aria-label="Export financial details as CSV"
+                aria-busy={isExporting}
+                onClick={() => void exportCsv()}
+                className="h-9 w-36 shrink-0 rounded-md px-3 text-xs focus-visible:ring-blue-600"
+              >
+                {isExporting ? (
+                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+                {isExporting ? 'Exporting' : 'Export CSV'}
+              </Button>
+            </div>
+
+            {exportNotice && (
+              <p role="status" className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                {exportNotice}
+              </p>
+            )}
+            {exportError && (
+              <p role="alert" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                {exportError}
+              </p>
+            )}
+
             <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-slate-200 bg-white sm:grid-cols-3 lg:grid-cols-6">
               {[
                 ['Rows', String(detail.data.total)],
