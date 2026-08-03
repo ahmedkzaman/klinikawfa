@@ -1,19 +1,25 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FinancialControlTab } from '@/components/clinic/insight/management/FinancialControlTab';
 import { FinancialSummaryStrip } from '@/components/clinic/insight/management/FinancialSummaryStrip';
 import { ManagementTab } from '@/components/clinic/insight/management/ManagementTab';
 import type {
+  FinancialControlAlert,
+  FinancialControlDetailFilters,
+  FinancialControlDetailResponse,
+  FinancialControlDetailRow,
   FinancialControlMetric,
   FinancialControlPeriodSummary,
   FinancialControlSummary,
 } from '@/lib/clinic/financialControl';
 
 const useFinancialControlSummaryMock = vi.hoisted(() => vi.fn());
+const useFinancialControlDetailsMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/clinic/useFinancialControl', () => ({
   useFinancialControlSummary: useFinancialControlSummaryMock,
+  useFinancialControlDetails: useFinancialControlDetailsMock,
 }));
 
 const period: FinancialControlPeriodSummary = {
@@ -76,6 +82,89 @@ const dates = {
   endDate: new Date(2026, 7, 7, 12),
 };
 
+const alerts: FinancialControlAlert[] = [
+  { key: 'zero_price', severity: 'medium', count: 2, amount: 200, oldestAgeDays: 4, attributionComplete: true, incompleteRows: 0 },
+  { key: 'refund_void_correction', severity: 'low', count: 1, amount: 75, oldestAgeDays: 2, attributionComplete: true, incompleteRows: 0 },
+  { key: 'payment_mismatch', severity: 'critical', count: 3, amount: 600, oldestAgeDays: 6, attributionComplete: true, incompleteRows: 0 },
+  { key: 'unsubmitted_panel', severity: 'medium', count: 5, amount: 700, oldestAgeDays: 8, attributionComplete: true, incompleteRows: 0 },
+  { key: 'missing_cost', severity: 'high', count: 4, amount: 0, oldestAgeDays: 1, attributionComplete: false, incompleteRows: 1 },
+  { key: 'negative_margin', severity: 'critical', count: 2, amount: 900, oldestAgeDays: 3, attributionComplete: true, incompleteRows: 0 },
+  { key: 'large_discount', severity: 'medium', count: 2, amount: 200, oldestAgeDays: 4, attributionComplete: true, incompleteRows: 0 },
+  { key: 'unpaid_self_pay', severity: 'high', count: 6, amount: 500, oldestAgeDays: 10, attributionComplete: true, incompleteRows: 0 },
+  { key: 'duplicate_or_excess_payment', severity: 'critical', count: 1, amount: 900, oldestAgeDays: 10, attributionComplete: true, incompleteRows: 0 },
+  { key: 'overdue_panel', severity: 'high', count: 3, amount: 500, oldestAgeDays: 20, attributionComplete: true, incompleteRows: 0 },
+];
+
+const detailRow = {
+  queueEntryId: 'queue-1',
+  consultationId: 'consultation-1',
+  completedDate: '2026-08-06',
+  patientName: 'Aisyah Rahman',
+  doctorName: 'Dr Lim',
+  paymentType: 'panel',
+  paymentMethod: 'bank_transfer',
+  panelProviderName: 'Acme Health',
+  claimStatus: 'submitted',
+  claimCreatedDate: '2026-08-06',
+  claimDueDate: '2026-09-05',
+  groupKey: 'group-1',
+  groupLabel: 'Amoxicillin 500 mg with a deliberately long dispensing label',
+  billed: 250,
+  paid: 100,
+  paidInPeriod: 100,
+  outstanding: 150,
+  cogs: 80,
+  profit: 170,
+  marginPct: 68,
+  discount: 10,
+  tax: 0,
+  refund: 0,
+  corrections: 0,
+  missingCostCount: 0,
+  zeroPriceCount: 0,
+  amount: 250,
+  alertKeys: ['unpaid_self_pay'],
+  attributionComplete: true,
+  costComplete: true,
+  visitCount: 1,
+  clinicalNotes: 'Private clinical note must never render',
+  diagnosis: 'Private diagnosis must never render',
+  attachments: ['private-document.pdf'],
+} satisfies FinancialControlDetailRow & Record<'clinicalNotes' | 'diagnosis' | 'attachments', unknown>;
+
+function detailResult(
+  overrides: Partial<FinancialControlDetailResponse> = {},
+  queryOverrides: Record<string, unknown> = {},
+) {
+  return {
+    data: {
+      rows: [detailRow],
+      total: 51,
+      page: 1,
+      pageSize: 25,
+      totals: {
+        billed: 250,
+        paid: 100,
+        outstanding: 150,
+        cogs: 80,
+        profit: 170,
+        attributionComplete: true,
+        costComplete: true,
+        incompleteRows: 0,
+      },
+      ...overrides,
+    },
+    isLoading: false,
+    isError: false,
+    error: null,
+    ...queryOverrides,
+  };
+}
+
+function latestDetailFilters(): FinancialControlDetailFilters {
+  return useFinancialControlDetailsMock.mock.calls.at(-1)?.[0] as FinancialControlDetailFilters;
+}
+
 function summaryResult(overrides: Record<string, unknown> = {}) {
   return {
     data: summary,
@@ -90,6 +179,10 @@ describe('Financial Control Management shell', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useFinancialControlSummaryMock.mockReturnValue(summaryResult());
+    useFinancialControlDetailsMock.mockImplementation((filters: FinancialControlDetailFilters) => detailResult({
+      page: filters.page,
+      pageSize: filters.pageSize,
+    }));
   });
 
   it('renders only Financial Control in the Management release', () => {
@@ -259,6 +352,10 @@ describe('FinancialControlTab summary and reconciliation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useFinancialControlSummaryMock.mockReturnValue(summaryResult());
+    useFinancialControlDetailsMock.mockImplementation((filters: FinancialControlDetailFilters) => detailResult({
+      page: filters.page,
+      pageSize: filters.pageSize,
+    }));
   });
 
   it('shows accounting relationships and the server-generated timestamp', () => {
@@ -344,5 +441,144 @@ describe('FinancialControlTab summary and reconciliation', () => {
 
     expect(screen.getByText('Cost completeness unknown because attribution is incomplete')).toBeInTheDocument();
     expect(screen.queryByText('Cost data incomplete for 0 items')).not.toBeInTheDocument();
+  });
+});
+
+describe('FinancialControlTab alerts and drill-down', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useFinancialControlSummaryMock.mockReturnValue(summaryResult({
+      data: { ...summary, alerts },
+    }));
+    useFinancialControlDetailsMock.mockImplementation((filters: FinancialControlDetailFilters) => detailResult({
+      page: filters.page,
+      pageSize: filters.pageSize,
+    }));
+  });
+
+  it('renders all ten alerts in deterministic urgency order', () => {
+    render(<FinancialControlTab {...dates} />);
+
+    const table = screen.getByRole('table', { name: 'Financial alerts' });
+    const alertRows = within(table).getAllByRole('row').slice(1);
+    const labels = alertRows.map((row) => within(row).getAllByRole('cell')[0].textContent);
+
+    expect(labels).toEqual([
+      'Duplicate or excess payment',
+      'Negative margin',
+      'Payment mismatch',
+      'Overdue panel claim',
+      'Unpaid self-pay bill',
+      'Missing cost',
+      'Unsubmitted panel claim',
+      'Large discount',
+      'Zero price',
+      'Refund, void, or correction',
+    ]);
+    expect(within(table).getAllByRole('button', { name: /^View / })).toHaveLength(10);
+  });
+
+  it('selects an alert and opens its visit-level detail sheet', async () => {
+    render(<FinancialControlTab {...dates} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'View Overdue panel claim' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Overdue panel claim details' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(latestDetailFilters()).toMatchObject({
+        metric: 'alerts',
+        groupBy: 'visit',
+        alertKey: 'overdue_panel',
+        page: 1,
+        pageSize: 25,
+      });
+    });
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+  });
+
+  it('uses exact server grouping values and resets the page when detail filters change', async () => {
+    render(<FinancialControlTab {...dates} />);
+    fireEvent.click(screen.getByRole('button', { name: /Gross Margin details/i }));
+
+    expect(await screen.findByRole('dialog', { name: 'Gross Margin details' })).toBeInTheDocument();
+    expect(latestDetailFilters()).toMatchObject({ metric: 'margin', groupBy: 'medicine', page: 1 });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(latestDetailFilters().page).toBe(2));
+
+    const switches: Array<[string, FinancialControlDetailFilters['groupBy']]> = [
+      ['Medicine', 'medicine'],
+      ['Procedure / service', 'procedure'],
+      ['Package', 'package'],
+      ['Doctor', 'doctor'],
+      ['Payment type', 'payment_type'],
+      ['Panel provider', 'panel_provider'],
+    ];
+    for (const [label, groupBy] of switches) {
+      fireEvent.click(screen.getByRole('button', { name: label }));
+      await waitFor(() => expect(latestDetailFilters()).toMatchObject({ groupBy, page: 1 }));
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Gross Margin details' })).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /COGS details/i }));
+    await waitFor(() => expect(latestDetailFilters()).toMatchObject({ metric: 'cogs', page: 1 }));
+  });
+
+  it('paginates within fixed boundaries and keeps page size inside the server contract', async () => {
+    render(<FinancialControlTab {...dates} />);
+    fireEvent.click(screen.getByRole('button', { name: /Billed Revenue details/i }));
+
+    const previous = await screen.findByRole('button', { name: 'Previous' });
+    const next = screen.getByRole('button', { name: 'Next' });
+    expect(previous).toBeDisabled();
+    expect(next).toBeEnabled();
+    expect(screen.getByText('Page 1 of 3')).toBeInTheDocument();
+
+    fireEvent.click(next);
+    await waitFor(() => expect(latestDetailFilters().page).toBe(2));
+    expect(previous).toBeEnabled();
+
+    fireEvent.change(screen.getByLabelText('Rows per page'), { target: { value: '100' } });
+    await waitFor(() => expect(latestDetailFilters()).toMatchObject({ page: 1, pageSize: 100 }));
+    expect(screen.getByText('Page 1 of 1')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+  });
+
+  it('keeps summary and reconciliation visible for detail loading, zero rows, and errors', async () => {
+    useFinancialControlDetailsMock.mockReturnValue(detailResult({}, { data: undefined, isLoading: true }));
+    const { rerender } = render(<FinancialControlTab {...dates} />);
+    fireEvent.click(screen.getByRole('button', { name: /Billed Revenue details/i }));
+
+    expect(await screen.findByText('Loading financial details')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Reconciliation' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Financial control summary' })).toBeInTheDocument();
+
+    useFinancialControlDetailsMock.mockReturnValue(detailResult({ rows: [], total: 0 }));
+    rerender(<FinancialControlTab {...dates} />);
+    expect(screen.getByText('No financial rows match these filters')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Reconciliation' })).toBeInTheDocument();
+
+    useFinancialControlDetailsMock.mockReturnValue(detailResult({}, {
+      data: undefined,
+      isError: true,
+      error: new Error('Detail unavailable'),
+    }));
+    rerender(<FinancialControlTab {...dates} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('Financial details unavailable');
+    expect(screen.getByRole('alert')).toHaveTextContent('Detail unavailable');
+    expect(screen.getByRole('heading', { name: 'Reconciliation' })).toBeInTheDocument();
+  });
+
+  it('renders only financial fields and exact visit and bill destinations', async () => {
+    render(<FinancialControlTab {...dates} />);
+    fireEvent.click(screen.getByRole('button', { name: /Billed Revenue details/i }));
+
+    expect(await screen.findByText('Aisyah Rahman')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open visit' })).toHaveAttribute('href', '/clinic/visits/queue-1');
+    expect(screen.getByRole('link', { name: 'Open bill' })).toHaveAttribute('href', '/clinic/billings?queue=queue-1');
+    expect(screen.queryByText('Private clinical note must never render')).not.toBeInTheDocument();
+    expect(screen.queryByText('Private diagnosis must never render')).not.toBeInTheDocument();
+    expect(screen.queryByText('private-document.pdf')).not.toBeInTheDocument();
   });
 });

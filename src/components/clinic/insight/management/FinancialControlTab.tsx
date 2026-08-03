@@ -4,7 +4,14 @@ import { differenceInCalendarDays, format, subDays } from 'date-fns';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFinancialControlSummary } from '@/hooks/clinic/useFinancialControl';
-import type { FinancialControlMetric, FinancialControlPeriodSummary } from '@/lib/clinic/financialControl';
+import type {
+  FinancialControlAlertKey,
+  FinancialControlGroupBy,
+  FinancialControlMetric,
+  FinancialControlPeriodSummary,
+} from '@/lib/clinic/financialControl';
+import { FinancialAlertsTable } from './FinancialAlertsTable';
+import { FinancialDetailSheet } from './FinancialDetailSheet';
 import { FinancialReconciliation } from './FinancialReconciliation';
 import { FinancialSummaryStrip } from './FinancialSummaryStrip';
 
@@ -12,6 +19,31 @@ interface FinancialControlTabProps {
   startDate: Date;
   endDate: Date;
 }
+
+const METRIC_LABELS: Record<FinancialControlMetric, string> = {
+  billed_revenue: 'Billed Revenue',
+  cash_collected: 'Cash Collected',
+  cohort_outstanding: 'Cohort Outstanding',
+  total_outstanding: 'Total Outstanding',
+  cogs: 'COGS',
+  gross_profit: 'Gross Profit',
+  adjustments: 'Adjustments',
+  alerts: 'Financial alerts',
+  margin: 'Gross Margin',
+};
+
+const ALERT_LABELS: Record<FinancialControlAlertKey, string> = {
+  unpaid_self_pay: 'Unpaid self-pay bill',
+  unsubmitted_panel: 'Unsubmitted panel claim',
+  overdue_panel: 'Overdue panel claim',
+  missing_cost: 'Missing cost',
+  zero_price: 'Zero price',
+  negative_margin: 'Negative margin',
+  large_discount: 'Large discount',
+  refund_void_correction: 'Refund, void, or correction',
+  payment_mismatch: 'Payment mismatch',
+  duplicate_or_excess_payment: 'Duplicate or excess payment',
+};
 
 function comparisonPeriodLabel(startDate: Date, endDate: Date): string {
   const periodDays = differenceInCalendarDays(endDate, startDate) + 1;
@@ -83,9 +115,45 @@ function LoadingState() {
 
 export function FinancialControlTab({ startDate, endDate }: FinancialControlTabProps) {
   const [selectedMetric, setSelectedMetric] = useState<FinancialControlMetric>('billed_revenue');
+  const [selectedAlert, setSelectedAlert] = useState<FinancialControlAlertKey | null>(null);
+  const [groupBy, setGroupBy] = useState<FinancialControlGroupBy>('visit');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [detailOpen, setDetailOpen] = useState(false);
   const range = useMemo(() => ({ from: startDate, to: endDate }), [endDate, startDate]);
   const { data, isLoading, isError, error } = useFinancialControlSummary(range);
   const comparisonLabel = comparisonPeriodLabel(startDate, endDate);
+
+  const openMetricDetails = (metric: FinancialControlMetric) => {
+    setSelectedMetric(metric);
+    setSelectedAlert(null);
+    setGroupBy(metric === 'margin' ? 'medicine' : 'visit');
+    setPage(1);
+    setDetailOpen(true);
+  };
+
+  const openAlertDetails = (alertKey: FinancialControlAlertKey) => {
+    setSelectedMetric('alerts');
+    setSelectedAlert(alertKey);
+    setGroupBy('visit');
+    setPage(1);
+    setDetailOpen(true);
+  };
+
+  const changeGroup = (nextGroup: FinancialControlGroupBy) => {
+    setGroupBy(nextGroup);
+    setPage(1);
+  };
+
+  const changePageSize = (nextPageSize: number) => {
+    if (![25, 50, 100].includes(nextPageSize)) return;
+    setPageSize(nextPageSize);
+    setPage(1);
+  };
+
+  const detailTitle = selectedAlert
+    ? `${ALERT_LABELS[selectedAlert]} details`
+    : `${METRIC_LABELS[selectedMetric]} details`;
 
   return (
     <div className="space-y-4">
@@ -139,10 +207,30 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
             comparisonIncompleteVisits={data.comparison.incompleteVisits}
             comparisonMissingCostItems={data.comparison.missingCostItems}
             selectedMetric={selectedMetric}
-            onMetricSelect={setSelectedMetric}
+            onMetricSelect={openMetricDetails}
           />
 
           <FinancialReconciliation reconciliation={data.reconciliation} />
+
+          <FinancialAlertsTable alerts={data.alerts} onView={openAlertDetails} />
+
+          {detailOpen && (
+            <FinancialDetailSheet
+              open={detailOpen}
+              onOpenChange={setDetailOpen}
+              title={detailTitle}
+              startDate={startDate}
+              endDate={endDate}
+              metric={selectedMetric}
+              groupBy={groupBy}
+              alertKey={selectedAlert}
+              page={page}
+              pageSize={pageSize}
+              onGroupByChange={changeGroup}
+              onPageChange={setPage}
+              onPageSizeChange={changePageSize}
+            />
+          )}
         </>
       )}
     </div>
