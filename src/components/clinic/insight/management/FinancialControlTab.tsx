@@ -17,10 +17,12 @@ function comparisonPeriodLabel(startDate: Date, endDate: Date): string {
   const periodDays = differenceInCalendarDays(endDate, startDate) + 1;
   const comparisonStart = subDays(startDate, periodDays);
   const comparisonEnd = subDays(startDate, 1);
+  const includeYear = comparisonEnd.getFullYear() !== endDate.getFullYear();
+  const endFormat = includeYear ? 'd MMM yyyy' : 'd MMM';
   if (format(comparisonStart, 'MMM yyyy') === format(comparisonEnd, 'MMM yyyy')) {
-    return `${format(comparisonStart, 'd')}-${format(comparisonEnd, 'd MMM')}`;
+    return `${format(comparisonStart, 'd')}-${format(comparisonEnd, endFormat)}`;
   }
-  return `${format(comparisonStart, 'd MMM')}-${format(comparisonEnd, 'd MMM')}`;
+  return `${format(comparisonStart, 'd MMM')}-${format(comparisonEnd, endFormat)}`;
 }
 
 function lastUpdatedLabel(value: string): string {
@@ -47,6 +49,14 @@ function hasFinancialActivity(period: FinancialControlPeriodSummary): boolean {
     period.cogs,
     period.grossProfit,
   ].some((value) => value === null || value !== 0);
+}
+
+function costStatusLabel(period: FinancialControlPeriodSummary): string | null {
+  if (period.costComplete) return null;
+  if (!period.attributionComplete && period.missingCostItems === 0) {
+    return 'Cost completeness unknown because attribution is incomplete';
+  }
+  return `Cost data incomplete for ${period.missingCostItems} items`;
 }
 
 function LoadingState() {
@@ -116,9 +126,7 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
               {!data.period.attributionComplete && (
                 <span>Attribution incomplete for {data.period.incompleteVisits} visits</span>
               )}
-              {!data.period.costComplete && (
-                <span>Cost data incomplete for {data.period.missingCostItems} items</span>
-              )}
+              {costStatusLabel(data.period) && <span>{costStatusLabel(data.period)}</span>}
             </div>
           )}
 
@@ -126,6 +134,10 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
             period={data.period}
             comparison={data.comparison}
             comparisonLabel={comparisonLabel}
+            comparisonAttributionComplete={data.comparison.attributionComplete}
+            comparisonCostComplete={data.comparison.costComplete}
+            comparisonIncompleteVisits={data.comparison.incompleteVisits}
+            comparisonMissingCostItems={data.comparison.missingCostItems}
             selectedMetric={selectedMetric}
             onMetricSelect={setSelectedMetric}
           />

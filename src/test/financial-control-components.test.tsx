@@ -162,6 +162,33 @@ describe('FinancialSummaryStrip', () => {
     expect(within(cash).getByText('down 10.0% vs 25-31 Jul')).toBeInTheDocument();
   });
 
+  it('warns when the preceding comparison period is incomplete', () => {
+    render(
+      <FinancialSummaryStrip
+        period={period}
+        comparison={{
+          ...comparison,
+          attributionComplete: false,
+          costComplete: false,
+          incompleteVisits: 2,
+          missingCostItems: 0,
+        }}
+        comparisonLabel="25-31 Jul"
+        comparisonAttributionComplete={false}
+        comparisonCostComplete={false}
+        comparisonIncompleteVisits={2}
+        comparisonMissingCostItems={0}
+        selectedMetric="billed_revenue"
+        onMetricSelect={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Comparison period: 25-31 Jul')).toBeInTheDocument();
+    expect(screen.getByText(/Comparison incomplete: attribution for 2 visits/)).toBeInTheDocument();
+    expect(screen.getByText(/cost completeness unknown because attribution is incomplete/)).toBeInTheDocument();
+    expect(within(screen.getByRole('button', { name: /Billed Revenue details/i })).getByText('up 25.0% vs 25-31 Jul')).toBeInTheDocument();
+  });
+
   it('emits the exact metric for every selectable KPI', () => {
     const onMetricSelect = vi.fn();
     const expected: Array<[string, FinancialControlMetric]> = [
@@ -212,6 +239,20 @@ describe('FinancialSummaryStrip', () => {
     expect(within(cogs).getByText('no change vs 25-31 Jul')).toBeInTheDocument();
     expect(screen.queryByText(/Infinity/)).not.toBeInTheDocument();
   });
+
+  it('keeps negative-baseline comparison direction and absolute-denominator math', () => {
+    render(
+      <FinancialSummaryStrip
+        period={{ ...period, billedRevenue: -50 }}
+        comparison={{ ...comparison, billedRevenue: -100 }}
+        comparisonLabel="25-31 Jul"
+        selectedMetric="billed_revenue"
+        onMetricSelect={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('up 50.0% vs 25-31 Jul')).toBeInTheDocument();
+  });
 });
 
 describe('FinancialControlTab summary and reconciliation', () => {
@@ -233,6 +274,26 @@ describe('FinancialControlTab summary and reconciliation', () => {
     expect(screen.getByText(/2 corrections/)).toBeInTheDocument();
     expect(screen.getByText('Self-pay outstanding')).toBeInTheDocument();
     expect(screen.getByText('Panel outstanding')).toBeInTheDocument();
+  });
+
+  it('labels comparison periods across month and year boundaries', () => {
+    const { rerender } = render(
+      <FinancialControlTab
+        startDate={new Date(2026, 2, 1, 12)}
+        endDate={new Date(2026, 2, 7, 12)}
+      />,
+    );
+
+    expect(screen.getByText('Comparison period: 22-28 Feb')).toBeInTheDocument();
+
+    rerender(
+      <FinancialControlTab
+        startDate={new Date(2026, 0, 1, 12)}
+        endDate={new Date(2026, 0, 7, 12)}
+      />,
+    );
+
+    expect(screen.getByText('Comparison period: 25-31 Dec 2025')).toBeInTheDocument();
   });
 
   it('shows incomplete attribution and cost status while preserving null accounting values', () => {
@@ -260,11 +321,28 @@ describe('FinancialControlTab summary and reconciliation', () => {
       },
     }));
 
-    render(<FinancialControlTab {...dates} />);
+    const { rerender } = render(<FinancialControlTab {...dates} />);
 
     expect(screen.getByText('Attribution incomplete for 3 visits')).toBeInTheDocument();
     expect(screen.getByText('Cost data incomplete for 4 items')).toBeInTheDocument();
     expect(screen.getAllByText('Unavailable').length).toBeGreaterThanOrEqual(3);
     expect(screen.queryByText('RM 0.00', { selector: '[data-null-accounting="true"]' })).not.toBeInTheDocument();
+
+    useFinancialControlSummaryMock.mockReturnValue(summaryResult({
+      data: {
+        ...summary,
+        period: {
+          ...period,
+          attributionComplete: false,
+          costComplete: false,
+          incompleteVisits: 3,
+          missingCostItems: 0,
+        },
+      },
+    }));
+    rerender(<FinancialControlTab {...dates} />);
+
+    expect(screen.getByText('Cost completeness unknown because attribution is incomplete')).toBeInTheDocument();
+    expect(screen.queryByText('Cost data incomplete for 0 items')).not.toBeInTheDocument();
   });
 });

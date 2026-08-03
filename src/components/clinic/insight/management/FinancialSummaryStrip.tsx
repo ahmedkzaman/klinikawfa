@@ -10,6 +10,10 @@ interface FinancialSummaryStripProps {
   period: FinancialControlPeriodSummary;
   comparison: FinancialControlPeriodSummary;
   comparisonLabel: string;
+  comparisonAttributionComplete: boolean;
+  comparisonCostComplete: boolean;
+  comparisonIncompleteVisits: number;
+  comparisonMissingCostItems: number;
   selectedMetric: FinancialControlMetric;
   onMetricSelect: (metric: FinancialControlMetric) => void;
 }
@@ -154,14 +158,37 @@ export function FinancialSummaryStrip({
   period,
   comparison,
   comparisonLabel,
+  comparisonAttributionComplete = true,
+  comparisonCostComplete = true,
+  comparisonIncompleteVisits = 0,
+  comparisonMissingCostItems = 0,
   selectedMetric,
   onMetricSelect,
 }: FinancialSummaryStripProps) {
+  const comparisonWarnings = [
+    !comparisonAttributionComplete
+      ? `Comparison incomplete: attribution for ${comparisonIncompleteVisits} visits is incomplete`
+      : null,
+    !comparisonCostComplete
+      ? !comparisonAttributionComplete && comparisonMissingCostItems === 0
+        ? 'cost completeness unknown because attribution is incomplete'
+        : `cost data incomplete for ${comparisonMissingCostItems} items`
+      : null,
+  ].filter((warning): warning is string => warning !== null);
+
   return (
     <section
       aria-label="Financial control summary"
       className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_3px_14px_rgb(15,23,42,0.035)]"
     >
+      <div className="flex flex-col gap-1 border-b border-slate-100 px-4 py-3 text-[11px] leading-4 sm:flex-row sm:items-baseline sm:gap-3">
+        <span className="font-semibold text-slate-700">Comparison period: {comparisonLabel}</span>
+        {comparisonWarnings.length > 0 && (
+          <span role="note" className="text-amber-800">
+            {comparisonWarnings.join('; ')}.
+          </span>
+        )}
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
         {METRICS.map((definition) => {
           const current = period[definition.value] as number | null;
