@@ -8,6 +8,7 @@ DONE
 
 - `36b9e53` - `feat: add canonical financial control facts`
 - `33791df` - `fix: preserve financial event history`
+- `d4caf02` - `fix: freeze zero-price package classification`
 
 ## Files Changed
 
@@ -245,4 +246,111 @@ module, CommonJS/ESM, large chunk, and ineffective dynamic-import warnings.
 - Pre-boundary bill-completion and panel-receipt timing is inherently unavailable in
   the source schema. The fix exposes that limitation with synthetic provenance and
   `NULL` fact values; it does not attempt to reconstruct or invent those dates.
+- The successful build retains unrelated existing warnings noted above.
+
+## Fix Round 2
+
+Status: DONE
+
+Implementation commit: `d4caf02` (`fix: freeze zero-price package classification`)
+
+### Changes
+
+- Added `private.financial_zero_price_package_child_events`, an append-only,
+  owner-only line-level record of the zero-priced consultation item, charged package
+  line, exact package catalog row, package ID, and completion timestamp.
+- Completion capture writes zero-price package-child events only when it inserts the
+  consultation's first exact completion event. Repeated completion-state updates and
+  later package catalog edits cannot add or rewrite historical classifications.
+- Removed package-child filtering from COGS and missing-cost calculations. Every
+  eligible dispensed/charged line now contributes its own cost and missing-cost
+  status; the immutable classification is consulted only by `zero_price_count`.
+- Removed all `public.package_items` reads from
+  `private.financial_control_visit_facts`; current catalog membership is read only at
+  first bill completion to freeze the narrowly scoped zero-price exemption.
+- Expanded the executable PostgreSQL fixture with a charged package, a zero-priced
+  included medicine, an independently charged medicine sharing that exact package
+  item identity, an independently charged missing-cost medicine, and a
+  post-completion package membership replacement. Historical COGS, missing-cost,
+  and zero-price values are asserted before and after the catalog edit.
+
+### RED Evidence
+
+Command:
+
+```powershell
+$env:REQUIRE_POSTGRES_TEST='1'
+npm.cmd test -- src/test/financial-control-report-migration.test.ts
+```
+
+Result: exit code 1; 1 test file failed, 2 tests failed. The static contract could
+not find `private.financial_zero_price_package_child_events`, and disposable
+PostgreSQL failed while loading the fixture with `relation
+"private.financial_zero_price_package_child_events" does not exist`. This proved
+the reviewed immutable line-level boundary was absent before implementation.
+
+### GREEN Evidence
+
+Focused command:
+
+```powershell
+$env:REQUIRE_POSTGRES_TEST='1'
+npm.cmd test -- src/test/financial-control-report-migration.test.ts
+```
+
+Result: exit code 0; 1 test file passed, 2 tests passed. The final focused run
+executed the duplicate-item and post-completion catalog mutation fixture in
+disposable PostgreSQL and preserved RM37 COGS, two missing-cost exceptions, and
+zero zero-price exceptions across the mutation.
+
+Relevant regression command:
+
+```powershell
+$env:REQUIRE_POSTGRES_TEST='1'
+npm.cmd test -- src/test/financial-control-report-migration.test.ts src/test/completed-bill-correction-migration.test.ts src/test/financial-cogs-and-panel-pricing-migration.test.ts src/test/panel-claim-reconciliation-migration.test.ts src/test/finance-boundary-hardening.test.ts src/test/financial-payment-classification.test.ts
+```
+
+Result: exit code 0; 6 test files passed, 33 tests passed.
+
+Additional commands and results:
+
+```powershell
+npx.cmd eslint src/test/financial-control-report-migration.test.ts
+# exit code 0, no findings
+
+npm.cmd run build
+# exit code 0, production build completed
+
+git diff --cached --check
+# exit code 0, no whitespace errors before the implementation commit
+```
+
+The build emitted only the repository's existing browser-data, externalized Node
+module, CommonJS/ESM, large chunk, and ineffective dynamic-import warnings.
+
+### Self-Review
+
+- Confirmed the fact function has no dependency on current `package_items` state.
+- Confirmed COGS and missing-cost predicates have no package-child exemption; no
+  inferred relationship can suppress independently sold or dispensed line costs.
+- Confirmed the zero-price exemption requires immutable line-level provenance
+  captured at the first exact bill-completion event and is not backfilled from
+  mutable catalog state for historical rows.
+- Confirmed positive-priced duplicate lines are never classified as zero-price
+  package children, even when their medicine/service identity matches a package
+  member at completion.
+- Confirmed the new event table is protected by the existing update/delete rejection
+  trigger and has all privileges revoked from `PUBLIC`, `anon`, and `authenticated`.
+- Confirmed no foreign keys connect the immutable record to mutable/deletable source
+  rows, preserving its audit provenance if source catalog rows are later deleted.
+- Confirmed capture is idempotent: classification runs only when the unique
+  completion event is first inserted, so later status updates cannot classify newly
+  edited package membership.
+- Confirmed Task 2 public report RPCs remain absent.
+
+### Remaining Concerns
+
+- Existing pre-boundary visits still cannot receive exact historical completion or
+  package-child classification from the available mutable schema. They retain the
+  round-1 synthetic/incomplete treatment and do not claim invented attribution.
 - The successful build retains unrelated existing warnings noted above.
