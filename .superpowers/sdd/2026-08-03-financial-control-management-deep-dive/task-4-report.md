@@ -108,3 +108,89 @@ Exit code 0 before the implementation commit. No whitespace errors.
 ## Commit SHA
 
 Implementation commit: `702fc4ef703d94d6e8c3f7fa35738e28c210df98`
+
+---
+
+## Fix Round 1/5
+
+### Review Findings Addressed
+
+- Surfaced comparison-period attribution and cost completeness beside the
+  preceding-period label. Partial comparison responses now show a clear warning
+  while retaining the existing directional values and math.
+- Distinguished known missing-cost items from cost completeness that is unknown
+  because attribution is incomplete; the UI no longer says `0 items` in that case.
+- Added rendered fixtures for a complete current period against an incomplete
+  comparison period, negative baselines, month boundaries, and year boundaries.
+
+### RED Evidence
+
+After adding the fix-round rendered fixtures, the focused component run failed for
+the expected missing behaviors: no comparison-period warning, no year-aware
+comparison label, and the old attribution-only `Cost data incomplete for 0 items`
+message. The negative-baseline fixture passed, confirming the existing absolute-
+denominator comparison math was already correct.
+
+Command:
+
+```powershell
+npm.cmd test -- src/test/financial-control-components.test.tsx
+```
+
+Observed result: exit code 1; 10 tests collected, 3 expected fixture assertions
+failed, and 7 passed. The test-harness-only rerun after correcting a missing
+`rerender` binding produced the same intended product failures without collection
+errors.
+
+### GREEN Verification
+
+```powershell
+npm.cmd test -- src/test/insight-management-tab.test.tsx src/test/financial-control-components.test.tsx
+```
+
+Exit code 0. 2 test files passed; 13 tests passed; 0 failed. Vitest duration:
+15.42s.
+
+```powershell
+.\node_modules\.bin\eslint.cmd src/pages/clinic/Insight.tsx src/components/clinic/insight/management src/test/insight-management-tab.test.tsx src/test/financial-control-components.test.tsx
+```
+
+Exit code 0. No lint errors or warnings.
+
+```powershell
+npx.cmd tsc --noEmit
+```
+
+Exit code 0. No TypeScript errors.
+
+```powershell
+npm.cmd run build
+```
+
+Exit code 0. Vite transformed 5,303 modules and completed the production build in
+14.04s. Existing Browserslist, browser externalization, CommonJS, large-chunk,
+ineffective dynamic-import, and plugin-timing warnings remain.
+
+```powershell
+git diff --check
+git diff --cached --check
+```
+
+Exit code 0 before the implementation commit. No whitespace errors.
+
+### Fix-Round Changed Files
+
+- `src/components/clinic/insight/management/FinancialSummaryStrip.tsx`
+- `src/components/clinic/insight/management/FinancialControlTab.tsx`
+- `src/test/financial-control-components.test.tsx`
+- `.superpowers/sdd/2026-08-03-financial-control-management-deep-dive/task-4-report.md`
+
+### Fix-Round Concerns
+
+- No Task 5 or Task 6 behavior was added.
+- The full repository test suite was not run; the requested focused tests, scoped
+  lint, typecheck, and build all passed.
+
+### Fix-Round Commit SHA
+
+Implementation and tests commit: `eeb595e3e302f96fc7cdb6121cb154b7747611e5`
