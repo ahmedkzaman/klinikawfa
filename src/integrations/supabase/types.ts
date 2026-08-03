@@ -6259,6 +6259,29 @@ export type Database = {
           patient_name: string
         }>
       }
+      get_financial_control_details: {
+        Args: {
+          _alert_key: string | null
+          _as_of_date: string
+          _end_date: string
+          _group_by: string
+          _metric: string
+          _page: number
+          _page_size: number
+          _start_date: string
+        }
+        Returns: Json
+      }
+      get_financial_control_summary: {
+        Args: {
+          _as_of_date: string
+          _comparison_end: string
+          _comparison_start: string
+          _end_date: string
+          _start_date: string
+        }
+        Returns: Json
+      }
       get_offline_consultation_audit: {
         Args: { p_consultation_id: string }
         Returns: Array<{
