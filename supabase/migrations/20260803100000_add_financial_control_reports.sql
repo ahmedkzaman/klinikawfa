@@ -133,7 +133,8 @@ AS $function$
     'package_id', item.package_id,
     'dispensed_qty', item.dispensed_qty,
     'unit_cost', item.unit_cost,
-    'adjustment_kind', item.billing_adjustment_kind
+    'adjustment_kind', item.billing_adjustment_kind,
+    'charge_type_id', item.clinic_charge_type_id
   ) ORDER BY item.id), '[]'::jsonb)
   FROM public.consultation_items item
   WHERE item.consultation_id = _consultation_id
@@ -209,6 +210,11 @@ AS $function$
       'item_id', COALESCE(canonical.item->>'item_id', original.item->>'item_id'),
       'service_id', COALESCE(canonical.item->>'service_id', original.item->>'service_id'),
       'package_id', COALESCE(canonical.item->>'package_id', original.item->>'package_id'),
+      'charge_type_id', COALESCE(
+        canonical.item->>'charge_type_id',
+        canonical.item->>'clinic_charge_type_id',
+        original.item->>'charge_type_id'
+      ),
       'dispensed_qty', COALESCE(
         (canonical.item->>'dispensed_qty')::numeric,
         (original.item->>'dispensed_qty')::numeric
@@ -658,6 +664,12 @@ BEGIN
         NULLIF(value->>'item_id', '')::uuid AS item_id,
         NULLIF(value->>'service_id', '')::uuid AS service_id,
         NULLIF(value->>'package_id', '')::uuid AS package_id,
+        NULLIF(value->>'charge_type_id', '')::uuid AS charge_type_id,
+        CASE
+          WHEN NULLIF(value->>'package_id', '') IS NOT NULL THEN 'package'
+          WHEN NULLIF(value->>'item_id', '') IS NOT NULL THEN 'medicine'
+          ELSE 'procedure'
+        END AS line_category,
         (value->>'quantity')::numeric AS quantity,
         (value->>'dispensed_qty')::numeric AS dispensed_qty,
         (value->>'price')::numeric AS price,
@@ -670,6 +682,15 @@ BEGIN
         ROW_NUMBER() OVER (
           PARTITION BY report.queue_entry_id ORDER BY value->>'id'
         ) AS line_number,
+        ROW_NUMBER() OVER (
+          PARTITION BY report.queue_entry_id,
+            CASE
+              WHEN NULLIF(value->>'package_id', '') IS NOT NULL THEN 'package'
+              WHEN NULLIF(value->>'item_id', '') IS NOT NULL THEN 'medicine'
+              ELSE 'procedure'
+            END
+          ORDER BY value->>'id'
+        ) AS category_line_number,
         COUNT(*) OVER (PARTITION BY report.queue_entry_id) AS line_count
       FROM filtered report
       CROSS JOIN LATERAL jsonb_array_elements(COALESCE(report.item_state, '[]'::jsonb)) value
@@ -697,7 +718,11 @@ BEGIN
         round(line.outstanding * line.allocation_ratio, 2) AS preliminary_outstanding,
         round(line.discount * line.allocation_ratio, 2) AS preliminary_discount,
         round(line.tax * line.allocation_ratio, 2) AS preliminary_tax,
-        round(line.refund * line.allocation_ratio, 2) AS preliminary_refund
+        round(line.refund * line.allocation_ratio, 2) AS preliminary_refund,
+        round(
+          GREATEST(line.cogs - line.billed, 0) * line.allocation_ratio,
+          2
+        ) AS preliminary_negative_margin
       FROM weighted line
     ),
     allocated AS MATERIALIZED (
@@ -737,7 +762,12 @@ BEGIN
           line.refund - (
             SUM(line.preliminary_refund) OVER (PARTITION BY line.queue_entry_id)
               - line.preliminary_refund
-          ) ELSE line.preliminary_refund END AS allocated_refund
+          ) ELSE line.preliminary_refund END AS allocated_refund,
+        CASE WHEN line.line_number = line.line_count THEN
+          GREATEST(line.cogs - line.billed, 0) - (
+            SUM(line.preliminary_negative_margin) OVER (PARTITION BY line.queue_entry_id)
+              - line.preliminary_negative_margin
+          ) ELSE line.preliminary_negative_margin END AS allocated_negative_margin
       FROM preliminary line
     ),
     item_rows AS MATERIALIZED (
@@ -745,9 +775,11 @@ BEGIN
         item.queue_entry_id,
         item.completed_date,
         CASE
-          WHEN _group_by = 'medicine' THEN item.item_id::text
-          WHEN _group_by = 'procedure' THEN item.service_id::text
-          ELSE item.package_id::text
+          WHEN item.line_category = 'medicine' THEN item.item_id::text
+          WHEN item.line_category = 'package' THEN item.package_id::text
+          WHEN item.service_id IS NOT NULL THEN item.service_id::text
+          WHEN item.charge_type_id IS NOT NULL THEN 'charge_type:' || item.charge_type_id::text
+          ELSE 'charge_line:' || item.line_id
         END AS group_key,
         item.item_name AS group_label,
         true AS attribution_complete,
@@ -764,7 +796,8 @@ BEGIN
         item.allocated_discount AS discount,
         item.allocated_tax AS tax,
         item.allocated_refund AS refund,
-        CASE WHEN item.line_number = 1 THEN item.correction_count ELSE 0 END AS corrections,
+        CASE WHEN item.category_line_number = 1
+          THEN item.correction_count ELSE 0 END AS corrections,
         CASE WHEN item.item_id IS NOT NULL
           AND GREATEST(
             LEAST(COALESCE(item.dispensed_qty, item.quantity), GREATEST(item.quantity, 0)), 0
@@ -779,21 +812,20 @@ BEGIN
           AND CASE WHEN item.item_id IS NOT NULL THEN GREATEST(
             LEAST(COALESCE(item.dispensed_qty, item.quantity), GREATEST(item.quantity, 0)), 0
           ) ELSE GREATEST(item.quantity, 0) END > 0 THEN 1 ELSE 0 END AS zero_price_count,
+        item.allocated_negative_margin AS negative_margin,
         item.alert_keys,
         item.allocation_ratio,
         item.billed AS visit_billed,
         item.paid_to_date AS visit_paid,
         item.panel_outstanding AS visit_panel_outstanding
       FROM allocated item
-      WHERE (_group_by = 'medicine' AND item.item_id IS NOT NULL)
-         OR (_group_by = 'procedure' AND item.service_id IS NOT NULL)
-         OR (_group_by = 'package' AND item.package_id IS NOT NULL)
+      WHERE _group_by = item.line_category
       UNION ALL
       SELECT
         report.queue_entry_id, report.completed_date, 'unavailable',
         'Unavailable attribution', false, false,
         NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-        0, 0, 0, report.alert_keys, NULL, NULL, NULL, NULL
+        0, 0, 0, NULL, report.alert_keys, NULL, NULL, NULL, NULL
       FROM filtered report
       WHERE NOT report.attribution_complete
     ),
@@ -815,7 +847,7 @@ BEGIN
             WHEN 'overdue_panel' THEN item.visit_panel_outstanding * item.allocation_ratio
             WHEN 'missing_cost' THEN item.billed
             WHEN 'zero_price' THEN 0
-            WHEN 'negative_margin' THEN GREATEST(item.cogs - item.billed, 0)
+            WHEN 'negative_margin' THEN item.negative_margin
             WHEN 'large_discount' THEN item.discount
             WHEN 'refund_void_correction' THEN item.refund
             WHEN 'payment_mismatch' THEN

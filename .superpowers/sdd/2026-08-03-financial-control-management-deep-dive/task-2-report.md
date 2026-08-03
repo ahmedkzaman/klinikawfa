@@ -239,3 +239,133 @@ large chunk, and ineffective dynamic-import warnings.
 - The production build retains the repository's pre-existing warnings listed above.
 - The earlier report concern about mutable item grouping is resolved by this round's
   immutable completion/correction snapshot path.
+
+## Fix Round 2/5 - 2026-08-03
+
+### Status
+
+DONE
+
+Both NOT ADDRESSED findings from `task-2-rereview-round-1.md` were corrected without
+changing the already-passing period-cash, deterministic-pagination, or distinct
+`visitCount` behavior. No Task 3 files were touched.
+
+### RED Evidence
+
+The generic-charge, mixed-margin, and mixed-category correction fixtures were added
+before the reporting SQL was changed.
+
+Command:
+
+```powershell
+$env:REQUIRE_POSTGRES_TEST='1'
+npm.cmd test -- src/test/financial-control-report-migration.test.ts
+```
+
+Result: exit code 1; one of two tests failed in executable PostgreSQL with:
+
+```text
+GENERIC_ITEM_RECONCILIATION_MISMATCH: visit 300.00, items 260.00
+```
+
+This demonstrated that the valid RM40 completed-bill `other_charge` with no item,
+service, or package ID was absent from every accepted item grouping. The same RED
+fixture also contained a mixed profitable/loss visit whose old per-line margin logic
+would report RM90 instead of the canonical RM10, and a correction whose first line
+was procedure while its medicine result needed to retain the correction alert.
+
+### Implementation
+
+- Added immutable `charge_type_id` to completion snapshots and preserved it while
+  merging as-of correction snapshots by immutable line UUID.
+- Classified every canonical charge line exactly once: package first, then medicine,
+  with service and generic `other_charge` lines represented as procedure. Generic
+  lines use stable `charge_type:<uuid>` group keys, with immutable line UUID as the
+  final fallback.
+- Continued allocating canonical visit billed, payment, outstanding, discount, tax,
+  and refund values over the complete canonical charge set, so the combined accepted
+  item categories reconcile to visit amounts within RM0.01.
+- Allocated the canonical visit-level `GREATEST(cogs - billed, 0)` alert amount over
+  canonical lines with the same deterministic residual-line method used by the other
+  financial allocations. Mixed line profitability can no longer inflate the visit
+  alert amount.
+- Assigned each visit's correction count once per accepted category using a stable
+  category line order. A corrected visit therefore retains the alert and a non-zero
+  correction count in every category it contributes to, without duplicating the
+  count across multiple groups inside that category.
+
+### Executable Fixtures
+
+- A valid RM40 generic completed-bill `other_charge` keyed by
+  `clinic_charge_type_id`, followed after the report date by name, amount, and charge
+  type mutation plus deletion. The procedure drill-down must retain the completion
+  identity, label, and amount.
+- Combined medicine, procedure, and package billed totals asserted equal the RM300
+  exact-attribution visit total within RM0.01.
+- A mixed-margin visit with an RM80 profitable medicine and RM90 loss procedure,
+  whose canonical visit loss is RM10; combined item alert amounts must equal RM10.
+- A corrected mixed-category visit whose lexically first line is a procedure and
+  second line is a medicine; both category results must expose
+  `refund_void_correction` with correction count 1.
+
+### GREEN Evidence
+
+Focused executable PostgreSQL contract, using a single thread to avoid Vitest's
+60-second fork-worker RPC heartbeat during the disposable database run:
+
+```powershell
+$env:REQUIRE_POSTGRES_TEST='1'
+npx.cmd vitest run --pool=threads --fileParallelism=false --maxWorkers=1 src/test/financial-control-report-migration.test.ts
+```
+
+Result: exit code 0; one test file passed and two tests passed. The executable test
+applied the migration to disposable PostgreSQL and passed all original and round-2
+assertions.
+
+Financial regression command:
+
+```powershell
+$env:REQUIRE_POSTGRES_TEST='1'
+npx.cmd vitest run --pool=threads --fileParallelism=false --maxWorkers=1 src/test/financial-control-report-migration.test.ts src/test/completed-bill-correction-migration.test.ts src/test/financial-cogs-and-panel-pricing-migration.test.ts src/test/panel-claim-reconciliation-migration.test.ts src/test/finance-boundary-hardening.test.ts src/test/financial-payment-classification.test.ts
+```
+
+Result: exit code 0; six files and 33 tests passed.
+
+Additional verification:
+
+```powershell
+npx.cmd eslint src/test/financial-control-report-migration.test.ts
+# exit code 0
+
+npx.cmd tsc --noEmit
+# exit code 0
+
+npm.cmd run build
+# exit code 0
+```
+
+The build retained the repository's existing browser-data, externalized Node module,
+CommonJS/ESM, large chunk, and ineffective dynamic-import warnings.
+
+### Self-Review
+
+- Confirmed generic charges are sourced only from immutable completion/correction
+  state for exact visits and remain stable after current-row mutation or deletion.
+- Confirmed category precedence makes each canonical charge line representable once,
+  avoiding both omissions and cross-category duplication.
+- Confirmed each deterministic residual allocation sums exactly to its canonical
+  visit value, including the RM10 mixed-margin alert.
+- Confirmed correction allocation is partitioned by visit and accepted category, so
+  filtering another category cannot remove the count and repeated groups within one
+  category cannot multiply it.
+- Confirmed all changes are limited to the Task 2 migration, executable migration
+  test, and this appended report.
+
+### Concerns
+
+- The repository's default forked Vitest command twice completed both PostgreSQL
+  assertions successfully but exited 1 after the test exceeded its 60-second worker
+  RPC heartbeat (`Timeout calling "onTaskUpdate"`). The equivalent single-thread
+  focused and six-file commands above both exited 0; this is a test-runner timing
+  issue rather than a database assertion failure.
+- The production build retains the repository's pre-existing warnings listed above.

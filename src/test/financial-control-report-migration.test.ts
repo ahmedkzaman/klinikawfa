@@ -128,6 +128,11 @@ create table public.consultations (
   status text not null,
   deleted_at timestamptz
 );
+create table public.clinic_charge_types (
+  id uuid primary key,
+  name text not null,
+  is_active boolean not null default true
+);
 create table public.consultation_items (
   id uuid primary key,
   consultation_id uuid not null,
@@ -140,7 +145,8 @@ create table public.consultation_items (
   price numeric not null,
   unit_cost numeric,
   billing_adjustment_kind text,
-  deleted_at timestamptz
+  deleted_at timestamptz,
+  clinic_charge_type_id uuid references public.clinic_charge_types(id)
 );
 create table public.package_items (
   id uuid primary key,
@@ -209,7 +215,8 @@ as $$
       'service_id', ci.service_id,
       'package_id', ci.package_id,
       'dispensed_qty', ci.dispensed_qty,
-      'adjustment_kind', ci.billing_adjustment_kind
+      'adjustment_kind', ci.billing_adjustment_kind,
+      'charge_type_id', ci.clinic_charge_type_id
     ) order by ci.id), '[]'::jsonb) as value
     from public.consultation_items ci
     where ci.consultation_id = p_consultation_id
@@ -242,6 +249,9 @@ insert into public.doctors values
   ('30000000-0000-4000-8000-000000000001', 'Dr Finance');
 insert into public.insurance_providers values
   ('40000000-0000-4000-8000-000000000001', 'Awfa Panel');
+insert into public.clinic_charge_types values
+  ('83000000-0000-4000-8000-000000000001', 'Completion administration', true),
+  ('83000000-0000-4000-8000-000000000002', 'Mutated administration', true);
 
 -- This completed visit predates the durable event boundary. The migration must
 -- preserve it as explicitly incomplete instead of inventing accounting dates.
@@ -250,7 +260,7 @@ insert into public.queue_entries values
 insert into public.consultations values
   ('60000000-0000-4000-8000-000000000096', '50000000-0000-4000-8000-000000000096', '20000000-0000-4000-8000-000000000096', '30000000-0000-4000-8000-000000000001', 'completed', null);
 insert into public.consultation_items values
-  ('70000000-0000-4000-8000-000000000096', '60000000-0000-4000-8000-000000000096', 'Legacy service', null, '81000000-0000-4000-8000-000000000096', null, 1, null, 100, 20, null, null);
+  ('70000000-0000-4000-8000-000000000096', '60000000-0000-4000-8000-000000000096', 'Legacy service', null, '81000000-0000-4000-8000-000000000096', null, 1, null, 100, 20, null, null, null);
 insert into public.payments values
   ('90000000-0000-4000-8000-000000000096', '50000000-0000-4000-8000-000000000096', '60000000-0000-4000-8000-000000000096', 'panel', 'panel', 10, '2026-07-01 03:00:00+00', null);
 insert into public.panel_claims values
@@ -280,19 +290,19 @@ insert into public.consultations values
   ('60000000-0000-4000-8000-000000000006', '50000000-0000-4000-8000-000000000006', '20000000-0000-4000-8000-000000000006', '30000000-0000-4000-8000-000000000001', 'completed', null),
   ('60000000-0000-4000-8000-000000000099', '50000000-0000-4000-8000-000000000099', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'completed', '2026-08-03 04:00:00+00');
 insert into public.consultation_items values
-  ('70000000-0000-4000-8000-000000000001', '60000000-0000-4000-8000-000000000001', 'Full medicine', '80000000-0000-4000-8000-000000000001', null, null, 2, null, 30, 10, null, null),
-  ('70000000-0000-4000-8000-000000000002', '60000000-0000-4000-8000-000000000002', 'Procedure', null, '81000000-0000-4000-8000-000000000001', null, 1, null, 100, 25, null, null),
-  ('70000000-0000-4000-8000-000000000003', '60000000-0000-4000-8000-000000000002', 'Discount', null, null, null, 1, null, -10, 999, 'discount', null),
-  ('70000000-0000-4000-8000-000000000004', '60000000-0000-4000-8000-000000000002', 'Tax', null, null, null, 1, null, 5, 999, 'tax', null),
-  ('70000000-0000-4000-8000-000000000005', '60000000-0000-4000-8000-000000000003', 'Package', null, null, '82000000-0000-4000-8000-000000000001', 1, null, 80, 30, null, null),
-  ('70000000-0000-4000-8000-000000000009', '60000000-0000-4000-8000-000000000003', 'Included package medicine', '80000000-0000-4000-8000-000000000009', null, null, 1, 1, 0, 0, null, null),
-  ('70000000-0000-4000-8000-000000000010', '60000000-0000-4000-8000-000000000003', 'Independently charged duplicate medicine', '80000000-0000-4000-8000-000000000009', null, null, 1, 1, 25, 7, null, null),
-  ('70000000-0000-4000-8000-000000000011', '60000000-0000-4000-8000-000000000003', 'Independently charged missing-cost medicine', '80000000-0000-4000-8000-000000000011', null, null, 1, 1, 15, 0, null, null),
-  ('70000000-0000-4000-8000-000000000006', '60000000-0000-4000-8000-000000000004', 'Panel service', null, '81000000-0000-4000-8000-000000000002', null, 1, null, 120, 20, null, null),
-  ('70000000-0000-4000-8000-000000000007', '60000000-0000-4000-8000-000000000005', 'Partial medicine', '80000000-0000-4000-8000-000000000002', null, null, 5, 2, 10, 4, null, null),
-  ('70000000-0000-4000-8000-000000000008', '60000000-0000-4000-8000-000000000005', 'Zero cost medicine', '80000000-0000-4000-8000-000000000003', null, null, 1, 1, 0, 0, null, null),
-  ('70000000-0000-4000-8000-000000000012', '60000000-0000-4000-8000-000000000006', 'Loss-making panel service', null, '81000000-0000-4000-8000-000000000012', null, 1, null, 100, 120, null, null),
-  ('70000000-0000-4000-8000-000000000099', '60000000-0000-4000-8000-000000000005', 'Deleted charge', null, null, null, 1, null, 999, 999, null, '2026-08-03 04:00:00+00');
+  ('70000000-0000-4000-8000-000000000001', '60000000-0000-4000-8000-000000000001', 'Full medicine', '80000000-0000-4000-8000-000000000001', null, null, 2, null, 30, 10, null, null, null),
+  ('70000000-0000-4000-8000-000000000002', '60000000-0000-4000-8000-000000000002', 'Procedure', null, '81000000-0000-4000-8000-000000000001', null, 1, null, 100, 25, null, null, null),
+  ('70000000-0000-4000-8000-000000000003', '60000000-0000-4000-8000-000000000002', 'Discount', null, null, null, 1, null, -10, 999, 'discount', null, null),
+  ('70000000-0000-4000-8000-000000000004', '60000000-0000-4000-8000-000000000002', 'Tax', null, null, null, 1, null, 5, 999, 'tax', null, null),
+  ('70000000-0000-4000-8000-000000000005', '60000000-0000-4000-8000-000000000003', 'Package', null, null, '82000000-0000-4000-8000-000000000001', 1, null, 80, 30, null, null, null),
+  ('70000000-0000-4000-8000-000000000009', '60000000-0000-4000-8000-000000000003', 'Included package medicine', '80000000-0000-4000-8000-000000000009', null, null, 1, 1, 0, 0, null, null, null),
+  ('70000000-0000-4000-8000-000000000010', '60000000-0000-4000-8000-000000000003', 'Independently charged duplicate medicine', '80000000-0000-4000-8000-000000000009', null, null, 1, 1, 25, 7, null, null, null),
+  ('70000000-0000-4000-8000-000000000011', '60000000-0000-4000-8000-000000000003', 'Independently charged missing-cost medicine', '80000000-0000-4000-8000-000000000011', null, null, 1, 1, 15, 0, null, null, null),
+  ('70000000-0000-4000-8000-000000000006', '60000000-0000-4000-8000-000000000004', 'Panel service', null, '81000000-0000-4000-8000-000000000002', null, 1, null, 120, 20, null, null, null),
+  ('70000000-0000-4000-8000-000000000007', '60000000-0000-4000-8000-000000000005', 'Partial medicine', '80000000-0000-4000-8000-000000000002', null, null, 5, 2, 10, 4, null, null, null),
+  ('70000000-0000-4000-8000-000000000008', '60000000-0000-4000-8000-000000000005', 'Zero cost medicine', '80000000-0000-4000-8000-000000000003', null, null, 1, 1, 0, 0, null, null, null),
+  ('70000000-0000-4000-8000-000000000012', '60000000-0000-4000-8000-000000000006', 'Loss-making panel service', null, '81000000-0000-4000-8000-000000000012', null, 1, null, 100, 120, null, null, null),
+  ('70000000-0000-4000-8000-000000000099', '60000000-0000-4000-8000-000000000005', 'Deleted charge', null, null, null, 1, null, 999, 999, null, '2026-08-03 04:00:00+00', null);
 insert into public.payments values
   ('90000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000001', '60000000-0000-4000-8000-000000000001', 'self_pay', 'card', 60, '2026-08-01 03:00:00+00', null),
   ('90000000-0000-4000-8000-000000000002', null, '60000000-0000-4000-8000-000000000002', 'self_pay', 'cash', 40, '2026-08-02 03:00:00+00', null),
@@ -979,8 +989,8 @@ insert into public.queue_entries values
 insert into public.consultations values
   ('60000000-0000-4000-8000-000000000007', '50000000-0000-4000-8000-000000000007', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'completed', null);
 insert into public.consultation_items values
-  ('70000000-0000-4000-8000-000000000071', '60000000-0000-4000-8000-000000000007', 'Tie medicine A', '80000000-0000-4000-8000-000000000071', null, null, 1, 1, 50, 10, null, null),
-  ('70000000-0000-4000-8000-000000000072', '60000000-0000-4000-8000-000000000007', 'Tie medicine B', '80000000-0000-4000-8000-000000000072', null, null, 1, 1, 50, 10, null, null);
+  ('70000000-0000-4000-8000-000000000071', '60000000-0000-4000-8000-000000000007', 'Tie medicine A', '80000000-0000-4000-8000-000000000071', null, null, 1, 1, 50, 10, null, null, null),
+  ('70000000-0000-4000-8000-000000000072', '60000000-0000-4000-8000-000000000007', 'Tie medicine B', '80000000-0000-4000-8000-000000000072', null, null, 1, 1, 50, 10, null, null, null);
 insert into private.financial_visit_completion_events
   (queue_entry_id, consultation_id, completed_at, provenance, attribution_complete, item_state)
 values (
@@ -1019,6 +1029,162 @@ begin
   end if;
 end $$;
 
+-- Round 2 fixtures: every canonical charge must have an accepted item category,
+-- and visit-level alert/correction values must survive category projection.
+alter table public.queue_entries disable trigger capture_financial_visit_completion_from_queue;
+alter table public.consultations disable trigger capture_financial_visit_completion_from_consultation;
+insert into public.queue_entries values
+  ('50000000-0000-4000-8000-000000000008', '20000000-0000-4000-8000-000000000001', 'completed', 'cash', null, '2026-08-02 16:30:00+00', null),
+  ('50000000-0000-4000-8000-000000000009', '20000000-0000-4000-8000-000000000001', 'completed', 'cash', null, '2026-08-02 17:30:00+00', null),
+  ('50000000-0000-4000-8000-000000000010', '20000000-0000-4000-8000-000000000001', 'completed', 'cash', null, '2026-08-02 18:30:00+00', null);
+insert into public.consultations values
+  ('60000000-0000-4000-8000-000000000008', '50000000-0000-4000-8000-000000000008', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'completed', null),
+  ('60000000-0000-4000-8000-000000000009', '50000000-0000-4000-8000-000000000009', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'completed', null),
+  ('60000000-0000-4000-8000-000000000010', '50000000-0000-4000-8000-000000000010', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'completed', null);
+insert into public.consultation_items values
+  ('70000000-0000-4000-8000-000000000081', '60000000-0000-4000-8000-000000000008', 'Mixed-margin medicine', '80000000-0000-4000-8000-000000000081', null, null, 1, 1, 100, 20, null, null, null),
+  ('70000000-0000-4000-8000-000000000082', '60000000-0000-4000-8000-000000000008', 'Mixed-margin procedure', null, '81000000-0000-4000-8000-000000000082', null, 1, null, 10, 100, null, null, null),
+  ('70000000-0000-4000-8000-000000000091', '60000000-0000-4000-8000-000000000009', 'Corrected procedure first', null, '81000000-0000-4000-8000-000000000091', null, 1, null, 20, 5, null, null, null),
+  ('70000000-0000-4000-8000-000000000092', '60000000-0000-4000-8000-000000000009', 'Corrected medicine second', '80000000-0000-4000-8000-000000000092', null, null, 1, 1, 30, 5, null, null, null),
+  ('70000000-0000-4000-8000-000000000101', '60000000-0000-4000-8000-000000000010', 'Completion administration', null, null, null, 1, null, 40, 0, 'other_charge', null, '83000000-0000-4000-8000-000000000001');
+insert into private.financial_visit_completion_events
+  (queue_entry_id, consultation_id, completed_at, provenance, attribution_complete, item_state)
+select fixture.queue_entry_id, fixture.consultation_id, fixture.completed_at,
+  'recorded', true,
+  private.financial_control_completion_item_state(fixture.consultation_id)
+from (values
+  ('50000000-0000-4000-8000-000000000008'::uuid, '60000000-0000-4000-8000-000000000008'::uuid, '2026-08-02 17:00:00+00'::timestamptz),
+  ('50000000-0000-4000-8000-000000000009', '60000000-0000-4000-8000-000000000009', '2026-08-02 18:00:00+00'),
+  ('50000000-0000-4000-8000-000000000010', '60000000-0000-4000-8000-000000000010', '2026-08-02 19:00:00+00')
+) fixture(queue_entry_id, consultation_id, completed_at);
+insert into public.completed_bill_correction_audit
+select
+  'b0000000-0000-4000-8000-000000000091',
+  '50000000-0000-4000-8000-000000000009',
+  '60000000-0000-4000-8000-000000000009',
+  public.completed_bill_correction_state(
+    '50000000-0000-4000-8000-000000000009',
+    '60000000-0000-4000-8000-000000000009'
+  ),
+  public.completed_bill_correction_state(
+    '50000000-0000-4000-8000-000000000009',
+    '60000000-0000-4000-8000-000000000009'
+  ),
+  '2026-08-03 10:00:00+00';
+insert into public.completed_bill_correction_audit
+select
+  'b0000000-0000-4000-8000-000000000101',
+  '50000000-0000-4000-8000-000000000010',
+  '60000000-0000-4000-8000-000000000010',
+  public.completed_bill_correction_state(
+    '50000000-0000-4000-8000-000000000010',
+    '60000000-0000-4000-8000-000000000010'
+  ),
+  '{"total": 0, "discount_rm": 0, "tax_rm": 0, "paid": 0, "items": []}'::jsonb,
+  '2026-08-04 01:00:00+00';
+update public.consultation_items
+set item_name = 'Mutated and deleted administration',
+    price = 400,
+    clinic_charge_type_id = '83000000-0000-4000-8000-000000000002',
+    deleted_at = '2026-08-04 01:00:00+00'
+where id = '70000000-0000-4000-8000-000000000101';
+alter table public.queue_entries enable trigger capture_financial_visit_completion_from_queue;
+alter table public.consultations enable trigger capture_financial_visit_completion_from_consultation;
+
+do $$
+declare
+  v_details jsonb;
+  v_visit_billed numeric;
+  v_item_billed numeric := 0;
+  v_negative_amount numeric := 0;
+begin
+  v_details := public.get_financial_control_details(
+    '2026-08-03', '2026-08-03', '2026-08-03',
+    'billed_revenue', 'visit', null, 1, 100
+  );
+  select coalesce(sum((row_value->>'billed')::numeric), 0)
+    into v_visit_billed
+  from jsonb_array_elements(v_details->'rows') row_value
+  where (row_value->>'attributionComplete')::boolean;
+
+  foreach v_details in array array[
+    public.get_financial_control_details('2026-08-03', '2026-08-03', '2026-08-03', 'billed_revenue', 'medicine', null, 1, 100),
+    public.get_financial_control_details('2026-08-03', '2026-08-03', '2026-08-03', 'billed_revenue', 'procedure', null, 1, 100),
+    public.get_financial_control_details('2026-08-03', '2026-08-03', '2026-08-03', 'billed_revenue', 'package', null, 1, 100)
+  ] loop
+    v_item_billed := v_item_billed + coalesce((
+      select sum((row_value->>'billed')::numeric)
+      from jsonb_array_elements(v_details->'rows') row_value
+      where (row_value->>'attributionComplete')::boolean
+    ), 0);
+  end loop;
+  if abs(v_visit_billed - 300) > 0.01
+     or abs(v_item_billed - v_visit_billed) > 0.01 then
+    raise exception 'GENERIC_ITEM_RECONCILIATION_MISMATCH: visit %, items %',
+      v_visit_billed, v_item_billed;
+  end if;
+
+  v_details := public.get_financial_control_details(
+    '2026-08-03', '2026-08-03', '2026-08-03',
+    'billed_revenue', 'procedure', null, 1, 100
+  );
+  if not exists (
+    select 1 from jsonb_array_elements(v_details->'rows') row_value
+    where row_value->>'groupKey' = 'charge_type:83000000-0000-4000-8000-000000000001'
+      and row_value->>'groupLabel' = 'Completion administration'
+      and (row_value->>'billed')::numeric = 40
+  ) then
+    raise exception 'GENERIC_CHARGE_HISTORY_MISMATCH: %', v_details;
+  end if;
+
+  v_details := public.get_financial_control_details(
+    '2026-08-03', '2026-08-03', '2026-08-03',
+    'alerts', 'visit', 'negative_margin', 1, 100
+  );
+  if (v_details #>> '{rows,0,amount}')::numeric <> 10 then
+    raise exception 'CANONICAL_NEGATIVE_MARGIN_VISIT_MISMATCH: %', v_details;
+  end if;
+  foreach v_details in array array[
+    public.get_financial_control_details('2026-08-03', '2026-08-03', '2026-08-03', 'alerts', 'medicine', 'negative_margin', 1, 100),
+    public.get_financial_control_details('2026-08-03', '2026-08-03', '2026-08-03', 'alerts', 'procedure', 'negative_margin', 1, 100),
+    public.get_financial_control_details('2026-08-03', '2026-08-03', '2026-08-03', 'alerts', 'package', 'negative_margin', 1, 100)
+  ] loop
+    v_negative_amount := v_negative_amount + coalesce((
+      select sum((row_value->>'amount')::numeric)
+      from jsonb_array_elements(v_details->'rows') row_value
+      where (row_value->>'attributionComplete')::boolean
+    ), 0);
+  end loop;
+  if abs(v_negative_amount - 10) > 0.01 then
+    raise exception 'ITEM_NEGATIVE_MARGIN_ALLOCATION_MISMATCH: %', v_negative_amount;
+  end if;
+
+  v_details := public.get_financial_control_details(
+    '2026-08-03', '2026-08-03', '2026-08-03',
+    'alerts', 'medicine', 'refund_void_correction', 1, 100
+  );
+  if not exists (
+    select 1 from jsonb_array_elements(v_details->'rows') row_value
+    where row_value->>'groupKey' = '80000000-0000-4000-8000-000000000092'
+      and (row_value->>'corrections')::integer = 1
+      and (row_value->'alertKeys') ? 'refund_void_correction'
+  ) then
+    raise exception 'MEDICINE_CORRECTION_COUNT_LOST: %', v_details;
+  end if;
+  v_details := public.get_financial_control_details(
+    '2026-08-03', '2026-08-03', '2026-08-03',
+    'alerts', 'procedure', 'refund_void_correction', 1, 100
+  );
+  if not exists (
+    select 1 from jsonb_array_elements(v_details->'rows') row_value
+    where row_value->>'groupKey' = '81000000-0000-4000-8000-000000000091'
+      and (row_value->>'corrections')::integer = 1
+      and (row_value->'alertKeys') ? 'refund_void_correction'
+  ) then
+    raise exception 'PROCEDURE_CORRECTION_COUNT_LOST: %', v_details;
+  end if;
+end $$;
+
 select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000099', false);
 do $$
 begin
@@ -1053,8 +1219,8 @@ insert into public.queue_entries values
 insert into public.consultations values
   ('60000000-0000-4000-8000-000000000095', '50000000-0000-4000-8000-000000000095', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'in_progress', null);
 insert into public.consultation_items values
-  ('70000000-0000-4000-8000-000000000095', '60000000-0000-4000-8000-000000000095', 'Trigger package', null, null, '82000000-0000-4000-8000-000000000095', 1, null, 50, 20, null, null),
-  ('70000000-0000-4000-8000-000000000094', '60000000-0000-4000-8000-000000000095', 'Trigger included medicine', '80000000-0000-4000-8000-000000000095', null, null, 1, 1, 0, 0, null, null);
+  ('70000000-0000-4000-8000-000000000095', '60000000-0000-4000-8000-000000000095', 'Trigger package', null, null, '82000000-0000-4000-8000-000000000095', 1, null, 50, 20, null, null, null),
+  ('70000000-0000-4000-8000-000000000094', '60000000-0000-4000-8000-000000000095', 'Trigger included medicine', '80000000-0000-4000-8000-000000000095', null, null, 1, 1, 0, 0, null, null, null);
 insert into public.package_items values
   ('c0000000-0000-4000-8000-000000000095', '82000000-0000-4000-8000-000000000095', '80000000-0000-4000-8000-000000000095', null);
 update public.queue_entries
