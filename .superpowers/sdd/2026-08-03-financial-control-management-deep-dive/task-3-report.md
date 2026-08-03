@@ -91,3 +91,84 @@ imports.
 ## Commit SHA
 
 Implementation commit: `cafe25ae2881b8977580e17a9a8e63fe92c2a284`
+
+---
+
+## Fix Round 1/5: Nullable Incomplete-Row Counts
+
+### RED Evidence
+
+Command:
+
+```powershell
+npm.cmd test -- src/test/financial-control-lib.test.ts src/test/use-financial-control.test.tsx
+```
+
+Exit code 1. One test file failed and one passed; 2 tests failed and 50 passed.
+Both new response fixtures rejected with `Invalid financial control response`:
+
+- attribution-incomplete visit row with null `corrections`, `missingCostCount`, and
+  `zeroPriceCount`
+- attribution-incomplete grouped row with the same unavailable count fields
+
+Vitest duration: 23.60s.
+
+### Correction
+
+- Changed the three detail-row count properties to `number | null`.
+- Added a nullable non-negative-integer guard and applied it only to those three
+  detail-row properties.
+- Added visit and grouped incomplete-row response fixtures matching the Task 2 RPC,
+  including incomplete nullable totals.
+- Updated the RFC 4180 CSV fixture to require blank cells for all three null counts.
+
+### GREEN Verification
+
+```powershell
+npm.cmd test -- src/test/financial-control-lib.test.ts src/test/use-financial-control.test.tsx
+```
+
+Exit code 0. 2 test files passed; 52 tests passed; 0 failed. Vitest duration:
+23.51s.
+
+```powershell
+npx.cmd eslint src/lib/clinic/financialControl.ts src/hooks/clinic/useFinancialControl.ts src/test/financial-control-lib.test.ts src/test/use-financial-control.test.tsx
+```
+
+Exit code 0. No lint errors or warnings.
+
+```powershell
+npx.cmd tsc --noEmit
+```
+
+Exit code 0. No TypeScript errors.
+
+```powershell
+npm.cmd run build
+```
+
+Exit code 0. Vite transformed 5,297 modules and completed the production build in
+33.44s. The existing dependency, Browserslist, CommonJS, chunk-size, and dynamic
+import warnings remain unchanged.
+
+### Self-Review
+
+- Rechecked the visit facts, visit JSON, and grouped `SUM(...)` expressions in the
+  Task 2 migration; each reviewed count can be null when attribution is incomplete.
+- Confirmed null is preserved through parsing and emitted as a blank CSV cell.
+- Confirmed negative and fractional values remain invalid because the nullable guard
+  delegates non-null values to the existing non-negative integer predicate.
+- Confirmed reconciliation `corrections` remains a required non-null integer.
+- Confirmed only the three permitted implementation/test files changed in the fix
+  commit and no Task 4 files were touched.
+
+### Concerns
+
+- No new implementation concerns. The production build retains the pre-existing
+  warnings recorded above.
+- The full test suite was not requested or run; the ledger records its controller
+  timeout. All requested focused verification completed successfully.
+
+### Commit SHA
+
+Fix implementation commit: `4204c5acc7952ffa1350be243fbfcfa5708fa91b`
