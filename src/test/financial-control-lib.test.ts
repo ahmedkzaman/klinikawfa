@@ -87,6 +87,15 @@ describe('financialControlRowsToCsv', () => {
     }
   });
 
+  it('neutralizes negative numeric profit and margin cells after formatting', () => {
+    const csv = financialControlRowsToCsv([
+      detailRow({ profit: -85, marginPct: -12.5 }),
+    ]);
+
+    expect(csv).toContain("40.00,'-85.00,'-12.5%,");
+    expect(csv).not.toContain('40.00,-85.00,-12.5%,');
+  });
+
   it('builds the filename from local date, metric, and grouping filters', () => {
     expect(financialControlExportFilename({
       startDate: new Date(2026, 7, 1, 12),

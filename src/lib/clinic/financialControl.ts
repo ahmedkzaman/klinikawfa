@@ -491,18 +491,21 @@ function csvEscape(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
-function csvString(value: string | null): string {
-  if (value === null) return '';
+function csvCell(value: string): string {
   const safeValue = /^[=+\-@]/.test(value) ? `'${value}` : value;
   return csvEscape(safeValue);
 }
 
+function csvString(value: string | null): string {
+  return value === null ? '' : csvCell(value);
+}
+
 function csvMoney(value: number | null): string {
-  return value === null ? '' : value.toFixed(2);
+  return value === null ? '' : csvCell(value.toFixed(2));
 }
 
 function csvMargin(value: number | null): string {
-  return value === null ? '' : `${value.toFixed(1)}%`;
+  return value === null ? '' : csvCell(`${value.toFixed(1)}%`);
 }
 
 function exportEntity(row: FinancialControlDetailRow, groupBy: FinancialControlGroupBy): string | null {
