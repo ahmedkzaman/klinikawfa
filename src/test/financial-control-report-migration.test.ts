@@ -948,6 +948,24 @@ begin
         raise exception 'METRIC_GROUP_CONTRACT_MISMATCH (%, %): %',
           v_value, v_group, v_details;
       end if;
+      if v_value = 'cash_collected' and (
+        exists (
+          select 1 from jsonb_array_elements(v_details->'rows') row_value
+          where (row_value->>'attributionComplete')::boolean
+            and abs((row_value->>'paid')::numeric - (row_value->>'amount')::numeric) > 0.01
+        )
+        or abs(
+          (v_details #>> '{totals,paid}')::numeric
+          - coalesce((
+            select sum((row_value->>'paid')::numeric)
+            from jsonb_array_elements(v_details->'rows') row_value
+            where (row_value->>'attributionComplete')::boolean
+          ), 0)
+        ) > 0.01
+      ) then
+        raise exception 'CASH_PAID_FIELD_DOES_NOT_RECONCILE (%, %): %',
+          v_value, v_group, v_details;
+      end if;
     end loop;
 
     foreach v_alert in array array[
@@ -1000,27 +1018,49 @@ begin
     raise exception 'INVALID_SUMMARY_DATES_ACCEPTED';
   exception when sqlstate '22023' then null;
   end;
+end $$;
 
-  update public.queue_entries
-  set clinic_status = 'cancelled', deleted_at = '2026-08-04 08:00:00+00'
-  where id = '50000000-0000-4000-8000-000000000003';
-  update public.consultations
-  set status = 'cancelled', deleted_at = '2026-08-04 08:00:00+00'
-  where id = '60000000-0000-4000-8000-000000000003';
+alter table public.queue_entries disable trigger capture_financial_visit_completion_from_queue;
+alter table public.consultations disable trigger capture_financial_visit_completion_from_consultation;
 
-  update public.queue_entries
-  set clinic_status = 'waiting'
-  where id = '50000000-0000-4000-8000-000000000001';
-  update public.consultations
-  set status = 'in_progress'
-  where id = '60000000-0000-4000-8000-000000000001';
+update public.queue_entries
+set clinic_status = 'cancelled', deleted_at = '2026-08-04 08:00:00+00'
+where id = '50000000-0000-4000-8000-000000000003';
+update public.consultations
+set status = 'cancelled', deleted_at = '2026-08-04 08:00:00+00'
+where id = '60000000-0000-4000-8000-000000000003';
 
-  update public.queue_entries
-  set deleted_at = '2026-08-04 08:05:00+00'
-  where id = '50000000-0000-4000-8000-000000000002';
-  update public.consultations
-  set deleted_at = '2026-08-04 08:05:00+00'
-  where id = '60000000-0000-4000-8000-000000000002';
+update public.queue_entries
+set clinic_status = 'waiting'
+where id = '50000000-0000-4000-8000-000000000001';
+update public.consultations
+set status = 'in_progress'
+where id = '60000000-0000-4000-8000-000000000001';
+
+update public.queue_entries
+set deleted_at = '2026-08-04 08:05:00+00'
+where id = '50000000-0000-4000-8000-000000000002';
+update public.consultations
+set deleted_at = '2026-08-04 08:05:00+00'
+where id = '60000000-0000-4000-8000-000000000002';
+
+alter table public.queue_entries enable trigger capture_financial_visit_completion_from_queue;
+alter table public.consultations enable trigger capture_financial_visit_completion_from_consultation;
+
+insert into private.financial_visit_completion_events
+  (queue_entry_id, consultation_id, event_kind, completed_at, provenance,
+   attribution_complete, item_state)
+values
+  ('50000000-0000-4000-8000-000000000001', '60000000-0000-4000-8000-000000000001', 'void', '2026-08-04 08:10:00+00', 'recorded', true, null),
+  ('50000000-0000-4000-8000-000000000002', '60000000-0000-4000-8000-000000000002', 'void', '2026-08-04 08:10:00+00', 'recorded', true, null),
+  ('50000000-0000-4000-8000-000000000003', '60000000-0000-4000-8000-000000000003', 'void', '2026-08-04 08:10:00+00', 'recorded', true, null);
+
+do $$
+declare
+  v_count integer;
+  v_summary jsonb;
+  v_details jsonb;
+begin
 
   select count(*) into v_count
   from private.financial_control_visit_facts('2026-08-01', '2026-08-03', '2026-08-03')
@@ -1031,6 +1071,41 @@ begin
   );
   if v_count <> 3 then
     raise exception 'HISTORICAL_COMPLETION_DISAPPEARED_AFTER_STATUS_CHANGE: %', v_count;
+  end if;
+
+  v_summary := public.get_financial_control_summary(
+    '2026-08-01', '2026-08-03', '2026-07-29', '2026-07-31', '2026-08-03'
+  );
+  if (v_summary #>> '{period,completedVisits}')::integer <> 5 then
+    raise exception 'HISTORICAL_SUMMARY_CHANGED_AFTER_STATUS_CHANGE: %', v_summary;
+  end if;
+  v_details := public.get_financial_control_details(
+    '2026-08-01', '2026-08-03', '2026-08-03',
+    'billed_revenue', 'visit', null, 1, 100
+  );
+  if not exists (
+    select 1 from jsonb_array_elements(v_details->'rows') row_value
+    where row_value->>'queueEntryId' = '50000000-0000-4000-8000-000000000001'
+  ) or not exists (
+    select 1 from jsonb_array_elements(v_details->'rows') row_value
+    where row_value->>'queueEntryId' = '50000000-0000-4000-8000-000000000002'
+  ) then
+    raise exception 'HISTORICAL_DETAILS_CHANGED_AFTER_STATUS_CHANGE: %', v_details;
+  end if;
+
+  select count(*) into v_count
+  from private.financial_control_visit_facts(
+    '2026-08-01',
+    '2026-08-03',
+    '2026-08-04'
+  )
+  where queue_entry_id in (
+    '50000000-0000-4000-8000-000000000001',
+    '50000000-0000-4000-8000-000000000002',
+    '50000000-0000-4000-8000-000000000003'
+  );
+  if v_count <> 0 then
+    raise exception 'CURRENT_VOIDED_COMPLETION_REMAINS_ELIGIBLE: %', v_count;
   end if;
 
 end $$;
@@ -1304,6 +1379,39 @@ declare
   v_row record;
   v_report_date date := (timezone('Asia/Kuala_Lumpur', statement_timestamp()))::date;
 begin
+  if (select count(*) from private.financial_payment_events event
+      where event.payment_id = '90000000-0000-4000-8000-000000000090'
+        and event.event_kind = 'reassignment_out') <> 1
+     or (select count(*) from private.financial_payment_events event
+      where event.payment_id = '90000000-0000-4000-8000-000000000090'
+        and event.event_kind = 'reassignment_in') <> 1 then
+    raise exception 'PAYMENT_PRE_COMPLETION_REASSIGNMENT_EVENTS_MISSING';
+  end if;
+  if (select count(*) from private.financial_payment_events event
+      where event.payment_id = '90000000-0000-4000-8000-000000000092'
+        and event.event_kind = 'reassignment_out') <> 1
+     or (select count(*) from private.financial_payment_events event
+      where event.payment_id = '90000000-0000-4000-8000-000000000092'
+        and event.event_kind = 'reassignment_in') <> 1 then
+    raise exception 'PAYMENT_POST_COMPLETION_REASSIGNMENT_EVENTS_MISSING';
+  end if;
+  if (select count(*) from private.financial_panel_claim_events event
+      where event.panel_claim_id = 'a0000000-0000-4000-8000-000000000090'
+        and event.event_kind = 'reassignment_out') <> 1
+     or (select count(*) from private.financial_panel_claim_events event
+      where event.panel_claim_id = 'a0000000-0000-4000-8000-000000000090'
+        and event.event_kind = 'reassignment_in') <> 1 then
+    raise exception 'PANEL_PRE_COMPLETION_REASSIGNMENT_EVENTS_MISSING';
+  end if;
+  if (select count(*) from private.financial_panel_claim_events event
+      where event.panel_claim_id = 'a0000000-0000-4000-8000-000000000092'
+        and event.event_kind = 'reassignment_out') <> 1
+     or (select count(*) from private.financial_panel_claim_events event
+      where event.panel_claim_id = 'a0000000-0000-4000-8000-000000000092'
+        and event.event_kind = 'reassignment_in') <> 1 then
+    raise exception 'PANEL_POST_COMPLETION_REASSIGNMENT_EVENTS_MISSING';
+  end if;
+
   select * into strict v_row
   from private.financial_control_visit_facts(v_report_date, v_report_date, v_report_date)
   where queue_entry_id = '50000000-0000-4000-8000-000000000090';
@@ -1378,6 +1486,12 @@ where id = '50000000-0000-4000-8000-000000000095';
 update public.consultations
 set status = 'completed'
 where id = '60000000-0000-4000-8000-000000000095';
+update public.consultations
+set status = 'in_progress'
+where id = '60000000-0000-4000-8000-000000000095';
+update public.consultations
+set status = 'completed'
+where id = '60000000-0000-4000-8000-000000000095';
 
 insert into public.payments values
   ('90000000-0000-4000-8000-000000000095', '50000000-0000-4000-8000-000000000095', '60000000-0000-4000-8000-000000000095', 'self_pay', 'cash', 12, statement_timestamp(), null);
@@ -1406,6 +1520,16 @@ begin
       and event.attribution_complete
   ) then
     raise exception 'COMPLETION_TRIGGER_EVENT_MISSING';
+  end if;
+  if (select count(*)
+      from private.financial_visit_completion_events event
+      where event.consultation_id = '60000000-0000-4000-8000-000000000095'
+        and event.event_kind = 'completion') <> 2
+     or (select count(*)
+      from private.financial_visit_completion_events event
+      where event.consultation_id = '60000000-0000-4000-8000-000000000095'
+        and event.event_kind = 'void') <> 1 then
+    raise exception 'COMPLETION_LIFECYCLE_TRIGGER_MISMATCH';
   end if;
 
   if not exists (
