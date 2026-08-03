@@ -118,3 +118,90 @@ Both exited 0 before the implementation commit. No whitespace errors.
 
 Implementation and tests commit:
 `c37803efe5916c4a2b3bbd33a9a6b2ffee478aaf`
+
+---
+
+## Fix Round 1/5: Negative Numeric CSV Cells
+
+### Review Finding
+
+The independent Task 6 review identified one P2: `csvMoney` and `csvMargin`
+formatted negative numeric values but bypassed the shared formula-neutralization
+path. Negative profit and margin therefore serialized as `-85.00` and `-12.5%`
+without the required leading single quote.
+
+### RED Evidence
+
+Added a regression for negative numeric profit and margin while preserving the
+existing two-decimal and nullable CSV assertions:
+
+```powershell
+npm.cmd test -- src/test/financial-control-lib.test.ts src/test/financial-control-components.test.tsx
+```
+
+Exit code 1. Two files ran; 29 tests passed and the new 30th test failed exactly on
+the missing leading quotes. Vitest reported 30 tests total, 1 failed, 29 passed.
+Observed output contained `40.00,-85.00,-12.5%,` instead of the required
+`40.00,'-85.00,'-12.5%,`.
+
+### Fix
+
+- Added a shared `csvCell` neutralization-and-escape helper.
+- Routed the final formatted strings from both `csvMoney` and `csvMargin` through
+  that helper.
+- Kept `toFixed(2)`, `toFixed(1)%`, null-to-blank behavior, and all existing string
+  CSV handling unchanged.
+- Added no server, migration, hook, or Task 7 behavior.
+
+### GREEN Verification
+
+```powershell
+npm.cmd test -- src/test/financial-control-lib.test.ts src/test/financial-control-components.test.tsx
+```
+
+Exit code 0. Two files passed; 30 tests passed and 0 failed. Vitest duration: 19.52s.
+
+```powershell
+npx.cmd eslint src/lib/clinic/financialControl.ts src/components/clinic/insight/management src/test/financial-control-lib.test.ts src/test/financial-control-components.test.tsx
+```
+
+Exit code 0. No lint errors or warnings.
+
+```powershell
+npx.cmd tsc --noEmit
+```
+
+Exit code 0. No TypeScript errors.
+
+```powershell
+npm.cmd run build
+```
+
+Exit code 0. Vite transformed 5,306 modules and completed the production build in
+14.88s. Existing dependency, Browserslist, CommonJS, chunk-size, ineffective
+dynamic-import, and plugin-timing warnings remain.
+
+`git diff --check` and `git diff --cached --check` both exited 0 before commit.
+
+### Changed Files
+
+- `src/lib/clinic/financialControl.ts`
+- `src/test/financial-control-lib.test.ts`
+- `.superpowers/sdd/2026-08-03-financial-control-management-deep-dive/task-6-report.md`
+
+### Self-Review
+
+- Positive numeric values remain unquoted numeric CSV cells.
+- Negative monetary values retain two decimals and gain the leading quote after
+  formatting; negative margins retain one decimal plus `%` and gain the same quote.
+- Null money and margin values remain blank.
+- The regression exercises both `csvMoney` and `csvMargin`; the prior 29 focused
+  tests continue to pass.
+- The fix commit changes only the approved client library and focused library test.
+
+### Fix Round Commit SHAs
+
+Implementation and regression test commit:
+`8915eaeaaf3da01152cf998c4c253b76218dabcc`
+
+Report update commit: recorded in the following documentation commit.
