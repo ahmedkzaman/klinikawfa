@@ -410,6 +410,7 @@ export default function ConsultationDetail() {
 
   const isLocked =
     consultation?.status === 'completed' || entry?.clinic_status === 'completed';
+  const isAtDispensary = entry?.clinic_status === 'sent_to_dispensary';
 
   // Tracks which treatment-item cards have unflushed auto-saves in flight.
   const pendingSavesRef = useRef<Set<string>>(new Set());
@@ -874,6 +875,7 @@ export default function ConsultationDetail() {
     await updateConsultation.mutateAsync({
       id: consultationId,
       case_note: caseNote,
+      dispense_note: dispenseNote,
       diagnosis_id: diagnosisId,
       diagnosis_text: diagnosisText,
     });
@@ -1649,7 +1651,7 @@ export default function ConsultationDetail() {
                   onClick={
                     canUseOfflineEditor
                       ? handleSaveNotes
-                      : isLocked
+                      : isLocked || isAtDispensary
                         ? handleUpdateClinicalNotes
                         : handleSaveNotes
                   }
@@ -1665,7 +1667,7 @@ export default function ConsultationDetail() {
                     ? effectiveOfflineApprovalStatus === 'returned'
                       ? 'Resubmit for approval'
                       : 'Save for doctor approval'
-                    : isLocked
+                    : isLocked || isAtDispensary
                       ? 'Update Clinical Notes'
                       : 'Save Draft'}
                 </Button>
@@ -1678,7 +1680,7 @@ export default function ConsultationDetail() {
                     {pendingSaveCount > 0 ? 'Savingâ€¦' : 'Proceed to dispensary'}
                   </Button>
                 )}
-                {!canUseOfflineEditor && !isLocked && (
+                {!canUseOfflineEditor && !isLocked && !isAtDispensary && (
                   <>
                     <Button
                       variant="outline"
