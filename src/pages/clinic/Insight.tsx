@@ -62,6 +62,7 @@ import { LeaderboardsTab } from '@/components/clinic/insight/LeaderboardsTab';
 import { ValuationTab } from '@/components/clinic/insight/ValuationTab';
 import { BankHealthTab } from '@/components/clinic/insight/BankHealthTab';
 import { ClinicHealthTab } from '@/components/clinic/insight/ClinicHealthTab';
+import { ManagementTab } from '@/components/clinic/insight/management/ManagementTab';
 
 const SEGMENT_COLORS = [chartColors.emerald, chartColors.blue, chartColors.slate];
 const MAX_RANGE_DAYS = 365;
@@ -310,6 +311,7 @@ export default function Insight() {
               <TabsTrigger value="leaderboards" className={TAB_TRIGGER}>Leaderboards</TabsTrigger>
               <TabsTrigger value="valuation" className={TAB_TRIGGER}>Valuation</TabsTrigger>
               <TabsTrigger value="health" className={TAB_TRIGGER}>Bank Health</TabsTrigger>
+              <TabsTrigger value="management" className={TAB_TRIGGER}>Management</TabsTrigger>
             </TabsList>
           </Card>
 
@@ -594,6 +596,10 @@ export default function Insight() {
 
           <TabsContent value="health" className="mt-0">
             <BankHealthTab startDate={startDate} endDate={endDate} />
+          </TabsContent>
+
+          <TabsContent value="management" className="mt-0">
+            <ManagementTab startDate={startDate} endDate={endDate} />
           </TabsContent>
         </Tabs>
       </div>
