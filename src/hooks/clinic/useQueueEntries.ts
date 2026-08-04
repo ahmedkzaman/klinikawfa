@@ -300,6 +300,11 @@ type CompletedTodayDoctor = NonNullable<QueueEntryWithJoins['doctors']>;
 
 type CompletedTodayConsultation = {
   doctors: CompletedTodayDoctor | CompletedTodayDoctor[] | null;
+  consultation_items?: Array<{
+    quantity?: number | string | null;
+    price?: number | string | null;
+    deleted_at?: string | null;
+  }> | null;
 };
 
 function completedTodayConsultingDoctor(
@@ -505,8 +510,10 @@ export function useCompletedTodayEntries(selectedDate = todayInputValue(), enabl
           `
           *,
           patients ( name, phone ),
+          payments ( id, amount, payment_method, payment_type, deleted_at ),
           consultations:consultations!consultations_queue_entry_id_fkey (
-            doctors:doctor_id ( id, name, avatar_url )
+            doctors:doctor_id ( id, name, avatar_url ),
+            consultation_items!left ( quantity, price, deleted_at )
           )
         `,
         )

@@ -56,7 +56,7 @@ import { toMalayTitleCase } from "@/lib/textCase";
 import { formatQueueNo } from "@/lib/clinic/queueNumber";
 import { bento, pageInner, pageShell, primaryBtn, secondaryBtn, softBadge } from "@/lib/clinic/bentoTokens";
 import { calculateClinicalAge } from "@/lib/clinic/clinicalAge";
-import { isCashVisit, isCompletedVisitUnpaid } from "@/lib/clinic/queuePaymentFocus";
+import { getCompletedPaymentStatus, isCashVisit, isCompletedVisitPaymentIncomplete } from "@/lib/clinic/queuePaymentFocus";
 import { getRecordedDiagnosisLabels } from "@/lib/clinic/diagnosisDisplay";
 import { formatPaymentMethod } from "@/lib/clinic/paymentMethod";
 import { sumActiveBillingLines } from "@/lib/clinic/billingLedgerTotals";
@@ -189,10 +189,17 @@ export default function QueueBoard() {
     return () => window.clearTimeout(timer);
   }, [missingPaymentFocus]);
 
+  const getEntryBillingLines = (entry: QueueEntryWithJoins) => {
+    const consultations = (entry as QueueEntryWithJoins & { consultations?: Array<{ consultation_items?: Array<{ quantity?: number | string | null; price?: number | string | null; deleted_at?: string | null }> | null }> | { consultation_items?: Array<{ quantity?: number | string | null; price?: number | string | null; deleted_at?: string | null }> | null } | null }).consultations;
+    const consultation = Array.isArray(consultations) ? consultations[0] : consultations;
+    return consultation?.consultation_items ?? [];
+  };
+
   const displayedCompletedToday = useMemo(
     () => missingPaymentFocus
       ? completedToday.filter((entry) =>
-          isCashVisit(entry.payment_method, entry.panel_id) && isCompletedVisitUnpaid(entry.payments),
+          isCashVisit(entry.payment_method, entry.panel_id) &&
+          isCompletedVisitPaymentIncomplete(entry.payments, getEntryBillingLines(entry)),
         )
       : completedToday,
     [completedToday, missingPaymentFocus],
@@ -415,7 +422,7 @@ export default function QueueBoard() {
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
                   <h2 className="text-sm font-bold uppercase tracking-tight text-slate-700">
-                    {missingPaymentFocus ? "Cash Visits Without Payment" : selectedDateIsToday ? "Completed Today" : "Completed on Selected Date"}
+                    {missingPaymentFocus ? "Cash Visits With Incomplete Payment" : selectedDateIsToday ? "Completed Today" : "Completed on Selected Date"}
                   </h2>
                 </div>
                 <span className={cn(softBadge, "px-2 py-0.5 text-xs")}>{displayedCompletedToday.length}</span>
@@ -462,9 +469,16 @@ export default function QueueBoard() {
                       <p className="mt-0.5 truncate text-xs text-slate-500">
                         Attending: {formatDoctorLabel(entry.doctors?.name)}
                       </p>
-                      {missingPaymentFocus && (
-                        <p className="mt-1 text-[11px] font-semibold text-rose-700">Belum ada bayaran direkodkan</p>
-                      )}
+                      {missingPaymentFocus && (() => {
+                        const status = getCompletedPaymentStatus(entry.payments, getEntryBillingLines(entry));
+                        if (status.kind === "partial-payment") {
+                          return <p className="mt-1 text-[11px] font-semibold text-rose-700">Bayaran separa · Baki {formatRM(status.outstanding ?? 0)}</p>;
+                        }
+                        if (status.kind === "no-payment") {
+                          return <p className="mt-1 text-[11px] font-semibold text-rose-700">Belum ada bayaran direkodkan · Jumlah {formatRM(status.billed ?? 0)}</p>;
+                        }
+                        return <p className="mt-1 text-[11px] font-semibold text-amber-700">Jumlah bil tidak tersedia</p>;
+                      })()}
                     </button>
                   ))}
                 </div>
