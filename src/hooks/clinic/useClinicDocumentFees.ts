@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
-export type DocumentFeeType = 'mc' | 'prescription' | 'referral';
+export type DocumentFeeType = 'mc' | 'prescription' | 'referral' | 'quarantine';
 
 export interface ClinicDocumentFee {
   documentType: DocumentFeeType;

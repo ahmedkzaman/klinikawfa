@@ -25,6 +25,7 @@ const feeRows = [
   { document_type: 'mc', amount: '15.00' },
   { document_type: 'prescription', amount: 15 },
   { document_type: 'referral', amount: 15 },
+  { document_type: 'quarantine', amount: 15 },
 ];
 
 function renderSettings() {
@@ -51,7 +52,8 @@ describe('DocumentFeeSettings', () => {
     renderSettings();
 
     expect(await screen.findByLabelText('Medical Certificate fee')).toHaveValue(15);
-    expect(screen.getAllByText('RM15.00')).toHaveLength(3);
+    expect(screen.getAllByText('RM15.00')).toHaveLength(4);
+    expect(screen.getByLabelText('Quarantine Letter fee')).toHaveValue(15);
   });
 
   it.each(['ops_staff', 'operations', 'staff', 'resident_doctor', 'admin', 'doctor_admin'])(
@@ -71,6 +73,7 @@ describe('DocumentFeeSettings', () => {
     expect(await screen.findByLabelText('Medical Certificate fee')).toBeDisabled();
     expect(screen.getByLabelText('Prescription Slip fee')).toBeDisabled();
     expect(screen.getByLabelText('Referral Letter fee')).toBeDisabled();
+    expect(screen.getByLabelText('Quarantine Letter fee')).toBeDisabled();
   });
 
   it('limits prescription and referral editing to admins', async () => {
@@ -79,6 +82,7 @@ describe('DocumentFeeSettings', () => {
 
     expect(await screen.findByLabelText('Prescription Slip fee')).toBeDisabled();
     expect(screen.getByLabelText('Referral Letter fee')).toBeDisabled();
+    expect(screen.getByLabelText('Quarantine Letter fee')).toBeDisabled();
 
     view.unmount();
     auth.role = 'admin';
@@ -86,6 +90,7 @@ describe('DocumentFeeSettings', () => {
 
     expect(await screen.findByLabelText('Prescription Slip fee')).toBeEnabled();
     expect(screen.getByLabelText('Referral Letter fee')).toBeEnabled();
+    expect(screen.getByLabelText('Quarantine Letter fee')).toBeEnabled();
   });
 
   it('rejects values with more than two decimal places without saving', async () => {

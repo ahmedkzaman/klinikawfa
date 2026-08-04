@@ -38,7 +38,10 @@ vi.mock('@/hooks/clinic/useCurrentDoctor', () => ({
 
 vi.mock('@/hooks/clinic/useClinicDocumentFees', () => ({
   useClinicDocumentFees: () => ({
-    data: [{ documentType: 'mc', amount: 15 }],
+    data: [
+      { documentType: 'mc', amount: 15 },
+      { documentType: 'quarantine', amount: 15 },
+    ],
     isLoading: false,
   }),
 }));
@@ -176,6 +179,23 @@ describe('official documentation document lifecycle', () => {
           isOpen
           onClose={() => undefined}
           template={template}
+          patient={{ id: 'patient-1', name: 'Patient Test' }}
+          consultationId="consultation-1"
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText('Official Documentation Fees · RM15.00')).toBeInTheDocument();
+  });
+
+  it('shows the configured official documentation fee before issuing a quarantine letter', () => {
+    const queryClient = createQueryClient();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <IssueDocumentModal
+          isOpen
+          onClose={() => undefined}
+          template={{ ...template, id: 'quarantine-template', name: 'Quarantine Letter', type: 'quarantine' }}
           patient={{ id: 'patient-1', name: 'Patient Test' }}
           consultationId="consultation-1"
         />

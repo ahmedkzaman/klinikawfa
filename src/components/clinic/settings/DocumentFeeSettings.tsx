@@ -25,6 +25,11 @@ const feeSettings: Array<{ type: DocumentFeeType; label: string; help: string }>
     label: 'Referral Letter',
     help: 'Only administrators may update this fee.',
   },
+  {
+    type: 'quarantine',
+    label: 'Quarantine Letter',
+    help: 'Only administrators may update this fee.',
+  },
 ];
 
 const mcEditors: AppRole[] = [
@@ -109,7 +114,7 @@ export function DocumentFeeSettings() {
       ) : isLoading ? (
         <p className="text-sm text-slate-500">Loading document fees…</p>
       ) : (
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {feeSettings.map(({ type, label, help }) => {
             const editable = canEditFee(role, type);
             const draft = drafts[type] ?? feeFor(type)?.toFixed(2) ?? '';
