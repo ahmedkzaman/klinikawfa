@@ -155,7 +155,7 @@ export function DoctorClinicalActivity({ startDate, endDate }: DoctorClinicalAct
                     </TableRow>
                     {isExpanded ? (
                       <TableRow className={TR}>
-                        <TableCell colSpan={6} className="bg-slate-50 p-4">
+                        <TableCell colSpan={9} className="bg-slate-50 p-4">
                           <ActivityDetails key={doctorExpansionKey} summary={summary} />
                         </TableCell>
                       </TableRow>
@@ -221,6 +221,9 @@ function ActivityRows({
             {kind === 'documents' ? 'Document Name' : 'Procedure'}
           </TableHead>
           <TableHead className={TH}>Patient</TableHead>
+          {kind === 'procedures' ? <TableHead className={cn(TH, 'text-right')}>Unit Price</TableHead> : null}
+          {kind === 'procedures' ? <TableHead className={cn(TH, 'text-right')}>Qty</TableHead> : null}
+          {kind === 'procedures' ? <TableHead className={cn(TH, 'text-right')}>Charged</TableHead> : null}
           <TableHead className={cn(TH, 'text-right')}>Queue</TableHead>
         </TableRow>
       </TableHeader>
@@ -237,6 +240,9 @@ function ActivityRows({
               ) : null}
               <TableCell className="text-slate-700">{row.activityName}</TableCell>
               <TableCell className="text-slate-600">{row.patientName}</TableCell>
+              {kind === 'procedures' ? <TableCell className="text-right text-slate-600">{row.unitPrice == null ? '—' : `RM ${row.unitPrice.toFixed(2)}`}</TableCell> : null}
+              {kind === 'procedures' ? <TableCell className="text-right text-slate-600">{row.quantity ?? '—'}</TableCell> : null}
+              {kind === 'procedures' ? <TableCell className="text-right font-medium text-slate-800">{row.totalPrice == null ? '—' : `RM ${row.totalPrice.toFixed(2)}`}</TableCell> : null}
               <TableCell className="text-right">
                 <a className="text-blue-600 hover:underline" href={`/clinic/visits/${row.queueEntryId}`}>
                   {queueNo}

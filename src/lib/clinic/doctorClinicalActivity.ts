@@ -14,6 +14,9 @@ export interface DoctorActivityRow {
   doctorId: string | null;
   doctorName: string;
   patientName: string;
+  unitPrice: number | null;
+  quantity: number | null;
+  totalPrice: number | null;
 }
 
 export interface DoctorActivitySummary {
@@ -104,12 +107,15 @@ export function doctorClinicalActivityCsv(
       row.activityKind,
       row.activityName,
       row.patientName,
+      row.unitPrice ?? '',
+      row.quantity ?? '',
+      row.totalPrice ?? '',
       doctorActivityQueueLabel(row),
     ].map(csvField).join(',')),
   );
 
   return [
-    'Doctor,Date,Activity Type,Activity Name,Patient,Queue Number',
+    'Doctor,Date,Activity Type,Activity Name,Patient,Queue Number,Unit Price,Quantity,Total Price',
     ...records,
   ].join('\r\n');
 }

@@ -38,6 +38,9 @@ function mapDoctorActivityRow(row: DoctorClinicalActivityRpcRow): DoctorActivity
     doctorId: row.doctor_id,
     doctorName: row.doctor_name,
     patientName: row.patient_name,
+    unitPrice: row.unit_price,
+    quantity: row.quantity,
+    totalPrice: row.total_price,
   };
 }
 

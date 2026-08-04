@@ -68,6 +68,9 @@ export type Database = {
           message: string | null
           patient_ic: string | null
           patient_name: string
+          unit_price: number | null
+          quantity: number | null
+          total_price: number | null
           patient_phone: string
           payment_reference: string | null
           service: string
