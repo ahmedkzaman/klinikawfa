@@ -790,6 +790,56 @@ BEGIN
     RAISE EXCEPTION 'PANEL_CLAIM_ROW_MISMATCH';
   END IF;
 
+  v_context := public.get_completed_bill_correction_context(
+    '70000000-0000-4000-8000-000000000202'
+  );
+  SELECT jsonb_agg(
+    value || '{"remove":false,"price":140}'::jsonb
+  )
+  INTO v_items FROM jsonb_array_elements(v_context->'items');
+  v_result := public.correct_completed_bill(
+    '70000000-0000-4000-8000-000000000202',
+    v_context->>'fingerprint',
+    'TEST panel outstanding correction',
+    v_items, v_context->'payments', 0, 0
+  );
+  SELECT amount, status, received_amount
+  INTO STRICT v_claim_amount, v_claim_status, v_claim_received
+  FROM public.panel_claims
+  WHERE id = '70000000-0000-4000-8000-000000000901';
+  IF v_claim_amount IS DISTINCT FROM 140
+     OR v_claim_status IS DISTINCT FROM 'approved'
+     OR v_claim_received IS DISTINCT FROM 120 THEN
+    RAISE EXCEPTION 'PANEL_CLAIM_OUTSTANDING_CORRECTION_MISMATCH';
+  END IF;
+  SELECT count(*) INTO v_current_count
+  FROM public.get_completed_bill_correction_history(
+    '70000000-0000-4000-8000-000000000202',
+    100, NULL, NULL
+  )
+  WHERE reason = 'TEST panel outstanding correction'
+    AND before_total = 80
+    AND after_total = 140;
+  IF v_current_count IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'PANEL_CLAIM_OUTSTANDING_AUDIT_MISMATCH';
+  END IF;
+
+  PERFORM public.update_panel_claim_workflow(
+    '70000000-0000-4000-8000-000000000901',
+    'received', NULL, 140,
+    'TEST-PANEL-REMAINDER', current_date, 140,
+    'TEST remaining correction payment', NULL, NULL
+  );
+  SELECT amount, status, received_amount
+  INTO STRICT v_claim_amount, v_claim_status, v_claim_received
+  FROM public.panel_claims
+  WHERE id = '70000000-0000-4000-8000-000000000901';
+  IF v_claim_amount IS DISTINCT FROM 140
+     OR v_claim_status IS DISTINCT FROM 'received'
+     OR v_claim_received IS DISTINCT FROM 140 THEN
+    RAISE EXCEPTION 'PANEL_CLAIM_REMAINING_PAYMENT_STRANDED';
+  END IF;
+
   SELECT count(*) INTO v_current_count
   FROM public.get_completed_bill_correction_history(
     '70000000-0000-4000-8000-000000000201',

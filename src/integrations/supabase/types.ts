@@ -2982,6 +2982,230 @@ export type Database = {
         }
         Relationships: []
       }
+      panel_claim_checkout_requests: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          created_by: string
+          idempotency_key: string
+          queue_entry_id: string
+          request_fingerprint: string
+          result: Json | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          created_by: string
+          idempotency_key: string
+          queue_entry_id: string
+          request_fingerprint: string
+          result?: Json | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
+          idempotency_key?: string
+          queue_entry_id?: string
+          request_fingerprint?: string
+          result?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "panel_claim_checkout_requests_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_claim_checkout_requests_queue_fkey"
+            columns: ["queue_entry_id"]
+            isOneToOne: true
+            referencedRelation: "queue_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      panel_claim_portion_audit: {
+        Row: {
+          action: string
+          actor_id: string
+          created_at: string
+          id: string
+          new_values: Json | null
+          old_values: Json | null
+          panel_claim_id: string
+          reason: string | null
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          created_at?: string
+          id?: string
+          new_values?: Json | null
+          old_values?: Json | null
+          panel_claim_id: string
+          reason?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          created_at?: string
+          id?: string
+          new_values?: Json | null
+          old_values?: Json | null
+          panel_claim_id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "panel_claim_portion_audit_actor_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_claim_portion_audit_claim_fkey"
+            columns: ["panel_claim_id"]
+            isOneToOne: false
+            referencedRelation: "panel_claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      panel_claim_portion_receipts: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          id: string
+          idempotency_key: string
+          panel_claim_id: string
+          panel_claim_portion_id: string
+          payment_reference: string
+          received_date: string
+          remark: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by: string
+          id?: string
+          idempotency_key: string
+          panel_claim_id: string
+          panel_claim_portion_id: string
+          payment_reference: string
+          received_date: string
+          remark?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          id?: string
+          idempotency_key?: string
+          panel_claim_id?: string
+          panel_claim_portion_id?: string
+          payment_reference?: string
+          received_date?: string
+          remark?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "panel_claim_portion_receipts_claim_fkey"
+            columns: ["panel_claim_id"]
+            isOneToOne: false
+            referencedRelation: "panel_claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_claim_portion_receipts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_claim_portion_receipts_portion_claim_fkey"
+            columns: ["panel_claim_portion_id", "panel_claim_id"]
+            isOneToOne: false
+            referencedRelation: "panel_claim_portions"
+            referencedColumns: ["id", "panel_claim_id"]
+          },
+        ]
+      }
+      panel_claim_portions: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          id: string
+          panel_claim_id: string
+          payment_reference: string | null
+          portion_no: number
+          received_amount: number
+          received_date: string | null
+          remark: string | null
+          status: string
+          updated_at: string
+          updated_by: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by: string
+          id?: string
+          panel_claim_id: string
+          payment_reference?: string | null
+          portion_no: number
+          received_amount?: number
+          received_date?: string | null
+          remark?: string | null
+          status?: never
+          updated_at?: string
+          updated_by: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          id?: string
+          panel_claim_id?: string
+          payment_reference?: string | null
+          portion_no?: number
+          received_amount?: number
+          received_date?: string | null
+          remark?: string | null
+          status?: never
+          updated_at?: string
+          updated_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "panel_claim_portions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_claim_portions_panel_claim_fkey"
+            columns: ["panel_claim_id"]
+            isOneToOne: false
+            referencedRelation: "panel_claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_claim_portions_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       panel_claims: {
         Row: {
           amount: number
@@ -2995,6 +3219,7 @@ export type Database = {
           panel_id: string
           patient_id: string
           payment_reference: string | null
+          portions_version: number
           queue_entry_id: string | null
           received_amount: number | null
           received_date: string | null
@@ -3017,6 +3242,7 @@ export type Database = {
           panel_id: string
           patient_id: string
           payment_reference?: string | null
+          portions_version?: number
           queue_entry_id?: string | null
           received_amount?: number | null
           received_date?: string | null
@@ -3039,6 +3265,7 @@ export type Database = {
           panel_id?: string
           patient_id?: string
           payment_reference?: string | null
+          portions_version?: number
           queue_entry_id?: string | null
           received_amount?: number | null
           received_date?: string | null
@@ -5924,6 +6151,7 @@ export type Database = {
           panel_id: string | null
           patient_id: string | null
           payment_reference: string | null
+          portions_version: number | null
           queue_entry_id: string | null
           received_amount: number | null
           received_date: string | null
@@ -5947,6 +6175,7 @@ export type Database = {
           panel_id?: string | null
           patient_id?: string | null
           payment_reference?: string | null
+          portions_version?: number | null
           queue_entry_id?: string | null
           received_amount?: number | null
           received_date?: string | null
@@ -5970,6 +6199,7 @@ export type Database = {
           panel_id?: string | null
           patient_id?: string | null
           payment_reference?: string | null
+          portions_version?: number | null
           queue_entry_id?: string | null
           received_amount?: number | null
           received_date?: string | null
@@ -6125,6 +6355,22 @@ export type Database = {
       can_correct_completed_bill: {
         Args: { _user_id: string }
         Returns: boolean
+      }
+      can_manage_panel_claim_portions: {
+        Args: { _user_id: string }
+        Returns: boolean
+      }
+      cancel_panel_claim_portions: {
+        Args: {
+          p_expected_version: number
+          p_panel_claim_id: string
+          p_reason: string
+        }
+        Returns: undefined
+      }
+      bulk_submit_panel_claims: {
+        Args: { p_panel_claim_ids: string[]; p_submitted_date: string | null }
+        Returns: number
       }
       completed_bill_correction_state: {
         Args: { p_consultation_id: string; p_queue_entry_id: string }
@@ -6299,9 +6545,12 @@ export type Database = {
       checkout_visit: {
         Args: {
           p_amount_paid: number
+          p_checkout_idempotency_key?: string
           p_consultation_id: string
           p_notes?: string
           p_other_charges?: Json
+          p_panel_covered_amount?: number
+          p_panel_portions?: Json
           p_panel_provider_id?: string
           p_payment_method: string
           p_payment_type?: string
@@ -6320,6 +6569,41 @@ export type Database = {
           p_queue_entry_id: string
         }
         Returns: Json
+      }
+      record_panel_claim_portion_payment: {
+        Args: {
+          p_amount: number
+          p_idempotency_key: string
+          p_payment_reference: string
+          p_portion_id: string
+          p_received_date: string
+          p_remark: string
+        }
+        Returns: Database["public"]["Tables"]["panel_claim_portions"]["Row"]
+      }
+      replace_panel_claim_portions: {
+        Args: {
+          p_expected_version: number
+          p_panel_claim_id: string
+          p_portions: Json
+          p_reason: string
+        }
+        Returns: Database["public"]["Tables"]["panel_claim_portions"]["Row"][]
+      }
+      update_panel_claim_workflow: {
+        Args: {
+          p_approved_amount: number | null
+          p_due_date: string | null
+          p_gl_document_url: string | null
+          p_panel_claim_id: string
+          p_payment_reference: string | null
+          p_received_amount: number | null
+          p_received_date: string | null
+          p_remarks: string | null
+          p_status: Database["public"]["Enums"]["panel_claim_status"] | null
+          p_submitted_date: string | null
+        }
+        Returns: Database["public"]["Tables"]["panel_claims"]["Row"]
       }
       review_offline_consultation: {
         Args: {

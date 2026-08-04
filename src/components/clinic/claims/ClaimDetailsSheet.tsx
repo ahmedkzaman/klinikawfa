@@ -41,12 +41,35 @@ import {
   softInput,
 } from '@/lib/clinic/bentoTokens';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  canManagePanelClaimWorkflow,
+  canManagePanelClaimPortions,
+  isPayablePanelClaimStatus,
+  malaysiaTodayIso,
+} from '@/lib/clinic/panelClaimPortions';
+import { PanelClaimPortionEditor, type PanelClaimPortionInput } from '@/components/clinic/claims/PanelClaimPortionEditor';
+import { PanelClaimPortions, type PortionPaymentInput } from '@/components/clinic/claims/PanelClaimPortions';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 import {
   type PanelClaimRow,
   type PanelClaimStatus,
   useClaimTreatmentItems,
   useUpdatePanelClaim,
+  useCancelPanelClaimPortions,
+  usePanelClaimPortions,
+  useRecordPanelClaimPortionPayment,
+  useReplacePanelClaimPortions,
   getClaimDocSignedUrl,
 } from '@/hooks/clinic/usePanelClaims';
 
@@ -65,14 +88,16 @@ function formatRM(value: number): string {
   return `RM ${value.toFixed(2)}`;
 }
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 interface ClaimDetailsSheetProps {
   claim: PanelClaimRow | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+interface ClaimReceiptSnapshot {
+  id: string;
+  status: PanelClaimStatus;
+  receivedAmount: number | null;
 }
 
 export default function ClaimDetailsSheet({
@@ -80,8 +105,13 @@ export default function ClaimDetailsSheet({
   open,
   onOpenChange,
 }: ClaimDetailsSheetProps) {
+  const { role } = useAuth();
   const ledger = useClaimTreatmentItems(claim?.queue_entry_id ?? null);
   const updateMut = useUpdatePanelClaim();
+  const portionsQuery = usePanelClaimPortions(claim?.id);
+  const replacePortionsMut = useReplacePanelClaimPortions();
+  const cancelPortionsMut = useCancelPanelClaimPortions();
+  const recordPaymentMut = useRecordPanelClaimPortionPayment();
 
   // Form state — re-seeded whenever the sheet opens with a new claim
   const [status, setStatus] = useState<PanelClaimStatus>('pending');
@@ -92,31 +122,67 @@ export default function ClaimDetailsSheet({
   const [receivedAmount, setReceivedAmount] = useState<string>('');
   const [remarks, setRemarks] = useState<string>('');
   const [glDocUrl, setGlDocUrl] = useState<string | null>(null);
+  const [showPortionEditor, setShowPortionEditor] = useState(false);
+  const [confirmSplitCancellation, setConfirmSplitCancellation] = useState(false);
 
   const [uploading, setUploading] = useState(false);
   const [signedDownloadUrl, setSignedDownloadUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const wasOpenRef = useRef(false);
+  const receiptSnapshotRef = useRef<ClaimReceiptSnapshot | null>(null);
 
   useEffect(() => {
-    if (!claim) return;
-    setStatus(claim.status);
-    setSubmittedDate(claim.submitted_date ?? '');
-    setApprovedAmount(
-      claim.approved_amount !== null && claim.approved_amount !== undefined
-        ? String(claim.approved_amount)
-        : '',
-    );
-    setPaymentReference(claim.payment_reference ?? '');
-    setReceivedDate(claim.received_date ?? '');
-    setReceivedAmount(
-      claim.received_amount !== null && claim.received_amount !== undefined
-        ? String(claim.received_amount)
-        : '',
-    );
-    setRemarks(claim.remarks ?? '');
-    setGlDocUrl(claim.gl_document_url ?? null);
-    setSignedDownloadUrl(null);
-  }, [claim?.id, open]);
+    if (!claim || !open) {
+      wasOpenRef.current = false;
+      receiptSnapshotRef.current = null;
+      return;
+    }
+
+    const nextSnapshot: ClaimReceiptSnapshot = {
+      id: claim.id,
+      status: claim.status,
+      receivedAmount: claim.received_amount,
+    };
+    const previousSnapshot = receiptSnapshotRef.current;
+    const isNewSession = !wasOpenRef.current || previousSnapshot?.id !== claim.id;
+
+    if (isNewSession) {
+      setStatus(claim.status);
+      setSubmittedDate(claim.submitted_date ?? '');
+      setApprovedAmount(
+        claim.approved_amount !== null && claim.approved_amount !== undefined
+          ? String(claim.approved_amount)
+          : '',
+      );
+      setPaymentReference(claim.payment_reference ?? '');
+      setReceivedDate(claim.received_date ?? '');
+      setReceivedAmount(
+        claim.received_amount !== null && claim.received_amount !== undefined
+          ? String(claim.received_amount)
+          : '',
+      );
+      setRemarks(claim.remarks ?? '');
+      setGlDocUrl(claim.gl_document_url ?? null);
+      setSignedDownloadUrl(null);
+      setShowPortionEditor(false);
+      setConfirmSplitCancellation(false);
+    } else {
+      if (previousSnapshot.status !== nextSnapshot.status) {
+        setStatus(claim.status);
+      }
+
+      if (previousSnapshot.receivedAmount !== nextSnapshot.receivedAmount) {
+        setReceivedAmount(
+          claim.received_amount !== null && claim.received_amount !== undefined
+            ? String(claim.received_amount)
+            : '',
+        );
+      }
+    }
+
+    wasOpenRef.current = true;
+    receiptSnapshotRef.current = nextSnapshot;
+  }, [claim, open]);
 
   // Refresh signed URL when we have a stored doc path
   useEffect(() => {
@@ -134,18 +200,38 @@ export default function ClaimDetailsSheet({
   }, [glDocUrl]);
 
   const billed = Number(claim?.amount ?? 0);
+  const portions = portionsQuery.data;
+  const portionsReady = !portionsQuery.isLoading && !portionsQuery.isError && Array.isArray(portions);
+  const resolvedPortions = portions ?? [];
+  const isSplitClaim = portionsReady && resolvedPortions.length > 0;
+  const hasPortionReceipt = resolvedPortions.some((portion) => portion.received_amount > 0);
+  const canManagePortions = canManagePanelClaimPortions(role);
+  const isPayableClaim = isPayablePanelClaimStatus(claim?.status);
+  const selectedStatusIsPayable = isPayablePanelClaimStatus(status);
+  const canUseReceiptControls = isPayableClaim && selectedStatusIsPayable;
+  const canEditPortions = portionsReady && canManagePortions && canUseReceiptControls && !hasPortionReceipt;
+  const canEditWorkflow = Boolean(claim)
+    && isPayableClaim
+    && canManagePanelClaimWorkflow(role);
+  const editorPortions = isSplitClaim
+    ? resolvedPortions.map((portion) => ({ amount: portion.amount.toFixed(2), remark: portion.remark ?? '' }))
+    : [{ amount: '', remark: '' }, { amount: '', remark: '' }];
   const writeOff = useMemo(() => {
     const approved = Number(approvedAmount);
     if (!approvedAmount || Number.isNaN(approved)) return 0;
     return billed - approved;
   }, [billed, approvedAmount]);
 
+  useEffect(() => {
+    if (!canEditPortions) setConfirmSplitCancellation(false);
+  }, [canEditPortions]);
+
   // Auto-stamp dates the moment the user picks the status, so the field
   // is visible / editable instead of empty.
   function handleStatusChange(next: PanelClaimStatus) {
     setStatus(next);
-    if (next === 'submitted' && !submittedDate) setSubmittedDate(todayIso());
-    if (next === 'received' && !receivedDate) setReceivedDate(todayIso());
+    if (next === 'submitted' && !submittedDate) setSubmittedDate(malaysiaTodayIso());
+    if (next === 'received' && !receivedDate) setReceivedDate(malaysiaTodayIso());
     if (next === 'received' && !receivedAmount) {
       setReceivedAmount(approvedAmount || String(billed));
     }
@@ -180,7 +266,7 @@ export default function ClaimDetailsSheet({
   function validate(): string | null {
     if (status === 'submitted' && !submittedDate) return 'Submitted date is required';
     if (status === 'approved' && !approvedAmount) return 'Approved amount is required';
-    if (status === 'received') {
+    if (status === 'received' && !isSplitClaim) {
       if (!paymentReference.trim()) return 'Payment reference is required';
       if (!receivedDate) return 'Received date is required';
     }
@@ -200,11 +286,12 @@ export default function ClaimDetailsSheet({
         status,
         submitted_date: submittedDate || null,
         approved_amount: approvedAmount ? Number(approvedAmount) : null,
-        payment_reference: paymentReference || null,
-        received_date: receivedDate || null,
-        received_amount: receivedAmount ? Number(receivedAmount) : null,
+        payment_reference: isSplitClaim ? null : paymentReference || null,
+        received_date: isSplitClaim ? null : receivedDate || null,
+        received_amount: isSplitClaim ? null : receivedAmount ? Number(receivedAmount) : null,
         remarks: remarks || null,
         gl_document_url: glDocUrl,
+        due_date: claim.due_date,
       });
       toast.success('Claim updated');
       onOpenChange(false);
@@ -212,6 +299,48 @@ export default function ClaimDetailsSheet({
       const msg = e instanceof Error ? e.message : 'Failed to update claim';
       toast.error(msg);
     }
+  }
+
+  async function handleConfirmPortions(portionDrafts: PanelClaimPortionInput[]) {
+    if (!claim || !canEditPortions) return;
+    try {
+      await replacePortionsMut.mutateAsync({
+        claimId: claim.id,
+        portions: portionDrafts.map((portion) => ({ amount: String(portion.amount), remark: portion.remark })),
+        reason: isSplitClaim ? 'Updated payment split' : 'Created payment split',
+        expectedVersion: claim.portions_version,
+      });
+      toast.success(isSplitClaim ? 'Payment split updated' : 'Payment split created');
+      setShowPortionEditor(false);
+    } catch (portionError) {
+      toast.error(portionError instanceof Error ? portionError.message : 'Failed to save payment split');
+    }
+  }
+
+  async function handleCancelSplit() {
+    if (!claim || !isSplitClaim || !canEditPortions) {
+      setConfirmSplitCancellation(false);
+      return;
+    }
+    try {
+      await cancelPortionsMut.mutateAsync({
+        claimId: claim.id,
+        reason: 'Split cancelled before receipt',
+        expectedVersion: claim.portions_version,
+      });
+      toast.success('Payment split cancelled');
+      setConfirmSplitCancellation(false);
+    } catch (portionError) {
+      toast.error(portionError instanceof Error ? portionError.message : 'Failed to cancel payment split');
+    }
+  }
+
+  async function handleReceivePortionPayment(payment: PortionPaymentInput) {
+    if (!claim || !portionsReady || !canManagePortions || !canUseReceiptControls) {
+      throw new Error('Payment access has changed. Reload the claim before recording a receipt.');
+    }
+    await recordPaymentMut.mutateAsync({ claimId: claim.id, ...payment });
+    toast.success('Receipt recorded');
   }
 
   return (
@@ -345,15 +474,100 @@ export default function ClaimDetailsSheet({
               <div className="text-xs text-slate-500 mt-1">Total billed amount</div>
             </section>
 
+            {!portionsReady ? (
+              <section className="space-y-3" aria-live="polite">
+                {portionsQuery.isLoading ? (
+                  <>
+                    <p className="text-sm text-slate-500">Loading payment workflow…</p>
+                    <Skeleton className="h-56 w-full" />
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-rose-600">Unable to load payment portions.</p>
+                    <Button type="button" className={secondaryBtn} aria-label="Retry portion loading" onClick={() => portionsQuery.refetch()}>
+                      Retry
+                    </Button>
+                  </>
+                )}
+              </section>
+            ) : (
+              <>
+                {isSplitClaim ? (
+                  <>
+                <section className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                  <Field label="Status" value={status[0].toUpperCase() + status.slice(1)} />
+                  <Field label="Remarks" value={remarks || '—'} />
+                </section>
+                <PanelClaimPortions
+                  portions={resolvedPortions}
+                  canReceivePayments={canManagePortions && canUseReceiptControls}
+                  onReceivePayment={handleReceivePortionPayment}
+                />
+                {canEditPortions && (
+                  <section className="space-y-3">
+                    {showPortionEditor ? (
+                      <PanelClaimPortionEditor
+                        claimAmount={billed}
+                        initialPortions={editorPortions}
+                        resetKey={claim?.id}
+                        disabled={replacePortionsMut.isPending}
+                        onConfirm={handleConfirmPortions}
+                        onCancel={() => setShowPortionEditor(false)}
+                      />
+                    ) : (
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button type="button" className={secondaryBtn} onClick={() => setShowPortionEditor(true)}>
+                          Edit payment split
+                        </Button>
+                        <Button type="button" variant="destructive" onClick={() => setConfirmSplitCancellation(true)}>
+                          Cancel split
+                        </Button>
+                      </div>
+                    )}
+                  </section>
+                )}
+                {canManagePortions && hasPortionReceipt && (
+                  <p className="text-sm text-slate-500">Portion allocation is locked after a receipt.</p>
+                )}
+                  </>
+                ) : (
+                  <>
+                {canManagePortions && canUseReceiptControls && (
+                  <section className="space-y-3">
+                    {showPortionEditor ? (
+                      <PanelClaimPortionEditor
+                        claimAmount={billed}
+                        initialPortions={editorPortions}
+                        resetKey={claim?.id}
+                        disabled={replacePortionsMut.isPending}
+                        onConfirm={handleConfirmPortions}
+                        onCancel={() => setShowPortionEditor(false)}
+                      />
+                    ) : (
+                      <Button type="button" className={secondaryBtn} onClick={() => setShowPortionEditor(true)}>
+                        Split payment
+                      </Button>
+                    )}
+                  </section>
+                )}
+                  </>
+                )}
             <section className="space-y-2">
               <Label className={fieldLabel}>Status</Label>
               <Select value={status} onValueChange={(v) => handleStatusChange(v as PanelClaimStatus)}>
-                <SelectTrigger className={cn(softInput, 'h-11')}>
+                <SelectTrigger className={cn(softInput, 'h-11')} aria-label="Claim status" disabled={!canEditWorkflow}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {STATUSES.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
+                    <SelectItem
+                      key={s.value}
+                      value={s.value}
+                      disabled={isSplitClaim && (
+                        s.value === 'received'
+                        || (hasPortionReceipt && (s.value === 'rejected' || s.value === 'cancelled'))
+                      )}
+                    >
                       {s.label}
                     </SelectItem>
                   ))}
@@ -408,7 +622,7 @@ export default function ClaimDetailsSheet({
               </section>
             )}
 
-            {status === 'received' && (
+            {status === 'received' && !isSplitClaim && (
               <section className="space-y-3">
                 <div className="space-y-2">
                   <Label className={fieldLabel}>Payment Reference *</Label>
@@ -468,7 +682,7 @@ export default function ClaimDetailsSheet({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
+                disabled={uploading || !canEditWorkflow}
                 className={cn(
                   'w-full rounded-xl border-2 border-dashed border-slate-200 bg-slate-50',
                   'hover:border-blue-400 hover:bg-blue-50/50 transition-colors',
@@ -509,21 +723,39 @@ export default function ClaimDetailsSheet({
                 variant="ghost"
                 className={secondaryBtn}
                 onClick={() => onOpenChange(false)}
-                disabled={updateMut.isPending}
+                disabled={updateMut.isPending || !canEditWorkflow}
               >
                 Cancel
               </Button>
               <Button
                 className={primaryBtn}
                 onClick={handleSave}
-                disabled={updateMut.isPending}
+                disabled={updateMut.isPending || !canEditWorkflow}
               >
                 {updateMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                 Save Changes
               </Button>
             </div>
+              </>
+            )}
           </div>
         </div>
+        <AlertDialog open={confirmSplitCancellation && canEditPortions && isSplitClaim} onOpenChange={setConfirmSplitCancellation}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Cancel this payment split?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will return the claim to its single-payment workflow. This action is only available before any receipt is recorded.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={cancelPortionsMut.isPending}>Keep split</AlertDialogCancel>
+              <AlertDialogAction onClick={handleCancelSplit} disabled={cancelPortionsMut.isPending || !canEditPortions}>
+                {cancelPortionsMut.isPending ? 'Cancelling…' : 'Cancel split'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </SheetContent>
     </Sheet>
   );

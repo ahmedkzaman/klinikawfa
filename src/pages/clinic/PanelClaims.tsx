@@ -38,12 +38,15 @@ import {
   usePanelClaims,
   usePanelClaimsSummary,
   useBulkMarkClaimsSubmitted,
+  usePanelClaimPortionCounts,
   PANEL_CLAIMS_PAGE_SIZE,
   type PanelClaimRow,
   type PanelClaimStatus,
   type PanelClaimsTab,
+  getPanelClaimBalances,
 } from '@/hooks/clinic/usePanelClaims';
 import ClaimDetailsSheet from '@/components/clinic/claims/ClaimDetailsSheet';
+import { isPayablePanelClaimStatus } from '@/lib/clinic/panelClaimPortions';
 
 const TABS: Array<{ key: PanelClaimsTab; label: string }> = [
   { key: 'all', label: 'All' },
@@ -91,23 +94,32 @@ function Dot({ className }: { className: string }) {
 export default function PanelClaims() {
   const [tab, setTab] = useState<PanelClaimsTab>('all');
   const [page, setPage] = useState(0);
-  const [activeClaim, setActiveClaim] = useState<PanelClaimRow | null>(null);
+  const [activeClaimId, setActiveClaimId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const { data: claims, isLoading } = usePanelClaims(tab, page);
   const { data: summary } = usePanelClaimsSummary();
   const bulkMark = useBulkMarkClaimsSubmitted();
 
-  const rows = claims?.rows ?? [];
+  const rows = useMemo(() => claims?.rows ?? [], [claims?.rows]);
+  const { data: portionCounts = {} } = usePanelClaimPortionCounts(rows.map((row) => row.id));
   const total = claims?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PANEL_CLAIMS_PAGE_SIZE));
+  const activeClaim = activeClaimId
+    ? rows.find((row) => row.id === activeClaimId) ?? null
+    : null;
 
   // Reset selection whenever the visible page changes
   useEffect(() => {
     setSelectedIds(new Set());
   }, [tab, page]);
 
-  const visibleIds = useMemo(() => rows.map((r) => r.id), [rows]);
+  const visibleIds = useMemo(
+    () => rows
+      .filter((row) => isPayablePanelClaimStatus(row.status))
+      .map((row) => row.id),
+    [rows],
+  );
   const allVisibleSelected =
     visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
   const someVisibleSelected =
@@ -332,10 +344,11 @@ export default function PanelClaims() {
                       <ClaimRow
                         key={row.id}
                         row={row}
-                        activeTab={tab}
+                        portionCount={portionCounts[row.id] ?? 0}
                         isSelected={selectedIds.has(row.id)}
+                        canSelect={isPayablePanelClaimStatus(row.status)}
                         onToggle={() => toggleRow(row.id)}
-                        onOpen={() => setActiveClaim(row)}
+                        onOpen={() => setActiveClaimId(row.id)}
                       />
                     ))
                   )}
@@ -379,7 +392,7 @@ export default function PanelClaims() {
         claim={activeClaim}
         open={activeClaim !== null}
         onOpenChange={(open) => {
-          if (!open) setActiveClaim(null);
+          if (!open) setActiveClaimId(null);
         }}
       />
     </div>
@@ -388,22 +401,20 @@ export default function PanelClaims() {
 
 function ClaimRow({
   row,
-  activeTab,
+  portionCount,
   isSelected,
+  canSelect,
   onToggle,
   onOpen,
 }: {
   row: PanelClaimRow;
-  activeTab: PanelClaimsTab;
+  portionCount: number;
   isSelected: boolean;
+  canSelect: boolean;
   onToggle: () => void;
   onOpen: () => void;
 }) {
-  const displayAmount = row.received_amount ?? row.amount;
-  const showClaimedSuffix =
-    activeTab === 'received' &&
-    row.received_amount !== null &&
-    row.received_amount !== row.amount;
+  const balances = getPanelClaimBalances(row);
 
   const updatedBy =
     row.updater?.full_name ?? row.updater?.email ?? '—';
@@ -438,22 +449,24 @@ function ClaimRow({
         className="w-10"
         onClick={(e) => {
           e.stopPropagation();
-          onToggle();
+          if (canSelect) onToggle();
         }}
       >
         <Checkbox
           checked={isSelected}
+          disabled={!canSelect}
           onCheckedChange={onToggle}
           aria-label={`Select claim ${row.claim_no}`}
           onClick={(e) => e.stopPropagation()}
         />
       </TableCell>
       <TableCell className="text-right tabular-nums font-semibold text-slate-800">
-        {formatRM(displayAmount)}
-        {showClaimedSuffix && (
-          <span className="text-slate-400 ml-1 text-xs font-normal">
-            (claimed: {formatRM(row.amount)})
-          </span>
+        <div>{formatRM(row.amount)}</div>
+        <div className="mt-0.5 text-xs font-normal text-slate-500">
+          Received {formatRM(balances.received)} · Outstanding {formatRM(balances.outstanding)}
+        </div>
+        {portionCount >= 2 && (
+          <div className="mt-1 text-xs font-semibold text-blue-700">Split · {portionCount} portions</div>
         )}
       </TableCell>
       <TableCell className="font-mono text-xs text-slate-700">{row.claim_no}</TableCell>

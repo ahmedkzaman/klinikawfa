@@ -1,5 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  malaysiaTodayIso,
+  type PanelClaimPortion,
+  type PanelClaimPortionDraft,
+  type PanelClaimPortionStatus,
+} from '@/lib/clinic/panelClaimPortions';
 
 export const PANEL_CLAIMS_PAGE_SIZE = 50;
 
@@ -30,6 +36,7 @@ export interface PanelClaimRow {
   remarks: string | null;
   created_at: string;
   is_overdue: boolean;
+  portions_version: number;
   queue_entry_id: string | null;
   insurance_providers: { id: string; name: string } | null;
   patients: { id: string; name: string; reg_no: string | null } | null;
@@ -59,7 +66,7 @@ const PANEL_CLAIMS_SELECT = `
   id, claim_no, amount, received_amount, status, claim_date, due_date,
   submitted_date, approved_amount, write_off_amount,
   payment_reference, received_date, gl_document_url,
-  remarks, created_at, is_overdue, queue_entry_id,
+  remarks, created_at, is_overdue, portions_version, queue_entry_id,
   insurance_providers:panel_id ( id, name ),
   patients:patient_id ( id, name, reg_no ),
   updater:profiles!fk_panel_claims_updated_by ( id, full_name, email )
@@ -270,25 +277,22 @@ export function useUpdatePanelClaim() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (payload: UpdateClaimPayload) => {
-      const { id, ...rest } = payload;
-      const { data: auth } = await supabase.auth.getUser();
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const patch: Record<string, any> = { ...rest, updated_by: auth.user?.id ?? null };
-
-      // Auto-stamp dates on transition if caller didn't supply them
-      const today = new Date().toISOString().slice(0, 10);
-      if (rest.status === 'submitted' && !('submitted_date' in rest)) {
-        patch.submitted_date = today;
-      }
-      if (rest.status === 'received' && !('received_date' in rest)) {
-        patch.received_date = today;
-      }
-
-      const { error } = await supabase
-        .from('panel_claims')
-        .update(patch)
-        .eq('id', id);
+      const submittedDate = payload.submitted_date
+        ?? (payload.status === 'submitted' ? malaysiaTodayIso() : null);
+      const receivedDate = payload.received_date
+        ?? (payload.status === 'received' ? malaysiaTodayIso() : null);
+      const { error } = await supabase.rpc('update_panel_claim_workflow', {
+        p_panel_claim_id: payload.id,
+        p_status: payload.status ?? null,
+        p_submitted_date: submittedDate,
+        p_approved_amount: payload.approved_amount ?? null,
+        p_payment_reference: payload.payment_reference ?? null,
+        p_received_date: receivedDate,
+        p_received_amount: payload.received_amount ?? null,
+        p_remarks: payload.remarks ?? null,
+        p_gl_document_url: payload.gl_document_url ?? null,
+        p_due_date: payload.due_date ?? null,
+      });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -310,23 +314,174 @@ export function useBulkMarkClaimsSubmitted() {
   return useMutation({
     mutationFn: async (ids: string[]) => {
       if (ids.length === 0) return 0;
-      const today = new Date().toISOString().slice(0, 10);
-      const { data: auth } = await supabase.auth.getUser();
-      const { error } = await supabase
-        .from('panel_claims')
-        .update({
-          status: 'submitted',
-          submitted_date: today,
-          updated_by: auth.user?.id ?? null,
-        })
-        .in('id', ids);
+      const today = malaysiaTodayIso();
+      const { data, error } = await supabase.rpc('bulk_submit_panel_claims', {
+        p_panel_claim_ids: ids,
+        p_submitted_date: today,
+      });
       if (error) throw error;
-      return ids.length;
+      return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['panel_claims'] });
       qc.invalidateQueries({ queryKey: ['panel_claims_summary'] });
     },
+  });
+}
+
+export function getPanelClaimBalances(row: Pick<PanelClaimRow, 'amount' | 'received_amount'>) {
+  const amount = Number(row.amount ?? 0);
+  const received = Math.max(Number(row.received_amount ?? 0), 0);
+  return {
+    received,
+    outstanding: Math.max(amount - received, 0),
+  };
+}
+
+// ---------- Payment portions ----------
+
+function normalizePanelClaimPortion(
+  portion: Omit<PanelClaimPortion, 'status'> & { status: string },
+): PanelClaimPortion {
+  return {
+    ...portion,
+    amount: Number(portion.amount),
+    received_amount: Number(portion.received_amount),
+    status: portion.status as PanelClaimPortionStatus,
+  };
+}
+
+function invalidatePanelFinanceQueries(
+  qc: ReturnType<typeof useQueryClient>,
+  claimId: string,
+) {
+  qc.invalidateQueries({ queryKey: ['panel_claims'] });
+  qc.invalidateQueries({ queryKey: ['panel_claims_summary'] });
+  qc.invalidateQueries({ queryKey: ['panel_claim_portions', claimId] });
+  qc.invalidateQueries({ queryKey: ['panel_claim_portion_counts'] });
+  qc.invalidateQueries({ queryKey: ['financial-control'] });
+  qc.invalidateQueries({ queryKey: ['clinic-health'] });
+}
+
+export function usePanelClaimPortions(claimId: string | null | undefined) {
+  return useQuery({
+    enabled: Boolean(claimId),
+    queryKey: ['panel_claim_portions', claimId],
+    queryFn: async (): Promise<PanelClaimPortion[]> => {
+      const { data, error } = await supabase
+        .from('panel_claim_portions')
+        .select('*')
+        .eq('panel_claim_id', claimId!)
+        .order('portion_no');
+      if (error) throw error;
+      return (data ?? []).map(normalizePanelClaimPortion);
+    },
+  });
+}
+
+export function usePanelClaimPortionCounts(claimIds: string[]) {
+  const stableClaimIds = [...claimIds].sort();
+  return useQuery({
+    enabled: stableClaimIds.length > 0,
+    queryKey: ['panel_claim_portion_counts', stableClaimIds],
+    queryFn: async (): Promise<Record<string, number>> => {
+      const { data, error } = await supabase
+        .from('panel_claim_portions')
+        .select('panel_claim_id')
+        .in('panel_claim_id', stableClaimIds);
+      if (error) throw error;
+      return (data ?? []).reduce<Record<string, number>>((counts, portion) => {
+        counts[portion.panel_claim_id] = (counts[portion.panel_claim_id] ?? 0) + 1;
+        return counts;
+      }, Object.fromEntries(stableClaimIds.map((claimId) => [claimId, 0])));
+    },
+  });
+}
+
+export interface ReplacePanelClaimPortionsPayload {
+  claimId: string;
+  portions: PanelClaimPortionDraft[];
+  reason: string;
+  expectedVersion: number;
+}
+
+export function useReplacePanelClaimPortions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      claimId,
+      portions,
+      reason,
+      expectedVersion,
+    }: ReplacePanelClaimPortionsPayload) => {
+      const { data, error } = await supabase.rpc('replace_panel_claim_portions', {
+        p_panel_claim_id: claimId,
+        p_portions: portions.map(({ amount, remark }) => ({ amount: Number(amount), remark })),
+        p_reason: reason,
+        p_expected_version: expectedVersion,
+      });
+      if (error) throw error;
+      return (data ?? []).map(normalizePanelClaimPortion);
+    },
+    onSuccess: (_, { claimId }) => invalidatePanelFinanceQueries(qc, claimId),
+  });
+}
+
+export interface CancelPanelClaimPortionsPayload {
+  claimId: string;
+  reason: string;
+  expectedVersion: number;
+}
+
+export function useCancelPanelClaimPortions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ claimId, reason, expectedVersion }: CancelPanelClaimPortionsPayload) => {
+      const { error } = await supabase.rpc('cancel_panel_claim_portions', {
+        p_panel_claim_id: claimId,
+        p_reason: reason,
+        p_expected_version: expectedVersion,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_, { claimId }) => invalidatePanelFinanceQueries(qc, claimId),
+  });
+}
+
+export interface RecordPanelClaimPortionPaymentPayload {
+  claimId: string;
+  portionId: string;
+  amount: number;
+  receivedDate: string;
+  paymentReference: string;
+  remark: string;
+  idempotencyKey: string;
+}
+
+export function useRecordPanelClaimPortionPayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      claimId: _claimId,
+      portionId,
+      amount,
+      receivedDate,
+      paymentReference,
+      remark,
+      idempotencyKey,
+    }: RecordPanelClaimPortionPaymentPayload) => {
+      const { data, error } = await supabase.rpc('record_panel_claim_portion_payment', {
+        p_portion_id: portionId,
+        p_amount: amount,
+        p_received_date: receivedDate,
+        p_payment_reference: paymentReference,
+        p_remark: remark,
+        p_idempotency_key: idempotencyKey,
+      });
+      if (error) throw error;
+      return normalizePanelClaimPortion(data);
+    },
+    onSuccess: (_, { claimId }) => invalidatePanelFinanceQueries(qc, claimId),
   });
 }
 

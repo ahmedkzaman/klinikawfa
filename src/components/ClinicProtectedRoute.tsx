@@ -9,6 +9,7 @@ interface ClinicProtectedRouteProps {
     | 'clinical'
     | 'clinical_staff'
     | 'ops_or_admin'
+    | 'billing_or_purchaser'
     | 'special_admin'
     | 'admin'
     | 'insights';
@@ -83,6 +84,8 @@ export function ClinicProtectedRoute({
   const hasAccess =
     requiredRole === 'any_staff'
       ? passesAnyStaff
+      : requiredRole === 'billing_or_purchaser'
+        ? isOpsOrAdmin || role === 'purchaser'
       : requiredRole === 'special_admin'
         ? isSpecialAdmin
         : requiredRole === 'admin'

@@ -308,7 +308,7 @@ const App = () => (
                 <Route
                   path="dispensary"
                   element={
-                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                    <ClinicProtectedRoute requiredRole="billing_or_purchaser">
                       <Dispensary />
                     </ClinicProtectedRoute>
                   }
@@ -340,7 +340,7 @@ const App = () => (
                 <Route
                   path="queue/checkout/:queueEntryId"
                   element={
-                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                    <ClinicProtectedRoute requiredRole="billing_or_purchaser">
                       <DispenseCheckout />
                     </ClinicProtectedRoute>
                   }
@@ -357,7 +357,7 @@ const App = () => (
                 <Route
                   path="panel-claims"
                   element={
-                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                    <ClinicProtectedRoute requiredRole="billing_or_purchaser">
                       <PanelClaims />
                     </ClinicProtectedRoute>
                   }

@@ -1,3 +1,5 @@
+DROP FUNCTION IF EXISTS public.get_doctor_clinical_activity(date, date);
+
 CREATE OR REPLACE FUNCTION public.get_doctor_clinical_activity(
   _start_date date,
   _end_date date

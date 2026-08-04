@@ -107,10 +107,10 @@ export function doctorClinicalActivityCsv(
       row.activityKind,
       row.activityName,
       row.patientName,
+      doctorActivityQueueLabel(row),
       row.unitPrice ?? '',
       row.quantity ?? '',
       row.totalPrice ?? '',
-      doctorActivityQueueLabel(row),
     ].map(csvField).join(',')),
   );
 

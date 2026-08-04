@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle2, Info, Printer, FileText, FilePlus2, Pencil, Tr
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -83,6 +84,13 @@ import {
 } from '@/lib/clinic/dispensaryPayer';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { PanelClaimPortionEditor } from '@/components/clinic/claims/PanelClaimPortionEditor';
+import {
+  canManagePanelClaimPortions,
+  summarizePortions,
+  type PanelClaimPortionDraft,
+} from '@/lib/clinic/panelClaimPortions';
 import {
   Select,
   SelectContent,
@@ -114,10 +122,20 @@ type ConsultationItemWithInventoryDefaults = ConsultationItemRow & {
   } | null;
 };
 
+function createDefaultPanelPortions(amount: number): PanelClaimPortionDraft[] {
+  const totalCents = Math.round(amount * 100);
+  const firstCents = Math.floor(totalCents / 2);
+  const secondCents = totalCents - firstCents;
+  return [firstCents, secondCents].map((cents) => ({
+    amount: (cents / 100).toFixed(2),
+    remark: '',
+  }));
+}
+
 export default function DispenseCheckout() {
   const { queueEntryId } = useParams<{ queueEntryId: string }>();
   const navigate = useNavigate();
-  const { isLocum } = useAuth();
+  const { isLocum, role } = useAuth();
 
   const { data: entries = [], isLoading: entriesLoading } =
     useConsultationQueueEntries();
@@ -137,6 +155,12 @@ export default function DispenseCheckout() {
   const [panelCoveredInput, setPanelCoveredInput] = useState<string>('');
   const [payerSelection, setPayerSelection] = useState<DispensaryPayerType>('self');
   const [selectedPanelId, setSelectedPanelId] = useState<string>('');
+  const [splitPanelPayment, setSplitPanelPayment] = useState(false);
+  const [panelPortions, setPanelPortions] = useState<PanelClaimPortionDraft[]>([]);
+  const [splitConfirmed, setSplitConfirmed] = useState(false);
+  const [splitEditorOpen, setSplitEditorOpen] = useState(false);
+  const [splitEditorResetKey, setSplitEditorResetKey] = useState(0);
+  const checkoutIdempotencyKeyRef = useRef<string | null>(null);
   const handleChargesChange = useCallback((c: SelectedCharge[]) => {
     setSelectedCharges(c);
   }, []);
@@ -172,6 +196,7 @@ export default function DispenseCheckout() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const clinicStatus = (entry as any)?.clinic_status as string | null | undefined;
   const dispensaryCanEdit = canEditDispensary(isLocum, clinicStatus, canEdit);
+  const canSplitPanelPayment = canManagePanelClaimPortions(role);
 
 
   // Panel billing context: name + medication discount % drive the
@@ -304,28 +329,33 @@ export default function DispenseCheckout() {
     }
   }, [entry, queueEntryId, updateQueue]);
 
-  const subtotal = useMemo(
+  const subtotalCents = useMemo(
     () =>
-      items.reduce((acc, item) => {
+      Math.round(items.reduce((acc, item) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const dispensed = (item as any).dispensed_qty as number | null;
         const qty =
           dispensed != null && item.item_id ? dispensed : Number(item.quantity ?? 0);
         return acc + Number(item.price ?? 0) * qty;
-      }, 0),
+      }, 0) * 100),
     [items],
   );
-  const paid = useMemo(
-    () => payments.reduce((acc, p) => acc + Number(p.amount ?? 0), 0),
+  const paidCents = useMemo(
+    () => Math.round(payments.reduce((acc, p) => acc + Number(p.amount ?? 0), 0) * 100),
     [payments],
   );
-  const otherChargesTotal = useMemo(
-    () => selectedCharges.reduce((acc, c) => acc + Number(c.amount ?? 0), 0),
+  const otherChargesCents = useMemo(
+    () => Math.round(
+      selectedCharges.reduce((acc, c) => acc + Number(c.amount ?? 0), 0) * 100,
+    ),
     [selectedCharges],
   );
-  const outstanding = Math.max(subtotal - paid, 0);
+  const outstandingCents = Math.max(subtotalCents - paidCents, 0);
+  const outstanding = outstandingCents / 100;
+  const otherChargesTotal = otherChargesCents / 100;
   // Grand total = items still owed + extra charges (replaces previous `totalDue`).
-  const grandTotal = Math.max(outstanding + otherChargesTotal, 0);
+  const grandTotalCents = Math.max(outstandingCents + otherChargesCents, 0);
+  const grandTotal = grandTotalCents / 100;
 
   // --- Panel coverage split ------------------------------------------------
   // Default: if a panel is attached, the panel covers the full grand total
@@ -342,7 +372,10 @@ export default function DispenseCheckout() {
     if (userEditedPanelRef.current) {
       // Respect the staff's manual coverage value, but clamp to grandTotal.
       setPanelCoveredAmount((prev) => {
-        const clamped = Math.min(Math.max(prev, 0), grandTotal);
+        const clamped = Math.min(
+          Math.max(Math.round(prev * 100), 0),
+          grandTotalCents,
+        ) / 100;
         if (clamped !== prev) setPanelCoveredInput(clamped.toFixed(2));
         return clamped;
       });
@@ -350,9 +383,45 @@ export default function DispenseCheckout() {
     }
     setPanelCoveredAmount(grandTotal);
     setPanelCoveredInput(grandTotal.toFixed(2));
-  }, [panelId, grandTotal]);
+  }, [panelId, grandTotal, grandTotalCents]);
 
-  const patientDue = Math.max(grandTotal - panelCoveredAmount, 0);
+  const panelCoveredCents = Math.min(
+    Math.max(Math.round(panelCoveredAmount * 100), 0),
+    grandTotalCents,
+  );
+  const patientDueCents = Math.max(grandTotalCents - panelCoveredCents, 0);
+  const patientDue = patientDueCents / 100;
+
+  const previousSplitCoverageRef = useRef(panelCoveredAmount);
+  useEffect(() => {
+    if (!splitPanelPayment) {
+      previousSplitCoverageRef.current = panelCoveredAmount;
+      return;
+    }
+    if (Math.round(previousSplitCoverageRef.current * 100) === Math.round(panelCoveredAmount * 100)) {
+      return;
+    }
+    previousSplitCoverageRef.current = panelCoveredAmount;
+    setPanelPortions(createDefaultPanelPortions(panelCoveredAmount));
+    setSplitConfirmed(false);
+    setSplitEditorResetKey((current) => current + 1);
+    setSplitEditorOpen(true);
+  }, [panelCoveredAmount, splitPanelPayment]);
+
+  useEffect(() => {
+    if (panelId && canSplitPanelPayment) return;
+    setSplitPanelPayment(false);
+    setPanelPortions([]);
+    setSplitConfirmed(false);
+    setSplitEditorOpen(false);
+  }, [canSplitPanelPayment, panelId]);
+
+  const splitSummary = useMemo(
+    () => summarizePortions(panelPortions, panelCoveredAmount),
+    [panelCoveredAmount, panelPortions],
+  );
+  const panelSplitReady =
+    !splitPanelPayment || (splitConfirmed && !splitEditorOpen && splitSummary.valid);
 
   const [printPaymentId, setPrintPaymentId] = useState<string | null>(null);
   const latestPaymentId = useMemo(() => {
@@ -388,9 +457,12 @@ export default function DispenseCheckout() {
   }, [patientDue]);
 
   const amountPaidNum = parseFloat(amountPaidInput);
-  const safeAmountPaid = Number.isFinite(amountPaidNum) ? Math.max(amountPaidNum, 0) : 0;
-  const balanceDue = Math.max(patientDue - safeAmountPaid, 0);
-  const isOverpay = safeAmountPaid > patientDue + 0.01;
+  const amountPaidCents = Number.isFinite(amountPaidNum)
+    ? Math.max(Math.round(amountPaidNum * 100), 0)
+    : 0;
+  const safeAmountPaid = amountPaidCents / 100;
+  const balanceDue = Math.max(patientDueCents - amountPaidCents, 0) / 100;
+  const isOverpay = amountPaidCents > patientDueCents;
 
   /**
    * Single source of truth for whether the Checkout button is allowed to fire.
@@ -400,6 +472,7 @@ export default function DispenseCheckout() {
     if (anyPartialMissingReason) return false;
     if (!consultation?.id) return false;
     if (checkoutPending) return false;
+    if (!panelSplitReady) return false;
     if (patientDue > 0 && isOverpay) return false;
     if (patientDue > 0 && safeAmountPaid <= 0) return false;
     if (patientDue > 0 && !paymentMethod) return false;
@@ -410,11 +483,27 @@ export default function DispenseCheckout() {
     anyPartialMissingReason,
     consultation?.id,
     checkoutPending,
+    panelSplitReady,
     isOverpay,
     patientDue,
     safeAmountPaid,
     paymentMethod,
   ]);
+
+  function setPanelSplitEnabled(enabled: boolean) {
+    setSplitPanelPayment(enabled);
+    if (!enabled) {
+      setPanelPortions([]);
+      setSplitConfirmed(false);
+      setSplitEditorOpen(false);
+      return;
+    }
+    previousSplitCoverageRef.current = panelCoveredAmount;
+    setPanelPortions(createDefaultPanelPortions(panelCoveredAmount));
+    setSplitConfirmed(false);
+    setSplitEditorResetKey((current) => current + 1);
+    setSplitEditorOpen(true);
+  }
 
   const handlePrintLabels = useCallback(() => {
     const labelRows = (items as ConsultationItemWithInventoryDefaults[])
@@ -512,6 +601,7 @@ export default function DispenseCheckout() {
     setCheckoutPending(true);
     try {
       const isPanelOnly = patientDue === 0 && !!panelId;
+      checkoutIdempotencyKeyRef.current ??= crypto.randomUUID();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rpcArgs: any = {
         p_queue_entry_id: queueEntryId,
@@ -526,6 +616,14 @@ export default function DispenseCheckout() {
           amount: c.amount,
         })),
         p_notes: null,
+        p_panel_covered_amount: panelId ? panelCoveredAmount : null,
+        p_panel_portions: splitPanelPayment
+          ? panelPortions.map(({ amount, remark }) => ({
+            amount: Number(amount),
+            remark,
+          }))
+          : null,
+        p_checkout_idempotency_key: checkoutIdempotencyKeyRef.current,
       };
       const { data, error } = await supabase.rpc('checkout_visit', rpcArgs);
       if (error) throw error;
@@ -540,6 +638,14 @@ export default function DispenseCheckout() {
       qc.invalidateQueries({ queryKey: ['consultation', queueEntryId] });
       qc.invalidateQueries({ queryKey: ['consultation_items', consultation.id] });
       qc.invalidateQueries({ queryKey: ['queue_entries'] });
+      qc.invalidateQueries({ queryKey: ['panel_claims'] });
+      qc.invalidateQueries({ queryKey: ['panel_claims_summary'] });
+
+      const successMessage = isPanelOnly
+        ? 'Panel checkout completed'
+        : result.status === 'paid'
+          ? 'Payment recorded - Visit checked out'
+          : `Partial payment recorded - Balance RM ${Number(result.balance_due ?? balanceDue).toFixed(2)} carried as debt`;
 
       if (isPanelOnly) {
         toast.success('Panel checkout completed');
@@ -553,7 +659,8 @@ export default function DispenseCheckout() {
       // RPC now closes the ticket on both paid and partial — always return to queue.
       navigate('/clinic/queue');
     } catch (err) {
-      toast.error((err as Error).message);
+      const message = err instanceof Error ? err.message : 'Checkout failed';
+      toast.error(message);
     } finally {
       setCheckoutPending(false);
     }
@@ -938,13 +1045,40 @@ export default function DispenseCheckout() {
                   setPanelCoveredInput(raw);
                   const n = parseFloat(raw);
                   const clamped = Number.isFinite(n)
-                    ? Math.min(Math.max(n, 0), grandTotal)
+                    ? Math.min(Math.max(Math.round(n * 100), 0), grandTotalCents) / 100
                     : 0;
                   setPanelCoveredAmount(clamped);
                   // Reset cashier-entered amount so it auto-syncs to the new patientDue.
                   userEditedAmountRef.current = false;
                 }}
               />
+            </div>
+          )}
+
+          {panelId && canSplitPanelPayment && (
+            <div className="flex min-h-9 items-center gap-2">
+              <Switch
+                id="split-panel-payment"
+                aria-label="Split panel payment"
+                checked={splitPanelPayment}
+                disabled={!dispensaryCanEdit || panelCoveredAmount < 0.02 || checkoutPending}
+                onCheckedChange={setPanelSplitEnabled}
+              />
+              <Label htmlFor="split-panel-payment" className="whitespace-nowrap text-xs text-slate-600">
+                Split panel payment
+              </Label>
+              {splitPanelPayment && splitConfirmed && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  aria-label="Edit panel payment portions"
+                  onClick={() => setSplitEditorOpen(true)}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              )}
             </div>
           )}
 
@@ -1061,6 +1195,46 @@ export default function DispenseCheckout() {
         onOpenChange={(o) => !o && setPrintPaymentId(null)}
         paymentId={printPaymentId}
       />
+
+      <Dialog
+        open={splitEditorOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setSplitEditorOpen(true);
+          } else if (splitConfirmed) {
+            setSplitEditorOpen(false);
+          } else {
+            setPanelSplitEnabled(false);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="sr-only">Split panel payment</DialogTitle>
+            <DialogDescription className="sr-only">
+              Divide the panel-covered amount into two or more payment portions.
+            </DialogDescription>
+          </DialogHeader>
+          <PanelClaimPortionEditor
+            claimAmount={panelCoveredAmount}
+            initialPortions={panelPortions}
+            resetKey={splitEditorResetKey}
+            disabled={checkoutPending}
+            onConfirm={(portions) => {
+              setPanelPortions(portions.map((portion) => ({
+                amount: portion.amount.toFixed(2),
+                remark: portion.remark,
+              })));
+              setSplitConfirmed(true);
+              setSplitEditorOpen(false);
+            }}
+            onCancel={() => {
+              if (splitConfirmed) setSplitEditorOpen(false);
+              else setPanelSplitEnabled(false);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
 
       <IssueDocumentModal
         isOpen={!!issuingTemplate || !!editingDoc}

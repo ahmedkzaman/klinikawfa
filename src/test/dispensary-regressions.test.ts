@@ -10,7 +10,18 @@ const checkoutPage = readFileSync(
 describe('dispensary regressions', () => {
   test('matches the live checkout_visit RPC signature', () => {
     expect(checkoutPage).toContain("supabase.rpc('checkout_visit', rpcArgs)");
-    expect(checkoutPage).not.toContain('p_panel_covered_amount');
+    expect(checkoutPage).toContain('p_panel_covered_amount');
+    expect(checkoutPage).toContain('p_panel_portions');
+    expect(checkoutPage).toContain('p_checkout_idempotency_key');
+  });
+
+  test('persists checkout and portions in one authoritative transaction', () => {
+    expect(checkoutPage).not.toContain('useSetCheckoutPanelClaimPortions');
+    expect(checkoutPage).not.toContain('useReplacePanelClaimPortions');
+    expect(checkoutPage).not.toContain('pendingPanelSplit');
+    expect(checkoutPage).not.toContain('Retry saving split');
+    expect(checkoutPage).not.toContain("from('panel_claims')");
+    expect(checkoutPage).not.toContain('.update({ amount: panelCoveredAmount })');
   });
 
   test('prints labels through the shared PDF generator path', () => {

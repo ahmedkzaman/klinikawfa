@@ -14,6 +14,10 @@ const migrationPath = resolve(
   process.cwd(),
   'supabase/migrations/20260803100000_add_financial_control_reports.sql',
 );
+const portionMigrationPath = resolve(
+  process.cwd(),
+  'supabase/migrations/20260804120000_add_panel_claim_payment_portions.sql',
+);
 const postgresBin = process.env.POSTGRES_BIN
   ?? 'C:/Users/ahmed/Documents/Codex/tools/postgresql/17.10/pgsql/bin';
 const postgresTools = {
@@ -62,8 +66,40 @@ describe('financial control reporting migration', () => {
     expect(factFunctionSql).not.toMatch(/public\.package_items/i);
   });
 
+  it('reconciles split claim receipts without changing public report shapes', () => {
+    const sql = readFileSync(portionMigrationPath, 'utf8');
+
+    expect(sql).toMatch(
+      /create or replace function private\.capture_financial_panel_claim_portion_receipt_event/i,
+    );
+    expect(sql).toMatch(
+      /after insert on public\.panel_claim_portion_receipts[\s\S]*capture_financial_panel_claim_portion_receipt_event/is,
+    );
+    expect(sql).toMatch(
+      /v_is_split := exists \([\s\S]*from public\.panel_claim_portions[\s\S]*if v_is_split and tg_op = 'update' then\s+v_delta := 0/is,
+    );
+    expect(sql).toMatch(
+      /'reassignment_out'[\s\S]*case when v_is_split then 0 else -v_before_received end/is,
+    );
+    expect(sql).toMatch(
+      /'reassignment_in'[\s\S]*case when v_is_split then 0 else v_after_received end/is,
+    );
+    expect(sql).toMatch(
+      /sum\(\s*greatest\(\s*portion\.amount - coalesce\(receipts\.received_amount, 0\),\s*0\s*\)\s*\)/i,
+    );
+    expect(sql).toMatch(
+      /child_cash[\s\S]*private\.financial_panel_claim_events[\s\S]*event\.queue_entry_id = fact\.queue_entry_id[\s\S]*event\.event_kind = 'receipt'/is,
+    );
+    expect(sql).toMatch(
+      /create or replace function public\.get_clinic_health_metrics[\s\S]*panel_claim_portions/is,
+    );
+    expect(sql).not.toMatch(
+      /create or replace function public\.get_financial_control_(summary|details)/i,
+    );
+  });
+
   it.skipIf(!requiresPostgresTest)(
-    'reconciles facts and public reports in disposable PostgreSQL',
+    'reconciles facts and reports while enforcing panel-portion runtime security in disposable PostgreSQL',
     () => {
       requirePostgresRuntime();
       const root = mkdtempSync(join(tmpdir(), 'financial-control-facts-'));
@@ -71,6 +107,9 @@ describe('financial control reporting migration', () => {
       const bootstrapPath = join(root, 'bootstrap.sql');
       const fixturePath = join(root, 'fixture.sql');
       const assertionsPath = join(root, 'assertions.sql');
+      const portionBootstrapPath = join(root, 'portion-bootstrap.sql');
+      const splitFixturePath = join(root, 'split-fixture.sql');
+      const portionSecurityAssertionsPath = join(root, 'portion-security-assertions.sql');
       const port = String(59000 + (process.pid % 500));
       const run = (tool: string, args: string[]) =>
         execFileSync(tool, args, { encoding: 'utf8', stdio: 'pipe' });
@@ -1603,10 +1642,1452 @@ begin
 end $$;
 `, 'utf8');
 
+        writeFileSync(portionBootstrapPath, `
+create role service_role nologin;
+create type public.panel_claim_status as enum (
+  'pending', 'submitted', 'approved', 'rejected', 'received', 'cancelled'
+);
+alter table public.panel_claims
+  alter column status type public.panel_claim_status
+  using status::public.panel_claim_status;
+
+create table public.profiles (id uuid primary key);
+create table public.user_roles (
+  user_id uuid not null references public.profiles(id),
+  role text not null
+);
+insert into public.profiles values ('10000000-0000-4000-8000-000000000001');
+insert into public.user_roles values (
+  '10000000-0000-4000-8000-000000000001',
+  'admin'
+);
+
+alter table public.panel_claims
+  add column payment_reference text,
+  add column received_date date,
+  add column updated_by uuid references public.profiles(id),
+  add column claim_date date,
+  add column submitted_date date,
+  add column approved_amount numeric,
+  add column write_off_amount numeric generated always as (amount - coalesce(approved_amount, amount)) stored,
+  add column gl_document_url text,
+  add column remarks text,
+  add column claim_no text,
+  add column patient_id uuid;
+update public.panel_claims set claim_date = date '2000-01-01';
+alter table public.panel_claims alter column claim_date set default current_date;
+alter table public.panel_claims alter column id set default gen_random_uuid();
+create unique index panel_claims_queue_entry_unique_idx
+  on public.panel_claims (queue_entry_id);
+
+alter table public.consultation_items alter column id set default gen_random_uuid();
+alter table public.payments alter column id set default gen_random_uuid();
+alter table public.payments alter column created_at set default now();
+
+create table public.completed_bill_correction_guard (
+  consultation_id uuid primary key,
+  queue_entry_id uuid not null,
+  actor_id uuid not null references public.profiles(id)
+);
+revoke all on public.completed_bill_correction_guard from public, anon, authenticated;
+
+alter table public.user_roles enable row level security;
+create policy user_roles_own_read on public.user_roles
+  for select to authenticated using (user_id = auth.uid());
+grant select on public.user_roles to authenticated;
+alter table public.panel_claims enable row level security;
+grant select, update on public.panel_claims to authenticated;
+
+alter table public.insurance_providers
+  add column status text not null default 'active',
+  add column consultation_fee_override numeric;
+create table public.inventory_items (id uuid primary key);
+create table public.inventory_item_batches (
+  inventory_item_id uuid not null references public.inventory_items(id),
+  quantity_remaining numeric not null,
+  expiry_date date not null
+);
+
+create or replace function public.ensure_panel_claim_for_queue(p_queue_entry_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = pg_catalog
+as $$
+declare
+  v_claim_id uuid;
+  v_panel_id uuid;
+  v_patient_id uuid;
+  v_amount numeric;
+begin
+  select queue_entry.panel_id, queue_entry.patient_id
+    into v_panel_id, v_patient_id
+  from public.queue_entries as queue_entry
+  where queue_entry.id = p_queue_entry_id
+    and queue_entry.payment_method = 'panel';
+  if not found then return null; end if;
+
+  select coalesce(sum(item.price * item.quantity), 0)
+    into v_amount
+  from public.consultations as consultation
+  left join public.consultation_items as item
+    on item.consultation_id = consultation.id and item.deleted_at is null
+  where consultation.queue_entry_id = p_queue_entry_id
+    and consultation.deleted_at is null;
+
+  select claim.id into v_claim_id
+  from public.panel_claims as claim
+  where claim.queue_entry_id = p_queue_entry_id
+  for update;
+  if found then
+    update public.panel_claims as claim
+    set amount = v_amount
+    where claim.id = v_claim_id and claim.status = 'pending';
+    return v_claim_id;
+  end if;
+
+  insert into public.panel_claims (
+    queue_entry_id, panel_id, patient_id, claim_no, amount, received_amount,
+    status, created_at, updated_at, due_date, claim_date
+  ) values (
+    p_queue_entry_id, v_panel_id, v_patient_id, 'RUNTIME-' || p_queue_entry_id::text,
+    v_amount, 0, 'pending', now(), now(), current_date + 30, current_date
+  ) returning id into v_claim_id;
+  return v_claim_id;
+end
+$$;
+
+create or replace function public.is_staff_or_admin(user_id uuid)
+returns boolean
+language sql
+stable
+as $$ select user_id is not null $$;
+
+create or replace function public.can_checkout_visit(user_id uuid)
+returns boolean
+language sql
+stable
+as $$ select user_id is not null $$;
+
+create or replace function public.is_finance_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog
+as $$
+  select exists (
+    select 1
+    from public.user_roles as user_role
+    where user_role.user_id = auth.uid()
+      and user_role.role in ('operations', 'ops_staff', 'doctor_admin', 'admin', 'special_admin')
+  )
+$$;
+
+create policy panel_claims_finance_admin_read on public.panel_claims
+  for select to authenticated using (public.is_finance_admin());
+create policy panel_claims_ops_insert on public.panel_claims
+  for insert to authenticated with check (true);
+create policy panel_claims_ops_update on public.panel_claims
+  for update to authenticated using (true) with check (true);
+create policy panel_claims_ops_delete on public.panel_claims
+  for delete to authenticated using (true);
+
+create or replace function public.lock_completed_bill_item_mutation_boundary()
+returns void
+language sql
+as $$ select null::void $$;
+
+create function public.checkout_visit(
+  p_queue_entry_id uuid,
+  p_consultation_id uuid,
+  p_total_amount numeric,
+  p_amount_paid numeric,
+  p_payment_method text,
+  p_payment_type text default 'self_pay',
+  p_panel_provider_id uuid default null,
+  p_other_charges jsonb default '[]'::jsonb,
+  p_notes text default null
+)
+returns jsonb
+language sql
+as $$ select '{}'::jsonb $$;
+`, 'utf8');
+
+        writeFileSync(splitFixturePath, `
+alter table public.panel_claim_portion_receipts
+  disable trigger panel_claim_portion_receipts_append_only;
+alter table public.panel_claim_portion_audit
+  disable trigger panel_claim_portion_audit_append_only;
+truncate table
+  private.financial_zero_price_package_child_events,
+  private.financial_panel_claim_events,
+  private.financial_payment_events,
+  private.financial_visit_completion_events,
+  public.panel_claim_portion_receipts,
+  public.panel_claim_portions,
+  public.panel_claims,
+  public.payments,
+  public.consultation_items,
+  public.consultations,
+  public.queue_entries
+restart identity cascade;
+alter table public.panel_claim_portion_receipts
+  enable trigger panel_claim_portion_receipts_append_only;
+alter table public.panel_claim_portion_audit
+  enable trigger panel_claim_portion_audit_append_only;
+
+select set_config(
+  'request.jwt.claim.sub',
+  '10000000-0000-4000-8000-000000000001',
+  false
+);
+
+insert into public.queue_entries values
+  ('50000000-0000-4000-8000-000000000201', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('50000000-0000-4000-8000-000000000202', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('50000000-0000-4000-8000-000000000203', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('50000000-0000-4000-8000-000000000204', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('50000000-0000-4000-8000-000000000205', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('50000000-0000-4000-8000-000000000206', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null);
+insert into public.consultations values
+  ('60000000-0000-4000-8000-000000000201', '50000000-0000-4000-8000-000000000201', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'in_progress', null),
+  ('60000000-0000-4000-8000-000000000202', '50000000-0000-4000-8000-000000000202', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'in_progress', null),
+  ('60000000-0000-4000-8000-000000000203', '50000000-0000-4000-8000-000000000203', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'in_progress', null),
+  ('60000000-0000-4000-8000-000000000204', '50000000-0000-4000-8000-000000000204', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'in_progress', null),
+  ('60000000-0000-4000-8000-000000000205', '50000000-0000-4000-8000-000000000205', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'in_progress', null),
+  ('60000000-0000-4000-8000-000000000206', '50000000-0000-4000-8000-000000000206', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'in_progress', null);
+insert into public.consultation_items values
+  ('70000000-0000-4000-8000-000000000201', '60000000-0000-4000-8000-000000000201', 'Partial split', null, '81000000-0000-4000-8000-000000000201', null, 1, null, 400, 0, null, null, '83000000-0000-4000-8000-000000000001'),
+  ('70000000-0000-4000-8000-000000000202', '60000000-0000-4000-8000-000000000202', 'Fully paid split', null, '81000000-0000-4000-8000-000000000202', null, 1, null, 300, 0, null, null, '83000000-0000-4000-8000-000000000001'),
+  ('70000000-0000-4000-8000-000000000203', '60000000-0000-4000-8000-000000000203', 'Historical unsplit', null, '81000000-0000-4000-8000-000000000203', null, 1, null, 200, 0, null, null, '83000000-0000-4000-8000-000000000001'),
+  ('70000000-0000-4000-8000-000000000204', '60000000-0000-4000-8000-000000000204', 'Reassigned split origin', null, '81000000-0000-4000-8000-000000000204', null, 1, null, 400, 0, null, null, '83000000-0000-4000-8000-000000000001'),
+  ('70000000-0000-4000-8000-000000000205', '60000000-0000-4000-8000-000000000205', 'Reassigned split destination', null, '81000000-0000-4000-8000-000000000205', null, 1, null, 400, 0, null, null, '83000000-0000-4000-8000-000000000001'),
+  ('70000000-0000-4000-8000-000000000206', '60000000-0000-4000-8000-000000000206', 'Terminal split', null, '81000000-0000-4000-8000-000000000206', null, 1, null, 100, 0, null, null, '83000000-0000-4000-8000-000000000001');
+
+insert into public.panel_claims (
+  id, queue_entry_id, panel_id, amount, received_amount, status,
+  created_at, updated_at, due_date, claim_date, submitted_date
+) values
+  ('a0000000-0000-4000-8000-000000000201', '50000000-0000-4000-8000-000000000201', '40000000-0000-4000-8000-000000000001', 400, 0, 'pending', statement_timestamp(), statement_timestamp(), current_date + 30, current_date + 1, current_date + 1),
+  ('a0000000-0000-4000-8000-000000000202', '50000000-0000-4000-8000-000000000202', '40000000-0000-4000-8000-000000000001', 300, 0, 'pending', statement_timestamp(), statement_timestamp(), current_date + 30, current_date + 1, current_date + 1),
+  ('a0000000-0000-4000-8000-000000000203', '50000000-0000-4000-8000-000000000203', '40000000-0000-4000-8000-000000000001', 200, 0, 'pending', statement_timestamp(), statement_timestamp(), current_date + 30, current_date + 1, null),
+  ('a0000000-0000-4000-8000-000000000204', '50000000-0000-4000-8000-000000000204', '40000000-0000-4000-8000-000000000001', 400, 0, 'pending', statement_timestamp(), statement_timestamp(), current_date + 30, current_date + 10, current_date + 10),
+  ('a0000000-0000-4000-8000-000000000205', '50000000-0000-4000-8000-000000000206', '40000000-0000-4000-8000-000000000001', 100, 0, 'pending', statement_timestamp(), statement_timestamp(), current_date + 30, current_date + 20, current_date + 20);
+
+select public.replace_panel_claim_portions(
+  'a0000000-0000-4000-8000-000000000201',
+  '[{"amount":150,"remark":"first"},{"amount":250,"remark":"second"}]'::jsonb,
+  'financial fixture partial split',
+  0
+);
+select public.replace_panel_claim_portions(
+  'a0000000-0000-4000-8000-000000000202',
+  '[{"amount":100,"remark":"first"},{"amount":200,"remark":"second"}]'::jsonb,
+  'financial fixture paid split',
+  0
+);
+select public.replace_panel_claim_portions(
+  'a0000000-0000-4000-8000-000000000204',
+  '[{"amount":150,"remark":"original queue"},{"amount":250,"remark":"outstanding"}]'::jsonb,
+  'financial fixture reassigned split',
+  0
+);
+select public.replace_panel_claim_portions(
+  'a0000000-0000-4000-8000-000000000205',
+  '[{"amount":40,"remark":"terminal one"},{"amount":60,"remark":"terminal two"}]'::jsonb,
+  'financial fixture terminal split',
+  0
+);
+
+select public.record_panel_claim_portion_payment(
+  (select id from public.panel_claim_portions where panel_claim_id = 'a0000000-0000-4000-8000-000000000201' and portion_no = 1),
+  150, current_date + 1, 'PARTIAL-150', null,
+  'd0000000-0000-4000-8000-000000000201'
+);
+select public.record_panel_claim_portion_payment(
+  (select id from public.panel_claim_portions where panel_claim_id = 'a0000000-0000-4000-8000-000000000202' and portion_no = 1),
+  100, current_date + 1, 'PAID-100', null,
+  'd0000000-0000-4000-8000-000000000202'
+);
+select public.record_panel_claim_portion_payment(
+  (select id from public.panel_claim_portions where panel_claim_id = 'a0000000-0000-4000-8000-000000000202' and portion_no = 2),
+  200, current_date + 1, 'PAID-200', null,
+  'd0000000-0000-4000-8000-000000000203'
+);
+select public.record_panel_claim_portion_payment(
+  (select id from public.panel_claim_portions where panel_claim_id = 'a0000000-0000-4000-8000-000000000204' and portion_no = 1),
+  150, current_date + 10, 'REASSIGNED-150', null,
+  'd0000000-0000-4000-8000-000000000204'
+);
+update public.panel_claims
+set queue_entry_id = '50000000-0000-4000-8000-000000000205',
+    updated_by = '10000000-0000-4000-8000-000000000001'
+where id = 'a0000000-0000-4000-8000-000000000204';
+
+alter table private.financial_panel_claim_events
+  disable trigger prevent_financial_panel_claim_event_change;
+update private.financial_panel_claim_events
+set occurred_at = (current_date + 11)::timestamp at time zone 'Asia/Kuala_Lumpur'
+where panel_claim_id = 'a0000000-0000-4000-8000-000000000204'
+  and event_kind in ('reassignment_out', 'reassignment_in');
+alter table private.financial_panel_claim_events
+  enable trigger prevent_financial_panel_claim_event_change;
+update public.panel_claims
+set received_amount = 50,
+    status = 'submitted',
+    received_date = current_date + 1,
+    updated_by = '10000000-0000-4000-8000-000000000001'
+where id = 'a0000000-0000-4000-8000-000000000203';
+
+update public.queue_entries
+set clinic_status = 'completed'
+where id in (
+  '50000000-0000-4000-8000-000000000201',
+  '50000000-0000-4000-8000-000000000202',
+  '50000000-0000-4000-8000-000000000203'
+);
+update public.consultations
+set status = 'completed'
+where id in (
+  '60000000-0000-4000-8000-000000000201',
+  '60000000-0000-4000-8000-000000000202',
+  '60000000-0000-4000-8000-000000000203'
+);
+
+insert into private.financial_visit_completion_events (
+  queue_entry_id, consultation_id, event_kind, completed_at,
+  provenance, attribution_complete, item_state
+)
+select fixture.queue_entry_id, fixture.consultation_id, 'completion',
+  (current_date + 1)::timestamp at time zone 'Asia/Kuala_Lumpur',
+  'recorded', true,
+  private.financial_control_completion_item_state(fixture.consultation_id)
+from (values
+  ('50000000-0000-4000-8000-000000000201'::uuid, '60000000-0000-4000-8000-000000000201'::uuid),
+  ('50000000-0000-4000-8000-000000000202'::uuid, '60000000-0000-4000-8000-000000000202'::uuid),
+  ('50000000-0000-4000-8000-000000000203'::uuid, '60000000-0000-4000-8000-000000000203'::uuid)
+) fixture(queue_entry_id, consultation_id);
+
+insert into private.financial_visit_completion_events (
+  queue_entry_id, consultation_id, event_kind, completed_at,
+  provenance, attribution_complete, item_state
+)
+select fixture.queue_entry_id, fixture.consultation_id, 'completion',
+  fixture.completed_date::timestamp at time zone 'Asia/Kuala_Lumpur',
+  'recorded', true,
+  private.financial_control_completion_item_state(fixture.consultation_id)
+from (values
+  ('50000000-0000-4000-8000-000000000204'::uuid, '60000000-0000-4000-8000-000000000204'::uuid, current_date + 10),
+  ('50000000-0000-4000-8000-000000000205'::uuid, '60000000-0000-4000-8000-000000000205'::uuid, current_date + 11),
+  ('50000000-0000-4000-8000-000000000206'::uuid, '60000000-0000-4000-8000-000000000206'::uuid, current_date + 20)
+) fixture(queue_entry_id, consultation_id, completed_date);
+
+insert into private.financial_panel_claim_events (
+  panel_claim_id, queue_entry_id, panel_id, event_kind, amount,
+  received_amount, receipt_delta, status, due_date, occurred_at,
+  provenance, attribution_complete
+) values (
+  'a0000000-0000-4000-8000-000000000203',
+  '50000000-0000-4000-8000-000000000203',
+  '40000000-0000-4000-8000-000000000001',
+  'receipt', 200, 50, 50, 'submitted', current_date + 30,
+  (current_date + 1)::timestamp at time zone 'Asia/Kuala_Lumpur',
+  'recorded', true
+);
+
+do $$
+declare
+  v_row record;
+  v_summary jsonb;
+  v_details jsonb;
+  v_health jsonb;
+begin
+  select * into strict v_row
+  from private.financial_control_visit_facts(current_date + 1, current_date + 1, current_date + 1)
+  where queue_entry_id = '50000000-0000-4000-8000-000000000201';
+  if (v_row.billed, v_row.paid_to_date, v_row.paid_in_period,
+      v_row.outstanding, v_row.panel_outstanding)
+     is distinct from (400::numeric, 150::numeric, 150::numeric, 250::numeric, 250::numeric) then
+    raise exception 'PARTIAL_SPLIT_RECONCILIATION_MISMATCH: %', row_to_json(v_row);
+  end if;
+
+  select * into strict v_row
+  from private.financial_control_visit_facts(current_date + 1, current_date + 1, current_date + 1)
+  where queue_entry_id = '50000000-0000-4000-8000-000000000202';
+  if (v_row.billed, v_row.paid_to_date, v_row.paid_in_period,
+      v_row.outstanding, v_row.panel_outstanding)
+     is distinct from (300::numeric, 300::numeric, 300::numeric, 0::numeric, 0::numeric) then
+    raise exception 'PAID_SPLIT_RECONCILIATION_MISMATCH: %', row_to_json(v_row);
+  end if;
+
+  select * into strict v_row
+  from private.financial_control_visit_facts(current_date + 1, current_date + 1, current_date + 1)
+  where queue_entry_id = '50000000-0000-4000-8000-000000000203';
+  if (v_row.billed, v_row.paid_to_date, v_row.paid_in_period,
+      v_row.outstanding, v_row.panel_outstanding)
+     is distinct from (200::numeric, 50::numeric, 50::numeric, 150::numeric, 150::numeric) then
+    raise exception 'UNSPLIT_RECONCILIATION_CHANGED: %', row_to_json(v_row);
+  end if;
+
+  if (select received_amount from public.panel_claims
+      where id = 'a0000000-0000-4000-8000-000000000201') <> 150 then
+    raise exception 'PARTIAL_SPLIT_PARENT_RECEIVED_MISMATCH';
+  end if;
+  if (select count(*) from private.financial_panel_claim_events
+      where panel_claim_id = 'a0000000-0000-4000-8000-000000000201'
+        and event_kind = 'receipt' and receipt_delta = 150) <> 1 then
+    raise exception 'PARTIAL_SPLIT_RECEIPT_EVENT_DUPLICATED';
+  end if;
+  if (select count(*) from private.financial_panel_claim_events
+      where panel_claim_id = 'a0000000-0000-4000-8000-000000000201'
+        and event_kind = 'claim_created') <> 1 then
+    raise exception 'PARTIAL_SPLIT_BILLED_EVENT_DUPLICATED';
+  end if;
+
+  v_summary := public.get_financial_control_summary(
+    current_date + 1, current_date + 1, current_date, current_date, current_date + 1
+  );
+  if (v_summary #>> '{period,billedRevenue}',
+      v_summary #>> '{period,cashCollected}',
+      v_summary #>> '{period,totalOutstanding}',
+      v_summary #>> '{period,completedVisits}')
+     is distinct from ('900.00', '500.00', '400.00', '3') then
+    raise exception 'SPLIT_SUMMARY_TOTALS_MISMATCH: %', v_summary;
+  end if;
+  if not (v_summary ?& array['period', 'comparison', 'reconciliation', 'alerts', 'generated_at']) then
+    raise exception 'FINANCIAL_SUMMARY_SHAPE_CHANGED: %', v_summary;
+  end if;
+
+  v_details := public.get_financial_control_details(
+    current_date + 1, current_date + 1, current_date + 1,
+    'billed_revenue', 'visit', null, 1, 100
+  );
+  if (v_details->>'total')::integer <> 3
+     or not (v_details ?& array['rows', 'total', 'page', 'pageSize', 'totals']) then
+    raise exception 'FINANCIAL_DETAILS_SHAPE_OR_COUNT_CHANGED: %', v_details;
+  end if;
+
+  v_health := public.get_clinic_health_metrics(current_date + 1, current_date + 1);
+  if (v_health #>> '{claims,outstandingAmount}',
+      v_health #>> '{claims,unsubmittedCount}')
+     is distinct from ('400.00', '1') then
+    raise exception 'CLINIC_HEALTH_SPLIT_TOTALS_MISMATCH: %', v_health;
+  end if;
+
+  if (select count(*) from private.financial_panel_claim_events
+      where panel_claim_id = 'a0000000-0000-4000-8000-000000000204'
+        and event_kind = 'receipt'
+        and queue_entry_id = '50000000-0000-4000-8000-000000000204'
+        and receipt_delta = 150) <> 1 then
+    raise exception 'REASSIGNED_CHILD_RECEIPT_CONTEXT_MISSING';
+  end if;
+  if exists (
+    select 1 from private.financial_panel_claim_events
+    where panel_claim_id = 'a0000000-0000-4000-8000-000000000204'
+      and event_kind in ('reassignment_out', 'reassignment_in')
+      and receipt_delta <> 0
+  ) or exists (
+    select 1 from private.financial_panel_claim_events
+    where panel_claim_id = 'a0000000-0000-4000-8000-000000000204'
+      and receipt_delta < 0
+  ) then
+    raise exception 'SPLIT_REASSIGNMENT_EMITTED_CASH_DELTA';
+  end if;
+
+  if (select coalesce(sum(paid_in_period), 0)
+      from private.financial_control_visit_facts(
+        current_date + 10, current_date + 10, current_date + 11
+      )
+      where queue_entry_id in (
+        '50000000-0000-4000-8000-000000000204',
+        '50000000-0000-4000-8000-000000000205'
+      )) <> 150 then
+    raise exception 'REASSIGNED_D1_CASH_NOT_EXACTLY_ONCE';
+  end if;
+  if (select coalesce(sum(paid_in_period), 0)
+      from private.financial_control_visit_facts(
+        current_date + 11, current_date + 11, current_date + 11
+      )
+      where queue_entry_id in (
+        '50000000-0000-4000-8000-000000000204',
+        '50000000-0000-4000-8000-000000000205'
+      )) <> 0 then
+    raise exception 'REASSIGNED_D2_CASH_NOT_ZERO';
+  end if;
+
+  select * into strict v_row
+  from private.financial_control_visit_facts(
+    current_date + 11, current_date + 11, current_date + 11
+  )
+  where queue_entry_id = '50000000-0000-4000-8000-000000000205';
+  if (v_row.billed, v_row.paid_to_date, v_row.paid_in_period,
+      v_row.outstanding, v_row.panel_outstanding)
+     is distinct from (400::numeric, 150::numeric, 0::numeric, 250::numeric, 250::numeric) then
+    raise exception 'REASSIGNED_CURRENT_VISIT_STATE_MISMATCH: %', row_to_json(v_row);
+  end if;
+
+  update public.panel_claims
+  set status = 'rejected',
+      updated_by = '10000000-0000-4000-8000-000000000001'
+  where id = 'a0000000-0000-4000-8000-000000000205';
+  select * into strict v_row
+  from private.financial_control_visit_facts(
+    current_date + 20, current_date + 20, current_date + 20
+  )
+  where queue_entry_id = '50000000-0000-4000-8000-000000000206';
+  if (v_row.paid_to_date, v_row.paid_in_period,
+      v_row.outstanding, v_row.panel_outstanding)
+     is distinct from (0::numeric, 0::numeric, 0::numeric, 0::numeric) then
+    raise exception 'REJECTED_SPLIT_STATE_MISMATCH: %', row_to_json(v_row);
+  end if;
+
+  set constraints all immediate;
+  alter table public.panel_claims
+    disable trigger guard_panel_claim_split_parent_mutation;
+  update public.panel_claims
+  set status = 'cancelled',
+      updated_by = '10000000-0000-4000-8000-000000000001'
+  where id = 'a0000000-0000-4000-8000-000000000205';
+  alter table public.panel_claims
+    enable trigger guard_panel_claim_split_parent_mutation;
+  select * into strict v_row
+  from private.financial_control_visit_facts(
+    current_date + 20, current_date + 20, current_date + 20
+  )
+  where queue_entry_id = '50000000-0000-4000-8000-000000000206';
+  if (v_row.paid_to_date, v_row.paid_in_period,
+      v_row.outstanding, v_row.panel_outstanding)
+     is distinct from (0::numeric, 0::numeric, 0::numeric, 0::numeric) then
+    raise exception 'CANCELLED_SPLIT_STATE_MISMATCH: %', row_to_json(v_row);
+  end if;
+end $$;
+`, 'utf8');
+
+        writeFileSync(portionSecurityAssertionsPath, `
+insert into public.profiles (id) values
+  ('10000000-0000-4000-8000-000000000002'),
+  ('10000000-0000-4000-8000-000000000003'),
+  ('10000000-0000-4000-8000-000000000004'),
+  ('10000000-0000-4000-8000-000000000005'),
+  ('10000000-0000-4000-8000-000000000006'),
+  ('10000000-0000-4000-8000-000000000007'),
+  ('10000000-0000-4000-8000-000000000008'),
+  ('10000000-0000-4000-8000-000000000009'),
+  ('10000000-0000-4000-8000-000000000010');
+insert into public.user_roles (user_id, role) values
+  ('10000000-0000-4000-8000-000000000002', 'doctor_admin'),
+  ('10000000-0000-4000-8000-000000000003', 'ops_staff'),
+  ('10000000-0000-4000-8000-000000000004', 'operations'),
+  ('10000000-0000-4000-8000-000000000005', 'purchaser'),
+  ('10000000-0000-4000-8000-000000000006', 'resident_doctor'),
+  ('10000000-0000-4000-8000-000000000007', 'locum'),
+  ('10000000-0000-4000-8000-000000000008', 'staff_nurse'),
+  ('10000000-0000-4000-8000-000000000009', 'guest');
+
+insert into public.queue_entries (
+  id, patient_id, clinic_status, payment_method, panel_id, created_at, deleted_at
+) values
+  ('51000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('51000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('51000000-0000-4000-8000-000000000003', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('51000000-0000-4000-8000-000000000004', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('51000000-0000-4000-8000-000000000005', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('51000000-0000-4000-8000-000000000006', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('51000000-0000-4000-8000-000000000007', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('51000000-0000-4000-8000-000000000008', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('51000000-0000-4000-8000-000000000009', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('51000000-0000-4000-8000-000000000010', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('51000000-0000-4000-8000-000000000011', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('51000000-0000-4000-8000-000000000012', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('51000000-0000-4000-8000-000000000013', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('51000000-0000-4000-8000-000000000014', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null);
+
+insert into public.panel_claims (
+  id, queue_entry_id, panel_id, amount, received_amount, status, created_at, updated_at, due_date
+) values
+  ('91000000-0000-4000-8000-000000000001', '51000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 100, 0, 'pending', statement_timestamp(), statement_timestamp(), current_date + 30),
+  ('91000000-0000-4000-8000-000000000002', '51000000-0000-4000-8000-000000000002', '40000000-0000-4000-8000-000000000001', 100, 0, 'pending', statement_timestamp(), statement_timestamp(), current_date + 30),
+  ('91000000-0000-4000-8000-000000000003', '51000000-0000-4000-8000-000000000003', '40000000-0000-4000-8000-000000000001', 100, 0, 'pending', statement_timestamp(), statement_timestamp(), current_date + 30),
+  ('91000000-0000-4000-8000-000000000004', '51000000-0000-4000-8000-000000000004', '40000000-0000-4000-8000-000000000001', 100, 0, 'pending', statement_timestamp(), statement_timestamp(), current_date + 30),
+  ('91000000-0000-4000-8000-000000000005', '51000000-0000-4000-8000-000000000005', '40000000-0000-4000-8000-000000000001', 100, 0, 'pending', statement_timestamp(), statement_timestamp(), current_date + 30),
+  ('91000000-0000-4000-8000-000000000006', '51000000-0000-4000-8000-000000000006', '40000000-0000-4000-8000-000000000001', 100, 0, 'pending', statement_timestamp(), statement_timestamp(), current_date + 30),
+  ('91000000-0000-4000-8000-000000000007', '51000000-0000-4000-8000-000000000007', '40000000-0000-4000-8000-000000000001', 100, 0, 'pending', statement_timestamp(), statement_timestamp(), current_date + 30),
+  ('91000000-0000-4000-8000-000000000008', '51000000-0000-4000-8000-000000000008', '40000000-0000-4000-8000-000000000001', 100, 0, 'pending', statement_timestamp(), statement_timestamp(), current_date + 30),
+  ('91000000-0000-4000-8000-000000000009', '51000000-0000-4000-8000-000000000009', '40000000-0000-4000-8000-000000000001', 100, 0, 'pending', statement_timestamp(), statement_timestamp(), current_date + 30);
+
+insert into public.consultations (
+  id, queue_entry_id, patient_id, doctor_id, status, deleted_at
+) values
+  ('61000000-0000-4000-8000-000000000001', '51000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'completed', null),
+  ('61000000-0000-4000-8000-000000000004', '51000000-0000-4000-8000-000000000004', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'completed', null),
+  ('61000000-0000-4000-8000-000000000005', '51000000-0000-4000-8000-000000000005', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'completed', null),
+  ('61000000-0000-4000-8000-000000000007', '51000000-0000-4000-8000-000000000007', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'completed', null),
+  ('61000000-0000-4000-8000-000000000010', '51000000-0000-4000-8000-000000000010', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'in_progress', null),
+  ('61000000-0000-4000-8000-000000000011', '51000000-0000-4000-8000-000000000011', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'in_progress', null),
+  ('61000000-0000-4000-8000-000000000012', '51000000-0000-4000-8000-000000000012', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'in_progress', null),
+  ('61000000-0000-4000-8000-000000000013', '51000000-0000-4000-8000-000000000013', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'in_progress', null),
+  ('61000000-0000-4000-8000-000000000014', '51000000-0000-4000-8000-000000000014', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'in_progress', null);
+
+insert into public.consultation_items (
+  id, consultation_id, item_name, quantity, price, deleted_at
+) values
+  ('71000000-0000-4000-8000-000000000001', '61000000-0000-4000-8000-000000000001', 'Paid correction guard', 1, 100, null),
+  ('71000000-0000-4000-8000-000000000004', '61000000-0000-4000-8000-000000000004', 'Correction growth', 1, 100, null),
+  ('71000000-0000-4000-8000-000000000005', '61000000-0000-4000-8000-000000000005', 'Rejected correction growth', 1, 100, null),
+  ('71000000-0000-4000-8000-000000000010', '61000000-0000-4000-8000-000000000010', 'Exact RM29.80 checkout', 1, 29.80, null),
+  ('71000000-0000-4000-8000-000000000011', '61000000-0000-4000-8000-000000000011', 'Rejected stale checkout total', 1, 29.80, null),
+  ('71000000-0000-4000-8000-000000000012', '61000000-0000-4000-8000-000000000012', 'Materialized checkout claim', 1, 29.80, null);
+
+insert into public.consultation_items (
+  id, consultation_id, item_name, item_id, quantity, dispensed_qty, price, deleted_at
+) values (
+  '71000000-0000-4000-8000-000000000013',
+  '61000000-0000-4000-8000-000000000013',
+  'Partially dispensed medicine',
+  '81000000-0000-4000-8000-000000000013',
+  3, 2, 10, null
+), (
+  '71000000-0000-4000-8000-000000000014',
+  '61000000-0000-4000-8000-000000000014',
+  'Non-inventory procedure with stray dispense data',
+  null,
+  3, 1, 10, null
+);
+
+insert into public.panel_claims (
+  id, queue_entry_id, panel_id, amount, received_amount, status, created_at,
+  updated_at, due_date, submitted_date, approved_amount
+) values (
+  '91000000-0000-4000-8000-000000000012',
+  '51000000-0000-4000-8000-000000000012',
+  '40000000-0000-4000-8000-000000000001',
+  25, 0, 'approved', statement_timestamp(), statement_timestamp(),
+  current_date + 30, current_date, 25
+);
+
+set role authenticated;
+do $allowed$
+declare
+  v_actor uuid;
+  v_claim uuid;
+begin
+  for v_actor, v_claim in
+    select * from (values
+      ('10000000-0000-4000-8000-000000000001'::uuid, '91000000-0000-4000-8000-000000000001'::uuid),
+      ('10000000-0000-4000-8000-000000000002'::uuid, '91000000-0000-4000-8000-000000000002'::uuid),
+      ('10000000-0000-4000-8000-000000000003'::uuid, '91000000-0000-4000-8000-000000000003'::uuid),
+      ('10000000-0000-4000-8000-000000000004'::uuid, '91000000-0000-4000-8000-000000000004'::uuid),
+      ('10000000-0000-4000-8000-000000000005'::uuid, '91000000-0000-4000-8000-000000000005'::uuid)
+    ) as allowed(actor_id, claim_id)
+  loop
+    perform set_config('request.jwt.claim.sub', v_actor::text, false);
+    perform public.replace_panel_claim_portions(
+      v_claim,
+      '[{"amount":40,"remark":"runtime security first"},{"amount":60,"remark":"runtime security second"}]'::jsonb,
+      'runtime authorization check',
+      0
+    );
+  end loop;
+end $allowed$;
+
+do $denied$
+declare
+  v_actor uuid;
+  v_claim uuid;
+begin
+  for v_actor, v_claim in
+    select * from (values
+      ('10000000-0000-4000-8000-000000000006'::uuid, '91000000-0000-4000-8000-000000000006'::uuid),
+      ('10000000-0000-4000-8000-000000000007'::uuid, '91000000-0000-4000-8000-000000000007'::uuid),
+      ('10000000-0000-4000-8000-000000000008'::uuid, '91000000-0000-4000-8000-000000000008'::uuid),
+      ('10000000-0000-4000-8000-000000000009'::uuid, '91000000-0000-4000-8000-000000000009'::uuid)
+    ) as denied(actor_id, claim_id)
+  loop
+    perform set_config('request.jwt.claim.sub', v_actor::text, false);
+    begin
+      perform public.replace_panel_claim_portions(
+        v_claim,
+        '[{"amount":40},{"amount":60}]'::jsonb,
+        'runtime authorization denial check',
+        0
+      );
+      raise exception 'UNAUTHORIZED_ROLE_WAS_ALLOWED: %', v_actor;
+    exception when insufficient_privilege then
+      if sqlerrm <> 'NOT_AUTHORIZED' then
+        raise;
+      end if;
+    end;
+  end loop;
+end $denied$;
+
+do $direct_mutation$
+declare
+  v_actor uuid;
+begin
+  for v_actor in
+    select actor_id from (values
+      ('10000000-0000-4000-8000-000000000001'::uuid),
+      ('10000000-0000-4000-8000-000000000002'::uuid),
+      ('10000000-0000-4000-8000-000000000003'::uuid),
+      ('10000000-0000-4000-8000-000000000004'::uuid),
+      ('10000000-0000-4000-8000-000000000005'::uuid),
+      ('10000000-0000-4000-8000-000000000006'::uuid),
+      ('10000000-0000-4000-8000-000000000007'::uuid),
+      ('10000000-0000-4000-8000-000000000008'::uuid),
+      ('10000000-0000-4000-8000-000000000009'::uuid)
+    ) as authenticated_actor(actor_id)
+  loop
+    perform set_config('request.jwt.claim.sub', v_actor::text, false);
+    begin
+      insert into public.panel_claim_portions default values;
+      raise exception 'DIRECT_PORTION_INSERT_WAS_ALLOWED: %', v_actor;
+    exception when insufficient_privilege then null;
+    end;
+    begin
+      insert into public.panel_claim_portion_receipts default values;
+      raise exception 'DIRECT_RECEIPT_INSERT_WAS_ALLOWED: %', v_actor;
+    exception when insufficient_privilege then null;
+    end;
+    begin
+      insert into public.panel_claim_portion_audit default values;
+      raise exception 'DIRECT_AUDIT_INSERT_WAS_ALLOWED: %', v_actor;
+    exception when insufficient_privilege then null;
+    end;
+  end loop;
+end $direct_mutation$;
+reset role;
+
+select set_config(
+  'task8.payment_portion_id',
+  (select id::text from public.panel_claim_portions
+   where panel_claim_id = '91000000-0000-4000-8000-000000000001' and portion_no = 1),
+  false
+);
+set role authenticated;
+do $payment_checks$
+declare
+  v_portion_id uuid;
+begin
+  if current_user <> 'authenticated' then
+    raise exception 'PAYMENT_CHECK_NOT_AUTHENTICATED';
+  end if;
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', false);
+  v_portion_id := current_setting('task8.payment_portion_id')::uuid;
+
+  perform public.record_panel_claim_portion_payment(
+    v_portion_id, 40, current_date, 'RUNTIME-REPLAY', null,
+    'd1000000-0000-4000-8000-000000000001'
+  );
+  perform public.record_panel_claim_portion_payment(
+    v_portion_id, 40, current_date, 'RUNTIME-REPLAY', null,
+    'd1000000-0000-4000-8000-000000000001'
+  );
+  begin
+    perform public.record_panel_claim_portion_payment(
+      v_portion_id, 0.01, current_date, 'RUNTIME-OVERPAY', null,
+      'd1000000-0000-4000-8000-000000000002'
+    );
+    raise exception 'OVERPAYMENT_WAS_ALLOWED';
+  exception when sqlstate '23514' then
+    if sqlerrm <> 'PORTION_OVERPAYMENT' then
+      raise;
+    end if;
+  end;
+end $payment_checks$;
+reset role;
+
+alter role authenticated login;
+create extension if not exists dblink;
+select dblink_connect('portion_payment_first', 'host=127.0.0.1 port=${port} dbname=postgres user=authenticated');
+select dblink_connect('portion_payment_second', 'host=127.0.0.1 port=${port} dbname=postgres user=authenticated');
+select dblink_exec('portion_payment_first', format(
+  'set task8.portion_id to %L',
+  (select id::text from public.panel_claim_portions
+   where panel_claim_id = '91000000-0000-4000-8000-000000000002' and portion_no = 1)
+));
+select dblink_exec('portion_payment_second', format(
+  'set task8.portion_id to %L',
+  (select id::text from public.panel_claim_portions
+   where panel_claim_id = '91000000-0000-4000-8000-000000000002' and portion_no = 1)
+));
+select dblink_send_query('portion_payment_first', $query$
+do $payment_first$
+declare v_portion_id uuid;
+begin
+  if current_user <> 'authenticated' then
+    raise exception 'FIRST_PAYMENT_SESSION_NOT_AUTHENTICATED';
+  end if;
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', false);
+  v_portion_id := current_setting('task8.portion_id')::uuid;
+  perform public.record_panel_claim_portion_payment(
+    v_portion_id, 30, current_date, 'RUNTIME-CONCURRENT-FIRST', null,
+    'd1000000-0000-4000-8000-000000000003'
+  );
+  perform pg_sleep(1);
+end $payment_first$;
+$query$);
+select pg_sleep(0.2);
+select dblink_exec('portion_payment_second', $query$
+do $payment_second$
+declare v_portion_id uuid;
+begin
+  if current_user <> 'authenticated' then
+    raise exception 'SECOND_PAYMENT_SESSION_NOT_AUTHENTICATED';
+  end if;
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', false);
+  v_portion_id := current_setting('task8.portion_id')::uuid;
+  begin
+    perform public.record_panel_claim_portion_payment(
+      v_portion_id, 30, current_date, 'RUNTIME-CONCURRENT-SECOND', null,
+      'd1000000-0000-4000-8000-000000000004'
+    );
+    raise exception 'CONCURRENT_OVERPAYMENT_WAS_ALLOWED';
+  exception when sqlstate '23514' then
+    if sqlerrm <> 'PORTION_OVERPAYMENT' then
+      raise;
+    end if;
+  end;
+end $payment_second$;
+$query$);
+select * from dblink_get_result('portion_payment_first') as result(status text);
+select dblink_disconnect('portion_payment_first');
+select dblink_disconnect('portion_payment_second');
+
+select dblink_connect('split_payment_first', 'host=127.0.0.1 port=${port} dbname=postgres user=authenticated');
+select dblink_connect('split_payment_second', 'host=127.0.0.1 port=${port} dbname=postgres user=authenticated');
+select dblink_exec('split_payment_first', format(
+  'set task8.portion_id to %L',
+  (select id::text from public.panel_claim_portions
+   where panel_claim_id = '91000000-0000-4000-8000-000000000003' and portion_no = 1)
+));
+select dblink_send_query('split_payment_first', $query$
+do $split_payment_first$
+declare v_portion_id uuid;
+begin
+  if current_user <> 'authenticated' then
+    raise exception 'SPLIT_PAYMENT_FIRST_SESSION_NOT_AUTHENTICATED';
+  end if;
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', false);
+  v_portion_id := current_setting('task8.portion_id')::uuid;
+  perform public.record_panel_claim_portion_payment(
+    v_portion_id, 40, current_date, 'RUNTIME-SPLIT-PAYMENT-FIRST', null,
+    'd1000000-0000-4000-8000-000000000005'
+  );
+  perform pg_sleep(1);
+end $split_payment_first$;
+$query$);
+select pg_sleep(0.2);
+select dblink_exec('split_payment_second', $query$
+do $split_payment_second$
+begin
+  if current_user <> 'authenticated' then
+    raise exception 'SPLIT_PAYMENT_SECOND_SESSION_NOT_AUTHENTICATED';
+  end if;
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', false);
+  begin
+    perform public.replace_panel_claim_portions(
+      '91000000-0000-4000-8000-000000000003',
+      '[{"amount":50},{"amount":50}]'::jsonb,
+      'concurrent split after payment',
+      1
+    );
+    raise exception 'SPLIT_AFTER_PAYMENT_WAS_ALLOWED';
+  exception when sqlstate '40001' then
+    if sqlerrm <> 'STALE_PANEL_CLAIM_PORTIONS' then
+      raise;
+    end if;
+  end;
+end $split_payment_second$;
+$query$);
+select * from dblink_get_result('split_payment_first') as result(status text);
+select dblink_disconnect('split_payment_first');
+select dblink_disconnect('split_payment_second');
+
+select dblink_connect('split_split_first', 'host=127.0.0.1 port=${port} dbname=postgres user=authenticated');
+select dblink_connect('split_split_second', 'host=127.0.0.1 port=${port} dbname=postgres user=authenticated');
+select dblink_send_query('split_split_first', $query$
+do $split_split_first$
+begin
+  if current_user <> 'authenticated' then
+    raise exception 'SPLIT_SPLIT_FIRST_SESSION_NOT_AUTHENTICATED';
+  end if;
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', false);
+  perform public.replace_panel_claim_portions(
+    '91000000-0000-4000-8000-000000000004',
+    '[{"amount":30},{"amount":70}]'::jsonb,
+    'first concurrent split replacement',
+    1
+  );
+  perform pg_sleep(1);
+end $split_split_first$;
+$query$);
+select pg_sleep(0.2);
+select dblink_exec('split_split_second', $query$
+do $split_split_second$
+begin
+  if current_user <> 'authenticated' then
+    raise exception 'SPLIT_SPLIT_SECOND_SESSION_NOT_AUTHENTICATED';
+  end if;
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', false);
+  begin
+    perform public.replace_panel_claim_portions(
+      '91000000-0000-4000-8000-000000000004',
+      '[{"amount":20},{"amount":80}]'::jsonb,
+      'second concurrent split replacement',
+      1
+    );
+    raise exception 'STALE_SPLIT_REPLACEMENT_WAS_ALLOWED';
+  exception when sqlstate '40001' then
+    if sqlerrm <> 'STALE_PANEL_CLAIM_PORTIONS' then raise; end if;
+  end;
+end $split_split_second$;
+$query$);
+select * from dblink_get_result('split_split_first') as result(status text);
+select dblink_disconnect('split_split_first');
+select dblink_disconnect('split_split_second');
+
+set role authenticated;
+select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000005', false);
+do $purchaser_read_and_checkout$
+declare
+  v_first jsonb;
+  v_replay jsonb;
+  v_claim_id uuid;
+begin
+  if (select count(*) from public.panel_claims) < 1 then
+    raise exception 'PURCHASER_PARENT_CLAIM_RLS_BLOCKED';
+  end if;
+
+  update public.panel_claims
+  set remarks = 'Purchaser direct parent mutation'
+  where id = '91000000-0000-4000-8000-000000000005';
+  if found then
+    raise exception 'PURCHASER_DIRECT_PARENT_MUTATION_WAS_ALLOWED';
+  end if;
+
+  begin
+    perform public.update_panel_claim_workflow(
+      '91000000-0000-4000-8000-000000000005',
+      'submitted', current_date, null, null, null, null, null, null, null
+    );
+    raise exception 'PURCHASER_PARENT_WORKFLOW_MUTATION_WAS_ALLOWED';
+  exception when insufficient_privilege then
+    if sqlerrm <> 'NOT_AUTHORIZED' then raise; end if;
+  end;
+
+  v_first := public.checkout_visit(
+    '51000000-0000-4000-8000-000000000010',
+    '61000000-0000-4000-8000-000000000010',
+    29.80,
+    0,
+    'panel',
+    'panel',
+    '40000000-0000-4000-8000-000000000001',
+    '[]'::jsonb,
+    null,
+    29.80,
+    '[{"amount":9.90,"remark":"first"},{"amount":19.90,"remark":"second"}]'::jsonb,
+    'd2000000-0000-4000-8000-000000000010'
+  );
+  v_replay := public.checkout_visit(
+    '51000000-0000-4000-8000-000000000010',
+    '61000000-0000-4000-8000-000000000010',
+    29.80,
+    0,
+    'panel',
+    'panel',
+    '40000000-0000-4000-8000-000000000001',
+    '[]'::jsonb,
+    null,
+    29.80,
+    '[{"amount":9.90,"remark":"first"},{"amount":19.90,"remark":"second"}]'::jsonb,
+    'd2000000-0000-4000-8000-000000000010'
+  );
+
+  if v_first is distinct from v_replay then
+    raise exception 'ATOMIC_CHECKOUT_REPLAY_CHANGED_RESULT';
+  end if;
+  v_claim_id := (v_first->>'panel_claim_id')::uuid;
+  if (select amount from public.panel_claims where id = v_claim_id) <> 29.80
+     or (select count(*) from public.panel_claim_portions
+         where panel_claim_id = v_claim_id) <> 2
+     or (select sum(amount) from public.panel_claim_portions
+         where panel_claim_id = v_claim_id) <> 29.80 then
+    raise exception 'AUTHORITATIVE_ATOMIC_CHECKOUT_STATE_MISMATCH';
+  end if;
+
+  perform public.checkout_visit(
+    '51000000-0000-4000-8000-000000000013',
+    '61000000-0000-4000-8000-000000000013',
+    20,
+    0,
+    'panel',
+    'panel',
+    '40000000-0000-4000-8000-000000000001',
+    '[]'::jsonb,
+    null,
+    20,
+    null,
+    'd2000000-0000-4000-8000-000000000013'
+  );
+
+  if (select amount from public.panel_claims
+      where queue_entry_id = '51000000-0000-4000-8000-000000000013') <> 20 then
+    raise exception 'PARTIAL_DISPENSE_CHECKOUT_BILLED_ORDERED_QUANTITY';
+  end if;
+
+  perform public.checkout_visit(
+    '51000000-0000-4000-8000-000000000014',
+    '61000000-0000-4000-8000-000000000014',
+    30,
+    0,
+    'panel',
+    'panel',
+    '40000000-0000-4000-8000-000000000001',
+    '[]'::jsonb,
+    null,
+    30,
+    null,
+    'd2000000-0000-4000-8000-000000000014'
+  );
+
+  if (select amount from public.panel_claims
+      where queue_entry_id = '51000000-0000-4000-8000-000000000014') <> 30 then
+    raise exception 'NON_INVENTORY_CHECKOUT_TRUSTED_STRAY_DISPENSE_QUANTITY';
+  end if;
+
+  begin
+    perform public.checkout_visit(
+      '51000000-0000-4000-8000-000000000011',
+      '61000000-0000-4000-8000-000000000011',
+      29.79,
+      0,
+      'panel',
+      'panel',
+      '40000000-0000-4000-8000-000000000001',
+      '[]'::jsonb,
+      null,
+      29.79,
+      null,
+      'd2000000-0000-4000-8000-000000000011'
+    );
+    raise exception 'CALLER_CHECKOUT_TOTAL_WAS_TRUSTED';
+  exception when sqlstate '40001' then
+    if sqlerrm <> 'CHECKOUT_TOTAL_MISMATCH' then raise; end if;
+  end;
+
+  begin
+    perform public.checkout_visit(
+      '51000000-0000-4000-8000-000000000012',
+      '61000000-0000-4000-8000-000000000012',
+      29.80,
+      0,
+      'panel',
+      'panel',
+      '40000000-0000-4000-8000-000000000001',
+      '[]'::jsonb,
+      null,
+      29.80,
+      null,
+      'd2000000-0000-4000-8000-000000000012'
+    );
+    raise exception 'MATERIALIZED_CLAIM_WAS_OVERWRITTEN_BY_CHECKOUT';
+  exception when sqlstate '23514' then
+    if sqlerrm <> 'PANEL_CLAIM_ALREADY_MATERIALIZED' then raise; end if;
+  end;
+
+end $purchaser_read_and_checkout$;
+
+do $terminal_guards$
+declare
+  v_portion_id uuid;
+  v_bulk_count integer;
+begin
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', false);
+  update public.panel_claims
+  set status = case id
+    when '91000000-0000-4000-8000-000000000007' then 'received'::public.panel_claim_status
+    when '91000000-0000-4000-8000-000000000008' then 'rejected'::public.panel_claim_status
+    else 'cancelled'::public.panel_claim_status
+  end,
+  received_amount = case
+    when id = '91000000-0000-4000-8000-000000000007' then amount
+    else received_amount
+  end
+  where id in (
+    '91000000-0000-4000-8000-000000000007',
+    '91000000-0000-4000-8000-000000000008',
+    '91000000-0000-4000-8000-000000000009'
+  );
+
+  begin
+    update public.panel_claims
+    set status = 'pending'
+    where id = '91000000-0000-4000-8000-000000000007';
+    raise exception 'RECEIVED_UNSPLIT_CLAIM_WAS_RESURRECTED';
+  exception when sqlstate '23514' then
+    if sqlerrm <> 'TERMINAL_PANEL_CLAIM_IMMUTABLE' then raise; end if;
+  end;
+
+  begin
+    update public.panel_claims
+    set status = 'pending'
+    where id = '91000000-0000-4000-8000-000000000008';
+    raise exception 'REJECTED_UNSPLIT_CLAIM_WAS_RESURRECTED';
+  exception when sqlstate '23514' then
+    if sqlerrm <> 'TERMINAL_PANEL_CLAIM_IMMUTABLE' then raise; end if;
+  end;
+
+  begin
+    update public.panel_claims
+    set status = 'pending'
+    where id = '91000000-0000-4000-8000-000000000009';
+    raise exception 'CANCELLED_UNSPLIT_CLAIM_WAS_RESURRECTED';
+  exception when sqlstate '23514' then
+    if sqlerrm <> 'TERMINAL_PANEL_CLAIM_IMMUTABLE' then raise; end if;
+  end;
+
+  v_bulk_count := public.bulk_submit_panel_claims(
+    array[
+      '91000000-0000-4000-8000-000000000006',
+      '91000000-0000-4000-8000-000000000007',
+      '91000000-0000-4000-8000-000000000008',
+      '91000000-0000-4000-8000-000000000009'
+    ]::uuid[],
+    current_date
+  );
+  if v_bulk_count <> 1
+     or (select status from public.panel_claims
+         where id = '91000000-0000-4000-8000-000000000006') <> 'submitted'
+     or exists (
+       select 1 from public.panel_claims
+       where id in (
+         '91000000-0000-4000-8000-000000000007',
+         '91000000-0000-4000-8000-000000000008',
+         '91000000-0000-4000-8000-000000000009'
+       ) and status not in ('received', 'rejected', 'cancelled')
+     ) then
+    raise exception 'BULK_SUBMISSION_MUTATED_TERMINAL_CLAIM';
+  end if;
+
+  perform public.update_panel_claim_workflow(
+    '91000000-0000-4000-8000-000000000005',
+    'rejected', null, null, null, null, null,
+    'Rejected by panel', null, null
+  );
+  select id into v_portion_id
+  from public.panel_claim_portions
+  where panel_claim_id = '91000000-0000-4000-8000-000000000005'
+    and portion_no = 1;
+
+  begin
+    perform public.record_panel_claim_portion_payment(
+      v_portion_id, 1, current_date, 'TERMINAL-RECEIPT', null,
+      'd2000000-0000-4000-8000-000000000012'
+    );
+    raise exception 'REJECTED_SPLIT_ACCEPTED_RECEIPT';
+  exception when sqlstate '23514' then
+    if sqlerrm <> 'PANEL_CLAIM_NOT_PAYABLE' then raise; end if;
+  end;
+
+  begin
+    perform public.replace_panel_claim_portions(
+      '91000000-0000-4000-8000-000000000005',
+      '[{"amount":50},{"amount":50}]'::jsonb,
+      'terminal replacement',
+      2
+    );
+    raise exception 'REJECTED_SPLIT_WAS_REPLACED';
+  exception when sqlstate '23514' then
+    if sqlerrm <> 'PANEL_CLAIM_NOT_PAYABLE' then raise; end if;
+  end;
+
+  begin
+    perform public.update_panel_claim_workflow(
+      '91000000-0000-4000-8000-000000000005',
+      'pending', null, null, null, null, null, null, null, null
+    );
+    raise exception 'REJECTED_SPLIT_WAS_RESURRECTED';
+  exception when sqlstate '23514' then
+    if sqlerrm <> 'TERMINAL_PANEL_CLAIM_IMMUTABLE' then raise; end if;
+  end;
+end $terminal_guards$;
+
+do $forged_correction_context$
+begin
+  perform set_config(
+    'app.panel_claim_split_correction',
+    '{"panel_claim_id":"91000000-0000-4000-8000-000000000004","actor_id":"10000000-0000-4000-8000-000000000001","reason":"forged"}',
+    true
+  );
+  begin
+    update public.panel_claims
+    set amount = 110
+    where id = '91000000-0000-4000-8000-000000000004';
+    raise exception 'FORGED_CORRECTION_CONTEXT_WAS_ACCEPTED';
+  exception when sqlstate '23514' then
+    if sqlerrm <> 'SPLIT_PARENT_AMOUNT_REQUIRES_CORRECTION' then raise; end if;
+  end;
+end $forged_correction_context$;
+reset role;
+
+do $checkout_storage_assertions$
+begin
+  if (select clinic_status from public.queue_entries
+      where id = '51000000-0000-4000-8000-000000000010') <> 'completed'
+     or (select count(*) from public.panel_claim_checkout_requests
+         where idempotency_key = 'd2000000-0000-4000-8000-000000000010') <> 1 then
+    raise exception 'AUTHORITATIVE_CHECKOUT_DURABILITY_MISMATCH';
+  end if;
+  if (select clinic_status from public.queue_entries
+      where id = '51000000-0000-4000-8000-000000000011') <> 'registered'
+     or exists (select 1 from public.panel_claims
+                where queue_entry_id = '51000000-0000-4000-8000-000000000011')
+     or exists (select 1 from public.panel_claim_checkout_requests
+                where idempotency_key = 'd2000000-0000-4000-8000-000000000011') then
+    raise exception 'FAILED_CHECKOUT_LEFT_DURABLE_STATE';
+  end if;
+  if (select clinic_status from public.queue_entries
+      where id = '51000000-0000-4000-8000-000000000012') <> 'registered'
+     or (select status from public.consultations
+         where id = '61000000-0000-4000-8000-000000000012') <> 'in_progress'
+     or (select amount from public.panel_claims
+         where id = '91000000-0000-4000-8000-000000000012') <> 25
+     or (select status from public.panel_claims
+         where id = '91000000-0000-4000-8000-000000000012') <> 'approved'
+     or exists (select 1 from public.panel_claim_checkout_requests
+                where idempotency_key = 'd2000000-0000-4000-8000-000000000012') then
+    raise exception 'MATERIALIZED_CHECKOUT_ROLLBACK_MISMATCH';
+  end if;
+end $checkout_storage_assertions$;
+
+update public.panel_claims
+set status = 'cancelled'
+where id = '91000000-0000-4000-8000-000000000006';
+
+set role authenticated;
+select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', false);
+do $cancelled_guard$
+begin
+  begin
+    perform public.replace_panel_claim_portions(
+      '91000000-0000-4000-8000-000000000006',
+      '[{"amount":40},{"amount":60}]'::jsonb,
+      'cancelled split attempt',
+      0
+    );
+    raise exception 'CANCELLED_CLAIM_WAS_SPLIT';
+  exception when sqlstate '23514' then
+    if sqlerrm <> 'PANEL_CLAIM_NOT_PAYABLE' then raise; end if;
+  end;
+end $cancelled_guard$;
+reset role;
+
+do $correction_integrity$
+begin
+  insert into public.completed_bill_correction_guard (
+    consultation_id, queue_entry_id, actor_id
+  ) values (
+    '61000000-0000-4000-8000-000000000007',
+    '51000000-0000-4000-8000-000000000007',
+    '10000000-0000-4000-8000-000000000001'
+  );
+  delete from public.completed_bill_correction_guard
+  where consultation_id = '61000000-0000-4000-8000-000000000007';
+  update public.panel_claims
+  set amount = 120,
+      received_amount = 120,
+      updated_by = '10000000-0000-4000-8000-000000000001'
+  where id = '91000000-0000-4000-8000-000000000007';
+
+  if (select amount from public.panel_claims
+      where id = '91000000-0000-4000-8000-000000000007') <> 120 then
+    raise exception 'AUDITED_UNSPLIT_TERMINAL_CORRECTION_WAS_BLOCKED';
+  end if;
+
+  begin
+    update public.panel_claims
+    set amount = 110
+    where id = '91000000-0000-4000-8000-000000000004';
+    raise exception 'DIRECT_SPLIT_PARENT_AMOUNT_UPDATE_WAS_ALLOWED';
+  exception when sqlstate '23514' then
+    if sqlerrm <> 'SPLIT_PARENT_AMOUNT_REQUIRES_CORRECTION' then raise; end if;
+  end;
+
+  insert into public.completed_bill_correction_guard (
+    consultation_id, queue_entry_id, actor_id
+  ) values (
+    '61000000-0000-4000-8000-000000000004',
+    '51000000-0000-4000-8000-000000000004',
+    '10000000-0000-4000-8000-000000000001'
+  );
+  update public.consultation_items
+  set price = 120
+  where id = '71000000-0000-4000-8000-000000000004';
+  delete from public.completed_bill_correction_guard
+  where consultation_id = '61000000-0000-4000-8000-000000000004';
+  update public.panel_claims
+  set amount = 120,
+      updated_by = '10000000-0000-4000-8000-000000000001'
+  where id = '91000000-0000-4000-8000-000000000004';
+
+  if (select sum(amount) from public.panel_claim_portions
+      where panel_claim_id = '91000000-0000-4000-8000-000000000004') <> 120
+     or (select amount from public.panel_claim_portions
+         where panel_claim_id = '91000000-0000-4000-8000-000000000004'
+           and portion_no = 2) <> 90
+     or (select portions_version from public.panel_claims
+         where id = '91000000-0000-4000-8000-000000000004') <> 3 then
+    raise exception 'SPLIT_CORRECTION_DID_NOT_REBALANCE_ATOMICALLY';
+  end if;
+
+  begin
+    insert into public.completed_bill_correction_guard (
+      consultation_id, queue_entry_id, actor_id
+    ) values (
+      '61000000-0000-4000-8000-000000000001',
+      '51000000-0000-4000-8000-000000000001',
+      '10000000-0000-4000-8000-000000000001'
+    );
+    update public.consultation_items
+    set price = 30
+    where id = '71000000-0000-4000-8000-000000000001';
+    delete from public.completed_bill_correction_guard
+    where consultation_id = '61000000-0000-4000-8000-000000000001';
+    update public.panel_claims
+    set amount = 30,
+        updated_by = '10000000-0000-4000-8000-000000000001'
+    where id = '91000000-0000-4000-8000-000000000001';
+    raise exception 'PAID_SPLIT_WAS_STRANDED_BY_CORRECTION';
+  exception when sqlstate '23514' then
+    if sqlerrm <> 'PANEL_SPLIT_CORRECTION_BELOW_RECEIPTS' then raise; end if;
+  end;
+
+  if (select price from public.consultation_items
+      where id = '71000000-0000-4000-8000-000000000001') <> 100
+     or (select amount from public.panel_claims
+         where id = '91000000-0000-4000-8000-000000000001') <> 100
+     or (select sum(amount) from public.panel_claim_portions
+         where panel_claim_id = '91000000-0000-4000-8000-000000000001') <> 100 then
+    raise exception 'FAILED_PAID_SPLIT_CORRECTION_WAS_NOT_ATOMIC';
+  end if;
+
+  insert into public.completed_bill_correction_guard (
+    consultation_id, queue_entry_id, actor_id
+  ) values (
+    '61000000-0000-4000-8000-000000000005',
+    '51000000-0000-4000-8000-000000000005',
+    '10000000-0000-4000-8000-000000000001'
+  );
+  update public.consultation_items
+  set price = 120
+  where id = '71000000-0000-4000-8000-000000000005';
+  delete from public.completed_bill_correction_guard
+  where consultation_id = '61000000-0000-4000-8000-000000000005';
+  update public.panel_claims
+  set amount = 120,
+      updated_by = '10000000-0000-4000-8000-000000000001'
+  where id = '91000000-0000-4000-8000-000000000005';
+
+  if (select status from public.panel_claims
+      where id = '91000000-0000-4000-8000-000000000005') <> 'rejected'
+     or (select sum(amount) from public.panel_claim_portions
+         where panel_claim_id = '91000000-0000-4000-8000-000000000005') <> 120 then
+    raise exception 'TERMINAL_SPLIT_CORRECTION_DID_NOT_PRESERVE_STATUS';
+  end if;
+
+  begin
+    update public.panel_claim_portions
+    set amount = amount + 1
+    where panel_claim_id = '91000000-0000-4000-8000-000000000004'
+      and portion_no = 1;
+    set constraints panel_claim_portions_integrity immediate;
+    raise exception 'DEFERRED_PARENT_CHILD_INTEGRITY_WAS_NOT_ENFORCED';
+  exception when sqlstate '23514' then
+    if sqlerrm <> 'PORTION_PARENT_AMOUNT_MISMATCH' then raise; end if;
+  end;
+end $correction_integrity$;
+
+set role authenticated;
+select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', false);
+do $stale_cancel$
+begin
+  begin
+    perform public.cancel_panel_claim_portions(
+      '91000000-0000-4000-8000-000000000004',
+      'stale cancellation',
+      2
+    );
+    raise exception 'STALE_SPLIT_CANCELLATION_WAS_ALLOWED';
+  exception when sqlstate '40001' then
+    if sqlerrm <> 'STALE_PANEL_CLAIM_PORTIONS' then raise; end if;
+  end;
+end $stale_cancel$;
+reset role;
+
+do $runtime_assertions$
+begin
+  if (select count(*) from public.panel_claim_portions
+      where panel_claim_id in (
+        '91000000-0000-4000-8000-000000000001',
+        '91000000-0000-4000-8000-000000000002',
+        '91000000-0000-4000-8000-000000000003',
+        '91000000-0000-4000-8000-000000000004',
+        '91000000-0000-4000-8000-000000000005'
+      )) <> 10 then
+    raise exception 'AUTHORIZED_ROLES_DID_NOT_CREATE_EXACT_SPLITS';
+  end if;
+  if exists (select 1 from public.panel_claim_portions
+      where panel_claim_id in (
+        '91000000-0000-4000-8000-000000000006',
+        '91000000-0000-4000-8000-000000000007',
+        '91000000-0000-4000-8000-000000000008',
+        '91000000-0000-4000-8000-000000000009'
+      )) then
+    raise exception 'DENIED_ROLE_CREATED_SPLIT';
+  end if;
+  if (select count(*) from public.panel_claim_portion_receipts
+      where idempotency_key = 'd1000000-0000-4000-8000-000000000001') <> 1
+     or (select received_amount from public.panel_claim_portions
+         where panel_claim_id = '91000000-0000-4000-8000-000000000001' and portion_no = 1) <> 40
+     or (select received_amount from public.panel_claims
+         where id = '91000000-0000-4000-8000-000000000001') <> 40 then
+    raise exception 'IDEMPOTENT_REPLAY_DOUBLE_PAID';
+  end if;
+  if (select count(*) from public.panel_claim_portion_receipts
+      where panel_claim_id = '91000000-0000-4000-8000-000000000002') <> 1
+     or (select received_amount from public.panel_claim_portions
+         where panel_claim_id = '91000000-0000-4000-8000-000000000002' and portion_no = 1) <> 30
+     or (select received_amount from public.panel_claims
+         where id = '91000000-0000-4000-8000-000000000002') <> 30 then
+    raise exception 'CONCURRENT_PAYMENT_TOTAL_VIOLATION';
+  end if;
+  if (select count(*) from public.panel_claim_portion_receipts
+      where panel_claim_id = '91000000-0000-4000-8000-000000000003') <> 1
+     or (select received_amount from public.panel_claims
+         where id = '91000000-0000-4000-8000-000000000003') <> 40 then
+    raise exception 'SPLIT_PAYMENT_SERIALIZATION_VIOLATION';
+  end if;
+  if (select amount from public.panel_claim_portions
+      where panel_claim_id = '91000000-0000-4000-8000-000000000004' and portion_no = 1) <> 30
+     or (select amount from public.panel_claim_portions
+          where panel_claim_id = '91000000-0000-4000-8000-000000000004' and portion_no = 2) <> 90
+     or (select sum(amount) from public.panel_claim_portions
+          where panel_claim_id = '91000000-0000-4000-8000-000000000004') <> 120 then
+    raise exception 'SPLIT_SPLIT_SERIALIZATION_VIOLATION';
+  end if;
+end $runtime_assertions$;
+`, 'utf8');
+
         psql(bootstrapPath);
         psql(migrationPath);
         psql(fixturePath);
         psql(assertionsPath);
+        psql(portionBootstrapPath);
+        psql(portionMigrationPath);
+        psql(splitFixturePath);
+        psql(portionSecurityAssertionsPath);
       } finally {
         if (serverStarted) {
           try {

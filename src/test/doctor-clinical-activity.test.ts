@@ -81,8 +81,8 @@ describe('doctorClinicalActivityCsv', () => {
     ]));
 
     expect(csv).toBe(
-      'Doctor,Date,Activity Type,Activity Name,Patient,Queue Number\r\n' +
-      '"Dr ""A""","2026-07-28T09:00:00.000Z","procedure","Review, follow-up","Patient One","260728-01"',
+      'Doctor,Date,Activity Type,Activity Name,Patient,Queue Number,Unit Price,Quantity,Total Price\r\n' +
+      '"Dr ""A""","2026-07-28T09:00:00.000Z","procedure","Review, follow-up","Patient One","260728-01","","",""',
     );
   });
 
