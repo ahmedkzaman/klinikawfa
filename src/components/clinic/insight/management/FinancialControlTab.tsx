@@ -250,6 +250,14 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
                 <span>Attribution incomplete for {data.period.incompleteVisits} visits</span>
               )}
               {costStatusLabel(data.period) && <span>{costStatusLabel(data.period)}</span>}
+              {!data.period.attributionComplete && (
+                <p className="basis-full text-xs leading-5 text-amber-900">
+                  <span className="font-semibold">Historical data note:</span>{' '}
+                  Financial Control was introduced after these visits were completed. Older completion and
+                  payment dates were inferred from existing queue and transaction timestamps. Figures are
+                  usable for management insights but may not match the exact original completion time.
+                </p>
+              )}
             </div>
           )}
 

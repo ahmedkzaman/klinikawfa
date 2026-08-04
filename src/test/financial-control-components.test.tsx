@@ -389,6 +389,7 @@ describe('FinancialControlTab summary and reconciliation', () => {
     expect(screen.getByText(/2 corrections/)).toBeInTheDocument();
     expect(screen.getByText('Self-pay outstanding')).toBeInTheDocument();
     expect(screen.getByText('Panel outstanding')).toBeInTheDocument();
+    expect(screen.queryByText(/Historical data note:/)).not.toBeInTheDocument();
   });
 
   it('labels comparison periods across month and year boundaries', () => {
@@ -439,6 +440,9 @@ describe('FinancialControlTab summary and reconciliation', () => {
     const { rerender } = render(<FinancialControlTab {...dates} />);
 
     expect(screen.getByText('Attribution incomplete for 3 visits')).toBeInTheDocument();
+    expect(screen.getByText('Historical data note:').parentElement).toHaveTextContent(
+      'Historical data note: Financial Control was introduced after these visits were completed. Older completion and payment dates were inferred from existing queue and transaction timestamps. Figures are usable for management insights but may not match the exact original completion time.',
+    );
     expect(screen.getByText('Cost data incomplete for 4 items')).toBeInTheDocument();
     expect(screen.getAllByText('Unavailable').length).toBeGreaterThanOrEqual(3);
     expect(screen.queryByText('RM 0.00', { selector: '[data-null-accounting="true"]' })).not.toBeInTheDocument();
