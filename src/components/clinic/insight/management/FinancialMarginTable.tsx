@@ -14,6 +14,7 @@ import type {
   FinancialControlDetailRow,
   FinancialControlGroupBy,
 } from '@/lib/clinic/financialControl';
+import { getFinancialAttributionIssues } from '@/lib/clinic/financialControl';
 
 interface FinancialMarginTableProps {
   rows: FinancialControlDetailRow[];
@@ -60,6 +61,7 @@ function textOrUnavailable(value: string | null): string {
 }
 
 function EntityCell({ row, isVisit }: { row: FinancialControlDetailRow; isVisit: boolean }) {
+  const attributionIssues = getFinancialAttributionIssues(row);
   return (
     <div className="min-w-0 max-w-[17rem]">
       <span className="block break-words text-xs font-semibold leading-5 text-slate-900">
@@ -68,6 +70,14 @@ function EntityCell({ row, isVisit }: { row: FinancialControlDetailRow; isVisit:
       <span className="block truncate text-[10px] leading-4 text-slate-500" title={isVisit ? row.groupLabel : row.groupKey}>
         {isVisit ? row.queueEntryId ?? 'No queue reference' : `${row.visitCount} ${row.visitCount === 1 ? 'visit' : 'visits'}`}
       </span>
+      {attributionIssues.length > 0 && (
+        <span
+          className="mt-1 block text-[10px] leading-4 text-amber-800"
+          title={`Incomplete: ${attributionIssues.join(', ')}`}
+        >
+          Incomplete: {attributionIssues.join(', ')}
+        </span>
+      )}
     </div>
   );
 }

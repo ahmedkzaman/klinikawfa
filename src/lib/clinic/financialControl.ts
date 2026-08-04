@@ -130,6 +130,24 @@ export interface FinancialControlDetailRow {
   visitCount: number;
 }
 
+/** Explain which financial fields prevent a detail row from being fully attributed. */
+export function getFinancialAttributionIssues(row: FinancialControlDetailRow): string[] {
+  if (row.attributionComplete) return [];
+
+  const issues: string[] = [];
+  if (row.completedDate === null || row.billed === null) issues.push('bill or completion history');
+  if (row.paid === null || row.paidInPeriod === null) issues.push('payment history');
+  if (row.outstanding === null) issues.push('outstanding-balance history');
+  if (row.cogs === null) issues.push('cost history');
+  if (row.discount === null || row.tax === null || row.refund === null) issues.push('adjustment history');
+  if (row.corrections === null) issues.push('correction history');
+  if (row.paymentType === 'panel' && (row.claimStatus === null || row.claimCreatedDate === null)) {
+    issues.push('panel-claim history');
+  }
+
+  return issues.length > 0 ? issues : ['financial event linkage'];
+}
+
 export interface FinancialControlDetailTotals {
   billed: number | null;
   paid: number | null;

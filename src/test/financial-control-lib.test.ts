@@ -3,6 +3,7 @@ import {
   collectFinancialControlExportRows,
   financialControlExportFilename,
   financialControlRowsToCsv,
+  getFinancialAttributionIssues,
   type FinancialControlDetailFilters,
   type FinancialControlDetailResponse,
   type FinancialControlDetailRow,
@@ -44,6 +45,22 @@ function detailRow(overrides: Partial<FinancialControlDetailRow> = {}): Financia
     ...overrides,
   };
 }
+
+describe('financial attribution explanations', () => {
+  it('identifies the missing history fields for an incomplete visit', () => {
+    expect(getFinancialAttributionIssues(detailRow({
+      attributionComplete: false,
+      paid: null,
+      paidInPeriod: null,
+      cogs: null,
+      corrections: null,
+    }))).toEqual(['payment history', 'cost history', 'correction history']);
+  });
+
+  it('does not label a fully attributed visit as incomplete', () => {
+    expect(getFinancialAttributionIssues(detailRow())).toEqual([]);
+  });
+});
 
 describe('financialControlRowsToCsv', () => {
   it('exports only visible visit columns with a BOM, safe formulas, and two-decimal money', () => {
