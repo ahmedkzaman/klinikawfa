@@ -23,6 +23,9 @@ import {
 } from '@/lib/clinic/financialControl';
 import { FinancialMarginTable } from './FinancialMarginTable';
 
+const DETAIL_ERROR_MESSAGE = 'Financial details are temporarily unavailable. Please retry.';
+const EXPORT_ERROR_MESSAGE = 'The CSV export could not be prepared. Please retry.';
+
 interface FinancialDetailSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -127,7 +130,7 @@ export function FinancialDetailSheet({
         );
       }
     } catch (error) {
-      setExportError(`Export failed. ${(error as Error)?.message ?? 'Unknown error'}`);
+      setExportError(EXPORT_ERROR_MESSAGE);
     } finally {
       setIsExporting(false);
     }
@@ -149,9 +152,7 @@ export function FinancialDetailSheet({
         {detail.isError && !detail.data ? (
           <div role="alert" className="mt-5 rounded-lg border border-rose-200 bg-white px-4 py-5">
             <h3 className="text-sm font-semibold text-rose-800">Financial details unavailable</h3>
-            <p className="mt-1 text-xs text-rose-700">
-              {(detail.error as Error)?.message ?? 'Unknown error'}
-            </p>
+            <p className="mt-1 text-xs text-rose-700">{DETAIL_ERROR_MESSAGE}</p>
             <Button
               type="button"
               variant="outline"
@@ -176,7 +177,7 @@ export function FinancialDetailSheet({
             {detail.isError && (
               <div role="alert" className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-amber-900">
-                  Detail data is stale. {(detail.error as Error)?.message ?? 'Refresh failed'}
+                  Detail data is stale. Please retry to refresh it.
                 </p>
                 <Button
                   type="button"

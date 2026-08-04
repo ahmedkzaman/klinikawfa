@@ -243,7 +243,8 @@ describe('Financial Control Management shell', () => {
     }));
     rerender(<FinancialControlTab {...dates} />);
     expect(screen.getByText('Financial control summary unavailable')).toBeInTheDocument();
-    expect(screen.getByText('Summary unavailable')).toBeInTheDocument();
+    expect(screen.getByText('Financial summary is temporarily unavailable. Please retry.')).toBeInTheDocument();
+    expect(screen.queryByText('Summary unavailable')).not.toBeInTheDocument();
   });
 });
 
@@ -631,7 +632,7 @@ describe('FinancialControlTab alerts and drill-down', () => {
     }));
     rerender(<FinancialControlTab {...dates} />);
     expect(screen.getByRole('alert')).toHaveTextContent('Financial details unavailable');
-    expect(screen.getByRole('alert')).toHaveTextContent('Detail unavailable');
+    expect(screen.getByRole('alert')).toHaveTextContent('Financial details are temporarily unavailable. Please retry.');
     expect(screen.getByRole('heading', { name: 'Reconciliation' })).toBeInTheDocument();
   });
 
@@ -826,11 +827,11 @@ describe('FinancialControlTab alerts and drill-down', () => {
     }));
 
     render(<FinancialControlTab {...dates} />);
-    expect(screen.getByText('Summary data is stale. Summary refresh failed')).toBeInTheDocument();
+    expect(screen.getByText('Summary data is stale. Please retry to refresh it.')).toBeInTheDocument();
     expect(screen.getByText('Last updated 7 Aug 2026, 12:15')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Billed Revenue details/i }));
 
-    expect(await screen.findByText('Detail data is stale. Detail refresh failed')).toBeInTheDocument();
+    expect(await screen.findByText('Detail data is stale. Please retry to refresh it.')).toBeInTheDocument();
     expect(screen.getByText('Aisyah Rahman')).toBeInTheDocument();
   });
 });

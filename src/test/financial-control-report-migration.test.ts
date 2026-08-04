@@ -846,6 +846,28 @@ begin
   end if;
 
   v_details := public.get_financial_control_details(
+    '2026-08-02', '2026-08-02', '2026-08-03',
+    'cash_collected', 'visit', null, 1, 100
+  );
+  if not exists (
+    select 1 from jsonb_array_elements(v_details->'rows') row_value
+    where row_value->>'queueEntryId' = '50000000-0000-4000-8000-000000000003'
+      and (row_value->>'paid')::numeric = 20
+      and (row_value->>'paidInPeriod')::numeric = 20
+      and (row_value->>'amount')::numeric = 20
+  ) then
+    raise exception 'VISIT_PERIOD_PAID_USES_LIFETIME_TOTAL: %', v_details;
+  end if;
+  if (v_details #>> '{totals,paid}')::numeric <> 92
+     or coalesce((
+       select sum((row_value->>'paid')::numeric)
+       from jsonb_array_elements(v_details->'rows') row_value
+       where (row_value->>'attributionComplete')::boolean
+     ), 0) <> 92 then
+    raise exception 'VISIT_PERIOD_PAID_TOTAL_DOES_NOT_RECONCILE: %', v_details;
+  end if;
+
+  v_details := public.get_financial_control_details(
     '2026-08-01', '2026-08-03', '2026-08-03',
     'adjustments', 'procedure', null, 1, 20
   );
@@ -978,6 +1000,39 @@ begin
     raise exception 'INVALID_SUMMARY_DATES_ACCEPTED';
   exception when sqlstate '22023' then null;
   end;
+
+  update public.queue_entries
+  set clinic_status = 'cancelled', deleted_at = '2026-08-04 08:00:00+00'
+  where id = '50000000-0000-4000-8000-000000000003';
+  update public.consultations
+  set status = 'cancelled', deleted_at = '2026-08-04 08:00:00+00'
+  where id = '60000000-0000-4000-8000-000000000003';
+
+  update public.queue_entries
+  set clinic_status = 'waiting'
+  where id = '50000000-0000-4000-8000-000000000001';
+  update public.consultations
+  set status = 'in_progress'
+  where id = '60000000-0000-4000-8000-000000000001';
+
+  update public.queue_entries
+  set deleted_at = '2026-08-04 08:05:00+00'
+  where id = '50000000-0000-4000-8000-000000000002';
+  update public.consultations
+  set deleted_at = '2026-08-04 08:05:00+00'
+  where id = '60000000-0000-4000-8000-000000000002';
+
+  select count(*) into v_count
+  from private.financial_control_visit_facts('2026-08-01', '2026-08-03', '2026-08-03')
+  where queue_entry_id in (
+    '50000000-0000-4000-8000-000000000001',
+    '50000000-0000-4000-8000-000000000002',
+    '50000000-0000-4000-8000-000000000003'
+  );
+  if v_count <> 3 then
+    raise exception 'HISTORICAL_COMPLETION_DISAPPEARED_AFTER_STATUS_CHANGE: %', v_count;
+  end if;
+
 end $$;
 
 -- Equal-value groups from the same visit straddle a page boundary. The final
@@ -1044,7 +1099,7 @@ insert into public.consultations values
 insert into public.consultation_items values
   ('70000000-0000-4000-8000-000000000081', '60000000-0000-4000-8000-000000000008', 'Mixed-margin medicine', '80000000-0000-4000-8000-000000000081', null, null, 1, 1, 100, 20, null, null, null),
   ('70000000-0000-4000-8000-000000000082', '60000000-0000-4000-8000-000000000008', 'Mixed-margin procedure', null, '81000000-0000-4000-8000-000000000082', null, 1, null, 10, 100, null, null, null),
-  ('70000000-0000-4000-8000-000000000091', '60000000-0000-4000-8000-000000000009', 'Corrected procedure first', null, '81000000-0000-4000-8000-000000000091', null, 1, null, 20, 5, null, null, null),
+  ('70000000-0000-4000-8000-000000000181', '60000000-0000-4000-8000-000000000009', 'Corrected procedure first', null, '81000000-0000-4000-8000-000000000181', null, 1, null, 20, 5, null, null, null),
   ('70000000-0000-4000-8000-000000000092', '60000000-0000-4000-8000-000000000009', 'Corrected medicine second', '80000000-0000-4000-8000-000000000092', null, null, 1, 1, 30, 5, null, null, null),
   ('70000000-0000-4000-8000-000000000101', '60000000-0000-4000-8000-000000000010', 'Completion administration', null, null, null, 1, null, 40, 0, 'other_charge', null, '83000000-0000-4000-8000-000000000001');
 insert into private.financial_visit_completion_events
@@ -1059,7 +1114,7 @@ from (values
 ) fixture(queue_entry_id, consultation_id, completed_at);
 insert into public.completed_bill_correction_audit
 select
-  'b0000000-0000-4000-8000-000000000091',
+  'b0000000-0000-4000-8000-000000000181',
   '50000000-0000-4000-8000-000000000009',
   '60000000-0000-4000-8000-000000000009',
   public.completed_bill_correction_state(
@@ -1177,11 +1232,105 @@ begin
   );
   if not exists (
     select 1 from jsonb_array_elements(v_details->'rows') row_value
-    where row_value->>'groupKey' = '81000000-0000-4000-8000-000000000091'
+    where row_value->>'groupKey' = '81000000-0000-4000-8000-000000000181'
       and (row_value->>'corrections')::integer = 1
       and (row_value->'alertKeys') ? 'refund_void_correction'
   ) then
     raise exception 'PROCEDURE_CORRECTION_COUNT_LOST: %', v_details;
+  end if;
+end $$;
+
+-- Association transfers must move immutable payment and panel state whether the
+-- affected visits complete before or after the reassignment.
+insert into public.queue_entries values
+  ('50000000-0000-4000-8000-000000000090', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('50000000-0000-4000-8000-000000000091', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('50000000-0000-4000-8000-000000000092', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null),
+  ('50000000-0000-4000-8000-000000000093', '20000000-0000-4000-8000-000000000001', 'registered', 'panel', '40000000-0000-4000-8000-000000000001', statement_timestamp(), null);
+insert into public.consultations values
+  ('60000000-0000-4000-8000-000000000090', '50000000-0000-4000-8000-000000000090', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'in_progress', null),
+  ('60000000-0000-4000-8000-000000000091', '50000000-0000-4000-8000-000000000091', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'in_progress', null),
+  ('60000000-0000-4000-8000-000000000092', '50000000-0000-4000-8000-000000000092', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'in_progress', null),
+  ('60000000-0000-4000-8000-000000000093', '50000000-0000-4000-8000-000000000093', '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'in_progress', null);
+insert into public.consultation_items values
+  ('70000000-0000-4000-8000-000000000190', '60000000-0000-4000-8000-000000000090', 'Pre-transfer origin', null, '81000000-0000-4000-8000-000000000190', null, 1, null, 100, 10, null, null, null),
+  ('70000000-0000-4000-8000-000000000191', '60000000-0000-4000-8000-000000000091', 'Pre-transfer destination', null, '81000000-0000-4000-8000-000000000191', null, 1, null, 100, 10, null, null, null),
+  ('70000000-0000-4000-8000-000000000192', '60000000-0000-4000-8000-000000000092', 'Post-transfer origin', null, '81000000-0000-4000-8000-000000000192', null, 1, null, 100, 10, null, null, null),
+  ('70000000-0000-4000-8000-000000000193', '60000000-0000-4000-8000-000000000093', 'Post-transfer destination', null, '81000000-0000-4000-8000-000000000193', null, 1, null, 100, 10, null, null, null);
+
+insert into public.payments values
+  ('90000000-0000-4000-8000-000000000090', '50000000-0000-4000-8000-000000000090', '60000000-0000-4000-8000-000000000090', 'self_pay', 'cash', 25, statement_timestamp(), null);
+insert into public.panel_claims values
+  ('a0000000-0000-4000-8000-000000000090', '50000000-0000-4000-8000-000000000090', '40000000-0000-4000-8000-000000000001', 80, 30, 'submitted', statement_timestamp(), statement_timestamp(), null);
+update public.payments
+set queue_entry_id = '50000000-0000-4000-8000-000000000091',
+    consultation_id = '60000000-0000-4000-8000-000000000091'
+where id = '90000000-0000-4000-8000-000000000090';
+update public.panel_claims
+set queue_entry_id = '50000000-0000-4000-8000-000000000091'
+where id = 'a0000000-0000-4000-8000-000000000090';
+
+update public.queue_entries
+set clinic_status = 'completed'
+where id in (
+  '50000000-0000-4000-8000-000000000090',
+  '50000000-0000-4000-8000-000000000091',
+  '50000000-0000-4000-8000-000000000092',
+  '50000000-0000-4000-8000-000000000093'
+);
+update public.consultations
+set status = 'completed'
+where id in (
+  '60000000-0000-4000-8000-000000000090',
+  '60000000-0000-4000-8000-000000000091',
+  '60000000-0000-4000-8000-000000000092',
+  '60000000-0000-4000-8000-000000000093'
+);
+
+insert into public.payments values
+  ('90000000-0000-4000-8000-000000000092', '50000000-0000-4000-8000-000000000092', '60000000-0000-4000-8000-000000000092', 'self_pay', 'cash', 40, statement_timestamp(), null);
+insert into public.panel_claims values
+  ('a0000000-0000-4000-8000-000000000092', '50000000-0000-4000-8000-000000000092', '40000000-0000-4000-8000-000000000001', 90, 35, 'approved', statement_timestamp(), statement_timestamp(), null);
+update public.payments
+set queue_entry_id = '50000000-0000-4000-8000-000000000093',
+    consultation_id = '60000000-0000-4000-8000-000000000093'
+where id = '90000000-0000-4000-8000-000000000092';
+update public.panel_claims
+set queue_entry_id = '50000000-0000-4000-8000-000000000093'
+where id = 'a0000000-0000-4000-8000-000000000092';
+
+do $$
+declare
+  v_row record;
+  v_report_date date := (timezone('Asia/Kuala_Lumpur', statement_timestamp()))::date;
+begin
+  select * into strict v_row
+  from private.financial_control_visit_facts(v_report_date, v_report_date, v_report_date)
+  where queue_entry_id = '50000000-0000-4000-8000-000000000090';
+  if (v_row.paid_to_date, v_row.paid_in_period, v_row.panel_outstanding)
+     is distinct from (0::numeric, 0::numeric, 0::numeric) then
+    raise exception 'PRE_COMPLETION_REASSIGNMENT_OLD_STATE_REMAINS: %', row_to_json(v_row);
+  end if;
+  select * into strict v_row
+  from private.financial_control_visit_facts(v_report_date, v_report_date, v_report_date)
+  where queue_entry_id = '50000000-0000-4000-8000-000000000091';
+  if (v_row.paid_to_date, v_row.paid_in_period, v_row.panel_outstanding)
+     is distinct from (55::numeric, 55::numeric, 50::numeric) then
+    raise exception 'PRE_COMPLETION_REASSIGNMENT_NEW_STATE_MISSING: %', row_to_json(v_row);
+  end if;
+  select * into strict v_row
+  from private.financial_control_visit_facts(v_report_date, v_report_date, v_report_date)
+  where queue_entry_id = '50000000-0000-4000-8000-000000000092';
+  if (v_row.paid_to_date, v_row.paid_in_period, v_row.panel_outstanding)
+     is distinct from (0::numeric, 0::numeric, 0::numeric) then
+    raise exception 'POST_COMPLETION_REASSIGNMENT_OLD_STATE_REMAINS: %', row_to_json(v_row);
+  end if;
+  select * into strict v_row
+  from private.financial_control_visit_facts(v_report_date, v_report_date, v_report_date)
+  where queue_entry_id = '50000000-0000-4000-8000-000000000093';
+  if (v_row.paid_to_date, v_row.paid_in_period, v_row.panel_outstanding)
+     is distinct from (75::numeric, 75::numeric, 55::numeric) then
+    raise exception 'POST_COMPLETION_REASSIGNMENT_NEW_STATE_MISSING: %', row_to_json(v_row);
   end if;
 end $$;
 

@@ -6,7 +6,9 @@ CREATE SCHEMA IF NOT EXISTS private;
 CREATE TABLE private.financial_visit_completion_events (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   queue_entry_id uuid NOT NULL,
-  consultation_id uuid NOT NULL UNIQUE,
+  consultation_id uuid NOT NULL,
+  event_kind text NOT NULL DEFAULT 'completion'
+    CHECK (event_kind IN ('completion', 'void')),
   completed_at timestamptz,
   provenance text NOT NULL CHECK (provenance IN ('recorded', 'synthetic_backfill')),
   attribution_complete boolean NOT NULL,
@@ -15,9 +17,12 @@ CREATE TABLE private.financial_visit_completion_events (
   CHECK (item_state IS NULL OR jsonb_typeof(item_state) = 'array'),
   CHECK (
     (attribution_complete AND completed_at IS NOT NULL
-      AND provenance = 'recorded' AND item_state IS NOT NULL)
+      AND provenance = 'recorded' AND (
+        (event_kind = 'completion' AND item_state IS NOT NULL)
+        OR (event_kind = 'void' AND item_state IS NULL)
+      ))
     OR (NOT attribution_complete AND provenance = 'synthetic_backfill'
-      AND item_state IS NULL)
+      AND event_kind = 'completion' AND item_state IS NULL)
   )
 );
 
@@ -27,7 +32,10 @@ CREATE TABLE private.financial_payment_events (
   queue_entry_id uuid,
   consultation_id uuid,
   event_kind text NOT NULL CHECK (
-    event_kind IN ('receipt', 'correction', 'void', 'restoration', 'synthetic_backfill')
+    event_kind IN (
+      'receipt', 'correction', 'void', 'restoration',
+      'reassignment_out', 'reassignment_in', 'synthetic_backfill'
+    )
   ),
   amount_delta numeric NOT NULL,
   payment_type text,
@@ -50,7 +58,7 @@ CREATE TABLE private.financial_panel_claim_events (
   event_kind text NOT NULL CHECK (
     event_kind IN (
       'claim_created', 'claim_edit', 'receipt', 'receipt_reversal',
-      'void', 'synthetic_backfill'
+      'void', 'reassignment_out', 'reassignment_in', 'synthetic_backfill'
     )
   ),
   amount numeric NOT NULL,
@@ -82,6 +90,8 @@ CREATE TABLE private.financial_zero_price_package_child_events (
 CREATE INDEX financial_visit_completion_completed_idx
   ON private.financial_visit_completion_events (completed_at, consultation_id)
   WHERE attribution_complete;
+CREATE INDEX financial_visit_completion_lifecycle_idx
+  ON private.financial_visit_completion_events (consultation_id, completed_at DESC, id DESC);
 CREATE INDEX financial_payment_queue_occurred_idx
   ON private.financial_payment_events (queue_entry_id, occurred_at, id)
   WHERE attribution_complete;
@@ -157,6 +167,13 @@ AS $function$
     FROM private.financial_visit_completion_events event
     WHERE event.queue_entry_id = _queue_entry_id
       AND event.consultation_id = _consultation_id
+      AND event.event_kind = 'completion'
+      AND (
+        NOT event.attribution_complete
+        OR event.completed_at
+          < ((_as_of_date + 1)::timestamp AT TIME ZONE 'Asia/Kuala_Lumpur')
+      )
+    ORDER BY event.completed_at DESC NULLS LAST, event.id DESC
     LIMIT 1
   ), completion_totals AS (
     SELECT
@@ -381,7 +398,8 @@ BEGIN
         COUNT(*)::integer AS total,
         COUNT(*) FILTER (WHERE NOT attribution_complete)::integer AS incomplete_rows,
         SUM(billed) FILTER (WHERE attribution_complete) AS billed,
-        SUM(paid_to_date) FILTER (WHERE attribution_complete) AS paid,
+        SUM(CASE WHEN _metric = 'cash_collected' THEN paid_in_period ELSE paid_to_date END)
+          FILTER (WHERE attribution_complete) AS paid,
         SUM(outstanding) FILTER (WHERE attribution_complete) AS outstanding,
         SUM(cogs) FILTER (WHERE attribution_complete) AS cogs,
         SUM(billed - cogs) FILTER (WHERE attribution_complete) AS profit,
@@ -406,7 +424,7 @@ BEGIN
           'groupKey', queue_entry_id,
           'groupLabel', patient_name,
           'billed', billed,
-          'paid', paid_to_date,
+          'paid', CASE WHEN _metric = 'cash_collected' THEN paid_in_period ELSE paid_to_date END,
           'paidInPeriod', paid_in_period,
           'outstanding', outstanding,
           'cogs', cogs,
@@ -534,7 +552,7 @@ BEGIN
         bool_and(attribution_complete) AS attribution_complete,
         bool_and(cost_complete) AS cost_complete,
         SUM(billed) AS billed,
-        SUM(paid_to_date) AS paid,
+        SUM(CASE WHEN _metric = 'cash_collected' THEN paid_in_period ELSE paid_to_date END) AS paid,
         SUM(outstanding) AS outstanding,
         SUM(cogs) AS cogs,
         SUM(billed - cogs) AS profit,
@@ -787,7 +805,8 @@ BEGIN
           LEAST(COALESCE(item.dispensed_qty, item.quantity), GREATEST(item.quantity, 0)), 0
         ) = 0 AS cost_complete,
         item.allocated_billed AS billed,
-        item.allocated_paid AS paid,
+        CASE WHEN _metric = 'cash_collected' THEN item.allocated_paid_in_period
+          ELSE item.allocated_paid END AS paid,
         item.allocated_paid_in_period AS paid_in_period,
         item.allocated_outstanding AS outstanding,
         round(item.unit_cost * CASE WHEN item.item_id IS NOT NULL THEN GREATEST(
@@ -997,6 +1016,10 @@ DECLARE
   v_consultation_id uuid;
   v_queue_status text;
   v_consultation_status text;
+  v_queue_deleted_at timestamptz;
+  v_consultation_deleted_at timestamptz;
+  v_latest_event_kind text;
+  v_is_completed boolean;
   v_completed_at timestamptz;
   v_completion_inserted integer;
 BEGIN
@@ -1009,8 +1032,7 @@ BEGIN
       INTO v_consultation_id
     FROM public.consultations c
     WHERE c.queue_entry_id = NEW.id
-      AND c.deleted_at IS NULL
-    ORDER BY c.id
+    ORDER BY c.deleted_at NULLS FIRST, c.id
     LIMIT 1;
   END IF;
 
@@ -1018,19 +1040,32 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  SELECT qe.clinic_status::text, c.status
-    INTO v_queue_status, v_consultation_status
+  SELECT qe.clinic_status::text, c.status, qe.deleted_at, c.deleted_at
+    INTO v_queue_status, v_consultation_status,
+      v_queue_deleted_at, v_consultation_deleted_at
   FROM public.queue_entries qe
   JOIN public.consultations c ON c.id = v_consultation_id
-  WHERE qe.id = v_queue_entry_id
-    AND qe.deleted_at IS NULL
-    AND c.deleted_at IS NULL;
+  WHERE qe.id = v_queue_entry_id;
 
-  IF v_queue_status = 'completed' AND v_consultation_status = 'completed' THEN
+  SELECT event.event_kind
+    INTO v_latest_event_kind
+  FROM private.financial_visit_completion_events event
+  WHERE event.consultation_id = v_consultation_id
+    AND event.queue_entry_id = v_queue_entry_id
+  ORDER BY event.completed_at DESC NULLS LAST, event.id DESC
+  LIMIT 1;
+
+  v_is_completed := v_queue_status = 'completed'
+    AND v_consultation_status = 'completed'
+    AND v_queue_deleted_at IS NULL
+    AND v_consultation_deleted_at IS NULL;
+
+  IF v_is_completed AND v_latest_event_kind IS DISTINCT FROM 'completion' THEN
     v_completed_at := statement_timestamp();
     INSERT INTO private.financial_visit_completion_events (
       queue_entry_id,
       consultation_id,
+      event_kind,
       completed_at,
       provenance,
       attribution_complete,
@@ -1039,13 +1074,12 @@ BEGIN
     VALUES (
       v_queue_entry_id,
       v_consultation_id,
+      'completion',
       v_completed_at,
       'recorded',
       true,
       private.financial_control_completion_item_state(v_consultation_id)
-    )
-    ON CONFLICT (consultation_id) DO NOTHING;
-
+    );
     GET DIAGNOSTICS v_completion_inserted = ROW_COUNT;
     IF v_completion_inserted = 1 THEN
       INSERT INTO private.financial_zero_price_package_child_events (
@@ -1092,6 +1126,24 @@ BEGIN
       ORDER BY child.id, package_line.id, package_item.id
       ON CONFLICT (consultation_item_id) DO NOTHING;
     END IF;
+  ELSIF NOT v_is_completed AND v_latest_event_kind = 'completion' THEN
+    INSERT INTO private.financial_visit_completion_events (
+      queue_entry_id,
+      consultation_id,
+      event_kind,
+      completed_at,
+      provenance,
+      attribution_complete,
+      item_state
+    ) VALUES (
+      v_queue_entry_id,
+      v_consultation_id,
+      'void',
+      statement_timestamp(),
+      'recorded',
+      true,
+      NULL
+    );
   END IF;
 
   RETURN NEW;
@@ -1117,6 +1169,33 @@ BEGIN
     v_after_amount := NEW.amount;
   END IF;
   v_delta := v_after_amount - v_before_amount;
+
+  IF TG_OP = 'UPDATE' AND (
+    OLD.queue_entry_id IS DISTINCT FROM NEW.queue_entry_id
+    OR OLD.consultation_id IS DISTINCT FROM NEW.consultation_id
+  ) THEN
+    IF OLD.deleted_at IS NULL AND v_before_amount <> 0 THEN
+      INSERT INTO private.financial_payment_events (
+        payment_id, queue_entry_id, consultation_id, event_kind, amount_delta,
+        payment_type, payment_method, occurred_at, provenance, attribution_complete
+      ) VALUES (
+        OLD.id, OLD.queue_entry_id, OLD.consultation_id, 'reassignment_out',
+        -v_before_amount, OLD.payment_type, OLD.payment_method,
+        statement_timestamp(), 'recorded', true
+      );
+    END IF;
+    IF NEW.deleted_at IS NULL AND v_after_amount <> 0 THEN
+      INSERT INTO private.financial_payment_events (
+        payment_id, queue_entry_id, consultation_id, event_kind, amount_delta,
+        payment_type, payment_method, occurred_at, provenance, attribution_complete
+      ) VALUES (
+        NEW.id, NEW.queue_entry_id, NEW.consultation_id, 'reassignment_in',
+        v_after_amount, NEW.payment_type, NEW.payment_method,
+        statement_timestamp(), 'recorded', true
+      );
+    END IF;
+    RETURN NEW;
+  END IF;
 
   IF TG_OP = 'INSERT' THEN
     v_event_kind := 'receipt';
@@ -1185,6 +1264,28 @@ BEGIN
   END IF;
   v_delta := v_after_received - v_before_received;
 
+  IF TG_OP = 'UPDATE' AND OLD.queue_entry_id IS DISTINCT FROM NEW.queue_entry_id THEN
+    INSERT INTO private.financial_panel_claim_events (
+      panel_claim_id, queue_entry_id, panel_id, event_kind, amount,
+      received_amount, receipt_delta, status, due_date, occurred_at,
+      provenance, attribution_complete
+    ) VALUES (
+      OLD.id, OLD.queue_entry_id, OLD.panel_id, 'reassignment_out', OLD.amount,
+      0, -v_before_received, 'cancelled', OLD.due_date, statement_timestamp(),
+      'recorded', true
+    );
+    INSERT INTO private.financial_panel_claim_events (
+      panel_claim_id, queue_entry_id, panel_id, event_kind, amount,
+      received_amount, receipt_delta, status, due_date, occurred_at,
+      provenance, attribution_complete
+    ) VALUES (
+      NEW.id, NEW.queue_entry_id, NEW.panel_id, 'reassignment_in', NEW.amount,
+      v_after_received, v_after_received, NEW.status::text, NEW.due_date,
+      statement_timestamp(), 'recorded', true
+    );
+    RETURN NEW;
+  END IF;
+
   IF TG_OP = 'INSERT' AND v_delta = 0 THEN
     v_event_kind := 'claim_created';
   ELSIF TG_OP = 'DELETE' THEN
@@ -1246,10 +1347,10 @@ REVOKE ALL ON FUNCTION private.capture_financial_payment_event() FROM PUBLIC, an
 REVOKE ALL ON FUNCTION private.capture_financial_panel_claim_event() FROM PUBLIC, anon, authenticated;
 
 CREATE TRIGGER capture_financial_visit_completion_from_queue
-  AFTER INSERT OR UPDATE OF clinic_status ON public.queue_entries
+  AFTER INSERT OR UPDATE OF clinic_status, deleted_at ON public.queue_entries
   FOR EACH ROW EXECUTE FUNCTION private.capture_financial_visit_completion_event();
 CREATE TRIGGER capture_financial_visit_completion_from_consultation
-  AFTER INSERT OR UPDATE OF status ON public.consultations
+  AFTER INSERT OR UPDATE OF status, deleted_at ON public.consultations
   FOR EACH ROW EXECUTE FUNCTION private.capture_financial_visit_completion_event();
 CREATE TRIGGER capture_financial_payment_event
   AFTER INSERT OR UPDATE OR DELETE ON public.payments
@@ -1262,19 +1363,19 @@ CREATE TRIGGER capture_financial_panel_claim_event
 INSERT INTO private.financial_visit_completion_events (
   queue_entry_id,
   consultation_id,
+  event_kind,
   completed_at,
   provenance,
   attribution_complete,
   item_state
 )
-SELECT qe.id, c.id, NULL, 'synthetic_backfill', false, NULL
+SELECT qe.id, c.id, 'completion', NULL, 'synthetic_backfill', false, NULL
 FROM public.consultations c
 JOIN public.queue_entries qe ON qe.id = c.queue_entry_id
 WHERE c.deleted_at IS NULL
   AND qe.deleted_at IS NULL
   AND c.status = 'completed'
-  AND qe.clinic_status = 'completed'
-ON CONFLICT (consultation_id) DO NOTHING;
+  AND qe.clinic_status = 'completed';
 
 INSERT INTO private.financial_payment_events (
   payment_id,
@@ -1384,7 +1485,17 @@ BEGIN
   END IF;
 
   RETURN QUERY
-  WITH completed_visits AS MATERIALIZED (
+  WITH lifecycle_events AS MATERIALIZED (
+    SELECT DISTINCT ON (event.consultation_id) event.*
+    FROM private.financial_visit_completion_events event
+    WHERE NOT event.attribution_complete
+       OR event.completed_at
+         < ((_as_of_date + 1)::timestamp AT TIME ZONE 'Asia/Kuala_Lumpur')
+    ORDER BY event.consultation_id,
+      event.completed_at DESC NULLS LAST,
+      event.id DESC
+  ),
+  completed_visits AS MATERIALIZED (
     SELECT
       qe.id AS queue_entry_id,
       c.id AS consultation_id,
@@ -1399,23 +1510,14 @@ BEGIN
       doctor.name AS doctor_name,
       qe.payment_method AS queue_payment_method,
       qe.panel_id AS queue_panel_id
-    FROM public.consultations c
-    JOIN public.queue_entries qe
-      ON qe.id = c.queue_entry_id
-     AND qe.deleted_at IS NULL
-     AND qe.clinic_status = 'completed'
-    JOIN private.financial_visit_completion_events completion
-      ON completion.consultation_id = c.id
-     AND completion.queue_entry_id = qe.id
-    JOIN public.patients patient ON patient.id = c.patient_id
+    FROM lifecycle_events completion
+    LEFT JOIN public.consultations c
+      ON c.id = completion.consultation_id
+    LEFT JOIN public.queue_entries qe
+      ON qe.id = completion.queue_entry_id
+    LEFT JOIN public.patients patient ON patient.id = c.patient_id
     LEFT JOIN public.doctors doctor ON doctor.id = c.doctor_id
-    WHERE c.deleted_at IS NULL
-      AND c.status = 'completed'
-      AND (
-        NOT completion.attribution_complete
-        OR completion.completed_at
-          < ((_as_of_date + 1)::timestamp AT TIME ZONE 'Asia/Kuala_Lumpur')
-      )
+    WHERE completion.event_kind = 'completion'
   ),
   visit_state AS MATERIALIZED (
     SELECT
@@ -1466,6 +1568,7 @@ BEGIN
         ), 0)::numeric AS paid_in_period,
         COALESCE(SUM(GREATEST(-event.amount_delta, 0)) FILTER (
           WHERE event.attribution_complete
+            AND event.event_kind <> 'reassignment_out'
             AND (timezone('Asia/Kuala_Lumpur', event.occurred_at))::date
               BETWEEN _start_date AND _end_date
         ), 0)::numeric AS refund_in_period,
@@ -1532,6 +1635,7 @@ BEGIN
         ), 0)::numeric AS received_in_period,
         COALESCE(SUM(GREATEST(-event.receipt_delta, 0)) FILTER (
           WHERE event.attribution_complete
+            AND event.event_kind <> 'reassignment_out'
             AND (timezone('Asia/Kuala_Lumpur', event.occurred_at))::date
               BETWEEN _start_date AND _end_date
         ), 0)::numeric AS refund_in_period,
@@ -1861,7 +1965,10 @@ AS $function$
         SELECT 1
         FROM private.financial_payment_events event
         WHERE event.attribution_complete
-          AND event.event_kind IN ('correction', 'void', 'restoration')
+          AND event.event_kind IN (
+            'correction', 'void', 'restoration',
+            'reassignment_out', 'reassignment_in'
+          )
           AND (timezone('Asia/Kuala_Lumpur', event.occurred_at))::date
             BETWEEN _start_date AND _end_date
           AND (
@@ -1881,7 +1988,9 @@ AS $function$
         SELECT 1
         FROM private.financial_panel_claim_events event
         WHERE event.attribution_complete
-          AND event.event_kind IN ('receipt_reversal', 'void')
+          AND event.event_kind IN (
+            'receipt_reversal', 'void', 'reassignment_out', 'reassignment_in'
+          )
           AND event.queue_entry_id = fact.queue_entry_id
           AND (timezone('Asia/Kuala_Lumpur', event.occurred_at))::date
             BETWEEN _start_date AND _end_date
@@ -1903,9 +2012,20 @@ AS $function$
         AND fact.correction_count IS NOT NULL
       ) AS row_attribution_complete
     FROM facts fact
-    LEFT JOIN private.financial_visit_completion_events completion
-      ON completion.queue_entry_id = fact.queue_entry_id
-     AND completion.consultation_id = fact.consultation_id
+    LEFT JOIN LATERAL (
+      SELECT event.completed_at
+      FROM private.financial_visit_completion_events event
+      WHERE event.queue_entry_id = fact.queue_entry_id
+        AND event.consultation_id = fact.consultation_id
+        AND event.event_kind = 'completion'
+        AND (
+          NOT event.attribution_complete
+          OR event.completed_at
+            < ((_as_of_date + 1)::timestamp AT TIME ZONE 'Asia/Kuala_Lumpur')
+        )
+      ORDER BY event.completed_at DESC NULLS LAST, event.id DESC
+      LIMIT 1
+    ) completion ON true
     LEFT JOIN LATERAL (
       SELECT private.financial_control_bill_state_as_of(
         fact.queue_entry_id,

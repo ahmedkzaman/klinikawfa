@@ -25,6 +25,10 @@ vi.mock('@/hooks/clinic/useSalesInsights', () => ({
   useSalesInsights: useSalesInsightsMock,
 }));
 
+vi.mock('@/components/clinic/insight/management/FinancialDetailSheet', () => ({
+  FinancialDetailSheet: () => null,
+}));
+
 vi.mock('@/components/clinic/insight/ClinicHealthTab', () => ({
   ClinicHealthTab: () => <div>Clinic health content</div>,
 }));
@@ -176,6 +180,7 @@ describe('Insight Management integration', () => {
     expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Management' })).toBeInTheDocument();
     expect(screen.getByText('Financial control summary unavailable')).toBeInTheDocument();
-    expect(screen.getByText('Summary unavailable')).toBeInTheDocument();
+    expect(screen.getByText('Financial summary is temporarily unavailable. Please retry.')).toBeInTheDocument();
+    expect(screen.queryByText('Summary unavailable')).not.toBeInTheDocument();
   });
 });

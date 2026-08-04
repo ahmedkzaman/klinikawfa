@@ -46,6 +46,8 @@ const ALERT_LABELS: Record<FinancialControlAlertKey, string> = {
   duplicate_or_excess_payment: 'Duplicate or excess payment',
 };
 
+const SUMMARY_ERROR_MESSAGE = 'Financial summary is temporarily unavailable. Please retry.';
+
 function comparisonPeriodLabel(startDate: Date, endDate: Date): string {
   const periodDays = differenceInCalendarDays(endDate, startDate) + 1;
   const comparisonStart = subDays(startDate, periodDays);
@@ -203,9 +205,7 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
       {isError && !data ? (
         <section role="alert" className="rounded-lg border border-rose-200 bg-white p-5">
           <h3 className="text-sm font-semibold text-rose-800">Financial control summary unavailable</h3>
-          <p className="mt-1 text-xs text-rose-700">
-            {(error as Error)?.message ?? 'Unknown error'}
-          </p>
+          <p className="mt-1 text-xs text-rose-700">{SUMMARY_ERROR_MESSAGE}</p>
           <Button
             type="button"
             variant="outline"
@@ -229,7 +229,7 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
           {isError && (
             <div role="alert" className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-amber-900">
-                Summary data is stale. {(error as Error)?.message ?? 'Refresh failed'}
+                Summary data is stale. Please retry to refresh it.
               </p>
               <Button
                 type="button"
