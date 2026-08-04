@@ -323,6 +323,7 @@ export default function ConsultationDetail() {
     data: entry,
     isLoading: entryLoading,
     error: entryError,
+    refetch: refetchQueueEntry,
   } = useQueueEntry(queueEntryId);
   const updateQueue = useUpdateQueueEntry();
   const { data: rooms = [] } = useRooms();
@@ -348,7 +349,11 @@ export default function ConsultationDetail() {
     isLoading: consultationFeeLoading,
   } = useVisitConsultationFee(panelId, cashConsultationFee);
 
-  const { data: consultation, isLoading: consultLoading } = useConsultation(queueEntryId);
+  const {
+    data: consultation,
+    isLoading: consultLoading,
+    refetch: refetchConsultation,
+  } = useConsultation(queueEntryId);
   const consultationId = (consultation as { id?: string } | null)?.id;
   const isOfflineRecord = consultation?.entry_source === 'offline_transcription';
   const {
@@ -982,7 +987,20 @@ export default function ConsultationDetail() {
     }
 
     if (!access.canEdit) return;
-    if (!canProceedConsultationToDispensary(consultation?.status, entry?.clinic_status)) {
+    const [freshEntryResult, freshConsultationResult] = await Promise.all([
+      refetchQueueEntry(),
+      refetchConsultation(),
+    ]);
+    if (freshEntryResult.error || freshConsultationResult.error) {
+      toast.error('Unable to verify the latest consultation status. Please try again.');
+      return;
+    }
+    const freshEntry = freshEntryResult.data;
+    const freshConsultation = freshConsultationResult.data;
+    if (!canProceedConsultationToDispensary(
+      freshConsultation?.status,
+      freshEntry?.clinic_status,
+    )) {
       toast.error('This consultation is completed and cannot be modified');
       return;
     }
