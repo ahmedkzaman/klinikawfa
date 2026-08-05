@@ -49,45 +49,6 @@ interface LedgerEntry {
   latestPaymentId: string | null;
 }
 
-interface GroupedEntry extends LedgerEntry {
-  accumulatedSubtotal: number;
-  accumulatedPaid: number;
-  accumulatedOutstanding: number;
-  accumulatedCreditDue: number;
-  visitCount: number;
-  groupedQueueIds: string[];
-}
-
-function groupOutstandingByPatient(rows: LedgerEntry[]): GroupedEntry[] {
-  const map = new Map<string, GroupedEntry>();
-  const sorted = [...rows].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
-  for (const e of sorted) {
-    const key = e.patientId;
-    const g = map.get(key);
-    if (!g) {
-      map.set(key, {
-        ...e,
-        accumulatedSubtotal: e.subtotal,
-        accumulatedPaid: e.paid,
-        accumulatedOutstanding: e.outstanding,
-        accumulatedCreditDue: e.creditDue,
-        visitCount: 1,
-        groupedQueueIds: [e.queueEntryId],
-      });
-    } else {
-      g.accumulatedSubtotal += e.subtotal;
-      g.accumulatedPaid += e.paid;
-      g.accumulatedOutstanding += e.outstanding;
-      g.accumulatedCreditDue += e.creditDue;
-      g.visitCount += 1;
-      g.groupedQueueIds.push(e.queueEntryId);
-    }
-  }
-  return Array.from(map.values());
-}
-
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: 'paid', label: 'Paid' },
   { key: 'panel', label: 'Outstanding Panel' },
@@ -225,29 +186,27 @@ export default function Billings() {
       e.creditDue = state.creditDue;
       e.unitemizedAdditionalCharges = 0;
     });
-    return list;
+    return list.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
   }, [ledger, itemsByQueue]);
 
-  const filtered = useMemo<LedgerEntry[] | GroupedEntry[]>(() => {
+  const filtered = useMemo<LedgerEntry[]>(() => {
     if (activeTab === 'paid') {
       return entries.filter(
         (e) => e.outstanding <= 0 && e.clinicStatus === 'completed',
       );
     }
     if (activeTab === 'panel') {
-      return groupOutstandingByPatient(
-        entries.filter(
-          (e) =>
-            e.outstanding > 0 &&
-            (e.latestPaymentType === 'panel' ||
-              e.latestPaymentType === 'insurance'),
-        ),
+      return entries.filter(
+        (e) =>
+          e.outstanding > 0 &&
+          (e.latestPaymentType === 'panel' ||
+            e.latestPaymentType === 'insurance'),
       );
     }
-    return groupOutstandingByPatient(
-      entries.filter(
-        (e) => e.outstanding > 0 && e.latestPaymentType === 'self_pay',
-      ),
+    return entries.filter(
+      (e) => e.outstanding > 0 && e.latestPaymentType === 'self_pay',
     );
   }, [entries, activeTab]);
 
@@ -265,8 +224,8 @@ export default function Billings() {
       paid: entries.filter(
         (e) => e.outstanding <= 0 && e.clinicStatus === 'completed',
       ).length,
-      panel: new Set(panelRows.map((e) => e.patientId)).size,
-      self_pay: new Set(selfPayRows.map((e) => e.patientId)).size,
+      panel: panelRows.length,
+      self_pay: selfPayRows.length,
     };
   }, [entries]);
 
@@ -301,7 +260,7 @@ export default function Billings() {
           <div>
             <h1 className="text-2xl font-semibold text-slate-800">Billings</h1>
             <p className="text-sm text-slate-500 mt-0.5">
-              Financial overview for self-pay and panel claims.
+              Financial overview for self-pay and panel claims. Each row is one visit.
             </p>
           </div>
           <div className="flex items-end gap-2">
@@ -424,12 +383,6 @@ export default function Billings() {
             </div>
           ) : (
             filtered.map((e) => {
-              const grouped = 'visitCount' in e ? (e as GroupedEntry) : null;
-              const subtotal = grouped ? grouped.accumulatedSubtotal : e.subtotal;
-              const paid = grouped ? grouped.accumulatedPaid : e.paid;
-              const outstanding = grouped ? grouped.accumulatedOutstanding : e.outstanding;
-              const creditDue = grouped ? grouped.accumulatedCreditDue : e.creditDue;
-              const visitCount = grouped?.visitCount ?? 1;
               return (
               <div
                 key={e.queueEntryId}
@@ -440,26 +393,13 @@ export default function Billings() {
                 </span>
                 <span className="text-sm font-medium text-slate-800 truncate flex items-center gap-2 min-w-0">
                   <span className="truncate">{e.patientName}</span>
-                  {visitCount > 1 && (
-                    <Badge
-                      variant="secondary"
-                      className="text-[10px] py-0 px-1.5 h-5 shrink-0"
-                    >
-                      {visitCount} Visits
-                    </Badge>
-                  )}
                 </span>
                 <span className="text-xs text-slate-500">
                   {format(new Date(e.createdAt), 'd MMM, h:mm a')}
-                  {visitCount > 1 && (
-                    <span className="block text-[10px] text-slate-400">
-                      +{visitCount - 1} earlier
-                    </span>
-                  )}
                 </span>
                 <span className="text-sm tabular-nums text-slate-600">
-                  RM {subtotal.toFixed(2)}
-                  {!grouped && e.unitemizedAdditionalCharges > 0 && (
+                  RM {e.subtotal.toFixed(2)}
+                  {e.unitemizedAdditionalCharges > 0 && (
                     <span
                       className="block text-[10px] text-amber-600"
                       title="Additional charge was collected but was not itemized in this legacy visit."
@@ -469,15 +409,17 @@ export default function Billings() {
                   )}
                 </span>
                 <span className="text-sm tabular-nums text-slate-600">
-                  RM {paid.toFixed(2)}
+                  RM {e.paid.toFixed(2)}
                 </span>
                 <span
                   className={cn(
                     'text-sm tabular-nums',
-                    outstanding > 0 ? 'text-rose-600 font-semibold' : 'text-slate-600',
+                    e.outstanding > 0 ? 'text-rose-600 font-semibold' : 'text-slate-600',
                   )}
                 >
-                  {creditDue > 0 ? `Credit RM ${creditDue.toFixed(2)}` : `RM ${outstanding.toFixed(2)}`}
+                  {e.creditDue > 0
+                    ? `Credit RM ${e.creditDue.toFixed(2)}`
+                    : `RM ${e.outstanding.toFixed(2)}`}
                 </span>
                 <span>
                   {e.paid > 0 || e.latestMethod ? (
@@ -496,7 +438,7 @@ export default function Billings() {
                 </span>
 
                 <div className="flex items-center gap-1">
-                  {e.latestPaymentId && visitCount === 1 && (
+                  {e.latestPaymentId && (
                     <>
                       <Button
                         type="button"
