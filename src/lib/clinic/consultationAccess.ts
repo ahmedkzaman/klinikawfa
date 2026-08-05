@@ -6,6 +6,14 @@ const CROSS_DOCTOR_NOTE_ROLES = new Set<AppRole>([
   'doctor_admin',
 ]);
 
+const CLINICAL_WORKFLOW_ROLES = new Set<AppRole>([
+  'locum',
+  'resident_doctor',
+  'doctor_admin',
+  'admin',
+  'special_admin',
+]);
+
 export function canBrowseConsultationDates(role: AppRole | null) {
   return role !== null && role !== 'guest' && role !== 'locum';
 }
@@ -31,6 +39,8 @@ export type ConsultationAccessInput = {
 
 export function getConsultationAccess(input: ConsultationAccessInput) {
   const ownConsultation =
+    input.role !== null &&
+    CLINICAL_WORKFLOW_ROLES.has(input.role) &&
     !!input.currentDoctorId &&
     input.currentDoctorId === input.attendingDoctorId;
   const completed =

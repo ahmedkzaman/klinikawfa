@@ -263,6 +263,28 @@ describe('offline consultation pages', () => {
     expect(screen.queryByRole('button', { name: 'Enter offline consultation' })).not.toBeInTheDocument();
   });
 
+  it('keeps offline entry separate from doctor workflow for operations with a stale doctor profile', async () => {
+    test.state.currentDoctor = test.doctor;
+    test.state.entry = {
+      ...test.state.entry,
+      assigned_doctor_id: test.doctor.id,
+      clinic_status: 'registered',
+    };
+    test.state.consultation = null;
+    test.state.offlineState = null;
+
+    render(<Consultation />);
+
+    expect(await screen.findByRole('button', { name: 'Enter offline consultation' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Call In' })).not.toBeInTheDocument();
+
+    cleanup();
+    render(<ConsultationDetail />);
+
+    expect(await screen.findByRole('button', { name: 'Save for doctor approval' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /Call In/ })).not.toBeInTheDocument();
+  });
+
   it('renders an existing returned offline row after it has moved downstream', async () => {
     test.state.entry = { ...test.state.entry, clinic_status: 'sent_to_dispensary' };
     render(<Consultation />);

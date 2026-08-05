@@ -62,6 +62,22 @@ describe('consultation access', () => {
     ).toBe(true);
   });
 
+  it('does not let operations act as a doctor through a stale linked doctor profile', () => {
+    expect(
+      getConsultationAccess({
+        role: 'ops_staff',
+        currentDoctorId: 'doctor-a',
+        attendingDoctorId: 'doctor-a',
+        consultationStatus: 'in_progress',
+        queueStatus: 'registered',
+      }),
+    ).toEqual({
+      canView: false,
+      canEdit: false,
+      isCrossDoctorReadOnly: false,
+    });
+  });
+
   it.each([
     'ops_staff',
     'operations',
