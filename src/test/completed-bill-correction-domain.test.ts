@@ -37,12 +37,15 @@ const baseDraft: CompletedBillCorrectionDraft = {
 };
 
 describe('completed bill corrections', () => {
-  it.each(['ops_staff', 'operations', 'staff', 'admin', 'special_admin', 'doctor_admin'])(
+  it.each([
+    'ops_staff', 'operations', 'staff', 'purchaser', 'staff_nurse',
+    'admin', 'special_admin', 'doctor_admin',
+  ])(
     'allows %s to correct a completed bill',
     (role) => expect(canCorrectCompletedBill(role)).toBe(true),
   );
 
-  it.each(['locum', 'resident_doctor', 'purchaser', 'staff_nurse', 'website_editor', 'guest', null])(
+  it.each(['locum', 'resident_doctor', 'website_editor', 'guest', null])(
     'denies %s from correcting a completed bill',
     (role) => expect(canCorrectCompletedBill(role)).toBe(false),
   );

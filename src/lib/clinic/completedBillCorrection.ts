@@ -2,6 +2,8 @@ export type CompletedBillCorrectionRole =
   | 'ops_staff'
   | 'operations'
   | 'staff'
+  | 'purchaser'
+  | 'staff_nurse'
   | 'admin'
   | 'special_admin'
   | 'doctor_admin';
@@ -64,7 +66,8 @@ export interface CompletedBillTotals {
 }
 
 const ALLOWED = new Set<CompletedBillCorrectionRole>([
-  'ops_staff', 'operations', 'staff', 'admin', 'special_admin', 'doctor_admin',
+  'ops_staff', 'operations', 'staff', 'purchaser', 'staff_nurse',
+  'admin', 'special_admin', 'doctor_admin',
 ]);
 
 const cents = (value: number) => Math.round(value * 100);

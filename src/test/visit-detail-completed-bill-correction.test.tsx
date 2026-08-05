@@ -96,7 +96,10 @@ describe('completed visit bill correction', () => {
     refetchPayments.mockReset();
   });
 
-  it.each(['ops_staff', 'operations', 'staff', 'admin', 'special_admin', 'doctor_admin'])(
+  it.each([
+    'ops_staff', 'operations', 'staff', 'purchaser', 'staff_nurse',
+    'admin', 'special_admin', 'doctor_admin',
+  ])(
     'shows Edit completed bill to %s',
     (role) => {
       auth.role = role;
@@ -105,7 +108,7 @@ describe('completed visit bill correction', () => {
     },
   );
 
-  it.each(['locum', 'resident_doctor', 'purchaser', 'staff_nurse', 'guest'])(
+  it.each(['locum', 'resident_doctor', 'guest'])(
     'hides completed bill correction from %s',
     (role) => {
       auth.role = role;
@@ -141,7 +144,10 @@ describe('completed visit bill correction', () => {
     expect(screen.getAllByText('completed')).toHaveLength(2);
   });
 
-  it.each(['ops_staff', 'operations', 'staff', 'admin', 'special_admin', 'doctor_admin'])(
+  it.each([
+    'ops_staff', 'operations', 'staff', 'purchaser', 'staff_nurse',
+    'admin', 'special_admin', 'doctor_admin',
+  ])(
     'shows immutable financial correction history to %s',
     (role) => {
     auth.role = role;
@@ -157,7 +163,7 @@ describe('completed visit bill correction', () => {
   });
 
   it('does not request or show correction history to a correction-denied role', () => {
-    auth.role = 'purchaser';
+    auth.role = 'locum';
     history.data = [{
       id: 'audit-1', actorId: 'actor-1', createdAt: '2026-07-28T09:15:00.000Z', reason: 'Correct consultation fee', beforeTotal: 50, afterTotal: 75,
     }];
