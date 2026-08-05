@@ -21,7 +21,8 @@ interface ClinicProtectedRouteProps {
  * Tiers:
  * - any_staff: Front-door of /clinic. Admits any non-guest employee
  *   (locum, staff, operations, doctor_admin, admin, special_admin).
- * - clinical: Locum + admins only (consultation, patients).
+ * - clinical: Locum + admins, plus exact operations staff in explicit
+ *   offline-consultation entry mode.
  * - ops_or_admin: Operations + admins (billings, inventory, settings).
  * - admin / special_admin / insights: existing higher tiers.
  */
@@ -65,7 +66,12 @@ export function ClinicProtectedRoute({
   // Clinical-only routes: bounce non-clinical staff back to the queue (in-portal),
   // never out of /clinic — they still belong here for other tasks.
   if (requiredRole === 'clinical') {
-    if (!isClinical) return <Navigate to="/clinic/queue" replace />;
+    const isOfflineOpsEntry =
+      role === 'ops_staff' &&
+      new URLSearchParams(location.search).get('mode') === 'offline';
+    if (!isClinical && !isOfflineOpsEntry) {
+      return <Navigate to="/clinic/queue" replace />;
+    }
     return <>{children}</>;
   }
 
