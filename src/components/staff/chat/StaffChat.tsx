@@ -97,6 +97,7 @@ export function StaffChat() {
   const [displayName, setDisplayName] = useState<string>('Staff');
   const [activeChat, setActiveChat] = useState<ActiveChat>('global');
   const [unreadCount, setUnreadCount] = useState(0);
+  const [readThrough, setReadThrough] = useState<Record<string, string>>({});
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const openRef = useRef(open);
   const activeChatRef = useRef<ActiveChat>(activeChat);
@@ -105,6 +106,18 @@ export function StaffChat() {
 
   const myId = user?.id ?? null;
   const eligible = !!myId && !!role && role !== 'guest';
+
+  const readStorageKey = myId ? `klinikawfa-staff-chat-read:${myId}` : null;
+
+  useEffect(() => {
+    if (!readStorageKey) return;
+    try {
+      const saved = window.localStorage.getItem(readStorageKey);
+      if (saved) setReadThrough(JSON.parse(saved) as Record<string, string>);
+    } catch {
+      setReadThrough({});
+    }
+  }, [readStorageKey]);
 
   useEffect(() => { openRef.current = open; }, [open]);
   useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
@@ -126,6 +139,16 @@ export function StaffChat() {
   useEffect(() => {
     if (open) setUnreadCount(0);
   }, [open, activeChat]);
+
+  useEffect(() => {
+    if (!open || !readStorageKey) return;
+    const readAt = new Date().toISOString();
+    setReadThrough((previous) => {
+      const next = { ...previous, [activeChat]: readAt };
+      window.localStorage.setItem(readStorageKey, JSON.stringify(next));
+      return next;
+    });
+  }, [open, activeChat, readStorageKey]);
 
   // Vibrate periodically when there are unread messages and chat is closed
   useEffect(() => {
@@ -310,10 +333,12 @@ export function StaffChat() {
       if (m.sender_id === myId) continue;
       const key = m.receiver_id === null ? 'global' : m.sender_id;
       if (key === activeChat) continue;
+      const readAt = readThrough[key];
+      if (readAt && m.created_at <= readAt) continue;
       map[key] = (map[key] ?? 0) + 1;
     }
     return map;
-  }, [messages, myId, activeChat]);
+  }, [messages, myId, activeChat, readThrough]);
 
   const peers = useMemo(
     () => onlineUsers.filter((u) => u.user_id !== myId),
