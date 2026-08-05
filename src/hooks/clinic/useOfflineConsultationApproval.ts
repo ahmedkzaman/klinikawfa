@@ -51,10 +51,13 @@ export type OfflineConsultationEntryState = {
 };
 
 type RpcResult = { data: unknown; error: { message: string } | null };
-const offlineRpc = supabase.rpc.bind(supabase) as unknown as (
+type OfflineRpc = (
   name: string,
   args?: Record<string, unknown>,
 ) => Promise<RpcResult>;
+
+const offlineRpc: OfflineRpc = (name, args) =>
+  supabase.rpc(name as never, args as never) as unknown as Promise<RpcResult>;
 
 type OfflineConsultation = Database['public']['Tables']['consultations']['Row'];
 
