@@ -5,20 +5,30 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useConsultation } from '@/hooks/clinic/useConsultations';
 import {
   useOfflineConsultationAudit,
+  useOfflineConsultationEntryVisits,
   useReviewOfflineConsultation,
   useSaveOfflineConsultation,
 } from '@/hooks/clinic/useOfflineConsultationApproval';
 
-const { rpc, from, select, eq, is, maybeSingle } = vi.hoisted(() => {
+const { supabaseClient, rpc, from, select, eq, is, maybeSingle } = vi.hoisted(() => {
   const maybeSingle = vi.fn();
   const is = vi.fn(() => ({ maybeSingle }));
   const eq = vi.fn(() => ({ is }));
   const select = vi.fn(() => ({ eq }));
   const from = vi.fn(() => ({ select }));
-  return { rpc: vi.fn(), from, select, eq, is, maybeSingle };
+  const rpc = vi.fn();
+  return {
+    supabaseClient: { rpc, from },
+    rpc,
+    from,
+    select,
+    eq,
+    is,
+    maybeSingle,
+  };
 });
 
-vi.mock('@/integrations/supabase/client', () => ({ supabase: { rpc, from } }));
+vi.mock('@/integrations/supabase/client', () => ({ supabase: supabaseClient }));
 
 const savedConsultation = {
   id: 'consultation-1',
@@ -175,6 +185,30 @@ describe('offline consultation approval hooks', () => {
     expect(result.current.data?.[0].id).toBe('audit-6');
     expect(result.current.data?.at(-1)?.id).toBe('audit-55');
     expect(result.current.data?.[0]).not.toHaveProperty('snapshot');
+  });
+
+  it('keeps the Supabase client receiver when loading operations offline visits', async () => {
+    rpc.mockImplementation(function (this: unknown, name: string) {
+      if (this !== supabaseClient) {
+        throw new TypeError("Cannot read properties of undefined (reading 'rest')");
+      }
+      if (name !== 'list_offline_consultation_entry_visits') {
+        return Promise.resolve({ data: null, error: new Error(`Unexpected RPC: ${name}`) });
+      }
+      return Promise.resolve({ data: [{ queue_entry_id: 'queue-1' }], error: null });
+    });
+    const queryClient = createQueryClient();
+    const { result } = renderHook(
+      () => useOfflineConsultationEntryVisits(
+        '2026-08-05T00:00:00.000Z',
+        '2026-08-06T00:00:00.000Z',
+        true,
+      ),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect([...result.current.data!]).toEqual(['queue-1']);
   });
 
   it('synchronizes active consultation, history, and audit queries after a real review mutation', async () => {
