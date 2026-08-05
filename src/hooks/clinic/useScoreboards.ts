@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   isProcedureScoreboardRow,
   normalizeProcedureName,
+  resolveCurrentProcedureCogs,
 } from '@/lib/clinic/procedureRoi';
 import {
   rankMedicationsByDispensedVisits,
@@ -84,44 +85,71 @@ export function useScoreboards(startDate: Date, endDate: Date) {
           )
           .gte('visit_date', startKey)
           .lte('visit_date', endKey),
-        db.from('services').select('name, category'),
+        db.from('services').select('id, name, category, cost'),
       ]);
 
       if (financialQuery.error) throw financialQuery.error;
       if (servicesQuery.error) throw servicesQuery.error;
 
       const rows: ViewRow[] = (financialQuery.data ?? []) as ViewRow[];
+      type ServiceCostRow = {
+        id: string;
+        name: string | null;
+        category: string | null;
+        cost: number | string | null;
+      };
+      const serviceRows = (servicesQuery.data ?? []) as ServiceCostRow[];
+      const serviceCategories = new Map<string, string>(
+        serviceRows
+          .filter((service) => service.name && service.category)
+          .map((service) => [normalizeProcedureName(service.name!), service.category!] as const),
+      );
+      const serviceCostsById = new Map(
+        serviceRows.map((service) => [service.id, service.cost] as const),
+      );
+      const serviceCostsByName = new Map(
+        serviceRows
+          .filter((service) => service.name)
+          .map((service) => [normalizeProcedureName(service.name!), service.cost] as const),
+      );
+
       const medicationRows = rows.filter((row) => row.kind === 'medication');
-      const medicationItemIds = [...new Set(medicationRows.map((row) => row.id))];
-      const medicationDetails = new Map<
+      const detailItemIds = [
+        ...new Set(
+          rows
+            .filter(
+              (row) =>
+                row.kind === 'medication' ||
+                isProcedureScoreboardRow(row, serviceCategories),
+            )
+            .map((row) => row.id),
+        ),
+      ];
+      const consultationItemDetails = new Map<
         string,
         {
           item_id: string | null;
+          service_id: string | null;
           quantity: number | string | null;
           dispensed_qty: number | string | null;
+          unit_cost: number | string | null;
         }
       >();
 
-      for (let offset = 0; offset < medicationItemIds.length; offset += 200) {
-        const itemIds = medicationItemIds.slice(offset, offset + 200);
+      for (let offset = 0; offset < detailItemIds.length; offset += 200) {
+        const itemIds = detailItemIds.slice(offset, offset + 200);
         const detailsQuery = await db
           .from('consultation_items')
-          .select('id, item_id, quantity, dispensed_qty')
+          .select('id, item_id, service_id, quantity, dispensed_qty, unit_cost')
           .in('id', itemIds)
           .is('deleted_at', null);
 
         if (detailsQuery.error) throw detailsQuery.error;
 
         for (const detail of detailsQuery.data ?? []) {
-          medicationDetails.set(detail.id, detail);
+          consultationItemDetails.set(detail.id, detail);
         }
       }
-
-      const serviceCategories = new Map<string, string>(
-        ((servicesQuery.data ?? []) as Array<{ name: string | null; category: string | null }>)
-          .filter((service) => service.name && service.category)
-          .map((service) => [normalizeProcedureName(service.name!), service.category!] as const),
-      );
 
       // ---- Aggregations ----------------------------------------------------
       type DoctorAcc = {
@@ -184,11 +212,22 @@ export function useScoreboards(startDate: Date, endDate: Date) {
 
         // Procedure ROI (services only)
         if (isProcedureScoreboardRow(r, serviceCategories)) {
+          const detail = consultationItemDetails.get(r.id);
+          const currentServiceCost = detail?.service_id
+            ? serviceCostsById.get(detail.service_id)
+            : serviceCostsByName.get(normalizeProcedureName(r.item_name));
+          const procedureCogs = detail
+            ? resolveCurrentProcedureCogs({
+                quantity: detail.quantity,
+                recordedUnitCost: detail.unit_cost,
+                currentServiceCost: currentServiceCost ?? null,
+              })
+            : cogs;
           const procAcc =
             procedureMap.get(r.item_name) ??
             ({ revenue: 0, cogs: 0, encounters: new Set<string>() } as ProcedureAcc);
           procAcc.revenue += rev;
-          procAcc.cogs += cogs;
+          procAcc.cogs += procedureCogs;
           procAcc.encounters.add(r.queue_entry_id);
           procedureMap.set(r.item_name, procAcc);
         }
@@ -222,7 +261,7 @@ export function useScoreboards(startDate: Date, endDate: Date) {
 
       const topMedications: MedicationRank[] = rankMedicationsByDispensedVisits(
         medicationRows.flatMap((row): MedicationDispenseRow[] => {
-          const detail = medicationDetails.get(row.id);
+          const detail = consultationItemDetails.get(row.id);
           if (!detail) return [];
 
           return [

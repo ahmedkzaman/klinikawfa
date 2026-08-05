@@ -95,4 +95,29 @@ describe('ScoreboardsTab doctor clinical activity integration', () => {
       'Procedure ROI',
     ]);
   });
+
+  it('shows the current COGS used by Procedure ROI', () => {
+    useScoreboardsMock.mockReturnValue({
+      data: {
+        doctors: [],
+        topDiagnoses: [],
+        topMedications: [],
+        procedureRoi: [{
+          itemName: 'Wound dressing',
+          count: 2,
+          totalRevenue: 100,
+          totalCogs: 20,
+          marginPct: 80,
+        }],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    render(<ScoreboardsTab {...dates} />);
+
+    expect(screen.getByRole('columnheader', { name: 'Current COGS' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'RM 20.00' })).toBeInTheDocument();
+  });
 });

@@ -250,7 +250,7 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
           <div className="mb-3">
             <h3 className={cn(bentoHeader, 'mb-1')}>Procedure ROI</h3>
             <p className="text-xs text-slate-500">
-              Gross Margin % = (Revenue − COGS) / Revenue × 100 · Sorted by margin.
+              Gross Margin % = (Revenue − current service COGS) / Revenue × 100 · Sorted by margin.
             </p>
           </div>
           {data!.procedureRoi.length === 0 ? (
@@ -262,6 +262,7 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
                   <TableHead className={TH}>Procedure</TableHead>
                   <TableHead className={cn(TH, 'text-right')}>Count</TableHead>
                   <TableHead className={cn(TH, 'text-right')}>Revenue</TableHead>
+                  <TableHead className={cn(TH, 'text-right')}>Current COGS</TableHead>
                   <TableHead className={cn(TH, 'text-right')}>Margin %</TableHead>
                 </TableRow>
               </TableHeader>
@@ -272,6 +273,9 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
                     <TableCell className="text-right text-slate-600">{p.count}</TableCell>
                     <TableCell className="text-right text-slate-500">
                       {formatRM(p.totalRevenue)}
+                    </TableCell>
+                    <TableCell className="text-right text-slate-500">
+                      {formatRM(p.totalCogs)}
                     </TableCell>
                     <TableCell className={cn('text-right', marginColorClass(p.marginPct))}>
                       {p.marginPct.toFixed(1)}%
