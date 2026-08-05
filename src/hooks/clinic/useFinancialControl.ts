@@ -74,7 +74,41 @@ export function useFinancialControlDetails(
       const args = getFinancialControlDetailArguments(filters);
       const { data, error } = await supabase.rpc('get_financial_control_details', args);
       if (error) throw error;
-      return parseFinancialControlDetails(data);
+      const parsed = parseFinancialControlDetails(data);
+      const missingPanelQueueIds = parsed.rows
+        .filter((row) => row.paymentType === 'panel' && row.outstanding === null && row.queueEntryId)
+        .map((row) => row.queueEntryId as string);
+
+      if (missingPanelQueueIds.length === 0) return parsed;
+
+      const { data: claims, error: claimsError } = await supabase
+        .from('panel_claims')
+        .select('queue_entry_id, amount, received_amount, status, claim_date, due_date, created_at')
+        .in('queue_entry_id', missingPanelQueueIds);
+
+      // The ledger remains the authoritative source. This fallback only fills
+      // historical gaps from the live visit-linked claim when the ledger
+      // cannot attribute an outstanding balance.
+      if (claimsError || !claims) return parsed;
+
+      const claimsByVisit = new Map(claims.map((claim) => [claim.queue_entry_id, claim]));
+      const rows = parsed.rows.map((row) => {
+        if (!row.queueEntryId || row.outstanding !== null || row.paymentType !== 'panel') return row;
+        const claim = claimsByVisit.get(row.queueEntryId);
+        if (!claim) return row;
+        const closed = claim.status === 'rejected' || claim.status === 'cancelled';
+        return {
+          ...row,
+          outstanding: closed
+            ? 0
+            : Math.max(Number(claim.amount ?? 0) - Number(claim.received_amount ?? 0), 0),
+          claimStatus: claim.status,
+          claimCreatedDate: claim.claim_date ?? claim.created_at?.slice(0, 10) ?? null,
+          claimDueDate: claim.due_date,
+        };
+      });
+
+      return { ...parsed, rows };
     },
   });
 }
