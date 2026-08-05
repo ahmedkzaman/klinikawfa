@@ -78,6 +78,7 @@ const test = vi.hoisted(() => {
         queueEntryId: 'queue-1',
         selectedDate: '2026-08-01',
       } as Record<string, unknown> | null,
+      locationSearch: '',
     },
     doctor,
     navigate: vi.fn(),
@@ -94,7 +95,7 @@ vi.mock('react-router-dom', async () => {
     ...actual,
     useNavigate: () => test.navigate,
     useParams: () => ({ queueEntryId: 'queue-1' }),
-    useLocation: () => ({ state: test.state.locationState }),
+    useLocation: () => ({ state: test.state.locationState, search: test.state.locationSearch }),
   };
 });
 
@@ -233,6 +234,7 @@ describe('offline consultation pages', () => {
     };
     test.state.eligibleDoctors = [test.doctor];
     test.state.locationState = { offlineConsultationEntry: true, queueEntryId: 'queue-1', selectedDate: '2026-08-01' };
+    test.state.locationSearch = '';
     test.navigate.mockReset();
     test.save.mockReset().mockResolvedValue({ approval_status: 'pending', approval_revision: 3 });
     test.proceed.mockReset().mockResolvedValue('queue-1');
@@ -246,7 +248,7 @@ describe('offline consultation pages', () => {
     render(<Consultation />);
     const action = await screen.findByRole('button', { name: 'Enter offline consultation' });
     fireEvent.click(action);
-    expect(test.navigate).toHaveBeenCalledWith('/clinic/consultation/queue-1', {
+    expect(test.navigate).toHaveBeenCalledWith('/clinic/consultation/queue-1?mode=offline', {
       state: expect.objectContaining({ offlineConsultationEntry: true, queueEntryId: 'queue-1' }),
     });
 
@@ -283,6 +285,24 @@ describe('offline consultation pages', () => {
 
     expect(await screen.findByRole('button', { name: 'Save for doctor approval' })).toBeEnabled();
     expect(screen.queryByRole('button', { name: /Call In/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps offline entry available when temporary navigation state is lost', async () => {
+    test.state.currentDoctor = test.doctor;
+    test.state.entry = {
+      ...test.state.entry,
+      assigned_doctor_id: test.doctor.id,
+      clinic_status: 'registered',
+    };
+    test.state.consultation = null;
+    test.state.offlineState = null;
+    test.state.locationState = null;
+    test.state.locationSearch = '?mode=offline';
+
+    render(<ConsultationDetail />);
+
+    expect(await screen.findByRole('button', { name: 'Save for doctor approval' })).toBeEnabled();
+    expect(screen.queryByText('You do not have permission to view this consultation.')).not.toBeInTheDocument();
   });
 
   it('renders an existing returned offline row after it has moved downstream', async () => {

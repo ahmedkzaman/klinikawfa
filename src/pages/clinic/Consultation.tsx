@@ -374,7 +374,7 @@ export default function Consultation() {
                             size="sm"
                             className={primaryBtn}
                             onClick={() =>
-                              navigate(`/clinic/consultation/${entry.id}`, {
+                              navigate(`/clinic/consultation/${entry.id}?mode=offline`, {
                                 state: {
                                   offlineConsultationEntry: true,
                                   queueEntryId: entry.id,

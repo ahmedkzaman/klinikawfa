@@ -311,9 +311,12 @@ export default function ConsultationDetail() {
         selectedDate?: string;
       }
     | null;
+  const requestedOfflineMode =
+    new URLSearchParams(location.search).get('mode') === 'offline';
   const requestedOfflineEntry =
-    routeState?.offlineConsultationEntry === true &&
-    routeState.queueEntryId === queueEntryId;
+    requestedOfflineMode ||
+    (routeState?.offlineConsultationEntry === true &&
+      routeState.queueEntryId === queueEntryId);
   const { data: doctor } = useCurrentDoctor();
   const { data: eligibleOfflineDoctors = [] } =
     useEligibleOfflineConsultationDoctors(role === 'ops_staff');
