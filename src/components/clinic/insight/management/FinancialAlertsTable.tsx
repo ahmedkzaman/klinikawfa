@@ -31,7 +31,7 @@ const FINANCIAL_ALERT_LABELS: Record<FinancialControlAlertKey, string> = {
   large_discount: 'Large discount',
   refund_void_correction: 'Refund, void, or correction',
   payment_mismatch: 'Payment mismatch',
-  duplicate_or_excess_payment: 'Duplicate or excess payment',
+  duplicate_or_excess_payment: 'Possible duplicate or under-recorded bill',
 };
 
 const SEVERITY_RANK: Record<FinancialControlAlertSeverity, number> = {

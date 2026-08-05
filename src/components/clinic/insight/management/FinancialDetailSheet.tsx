@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Download, LoaderCircle, RefreshCw } from 'lucide-react';
+import { Download, ExternalLink, LoaderCircle, RefreshCw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -41,6 +41,37 @@ interface FinancialDetailSheetProps {
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
 }
+
+const ALERT_RESOLUTION: Partial<Record<FinancialControlAlertKey, {
+  description: string;
+  checks: string[];
+  href?: string;
+  linkLabel?: string;
+}>> = {
+  unsubmitted_panel: {
+    description: 'These claims have stayed pending for at least 2 business days after creation.',
+    checks: [
+      'Open Pending Panel Claims, select the claims already sent to the panel, then mark them as submitted.',
+      'Leave a claim pending only when its supporting documents are not ready or it has not actually been sent.',
+    ],
+    href: '/clinic/panel-claims?tab=pending',
+    linkLabel: 'Open pending panel claims',
+  },
+  duplicate_or_excess_payment: {
+    description: 'The paid amount is higher than the bill recorded for the visit, or two matching receipts were recorded close together.',
+    checks: [
+      'If there is one receipt, it usually means a missing charge in the recorded bill. Open the bill and add the missing fee through completed-bill correction.',
+      'If there is more than one receipt for the same amount, verify the duplicate and void or correct only the extra payment.',
+    ],
+  },
+  payment_mismatch: {
+    description: 'The recorded bill, payment and outstanding balance do not reconcile after known outstanding items are accounted for.',
+    checks: [
+      'Open the bill and compare Billed, Paid and Outstanding for the same visit.',
+      'Correct the bill or payment record with a reason; do not mark an unpaid balance as paid just to clear the warning.',
+    ],
+  },
+};
 
 function formatMoney(value: number | null): string {
   if (value === null) return 'Unavailable';
@@ -89,6 +120,7 @@ export function FinancialDetailSheet({
     page,
     pageSize,
   };
+  const resolution = alertKey ? ALERT_RESOLUTION[alertKey] : undefined;
 
   useEffect(() => {
     setExportNotice(null);
@@ -189,6 +221,25 @@ export function FinancialDetailSheet({
                   Retry financial details
                 </Button>
               </div>
+            )}
+
+            {resolution && (
+              <section className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-950">
+                <h3 className="text-sm font-semibold">How to resolve</h3>
+                <p className="mt-1 text-xs leading-5">{resolution.description}</p>
+                <div className="mt-2 space-y-1 text-xs leading-5">
+                  {resolution.checks.map((check) => <p key={check}>{check}</p>)}
+                </div>
+                {resolution.href && resolution.linkLabel && (
+                  <a
+                    href={resolution.href}
+                    className="mt-3 inline-flex h-9 items-center gap-2 rounded-md border border-blue-300 bg-white px-3 text-xs font-medium text-blue-800 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                  >
+                    {resolution.linkLabel}
+                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                  </a>
+                )}
+              </section>
             )}
 
             <div className="flex min-h-9 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

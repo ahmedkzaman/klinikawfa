@@ -59,6 +59,13 @@ const TABS: Array<{ key: PanelClaimsTab; label: string }> = [
   { key: 'cancelled', label: 'Cancelled' },
 ];
 
+function initialPanelClaimsTab(): PanelClaimsTab {
+  const requestedTab = new URLSearchParams(window.location.search).get('tab');
+  return TABS.some((tab) => tab.key === requestedTab)
+    ? requestedTab as PanelClaimsTab
+    : 'all';
+}
+
 const COLUMN_COUNT = 11;
 
 function formatRM(value: number): string {
@@ -92,7 +99,7 @@ function Dot({ className }: { className: string }) {
 }
 
 export default function PanelClaims() {
-  const [tab, setTab] = useState<PanelClaimsTab>('all');
+  const [tab, setTab] = useState<PanelClaimsTab>(initialPanelClaimsTab);
   const [page, setPage] = useState(0);
   const [activeClaimId, setActiveClaimId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -241,6 +248,8 @@ export default function PanelClaims() {
                 return (
                   <button
                     key={t.key}
+                    type="button"
+                    aria-pressed={isActive}
                     onClick={() => {
                       setTab(t.key);
                       setPage(0);

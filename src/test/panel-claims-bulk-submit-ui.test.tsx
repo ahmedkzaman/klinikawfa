@@ -1,8 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PanelClaims from '@/pages/clinic/PanelClaims';
 
 const mutateAsync = vi.fn();
+const usePanelClaimsMock = vi.fn();
 
 vi.mock('@/components/clinic/claims/ClaimDetailsSheet', () => ({ default: () => null }));
 vi.mock('@/hooks/clinic/usePanelClaims', () => ({
@@ -11,7 +12,9 @@ vi.mock('@/hooks/clinic/usePanelClaims', () => ({
     received: received_amount,
     outstanding: amount - received_amount,
   }),
-  usePanelClaims: () => ({
+  usePanelClaims: (...args: unknown[]) => {
+    usePanelClaimsMock(...args);
+    return ({
     data: {
       rows: [
         {
@@ -34,13 +37,19 @@ vi.mock('@/hooks/clinic/usePanelClaims', () => ({
       total: 2,
     },
     isLoading: false,
-  }),
+    });
+  },
   usePanelClaimsSummary: () => ({ data: undefined }),
   useBulkMarkClaimsSubmitted: () => ({ mutateAsync, isPending: false }),
   usePanelClaimPortionCounts: () => ({ data: {} }),
 }));
 
 describe('panel claims bulk submission UI', () => {
+  beforeEach(() => {
+    usePanelClaimsMock.mockClear();
+    window.history.replaceState({}, '', '/clinic/panel-claims');
+  });
+
   it('selects only non-terminal claims for bulk submission', () => {
     render(<PanelClaims />);
 
@@ -52,5 +61,14 @@ describe('panel claims bulk submission UI', () => {
     fireEvent.click(selectAll);
     expect(pending).toHaveAttribute('data-state', 'checked');
     expect(received).toHaveAttribute('data-state', 'unchecked');
+  });
+
+  it('opens the pending tab when linked from Financial Control', () => {
+    window.history.pushState({}, '', '/clinic/panel-claims?tab=pending');
+
+    render(<PanelClaims />);
+
+    expect(usePanelClaimsMock).toHaveBeenCalledWith('pending', 0);
+    expect(screen.getByRole('button', { name: 'Pending' })).toHaveAttribute('aria-pressed', 'true');
   });
 });

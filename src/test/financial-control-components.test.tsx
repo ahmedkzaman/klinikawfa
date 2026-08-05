@@ -487,7 +487,7 @@ describe('FinancialControlTab alerts and drill-down', () => {
     const labels = alertRows.map((row) => within(row).getAllByRole('cell')[0].textContent);
 
     expect(labels).toEqual([
-      'Duplicate or excess payment',
+      'Possible duplicate or under-recorded bill',
       'Negative margin',
       'Payment mismatch',
       'Overdue panel claim',
@@ -517,6 +517,30 @@ describe('FinancialControlTab alerts and drill-down', () => {
       });
     });
     expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+  });
+
+  it('explains how to resolve an unsubmitted panel claim and links to pending claims', async () => {
+    render(<FinancialControlTab {...dates} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'View Unsubmitted panel claim' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Unsubmitted panel claim details' });
+    expect(within(dialog).getByRole('heading', { name: 'How to resolve' })).toBeInTheDocument();
+    expect(within(dialog).getByText(/pending for at least 2 business days/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole('link', { name: /Open pending panel claims/i })).toHaveAttribute(
+      'href',
+      '/clinic/panel-claims?tab=pending',
+    );
+  });
+
+  it('explains that excess-payment rows may be under-recorded bills rather than duplicates', async () => {
+    render(<FinancialControlTab {...dates} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'View Possible duplicate or under-recorded bill' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Possible duplicate or under-recorded bill details' });
+    expect(within(dialog).getByText(/one receipt.*missing charge/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/more than one receipt.*duplicate/i)).toBeInTheDocument();
   });
 
   it('uses exact server grouping values and resets the page when detail filters change', async () => {
