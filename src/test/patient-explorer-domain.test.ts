@@ -72,6 +72,23 @@ describe("Patient Explorer domain contract", () => {
     );
   });
 
+  it("normalizes OR-list filters without runtime locale behavior", () => {
+    const lowerCaseSpy = vi.spyOn(String.prototype, "toLocaleLowerCase").mockImplementation(() => {
+      throw new Error("locale-sensitive case folding is not allowed");
+    });
+    const compareSpy = vi.spyOn(String.prototype, "localeCompare").mockImplementation(() => {
+      throw new Error("locale-sensitive ordering is not allowed");
+    });
+
+    try {
+      expect(normalizePatientExplorerFilters({ diagnoses: ["zulu", "Alpha", "alpha"] }).diagnoses)
+        .toEqual(["Alpha", "zulu"]);
+    } finally {
+      lowerCaseSpy.mockRestore();
+      compareSpy.mockRestore();
+    }
+  });
+
   it("escapes CSV commas, quotes, and line breaks using the approved header order", () => {
     const row: PatientExplorerRow = {
       patientId: "p-1",

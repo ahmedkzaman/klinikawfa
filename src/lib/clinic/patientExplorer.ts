@@ -58,9 +58,10 @@ function normalizeList(values: readonly string[] | null | undefined): string[] {
   const normalized = new Map<string, string>();
   for (const value of values ?? []) {
     const text = normalizeText(value);
-    if (text && !normalized.has(text.toLocaleLowerCase())) normalized.set(text.toLocaleLowerCase(), text);
+    const key = text.toLowerCase();
+    if (text && !normalized.has(key)) normalized.set(key, text);
   }
-  return [...normalized.values()].sort((a, b) => a.localeCompare(b));
+  return [...normalized.values()].sort();
 }
 
 function isIsoDate(value: string): boolean {
