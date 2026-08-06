@@ -28,7 +28,11 @@ BEGIN
 
   IF NOT COALESCE(v_is_offline_path, false) THEN
     RETURN public.is_ops_or_admin(p_actor_id)
-       OR public.is_current_user_consultation_doctor(v_consultation_id);
+       OR (public.is_clinical(p_actor_id) AND EXISTS (
+            SELECT 1 FROM public.user_roles
+             WHERE user_id = p_actor_id
+               AND role::text IN ('resident_doctor', 'doctor_admin', 'locum')
+          ));
   END IF;
 
   RETURN public.is_exact_ops_staff(p_actor_id)
@@ -42,5 +46,9 @@ CREATE POLICY "attachments_insert"
   TO authenticated
   WITH CHECK (
     public.is_ops_or_admin(auth.uid())
-    OR public.is_current_user_consultation_doctor(consultation_id)
+    OR (public.is_clinical(auth.uid()) AND EXISTS (
+         SELECT 1 FROM public.user_roles
+          WHERE user_id = auth.uid()
+            AND role::text IN ('resident_doctor', 'doctor_admin', 'locum')
+       ))
   );

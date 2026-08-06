@@ -472,6 +472,9 @@ export default function ConsultationDetail() {
       | undefined,
   );
   const canEditWorkspace = canEditClinical && (canUseOfflineEditor || canEdit);
+  const canUploadClinicalAttachment =
+    !isOfflineRecord &&
+    ['resident_doctor', 'doctor_admin', 'locum'].includes(role);
   const documentAccess = getConsultationDocumentAccess({
     isOfflineEditor: isOfflineRecord,
     canEditWorkspace,
@@ -1446,9 +1449,11 @@ export default function ConsultationDetail() {
                     </Label>
                     <SessionAttachmentsStrip
                       consultationId={consultationId}
-                      canEdit={canEditWorkspace}
+                      canEdit={canEditWorkspace || canUploadClinicalAttachment}
                       canMutate={
-                        isOfflineRecord ? offlineAccess.canEditTranscription : undefined
+                        isOfflineRecord
+                          ? offlineAccess.canEditTranscription
+                          : canUploadClinicalAttachment || canEditWorkspace
                       }
                       onBeforeMutation={guardOfflineMutation}
                       offlineConsultationId={canUseOfflineEditor ? consultationId : null}
