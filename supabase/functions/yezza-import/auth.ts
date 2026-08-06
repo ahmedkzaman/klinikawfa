@@ -20,7 +20,7 @@ export async function authorizeYezzaImportRequest(
   authenticate: RequireRole = requireRole,
 ): Promise<ImportActor> {
   try {
-    return await authenticate(req, ["admin"]);
+    return await authenticate(req, ["admin", "special_admin"]);
   } catch (error) {
     if (error instanceof HttpError) {
       throw new ImportHttpError(error.status, error.safeMessage);
