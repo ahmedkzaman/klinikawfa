@@ -49,7 +49,7 @@ class SupabaseImportGateway implements ImportGateway {
       p_source_batch_id: input.payload.sourceBatchId,
       p_payload_hash: input.payloadHash,
       p_source_counts: input.counts,
-      p_review_counts: input.payload.reviewCounts,
+      p_review_counts: input.reviewCounts,
       p_review_artifacts: input.reviewArtifacts,
     });
     if (error) rpcFailure(error);

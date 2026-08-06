@@ -89,11 +89,11 @@ The source file review remains a release gate, not an automatic merge decision:
   `legacy-financial-only`; retain their financial history but do not fabricate
   clinical notes, items, diagnoses, or clinical activity.
 
-The full CSV dry-run parses the complete 352 MB consultation export and may
-require an explicitly increased Node heap on the approved local import
-workstation. This is an operational resource requirement, not authority to
-skip review; the bounded transaction reconciliation above remains the verified
-financial source gate.
+The deterministic preparation command streams the complete consultation
+export and caps request arrays at 2,000 rows and request bodies at 8 MiB. It
+still requires an approved local workstation for bounded patient and
+transaction indexes. This resource requirement is not authority to skip
+review; financial reconciliation remains the source gate.
 
 Production apply is **blocked** until the guarded PostgreSQL integration suite
 and the full reconciliation suite have passed in an isolated non-production

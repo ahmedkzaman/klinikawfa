@@ -140,4 +140,17 @@ describe("matchYezzaPatient", () => {
       conflicts: ["name", "phone", "dateOfBirth", "address"],
     });
   });
+
+  it("does not report conflicts when optional values are blank on both records", () => {
+    const decision = matchYezzaPatient(
+      source({ phone: null, dateOfBirth: null, address: null }),
+      [existing({ phone: null, dateOfBirth: null, address: null })],
+    );
+
+    expect(decision).toMatchObject({
+      kind: "exact-id",
+      existingPatientId: "klinik-456",
+      conflicts: [],
+    });
+  });
 });

@@ -273,6 +273,51 @@ BEGIN
 END;
 $second_patient_identity$;
 
+-- An existing source identity is immutable. A later payload must not silently
+-- redirect it to another otherwise-valid canonical patient.
+DO $patient_mapping_remap_rejected$
+DECLARE
+  v_original_patient_id uuid;
+  v_other_patient_id uuid;
+  v_payload jsonb;
+  v_approval jsonb;
+  v_result jsonb;
+BEGIN
+  SELECT patient_id INTO v_original_patient_id
+  FROM public.patient_external_ids
+  WHERE source_system = 'yezza' AND source_patient_id = 'sql-patient-1';
+  SELECT patient_id INTO v_other_patient_id
+  FROM public.patient_external_ids
+  WHERE source_system = 'yezza' AND source_patient_id = 'sql-patient-2';
+  v_payload := jsonb_build_object(
+    'sourceBatchId', 'sql-patient-remap',
+    'reviewCounts', '{"patientReview":0,"unresolvedDoctors":0,"orphanFinancialVisits":0}'::jsonb,
+    'patients', jsonb_build_array(jsonb_build_object(
+      'sourcePatientId', 'sql-patient-1', 'existingPatientId', v_other_patient_id
+    )),
+    'visits', '[]'::jsonb
+  );
+  v_approval := public.approve_yezza_import(
+    '76000000-0000-4000-8000-000000000001',
+    'sql-patient-remap', repeat('9', 64),
+    '{"patients":1,"visits":0,"consultations":0,"consultationItems":0,"transactions":0,"payments":0}'::jsonb,
+    v_payload->'reviewCounts', '["patient_matches.csv","summary.json"]'::jsonb
+  );
+  v_result := public.apply_yezza_import(
+    (v_approval->>'importBatchId')::uuid,
+    '76000000-0000-4000-8000-000000000001', repeat('9', 64), v_payload
+  );
+  IF v_result->>'status' <> 'failed' THEN
+    RAISE EXCEPTION 'PATIENT_MAPPING_REMAP_SUCCEEDED:%', v_result;
+  END IF;
+  IF (SELECT patient_id FROM public.patient_external_ids
+      WHERE source_system = 'yezza' AND source_patient_id = 'sql-patient-1')
+     IS DISTINCT FROM v_original_patient_id THEN
+    RAISE EXCEPTION 'PATIENT_MAPPING_CHANGED_AFTER_REJECTED_REMAP';
+  END IF;
+END;
+$patient_mapping_remap_rejected$;
+
 DO $mismatched_visit_patient$
 DECLARE
   v_other_patient_id uuid;

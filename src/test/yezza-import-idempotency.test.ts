@@ -15,6 +15,10 @@ const ADMIN_ID = "75000000-0000-4000-8000-000000000001";
 function payload(overrides: Partial<YezzaImportPayload> = {}): YezzaImportPayload {
   return {
     sourceBatchId: "yezza-2026-08-06-001",
+    manifestHash: "a".repeat(64),
+    resolutionHash: "b".repeat(64),
+    batchIndex: 1,
+    batchCount: 1,
     reviewCounts: {
       patientReview: 1,
       unresolvedDoctors: 0,
@@ -23,6 +27,7 @@ function payload(overrides: Partial<YezzaImportPayload> = {}): YezzaImportPayloa
     patients: [
       {
         sourcePatientId: "patient-001",
+        reviewLocator: "patients.csv:2",
         patient: {
           name: "Test Patient",
           phone: "+60123456789",
@@ -116,6 +121,9 @@ class TransactionalGateway implements ImportGateway {
     try {
       for (const patient of input.payload.patients) {
         const existing = this.rows.patientExternalIds.get(patient.sourcePatientId);
+        if (existing && patient.existingPatientId && patient.existingPatientId !== existing) {
+          throw new ImportHttpError(409, "Source patient is already mapped to a different patient");
+        }
         const patientId = existing ?? patient.existingPatientId ?? `new:${patient.sourcePatientId}`;
         if (!existing && !patient.existingPatientId) this.rows.patients.add(patientId);
         this.rows.patientExternalIds.set(patient.sourcePatientId, patientId);
@@ -167,6 +175,15 @@ function request(action: string, body: unknown): Request {
   });
 }
 
+function approvalBody(prepared: Awaited<ReturnType<typeof prepareYezzaImport>>, sourcePayload = payload()): Record<string, unknown> {
+  return {
+    payload: sourcePayload,
+    expectedPayloadHash: prepared.payloadHash,
+    expectedManifestHash: prepared.payload.manifestHash,
+    expectedResolutionHash: prepared.payload.resolutionHash,
+  };
+}
+
 describe("guarded Yezza import endpoint", () => {
   it("rejects unauthorized callers before reading or applying a batch", async () => {
     const gateway = new TransactionalGateway();
@@ -209,7 +226,32 @@ describe("guarded Yezza import endpoint", () => {
     expect(response.status).toBe(200);
     expect(body.counts).toEqual({ patients: 1, visits: 1, consultations: 1, consultationItems: 1, transactions: 1, payments: 1 });
     expect(body.reviewArtifacts).toEqual(["patient_matches.csv", "patient_review.csv", "summary.json"]);
+    expect(body).toMatchObject({ manifestHash: "a".repeat(64), resolutionHash: "b".repeat(64) });
     expect(body.payloadHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(gateway.approvals.size).toBe(0);
+  });
+
+  it("derives review counts from prepared rows instead of trusting caller-supplied counts", async () => {
+    const forged = payload({ reviewCounts: { patientReview: 999, unresolvedDoctors: 999, orphanFinancialVisits: 999 } });
+
+    const prepared = await prepareYezzaImport(forged);
+
+    expect(prepared.payload.reviewCounts).toEqual({ patientReview: 1, unresolvedDoctors: 0, orphanFinancialVisits: 0 });
+    expect(prepared.reviewCounts).toEqual(prepared.payload.reviewCounts);
+  });
+
+  it("rejects approval when the expected manifest or resolution hash differs", async () => {
+    const gateway = new TransactionalGateway();
+    const handler = createYezzaImportHandler({ authorize: async () => ({ userId: ADMIN_ID, role: "admin" }), gateway });
+    const prepared = await prepareYezzaImport(payload());
+
+    const response = await handler(request("approve", {
+      ...approvalBody(prepared),
+      expectedManifestHash: "c".repeat(64),
+    }));
+
+    expect(response.status).toBe(409);
+    expect(await responseJson(response)).toEqual({ error: "Dry-run summary has changed" });
     expect(gateway.approvals.size).toBe(0);
   });
 
@@ -230,7 +272,7 @@ describe("guarded Yezza import endpoint", () => {
     const gateway = new TransactionalGateway();
     const handler = createYezzaImportHandler({ authorize: async () => ({ userId: ADMIN_ID, role: "admin" }), gateway });
     const prepared = await prepareYezzaImport(payload());
-    const approvalResponse = await handler(request("approve", { payload: payload(), expectedPayloadHash: prepared.payloadHash }));
+    const approvalResponse = await handler(request("approve", approvalBody(prepared)));
     const importBatchId = (await responseJson(approvalResponse)).importBatchId as string;
 
     const first = await handler(request("apply", { importBatchId, payload: payload() }));
@@ -249,13 +291,33 @@ describe("guarded Yezza import endpoint", () => {
     gateway.rows.patientExternalIds.set("patient-001", "existing-patient-db-id");
     const handler = createYezzaImportHandler({ authorize: async () => ({ userId: ADMIN_ID, role: "admin" }), gateway });
     const prepared = await prepareYezzaImport(payload());
-    const approved = await handler(request("approve", { payload: payload(), expectedPayloadHash: prepared.payloadHash }));
+    const approved = await handler(request("approve", approvalBody(prepared)));
     const importBatchId = (await responseJson(approved)).importBatchId as string;
 
     await handler(request("apply", { importBatchId, payload: payload() }));
 
     expect(gateway.rows.patientExternalIds.get("patient-001")).toBe("existing-patient-db-id");
     expect(gateway.rows.patients.size).toBe(0);
+  });
+
+  it("rejects an existing source identity remap to a different canonical patient", async () => {
+    const gateway = new TransactionalGateway();
+    const mappedPatientId = "75000000-0000-4000-8000-000000000201";
+    const conflictingPatientId = "75000000-0000-4000-8000-000000000202";
+    gateway.rows.patientExternalIds.set("patient-001", mappedPatientId);
+    const remapPayload = payload({
+      patients: [{ sourcePatientId: "patient-001", existingPatientId: conflictingPatientId, reviewLocator: "patients.csv:2" }],
+    });
+    const prepared = await prepareYezzaImport(remapPayload);
+    const handler = createYezzaImportHandler({ authorize: async () => ({ userId: ADMIN_ID, role: "admin" }), gateway });
+    const approved = await handler(request("approve", approvalBody(prepared, remapPayload)));
+    const importBatchId = (await responseJson(approved)).importBatchId as string;
+
+    const response = await handler(request("apply", { importBatchId, payload: remapPayload }));
+
+    expect(response.status).toBe(409);
+    expect(await responseJson(response)).toEqual({ error: "Yezza import batch failed", errorCode: "YEZZA_IMPORT_FAILED" });
+    expect(gateway.rows.patientExternalIds.get("patient-001")).toBe(mappedPatientId);
   });
 
   it("deduplicates repeated source bills before creating payments and transaction identities", async () => {
@@ -285,7 +347,7 @@ describe("guarded Yezza import endpoint", () => {
     gateway.failAfterItems = true;
     const handler = createYezzaImportHandler({ authorize: async () => ({ userId: ADMIN_ID, role: "admin" }), gateway });
     const prepared = await prepareYezzaImport(payload());
-    const approved = await handler(request("approve", { payload: payload(), expectedPayloadHash: prepared.payloadHash }));
+    const approved = await handler(request("approve", approvalBody(prepared)));
     const importBatchId = (await responseJson(approved)).importBatchId as string;
 
     const response = await handler(request("apply", { importBatchId, payload: payload() }));

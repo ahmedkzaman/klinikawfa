@@ -13,6 +13,10 @@ export class ImportHttpError extends Error {
 
 export interface YezzaImportPayload {
   sourceBatchId: string;
+  manifestHash: string;
+  resolutionHash: string;
+  batchIndex: number;
+  batchCount: number;
   reviewCounts: {
     patientReview: number;
     unresolvedDoctors: number;
@@ -20,6 +24,7 @@ export interface YezzaImportPayload {
   };
   patients: Array<{
     sourcePatientId: string;
+    reviewLocator?: string;
     existingPatientId?: string;
     patient?: {
       name: string;
@@ -38,6 +43,7 @@ export interface YezzaImportPayload {
   visits: Array<{
     sourceVisitId: string;
     sourcePatientId: string;
+    doctorReviewKey?: string;
     queueEntry: {
       clinicStatus: "registered";
       assignedDoctorId?: string | null;
@@ -84,6 +90,7 @@ export interface PreparedYezzaImport {
   payload: YezzaImportPayload;
   payloadHash: string;
   counts: ImportCounts;
+  reviewCounts: YezzaImportPayload["reviewCounts"];
   reviewArtifacts: string[];
 }
 
@@ -198,12 +205,15 @@ function normalizedPatient(value: unknown): YezzaImportPayload["patients"][numbe
   const row = requiredRecord(value, "patient row");
   const sourcePatientId = requiredString(row.sourcePatientId, "sourcePatientId", 256);
   const existingPatientId = optionalUuid(row.existingPatientId, "existingPatientId");
+  const reviewLocator = row.reviewLocator === undefined ? undefined : requiredString(row.reviewLocator, "reviewLocator", 100);
+  if (reviewLocator && !/^patients\.csv:\d+$/.test(reviewLocator)) throw new ImportHttpError(400, "Invalid reviewLocator");
   const profile = row.patient === undefined ? undefined : requiredRecord(row.patient, "patient profile");
   if (!existingPatientId && !profile) throw new ImportHttpError(400, "New patient profile is required");
   if (existingPatientId && profile) throw new ImportHttpError(400, "Patient row cannot create and reuse simultaneously");
 
   return {
     sourcePatientId,
+    ...(reviewLocator ? { reviewLocator } : {}),
     ...(existingPatientId ? { existingPatientId } : {}),
     ...(profile ? {
       patient: {
@@ -276,6 +286,7 @@ function normalizedVisit(value: unknown): YezzaImportPayload["visits"][number] {
   return {
     sourceVisitId: requiredString(row.sourceVisitId, "sourceVisitId", 256),
     sourcePatientId: requiredString(row.sourcePatientId, "sourcePatientId", 256),
+    ...(row.doctorReviewKey === undefined ? {} : { doctorReviewKey: requiredString(row.doctorReviewKey, "doctorReviewKey", 100) }),
     queueEntry: {
       clinicStatus: "registered",
       assignedDoctorId: optionalUuid(queue.assignedDoctorId, "queueEntry.assignedDoctorId"),
@@ -315,7 +326,6 @@ function deduplicateTransactions(payload: YezzaImportPayload): YezzaImportPayloa
 
 export async function prepareYezzaImport(value: unknown): Promise<PreparedYezzaImport> {
   const input = requiredRecord(value, "import payload");
-  const review = requiredRecord(input.reviewCounts, "reviewCounts");
   const patients = requiredArray(input.patients, "patients").map(normalizedPatient);
   const visits = requiredArray(input.visits, "visits").map(normalizedVisit);
 
@@ -331,13 +341,25 @@ export async function prepareYezzaImport(value: unknown): Promise<PreparedYezzaI
     visitIds.add(visit.sourceVisitId);
   }
 
+  const reviewCounts = {
+    patientReview: new Set(patients.flatMap((patient) => patient.reviewLocator ? [patient.reviewLocator] : [])).size,
+    unresolvedDoctors: new Set(visits.flatMap((visit) => visit.doctorReviewKey ? [visit.doctorReviewKey] : [])).size,
+    orphanFinancialVisits: visits.filter((visit) => visit.queueEntry.visitPurpose === "legacy-financial-only").length,
+  };
+  const manifestHash = requiredString(input.manifestHash, "manifestHash", 64);
+  const resolutionHash = requiredString(input.resolutionHash, "resolutionHash", 64);
+  if (!HASH_PATTERN.test(manifestHash) || !HASH_PATTERN.test(resolutionHash)) throw new ImportHttpError(400, "Invalid manifest binding");
+  const batchIndex = nonnegativeInteger(input.batchIndex, "batchIndex");
+  const batchCount = nonnegativeInteger(input.batchCount, "batchCount");
+  if (batchIndex < 1 || batchCount < 1 || batchIndex > batchCount) throw new ImportHttpError(400, "Invalid batch position");
+
   const payload = deduplicateTransactions({
     sourceBatchId: requiredString(input.sourceBatchId, "sourceBatchId", 128),
-    reviewCounts: {
-      patientReview: nonnegativeInteger(review.patientReview, "reviewCounts.patientReview"),
-      unresolvedDoctors: nonnegativeInteger(review.unresolvedDoctors, "reviewCounts.unresolvedDoctors"),
-      orphanFinancialVisits: nonnegativeInteger(review.orphanFinancialVisits, "reviewCounts.orphanFinancialVisits"),
-    },
+    manifestHash,
+    resolutionHash,
+    batchIndex,
+    batchCount,
+    reviewCounts,
     patients,
     visits,
   });
@@ -356,7 +378,7 @@ export async function prepareYezzaImport(value: unknown): Promise<PreparedYezzaI
     ...(payload.reviewCounts.orphanFinancialVisits > 0 ? ["orphan_financial_visits.csv"] : []),
     "summary.json",
   ];
-  return { payload, counts, reviewArtifacts, payloadHash: await sha256(canonicalJson(payload)) };
+  return { payload, counts, reviewCounts, reviewArtifacts, payloadHash: await sha256(canonicalJson(payload)) };
 }
 
 async function readRequestJson(req: Request): Promise<unknown> {
@@ -403,6 +425,8 @@ export function createYezzaImportHandler(dependencies: ImportHandlerDependencies
         return json(200, {
           sourceBatchId: prepared.payload.sourceBatchId,
           payloadHash: prepared.payloadHash,
+          manifestHash: prepared.payload.manifestHash,
+          resolutionHash: prepared.payload.resolutionHash,
           counts: prepared.counts,
           reviewCounts: prepared.payload.reviewCounts,
           reviewArtifacts: prepared.reviewArtifacts,
@@ -413,11 +437,25 @@ export function createYezzaImportHandler(dependencies: ImportHandlerDependencies
       if (action === "approve") {
         const prepared = await prepareYezzaImport(body.payload);
         const expectedPayloadHash = requiredString(body.expectedPayloadHash, "expectedPayloadHash", 64);
-        if (!HASH_PATTERN.test(expectedPayloadHash) || expectedPayloadHash !== prepared.payloadHash) {
+        const expectedManifestHash = requiredString(body.expectedManifestHash, "expectedManifestHash", 64);
+        const expectedResolutionHash = requiredString(body.expectedResolutionHash, "expectedResolutionHash", 64);
+        if (
+          !HASH_PATTERN.test(expectedPayloadHash)
+          || !HASH_PATTERN.test(expectedManifestHash)
+          || !HASH_PATTERN.test(expectedResolutionHash)
+          || expectedPayloadHash !== prepared.payloadHash
+          || expectedManifestHash !== prepared.payload.manifestHash
+          || expectedResolutionHash !== prepared.payload.resolutionHash
+        ) {
           throw new ImportHttpError(409, "Dry-run summary has changed");
         }
         const result = await dependencies.gateway.approve({ ...prepared, actorId: actor.userId });
-        return json(200, { ...result, payloadHash: prepared.payloadHash });
+        return json(200, {
+          ...result,
+          payloadHash: prepared.payloadHash,
+          manifestHash: prepared.payload.manifestHash,
+          resolutionHash: prepared.payload.resolutionHash,
+        });
       }
 
       if (action === "apply") {

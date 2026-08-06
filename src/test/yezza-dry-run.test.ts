@@ -46,6 +46,7 @@ describe("Yezza dry-run reports", () => {
     const root = await mkdtemp(join(tmpdir(), "yezza-dry-run-"));
     const inputDirectory = join(root, "input");
     const outputDirectory = join(root, "reports");
+    const privateDirectory = join(root, "private-review");
     await mkdir(inputDirectory);
     try {
       await Promise.all([
@@ -57,7 +58,7 @@ describe("Yezza dry-run reports", () => {
       vi.stubEnv("YEZZA_SUPABASE_URL", "https://example.invalid");
       vi.stubEnv("YEZZA_SUPABASE_SERVICE_ROLE_KEY", "test-key");
 
-      await runDryRun({ inputDirectory, outputDirectory });
+      await runDryRun({ inputDirectory, outputDirectory, privateDirectory } as Parameters<typeof runDryRun>[0]);
 
       expect((await readdir(outputDirectory)).sort()).toEqual([
         "orphan_financial_visits.csv",
@@ -87,9 +88,73 @@ describe("Yezza dry-run reports", () => {
         orphanFinancialVisits: 1,
         writesPerformed: 0,
       });
+      expect(await readFile(join(outputDirectory, "patient_matches.csv"), "utf8")).toContain("patients.csv:2");
+      const privateMapping = await readFile(join(privateDirectory, "review_mapping.csv"), "utf8");
+      expect(privateMapping).toContain("patients.csv:2");
+      expect(privateMapping).toContain("source-patient-one");
+      expect(privateMapping).toContain("Nur Aisyah");
       expect(insert).not.toHaveBeenCalled();
       expect(update).not.toHaveBeenCalled();
       expect(upsert).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("forces every source patient sharing a normalized identifier to review", async () => {
+    const root = await mkdtemp(join(tmpdir(), "yezza-duplicate-source-"));
+    const inputDirectory = join(root, "input");
+    const outputDirectory = join(root, "reports");
+    const privateDirectory = join(root, "private-review");
+    await mkdir(inputDirectory);
+    try {
+      await Promise.all([
+        writeFile(join(inputDirectory, "patients.csv"), "PatientID,Patient Name,IC/Passport,Phone,DOB,Address\nsource-a,Alpha Person,820101-14-1111,,,,\nsource-b,Beta Person,820101141111,,,,\n", "utf8"),
+        writeFile(join(inputDirectory, "consultations.csv"), "Visit ID,Attending Dr\n", "utf8"),
+        writeFile(join(inputDirectory, "transactions_1.csv"), "Visit ID,Bill#,Total,Paid Amount,Method,Channel\n", "utf8"),
+        writeFile(join(inputDirectory, "transactions_2.csv"), "Visit ID,Bill#,Total,Paid Amount,Method,Channel\n", "utf8"),
+      ]);
+      vi.stubEnv("YEZZA_SUPABASE_URL", "https://example.invalid");
+      vi.stubEnv("YEZZA_SUPABASE_SERVICE_ROLE_KEY", "test-key");
+
+      await runDryRun({ inputDirectory, outputDirectory, privateDirectory } as Parameters<typeof runDryRun>[0]);
+
+      const review = await readFile(join(outputDirectory, "patient_review.csv"), "utf8");
+      expect(review).toContain("patients.csv:2");
+      expect(review).toContain("patients.csv:3");
+      expect(review).toContain("Identifier appears in multiple Yezza source patients");
+      expect(JSON.parse(await readFile(join(outputDirectory, "summary.json"), "utf8"))).toMatchObject({
+        patientDecisions: { review: 2, new: 0 },
+        duplicateSourceIdentifierPatients: 2,
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed before classification when the current clinic roster cannot be loaded", async () => {
+    const root = await mkdtemp(join(tmpdir(), "yezza-no-roster-"));
+    const inputDirectory = join(root, "input");
+    await mkdir(inputDirectory);
+    try {
+      await Promise.all([
+        writeFile(join(inputDirectory, "patients.csv"), "PatientID,Patient Name\nsource-a,Alpha Person\n", "utf8"),
+        writeFile(join(inputDirectory, "consultations.csv"), "Visit ID,Attending Dr\n", "utf8"),
+        writeFile(join(inputDirectory, "transactions_1.csv"), "Visit ID,Bill#\n", "utf8"),
+        writeFile(join(inputDirectory, "transactions_2.csv"), "Visit ID,Bill#\n", "utf8"),
+      ]);
+      vi.stubEnv("YEZZA_SUPABASE_URL", "");
+      vi.stubEnv("YEZZA_SUPABASE_SERVICE_ROLE_KEY", "");
+
+      await expect(runDryRun({
+        inputDirectory,
+        outputDirectory: join(root, "reports"),
+        privateDirectory: join(root, "private-review"),
+      } as Parameters<typeof runDryRun>[0])).rejects.toThrow("Current Klinik Awfa patient and doctor roster credentials are required");
+
+      await expect(readdir(join(root, "reports"))).rejects.toThrow();
     } finally {
       vi.unstubAllEnvs();
       await rm(root, { recursive: true, force: true });

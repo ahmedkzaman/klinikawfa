@@ -21,9 +21,15 @@ function normalizedAddress(value: string | null): string | null {
 function conflictsFor(source: YezzaPatient, patient: ExistingPatient): string[] {
   const conflicts: string[] = [];
   if (!sameValue(normalizeName(source.name), normalizeName(patient.name))) conflicts.push("name");
-  if (!sameValue(normalizePhone(source.phone ?? ""), normalizePhone(patient.phone ?? ""))) conflicts.push("phone");
-  if (!sameValue(normalizedDate(source.dateOfBirth), normalizedDate(patient.dateOfBirth))) conflicts.push("dateOfBirth");
-  if (!sameValue(normalizedAddress(source.address), normalizedAddress(patient.address))) conflicts.push("address");
+  const sourcePhone = normalizePhone(source.phone ?? "");
+  const patientPhone = normalizePhone(patient.phone ?? "");
+  if (sourcePhone !== null && patientPhone !== null && sourcePhone !== patientPhone) conflicts.push("phone");
+  const sourceDate = normalizedDate(source.dateOfBirth);
+  const patientDate = normalizedDate(patient.dateOfBirth);
+  if (sourceDate !== null && patientDate !== null && sourceDate !== patientDate) conflicts.push("dateOfBirth");
+  const sourceAddress = normalizedAddress(source.address);
+  const patientAddress = normalizedAddress(patient.address);
+  if (sourceAddress !== null && patientAddress !== null && sourceAddress !== patientAddress) conflicts.push("address");
   return conflicts;
 }
 

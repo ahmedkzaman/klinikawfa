@@ -36,11 +36,16 @@ rehearsal.
 Run the local dry-run with a directory containing only the supplied CSVs:
 
 ```text
-npm run yezza:dry-run -- --input-dir <local-csv-directory> --output-dir <local-sanitized-report-directory>
+npm run yezza:dry-run -- --input-dir <local-csv-directory> \
+  --output-dir <local-sanitized-report-directory> \
+  --private-dir <restricted-local-review-directory>
 ```
 
-This command may make read-only roster queries only when explicit local
-credentials are configured; it never writes to the database. Retain the
+The private directory must be outside the sanitized report directory and is
+ignored by Git. The command fails closed unless explicit read-only credentials
+are available and both current patient and doctor rosters load successfully;
+missing credentials never classify every source patient as new. It never
+writes to the database. Retain the
 sanitized artifacts locally and record their filenames and the `summary.json`
 counts in the approval ticket:
 
@@ -49,6 +54,11 @@ counts in the approval ticket:
 - `unresolved_doctors.csv`
 - `orphan_financial_visits.csv`
 - `summary.json`
+
+Sanitized CSVs use stable source-row locators such as `patients.csv:42`. The
+PHI needed to resolve those rows is in `review_mapping.csv` under the separate
+private directory. Restrict that file to import operators, never attach it to a
+ticket, and never copy it into the repository.
 
 Use the bounded, read-only financial reconciliation command as the source
 baseline. It must return exactly the following values before any approval:
@@ -88,11 +98,42 @@ record approval of all of the following:
    consultation, note, or clinical item. They remain excluded from clinical
    activity metrics until staff complete them later.
 5. The approved source counts, review counts, sanitized artifact names, and
-   payload SHA-256 hash.
+   payload, resolution, and manifest SHA-256 hashes.
+
+Record every patient resolution by stable locator and every doctor resolution
+by normalized roster name in a private local `resolutions.json`. Every entry
+must have `reviewed: true`. Repeated identifiers additionally require
+`confirmedDuplicateIdentifier: true` on every affected source row. Prepare the
+deterministic bounded payloads with:
+
+```text
+npm run yezza:prepare -- --input-dir <local-csv-directory> \
+  --resolutions <private-resolutions.json> \
+  --output-dir <private-prepared-directory>
+```
+
+Preparation streams the consultation export, keeps bounded patient and
+transaction indexes, deduplicates and reconciles both transaction exports, and
+stops unless the approved 67,442-bill baseline matches. It writes
+`manifest.json` and byte-stable `batch-NNNN.json` files. Request arrays are
+limited to 2,000 rows and payloads remain under 8 MiB. These payloads contain
+PHI, so the prepared directory is private local import material—not a
+sanitized report—and is ignored by Git.
+
+Use the coordinator so the exact prepared files drive each gate:
+
+```text
+$env:YEZZA_IMPORT_ACCESS_TOKEN = '<short-lived-admin-token>'
+$env:YEZZA_IMPORT_API_KEY = '<project-anon-key>'
+npm run yezza:batch -- --mode dry-run --manifest <private-prepared-directory>/manifest.json --endpoint <edge-function-url>
+npm run yezza:batch -- --mode approve --manifest <private-prepared-directory>/manifest.json --endpoint <edge-function-url>
+```
 
 The server-side approval path is `POST /yezza-import?action=approve`. It
 requires an authenticated admin or doctor-admin and sends the prepared payload
-plus the exact dry-run hash as `expectedPayloadHash`. The Edge Function calls
+plus the exact payload, resolution, and manifest hashes. Review counts are
+derived from prepared row metadata and visit shapes; caller-supplied aggregate
+counts are ignored. The Edge Function calls
 the restricted `approve_yezza_import` RPC; direct client access to that RPC is
 not permitted. Record the returned `importBatchId`, payload hash, approving
 user, and approval time in the cutover ticket.
@@ -102,14 +143,15 @@ user, and approval time in the cutover ticket.
 1. Re-run the dry-run immediately before apply and compare its hash, counts,
    review counts, and artifact names to the approved evidence. Any difference
    invalidates approval.
-2. Submit only the approved, bounded payload to
-   `POST /yezza-import?action=apply` with its `importBatchId`. Apply batches in
-   dependency order through the server pathway; never use browser-side inserts.
+2. Submit only the approved bounded payloads in manifest order. Patient batches
+   precede visit batches. Use `npm run yezza:batch -- --mode apply ...`; never
+   use browser-side inserts.
 3. Stop automatically and investigate if a response reports `failed`, if the
    batch ledger is not `completed`, or if target counts/totals differ from the
    approved reconciliation rules.
-4. A network timeout is not permission to submit a new source batch. Retry the
-   **same** approved `importBatchId` and byte-identical payload. A completed
+4. A network timeout is not permission to submit a new source batch. Run the
+   coordinator with `--mode retry`; it reuses the approval state, the **same**
+   approved `importBatchId`, and the byte-identical payload. A completed
    retry must return `idempotent: true` and create no patient, visit, item,
    payment, or source-identity duplicate.
 
@@ -149,3 +191,8 @@ is represented by payments on the linked imported visit; and retain the SQL
 output plus the source-reconciliation JSON in the cutover ticket. Only then may
 the change request be considered for a separately authorized production
 deployment and smoke test.
+
+Repository tests and static checks do not satisfy this runtime gate. Unless the
+SQL commands above have actually run against the designated isolated database,
+the correct status is **runtime database verification not performed** and
+production apply remains blocked.

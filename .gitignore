@@ -34,6 +34,8 @@ stress-tests/node_modules/
 !.env.*.example
 .worktrees/
 yezza-dry-run-report/
+yezza-private-review/
+yezza-prepared-import/
 patients.csv
 consultations.csv
 transactions_1.csv

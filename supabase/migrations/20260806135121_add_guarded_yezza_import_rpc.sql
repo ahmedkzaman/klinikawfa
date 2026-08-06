@@ -434,6 +434,10 @@ BEGIN
         AND external_id.source_patient_id = v_patient->>'sourcePatientId';
 
       IF FOUND THEN
+        IF coalesce(v_patient->>'existingPatientId', '') <> ''
+           AND v_patient_id IS DISTINCT FROM (v_patient->>'existingPatientId')::uuid THEN
+          RAISE EXCEPTION 'YEZZA_IMPORT_PATIENT_MAPPING_CONFLICT' USING ERRCODE = '23505';
+        END IF;
         v_imported_counts := jsonb_set(
           v_imported_counts,
           '{patientsReused}',
