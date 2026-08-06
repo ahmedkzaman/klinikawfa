@@ -168,3 +168,80 @@ non-production Supabase environment, run a small approved fixture through
 dry-run/approve/apply/retry/failure paths, verify table counts after forced
 rollback, and run Supabase security/performance advisors. Production apply must
 remain disabled until that database verification and human review are complete.
+
+## Review-fix round
+
+The first Task 4 review identified four security/test gaps. This round addresses
+all four without running a production import.
+
+### Reused visit ownership and shape
+
+The apply RPC no longer trusts `visit_external_ids` by source key alone. Its
+reuse branch now joins the mapped `queue_entries` row and rejects the batch
+before payment processing when the queue patient differs from the patient
+resolved through `patient_external_ids`. It also validates the existing visit
+purpose, active consultation presence, consultation patient/doctor/provenance/
+status/content/timestamp, and the multiset of active item names, quantities,
+prices, and row counts. A financial-only visit must have neither a consultation
+nor items. Every per-visit target variable is reset before lookup, preventing a
+prior visit's consultation ID from leaking into a later payment.
+
+### Shared Edge authorization errors
+
+`supabase/functions/yezza-import/auth.ts` is now the explicit boundary between
+the shared Auth helper and the runtime-independent handler. It calls the shared
+helper with its `admin` role label, which expands to both concrete `admin` and
+`doctor_admin`, and converts the shared `HttpError` into `ImportHttpError` while
+preserving the safe status/message. Real 401/403 failures therefore remain
+401/403 instead of falling through to a generic 500. A Deno test imports the
+actual shared `HttpError` type and verifies both translation and acceptance of a
+concrete `doctor_admin` result through the shared admin-label wiring.
+
+### Item source-key validation
+
+The payload normalizer now rejects repeated `(sourceVisitId, sourceLine)` item
+keys. Since source visit IDs are already unique within a payload, it enforces a
+unique source line set inside each visit before hashing, approval, or RPC
+invocation. The focused regression test uses different target content on the
+same source line, proving this is source identity validation rather than target
+row deduplication.
+
+### Real database integration suite
+
+`supabase/tests/yezza_import_rpc.sql` is a rollback-only, non-production SQL
+suite that invokes `approve_yezza_import` and `apply_yezza_import` directly. It
+checks:
+
+- RLS enabled and RPC execute grants restricted to `service_role`;
+- authenticated direct-write denial and staff ledger isolation;
+- rejection of an unapproved batch;
+- successful dependency-ordered apply and idempotent retry row counts;
+- patient reuse through an existing `patient_external_ids` binding;
+- duplicate source-bill suppression at the database boundary;
+- rejection of a reused visit bound to another patient;
+- rejection of changed consultation-item shape before a new payment;
+- rollback forced by a test-only payment trigger raising a constraint error;
+- absence of patient/visit/payment/external-identity remnants after rollback;
+- persisted `failed` ledger status with safe error code and SQLSTATE.
+
+The script starts with `BEGIN`, checks fixture-name collisions, removes its
+test-only trigger/function, and ends with `ROLLBACK`.
+
+### Review-fix TDD evidence
+
+The duplicate-item regression test first failed because the payload was
+accepted with two rows on source line 1. The auth test first failed type checking
+because the translating auth boundary did not exist. After the focused fixes:
+
+```text
+npm.cmd test -- src/test/yezza-import-idempotency.test.ts
+1 test file passed; 9 tests passed.
+
+npx.cmd --yes deno@2.5.6 test --no-lock \
+  supabase/functions/yezza-import/auth_test.ts
+2 passed; 0 failed.
+```
+
+Both the migration and rollback-only integration test parse as PostgreSQL SQL.
+The local machine still has no Docker/Supabase database runtime, so the new SQL
+suite remains a mandatory non-production execution gate before deployment.

@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
-import { requireRole } from "../_shared/auth-helpers.ts";
+import { authorizeYezzaImportRequest } from "./auth.ts";
 import {
   ImportHttpError,
   createYezzaImportHandler,
@@ -80,7 +80,7 @@ class SupabaseImportGateway implements ImportGateway {
 }
 
 const handler = createYezzaImportHandler({
-  authorize: (req) => requireRole(req, ["admin"]),
+  authorize: authorizeYezzaImportRequest,
   gateway: new SupabaseImportGateway(),
 });
 

@@ -313,6 +313,10 @@ DECLARE
   v_intended_patient_id uuid;
   v_queue_entry_id uuid;
   v_consultation_id uuid;
+  v_existing_visit_patient_id uuid;
+  v_existing_visit_purpose text;
+  v_source_has_consultation boolean;
+  v_existing_has_consultation boolean;
   v_existing_transaction public.transaction_external_ids%ROWTYPE;
   v_amount numeric;
   v_paid_amount numeric;
@@ -501,6 +505,18 @@ BEGIN
     -- items are created only alongside a new visit; bills are independently
     -- keyed so retries cannot create duplicate payments.
     FOR v_visit IN SELECT value FROM jsonb_array_elements(p_payload->'visits') LOOP
+      v_queue_entry_id := NULL;
+      v_consultation_id := NULL;
+      v_existing_visit_patient_id := NULL;
+      v_existing_visit_purpose := NULL;
+      v_existing_has_consultation := false;
+      v_source_has_consultation := v_visit->'consultation' IS NOT NULL
+        AND v_visit->'consultation' <> 'null'::jsonb;
+      IF NOT v_source_has_consultation
+         AND jsonb_array_length(v_visit->'items') <> 0 THEN
+        RAISE EXCEPTION 'YEZZA_IMPORT_FINANCIAL_VISIT_ITEM_CONFLICT' USING ERRCODE = '22023';
+      END IF;
+
       SELECT external_id.patient_id
         INTO v_patient_id
       FROM public.patient_external_ids AS external_id
@@ -511,23 +527,89 @@ BEGIN
       END IF;
 
       PERFORM pg_advisory_xact_lock(hashtextextended('yezza:visit:' || (v_visit->>'sourceVisitId'), 0));
-      SELECT external_id.queue_entry_id
-        INTO v_queue_entry_id
+      SELECT external_id.queue_entry_id, queue_entry.patient_id, queue_entry.visit_purpose
+        INTO v_queue_entry_id, v_existing_visit_patient_id, v_existing_visit_purpose
       FROM public.visit_external_ids AS external_id
+      JOIN public.queue_entries AS queue_entry
+        ON queue_entry.id = external_id.queue_entry_id
       WHERE external_id.source_system = 'yezza'
         AND external_id.source_visit_id = v_visit->>'sourceVisitId';
 
       IF FOUND THEN
-        v_imported_counts := jsonb_set(
-          v_imported_counts,
-          '{visitsReused}',
-          to_jsonb((v_imported_counts->>'visitsReused')::integer + 1)
-        );
+        IF v_existing_visit_patient_id IS DISTINCT FROM v_patient_id THEN
+          RAISE EXCEPTION 'YEZZA_IMPORT_VISIT_PATIENT_CONFLICT' USING ERRCODE = '23505';
+        END IF;
+        IF v_existing_visit_purpose IS DISTINCT FROM v_visit->'queueEntry'->>'visitPurpose' THEN
+          RAISE EXCEPTION 'YEZZA_IMPORT_VISIT_SHAPE_CONFLICT' USING ERRCODE = '23505';
+        END IF;
+
         SELECT consultation.id
           INTO v_consultation_id
         FROM public.consultations AS consultation
         WHERE consultation.queue_entry_id = v_queue_entry_id
           AND consultation.deleted_at IS NULL;
+        v_existing_has_consultation := FOUND;
+
+        IF v_source_has_consultation IS DISTINCT FROM v_existing_has_consultation THEN
+          RAISE EXCEPTION 'YEZZA_IMPORT_CONSULTATION_SHAPE_CONFLICT' USING ERRCODE = '23505';
+        END IF;
+
+        IF v_source_has_consultation AND NOT EXISTS (
+          SELECT 1
+          FROM public.consultations AS consultation
+          WHERE consultation.id = v_consultation_id
+            AND consultation.patient_id = v_patient_id
+            AND consultation.doctor_id IS NOT DISTINCT FROM
+              nullif(v_visit->'consultation'->>'doctorId', '')::uuid
+            AND consultation.case_note IS NOT DISTINCT FROM
+              coalesce(v_visit->'consultation'->>'caseNote', '')
+            AND consultation.diagnosis_text IS NOT DISTINCT FROM
+              coalesce(v_visit->'consultation'->>'diagnosisText', '')
+            AND consultation.original_consulted_at IS NOT DISTINCT FROM
+              nullif(v_visit->'consultation'->>'originalConsultedAt', '')::timestamptz
+            AND consultation.entry_source = 'legacy_import'
+            AND consultation.status = 'in_progress'
+            AND consultation.deleted_at IS NULL
+        ) THEN
+          RAISE EXCEPTION 'YEZZA_IMPORT_CONSULTATION_SHAPE_CONFLICT' USING ERRCODE = '23505';
+        END IF;
+
+        IF v_source_has_consultation AND EXISTS (
+          WITH source_items AS (
+            SELECT
+              source_item->>'itemName' AS item_name,
+              (source_item->>'quantity')::integer AS quantity,
+              (source_item->>'price')::numeric AS price,
+              count(*) AS row_count
+            FROM jsonb_array_elements(v_visit->'items') AS source_item
+            GROUP BY 1, 2, 3
+          ),
+          target_items AS (
+            SELECT
+              target_item.item_name,
+              target_item.quantity,
+              target_item.price,
+              count(*) AS row_count
+            FROM public.consultation_items AS target_item
+            WHERE target_item.consultation_id = v_consultation_id
+              AND target_item.deleted_at IS NULL
+            GROUP BY 1, 2, 3
+          )
+          SELECT 1
+          FROM (
+            (SELECT * FROM source_items EXCEPT SELECT * FROM target_items)
+            UNION ALL
+            (SELECT * FROM target_items EXCEPT SELECT * FROM source_items)
+          ) AS item_difference
+        ) THEN
+          RAISE EXCEPTION 'YEZZA_IMPORT_ITEM_SHAPE_CONFLICT' USING ERRCODE = '23505';
+        END IF;
+
+        v_imported_counts := jsonb_set(
+          v_imported_counts,
+          '{visitsReused}',
+          to_jsonb((v_imported_counts->>'visitsReused')::integer + 1)
+        );
       ELSE
         INSERT INTO public.queue_entries (
           patient_id,
@@ -567,7 +649,7 @@ BEGIN
           to_jsonb((v_imported_counts->>'visitsCreated')::integer + 1)
         );
 
-        IF v_visit->'consultation' IS NOT NULL AND v_visit->'consultation' <> 'null'::jsonb THEN
+        IF v_source_has_consultation THEN
           INSERT INTO public.consultations (
             queue_entry_id,
             patient_id,

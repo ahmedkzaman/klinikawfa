@@ -267,6 +267,19 @@ describe("guarded Yezza import endpoint", () => {
     expect(prepared.counts).toMatchObject({ transactions: 1, payments: 1 });
   });
 
+  it("rejects duplicate source lines within a source visit", async () => {
+    const duplicated = payload();
+    duplicated.visits[0].items.push({
+      ...duplicated.visits[0].items[0],
+      itemName: "Different target row with the same source line",
+    });
+
+    await expect(prepareYezzaImport(duplicated)).rejects.toMatchObject({
+      status: 400,
+      safeMessage: "Duplicate consultation item source key",
+    });
+  });
+
   it("rolls back patient, visit, item, and payment writes when a batch fails", async () => {
     const gateway = new TransactionalGateway();
     gateway.failAfterItems = true;

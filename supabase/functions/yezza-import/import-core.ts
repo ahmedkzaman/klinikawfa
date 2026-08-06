@@ -248,6 +248,13 @@ function normalizedVisit(value: unknown): YezzaImportPayload["visits"][number] {
       price: nonnegativeMoney(item.price, "item.price"),
     };
   });
+  const sourceLines = new Set<number>();
+  for (const item of items) {
+    if (sourceLines.has(item.sourceLine)) {
+      throw new ImportHttpError(400, "Duplicate consultation item source key");
+    }
+    sourceLines.add(item.sourceLine);
+  }
   if (!consultationRecord && items.length > 0) throw new ImportHttpError(400, "Financial-only visit cannot include consultation items");
 
   const paymentMethods = new Set(["cash", "card", "bank_transfer", "e_wallet", "panel", "other"]);
