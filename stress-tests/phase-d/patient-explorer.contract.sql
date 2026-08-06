@@ -16,7 +16,8 @@ DECLARE
   queue_entry_two_id constant uuid := 'ae100003-0000-4000-8000-000000000001';
   consultation_one_id constant uuid := 'ae100004-0000-4000-8000-000000000001';
   consultation_two_id constant uuid := 'ae100005-0000-4000-8000-000000000001';
-  request_date text := to_char(current_date, 'YYYY-MM-DD');
+  fixture_name constant text := 'Patient Explorer Contract Fixture ae100001-0000-4000-8000-000000000001';
+  request_date text := to_char(current_timestamp AT TIME ZONE 'Asia/Kuala_Lumpur', 'YYYY-MM-DD');
   all_time_response jsonb;
   custom_response jsonb;
   age_response jsonb;
@@ -35,8 +36,8 @@ BEGIN
   INSERT INTO public.patients (id, name, date_of_birth, postcode)
   VALUES (
     patient_id,
-    'Patient Explorer Contract Fixture',
-    (current_date - interval '35 years')::date,
+    fixture_name,
+    (request_date::date - interval '35 years')::date,
     '68000'
   );
 
@@ -59,7 +60,11 @@ BEGIN
   );
 
   all_time_response := public.search_patient_explorer(
-    jsonb_build_object('dateMode', 'all_time', 'postcode', '68000'),
+    jsonb_build_object(
+      'dateMode', 'all_time',
+      'patientName', fixture_name,
+      'postcode', '68000'
+    ),
     1,
     25
   );
@@ -77,6 +82,7 @@ BEGIN
       'dateMode', 'custom',
       'startDate', request_date,
       'endDate', request_date,
+      'patientName', fixture_name,
       'postcode', '68000'
     ),
     1,
@@ -92,6 +98,7 @@ BEGIN
       'dateMode', 'all_time',
       'ageMin', '34',
       'ageMax', '36',
+      'patientName', fixture_name,
       'postcode', '68000'
     ),
     1,
@@ -117,7 +124,7 @@ BEGIN
       jsonb_build_object(
         'dateMode', 'custom',
         'startDate', request_date,
-        'endDate', to_char(current_date - 1, 'YYYY-MM-DD')
+        'endDate', to_char(request_date::date - 1, 'YYYY-MM-DD')
       ),
       1,
       25

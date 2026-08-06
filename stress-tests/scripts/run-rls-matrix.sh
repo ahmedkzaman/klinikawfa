@@ -176,11 +176,6 @@ psql "$STAGING_DB_URL" -X \
   -v RLS_GUEST_UID="$RLS_GUEST_UID" \
   -f "$ROOT_DIR/phase-d/seed-rls-matrix.sql"
 
-echo "→ running Patient Explorer PostgreSQL contract"
-psql "$STAGING_DB_URL" -X \
-  -v ON_ERROR_STOP=1 \
-  -f "$ROOT_DIR/phase-d/patient-explorer.contract.sql"
-
 # --- 6. Trap cleanup -------------------------------------------------------
 CLEANUP_STATUS=0
 cleanup() {
@@ -207,7 +202,13 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# --- 7. Run all three test files ------------------------------------------
+# --- 7. Run Patient Explorer PostgreSQL contract --------------------------
+echo "→ running Patient Explorer PostgreSQL contract"
+psql "$STAGING_DB_URL" -X \
+  -v ON_ERROR_STOP=1 \
+  -f "$ROOT_DIR/phase-d/patient-explorer.contract.sql"
+
+# --- 8. Run all three test files ------------------------------------------
 TEST_STATUS=0
 ( cd "$ROOT_DIR" && bun test \
     phase-d/rls-matrix.fixture.test.ts \
@@ -215,7 +216,7 @@ TEST_STATUS=0
     phase-d/website-editor-wordpress-matrix.test.ts \
     phase-d/rls.test.ts ) || TEST_STATUS=$?
 
-# --- 8. Final exit ---------------------------------------------------------
+# --- 9. Final exit ---------------------------------------------------------
 trap - EXIT INT TERM
 cleanup
 

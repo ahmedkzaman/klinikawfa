@@ -122,4 +122,28 @@ describe("patient explorer RPC migration", () => {
     );
     expect(rlsRunner).toContain("phase-d/patient-explorer.contract.sql");
   });
+
+  it("cleans Phase-D fixtures before the patient explorer contract can fail", () => {
+    const rlsRunner = readFileSync(
+      resolve(process.cwd(), "stress-tests/scripts/run-rls-matrix.sh"),
+      "utf8",
+    );
+
+    expect(rlsRunner.indexOf("trap cleanup EXIT INT TERM")).toBeGreaterThan(-1);
+    expect(rlsRunner.indexOf("trap cleanup EXIT INT TERM")).toBeLessThan(
+      rlsRunner.indexOf("phase-d/patient-explorer.contract.sql"),
+    );
+  });
+
+  it("uses a Kuala Lumpur fixture date and unique patient filters", () => {
+    expect(integrationContract).toMatch(
+      /request_date text := to_char\(current_timestamp at time zone 'Asia\/Kuala_Lumpur', 'YYYY-MM-DD'\)/i,
+    );
+    expect(integrationContract).toMatch(
+      /fixture_name constant text := 'Patient Explorer Contract Fixture ae100001-0000-4000-8000-000000000001'/i,
+    );
+    expect(
+      integrationContract.match(/'patientName', fixture_name/g),
+    ).toHaveLength(3);
+  });
 });
