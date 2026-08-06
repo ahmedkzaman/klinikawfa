@@ -31,6 +31,9 @@ export interface YezzaImportPayload {
       phone?: string | null;
       email?: string | null;
       nationalId?: string | null;
+      passportNo?: string | null;
+      address?: string | null;
+      regNo?: string | null;
       dateOfBirth?: string | null;
       gender?: string | null;
       stateOfBirth?: string | null;
@@ -221,6 +224,9 @@ function normalizedPatient(value: unknown): YezzaImportPayload["patients"][numbe
         phone: nullableString(profile.phone, "patient.phone", 100),
         email: nullableString(profile.email, "patient.email", 320),
         nationalId: nullableString(profile.nationalId, "patient.nationalId", 200),
+        passportNo: nullableString(profile.passportNo, "patient.passportNo", 200),
+        address: nullableString(profile.address, "patient.address", 1000),
+        regNo: nullableString(profile.regNo, "patient.regNo", 100),
         dateOfBirth: profile.dateOfBirth == null ? profile.dateOfBirth as null | undefined : validateIsoDate(profile.dateOfBirth, "patient.dateOfBirth", true),
         gender: nullableString(profile.gender, "patient.gender", 100),
         stateOfBirth: nullableString(profile.stateOfBirth, "patient.stateOfBirth", 200),
