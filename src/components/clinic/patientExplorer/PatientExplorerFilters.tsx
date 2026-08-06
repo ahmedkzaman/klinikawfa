@@ -30,14 +30,27 @@ const listFields: Array<{ key: ListFilterKey; label: string; addLabel: string }>
   { key: "attendingDoctors", label: "Attending doctors", addLabel: "Add attending doctor" },
 ];
 
+const malaysiaDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Kuala_Lumpur",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 function toDateInputValue(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  const parts = malaysiaDateFormatter.formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  return `${year}-${month}-${day}`;
 }
 
-function dateDaysAgo(days: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  return toDateInputValue(date);
+function dateDaysAgo(dateValue: string, days: number): string {
+  const [year, month, day] = dateValue.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day - days));
+  return [date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()]
+    .map((value, index) => index === 0 ? String(value).padStart(4, "0") : String(value).padStart(2, "0"))
+    .join("-");
 }
 
 interface PatientExplorerFiltersProps {
@@ -60,11 +73,12 @@ export function PatientExplorerFilters({
   };
 
   const setPreset = (days: number) => {
+    const today = toDateInputValue(new Date());
     onChange({
       ...value,
       dateMode: "custom",
-      startDate: dateDaysAgo(days),
-      endDate: toDateInputValue(new Date()),
+      startDate: dateDaysAgo(today, days),
+      endDate: today,
     });
   };
 

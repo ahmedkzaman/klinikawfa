@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PatientExplorer from "@/pages/clinic/PatientExplorer";
 import { ClinicLayout } from "@/components/clinic/ClinicLayout";
 import { usePatientExplorer } from "@/hooks/clinic/usePatientExplorer";
@@ -66,6 +66,10 @@ describe("Patient Explorer UI", () => {
     explorer.mockReturnValue(response as ReturnType<typeof usePatientExplorer>);
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("starts with all time filters and waits for Apply before querying", () => {
     renderExplorer();
 
@@ -73,6 +77,21 @@ describe("Patient Explorer UI", () => {
     expect(screen.getByLabelText("Patient name")).toBeInTheDocument();
     expect(screen.getByLabelText("Diagnoses")).toBeInTheDocument();
     expect(explorer).toHaveBeenCalledWith(null, 1, 50);
+  });
+
+  it.each([
+    ["Today", "2026-08-06", "2026-08-06"],
+    ["Last 7 days", "2026-07-31", "2026-08-06"],
+    ["Last 30 days", "2026-07-08", "2026-08-06"],
+  ])("uses Kuala Lumpur calendar boundaries for the %s preset", (preset, startDate, endDate) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-05T16:30:00.000Z"));
+    renderExplorer();
+
+    fireEvent.click(screen.getByRole("button", { name: preset }));
+
+    expect(screen.getByLabelText("Start date")).toHaveValue(startDate);
+    expect(screen.getByLabelText("End date")).toHaveValue(endDate);
   });
 
   it("applies the draft filters and clears them without an immediate default query", () => {
