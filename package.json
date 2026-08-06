@@ -10,6 +10,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "lint:changed": "node scripts/lint-changed.mjs",
+    "yezza:dry-run": "node --experimental-strip-types scripts/yezza-import/dryRun.ts",
     "preview": "vite preview",
     "test": "vitest run --pool=forks --fileParallelism=false --maxWorkers=1",
     "test:watch": "vitest"

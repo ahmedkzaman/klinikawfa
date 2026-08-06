@@ -33,3 +33,8 @@ stress-tests/node_modules/
 !.env.example
 !.env.*.example
 .worktrees/
+yezza-dry-run-report/
+patients.csv
+consultations.csv
+transactions_1.csv
+transactions_2.csv
