@@ -14,6 +14,13 @@ const followUpMigrationPath = resolve(
 const followUpMigration = existsSync(followUpMigrationPath)
   ? readFileSync(followUpMigrationPath, "utf8")
   : "";
+const integrationContractPath = resolve(
+  process.cwd(),
+  "stress-tests/phase-d/patient-explorer.contract.sql",
+);
+const integrationContract = existsSync(integrationContractPath)
+  ? readFileSync(integrationContractPath, "utf8")
+  : "";
 
 describe("patient explorer RPC migration", () => {
   it("defines the paginated patient-level RPC contract", () => {
@@ -96,5 +103,23 @@ describe("patient explorer RPC migration", () => {
       /if date_mode is null or date_mode not in \('all_time', 'custom'\) then/i,
     );
     expect(followUpMigration).toContain("date mode must be all_time or custom");
+  });
+
+  it("ships an executable PostgreSQL integration contract as supplemental coverage", () => {
+    expect(integrationContract).toContain(
+      "\\ir ../../supabase/migrations/20260806100000_add_patient_explorer_rpc.sql",
+    );
+    expect(integrationContract).toContain(
+      "\\ir ../../supabase/migrations/20260806110000_fix_patient_explorer_postcode_and_validation.sql",
+    );
+    expect(integrationContract).toMatch(/begin;[\s\S]*rollback;/i);
+    expect(integrationContract).toMatch(/search_patient_explorer/i);
+    expect(integrationContract).toMatch(/missing dateMode/i);
+    expect(integrationContract).toMatch(/anonymous request/i);
+    const rlsRunner = readFileSync(
+      resolve(process.cwd(), "stress-tests/scripts/run-rls-matrix.sh"),
+      "utf8",
+    );
+    expect(rlsRunner).toContain("phase-d/patient-explorer.contract.sql");
   });
 });

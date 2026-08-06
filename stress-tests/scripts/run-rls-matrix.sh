@@ -176,6 +176,11 @@ psql "$STAGING_DB_URL" -X \
   -v RLS_GUEST_UID="$RLS_GUEST_UID" \
   -f "$ROOT_DIR/phase-d/seed-rls-matrix.sql"
 
+echo "→ running Patient Explorer PostgreSQL contract"
+psql "$STAGING_DB_URL" -X \
+  -v ON_ERROR_STOP=1 \
+  -f "$ROOT_DIR/phase-d/patient-explorer.contract.sql"
+
 # --- 6. Trap cleanup -------------------------------------------------------
 CLEANUP_STATUS=0
 cleanup() {
