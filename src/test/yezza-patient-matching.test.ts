@@ -88,13 +88,17 @@ describe("matchYezzaPatient", () => {
   });
 
   it("flags duplicate existing IC candidates for review without choosing one", () => {
-    const decision = matchYezzaPatient(source(), [existing(), existing({ id: "klinik-789" })]);
+    const firstCandidateId = "11111111-1111-4111-8111-111111111111";
+    const secondCandidateId = "22222222-2222-4222-8222-222222222222";
+    const decision = matchYezzaPatient(source(), [existing({ id: firstCandidateId }), existing({ id: secondCandidateId })]);
 
     expect(decision).toEqual({
       kind: "review",
       reason: "National ID matches multiple Klinik Awfa patients",
-      conflicts: ["duplicate-existing-national-id:klinik-456,klinik-789"],
+      conflicts: ["duplicate-existing-national-id:2-candidates"],
     });
+    expect(JSON.stringify(decision.conflicts)).not.toContain(firstCandidateId);
+    expect(JSON.stringify(decision.conflicts)).not.toContain(secondCandidateId);
   });
 
   it("handles blank identifiers as a new patient when there is no name and DOB candidate", () => {

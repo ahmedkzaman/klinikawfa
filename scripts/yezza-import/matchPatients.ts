@@ -62,7 +62,7 @@ export function matchYezzaPatient(source: YezzaPatient, existing: ExistingPatien
       return {
         kind: "review",
         reason: "National ID matches multiple Klinik Awfa patients",
-        conflicts: [`duplicate-existing-national-id:${identifierMatches.map((patient) => patient.id).sort().join(",")}`],
+        conflicts: [`duplicate-existing-national-id:${identifierMatches.length}-candidates`],
       };
     }
   }
@@ -83,7 +83,7 @@ export function matchYezzaPatient(source: YezzaPatient, existing: ExistingPatien
       return {
         kind: "review",
         reason: "Phone, name, and date of birth match multiple Klinik Awfa patients",
-        conflicts: [`duplicate-existing-phone-name-dob:${phoneNameDobMatches.map((patient) => patient.id).sort().join(",")}`],
+        conflicts: [`duplicate-existing-phone-name-dob:${phoneNameDobMatches.length}-candidates`],
       };
     }
   }

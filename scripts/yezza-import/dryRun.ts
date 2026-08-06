@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -107,8 +107,8 @@ function sourcePatient(row: CsvRow): YezzaPatient {
   };
 }
 
-function fingerprint(type: string, value: string): string {
-  return `${type}-${createHash("sha256").update(`${type}:${value}`).digest("hex").slice(0, 16)}`;
+function fingerprint(reportReferenceKey: Uint8Array, type: string, value: string): string {
+  return `${type}-${createHmac("sha256", reportReferenceKey).update(`${type}:${value}`).digest("hex").slice(0, 16)}`;
 }
 
 function csvCell(value: string | number): string {
@@ -181,6 +181,8 @@ async function runDryRun(options: DryRunOptions): Promise<void> {
     readCsv(options.inputDirectory, "transactions_2.csv"),
     currentClinicRoster(),
   ]);
+  const reportReferenceKey = randomBytes(32);
+  const reportReference = (type: string, value: string) => fingerprint(reportReferenceKey, type, value);
 
   const matchRows: Array<Record<string, string>> = [];
   const reviewRows: Array<Record<string, string>> = [];
@@ -190,8 +192,8 @@ async function runDryRun(options: DryRunOptions): Promise<void> {
     const decision = matchYezzaPatient(patient, roster.patients);
     decisionCounts[decision.kind] += 1;
     const sanitized = {
-      source_patient_ref: fingerprint("source-patient", patient.sourcePatientId || JSON.stringify(row)),
-      existing_patient_ref: decision.existingPatientId ? fingerprint("existing-patient", decision.existingPatientId) : "",
+      source_patient_ref: reportReference("source-patient", patient.sourcePatientId || JSON.stringify(row)),
+      existing_patient_ref: decision.existingPatientId ? reportReference("existing-patient", decision.existingPatientId) : "",
       match_kind: decision.kind,
       reason: decision.reason,
       conflict_fields: decision.conflicts.join(";"),
@@ -205,7 +207,7 @@ async function runDryRun(options: DryRunOptions): Promise<void> {
   for (const row of consultationRows) {
     const doctor = valueFor(row, ["Attending Dr", "Attending Doctor", "Doctor", "Dr"]);
     if (doctor && !roster.doctorNames.has(normalizeName(doctor))) {
-      const key = fingerprint("source-doctor", doctor);
+      const key = reportReference("source-doctor", doctor);
       doctorCounts.set(key, (doctorCounts.get(key) ?? 0) + 1);
     }
   }
@@ -225,7 +227,7 @@ async function runDryRun(options: DryRunOptions): Promise<void> {
     writeCsv(options.outputDirectory, "patient_matches.csv", ["source_patient_ref", "existing_patient_ref", "match_kind", "reason", "conflict_fields"], matchRows),
     writeCsv(options.outputDirectory, "patient_review.csv", ["source_patient_ref", "existing_patient_ref", "match_kind", "reason", "conflict_fields"], reviewRows),
     writeCsv(options.outputDirectory, "unresolved_doctors.csv", ["source_doctor_ref", "consultation_count", "reason"], [...doctorCounts.entries()].sort().map(([sourceDoctorRef, consultationCount]) => ({ source_doctor_ref: sourceDoctorRef, consultation_count: consultationCount, reason: roster.configured ? "No exact normalized roster match" : "Klinik Awfa roster lookup not configured" }))),
-    writeCsv(options.outputDirectory, "orphan_financial_visits.csv", ["source_visit_ref", "reason"], [...orphanVisits].sort().map((visitId) => ({ source_visit_ref: fingerprint("source-visit", visitId), reason: "No consultation export row" }))),
+    writeCsv(options.outputDirectory, "orphan_financial_visits.csv", ["source_visit_ref", "reason"], [...orphanVisits].sort().map((visitId) => ({ source_visit_ref: reportReference("source-visit", visitId), reason: "No consultation export row" }))),
     writeFile(join(options.outputDirectory, "summary.json"), `${JSON.stringify({
       reportVersion: 1,
       sourceFiles: requiredFiles.map((filename) => basename(filename)),
