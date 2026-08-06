@@ -147,6 +147,36 @@ function nullable(value: string): string | null {
   return value.trim() || null;
 }
 
+function patientIdentityFromRow(row: CsvRow): {
+  nationalId: string | null;
+  passportNo: string | null;
+} {
+  const explicitNationalId = nullable(valueFor(row, ["IC", "NRIC", "National ID"]));
+  const explicitPassport = nullable(valueFor(row, ["Passport No", "Passport Number", "Passport"]));
+  const combined = nullable(valueFor(row, ["IC/Passport", "IC Passport"]));
+  if (explicitNationalId || explicitPassport) {
+    return { nationalId: explicitNationalId, passportNo: explicitPassport };
+  }
+  if (!combined) return { nationalId: null, passportNo: null };
+  const compact = combined.replace(/[\s-]+/g, "");
+  return /^\d{12}$/.test(compact)
+    ? { nationalId: compact, passportNo: null }
+    : { nationalId: null, passportNo: combined };
+}
+
+function patientAddressFromRow(row: CsvRow): string | null {
+  const generic = nullable(valueFor(row, ["Address", "Full Address"]));
+  if (generic) return generic;
+  const parts = [
+    valueFor(row, ["address_1", "Address Line 1"]),
+    valueFor(row, ["address_2", "Address Line 2"]),
+    valueFor(row, ["city", "City"]),
+    valueFor(row, ["postcode", "Postcode"]),
+    valueFor(row, ["state", "State"]),
+  ].map((part) => part.trim()).filter(Boolean);
+  return parts.length ? parts.join(", ") : null;
+}
+
 function money(value: string, field: string): number {
   const normalized = value.trim().replace(/^RM\s*/i, "").replace(/,/g, "");
   if (!/^\d+(?:\.\d+)?$/.test(normalized)) throw new Error(`Invalid ${field}`);
@@ -232,22 +262,23 @@ function patientFromRow(row: CsvRow, locator: string, resolution: PatientResolut
     return { sourcePatientId, existingPatientId: resolution.existingPatientId, ...(reviewRequired ? { reviewLocator: locator } : {}) };
   }
   if (resolution.action !== "create") throw new Error(`${locator} has an invalid patient decision`);
+  const identity = patientIdentityFromRow(row);
   return {
     sourcePatientId,
     patient: {
       name: valueFor(row, ["Patient Name", "Name"]),
       phone: nullable(valueFor(row, ["Phone", "Phone No", "Mobile", "Contact No"])),
       email: nullable(valueFor(row, ["Email"])),
-      nationalId: nullable(valueFor(row, ["IC", "NRIC", "National ID", "IC/Passport", "IC Passport"])),
-      passportNo: nullable(valueFor(row, ["Passport No", "Passport Number", "Passport"])),
-      address: nullable(valueFor(row, ["Address", "Full Address", "Address Line 1"])),
+      nationalId: identity.nationalId,
+      passportNo: identity.passportNo,
+      address: patientAddressFromRow(row),
       regNo: nullable(valueFor(row, ["Reg No", "Registration No", "Registration Number"])),
       dateOfBirth: nullable(valueFor(row, ["DOB", "Date Of Birth", "Birth Date"])),
       gender: nullable(valueFor(row, ["Gender"])),
       stateOfBirth: nullable(valueFor(row, ["State Of Birth", "Birth State"])),
       allergies: nullable(valueFor(row, ["Allergies"])),
       underlyingConditions: nullable(valueFor(row, ["Underlying Conditions", "Medical Conditions"])),
-      registrationDate: nullable(valueFor(row, ["Registration Date", "Registered At"])),
+      registrationDate: nullable(valueFor(row, ["Registration Date", "Registered At", "Created Date"])),
       notes: nullable(valueFor(row, ["Notes"])),
     },
     ...(reviewRequired ? { reviewLocator: locator } : {}),
