@@ -179,10 +179,10 @@ function patientAddressFromRow(row: CsvRow): string | null {
 
 function money(value: string, field: string): number {
   const normalized = value.trim().replace(/^RM\s*/i, "").replace(/,/g, "");
-  if (!/^\d+(?:\.\d+)?$/.test(normalized)) throw new Error(`Invalid ${field}`);
   const amount = Number(normalized);
-  if (!Number.isFinite(amount) || amount < 0 || Math.round(amount * 100) !== amount * 100) throw new Error(`Invalid ${field}`);
-  return amount;
+  const rounded = Math.round((amount + Number.EPSILON) * 100) / 100;
+  if (!Number.isFinite(amount) || amount < 0 || Math.abs(rounded - amount) > 1e-9) throw new Error(`Invalid ${field}`);
+  return rounded;
 }
 
 function paymentMethod(value: string): "cash" | "card" | "bank_transfer" | "e_wallet" | "panel" | "other" {
@@ -673,7 +673,12 @@ async function main(argumentsList: string[]): Promise<void> {
     const decisionsPath = values.get("--resolutions");
     const outputDirectory = values.get("--output-dir") ?? "yezza-prepared-import";
     if (!inputDirectory || !decisionsPath) throw new Error("Prepare requires --input-dir and --resolutions");
-    const manifest = await prepareYezzaBatchFiles({ inputDirectory, decisionsPath, outputDirectory });
+    const manifest = await prepareYezzaBatchFiles({
+      inputDirectory,
+      decisionsPath,
+      outputDirectory,
+      allowNonProductionReconciliation: values.get("--allow-non-production-reconciliation") === "true",
+    });
     console.log(JSON.stringify({ manifest: join(resolve(outputDirectory), "manifest.json"), manifestHash: manifest.manifestHash, artifactHash: manifest.artifactHash, batches: manifest.batches.length }, null, 2));
     return;
   }
