@@ -30,11 +30,14 @@ const row = {
   attending_doctors: ["Dr. Lee"],
 };
 
-function wrapper({ children }: { children: ReactNode }) {
+function createWrapper() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+
+  return function wrapper({ children }: { children: ReactNode }) {
+    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  };
 }
 
 describe("usePatientExplorer", () => {
@@ -50,7 +53,7 @@ describe("usePatientExplorer", () => {
 
     const { result } = renderHook(
       () => usePatientExplorer({ patientName: " Jane ", diagnoses: ["flu", " Flu "] }, 2, 25),
-      { wrapper },
+      { wrapper: createWrapper() },
     );
 
     await waitFor(() => expect(result.current.rows).toHaveLength(1));
@@ -71,7 +74,7 @@ describe("usePatientExplorer", () => {
     rpc.mockResolvedValue({ data: { rows: [], total_count: 0, page: 1, page_size: 50 }, error: null } as never);
     const { result, rerender } = renderHook(
       ({ filters }) => usePatientExplorer(filters, 1, 50),
-      { initialProps: { filters: { patientName: "Jane" } }, wrapper },
+      { initialProps: { filters: { patientName: "Jane" } }, wrapper: createWrapper() },
     );
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -86,7 +89,7 @@ describe("usePatientExplorer", () => {
     rpc.mockResolvedValue({ data: { rows: [], total_count: 0, page: 1, page_size: 50 }, error: null } as never);
     const { result, rerender } = renderHook(
       ({ filters, page }) => usePatientExplorer(filters, page, 50),
-      { initialProps: { filters: { patientName: "Jane" }, page: 3 }, wrapper },
+      { initialProps: { filters: { patientName: "Jane" }, page: 3 }, wrapper: createWrapper() },
     );
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -94,17 +97,22 @@ describe("usePatientExplorer", () => {
     await waitFor(() => expect(rpc).toHaveBeenCalledTimes(2));
     expect(rpc.mock.calls[1][1]).toEqual(expect.objectContaining({ p_page: 1 }));
     expect(result.current.page).toBe(1);
+
+    rerender({ filters: { patientName: "John" }, page: 3 });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(result.current.page).toBe(1);
   });
 
   it("propagates RPC errors", async () => {
     const error = new Error("RPC failed");
     rpc.mockResolvedValue({ data: null, error } as never);
-    const { result } = renderHook(() => usePatientExplorer({ patientName: "Jane" }, 1, 50), { wrapper });
+    const { result } = renderHook(() => usePatientExplorer({ patientName: "Jane" }, 1, 50), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.error).toBe(error));
   });
 
   it("stays disabled until the page supplies applied filters", () => {
-    const { result } = renderHook(() => usePatientExplorer(undefined, 1, 50), { wrapper });
+    const { result } = renderHook(() => usePatientExplorer(undefined, 1, 50), { wrapper: createWrapper() });
     expect(result.current.isLoading).toBe(false);
     expect(result.current.isFetching).toBe(false);
     expect(rpc).not.toHaveBeenCalled();
@@ -113,7 +121,7 @@ describe("usePatientExplorer", () => {
   it("exposes loading and fetching states", async () => {
     let resolve: ((value: unknown) => void) | undefined;
     rpc.mockImplementation(() => new Promise((res) => { resolve = res; }) as never);
-    const { result } = renderHook(() => usePatientExplorer({}, 1, 50), { wrapper });
+    const { result } = renderHook(() => usePatientExplorer({}, 1, 50), { wrapper: createWrapper() });
     expect(result.current.isLoading).toBe(true);
     expect(result.current.isFetching).toBe(true);
 

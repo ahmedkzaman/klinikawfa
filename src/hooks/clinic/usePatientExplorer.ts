@@ -76,12 +76,19 @@ export function usePatientExplorer(
 ) {
   const normalizedFilters = filters == null ? null : normalizePatientExplorerFilters(filters);
   const serializedFilters = normalizedFilters == null ? null : JSON.stringify(normalizedFilters);
-  const previousFilters = useRef(serializedFilters);
+  const pagination = useRef({ filters: serializedFilters, resetFromPage: null as number | null });
   let effectivePage = page;
 
-  if (serializedFilters !== previousFilters.current) {
+  if (serializedFilters !== pagination.current.filters) {
     effectivePage = serializedFilters == null ? page : 1;
-    previousFilters.current = serializedFilters;
+    pagination.current = {
+      filters: serializedFilters,
+      resetFromPage: serializedFilters == null ? null : page,
+    };
+  } else if (pagination.current.resetFromPage === page) {
+    effectivePage = 1;
+  } else {
+    pagination.current.resetFromPage = null;
   }
 
   const query = useQuery<PatientExplorerResponse>({
