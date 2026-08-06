@@ -48,3 +48,31 @@ read or modified.
 Start the local Supabase stack (or run the rollback-only SQL script in a
 non-production Supabase environment after applying migrations) to complete the
 database integration and advisor checks.
+
+## Review fix report
+
+The migration and SQL integration test were tightened after review:
+
+- Replaced the reused permission helper with `can_manage_imports`, a dedicated
+  security-definer helper that allows only `admin` and `doctor_admin`. This
+  avoids the later expansion of `can_manage_clinic_permissions` to
+  `special_admin`.
+- Added non-empty `source_batch_id` and a unique `(source_system,
+  source_batch_id)` key to `import_batches` for idempotent batch retries.
+- Made source mapping tables insert-only for authenticated users; no mapping
+  update or delete privilege/policy exists. Batch source identity and creator
+  are immutable through a trigger, and audit batches cannot be deleted.
+- Required `created_by = auth.uid()` in the batch insert/update policy's
+  `WITH CHECK` condition.
+- Added a trigger that rejects a mapping when its `source_system` differs from
+  the referenced import batch.
+- Expanded the SQL test to cover denied `staff` and `special_admin` reads and
+  writes for every table, anonymous denial for every table, forged creators,
+  cross-source links, all required foreign-key paths, batch deduplication, and
+  immutable identity mappings.
+
+Follow-up verification: `git diff --check` passed. `npm run lint` remains
+blocked by 293 pre-existing lint errors in unrelated application and stress-test
+files. `supabase db lint` and the rollback SQL integration test remain blocked
+because local PostgreSQL on `127.0.0.1:54322` is unavailable; no production
+database was accessed.
