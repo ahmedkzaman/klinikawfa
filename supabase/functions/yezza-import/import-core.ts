@@ -2,7 +2,9 @@ export const YEZZA_IMPORT_MAX_BYTES = 8 * 1024 * 1024;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const HASH_PATTERN = /^[a-f0-9]{64}$/;
-const ALLOWED_ROLES = new Set(["admin", "doctor_admin"]);
+// Staging-only migration operator. Production deployments should omit
+// special_admin unless explicitly approved by the clinic owner.
+const ALLOWED_ROLES = new Set(["admin", "doctor_admin", "special_admin"]);
 const MAX_ROWS_PER_BATCH = 2_000;
 
 export class ImportHttpError extends Error {
