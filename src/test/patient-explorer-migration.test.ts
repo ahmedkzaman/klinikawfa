@@ -7,6 +7,13 @@ const migrationPath = resolve(
   "supabase/migrations/20260806100000_add_patient_explorer_rpc.sql",
 );
 const migration = existsSync(migrationPath) ? readFileSync(migrationPath, "utf8") : "";
+const followUpMigrationPath = resolve(
+  process.cwd(),
+  "supabase/migrations/20260806110000_fix_patient_explorer_postcode_and_validation.sql",
+);
+const followUpMigration = existsSync(followUpMigrationPath)
+  ? readFileSync(followUpMigrationPath, "utf8")
+  : "";
 
 describe("patient explorer RPC migration", () => {
   it("defines the paginated patient-level RPC contract", () => {
@@ -59,5 +66,35 @@ describe("patient explorer RPC migration", () => {
     expect(migration).not.toMatch(/disable row level security/i);
     expect(migration).not.toMatch(/security definer/i);
     expect(migration).not.toMatch(/service_role/i);
+  });
+
+  it("adds a real nullable postcode column before recreating the deployed RPC", () => {
+    expect(followUpMigration).toMatch(
+      /alter table public\.patients\s+add column if not exists postcode text/i,
+    );
+    expect(followUpMigration).toMatch(/'postcode', p\.postcode/i);
+    expect(followUpMigration).toMatch(/coalesce\(p\.postcode, ''\) ilike '%' \|\| v_postcode \|\| '%'/i);
+    expect(followUpMigration).toMatch(
+      /to_regprocedure\('public\.search_patient_explorer\(jsonb, integer, integer\)'\) is null/i,
+    );
+    expect(followUpMigration).toMatch(
+      /create or replace function public\.search_patient_explorer\(/i,
+    );
+    expect(followUpMigration).not.toMatch(/pg_get_functiondef/i);
+  });
+
+  it("accepts valid custom dates and age values with PostgreSQL-safe regexes", () => {
+    expect(followUpMigration).toContain("start_date_text !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'");
+    expect(followUpMigration).toContain("end_date_text !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'");
+    expect(followUpMigration).toContain("filters ->> 'ageMin' !~ '^[0-9]+$'");
+    expect(followUpMigration).toContain("filters ->> 'ageMax' !~ '^[0-9]+$'");
+    expect(followUpMigration).not.toContain("\\\\d");
+  });
+
+  it("requires dateMode explicitly and rejects missing or null values", () => {
+    expect(followUpMigration).toMatch(
+      /if date_mode is null or date_mode not in \('all_time', 'custom'\) then/i,
+    );
+    expect(followUpMigration).toContain("date mode must be all_time or custom");
   });
 });
