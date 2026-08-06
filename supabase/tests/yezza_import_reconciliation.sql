@@ -5,6 +5,8 @@
 --   SET app.yezza_reconciliation_environment = 'isolated-non-production';
 -- This script writes no data and closes with ROLLBACK.
 
+\set ON_ERROR_STOP on
+
 BEGIN;
 
 DO $yezza_reconciliation$

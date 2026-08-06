@@ -126,19 +126,22 @@ backup's pre-import state before any new dry-run/approval cycle.
 ## 6. Post-import verification
 
 Run the reconciliation SQL suite only against the isolated non-production
-database after the complete import is present. In the same database session,
-set the explicit non-production guard and run:
+database after the complete import is present. Use `psql` with error stopping
+enabled, so an assertion failure cannot continue to the success output. In the
+same database session, set the explicit non-production guard and run:
 
 ```sql
-SET app.yezza_reconciliation_environment = 'isolated-non-production';
-\i supabase/tests/yezza_import_reconciliation.sql
+psql -X -v ON_ERROR_STOP=1 <connection-options> \
+  -c "SET app.yezza_reconciliation_environment = 'isolated-non-production';" \
+  -f supabase/tests/yezza_import_reconciliation.sql
 ```
 
 It verifies the full target baseline: 26,578 source patient identities,
 67,442 visits and bills, 17,442 financial-only visits, unique bill keys,
 RM5,684,929.22 billed, RM1,099,076.00 paid, one patient per imported visit,
 financial-only clinical exclusion, and completed ledger ownership. The script
-is read-only and finishes with `ROLLBACK`.
+is read-only, sets `ON_ERROR_STOP` itself as a defense in depth measure, and
+finishes with `ROLLBACK` only after every assertion passes.
 
 Also verify that imported patients, visits, and bills appear in the intended
 Klinik Awfa history and billing views; confirm each positive paid source total

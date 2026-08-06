@@ -50,3 +50,13 @@ Focused TypeScript validation completed with exit 0 using ESNext/Bundler resolut
 3. Obtain documented patient-review, repeated-IC, unresolved-doctor, financial-only-policy, count, total, artifact, and payload-hash approval.
 4. Take and restore-test a production backup under a separately authorized change request.
 5. Only after those gates pass, execute a separately authorized production apply and post-import verification. This task did not do so.
+
+## Review fix — fail closed SQL execution
+
+The reconciliation script now starts with `\set ON_ERROR_STOP on`. Any failed
+assertion therefore terminates a normal `psql` run before its final pass JSON
+can be selected. The runbook also requires `psql -X -v ON_ERROR_STOP=1` for
+defense in depth, while retaining the script-local setting for operators who
+source it directly. SQL parsing verification strips this psql client directive
+before sending the remaining PostgreSQL statements to `pglast`; the database
+semantics are otherwise unchanged.
