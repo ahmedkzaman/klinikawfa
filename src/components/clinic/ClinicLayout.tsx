@@ -24,6 +24,7 @@ import {
   Activity,
   TrendingUp,
   Video,
+  Search,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -42,6 +43,7 @@ type ClinicNavItem = {
 
 const clinicNavItems: ClinicNavItem[] = [
   { href: '/clinic/patients', label: 'Patients', icon: Users },
+  { href: '/clinic/patient-explorer', label: 'Patient Explorer', icon: Search, locumAllowed: true },
   { href: '/clinic/appointments', label: 'Appointments', icon: CalendarDays, locumAllowed: true },
   { href: '/clinic/video-calls', label: 'Video Calls', icon: Video },
   { href: '/clinic/queue', label: 'Queue Board', icon: LayoutDashboard, locumAllowed: true },

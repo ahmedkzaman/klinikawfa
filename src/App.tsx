@@ -63,6 +63,7 @@ import { ClinicProtectedRoute } from "./components/ClinicProtectedRoute";
 import { ClinicLayout } from "./components/clinic/ClinicLayout";
 import QueueBoard from "./pages/clinic/QueueBoard";
 import PatientsList from "./pages/clinic/PatientsList";
+import PatientExplorer from "./pages/clinic/PatientExplorer";
 import Consultation from "./pages/clinic/Consultation";
 import ConsultationDetail from "./pages/clinic/ConsultationDetail";
 import Procurement from "./pages/clinic/Procurement";
@@ -289,6 +290,7 @@ const App = () => (
                     </ClinicProtectedRoute>
                   }
                 />
+                <Route path="patient-explorer" element={<PatientExplorer />} />
                 <Route
                   path="consultation"
                   element={
