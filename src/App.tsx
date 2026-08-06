@@ -290,7 +290,14 @@ const App = () => (
                     </ClinicProtectedRoute>
                   }
                 />
-                <Route path="patient-explorer" element={<PatientExplorer />} />
+                <Route
+                  path="patient-explorer"
+                  element={
+                    <ClinicProtectedRoute requiredRole="non_locum_staff">
+                      <PatientExplorer />
+                    </ClinicProtectedRoute>
+                  }
+                />
                 <Route
                   path="consultation"
                   element={

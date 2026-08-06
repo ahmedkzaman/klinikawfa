@@ -6,6 +6,7 @@ interface ClinicProtectedRouteProps {
   children: React.ReactNode;
   requiredRole?:
     | 'any_staff'
+    | 'non_locum_staff'
     | 'clinical'
     | 'clinical_staff'
     | 'ops_or_admin'
@@ -79,6 +80,12 @@ export function ClinicProtectedRoute({
   if (requiredRole === 'clinical_staff') {
     if (isLocum) return <Navigate to="/clinic/queue" replace />;
     if (!isClinical) return <Navigate to="/clinic/queue" replace />;
+    return <>{children}</>;
+  }
+
+  if (requiredRole === 'non_locum_staff') {
+    if (isLocum) return <Navigate to="/clinic/queue" replace />;
+    if (!isStaffOrAdmin) return <Navigate to="/staff/dashboard" replace />;
     return <>{children}</>;
   }
 
