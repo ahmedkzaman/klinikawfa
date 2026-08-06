@@ -833,7 +833,16 @@ export default function DispenseCheckout() {
               />
             )}
 
-            {!isDirectSale && <AttachmentsCard consultationId={consultation?.id} />}
+            {!isDirectSale && (
+              <AttachmentsCard
+                consultationId={consultation?.id}
+                offlineConsultationId={
+                  consultation?.entry_source === 'offline_transcription'
+                    ? consultation.id
+                    : null
+                }
+              />
+            )}
 
             {/* Attached Documents (MC, Time Slip, Referral, etc.) */}
             <Card className={bento}>

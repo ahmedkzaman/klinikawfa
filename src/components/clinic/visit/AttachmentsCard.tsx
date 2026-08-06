@@ -24,6 +24,8 @@ import {
 
 interface AttachmentsCardProps {
   consultationId: string | null | undefined;
+  /** Offline consultations must use the reservation/finalization RPC flow. */
+  offlineConsultationId?: string | null;
 }
 
 /**
@@ -31,15 +33,15 @@ interface AttachmentsCardProps {
  * the active consultation. Files land in the private `visit-attachment` bucket
  * and are surfaced via short-lived signed URLs.
  */
-export function AttachmentsCard({ consultationId }: AttachmentsCardProps) {
+export function AttachmentsCard({ consultationId, offlineConsultationId }: AttachmentsCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [remark, setRemark] = useState('');
 
   const { data: attachments = [], isLoading } =
     useConsultationAttachments(consultationId);
-  const upload = useUploadAttachment(consultationId);
-  const remove = useDeleteAttachment();
+  const upload = useUploadAttachment(consultationId, { offlineConsultationId });
+  const remove = useDeleteAttachment({ offlineConsultationId });
   const [confirmDelete, setConfirmDelete] = useState<{
     id: string;
     file_path: string;
