@@ -20,7 +20,7 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 const explorer = vi.mocked(usePatientExplorer);
 const rpc = vi.mocked(supabase.rpc);
 const download = vi.fn();
-const createObjectURL = vi.fn(() => "blob:patient-explorer");
+const createObjectURL = vi.fn<(object: Blob) => string>(() => "blob:patient-explorer");
 const revokeObjectURL = vi.fn();
 
 const row = {
