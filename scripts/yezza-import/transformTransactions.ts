@@ -39,7 +39,7 @@ export const YEZZA_EXPECTED_RECONCILIATION = {
 function parseMoney(value: string | number): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   const normalized = value.trim().replace(/^RM\s*/i, "").replace(/,/g, "");
-  if (!/^[+-]?\d+(?:\.\d{1,2})?$/.test(normalized)) return null;
+  if (!/^[+-]?\d+(?:\.\d+)?$/.test(normalized)) return null;
   const amount = Number(normalized);
   return Number.isFinite(amount) ? amount : null;
 }
@@ -120,11 +120,16 @@ export function deduplicateTransactions(rows: readonly YezzaTransaction[]): Yezz
 
 /** Reconciliation reports source amounts only; no amount is inferred or adjusted. */
 export function reconcileTransactions(rows: readonly YezzaTransaction[]): TransactionReconciliation {
-  return rows.reduce<TransactionReconciliation>((totals, row) => ({
+  const totalsInSen = rows.reduce((totals, row) => ({
     uniqueBills: totals.uniqueBills + 1,
-    sourceTotal: totals.sourceTotal + (parseMoney(row.totalAmount) ?? 0),
-    paidTotal: totals.paidTotal + (parseMoney(row.paidAmount) ?? 0),
+    sourceTotal: totals.sourceTotal + Math.round((parseMoney(row.totalAmount) ?? 0) * 100),
+    paidTotal: totals.paidTotal + Math.round((parseMoney(row.paidAmount) ?? 0) * 100),
   }), { uniqueBills: 0, sourceTotal: 0, paidTotal: 0 });
+  return {
+    uniqueBills: totalsInSen.uniqueBills,
+    sourceTotal: totalsInSen.sourceTotal / 100,
+    paidTotal: totalsInSen.paidTotal / 100,
+  };
 }
 
 export function matchesExpectedYezzaReconciliation(totals: TransactionReconciliation): boolean {

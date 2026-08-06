@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "lint:changed": "node scripts/lint-changed.mjs",
     "yezza:dry-run": "node --experimental-strip-types scripts/yezza-import/dryRun.ts",
+    "yezza:reconcile": "node --experimental-strip-types scripts/yezza-import/reconcileTransactions.ts",
     "preview": "vite preview",
     "test": "vitest run --pool=forks --fileParallelism=false --maxWorkers=1",
     "test:watch": "vitest"

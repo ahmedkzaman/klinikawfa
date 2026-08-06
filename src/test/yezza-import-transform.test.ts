@@ -12,6 +12,7 @@ import {
   transformVisit,
   type YezzaConsultation,
 } from "../../scripts/yezza-import/transformVisits";
+import { csvRowsToYezzaTransactions } from "../../scripts/yezza-import/reconcileTransactions";
 
 const transaction = (overrides: Partial<YezzaTransaction> = {}): YezzaTransaction => ({
   sourceVisitId: "visit-001",
@@ -36,6 +37,18 @@ const consultation = (overrides: Partial<YezzaConsultation> = {}): YezzaConsulta
 });
 
 describe("Yezza service and payment transformations", () => {
+  it("maps the supplied transaction CSV headers without losing source metadata", () => {
+    expect(csvRowsToYezzaTransactions([{
+      "Visit ID": "visit-001",
+      "Bill#": "bill-001",
+      "Total (RM)": "25.50",
+      "Paid Amount (RM)": "25.50",
+      "Payment Method": "CASH",
+      "Payment Channel": "Clinic",
+      Status: "Paid",
+    }])).toEqual([transaction()]);
+  });
+
   it("parses multiline services, retains zero prices, and does not invent quantities", () => {
     expect(parseServiceLines("Consultation : 10.00\nFree sample : 0.00\nBandage : RM 2.50")).toEqual([
       { name: "Consultation", amount: 10, quantity: 1, sourceLine: 1 },
@@ -71,6 +84,10 @@ describe("Yezza service and payment transformations", () => {
     });
   });
 
+  it("accepts the source export's fixed-scale decimal amounts", () => {
+    expect(mapLegacyPayment(transaction({ paidAmount: "25.50000000000000000000" }))).toMatchObject({ amount: 25.5 });
+  });
+
   it("retains composite payment methods in auditable notes without inventing splits", () => {
     expect(mapLegacyPayment(transaction({ method: "CASH, PMCARE", paidAmount: "80.00" }))).toEqual({
       sourceVisitId: "visit-001",
@@ -91,6 +108,13 @@ describe("Yezza service and payment transformations", () => {
 
     expect(unique).toEqual([first, distinct]);
     expect(reconcileTransactions(unique)).toEqual({ uniqueBills: 2, sourceTotal: 35.5, paidTotal: 25.5 });
+  });
+
+  it("reports reconciliation totals at exact sen precision", () => {
+    expect(reconcileTransactions([
+      transaction({ billNumber: "bill-sen-1", totalAmount: "0.10", paidAmount: "0.10" }),
+      transaction({ billNumber: "bill-sen-2", totalAmount: "0.20", paidAmount: "0.20" }),
+    ])).toEqual({ uniqueBills: 2, sourceTotal: 0.3, paidTotal: 0.3 });
   });
 
   it("uses the approved 67,442-bill source reconciliation baseline", () => {
@@ -156,6 +180,17 @@ describe("Yezza visit transformation", () => {
     expect(result.queueEntry.assigned_doctor_id).toBeNull();
     expect(result.consultation?.doctor_id).toBeNull();
     expect(result.unresolvedDoctor).toBe("Dr Unknown");
+  });
+
+  it("rejects a transaction when its source visit does not match the consultation", () => {
+    expect(() => transformVisit({
+      consultation: consultation({ sourceVisitId: "visit-clinical" }),
+      transaction: transaction({ sourceVisitId: "visit-financial" }),
+      patientId: "patient-db-id",
+      queueEntryId: "queue-db-id",
+      consultationId: "consultation-db-id",
+      doctorIdsByNormalizedName: { "dr roster": "doctor-db-id" },
+    })).toThrow("Consultation and transaction sourceVisitId values must match.");
   });
 
   it("marks transaction-only visits as financial-only and creates no fabricated consultation", () => {

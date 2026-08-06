@@ -79,12 +79,36 @@ type mismatches). `npm run lint:changed` also cannot determine an
 `origin/main...HEAD` merge base in this clone. Neither issue is caused by these
 three Task 3 files.
 
-## Reconciliation limitation
+## Review-fix round: source consistency and live reconciliation
 
-The supplied source CSVs are intentionally absent from this working copy (and
-were not searched for outside the assigned workspace). The baseline guard is
-tested, but a live row-by-row reconciliation must be run locally against the
-approved CSV staging directory before any import apply. That run must verify
-`deduplicateTransactions([...transactions_1, ...transactions_2])`, then pass
-the resulting totals through `matchesExpectedYezzaReconciliation` before an
-admin approves the batch.
+`transformVisit` now rejects a request that supplies both clinical and
+financial source rows with different `sourceVisitId` values. This prevents a
+transaction from being linked to the wrong clinical visit before any payload is
+returned. The focused suite includes this rejection case.
+
+`scripts/yezza-import/reconcileTransactions.ts` is a read-only command that
+parses the source transaction CSV headers, maps the transaction fields,
+deduplicates the two exports, reconciles monetary values in integer sen, and
+returns only aggregate counts/totals. It does not write production data or alter
+the source files. It is available as `npm run yezza:reconcile`.
+
+Executed on 2026-08-06 against the supplied local files:
+
+```text
+npm.cmd run yezza:reconcile -- \
+  --transactions-one C:\Users\USER\Downloads\klinikawfa\klinikawfa\transactions_1.csv \
+  --transactions-two C:\Users\USER\Downloads\klinikawfa\klinikawfa\transactions_2.csv
+
+inputRows: 69,832
+duplicateRowsRemoved: 2,390
+uniqueBills: 67,442
+sourceTotal: RM5,684,929.22
+paidTotal: RM1,099,076.00
+matchesExpectedBaseline: true
+```
+
+This proves the required source reconciliation against the supplied files.
+The command rounds each source amount to the recorded currency precision before
+aggregating, avoiding floating-point display drift while preserving the source
+amounts. The focused test suite also verifies source fixed-scale decimal input
+and sen-precise output.

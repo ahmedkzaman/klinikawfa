@@ -83,6 +83,9 @@ function trace(...entries: Array<[string, string | boolean]>): string {
  */
 export function transformVisit(options: TransformVisitOptions): TransformVisitResult {
   const { consultation, transaction, patientId, queueEntryId, consultationId, doctorIdsByNormalizedName } = options;
+  if (consultation && transaction && consultation.sourceVisitId !== transaction.sourceVisitId) {
+    throw new Error("Consultation and transaction sourceVisitId values must match.");
+  }
   const sourceVisitId = consultation?.sourceVisitId ?? transaction?.sourceVisitId;
   if (!sourceVisitId) throw new Error("A Yezza consultation or transaction with sourceVisitId is required.");
 
