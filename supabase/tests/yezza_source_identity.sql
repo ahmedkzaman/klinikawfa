@@ -68,6 +68,21 @@ BEGIN
 END
 $schema$;
 
+DO $creator_foreign_key$
+BEGIN
+  BEGIN
+    INSERT INTO public.import_batches (
+      source_system, source_batch_id, status, created_by
+    ) VALUES (
+      'yezza', 'missing-creator', 'running',
+      '72000000-0000-4000-8000-000000000999'
+    );
+    RAISE EXCEPTION 'MISSING_CREATED_BY_FOREIGN_KEY_SUCCEEDED';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+END
+$creator_foreign_key$;
+
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 SELECT set_config('request.jwt.claim.sub', '72000000-0000-4000-8000-000000000001', true);
@@ -141,6 +156,12 @@ BEGIN
     INSERT INTO public.patient_external_ids (source_system, source_patient_id, patient_id, import_batch_id)
     VALUES ('yezza', 'missing-patient', '72000000-0000-4000-8000-000000000999', v_batch_id);
     RAISE EXCEPTION 'MISSING_PATIENT_FOREIGN_KEY_SUCCEEDED';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO public.patient_external_ids (source_system, source_patient_id, patient_id, import_batch_id)
+    VALUES ('yezza', 'missing-patient-batch', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000999');
+    RAISE EXCEPTION 'MISSING_PATIENT_BATCH_FOREIGN_KEY_SUCCEEDED';
   EXCEPTION WHEN foreign_key_violation THEN NULL;
   END;
   BEGIN

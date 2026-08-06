@@ -76,3 +76,22 @@ blocked by 293 pre-existing lint errors in unrelated application and stress-test
 files. `supabase db lint` and the rollback SQL integration test remain blocked
 because local PostgreSQL on `127.0.0.1:54322` is unavailable; no production
 database was accessed.
+
+## Review fix report — forward migration correction
+
+- Restored `20260806103000_add_yezza_source_identity.sql` exactly to its
+  original committed contents.
+- Added `20260806110000_harden_yezza_source_identity.sql` as the forward-only
+  hardening migration for databases that already applied the foundation.
+- The new migration adds the source-batch deduplication key without rewriting
+  legacy batch rows. Its insert policy requires a non-null source batch ID for
+  every new import, so all future batches are deduplicated.
+- Added rollback-only assertions for the `import_batches.created_by ->
+  auth.users(id)` FK and `patient_external_ids.import_batch_id ->
+  import_batches(id)` FK; existing visit and transaction batch-FK assertions
+  remain in place.
+
+Verification for this correction: `git diff --check` passed. The local
+PostgreSQL/Supabase stack remains unavailable, so the SQL integration script
+and database advisors were not executed. No production database was accessed
+or modified.
