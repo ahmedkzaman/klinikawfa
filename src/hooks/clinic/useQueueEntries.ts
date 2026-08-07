@@ -519,9 +519,9 @@ export function useCompletedTodayEntries(selectedDate = todayInputValue(), enabl
         )
         .eq("clinic_status", "completed")
         .is("deleted_at", null)
-        .gte("updated_at", start)
-        .lt("updated_at", end)
-        .order("updated_at", { ascending: false });
+        .gte("created_at", start)
+        .lt("created_at", end)
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
       const entries = await attachInsuranceProviderDirectory(data ?? []);
