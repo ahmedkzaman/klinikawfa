@@ -4,9 +4,14 @@ import { STATUS_COLORS, STATUS_LABELS, type ClinicStatus } from '@/types/clinic'
 const baseClass =
   'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border';
 
+function humanizeStatus(status: string): string {
+  const words = status.replace(/_/g, ' ').toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export function StatusBadge({ status }: { status: ClinicStatus }) {
   const className = STATUS_COLORS[status] ?? 'bg-muted text-muted-foreground border-border';
-  const label = STATUS_LABELS[status] ?? status;
+  const label = STATUS_LABELS[status] ?? humanizeStatus(status);
   return <span className={cn(baseClass, className)}>{label}</span>;
 }
 
