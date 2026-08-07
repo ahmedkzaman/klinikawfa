@@ -119,6 +119,7 @@ import {
   getOfflineConsultationAccess,
 } from '@/lib/clinic/consultationAccess';
 import { getRecordedDiagnosisLabels } from '@/lib/clinic/diagnosisDisplay';
+import { displayClinicalNote } from '@/lib/clinic/legacyClinicalNote';
 import {
   assertOfflineConsultationEditable,
   useEligibleOfflineConsultationDoctors,
@@ -173,7 +174,7 @@ function PastVisitCard({
   const freeText = visit.diagnosis_text?.trim() || '';
   const diagnosisDisplay = structuredName || freeText;
   const diagnosisId = visit.diagnoses?.id ?? null;
-  const note = (visit.case_note ?? '').trim();
+  const note = displayClinicalNote(visit.case_note);
   const isLongNote = note.length > 120;
   const dispenseNote = (visit.dispense_note ?? '').trim();
 
