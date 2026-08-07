@@ -135,8 +135,10 @@ export default function VisitDetail() {
               Queue {formatQueueNo(entry.created_at, entry.queue_sequence)} · Visit record
             </p>
           </div>
-          <StatusBadge status={entry.clinic_status} />
-          {consultation?.status && <StatusBadge status={consultation.status} />}
+          <StatusGroup label="Queue" status={entry.clinic_status} />
+          {consultation?.status && (
+            <StatusGroup label="Consultation" status={consultation.status} />
+          )}
           {canCorrect && (
             <Button type="button" variant="outline" onClick={() => setCorrectionOpen(true)}>
               Edit completed bill
@@ -244,6 +246,17 @@ function Field({ label, value }: { label: string; value: string }) {
       <span className="text-sm text-right text-slate-800 break-words max-w-[60%]">
         {value}
       </span>
+    </div>
+  );
+}
+
+function StatusGroup({ label, status }: { label: string; status: string }) {
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        {label}:
+      </span>
+      <StatusBadge status={status as Parameters<typeof StatusBadge>[0]['status']} />
     </div>
   );
 }
