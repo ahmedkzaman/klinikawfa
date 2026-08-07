@@ -58,6 +58,7 @@ import { bento, pageInner, pageShell, primaryBtn, secondaryBtn, softBadge } from
 import { calculateClinicalAge } from "@/lib/clinic/clinicalAge";
 import { getCompletedPaymentStatus, isCashVisit, isCompletedVisitPaymentIncomplete } from "@/lib/clinic/queuePaymentFocus";
 import { getRecordedDiagnosisLabels } from "@/lib/clinic/diagnosisDisplay";
+import { displayClinicalNote } from "@/lib/clinic/legacyClinicalNote";
 import { formatPaymentMethod } from "@/lib/clinic/paymentMethod";
 import { sumActiveBillingLines } from "@/lib/clinic/billingLedgerTotals";
 
@@ -217,7 +218,7 @@ export default function QueueBoard() {
   }, [completedConsultation?.doctors, completedVisit?.doctors?.name]);
 
   const completedVisitNote =
-    completedConsultation?.case_note?.trim() ||
+    displayClinicalNote(completedConsultation?.case_note) ||
     completedVisit?.visit_notes?.trim() ||
     "";
   const completedVisitDiagnoses = useMemo(() => {

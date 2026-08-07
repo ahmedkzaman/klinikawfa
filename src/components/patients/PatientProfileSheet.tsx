@@ -36,6 +36,7 @@ import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 import { useAuth } from '@/contexts/AuthContext';
 import { canReadCrossDoctorNotes } from '@/lib/clinic/consultationAccess';
 import { getRecordedDiagnosisLabels } from '@/lib/clinic/diagnosisDisplay';
+import { displayClinicalNote } from '@/lib/clinic/legacyClinicalNote';
 
 /**
  * Lazy attachment list — calls `useConsultationAttachments` only when
@@ -151,7 +152,7 @@ function VisitRow({
       })
     : [];
   const clinicalNote = canViewClinicalNotes
-    ? consultation?.case_note?.trim() || diagnosisPills.join(', ') || ''
+    ? displayClinicalNote(consultation?.case_note) || diagnosisPills.join(', ') || ''
     : '';
   const dispenseNote = canViewClinicalNotes
     ? consultation?.dispense_note?.trim() ?? ''
