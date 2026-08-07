@@ -172,10 +172,14 @@ function optionalUuid(value: unknown, field: string): string | null | undefined 
 }
 
 function nonnegativeMoney(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || Math.round(value * 100) !== value * 100) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
     throw new ImportHttpError(400, `Invalid ${field}`);
   }
-  return value;
+  const cents = Math.round(value * 100);
+  if (Math.abs(value * 100 - cents) > 1e-6) {
+    throw new ImportHttpError(400, `Invalid ${field}`);
+  }
+  return cents / 100;
 }
 
 function nonnegativeInteger(value: unknown, field: string): number {

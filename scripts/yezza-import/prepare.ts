@@ -147,6 +147,16 @@ function nullable(value: string): string | null {
   return value.trim() || null;
 }
 
+function dateOnly(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const isoPrefix = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoPrefix) return isoPrefix[1];
+  const slashDate = trimmed.match(/^(\d{1,2})[\\/]([0-9]{1,2})[\\/](\d{4})$/);
+  if (slashDate) return `${slashDate[3]}-${slashDate[2].padStart(2, "0")}-${slashDate[1].padStart(2, "0")}`;
+  return trimmed;
+}
+
 function patientIdentityFromRow(row: CsvRow): {
   nationalId: string | null;
   passportNo: string | null;
@@ -273,12 +283,12 @@ function patientFromRow(row: CsvRow, locator: string, resolution: PatientResolut
       passportNo: identity.passportNo,
       address: patientAddressFromRow(row),
       regNo: nullable(valueFor(row, ["Reg No", "Registration No", "Registration Number"])),
-      dateOfBirth: nullable(valueFor(row, ["DOB", "Date Of Birth", "Birth Date"])),
+      dateOfBirth: dateOnly(valueFor(row, ["DOB", "Date Of Birth", "Birth Date"])),
       gender: nullable(valueFor(row, ["Gender"])),
       stateOfBirth: nullable(valueFor(row, ["State Of Birth", "Birth State"])),
       allergies: nullable(valueFor(row, ["Allergies"])),
       underlyingConditions: nullable(valueFor(row, ["Underlying Conditions", "Medical Conditions"])),
-      registrationDate: nullable(valueFor(row, ["Registration Date", "Registered At", "Created Date"])),
+      registrationDate: dateOnly(valueFor(row, ["Registration Date", "Registered At", "Created Date"])),
       notes: nullable(valueFor(row, ["Notes"])),
     },
     ...(reviewRequired ? { reviewLocator: locator } : {}),

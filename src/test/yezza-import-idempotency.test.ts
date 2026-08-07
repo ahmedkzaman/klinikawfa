@@ -185,6 +185,15 @@ function approvalBody(prepared: Awaited<ReturnType<typeof prepareYezzaImport>>, 
 }
 
 describe("guarded Yezza import endpoint", () => {
+  it("accepts ordinary two-decimal prices despite binary floating-point representation", async () => {
+    const input = payload();
+    input.visits[0].items[0].price = 19.99;
+
+    await expect(prepareYezzaImport(input)).resolves.toMatchObject({
+      counts: { consultationItems: 1 },
+    });
+  });
+
   it("rejects unauthorized callers before reading or applying a batch", async () => {
     const gateway = new TransactionalGateway();
     const handler = createYezzaImportHandler({
