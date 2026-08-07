@@ -27,6 +27,7 @@ import {
   billingFinancialState,
   sumActiveBillingLines,
 } from '@/lib/clinic/billingLedgerTotals';
+import { fetchAllBillingRows } from '@/lib/clinic/fetchAllBillingRows';
 import { Badge } from '@/components/ui/badge';
 import type { ConsultationRow, ConsultationItemRow } from '@/types/clinic';
 
@@ -102,12 +103,17 @@ export default function Billings() {
       );
       if (consultationIds.length === 0) return {};
 
-      const { data: items, error: iErr } = await supabase
-        .from('consultation_items')
-        .select('consultation_id, price, quantity')
-        .in('consultation_id', consultationIds)
-        .is('deleted_at', null);
-      if (iErr) throw iErr;
+      const items = await fetchAllBillingRows(async (from, to) => {
+        const { data, error } = await supabase
+          .from('consultation_items')
+          .select('consultation_id, price, quantity')
+          .in('consultation_id', consultationIds)
+          .is('deleted_at', null)
+          .order('id', { ascending: true })
+          .range(from, to);
+        if (error) throw error;
+        return data ?? [];
+      });
 
       const linesByConsultation: Record<
         string,
