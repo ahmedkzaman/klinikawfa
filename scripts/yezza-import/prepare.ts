@@ -16,6 +16,7 @@ import {
 
 const REQUIRED_FILES = ["patients.csv", "consultations.csv", "transactions_1.csv", "transactions_2.csv"] as const;
 const MAX_ROWS = 2_000;
+const MAX_VISITS_PER_BATCH = 250;
 const MAX_PAYLOAD_BYTES = 8 * 1024 * 1024;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -123,6 +124,8 @@ export type RunPreparedOptions = {
   accessToken: string;
   apiKey?: string;
   fetchImpl?: typeof fetch;
+  startIndex?: number;
+  endIndex?: number;
 };
 
 function canonicalJson(value: unknown): string {
@@ -491,7 +494,7 @@ export async function prepareYezzaBatchFiles(options: PrepareYezzaOptions): Prom
       visits: [...visitBatchVisits, visit],
     };
     const candidateBytes = Buffer.byteLength(JSON.stringify(candidate), "utf8");
-    if (visitBatchVisits.length > 0 && (candidate.visits.length > MAX_ROWS || candidate.patients.length > MAX_ROWS || candidateBytes > MAX_PAYLOAD_BYTES - 64_000)) {
+    if (visitBatchVisits.length > 0 && (candidate.visits.length > MAX_VISITS_PER_BATCH || candidate.patients.length > MAX_ROWS || candidateBytes > MAX_PAYLOAD_BYTES - 64_000)) {
       await flushVisits();
     }
     if (Buffer.byteLength(JSON.stringify({ phase: "visits", patients: [patient], visits: [visit] }), "utf8") > MAX_PAYLOAD_BYTES - 64_000) {
@@ -595,24 +598,38 @@ async function loadVerifiedManifest(manifestPath: string): Promise<{ manifest: P
 }
 
 async function postJson(options: RunPreparedOptions, action: string, body: unknown): Promise<Record<string, unknown>> {
-  const response = await (options.fetchImpl ?? fetch)(`${options.endpoint}?action=${action}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${options.accessToken}`,
-      ...(options.apiKey ? { apikey: options.apiKey } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  const result = await response.json() as Record<string, unknown>;
-  if (!response.ok) throw new Error(typeof result.error === "string" ? result.error : `Yezza ${action} request failed`);
-  return result;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await (options.fetchImpl ?? fetch)(`${options.endpoint}?action=${action}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${options.accessToken}`,
+          ...(options.apiKey ? { apikey: options.apiKey } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+      const result = JSON.parse(await response.text()) as Record<string, unknown>;
+      if (!response.ok) throw new Error(typeof result.error === "string" ? result.error : `Yezza ${action} request failed`);
+      return result;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await new Promise((resolveDelay) => setTimeout(resolveDelay, attempt * 250));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(`Yezza ${action} request failed`);
 }
 
 export async function runPreparedYezzaImport(options: RunPreparedOptions): Promise<void> {
   if (!options.accessToken) throw new Error("An authenticated operator access token is required");
   const { manifest, directory } = await loadVerifiedManifest(options.manifestPath);
-  const payloads = await Promise.all(manifest.batches.map(async (batch) => {
+  const selectedBatches = manifest.batches.filter((batch) =>
+    (options.startIndex === undefined || batch.index >= options.startIndex) &&
+    (options.endIndex === undefined || batch.index <= options.endIndex)
+  );
+  if (selectedBatches.length === 0) throw new Error("No prepared batches match the requested index range");
+  const payloads = await Promise.all(selectedBatches.map(async (batch) => {
     const payload = JSON.parse(await readFile(join(directory, batch.filename), "utf8")) as Record<string, unknown>;
     if (sha256Text(canonicalJson(payload)) !== batch.payloadHash) throw new Error(`Payload hash mismatch for ${batch.filename}`);
     if (payload.manifestHash !== manifest.manifestHash || payload.resolutionHash !== manifest.resolutionHash) throw new Error(`Manifest binding mismatch for ${batch.filename}`);
@@ -631,7 +648,13 @@ export async function runPreparedYezzaImport(options: RunPreparedOptions): Promi
   }
 
   if (options.mode === "approve") {
-    const approvals: Array<{ index: number; importBatchId: string; payloadHash: string }> = [];
+    let approvals: Array<{ index: number; importBatchId: string; payloadHash: string }> = [];
+    try {
+      const existing = JSON.parse(await readFile(statePath, "utf8")) as { manifestHash?: string; artifactHash?: string; approvals?: typeof approvals };
+      if (existing.manifestHash === manifest.manifestHash && existing.artifactHash === manifest.artifactHash && Array.isArray(existing.approvals)) approvals = existing.approvals;
+    } catch {
+      // The first approval range has no state file yet.
+    }
     for (const { batch, payload } of payloads) {
       const dryRun = await postJson(options, "dry-run", payload);
       if (dryRun.payloadHash !== batch.payloadHash || dryRun.manifestHash !== manifest.manifestHash || dryRun.resolutionHash !== manifest.resolutionHash) {
@@ -644,9 +667,11 @@ export async function runPreparedYezzaImport(options: RunPreparedOptions): Promi
         expectedResolutionHash: manifest.resolutionHash,
       });
       if (approval.status !== "approved" || typeof approval.importBatchId !== "string") throw new Error(`Invalid approval for ${batch.filename}`);
+      approvals = approvals.filter((candidate) => candidate.index !== batch.index);
       approvals.push({ index: batch.index, importBatchId: approval.importBatchId, payloadHash: batch.payloadHash });
+      approvals.sort((left, right) => left.index - right.index);
+      await writeFile(statePath, `${JSON.stringify({ formatVersion: 1, manifestHash: manifest.manifestHash, artifactHash: manifest.artifactHash, approvals }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     }
-    await writeFile(statePath, `${JSON.stringify({ formatVersion: 1, manifestHash: manifest.manifestHash, artifactHash: manifest.artifactHash, approvals }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     return;
   }
 
@@ -703,6 +728,8 @@ async function main(argumentsList: string[]): Promise<void> {
     endpoint,
     accessToken,
     apiKey: process.env.YEZZA_IMPORT_API_KEY,
+    startIndex: values.has("--start-index") ? Number(values.get("--start-index")) : undefined,
+    endIndex: values.has("--end-index") ? Number(values.get("--end-index")) : undefined,
   });
   console.log(`Yezza ${mode} completed for ${basename(manifestPath)}.`);
 }

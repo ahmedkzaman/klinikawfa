@@ -50,6 +50,34 @@ async function directoryContents(directory: string): Promise<Record<string, stri
 }
 
 describe("deterministic Yezza preparation", () => {
+  it("caps visit batches at 250 visits so guarded database transactions stay bounded", async () => {
+    const root = await mkdtemp(join(tmpdir(), "yezza-visit-batches-"));
+    try {
+      const { inputDirectory, decisionsPath } = await writeFixture(root, 1);
+      const visitRows = Array.from({ length: 251 }, (_, index) =>
+        `visit-${index + 1},source-1,2025-01-02T03:04:05.000Z,Historical note,Tension headache,Dr Roster,Consultation : 35.00`
+      );
+      await writeFile(
+        join(inputDirectory, "consultations.csv"),
+        `Visit ID,PatientID,Visit Date,Visit Note,Diagnosis,Attending Dr,Service Name\n${visitRows.join("\n")}\n`,
+        "utf8",
+      );
+
+      const manifest = await prepareYezzaBatchFiles({
+        inputDirectory,
+        decisionsPath,
+        outputDirectory: join(root, "output"),
+        allowNonProductionReconciliation: true,
+      });
+      const visitBatches = manifest.batches.filter((batch) => batch.phase === "visits");
+
+      expect(visitBatches).toHaveLength(2);
+      expect(Math.max(...visitBatches.map((batch) => batch.counts.visits))).toBeLessThanOrEqual(250);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("streams four CSVs into byte-stable payloads whose arrays never exceed 2,000 rows", async () => {
     const root = await mkdtemp(join(tmpdir(), "yezza-prepare-"));
     try {
@@ -152,6 +180,54 @@ describe("deterministic Yezza preparation", () => {
       const state = JSON.parse(await readFile(join(outputDirectory, "import-state.json"), "utf8")) as { manifestHash: string; approvals: unknown[] };
       expect(state.manifestHash).toBe((manifest as PreparedManifest).manifestHash);
       expect(state.approvals).toHaveLength(manifest.batches.length);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("retries a truncated successful response because guarded import operations are idempotent", async () => {
+    const root = await mkdtemp(join(tmpdir(), "yezza-run-retry-"));
+    try {
+      const { inputDirectory, decisionsPath } = await writeFixture(root, 1);
+      const outputDirectory = join(root, "prepared");
+      const manifest = await prepareYezzaBatchFiles({ inputDirectory, decisionsPath, outputDirectory, allowNonProductionReconciliation: true });
+      let calls = 0;
+      const fetchImpl = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        calls += 1;
+        if (calls === 1) return new Response("{", { status: 200 });
+        const body = JSON.parse(String(init?.body)) as { sourceBatchId: string };
+        const batch = manifest.batches.find((candidate) => candidate.sourceBatchId === body.sourceBatchId)!;
+        return Response.json({ payloadHash: batch.payloadHash, manifestHash: manifest.manifestHash, resolutionHash: manifest.resolutionHash });
+      };
+
+      await expect(runPreparedYezzaImport({
+        mode: "dry-run",
+        manifestPath: join(outputDirectory, "manifest.json"),
+        endpoint: "https://example.invalid/yezza-import",
+        accessToken: "test-token",
+        fetchImpl,
+      })).resolves.toBeUndefined();
+      expect(calls).toBe(manifest.batches.length + 1);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("can resume from a selected prepared batch without replaying earlier batches", async () => {
+    const root = await mkdtemp(join(tmpdir(), "yezza-run-range-"));
+    try {
+      const { inputDirectory, decisionsPath } = await writeFixture(root, 501);
+      const outputDirectory = join(root, "prepared");
+      const manifest = await prepareYezzaBatchFiles({ inputDirectory, decisionsPath, outputDirectory, allowNonProductionReconciliation: true });
+      const selected = manifest.batches.at(-1)!;
+      const sourceBatchIds: string[] = [];
+      const fetchImpl = async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        const payload = JSON.parse(String(init?.body)) as { sourceBatchId: string };
+        sourceBatchIds.push(payload.sourceBatchId);
+        return Response.json({ payloadHash: selected.payloadHash, manifestHash: manifest.manifestHash, resolutionHash: manifest.resolutionHash });
+      };
+      await runPreparedYezzaImport({ mode: "dry-run", manifestPath: join(outputDirectory, "manifest.json"), endpoint: "https://example.invalid/yezza-import", accessToken: "test-token", startIndex: selected.index, fetchImpl });
+      expect(sourceBatchIds).toEqual([selected.sourceBatchId]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
