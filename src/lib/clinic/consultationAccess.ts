@@ -14,6 +14,12 @@ const CLINICAL_WORKFLOW_ROLES = new Set<AppRole>([
   'special_admin',
 ]);
 
+const CONSULTATION_OVERVIEW_ROLES = new Set<AppRole>([
+  'admin',
+  'special_admin',
+  'doctor_admin',
+]);
+
 export function canBrowseConsultationDates(role: AppRole | null) {
   return role !== null && role !== 'guest' && role !== 'locum';
 }
@@ -78,6 +84,14 @@ export function canListConsultationEntry(input: ConsultationListAccessInput) {
 
   if (input.role === 'ops_staff') {
     return input.offlineEntryEligible === true;
+  }
+
+  if (
+    input.selectedDateIsToday &&
+    input.role !== null &&
+    CONSULTATION_OVERVIEW_ROLES.has(input.role)
+  ) {
+    return true;
   }
 
   if (input.queueStatus === 'completed') {

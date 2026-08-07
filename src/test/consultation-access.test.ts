@@ -121,6 +121,31 @@ describe('consultation access', () => {
     ).toBe(false);
   });
 
+  it.each(['admin', 'special_admin', 'doctor_admin'] as const)(
+    '%s can list active consultation rows for clinic oversight without becoming the treating doctor',
+    (role) => {
+      expect(
+        canListConsultationEntry({
+          role,
+          currentDoctorId: 'doctor-a',
+          attendingDoctorId: 'doctor-b',
+          queueStatus: 'ready_for_doctor',
+          selectedDateIsToday: true,
+        }),
+      ).toBe(true);
+
+      expect(
+        getConsultationAccess({
+          role,
+          currentDoctorId: 'doctor-a',
+          attendingDoctorId: 'doctor-b',
+          consultationStatus: 'in_progress',
+          queueStatus: 'ready_for_doctor',
+        }).canEdit,
+      ).toBe(false);
+    },
+  );
+
   it.each(['resident_doctor', 'doctor_admin'] as const)(
     '%s can open an existing consultation from patient history',
     (role) => {
