@@ -22,7 +22,7 @@ async function writeFixture(root: string, patientCount = 3): Promise<{ inputDire
   );
   await Promise.all([
     writeFile(join(inputDirectory, "patients.csv"), `PatientID,Patient Name,IC/Passport,Phone,DOB\n${patientRows.join("\n")}\n`, "utf8"),
-    writeFile(join(inputDirectory, "consultations.csv"), "Visit ID,PatientID,Visit Date,Visit Note,Diagnosis,Attending Dr,Service Name\nvisit-1,source-1,2025-01-02T03:04:05.000Z,Historical note,Tension headache,Dr Roster,Consultation : 35.00\n", "utf8"),
+    writeFile(join(inputDirectory, "consultations.csv"), "Visit ID,PatientID,Visit Date,Visit Note,Case Note,Diagnosis,Attending Dr,Service Name\nvisit-1,source-1,2025-01-02T03:04:05.000Z,Short visit reason,Detailed clinical history and examination,Tension headache,Dr Roster,Consultation : 35.00\n", "utf8"),
     writeFile(join(inputDirectory, "transactions_1.csv"), "Visit ID,PatientID,Bill#,Total (RM),Paid Amount (RM),Payment Method,Payment Channel,Status\nvisit-1,source-1,bill-1,35.00,35.00,CASH,Clinic,Paid\n", "utf8"),
     writeFile(join(inputDirectory, "transactions_2.csv"), "Visit ID,PatientID,Bill#,Total (RM),Paid Amount (RM),Payment Method,Payment Channel,Status\nvisit-1,source-1,bill-1,35.00,35.00,CASH,Clinic,Paid\n", "utf8"),
   ]);
@@ -50,6 +50,30 @@ async function directoryContents(directory: string): Promise<Record<string, stri
 }
 
 describe("deterministic Yezza preparation", () => {
+  it("imports the dedicated Yezza Case Note instead of replacing it with Visit Note", async () => {
+    const root = await mkdtemp(join(tmpdir(), "yezza-case-note-"));
+    try {
+      const { inputDirectory, decisionsPath } = await writeFixture(root, 1);
+      const outputDirectory = join(root, "prepared");
+      const manifest = await prepareYezzaBatchFiles({
+        inputDirectory,
+        decisionsPath,
+        outputDirectory,
+        allowNonProductionReconciliation: true,
+      });
+      const visitBatch = manifest.batches.find((batch) => batch.phase === "visits")!;
+      const payload = JSON.parse(
+        await readFile(join(outputDirectory, visitBatch.filename), "utf8"),
+      ) as { visits: Array<{ consultation: { caseNote: string } }> };
+
+      expect(payload.visits[0].consultation.caseNote).toBe(
+        "Detailed clinical history and examination\n\nsource_system=yezza; source_visit_id=visit-1",
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("caps visit batches at 250 visits so guarded database transactions stay bounded", async () => {
     const root = await mkdtemp(join(tmpdir(), "yezza-visit-batches-"));
     try {

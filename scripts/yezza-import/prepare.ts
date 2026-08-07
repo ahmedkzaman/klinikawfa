@@ -324,7 +324,8 @@ function preparedVisit(
   const visitAt = valueFor(row, ["Visit Date", "Visit At", "Date"]);
   if (!sourceVisitId || !sourcePatientId || !visitAt) throw new Error("Consultation row is missing a visit, patient, or date");
   if (patient.sourcePatientId !== sourcePatientId) throw new Error(`Visit ${sourceVisitId} has an invalid patient mapping`);
-  const note = valueFor(row, ["Visit Note", "Notes", "Case Note"]);
+  const visitNote = valueFor(row, ["Visit Note", "Notes"]);
+  const caseNote = valueFor(row, ["Case Note"]) || visitNote;
   const doctor = doctorResolutionFor(valueFor(row, ["Attending Dr", "Attending Doctor", "Doctor", "Dr"]), resolutions, usedDoctors);
   const items = parseServiceLines(valueFor(row, ["Service Name", "Services", "Service"]));
   if (items.length > MAX_ROWS || transactionSources.length > MAX_ROWS) throw new Error(`Visit ${sourceVisitId} exceeds the 2,000-row nested array limit`);
@@ -336,7 +337,7 @@ function preparedVisit(
       clinicStatus: "registered",
       assignedDoctorId: doctor.doctorId,
       visitPurpose: "consultation",
-      visitNotes: note || null,
+      visitNotes: visitNote || null,
       visitRemarks: `source_system=yezza; source_visit_id=${sourceVisitId}; source_patient_id=${sourcePatientId}`,
       paymentMethod: null,
       isUrgent: false,
@@ -344,7 +345,7 @@ function preparedVisit(
     },
     consultation: {
       doctorId: doctor.doctorId,
-      caseNote: `${note}${note ? "\n\n" : ""}source_system=yezza; source_visit_id=${sourceVisitId}`,
+      caseNote: `${caseNote}${caseNote ? "\n\n" : ""}source_system=yezza; source_visit_id=${sourceVisitId}`,
       diagnosisText: valueFor(row, ["Diagnoses", "Diagnosis"]),
       originalConsultedAt: visitAt,
     },
