@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { format, subDays } from 'date-fns';
-import { ExternalLink, Receipt, Printer, Download } from 'lucide-react';
+import { ArrowDown, ArrowUp, ExternalLink, Receipt, Printer, Download } from 'lucide-react';
 import { PrintReceiptDialog } from '@/components/clinic/billing/PrintReceiptDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,6 +28,11 @@ import {
   sumActiveBillingLines,
 } from '@/lib/clinic/billingLedgerTotals';
 import { fetchAllBillingRows } from '@/lib/clinic/fetchAllBillingRows';
+import {
+  sortBillingEntries,
+  type BillingSortDirection,
+  type BillingSortKey,
+} from '@/lib/clinic/billingLedgerSort';
 import { Badge } from '@/components/ui/badge';
 import type { ConsultationRow, ConsultationItemRow } from '@/types/clinic';
 
@@ -56,6 +61,16 @@ const tabs: Array<{ key: TabKey; label: string }> = [
   { key: 'self_pay', label: 'Outstanding Self-Pay' },
 ];
 
+const sortableHeaders: Partial<
+  Record<string, { key: BillingSortKey; label: string }>
+> = {
+  DATE: { key: 'date', label: 'Date' },
+  SUBTOTAL: { key: 'subtotal', label: 'Subtotal' },
+  PAID: { key: 'paid', label: 'Paid' },
+  OUTSTANDING: { key: 'outstanding', label: 'Outstanding' },
+  METHOD: { key: 'method', label: 'Method' },
+};
+
 export default function Billings() {
   const today = useMemo(() => new Date(), []);
   const [from, setFrom] = useState<string>(
@@ -65,6 +80,10 @@ export default function Billings() {
   const [activeTab, setActiveTab] = useState<TabKey>('paid');
   const [printPaymentId, setPrintPaymentId] = useState<string | null>(null);
   const [downloadPaymentId, setDownloadPaymentId] = useState<string | null>(null);
+  const [sort, setSort] = useState<{
+    key: BillingSortKey;
+    direction: BillingSortDirection;
+  }>({ key: 'date', direction: 'desc' });
 
   const fromISO = useMemo(() => new Date(`${from}T00:00:00`).toISOString(), [from]);
   const toISO = useMemo(() => new Date(`${to}T23:59:59`).toISOString(), [to]);
@@ -216,6 +235,11 @@ export default function Billings() {
     );
   }, [entries, activeTab]);
 
+  const sortedFiltered = useMemo(
+    () => sortBillingEntries(filtered, sort.key, sort.direction),
+    [filtered, sort],
+  );
+
   const counts = useMemo(() => {
     const panelRows = entries.filter(
       (e) =>
@@ -236,6 +260,21 @@ export default function Billings() {
   }, [entries]);
 
   const isLoading = ledgerLoading || itemsLoading;
+
+  const handleSort = (key: BillingSortKey) => {
+    setSort((current) => {
+      if (current.key === key) {
+        return {
+          key,
+          direction: current.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+      return {
+        key,
+        direction: key === 'date' ? 'desc' : 'asc',
+      };
+    });
+  };
 
   // Daily breakdown by payment_method, computed from raw ledger so every
   // payment row lands in its actual bucket (not just the latest per visit).
@@ -361,15 +400,48 @@ export default function Billings() {
         )}
 
         <div className={cn(bento, 'overflow-hidden')}>
-          <div className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_120px_140px] gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
-            {['QUEUE', 'PATIENT', 'DATE', 'SUBTOTAL', 'PAID', 'OUTSTANDING', 'METHOD', ''].map((col) => (
-              <span
-                key={col}
-                className="text-[11px] font-bold text-slate-500 uppercase tracking-wider"
-              >
-                {col}
-              </span>
-            ))}
+          <div
+            data-testid="billing-ledger-header"
+            className="grid grid-cols-[80px_1fr_140px_100px_100px_100px_120px_140px] gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60"
+          >
+            {['QUEUE', 'PATIENT', 'DATE', 'SUBTOTAL', 'PAID', 'OUTSTANDING', 'METHOD', ''].map((col) => {
+              const sortable = sortableHeaders[col];
+              const active = sortable?.key === sort.key;
+              return (
+                <span
+                  key={col}
+                  className="text-[11px] font-bold text-slate-500 uppercase tracking-wider"
+                >
+                  {sortable ? (
+                    <button
+                      type="button"
+                      aria-sort={
+                        active
+                          ? sort.direction === 'asc'
+                            ? 'ascending'
+                            : 'descending'
+                          : 'none'
+                      }
+                      onClick={() => handleSort(sortable.key)}
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded px-1 py-0.5 -ml-1 uppercase tracking-wider transition-colors hover:bg-slate-100 hover:text-slate-700',
+                        active && 'text-slate-800',
+                      )}
+                    >
+                      {sortable.label}
+                      {active &&
+                        (sort.direction === 'asc' ? (
+                          <ArrowUp className="h-3 w-3" aria-hidden="true" />
+                        ) : (
+                          <ArrowDown className="h-3 w-3" aria-hidden="true" />
+                        ))}
+                    </button>
+                  ) : (
+                    col
+                  )}
+                </span>
+              );
+            })}
           </div>
 
 
@@ -379,7 +451,7 @@ export default function Billings() {
                 <Skeleton key={i} className="h-10 w-full" />
               ))}
             </div>
-          ) : filtered.length === 0 ? (
+          ) : sortedFiltered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400">
               <Receipt className="h-12 w-12 mb-3 opacity-30" />
               <p className="text-sm font-medium text-slate-600">No entries in this view</p>
@@ -388,7 +460,7 @@ export default function Billings() {
               </p>
             </div>
           ) : (
-            filtered.map((e) => {
+            sortedFiltered.map((e) => {
               return (
               <div
                 key={e.queueEntryId}
