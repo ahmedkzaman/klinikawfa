@@ -15,6 +15,7 @@ import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 import { downloadReceiptPdf, printReceipt } from '@/lib/clinic/printReceipt';
 import { sumActiveBillingLines } from '@/lib/clinic/billingLedgerTotals';
+import { calculateDualLedger } from '@/lib/clinic/dualLedger';
 import { ReceiptTemplate, type ReceiptData } from './ReceiptTemplate';
 
 interface Props {
@@ -57,6 +58,15 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
         .is('deleted_at', null);
       if (paymentsErr) throw paymentsErr;
 
+      const { data: claims, error: claimsErr } = await supabase
+        .from('panel_claims')
+        .select('amount, received_amount, status')
+        .eq('queue_entry_id', pay.queue_entry_id);
+      if (claimsErr) throw claimsErr;
+      const activeClaims = (claims ?? []).filter((claim) =>
+        ['pending', 'submitted', 'approved', 'received'].includes(String(claim.status).toLowerCase()),
+      );
+
       let items: ReceiptData['items'] = [];
       let subtotal = 0;
       if (pay.consultation_id) {
@@ -84,6 +94,18 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const qe: any = (pay as any).queue_entries;
       const patient = qe?.patients ?? null;
+      const panelAmount = activeClaims.reduce((sum, claim) => sum + Number(claim.amount ?? 0), 0);
+      const panelReceived = activeClaims.reduce((sum, claim) => sum + Number(claim.received_amount ?? 0), 0);
+      const ledger = calculateDualLedger({
+        billedTotal: subtotal,
+        patientPayments: (queuePayments ?? []).map((payment) => Number(payment.amount ?? 0)),
+        expectsPanel: pay.payment_type === 'panel' || pay.payment_type === 'insurance',
+        panelClaim: activeClaims.length ? {
+          amount: panelAmount,
+          receivedAmount: panelReceived,
+          status: String(activeClaims[0].status),
+        } : null,
+      });
 
       return {
         paymentId: pay.id,
@@ -102,9 +124,9 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
         items,
         subtotal,
         invoiceTotal: subtotal,
-        balanceRemaining: Math.max(0, subtotal - (queuePayments ?? []).reduce(
-          (total, payment) => total + Number(payment.amount ?? 0), 0,
-        )),
+        balanceRemaining: ledger.patientOutstanding,
+        panelBilled: ledger.panelCovered,
+        panelOutstanding: ledger.panelOutstanding,
       } satisfies ReceiptData;
     },
   });

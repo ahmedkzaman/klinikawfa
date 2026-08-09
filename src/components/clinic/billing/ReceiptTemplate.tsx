@@ -23,6 +23,8 @@ export interface ReceiptData {
   subtotal: number;
   invoiceTotal: number;
   balanceRemaining: number;
+  panelBilled?: number;
+  panelOutstanding?: number;
   /** @deprecated kept for back-compat; not rendered */
   grandTotal?: number;
 }
@@ -129,6 +131,16 @@ export function ReceiptTemplate({ data, settings }: Props) {
                 Total (RM)
               </th>
             </tr>
+            {(data.panelBilled ?? 0) > 0 && (
+              <tr>
+                <td colSpan={4} className="border border-black px-2 py-1 text-right font-semibold">
+                  Billed to Panel (RM)
+                </td>
+                <td className="border border-black px-2 py-1 text-right font-semibold tabular-nums">
+                  {data.panelBilled!.toFixed(2)}
+                </td>
+              </tr>
+            )}
           </thead>
           <tbody>
             {data.items.length === 0 ? (

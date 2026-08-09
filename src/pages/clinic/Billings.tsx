@@ -23,10 +23,7 @@ import {
   formatPaymentMethod,
   paymentMethodBadgeClass,
 } from '@/lib/clinic/paymentMethod';
-import {
-  billingFinancialState,
-  sumActiveBillingLines,
-} from '@/lib/clinic/billingLedgerTotals';
+import { sumActiveBillingLines } from '@/lib/clinic/billingLedgerTotals';
 import { fetchAllBillingRows } from '@/lib/clinic/fetchAllBillingRows';
 import {
   sortBillingEntries,
@@ -35,6 +32,7 @@ import {
 } from '@/lib/clinic/billingLedgerSort';
 import { Badge } from '@/components/ui/badge';
 import type { ConsultationRow, ConsultationItemRow } from '@/types/clinic';
+import { calculateDualLedger } from '@/lib/clinic/dualLedger';
 
 type TabKey = 'paid' | 'panel' | 'self_pay';
 
@@ -49,6 +47,9 @@ interface LedgerEntry {
   paid: number;
   outstanding: number;
   creditDue: number;
+  panelCovered: number;
+  panelOutstanding: number;
+  unattributedBalance: number;
   unitemizedAdditionalCharges: number;
   latestPaymentType: 'self_pay' | 'panel' | 'insurance';
   latestMethod: string | null;
@@ -159,6 +160,35 @@ export default function Billings() {
     },
   });
 
+  const { data: claimsByQueue = {}, isLoading: claimsLoading } = useQuery<Record<string, {
+    amount: number;
+    receivedAmount: number;
+    status: string;
+  }>>({
+    queryKey: ['billing-panel-claims', queueEntryIds.slice().sort().join(',')],
+    enabled: queueEntryIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('panel_claims')
+        .select('queue_entry_id, amount, received_amount, status')
+        .in('queue_entry_id', queueEntryIds);
+      if (error) throw error;
+      const grouped: Record<string, { amount: number; receivedAmount: number; status: string }> = {};
+      for (const claim of data ?? []) {
+        const id = claim.queue_entry_id;
+        if (!id) continue;
+        const status = String(claim.status ?? '').toLowerCase();
+        if (!['pending', 'submitted', 'approved', 'received'].includes(status)) continue;
+        const current = grouped[id] ?? { amount: 0, receivedAmount: 0, status };
+        current.amount += Number(claim.amount ?? 0);
+        current.receivedAmount += Number(claim.received_amount ?? 0);
+        current.status = status;
+        grouped[id] = current;
+      }
+      return grouped;
+    },
+  });
+
   const entries: LedgerEntry[] = useMemo(() => {
     const byQueue = new Map<string, LedgerEntry>();
     // Sort by created_at ascending so the LAST iteration wins for "latest".
@@ -194,6 +224,9 @@ export default function Billings() {
           paid: amt,
           outstanding: 0,
           creditDue: 0,
+          panelCovered: 0,
+          panelOutstanding: 0,
+          unattributedBalance: 0,
           unitemizedAdditionalCharges: 0,
           latestPaymentType: pType,
           latestMethod: p.payment_method ?? null,
@@ -205,27 +238,38 @@ export default function Billings() {
 
     const list = Array.from(byQueue.values());
     list.forEach((e) => {
-      const state = billingFinancialState(e.subtotal, e.paid);
-      e.subtotal = state.subtotal;
-      e.outstanding = state.outstanding;
+      const expectsPanel = e.latestPaymentType === 'panel' || e.latestPaymentType === 'insurance';
+      const claim = claimsByQueue[e.queueEntryId];
+      const state = calculateDualLedger({
+        billedTotal: e.subtotal,
+        patientPayments: [e.paid],
+        expectsPanel,
+        panelClaim: claim ? { amount: claim.amount, receivedAmount: claim.receivedAmount, status: claim.status } : null,
+      });
+      e.subtotal = state.billedTotal;
+      e.paid = state.patientPaid;
+      e.outstanding = state.patientOutstanding;
+      e.panelCovered = state.panelCovered;
+      e.panelOutstanding = state.panelOutstanding;
+      e.unattributedBalance = state.unattributedBalance;
       e.creditDue = state.creditDue;
       e.unitemizedAdditionalCharges = 0;
     });
     return list.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
-  }, [ledger, itemsByQueue]);
+  }, [claimsByQueue, ledger, itemsByQueue]);
 
   const filtered = useMemo<LedgerEntry[]>(() => {
     if (activeTab === 'paid') {
       return entries.filter(
-        (e) => e.outstanding <= 0 && e.clinicStatus === 'completed',
+        (e) => e.outstanding <= 0 && e.panelOutstanding <= 0 && e.unattributedBalance <= 0 && e.clinicStatus === 'completed',
       );
     }
     if (activeTab === 'panel') {
       return entries.filter(
         (e) =>
-          e.outstanding > 0 &&
+          e.panelOutstanding > 0 &&
           (e.latestPaymentType === 'panel' ||
             e.latestPaymentType === 'insurance'),
       );
@@ -243,7 +287,7 @@ export default function Billings() {
   const counts = useMemo(() => {
     const panelRows = entries.filter(
       (e) =>
-        e.outstanding > 0 &&
+        e.panelOutstanding > 0 &&
         (e.latestPaymentType === 'panel' ||
           e.latestPaymentType === 'insurance'),
     );
@@ -252,14 +296,14 @@ export default function Billings() {
     );
     return {
       paid: entries.filter(
-        (e) => e.outstanding <= 0 && e.clinicStatus === 'completed',
+        (e) => e.outstanding <= 0 && e.panelOutstanding <= 0 && e.unattributedBalance <= 0 && e.clinicStatus === 'completed',
       ).length,
       panel: panelRows.length,
       self_pay: selfPayRows.length,
     };
   }, [entries]);
 
-  const isLoading = ledgerLoading || itemsLoading;
+  const isLoading = ledgerLoading || itemsLoading || claimsLoading;
 
   const handleSort = (key: BillingSortKey) => {
     setSort((current) => {
@@ -461,6 +505,9 @@ export default function Billings() {
             </div>
           ) : (
             sortedFiltered.map((e) => {
+              const displayedOutstanding = activeTab === 'panel'
+                ? e.panelOutstanding
+                : e.outstanding;
               return (
               <div
                 key={e.queueEntryId}
@@ -492,12 +539,12 @@ export default function Billings() {
                 <span
                   className={cn(
                     'text-sm tabular-nums',
-                    e.outstanding > 0 ? 'text-rose-600 font-semibold' : 'text-slate-600',
+                    displayedOutstanding > 0 ? 'text-rose-600 font-semibold' : 'text-slate-600',
                   )}
                 >
                   {e.creditDue > 0
                     ? `Credit RM ${e.creditDue.toFixed(2)}`
-                    : `RM ${e.outstanding.toFixed(2)}`}
+                    : `RM ${displayedOutstanding.toFixed(2)}`}
                 </span>
                 <span>
                   {e.paid > 0 || e.latestMethod ? (

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { sumActiveBillingLines } from '@/lib/clinic/billingLedgerTotals';
+import { calculateDualLedger } from '@/lib/clinic/dualLedger';
 
 export function formatRm(n: number): string {
   return `RM ${n.toLocaleString('en-MY', {
@@ -101,20 +102,12 @@ export function usePatientOutstanding(patientId: string | undefined | null) {
         visitTotalByEntry.set(entryId, sumActiveBillingLines(lines));
       }
 
-      const patientPaidByEntry = new Map<string, number>();
-      const panelPaidViaPaymentsByEntry = new Map<string, number>();
+      const paidByEntry = new Map<string, number>();
       for (const p of paymentsRes.data ?? []) {
         const entryId = p.queue_entry_id as string | null;
         if (!entryId) continue;
         const amt = Number(p.amount ?? 0);
-        if (p.payment_type === 'panel') {
-          panelPaidViaPaymentsByEntry.set(
-            entryId,
-            (panelPaidViaPaymentsByEntry.get(entryId) ?? 0) + amt,
-          );
-        } else {
-          patientPaidByEntry.set(entryId, (patientPaidByEntry.get(entryId) ?? 0) + amt);
-        }
+        paidByEntry.set(entryId, (paidByEntry.get(entryId) ?? 0) + amt);
       }
 
       // Per-visit panel coverage and disbursement (only count "active" claims
@@ -146,16 +139,19 @@ export function usePatientOutstanding(patientId: string | undefined | null) {
       for (const entryId of queueEntryIds) {
         const visitTotal = visitTotalByEntry.get(entryId) ?? 0;
         const panelCovered = panelCoveredByEntry.get(entryId) ?? 0;
-        const patientPortion = Math.max(visitTotal - panelCovered, 0);
-        const patientPaid = patientPaidByEntry.get(entryId) ?? 0;
-        const panelReceived =
-          (panelReceivedByEntry.get(entryId) ?? 0) +
-          (panelPaidViaPaymentsByEntry.get(entryId) ?? 0);
-
-        const visitPatientOut = Math.max(patientPortion - patientPaid, 0);
-        const visitPanelOut = panelClaimActive.get(entryId)
-          ? Math.max(panelCovered - panelReceived, 0)
-          : 0;
+        const panelReceived = panelReceivedByEntry.get(entryId) ?? 0;
+        const state = calculateDualLedger({
+          billedTotal: visitTotal,
+          patientPayments: [paidByEntry.get(entryId) ?? 0],
+          expectsPanel: panelCovered > 0 || panelClaimActive.get(entryId) === true,
+          panelClaim: panelClaimActive.get(entryId) ? {
+            amount: panelCovered,
+            receivedAmount: panelReceived,
+            status: 'pending',
+          } : null,
+        });
+        const visitPatientOut = state.patientOutstanding;
+        const visitPanelOut = state.panelOutstanding;
 
         patientOutstanding += visitPatientOut;
         panelOutstanding += visitPanelOut;

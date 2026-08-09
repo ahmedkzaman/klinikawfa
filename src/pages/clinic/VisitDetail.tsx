@@ -13,6 +13,8 @@ import { useConsultation } from '@/hooks/clinic/useConsultations';
 import { useConsultationItems } from '@/hooks/clinic/useConsultationItems';
 import { usePayments } from '@/hooks/clinic/usePayments';
 import { useCompletedBillCorrectionHistory } from '@/hooks/clinic/useCompletedBillCorrection';
+import { useVisitPanelClaim } from '@/hooks/clinic/useVisitPanelClaim';
+import { calculateDualLedger } from '@/lib/clinic/dualLedger';
 import { CompletedBillCorrectionDialog } from '@/components/clinic/visit/CompletedBillCorrectionDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { canCorrectCompletedBill, isCompletedForBillCorrection } from '@/lib/clinic/completedBillCorrection';
@@ -44,6 +46,7 @@ export default function VisitDetail() {
   const { data: consultation } = useConsultation(queueEntryId);
   const { data: items = [], refetch: refetchItems } = useConsultationItems(consultation?.id);
   const { data: payments = [], refetch: refetchPayments } = usePayments(queueEntryId);
+  const { data: panelClaim = null, refetch: refetchPanelClaim } = useVisitPanelClaim(queueEntryId);
   const canCorrect =
     entry?.clinic_status === 'completed' &&
     isCompletedForBillCorrection(consultation) &&
@@ -54,11 +57,11 @@ export default function VisitDetail() {
   );
 
   const refreshBilling = useCallback(async () => {
-    const refreshes = [refetchItems(), refetchPayments()];
+    const refreshes = [refetchItems(), refetchPayments(), refetchPanelClaim()];
     if (canReadCorrectionHistory) refreshes.push(correctionHistory.refetch());
     await Promise.all(refreshes);
     setBillingRevision((revision) => revision + 1);
-  }, [canReadCorrectionHistory, correctionHistory, refetchItems, refetchPayments]);
+  }, [canReadCorrectionHistory, correctionHistory, refetchItems, refetchPanelClaim, refetchPayments]);
 
   const subtotal = useMemo(
     () =>
@@ -69,11 +72,19 @@ export default function VisitDetail() {
       ),
     [items],
   );
-  const paid = useMemo(
-    () => payments.reduce((acc, p) => acc + Number(p.amount ?? 0), 0),
-    [payments],
-  );
-  const outstanding = Math.max(subtotal - paid, 0);
+  const financial = useMemo(() => calculateDualLedger({
+    billedTotal: subtotal,
+    patientPayments: payments.map((payment) => ({
+      amount: Number(payment.amount ?? 0),
+      deletedAt: payment.deleted_at,
+    })),
+    expectsPanel: entry?.payment_type === 'panel' || entry?.payment_type === 'insurance',
+    panelClaim: panelClaim ? {
+      amount: panelClaim.amount,
+      receivedAmount: panelClaim.receivedAmount,
+      status: panelClaim.status,
+    } : null,
+  }), [entry?.payment_type, panelClaim, payments, subtotal]);
 
   if (isLoading) {
     return (
@@ -178,8 +189,8 @@ export default function VisitDetail() {
                 }
               />
               <Field
-                label="Outstanding"
-                value={`RM ${outstanding.toFixed(2)}`}
+                label="Patient outstanding"
+                value={`RM ${financial.patientOutstanding.toFixed(2)}`}
               />
             </div>
           </div>
@@ -222,6 +233,8 @@ export default function VisitDetail() {
             consultationId={consultation?.id ?? null}
             items={items}
             payments={payments}
+            panelClaim={panelClaim}
+            expectsPanel={entry.payment_type === 'panel' || entry.payment_type === 'insurance'}
           />
         </div>
       </div>

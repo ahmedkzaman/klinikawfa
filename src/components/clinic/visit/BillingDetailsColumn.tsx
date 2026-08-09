@@ -25,6 +25,8 @@ import {
 } from '@/lib/clinic/paymentMethod';
 import { RecordPaymentDialog } from './RecordPaymentDialog';
 import type { ConsultationItemRow, PaymentRow } from '@/types/clinic';
+import { calculateDualLedger } from '@/lib/clinic/dualLedger';
+import type { VisitPanelClaim } from '@/hooks/clinic/useVisitPanelClaim';
 
 export interface SelectedCharge {
   charge_type_id: string;
@@ -37,6 +39,8 @@ interface Props {
   consultationId: string | null;
   items: ConsultationItemRow[];
   payments: PaymentRow[];
+  panelClaim?: VisitPanelClaim | null;
+  expectsPanel?: boolean;
   completeVisitOnPayment?: boolean;
   /** When true, render the "Other Charges" picker. Selections are NOT
    *  persisted on toggle — parent commits them at checkout via onChargesChange. */
@@ -55,6 +59,8 @@ export function BillingDetailsColumn({
   consultationId,
   items,
   payments,
+  panelClaim = null,
+  expectsPanel = false,
   completeVisitOnPayment = false,
   showOtherCharges = false,
   onChargesChange,
@@ -109,17 +115,14 @@ export function BillingDetailsColumn({
   const subtotalWithCharges = subtotal + otherChargesTotal;
   const afterDiscount = Math.max(subtotalWithCharges - discountRm, 0);
   const total = afterDiscount * (1 + taxPct / 100);
-  const paid = useMemo(
-    () => payments.reduce((acc, p) => acc + Number(p.amount ?? 0), 0),
-    [payments],
-  );
-  const balance = total - paid;
-  const outstanding = Math.max(balance, 0);
-  const financialState = balance > 0
-    ? { label: 'Outstanding', amount: balance, highlight: true }
-    : balance < 0
-      ? { label: 'Refund/Credit Due', amount: Math.abs(balance), highlight: true }
-      : { label: 'Paid', amount: 0, highlight: false };
+  const ledger = useMemo(() => calculateDualLedger({
+    billedTotal: total,
+    patientPayments: payments.map((payment) => ({ amount: Number(payment.amount ?? 0), deletedAt: payment.deleted_at })),
+    expectsPanel,
+    panelClaim: panelClaim ? { amount: panelClaim.amount, receivedAmount: panelClaim.receivedAmount, status: panelClaim.status } : null,
+  }), [expectsPanel, panelClaim, payments, total]);
+  const paid = ledger.patientPaid;
+  const outstanding = ledger.patientOutstanding;
 
   const handleVoid = async (id: string) => {
     if (!confirm('Void this payment? This action is logged.')) return;
@@ -248,12 +251,17 @@ export function BillingDetailsColumn({
 
           <Row label="Total" value={`RM ${total.toFixed(2)}`} bold />
           <Row label="Paid" value={`RM ${paid.toFixed(2)}`} muted />
+          {expectsPanel && <Row label="Billed to panel" value={`RM ${ledger.panelCovered.toFixed(2)}`} muted />}
+          {expectsPanel && <Row label="Panel receivable" value={`RM ${ledger.panelOutstanding.toFixed(2)}`} muted />}
           <Row
-            label={financialState.label}
-            value={`RM ${financialState.amount.toFixed(2)}`}
+            label={ledger.creditDue > 0 ? 'Refund/Credit Due' : expectsPanel ? 'Patient outstanding' : 'Outstanding'}
+            value={`RM ${(ledger.creditDue > 0 ? ledger.creditDue : ledger.patientOutstanding).toFixed(2)}`}
             bold
-            highlight={financialState.highlight}
+            highlight={ledger.creditDue > 0 || ledger.patientOutstanding > 0}
           />
+          {ledger.unattributedBalance > 0 && (
+            <Row label="Needs attribution" value={`RM ${ledger.unattributedBalance.toFixed(2)}`} bold highlight />
+          )}
         </div>
 
         <div className="px-4 pb-3 space-y-2">
