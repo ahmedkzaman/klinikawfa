@@ -30,4 +30,26 @@ describe('clinic health metrics migration', () => {
       /insurance_providers\s+WHERE\s+is_active/i,
     );
   });
+
+  it('runs the staff-authorized aggregate without per-row RLS overhead', () => {
+    const guardedFunctionSql = readFileSync(
+      resolve(
+        process.cwd(),
+        'supabase/migrations/20260804120000_add_panel_claim_payment_portions.sql',
+      ),
+      'utf8',
+    );
+    const sql = readFileSync(
+      resolve(
+        process.cwd(),
+        'supabase/migrations/20260809130000_optimize_clinic_health_metrics_rls.sql',
+      ),
+      'utf8',
+    );
+
+    expect(sql).toMatch(/get_clinic_health_metrics\s*\([^)]*\)[\s\S]*security definer/i);
+    expect(guardedFunctionSql).toMatch(/is_staff_or_admin\(auth\.uid\(\)\)/i);
+    expect(sql).toMatch(/revoke all on function[\s\S]*from public/i);
+    expect(sql).toMatch(/grant execute on function[\s\S]*to authenticated/i);
+  });
 });
