@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { Plus, Trash2, Receipt, Printer } from 'lucide-react';
 import { PrintReceiptDialog } from '@/components/clinic/billing/PrintReceiptDialog';
@@ -26,6 +27,7 @@ import {
 import { RecordPaymentDialog } from './RecordPaymentDialog';
 import type { ConsultationItemRow, PaymentRow } from '@/types/clinic';
 import { calculateDualLedger } from '@/lib/clinic/dualLedger';
+import { paymentVisitPath } from '@/lib/clinic/paymentHistoryNavigation';
 import type { VisitPanelClaim } from '@/hooks/clinic/useVisitPanelClaim';
 
 export interface SelectedCharge {
@@ -308,40 +310,52 @@ export function BillingDetailsColumn({
             </div>
           ) : (
             <div className="divide-y divide-border">
-              {payments.map((p) => (
+              {payments.map((p) => {
+                const paymentDate = format(new Date(p.created_at), 'd MMM, h:mm a');
+                const paymentAmount = Number(p.amount ?? 0);
+                return (
                 <div
                   key={p.id}
                   className="px-4 py-2.5 flex items-center gap-3"
                 >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          'text-[10px] py-0 px-1.5 h-5',
-                          paymentMethodBadgeClass(p.payment_method),
-                        )}
-                      >
-                        {formatPaymentMethod(p.payment_method, Number(p.amount ?? 0))}
-                      </Badge>
+                  <Link
+                    to={paymentVisitPath(queueEntryId, p.id)}
+                    className="flex flex-1 min-w-0 items-center gap-3 rounded-md -mx-1 px-1 py-1 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label={`RM ${paymentAmount.toFixed(2)} payment on ${paymentDate}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            'text-[10px] py-0 px-1.5 h-5',
+                            paymentMethodBadgeClass(p.payment_method),
+                          )}
+                        >
+                          {formatPaymentMethod(p.payment_method, paymentAmount)}
+                        </Badge>
 
-                      <span className="text-[11px] text-muted-foreground capitalize">
-                        {(p.payment_type ?? '').replace('_', '-')}
-                      </span>
+                        <span className="text-[11px] text-muted-foreground capitalize">
+                          {(p.payment_type ?? '').replace('_', '-')}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        {paymentDate}
+                      </div>
                     </div>
-                    <div className="text-[11px] text-muted-foreground mt-0.5">
-                      {format(new Date(p.created_at), 'd MMM, h:mm a')}
+                    <div className="text-sm font-medium tabular-nums text-foreground">
+                      RM {paymentAmount.toFixed(2)}
                     </div>
-                  </div>
-                  <div className="text-sm font-medium tabular-nums">
-                    RM {Number(p.amount ?? 0).toFixed(2)}
-                  </div>
+                  </Link>
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                    onClick={() => setPrintPaymentId(p.id)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setPrintPaymentId(p.id);
+                    }}
                     aria-label="Print receipt"
                     title="Print receipt"
                   >
@@ -353,14 +367,18 @@ export function BillingDetailsColumn({
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      onClick={() => handleVoid(p.id)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleVoid(p.id);
+                      }}
                       aria-label="Void payment"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
