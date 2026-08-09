@@ -36,6 +36,7 @@ const PERMISSIONS = [
   ['billing.manage', 'Manage billing'],
   ['reports.view', 'View reports'],
   ['settings.manage', 'Manage clinic settings'],
+  ['management_dashboard.view', 'View management dashboard'],
 ] as const;
 
 const ROLE_LABELS: Record<string, string> = {
@@ -52,6 +53,14 @@ type UserPermissionDetail = {
   role_allowed: boolean;
   override_allowed: boolean | null;
   effective_allowed: boolean;
+  updated_at?: string | null;
+  updated_by?: string | null;
+};
+
+type RolePermissionRow = {
+  role: AppRole;
+  permission_key: string;
+  allowed: boolean;
 };
 
 export default function ClinicPermissionsSettings() {
@@ -77,7 +86,7 @@ export default function ClinicPermissionsSettings() {
     } else {
       setMatrix(
         Object.fromEntries(
-          (data ?? []).map((item: any) => [
+          ((data ?? []) as RolePermissionRow[]).map((item) => [
             `${item.role}:${item.permission_key}`,
             item.allowed,
           ]),
@@ -99,7 +108,10 @@ export default function ClinicPermissionsSettings() {
     } else {
       setDetails(
         Object.fromEntries(
-          (data ?? []).map((item: any) => [item.permission_key, item]),
+          ((data ?? []) as UserPermissionDetail[]).map((item) => [
+            item.permission_key,
+            item,
+          ]),
         ),
       );
     }

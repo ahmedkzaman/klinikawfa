@@ -44,6 +44,7 @@ export function ClinicProtectedRoute({
     isClinical,
     isLocum,
     canViewInsights,
+    canViewManagementDashboard,
   } = useAuth();
   const location = useLocation();
 
@@ -91,10 +92,7 @@ export function ClinicProtectedRoute({
   }
 
   if (requiredRole === 'management_dashboard') {
-    if (isLocum || role === 'ops_staff' || role === 'operations') {
-      return <Navigate to="/clinic/queue" replace />;
-    }
-    if (!isStaffOrAdmin) return <Navigate to="/staff/dashboard" replace />;
+    if (!canViewManagementDashboard) return <Navigate to="/clinic/queue" replace />;
     return <>{children}</>;
   }
 

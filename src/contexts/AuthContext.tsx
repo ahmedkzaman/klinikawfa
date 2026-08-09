@@ -6,6 +6,11 @@ import {
   canManageWebsiteRole,
 } from '@/lib/website-access';
 
+type ManagementDashboardAccessRpc = (
+  fn: 'can_view_management_dashboard',
+  args: { _user_id: string },
+) => Promise<{ data: boolean | null; error: { message: string } | null }>;
+
 export type AppRole =
   | 'special_admin'
   | 'admin'
@@ -37,6 +42,7 @@ interface AuthContextType {
   isLocum: boolean;
   isClinical: boolean;
   canViewInsights: boolean;
+  canViewManagementDashboard: boolean;
   canEditManagementDashboard: boolean;
   canManageWebsite: boolean;
   canManageTrackingSettings: boolean;
@@ -54,6 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [rolesLoading, setRolesLoading] = useState(true);
   const [role, setRole] = useState<AppRole | null>(null);
+  const [canViewManagementDashboard, setCanViewManagementDashboard] = useState(false);
 
   // Refs to track state across the auth listener closure
   const authInitializedRef = useRef(false);
@@ -75,9 +82,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setRole((data?.role as AppRole) ?? null);
+
+      const fetchDashboardAccess = supabase.rpc as unknown as ManagementDashboardAccessRpc;
+      const { data: canViewDashboard, error: dashboardError } =
+        await fetchDashboardAccess('can_view_management_dashboard', { _user_id: userId });
+
+      if (dashboardError) {
+        console.error('Error fetching management dashboard access:', dashboardError);
+        setCanViewManagementDashboard(false);
+      } else {
+        setCanViewManagementDashboard(canViewDashboard === true);
+      }
     } catch (err) {
       console.error('Error in fetchUserRole:', err);
       setRole(null);
+      setCanViewManagementDashboard(false);
     } finally {
       setRolesLoading(false);
     }
@@ -124,9 +143,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }, 0);
         } else {
           setRole(null);
+          setCanViewManagementDashboard(false);
           setRolesLoading(false);
         }
-      }
+      },
     );
 
     return () => subscription.unsubscribe();
@@ -161,6 +181,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     authInitializedRef.current = false;
     await supabase.auth.signOut();
     setRole(null);
+    setCanViewManagementDashboard(false);
   };
 
   const resetPassword = async (email: string) => {
@@ -234,6 +255,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLocum,
         isClinical,
         canViewInsights,
+        canViewManagementDashboard,
         canEditManagementDashboard,
         canManageWebsite,
         canManageTrackingSettings,

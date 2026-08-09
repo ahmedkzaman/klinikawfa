@@ -40,11 +40,11 @@ type ClinicNavItem = {
   specialAdminOnly?: boolean;
   adminOnly?: boolean;
   locumAllowed?: boolean;
-  excludeOperations?: boolean;
+  managementDashboard?: boolean;
 };
 
 const clinicNavItems: ClinicNavItem[] = [
-  { href: '/clinic/dashboard', label: 'Management Dashboard', icon: Gauge, excludeOperations: true },
+  { href: '/clinic/dashboard', label: 'Management Dashboard', icon: Gauge, managementDashboard: true },
   { href: '/clinic/patients', label: 'Patients', icon: Users },
   { href: '/clinic/patient-explorer', label: 'Patient Explorer', icon: Search },
   { href: '/clinic/appointments', label: 'Appointments', icon: CalendarDays, locumAllowed: true },
@@ -72,6 +72,7 @@ function SidebarNav({
   isAdmin,
   isLocum,
   role,
+  canViewManagementDashboard,
   onLinkClick,
 }: {
   pathname: string;
@@ -79,12 +80,13 @@ function SidebarNav({
   isAdmin: boolean;
   isLocum: boolean;
   role: string | null;
+  canViewManagementDashboard: boolean;
   onLinkClick?: () => void;
 }) {
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const visibleItems = clinicNavItems.filter((item) => {
-    if (isLocum) return !!item.locumAllowed;
-    if (item.excludeOperations && (role === 'ops_staff' || role === 'operations')) return false;
+    if (item.managementDashboard && !canViewManagementDashboard) return false;
+    if (isLocum) return !!item.locumAllowed || !!item.managementDashboard;
     if (item.specialAdminOnly && !isSpecialAdmin) return false;
     if (item.adminOnly && !(isAdmin || isSpecialAdmin)) return false;
     return true;
@@ -118,7 +120,15 @@ function SidebarNav({
 }
 
 export function ClinicLayout() {
-  const { user, role, isSpecialAdmin, isAdmin, isLocum, signOut } = useAuth();
+  const {
+    user,
+    role,
+    isSpecialAdmin,
+    isAdmin,
+    isLocum,
+    canViewManagementDashboard,
+    signOut,
+  } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   useClinicChimes();
@@ -140,6 +150,7 @@ export function ClinicLayout() {
             isAdmin={isAdmin}
             isLocum={isLocum}
             role={role}
+            canViewManagementDashboard={canViewManagementDashboard}
           />
         </div>
         <div className="shrink-0 p-4 border-t border-slate-100">
@@ -193,6 +204,7 @@ export function ClinicLayout() {
               isAdmin={isAdmin}
               isLocum={isLocum}
               role={role}
+              canViewManagementDashboard={canViewManagementDashboard}
               onLinkClick={() => setMobileOpen(false)}
             />
           </div>

@@ -23,10 +23,15 @@ describe('management dashboard page contract', () => {
     const app = readFileSync('src/App.tsx', 'utf8');
     const layout = readFileSync('src/components/clinic/ClinicLayout.tsx', 'utf8');
     const guard = readFileSync('src/components/ClinicProtectedRoute.tsx', 'utf8');
+    const auth = readFileSync('src/contexts/AuthContext.tsx', 'utf8');
+    const settings = readFileSync('src/pages/clinic/settings/ClinicPermissionsSettings.tsx', 'utf8');
     expect(app).toMatch(/path="dashboard"[\s\S]*requiredRole="management_dashboard"/);
     expect(guard).toContain("requiredRole === 'management_dashboard'");
-    expect(guard).toContain("role === 'ops_staff' || role === 'operations'");
-    expect(layout).toMatch(/label: 'Management Dashboard',[\s\S]*excludeOperations: true/);
+    expect(guard).toContain('canViewManagementDashboard');
+    expect(auth).toContain('can_view_management_dashboard');
+    expect(layout).toContain('canViewManagementDashboard');
+    expect(settings).toContain('management_dashboard.view');
+    expect(settings).toContain('View management dashboard');
     expect(layout).toMatch(/label: 'Insight',[\s\S]*adminOnly: true/);
   });
 });
