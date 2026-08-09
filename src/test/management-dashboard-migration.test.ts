@@ -57,3 +57,16 @@ describe('management dashboard foundation migration', () => {
     );
   });
 });
+
+describe('management dashboard access restriction migration', () => {
+  const sql = readFileSync(
+    'supabase/migrations/20260809103031_restrict_management_dashboard_operations_access.sql',
+    'utf8',
+  );
+
+  it('excludes locum and both operations role names from dashboard access', () => {
+    expect(sql).not.toMatch(/'(ops_staff|operations|locum)'/);
+    expect(sql).toMatch(/'admin'[\s\S]*'special_admin'[\s\S]*'doctor_admin'/);
+    expect(sql).toMatch(/'resident_doctor'[\s\S]*'staff'[\s\S]*'purchaser'[\s\S]*'staff_nurse'/);
+  });
+});

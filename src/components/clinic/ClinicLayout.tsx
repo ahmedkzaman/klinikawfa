@@ -40,10 +40,11 @@ type ClinicNavItem = {
   specialAdminOnly?: boolean;
   adminOnly?: boolean;
   locumAllowed?: boolean;
+  excludeOperations?: boolean;
 };
 
 const clinicNavItems: ClinicNavItem[] = [
-  { href: '/clinic/dashboard', label: 'Management Dashboard', icon: Gauge },
+  { href: '/clinic/dashboard', label: 'Management Dashboard', icon: Gauge, excludeOperations: true },
   { href: '/clinic/patients', label: 'Patients', icon: Users },
   { href: '/clinic/patient-explorer', label: 'Patient Explorer', icon: Search },
   { href: '/clinic/appointments', label: 'Appointments', icon: CalendarDays, locumAllowed: true },
@@ -70,17 +71,20 @@ function SidebarNav({
   isSpecialAdmin,
   isAdmin,
   isLocum,
+  role,
   onLinkClick,
 }: {
   pathname: string;
   isSpecialAdmin: boolean;
   isAdmin: boolean;
   isLocum: boolean;
+  role: string | null;
   onLinkClick?: () => void;
 }) {
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const visibleItems = clinicNavItems.filter((item) => {
     if (isLocum) return !!item.locumAllowed;
+    if (item.excludeOperations && (role === 'ops_staff' || role === 'operations')) return false;
     if (item.specialAdminOnly && !isSpecialAdmin) return false;
     if (item.adminOnly && !(isAdmin || isSpecialAdmin)) return false;
     return true;
@@ -114,7 +118,7 @@ function SidebarNav({
 }
 
 export function ClinicLayout() {
-  const { user, isSpecialAdmin, isAdmin, isLocum, signOut } = useAuth();
+  const { user, role, isSpecialAdmin, isAdmin, isLocum, signOut } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   useClinicChimes();
@@ -135,6 +139,7 @@ export function ClinicLayout() {
             isSpecialAdmin={isSpecialAdmin}
             isAdmin={isAdmin}
             isLocum={isLocum}
+            role={role}
           />
         </div>
         <div className="shrink-0 p-4 border-t border-slate-100">
@@ -187,6 +192,7 @@ export function ClinicLayout() {
               isSpecialAdmin={isSpecialAdmin}
               isAdmin={isAdmin}
               isLocum={isLocum}
+              role={role}
               onLinkClick={() => setMobileOpen(false)}
             />
           </div>

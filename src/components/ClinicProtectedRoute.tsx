@@ -7,6 +7,7 @@ interface ClinicProtectedRouteProps {
   requiredRole?:
     | 'any_staff'
     | 'non_locum_staff'
+    | 'management_dashboard'
     | 'clinical'
     | 'clinical_staff'
     | 'ops_or_admin'
@@ -85,6 +86,14 @@ export function ClinicProtectedRoute({
 
   if (requiredRole === 'non_locum_staff') {
     if (isLocum) return <Navigate to="/clinic/queue" replace />;
+    if (!isStaffOrAdmin) return <Navigate to="/staff/dashboard" replace />;
+    return <>{children}</>;
+  }
+
+  if (requiredRole === 'management_dashboard') {
+    if (isLocum || role === 'ops_staff' || role === 'operations') {
+      return <Navigate to="/clinic/queue" replace />;
+    }
     if (!isStaffOrAdmin) return <Navigate to="/staff/dashboard" replace />;
     return <>{children}</>;
   }

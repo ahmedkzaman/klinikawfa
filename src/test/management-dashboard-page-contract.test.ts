@@ -19,11 +19,14 @@ describe('management dashboard page contract', () => {
     expect(source).toContain('Enter stock purchases');
   });
 
-  it('protects the route from locum and leaves Insight unchanged', () => {
+  it('protects the route from locum and operations roles and leaves Insight unchanged', () => {
     const app = readFileSync('src/App.tsx', 'utf8');
     const layout = readFileSync('src/components/clinic/ClinicLayout.tsx', 'utf8');
-    expect(app).toMatch(/path="dashboard"[\s\S]*requiredRole="non_locum_staff"/);
-    expect(layout).toContain("label: 'Management Dashboard'");
+    const guard = readFileSync('src/components/ClinicProtectedRoute.tsx', 'utf8');
+    expect(app).toMatch(/path="dashboard"[\s\S]*requiredRole="management_dashboard"/);
+    expect(guard).toContain("requiredRole === 'management_dashboard'");
+    expect(guard).toContain("role === 'ops_staff' || role === 'operations'");
+    expect(layout).toMatch(/label: 'Management Dashboard',[\s\S]*excludeOperations: true/);
     expect(layout).toMatch(/label: 'Insight',[\s\S]*adminOnly: true/);
   });
 });

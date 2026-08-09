@@ -276,7 +276,7 @@ const App = () => (
                 <Route
                   path="dashboard"
                   element={
-                    <ClinicProtectedRoute requiredRole="non_locum_staff">
+                    <ClinicProtectedRoute requiredRole="management_dashboard">
                       <ManagementDashboard />
                     </ClinicProtectedRoute>
                   }
