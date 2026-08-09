@@ -37,6 +37,7 @@ interface AuthContextType {
   isLocum: boolean;
   isClinical: boolean;
   canViewInsights: boolean;
+  canEditManagementDashboard: boolean;
   canManageWebsite: boolean;
   canManageTrackingSettings: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
@@ -209,6 +210,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     role === 'resident_doctor';
   const canViewInsights =
     role === 'admin' || role === 'special_admin' || role === 'doctor_admin';
+  const canEditManagementDashboard =
+    role === 'admin' || role === 'special_admin' || role === 'doctor_admin';
   const canManageWebsite = canManageWebsiteRole(role);
   const canManageTrackingSettings = canManageTrackingSettingsRole(role);
 
@@ -231,6 +234,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLocum,
         isClinical,
         canViewInsights,
+        canEditManagementDashboard,
         canManageWebsite,
         canManageTrackingSettings,
         signIn,

@@ -80,6 +80,7 @@ import OweSlips from "./pages/clinic/OweSlips";
 import Receivables from "./pages/clinic/Receivables";
 import VoidedRecords from "./pages/clinic/VoidedRecords";
 import Insight from "./pages/clinic/Insight";
+import ManagementDashboard from "./pages/clinic/ManagementDashboard";
 import SettingsPage from "./pages/clinic/settings/SettingsPage";
 import ClinicProfile from "./pages/clinic/settings/ClinicProfile";
 import InClinicSettings from "./pages/clinic/settings/InClinicSettings";
@@ -272,6 +273,14 @@ const App = () => (
                 }
               >
                 <Route index element={<Navigate to="queue" replace />} />
+                <Route
+                  path="dashboard"
+                  element={
+                    <ClinicProtectedRoute requiredRole="non_locum_staff">
+                      <ManagementDashboard />
+                    </ClinicProtectedRoute>
+                  }
+                />
                 <Route path="queue" element={<QueueBoard />} />
                 <Route path="appointments" element={<Appointments />} />
                 <Route

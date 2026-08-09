@@ -58,6 +58,7 @@ interface WalkInArgs {
   visitPurpose: string;
   notes?: string | null;
   panelId?: string | null;
+  clinicAppointmentId?: string;
 }
 
 /** Inserts a walk-in queue entry (no source appointment). */
@@ -65,7 +66,7 @@ export function useCheckInWalkIn() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ patientId, visitPurpose, notes, panelId }: WalkInArgs) => {
+    mutationFn: async ({ patientId, visitPurpose, notes, panelId, clinicAppointmentId }: WalkInArgs) => {
       const { data: userData } = await supabase.auth.getUser();
 
       // Atomic daily sequence (race-safe via advisory lock in the SQL fn)
@@ -87,10 +88,19 @@ export function useCheckInWalkIn() {
         .select()
         .single();
       if (error) throw error;
+
+      if (clinicAppointmentId) {
+        const { error: linkError } = await supabase.rpc(
+          'link_clinic_appointment_checkin' as never,
+          { _appointment_id: clinicAppointmentId, _queue_entry_id: data.id } as never,
+        );
+        if (linkError) throw linkError;
+      }
       return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['clinic', 'queue-entries'] });
+      qc.invalidateQueries({ queryKey: ['clinic', 'clinic_appointments'] });
     },
   });
 }

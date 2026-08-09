@@ -35,12 +35,14 @@ interface CheckInWalkInDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialPatient?: PatientRow | null;
+  clinicAppointmentId?: string;
 }
 
 export function CheckInWalkInDialog({
   open,
   onOpenChange,
   initialPatient,
+  clinicAppointmentId,
 }: CheckInWalkInDialogProps) {
   const [patient, setPatient] = useState<PatientRow | null>(null);
   const [purpose, setPurpose] = useState('consultation');
@@ -92,6 +94,7 @@ export function CheckInWalkInDialog({
         visitPurpose: purpose,
         notes: notes || null,
         panelId: payerType === 'panel' ? panelId : null,
+        clinicAppointmentId,
       });
       toast.success(`${toMalayTitleCase(patient.name)} added to queue`);
       reset();

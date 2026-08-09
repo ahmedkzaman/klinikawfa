@@ -733,6 +733,7 @@ function AppointmentDetailsSheet({
 
       <CheckInWalkInDialog
         open={checkInOpen}
+        clinicAppointmentId={appt.id}
         onOpenChange={(o) => {
           setCheckInOpen(o);
           if (!o) onClose();
