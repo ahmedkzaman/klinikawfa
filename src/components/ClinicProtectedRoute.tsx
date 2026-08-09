@@ -45,10 +45,15 @@ export function ClinicProtectedRoute({
     isLocum,
     canViewInsights,
     canViewManagementDashboard,
+    managementDashboardAccessLoading,
   } = useAuth();
   const location = useLocation();
 
-  if (loading || rolesLoading) {
+  if (
+    loading ||
+    rolesLoading ||
+    (requiredRole === 'management_dashboard' && managementDashboardAccessLoading)
+  ) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />

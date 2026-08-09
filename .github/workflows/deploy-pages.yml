@@ -136,7 +136,9 @@ jobs:
             editor/analytics
             editor/profile
             staff
+            staff/dashboard
             clinic
+            clinic/dashboard
             clinic/queue
             clinic/appointments
             clinic/video-calls

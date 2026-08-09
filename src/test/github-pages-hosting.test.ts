@@ -24,6 +24,7 @@ describe("GitHub Pages hosting", () => {
 
   const fixedClinicRoutes = [
     "clinic",
+    "clinic/dashboard",
     "clinic/queue",
     "clinic/appointments",
     "clinic/video-calls",
@@ -56,6 +57,7 @@ describe("GitHub Pages hosting", () => {
     "clinic/settings/procurement-rules",
     "clinic/voided",
     "staff",
+    "staff/dashboard",
     "admin",
   ];
 
