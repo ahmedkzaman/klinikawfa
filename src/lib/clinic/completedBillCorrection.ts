@@ -88,6 +88,25 @@ export function canCorrectCompletedBill(role: string | null): boolean {
   return role !== null && ALLOWED.has(role as CompletedBillCorrectionRole);
 }
 
+export const DIRECT_SALE_CASE_NOTE = 'Direct Sale (OTC counter sale)';
+
+export interface CompletedBillCorrectionConsultationStatus {
+  status?: string | null;
+  case_note?: string | null;
+  doctor_id?: string | null;
+}
+
+export function isCompletedForBillCorrection(
+  consultation: CompletedBillCorrectionConsultationStatus | null | undefined,
+): boolean {
+  if (!consultation) return false;
+  if (consultation.status === 'completed') return true;
+
+  return consultation.status === 'in_progress'
+    && consultation.case_note === DIRECT_SALE_CASE_NOTE
+    && (consultation.doctor_id === null || consultation.doctor_id === undefined);
+}
+
 /** Maps known historical labels to the controlled vocabulary accepted by the correction RPC. */
 export function normalizeCompletedBillPaymentMethod(value: string): string | null {
   const normalized = value.trim().toLowerCase();
