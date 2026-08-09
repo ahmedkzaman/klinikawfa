@@ -15,7 +15,7 @@ import { usePayments } from '@/hooks/clinic/usePayments';
 import { useCompletedBillCorrectionHistory } from '@/hooks/clinic/useCompletedBillCorrection';
 import { CompletedBillCorrectionDialog } from '@/components/clinic/visit/CompletedBillCorrectionDialog';
 import { useAuth } from '@/contexts/AuthContext';
-import { canCorrectCompletedBill } from '@/lib/clinic/completedBillCorrection';
+import { canCorrectCompletedBill, isCompletedForBillCorrection } from '@/lib/clinic/completedBillCorrection';
 import { cn } from '@/lib/utils';
 import { toMalayTitleCase } from '@/lib/textCase';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
@@ -46,7 +46,7 @@ export default function VisitDetail() {
   const { data: payments = [], refetch: refetchPayments } = usePayments(queueEntryId);
   const canCorrect =
     entry?.clinic_status === 'completed' &&
-    consultation?.status === 'completed' &&
+    isCompletedForBillCorrection(consultation) &&
     canCorrectCompletedBill(role);
   const canReadCorrectionHistory = canCorrectCompletedBill(role);
   const correctionHistory = useCompletedBillCorrectionHistory(

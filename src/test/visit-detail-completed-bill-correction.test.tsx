@@ -4,7 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const auth = vi.hoisted(() => ({ role: 'ops_staff' as string | null }));
 const corrected = vi.hoisted(() => ({ value: false }));
-const visit = vi.hoisted(() => ({ queueStatus: 'completed', consultationStatus: 'completed' }));
+const visit = vi.hoisted(() => ({
+  queueStatus: 'completed',
+  consultationStatus: 'completed',
+  caseNote: null as string | null,
+}));
 const history = vi.hoisted(() => ({
   data: [] as Array<{ id: string; actorId: string; createdAt: string; reason: string; beforeTotal: number; afterTotal: number }>,
   isLoading: false,
@@ -32,7 +36,14 @@ vi.mock('@/hooks/clinic/useQueueEntries', () => ({
   }),
 }));
 vi.mock('@/hooks/clinic/useConsultations', () => ({
-  useConsultation: () => ({ data: { id: 'consultation-1', status: visit.consultationStatus, diagnosis_text: null } }),
+  useConsultation: () => ({
+    data: {
+      id: 'consultation-1',
+      status: visit.consultationStatus,
+      diagnosis_text: null,
+      case_note: visit.caseNote,
+    },
+  }),
 }));
 vi.mock('@/hooks/clinic/useConsultationItems', () => ({
   useConsultationItems: () => ({
@@ -87,6 +98,7 @@ describe('completed visit bill correction', () => {
     corrected.value = false;
     visit.queueStatus = 'completed';
     visit.consultationStatus = 'completed';
+    visit.caseNote = null;
     history.data = [];
     history.isLoading = false;
     history.isError = false;
@@ -127,6 +139,15 @@ describe('completed visit bill correction', () => {
     visit.consultationStatus = 'with_doctor';
     renderVisit();
     expect(screen.queryByRole('button', { name: 'Edit completed bill' })).not.toBeInTheDocument();
+  });
+
+  it('shows completed bill correction for a legacy completed direct-sale OTC consultation', () => {
+    visit.consultationStatus = 'in_progress';
+    visit.caseNote = 'Direct Sale (OTC counter sale)';
+
+    renderVisit();
+
+    expect(screen.getByRole('button', { name: 'Edit completed bill' })).toBeVisible();
   });
 
   it('refreshes corrected billing values without changing completed status badges', async () => {
