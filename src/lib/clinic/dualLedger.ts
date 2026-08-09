@@ -7,6 +7,7 @@ export type DualLedgerSettlement =
 export type PatientPayment = number | {
   amount: number;
   deletedAt?: string | null;
+  paymentMethod?: string | null;
 };
 
 export interface PanelClaimLedgerInput {
@@ -20,6 +21,7 @@ export interface DualLedgerInput {
   patientPayments?: PatientPayment[];
   expectsPanel?: boolean;
   panelClaim?: PanelClaimLedgerInput | null;
+  panelPayments?: number;
 }
 
 export interface DualLedgerState {
@@ -46,14 +48,19 @@ export function calculateDualLedger(input: DualLedgerInput): DualLedgerState {
   const billedTotal = Math.max(money(input.billedTotal), 0);
   const patientPaid = money((input.patientPayments ?? []).reduce((sum, payment) => {
     if (typeof payment === 'number') return sum + money(payment);
-    return payment.deletedAt ? sum : sum + money(payment.amount);
+    return payment.deletedAt || String(payment.paymentMethod ?? '').toLowerCase() === 'panel'
+      ? sum
+      : sum + money(payment.amount);
   }, 0));
 
   const status = String(input.panelClaim?.status ?? '').toLowerCase();
   const hasActiveClaim = Boolean(input.panelClaim) && ACTIVE_CLAIM_STATUSES.has(status);
   const panelCovered = hasActiveClaim ? Math.max(money(input.panelClaim?.amount), 0) : 0;
   const panelReceived = hasActiveClaim
-    ? Math.min(Math.max(money(input.panelClaim?.receivedAmount), 0), panelCovered)
+    ? Math.min(
+      Math.max(money(input.panelClaim?.receivedAmount) + money(input.panelPayments), 0),
+      panelCovered,
+    )
     : 0;
   const attributed = money(patientPaid + panelCovered);
   const excessAttribution = Math.max(money(attributed - billedTotal), 0);

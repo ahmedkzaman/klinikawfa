@@ -96,9 +96,12 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
       const patient = qe?.patients ?? null;
       const panelAmount = activeClaims.reduce((sum, claim) => sum + Number(claim.amount ?? 0), 0);
       const panelReceived = activeClaims.reduce((sum, claim) => sum + Number(claim.received_amount ?? 0), 0);
+      const panelPayments = (queuePayments ?? []).reduce((sum, payment) =>
+        sum + (pay.payment_method === 'panel' ? Number(payment.amount ?? 0) : 0), 0);
       const ledger = calculateDualLedger({
         billedTotal: subtotal,
-        patientPayments: (queuePayments ?? []).map((payment) => Number(payment.amount ?? 0)),
+        patientPayments: (queuePayments ?? []).map((payment) => ({ amount: Number(payment.amount ?? 0), paymentMethod: pay.payment_method })),
+        panelPayments,
         expectsPanel: pay.payment_type === 'panel' || pay.payment_type === 'insurance',
         panelClaim: activeClaims.length ? {
           amount: panelAmount,

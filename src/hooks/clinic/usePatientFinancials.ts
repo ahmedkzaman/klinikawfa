@@ -68,7 +68,7 @@ export function usePatientOutstanding(patientId: string | undefined | null) {
         queueEntryIds.length
           ? supabase
               .from('payments')
-              .select('queue_entry_id, amount, payment_type')
+              .select('queue_entry_id, amount, payment_type, payment_method')
               .in('queue_entry_id', queueEntryIds)
               .is('deleted_at', null)
           : Promise.resolve({ data: [], error: null }),
@@ -103,11 +103,16 @@ export function usePatientOutstanding(patientId: string | undefined | null) {
       }
 
       const paidByEntry = new Map<string, number>();
+      const panelPaidViaPaymentsByEntry = new Map<string, number>();
       for (const p of paymentsRes.data ?? []) {
         const entryId = p.queue_entry_id as string | null;
         if (!entryId) continue;
         const amt = Number(p.amount ?? 0);
-        paidByEntry.set(entryId, (paidByEntry.get(entryId) ?? 0) + amt);
+        if (p.payment_method === 'panel') {
+          panelPaidViaPaymentsByEntry.set(entryId, (panelPaidViaPaymentsByEntry.get(entryId) ?? 0) + amt);
+        } else {
+          paidByEntry.set(entryId, (paidByEntry.get(entryId) ?? 0) + amt);
+        }
       }
 
       // Per-visit panel coverage and disbursement (only count "active" claims
@@ -149,6 +154,7 @@ export function usePatientOutstanding(patientId: string | undefined | null) {
             receivedAmount: panelReceived,
             status: 'pending',
           } : null,
+          panelPayments: panelPaidViaPaymentsByEntry.get(entryId) ?? 0,
         });
         const visitPatientOut = state.patientOutstanding;
         const visitPanelOut = state.panelOutstanding;

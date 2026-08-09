@@ -77,7 +77,11 @@ export default function VisitDetail() {
     patientPayments: payments.map((payment) => ({
       amount: Number(payment.amount ?? 0),
       deletedAt: payment.deleted_at,
+      paymentMethod: payment.payment_method,
     })),
+    panelPayments: payments
+      .filter((payment) => payment.payment_method === 'panel')
+      .reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0),
     expectsPanel:
       entry?.payment_type === 'panel' ||
       entry?.payment_type === 'insurance' ||

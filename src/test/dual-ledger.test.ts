@@ -88,4 +88,23 @@ describe('calculateDualLedger', () => {
       settlement: 'settled',
     });
   });
+
+  it('does not count a panel remittance as patient co-payment', () => {
+    expect(calculateDualLedger({
+      billedTotal: 103,
+      patientPayments: [
+        { amount: 93, paymentMethod: 'panel' },
+        { amount: 10, paymentMethod: 'qr_pay' },
+      ],
+      expectsPanel: true,
+      panelClaim: { amount: 103, receivedAmount: 0, status: 'submitted' },
+      panelPayments: 93,
+    })).toMatchObject({
+      patientPaid: 10,
+      panelReceived: 93,
+      patientOutstanding: 0,
+      panelOutstanding: 10,
+      settlement: 'needs_attention',
+    });
+  });
 });

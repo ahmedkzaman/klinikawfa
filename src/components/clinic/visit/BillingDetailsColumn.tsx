@@ -117,7 +117,8 @@ export function BillingDetailsColumn({
   const total = afterDiscount * (1 + taxPct / 100);
   const ledger = useMemo(() => calculateDualLedger({
     billedTotal: total,
-    patientPayments: payments.map((payment) => ({ amount: Number(payment.amount ?? 0), deletedAt: payment.deleted_at })),
+    patientPayments: payments.map((payment) => ({ amount: Number(payment.amount ?? 0), deletedAt: payment.deleted_at, paymentMethod: payment.payment_method })),
+    panelPayments: payments.filter((payment) => payment.payment_method === 'panel').reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0),
     expectsPanel,
     panelClaim: panelClaim ? { amount: panelClaim.amount, receivedAmount: panelClaim.receivedAmount, status: panelClaim.status } : null,
   }), [expectsPanel, panelClaim, payments, total]);

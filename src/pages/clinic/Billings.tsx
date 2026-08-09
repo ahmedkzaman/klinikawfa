@@ -45,6 +45,7 @@ interface LedgerEntry {
   clinicStatus: string;
   subtotal: number;
   paid: number;
+  panelPayments: number;
   outstanding: number;
   creditDue: number;
   panelCovered: number;
@@ -208,7 +209,8 @@ export default function Billings() {
         | 'insurance';
 
       if (existing) {
-        existing.paid += amt;
+        if (p.payment_method === 'panel') existing.panelPayments += amt;
+        else existing.paid += amt;
         existing.latestPaymentType = pType;
         existing.latestMethod = p.payment_method ?? existing.latestMethod;
         existing.latestPaymentId = p.id;
@@ -221,7 +223,8 @@ export default function Billings() {
           createdAt: qe.created_at,
           clinicStatus: qe.clinic_status,
           subtotal: itemsByQueue[qe.id] ?? 0,
-          paid: amt,
+          paid: p.payment_method === 'panel' ? 0 : amt,
+          panelPayments: p.payment_method === 'panel' ? amt : 0,
           outstanding: 0,
           creditDue: 0,
           panelCovered: 0,
@@ -243,6 +246,7 @@ export default function Billings() {
       const state = calculateDualLedger({
         billedTotal: e.subtotal,
         patientPayments: [e.paid],
+        panelPayments: e.panelPayments,
         expectsPanel,
         panelClaim: claim ? { amount: claim.amount, receivedAmount: claim.receivedAmount, status: claim.status } : null,
       });
