@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import type { ConsultationItemRow, PaymentRow } from '@/types/clinic';
 
@@ -14,12 +15,14 @@ const item = { id: 'item-1', item_name: 'Consultation', quantity: 1, price: 100,
 
 function renderBilling(amount: number, billingItem = item) {
   render(
-    <BillingDetailsColumn
-      queueEntryId="queue-1"
-      consultationId="consultation-1"
-      items={[billingItem]}
-      payments={[{ id: 'payment-1', amount, payment_method: 'cash', payment_type: 'self_pay', created_at: '2026-07-28T09:00:00.000Z' } as PaymentRow]}
-    />,
+    <MemoryRouter>
+      <BillingDetailsColumn
+        queueEntryId="queue-1"
+        consultationId="consultation-1"
+        items={[billingItem]}
+        payments={[{ id: 'payment-1', amount, payment_method: 'cash', payment_type: 'self_pay', created_at: '2026-07-28T09:00:00.000Z' } as PaymentRow]}
+      />
+    </MemoryRouter>,
   );
 }
 
