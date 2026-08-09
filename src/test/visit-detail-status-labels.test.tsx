@@ -41,6 +41,10 @@ vi.mock('@/hooks/clinic/usePayments', () => ({
   usePayments: () => ({ data: [], refetch: vi.fn() }),
 }));
 
+vi.mock('@/hooks/clinic/useVisitPanelClaim', () => ({
+  useVisitPanelClaim: () => ({ data: null, refetch: vi.fn() }),
+}));
+
 vi.mock('@/hooks/clinic/useCompletedBillCorrection', () => ({
   useCompletedBillCorrectionHistory: () => ({
     data: [],

@@ -61,6 +61,9 @@ vi.mock('@/hooks/clinic/usePayments', () => ({
     refetch: refetchPayments,
   }),
 }));
+vi.mock('@/hooks/clinic/useVisitPanelClaim', () => ({
+  useVisitPanelClaim: () => ({ data: null, refetch: vi.fn() }),
+}));
 vi.mock('@/components/clinic/StatusBadge', () => ({ StatusBadge: ({ status }: { status: string }) => <span>{status}</span> }));
 vi.mock('@/components/clinic/visit/VisitDetailsColumn', () => ({ VisitDetailsColumn: () => null }));
 vi.mock('@/components/clinic/visit/AttachmentsCard', () => ({ AttachmentsCard: () => null }));

@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 
 export interface VisitPanelClaim {
   amount: number;
@@ -12,6 +11,9 @@ export function useVisitPanelClaim(queueEntryId?: string | null) {
     queryKey: ['visit-panel-claim', queueEntryId ?? ''],
     enabled: Boolean(queueEntryId),
     queryFn: async () => {
+      // Load the client only when the query actually runs. This keeps the
+      // read-only visit component testable without requiring browser env vars.
+      const { supabase } = await import('@/integrations/supabase/client');
       const { data, error } = await supabase
         .from('panel_claims')
         .select('amount, received_amount, status')
