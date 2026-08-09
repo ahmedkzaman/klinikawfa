@@ -22,7 +22,9 @@ describe('consultation clinical attachments', () => {
     expect(consultationStrip).toContain('accept="image/*,application/pdf"');
     expect(consultationStrip).toContain('Clinical attachment');
     expect(consultationStrip).toContain('canEdit &&');
-    expect(consultationDetail).toContain('canEdit={canEditWorkspace || canUploadClinicalAttachment}');
+    expect(consultationDetail).toMatch(
+      /canEdit=\{\s*canEditWorkspace\s*\|\|\s*canUploadClinicalAttachment\s*\}/,
+    );
   });
 
   it('shows the same visit attachments in the completed visit panel', () => {
