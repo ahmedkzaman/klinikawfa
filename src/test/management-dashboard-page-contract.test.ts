@@ -34,4 +34,10 @@ describe('management dashboard page contract', () => {
     expect(settings).toContain('View management dashboard');
     expect(layout).toMatch(/label: 'Insight',[\s\S]*adminOnly: true/);
   });
+
+  it('uses the KotaSAS clinic name in the clinic portal shell', () => {
+    const layout = readFileSync('src/components/clinic/ClinicLayout.tsx', 'utf8');
+    expect(layout).toContain('Klinik Awfa, Kotasas');
+    expect(layout).not.toContain('Klinik Awfa Clinic');
+  });
 });

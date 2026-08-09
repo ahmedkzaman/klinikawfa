@@ -140,7 +140,7 @@ export function ClinicLayout() {
         <div className="px-4 py-4 border-b border-slate-100">
           <Link to="/clinic/queue" className="flex items-center gap-2">
             <img src={logoKlinikAwfa} alt="Klinik Awfa" className="h-8 w-auto" />
-            <span className="font-semibold text-sm text-slate-800">Klinik Awfa Clinic</span>
+            <span className="font-semibold text-sm text-slate-800">Klinik Awfa, Kotasas</span>
           </Link>
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -194,7 +194,7 @@ export function ClinicLayout() {
               onClick={() => setMobileOpen(false)}
             >
               <img src={logoKlinikAwfa} alt="Klinik Awfa" className="h-8 w-auto" />
-              <span className="font-semibold text-sm text-slate-800">Klinik Awfa Clinic</span>
+              <span className="font-semibold text-sm text-slate-800">Klinik Awfa, Kotasas</span>
             </Link>
           </div>
           <div className="flex-1 overflow-y-auto">
