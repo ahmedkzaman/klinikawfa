@@ -30,6 +30,13 @@ describe('consultation date browsing', () => {
     );
   });
 
+  it('keeps live consultation carry-over bounded so imported history cannot flood today', () => {
+    expect(queueSource).toContain('CONSULTATION_CARRY_OVER_DAYS');
+    expect(queueSource).not.toContain(
+      '`created_at.gte.${start},clinic_status.in.(${ACTIVE_STATUSES.join(",")})`',
+    );
+  });
+
   it('opens the dated list to staff without removing the locum live workflow', () => {
     expect(appSource).toMatch(
       /path="consultation"[\s\S]*?requiredRole="any_staff"/,

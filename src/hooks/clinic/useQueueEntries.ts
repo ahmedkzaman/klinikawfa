@@ -9,6 +9,7 @@ const QUEUE_QUERY_KEY = ["clinic", "queue-entries"] as const;
 const CONSULT_QUEUE_QUERY_KEY = ["clinic", "consultation-queue-entries"] as const;
 const CANCELLED_TODAY_QUERY_KEY = ["clinic", "queue-entries", "cancelled-today"] as const;
 const COMPLETED_TODAY_QUERY_KEY = ["clinic", "queue-entries", "completed-today"] as const;
+export const CONSULTATION_CARRY_OVER_DAYS = 30;
 let queueRealtimeSubscriberId = 0;
 
 export function dateRangeForLocalDate(date: string) {
@@ -32,6 +33,12 @@ export function todayInputValue() {
 export function createQueueRealtimeChannelName() {
   queueRealtimeSubscriberId += 1;
   return `clinic-queue-entries-sync-${queueRealtimeSubscriberId}`;
+}
+
+export function consultationCarryOverStartForLocalDate(date: string) {
+  const start = new Date(`${date}T00:00:00`);
+  start.setDate(start.getDate() - CONSULTATION_CARRY_OVER_DAYS);
+  return start.toISOString();
 }
 
 async function attachInsuranceProviderDirectory(
@@ -147,28 +154,55 @@ export function useConsultationQueueEntries(selectedDate = todayInputValue()) {
     queryKey: [...CONSULT_QUEUE_QUERY_KEY, selectedDate],
     queryFn: async () => {
       const { start, end } = dateRangeForLocalDate(selectedDate);
-      let queueQuery = supabase
-        .from("queue_entries")
-        .select(
-          `
-          *,
-          patients ( * ),
-          doctors:assigned_doctor_id ( id, name, avatar_url ),
-          rooms:assigned_room_id ( id, label )
-        `,
-        )
-        .is("deleted_at", null);
+      const buildQuery = () =>
+        supabase
+          .from("queue_entries")
+          .select(
+            `
+            *,
+            patients ( * ),
+            doctors:assigned_doctor_id ( id, name, avatar_url ),
+            rooms:assigned_room_id ( id, label )
+          `,
+          )
+          .is("deleted_at", null);
 
-      queueQuery =
-        selectedDate === todayInputValue()
-          ? queueQuery.or(
-              `created_at.gte.${start},clinic_status.in.(${ACTIVE_STATUSES.join(",")})`,
-            )
-          : queueQuery.gte("created_at", start).lt("created_at", end);
+      if (selectedDate === todayInputValue()) {
+        const carryOverStart = consultationCarryOverStartForLocalDate(selectedDate);
+        const [todayResult, carryOverResult] = await Promise.all([
+          buildQuery()
+            .gte("created_at", start)
+            .lt("created_at", end)
+            .order("created_at", { ascending: true }),
+          buildQuery()
+            .in("clinic_status", [...ACTIVE_STATUSES])
+            .gte("created_at", carryOverStart)
+            .lt("created_at", start)
+            .order("created_at", { ascending: true }),
+        ]);
 
-      const { data, error } = await queueQuery.order("created_at", {
-        ascending: true,
-      });
+        if (todayResult.error) throw todayResult.error;
+        if (carryOverResult.error) throw carryOverResult.error;
+
+        const rowsById = new Map<string, unknown>();
+        for (const row of [...(carryOverResult.data ?? []), ...(todayResult.data ?? [])]) {
+          const id = (row as { id?: string }).id;
+          if (id) rowsById.set(id, row);
+        }
+
+        const rows = [...rowsById.values()].sort((a, b) => {
+          const aTime = new Date((a as { created_at?: string }).created_at ?? 0).getTime();
+          const bTime = new Date((b as { created_at?: string }).created_at ?? 0).getTime();
+          return aTime - bTime;
+        });
+
+        return attachInsuranceProviderDirectory(rows);
+      }
+
+      const { data, error } = await buildQuery()
+        .gte("created_at", start)
+        .lt("created_at", end)
+        .order("created_at", { ascending: true });
 
       if (error) throw error;
       return attachInsuranceProviderDirectory(data ?? []);
