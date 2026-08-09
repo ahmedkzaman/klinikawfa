@@ -98,6 +98,12 @@ export interface ManagementDashboardReport {
     averageWaitMinutes: number | null;
     waitMeasuredVisits: number;
     daily: Array<{ date: string; pax: number; averageWaitMinutes: number | null; measuredVisits: number }>;
+    doctorRosterHours: {
+      totalHours: number;
+      doctorCount: number;
+      shiftCount: number;
+      rows: Array<{ doctorId: string | null; doctorName: string; totalHours: number; shiftCount: number }>;
+    };
   };
   financial: {
     grossRevenue: number;
@@ -137,7 +143,13 @@ export interface ManagementDashboardReport {
 
 const EMPTY_REPORT: ManagementDashboardReport = {
   period: { monthStart: '', asOfDate: '', timezone: 'Asia/Kuala_Lumpur' },
-  operations: { totalPax: 0, averageWaitMinutes: null, waitMeasuredVisits: 0, daily: [] },
+  operations: {
+    totalPax: 0,
+    averageWaitMinutes: null,
+    waitMeasuredVisits: 0,
+    daily: [],
+    doctorRosterHours: { totalHours: 0, doctorCount: 0, shiftCount: 0, rows: [] },
+  },
   financial: {
     grossRevenue: 0, patientCollections: 0, panelCollections: 0, collections: 0,
     revenueByDoctor: [], approvedOtHours: 0, approvedOtPay: 0,

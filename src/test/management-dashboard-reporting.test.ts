@@ -5,6 +5,10 @@ const sql = readFileSync(
   'supabase/migrations/20260809091939_management_dashboard_reporting.sql',
   'utf8',
 );
+const doctorRosterHoursSql = readFileSync(
+  'supabase/migrations/20260809141841_add_doctor_roster_hours_to_management_dashboard.sql',
+  'utf8',
+);
 
 describe('management dashboard reporting contract', () => {
   it('uses the shared financial facts and Kuala Lumpur date boundaries', () => {
@@ -42,5 +46,18 @@ describe('management dashboard reporting contract', () => {
     expect(sql).toContain("'Unassigned'");
     expect(sql).toContain("'manual'");
     expect(sql).toContain("'catalogue'");
+  });
+
+  it('returns doctor roster minimum hours from saved doctor roster shifts', () => {
+    expect(doctorRosterHoursSql).toContain('doctor_roster_hours');
+    expect(doctorRosterHoursSql).toContain('public.saved_rosters');
+    expect(doctorRosterHoursSql).toContain("sr.roster_type = 'doctor'");
+    expect(doctorRosterHoursSql).toContain("'doctorRosterHours'");
+    expect(doctorRosterHoursSql).toContain("'totalHours'");
+    expect(doctorRosterHoursSql).toContain("'doctorCount'");
+    expect(doctorRosterHoursSql).toContain("'shiftCount'");
+    expect(doctorRosterHoursSql).toMatch(/WHEN shift_key IN \('DOC_S1', 'shift1'\) THEN 5/i);
+    expect(doctorRosterHoursSql).toMatch(/WHEN shift_key IN \('DOC_S2', 'shift2'\) THEN 5/i);
+    expect(doctorRosterHoursSql).toMatch(/WHEN shift_key IN \('DOC_S3', 'shift3'\) THEN 4/i);
   });
 });

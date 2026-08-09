@@ -40,4 +40,25 @@ describe('management dashboard page contract', () => {
     expect(layout).toContain('Klinik Awfa, Kotasas');
     expect(layout).not.toContain('Klinik Awfa Clinic');
   });
+
+  it('shows doctor roster hours and keeps doctor roster shift durations at 5/5/4', () => {
+    const dashboardPanel = readFileSync(
+      'src/components/clinic/dashboard/FinancialOperationsPanel.tsx',
+      'utf8',
+    );
+    const dashboardTypes = readFileSync('src/lib/clinic/managementDashboard.ts', 'utf8');
+    const editableRoster = readFileSync(
+      'src/components/staff/roster/DoctorRosterPanel.tsx',
+      'utf8',
+    );
+
+    expect(dashboardPanel).toContain('Doctor roster hours');
+    expect(dashboardPanel).toContain('doctorRosterHours');
+    expect(dashboardTypes).toContain('doctorRosterHours');
+    expect(editableRoster).toContain('const SHIFT1_HOURS = 5');
+    expect(editableRoster).toContain('const SHIFT2_HOURS = 5');
+    expect(editableRoster).toContain('const SHIFT3_HOURS = 4');
+    expect(editableRoster).not.toContain('const SHIFT1_HOURS = 6');
+    expect(editableRoster).not.toContain('const SHIFT2_HOURS = 6');
+  });
 });

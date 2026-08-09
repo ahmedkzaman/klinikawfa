@@ -28,8 +28,8 @@ interface RosterCell {
 }
 
 interface DoctorDayRoster {
-  shift1: RosterCell | null; // 8am-2pm, 6h
-  shift2: RosterCell | null; // 2pm-8pm, 6h
+  shift1: RosterCell | null; // 8am-1pm, 5h
+  shift2: RosterCell | null; // 2pm-7pm, 5h
   shift3: RosterCell | null; // 8pm-12am, 4h
 }
 
@@ -47,10 +47,10 @@ interface RosterSettings {
   };
 }
 
-const SHIFT1_HOURS = 6;
-const SHIFT2_HOURS = 6;
+const SHIFT1_HOURS = 5;
+const SHIFT2_HOURS = 5;
 const SHIFT3_HOURS = 4;
-const DAYTIME_HOURS = SHIFT1_HOURS + SHIFT2_HOURS; // 12
+const DAYTIME_HOURS = SHIFT1_HOURS + SHIFT2_HOURS; // 10
 const WEEKLY_MIN = 45;
 const WEEKLY_MAX = 45; // OT threshold changed to 45h
 const MAX_CONSECUTIVE_DAYS = 6;

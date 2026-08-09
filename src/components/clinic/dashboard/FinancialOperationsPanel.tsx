@@ -28,6 +28,33 @@ export function FinancialOperationsPanel({ report, metrics, canEdit, onEdit }: {
           <div className="rounded-xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Approved OT</p><p className="mt-1 text-lg font-bold">{report.financial.approvedOtHours} hours</p><p className="text-xs text-slate-500">{rm(report.financial.approvedOtPay)} aggregate pay</p></div>
           <div className="rounded-xl bg-slate-50 p-4"><div className="flex justify-between"><p className="text-xs text-slate-500">Total locum pay</p>{canEdit && <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onEdit('locum_pay')} aria-label="Edit total locum pay"><Pencil className="h-3.5 w-3.5" /></Button>}</div><p className="mt-1 text-lg font-bold">{byKey.get('locum_pay')?.actual_numeric == null ? 'Not entered' : rm(byKey.get('locum_pay')!.actual_numeric!)}</p><Badge variant="outline">Manual aggregate</Badge></div>
         </div>
+        <div className="rounded-xl border bg-white p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs text-slate-500">Doctor roster hours</p>
+              <p className="mt-1 text-xl font-bold">
+                {report.operations.doctorRosterHours.totalHours} hours
+              </p>
+              <p className="text-xs text-slate-500">
+                {report.operations.doctorRosterHours.shiftCount} shift(s) across{' '}
+                {report.operations.doctorRosterHours.doctorCount} doctor(s)
+              </p>
+            </div>
+            <Badge variant="outline">Roster Dr: S1 5h, S2 5h, S3 4h</Badge>
+          </div>
+          {report.operations.doctorRosterHours.rows.length > 0 && (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {report.operations.doctorRosterHours.rows.slice(0, 6).map((doctor) => (
+                <div key={doctor.doctorId ?? doctor.doctorName} className="rounded-lg bg-slate-50 px-3 py-2">
+                  <p className="truncate text-sm font-medium">{doctor.doctorName}</p>
+                  <p className="text-xs text-slate-500">
+                    {doctor.totalHours} hours - {doctor.shiftCount} shift(s)
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <div>
           <h3 className="mb-2 text-sm font-semibold">Revenue by doctor</h3>
           {report.financial.revenueByDoctor.length === 0 ? <p className="text-sm text-slate-500">No completed visit revenue in this month.</p> : (
