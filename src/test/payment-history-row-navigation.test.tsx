@@ -53,7 +53,7 @@ const payments = [
   },
 ] as PaymentRow[];
 
-function renderBilling() {
+function renderBilling(focusedPaymentId?: string | null) {
   render(
     <MemoryRouter>
       <BillingDetailsColumn
@@ -61,6 +61,7 @@ function renderBilling() {
         consultationId="consultation-1"
         items={items}
         payments={payments}
+        focusedPaymentId={focusedPaymentId}
       />
     </MemoryRouter>,
   );
@@ -80,5 +81,15 @@ describe('payment history row navigation', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /print receipt/i })[0]);
 
     expect(screen.getByText('Receipt dialog payment-1')).toBeVisible();
+  });
+
+  it('marks only the selected payment row', () => {
+    renderBilling('payment-2');
+
+    const selected = screen.getByText('Selected payment').closest('[aria-current="true"]');
+
+    expect(selected).toBeTruthy();
+    expect(selected).toHaveTextContent('RM 93.00');
+    expect(screen.getAllByText('Selected payment')).toHaveLength(1);
   });
 });

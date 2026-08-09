@@ -41,6 +41,7 @@ interface Props {
   consultationId: string | null;
   items: ConsultationItemRow[];
   payments: PaymentRow[];
+  focusedPaymentId?: string | null;
   panelClaim?: VisitPanelClaim | null;
   expectsPanel?: boolean;
   completeVisitOnPayment?: boolean;
@@ -61,6 +62,7 @@ export function BillingDetailsColumn({
   consultationId,
   items,
   payments,
+  focusedPaymentId = null,
   panelClaim = null,
   expectsPanel = false,
   completeVisitOnPayment = false,
@@ -313,10 +315,15 @@ export function BillingDetailsColumn({
               {payments.map((p) => {
                 const paymentDate = format(new Date(p.created_at), 'd MMM, h:mm a');
                 const paymentAmount = Number(p.amount ?? 0);
+                const isFocused = focusedPaymentId === p.id;
                 return (
                 <div
                   key={p.id}
-                  className="px-4 py-2.5 flex items-center gap-3"
+                  className={cn(
+                    'px-4 py-2.5 flex items-center gap-3',
+                    isFocused && 'bg-amber-50/80 ring-1 ring-inset ring-amber-300',
+                  )}
+                  aria-current={isFocused ? 'true' : undefined}
                 >
                   <Link
                     to={paymentVisitPath(queueEntryId, p.id)}
@@ -342,6 +349,11 @@ export function BillingDetailsColumn({
                       <div className="text-[11px] text-muted-foreground mt-0.5">
                         {paymentDate}
                       </div>
+                      {isFocused && (
+                        <div className="text-[11px] font-semibold text-amber-700 mt-1">
+                          Selected payment
+                        </div>
+                      )}
                     </div>
                     <div className="text-sm font-medium tabular-nums text-foreground">
                       RM {paymentAmount.toFixed(2)}

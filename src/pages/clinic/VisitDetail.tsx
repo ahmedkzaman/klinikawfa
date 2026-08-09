@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import { usePayments } from '@/hooks/clinic/usePayments';
 import { useCompletedBillCorrectionHistory } from '@/hooks/clinic/useCompletedBillCorrection';
 import { useVisitPanelClaim } from '@/hooks/clinic/useVisitPanelClaim';
 import { calculateDualLedger } from '@/lib/clinic/dualLedger';
+import { parsePaymentVisitLocation } from '@/lib/clinic/paymentHistoryNavigation';
 import { CompletedBillCorrectionDialog } from '@/components/clinic/visit/CompletedBillCorrectionDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { canCorrectCompletedBill, isCompletedForBillCorrection } from '@/lib/clinic/completedBillCorrection';
@@ -38,6 +39,7 @@ import {
 export default function VisitDetail() {
   const { queueEntryId } = useParams<{ queueEntryId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { role } = useAuth();
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [, setBillingRevision] = useState(0);
@@ -47,6 +49,10 @@ export default function VisitDetail() {
   const { data: items = [], refetch: refetchItems } = useConsultationItems(consultation?.id);
   const { data: payments = [], refetch: refetchPayments } = usePayments(queueEntryId);
   const { data: panelClaim = null, refetch: refetchPanelClaim } = useVisitPanelClaim(queueEntryId);
+  const { paymentId: focusedPaymentId } = useMemo(
+    () => parsePaymentVisitLocation(location.search),
+    [location.search],
+  );
   const canCorrect =
     entry?.clinic_status === 'completed' &&
     isCompletedForBillCorrection(consultation) &&
@@ -240,6 +246,7 @@ export default function VisitDetail() {
             consultationId={consultation?.id ?? null}
             items={items}
             payments={payments}
+            focusedPaymentId={focusedPaymentId}
             panelClaim={panelClaim}
             expectsPanel={
               entry.payment_type === 'panel' ||
