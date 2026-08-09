@@ -67,6 +67,7 @@ vi.mock('@/hooks/clinic/useVisitPanelClaim', () => ({
 vi.mock('@/components/clinic/StatusBadge', () => ({ StatusBadge: ({ status }: { status: string }) => <span>{status}</span> }));
 vi.mock('@/components/clinic/visit/VisitDetailsColumn', () => ({ VisitDetailsColumn: () => null }));
 vi.mock('@/components/clinic/visit/AttachmentsCard', () => ({ AttachmentsCard: () => null }));
+vi.mock('@/components/clinic/patient/PatientVisitPaymentHistory', () => ({ PatientVisitPaymentHistory: () => null }));
 vi.mock('@/components/clinic/visit/BillingDetailsColumn', () => ({
   BillingDetailsColumn: ({ items, payments }: { items: Array<{ price: number; quantity: number }>; payments: Array<{ amount: number }> }) => (
     <section aria-label="Billing">
