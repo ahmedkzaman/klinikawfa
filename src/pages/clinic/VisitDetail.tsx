@@ -17,6 +17,7 @@ import { useVisitPanelClaim } from '@/hooks/clinic/useVisitPanelClaim';
 import { calculateDualLedger } from '@/lib/clinic/dualLedger';
 import { parsePaymentVisitLocation } from '@/lib/clinic/paymentHistoryNavigation';
 import { CompletedBillCorrectionDialog } from '@/components/clinic/visit/CompletedBillCorrectionDialog';
+import { PatientVisitPaymentHistory } from '@/components/clinic/patient/PatientVisitPaymentHistory';
 import { useAuth } from '@/contexts/AuthContext';
 import { canCorrectCompletedBill, isCompletedForBillCorrection } from '@/lib/clinic/completedBillCorrection';
 import { cn } from '@/lib/utils';
@@ -181,6 +182,10 @@ export default function VisitDetail() {
             <Field
               label="Gender"
               value={patient?.gender ? String(patient.gender) : '—'}
+            />
+            <PatientVisitPaymentHistory
+              patientId={entry.patient_id}
+              currentQueueEntryId={queueEntryId}
             />
             <div className="border-t border-slate-100 pt-3 mt-3 space-y-3">
               <Field

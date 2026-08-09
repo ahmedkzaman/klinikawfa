@@ -79,6 +79,9 @@ vi.mock('@/components/clinic/visit/VisitDetailsColumn', () => ({
 vi.mock('@/components/clinic/visit/AttachmentsCard', () => ({
   AttachmentsCard: () => null,
 }));
+vi.mock('@/components/clinic/patient/PatientVisitPaymentHistory', () => ({
+  PatientVisitPaymentHistory: () => null,
+}));
 vi.mock('@/components/clinic/visit/BillingDetailsColumn', () => ({
   BillingDetailsColumn: (props: { focusedPaymentId?: string | null }) => {
     billingProps(props);
