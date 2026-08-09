@@ -78,7 +78,10 @@ export default function VisitDetail() {
       amount: Number(payment.amount ?? 0),
       deletedAt: payment.deleted_at,
     })),
-    expectsPanel: entry?.payment_type === 'panel' || entry?.payment_type === 'insurance',
+    expectsPanel:
+      entry?.payment_type === 'panel' ||
+      entry?.payment_type === 'insurance' ||
+      payments.some((payment) => payment.payment_type === 'panel' || payment.payment_type === 'insurance'),
     panelClaim: panelClaim ? {
       amount: panelClaim.amount,
       receivedAmount: panelClaim.receivedAmount,
@@ -234,7 +237,11 @@ export default function VisitDetail() {
             items={items}
             payments={payments}
             panelClaim={panelClaim}
-            expectsPanel={entry.payment_type === 'panel' || entry.payment_type === 'insurance'}
+            expectsPanel={
+              entry.payment_type === 'panel' ||
+              entry.payment_type === 'insurance' ||
+              payments.some((payment) => payment.payment_type === 'panel' || payment.payment_type === 'insurance')
+            }
           />
         </div>
       </div>
