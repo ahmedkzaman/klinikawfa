@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -10,32 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+    PostgrestVersion: "14.1"
   }
   public: {
     Tables: {
@@ -86,45 +61,48 @@ export type Database = {
       }
       appointments: {
         Row: {
+          appointment_date: string
+          appointment_time: string
           created_at: string
           id: string
           message: string | null
-          name: string
           patient_ic: string | null
+          patient_name: string
+          unit_price: number | null
+          quantity: number | null
+          total_price: number | null
+          patient_phone: string
           payment_reference: string | null
-          phone: string
-          preferred_date: string
-          preferred_time: string
           service: string
           service_slug: string | null
           status: string
           updated_at: string | null
         }
         Insert: {
+          appointment_date: string
+          appointment_time: string
           created_at?: string
           id?: string
           message?: string | null
-          name: string
           patient_ic?: string | null
+          patient_name: string
+          patient_phone: string
           payment_reference?: string | null
-          phone: string
-          preferred_date: string
-          preferred_time: string
           service: string
           service_slug?: string | null
           status?: string
           updated_at?: string | null
         }
         Update: {
+          appointment_date?: string
+          appointment_time?: string
           created_at?: string
           id?: string
           message?: string | null
-          name?: string
           patient_ic?: string | null
+          patient_name?: string
+          patient_phone?: string
           payment_reference?: string | null
-          phone?: string
-          preferred_date?: string
-          preferred_time?: string
           service?: string
           service_slug?: string | null
           status?: string
@@ -501,6 +479,36 @@ export type Database = {
         }
         Relationships: []
       }
+      blog_tags: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          name_en: string
+          name_ms: string
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          name_en?: string
+          name_ms: string
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          name_en?: string
+          name_ms?: string
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       blog_post_tags: {
         Row: {
           post_id: string
@@ -553,7 +561,6 @@ export type Database = {
           title_ms: string | null
           updated_at: string
           website_editor_metadata: Json
-          website_revision: number
         }
         Insert: {
           author_id?: string | null
@@ -576,7 +583,6 @@ export type Database = {
           title_ms?: string | null
           updated_at?: string
           website_editor_metadata?: Json
-          website_revision?: number
         }
         Update: {
           author_id?: string | null
@@ -599,7 +605,6 @@ export type Database = {
           title_ms?: string | null
           updated_at?: string
           website_editor_metadata?: Json
-          website_revision?: number
         }
         Relationships: [
           {
@@ -610,36 +615,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      blog_tags: {
-        Row: {
-          created_at: string
-          created_by: string
-          id: string
-          name_en: string
-          name_ms: string
-          slug: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          created_by: string
-          id?: string
-          name_en?: string
-          name_ms: string
-          slug: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          created_by?: string
-          id?: string
-          name_en?: string
-          name_ms?: string
-          slug?: string
-          updated_at?: string
-        }
-        Relationships: []
       }
       circular_notice_acknowledgements: {
         Row: {
@@ -801,45 +776,39 @@ export type Database = {
         Row: {
           appointment_date: string
           appointment_time: string
-          checked_in_at: string | null
           created_at: string
           doctor_id: string | null
           id: string
           notes: string | null
           patient_id: string
-          queue_entry_id: string | null
-          source_appointment_id: string | null
           source_consultation_id: string | null
+          source_appointment_id: string | null
           status: Database["public"]["Enums"]["clinic_appointment_status"]
           updated_at: string
         }
         Insert: {
           appointment_date: string
           appointment_time: string
-          checked_in_at?: string | null
           created_at?: string
           doctor_id?: string | null
           id?: string
           notes?: string | null
           patient_id: string
-          queue_entry_id?: string | null
-          source_appointment_id?: string | null
           source_consultation_id?: string | null
+          source_appointment_id?: string | null
           status?: Database["public"]["Enums"]["clinic_appointment_status"]
           updated_at?: string
         }
         Update: {
           appointment_date?: string
           appointment_time?: string
-          checked_in_at?: string | null
           created_at?: string
           doctor_id?: string | null
           id?: string
           notes?: string | null
           patient_id?: string
-          queue_entry_id?: string | null
-          source_appointment_id?: string | null
           source_consultation_id?: string | null
+          source_appointment_id?: string | null
           status?: Database["public"]["Enums"]["clinic_appointment_status"]
           updated_at?: string
         }
@@ -859,17 +828,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "clinic_appointments_queue_entry_id_fkey"
-            columns: ["queue_entry_id"]
+            foreignKeyName: "clinic_appointments_source_consultation_id_fkey"
+            columns: ["source_consultation_id"]
             isOneToOne: false
-            referencedRelation: "insight_financials_view"
-            referencedColumns: ["queue_entry_id"]
-          },
-          {
-            foreignKeyName: "clinic_appointments_queue_entry_id_fkey"
-            columns: ["queue_entry_id"]
-            isOneToOne: false
-            referencedRelation: "queue_entries"
+            referencedRelation: "consultations"
             referencedColumns: ["id"]
           },
           {
@@ -877,13 +839,6 @@ export type Database = {
             columns: ["source_appointment_id"]
             isOneToOne: false
             referencedRelation: "appointments"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "clinic_appointments_source_consultation_id_fkey"
-            columns: ["source_consultation_id"]
-            isOneToOne: false
-            referencedRelation: "consultations"
             referencedColumns: ["id"]
           },
         ]
@@ -912,27 +867,6 @@ export type Database = {
           is_active?: boolean
           name?: string
           updated_at?: string
-        }
-        Relationships: []
-      }
-      clinic_document_fees: {
-        Row: {
-          amount: number
-          document_type: string
-          updated_at: string
-          updated_by: string | null
-        }
-        Insert: {
-          amount: number
-          document_type: string
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Update: {
-          amount?: number
-          document_type?: string
-          updated_at?: string
-          updated_by?: string | null
         }
         Relationships: []
       }
@@ -1162,93 +1096,42 @@ export type Database = {
           },
         ]
       }
-      clinic_role_permissions: {
-        Row: {
-          allowed: boolean
-          permission_key: string
-          role: Database["public"]["Enums"]["app_role"]
-          updated_at: string
-          updated_by: string | null
-        }
-        Insert: {
-          allowed?: boolean
-          permission_key: string
-          role: Database["public"]["Enums"]["app_role"]
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Update: {
-          allowed?: boolean
-          permission_key?: string
-          role?: Database["public"]["Enums"]["app_role"]
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Relationships: []
-      }
       clinic_services: {
         Row: {
           call_to_action: string
-          call_to_action_en: string | null
-          call_to_action_ms: string | null
           created_at: string | null
           description: string
-          description_en: string | null
-          description_ms: string | null
           hero_image_url: string | null
           id: string
           promo_video_url: string | null
           services_list: string[]
-          services_list_en: string[] | null
-          services_list_ms: string[] | null
           slug: string
           title: string
-          title_en: string | null
-          title_ms: string | null
           updated_at: string | null
-          website_revision: number
         }
         Insert: {
           call_to_action: string
-          call_to_action_en?: string | null
-          call_to_action_ms?: string | null
           created_at?: string | null
           description: string
-          description_en?: string | null
-          description_ms?: string | null
           hero_image_url?: string | null
           id?: string
           promo_video_url?: string | null
           services_list: string[]
-          services_list_en?: string[] | null
-          services_list_ms?: string[] | null
           slug: string
           title: string
-          title_en?: string | null
-          title_ms?: string | null
           updated_at?: string | null
-          website_revision?: number
         }
         Update: {
           call_to_action?: string
-          call_to_action_en?: string | null
-          call_to_action_ms?: string | null
           created_at?: string | null
           description?: string
-          description_en?: string | null
-          description_ms?: string | null
           hero_image_url?: string | null
           id?: string
           promo_video_url?: string | null
           services_list?: string[]
-          services_list_en?: string[] | null
-          services_list_ms?: string[] | null
           slug?: string
           title?: string
-          title_en?: string | null
-          title_ms?: string | null
           updated_at?: string | null
-          website_revision?: number
         }
         Relationships: []
       }
@@ -1339,155 +1222,6 @@ export type Database = {
         }
         Relationships: []
       }
-      clinic_user_permission_overrides: {
-        Row: {
-          allowed: boolean
-          permission_key: string
-          updated_at: string
-          updated_by: string
-          user_id: string
-        }
-        Insert: {
-          allowed: boolean
-          permission_key: string
-          updated_at?: string
-          updated_by: string
-          user_id: string
-        }
-        Update: {
-          allowed?: boolean
-          permission_key?: string
-          updated_at?: string
-          updated_by?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      completed_bill_correction_audit: {
-        Row: {
-          actor_id: string
-          after_state: Json
-          before_state: Json
-          consultation_id: string
-          created_at: string
-          id: string
-          queue_entry_id: string
-          reason: string
-        }
-        Insert: {
-          actor_id: string
-          after_state: Json
-          before_state: Json
-          consultation_id: string
-          created_at?: string
-          id?: string
-          queue_entry_id: string
-          reason: string
-        }
-        Update: {
-          actor_id?: string
-          after_state?: Json
-          before_state?: Json
-          consultation_id?: string
-          created_at?: string
-          id?: string
-          queue_entry_id?: string
-          reason?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "completed_bill_correction_audit_consultation_id_fkey"
-            columns: ["consultation_id"]
-            isOneToOne: false
-            referencedRelation: "consultations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "completed_bill_correction_audit_queue_entry_id_fkey"
-            columns: ["queue_entry_id"]
-            isOneToOne: false
-            referencedRelation: "insight_financials_view"
-            referencedColumns: ["queue_entry_id"]
-          },
-          {
-            foreignKeyName: "completed_bill_correction_audit_queue_entry_id_fkey"
-            columns: ["queue_entry_id"]
-            isOneToOne: false
-            referencedRelation: "queue_entries"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      completed_bill_correction_guard: {
-        Row: {
-          actor_id: string
-          backend_pid: number
-          consultation_id: string
-          transaction_id: number
-        }
-        Insert: {
-          actor_id: string
-          backend_pid: number
-          consultation_id: string
-          transaction_id: number
-        }
-        Update: {
-          actor_id?: string
-          backend_pid?: number
-          consultation_id?: string
-          transaction_id?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "completed_bill_correction_guard_consultation_id_fkey"
-            columns: ["consultation_id"]
-            isOneToOne: false
-            referencedRelation: "consultations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      consultation_approval_audit: {
-        Row: {
-          action: string
-          actor_id: string
-          actor_name: string
-          consultation_id: string
-          created_at: string
-          id: string
-          reason: string | null
-          snapshot: Json
-        }
-        Insert: {
-          action: string
-          actor_id: string
-          actor_name: string
-          consultation_id: string
-          created_at?: string
-          id?: string
-          reason?: string | null
-          snapshot?: Json
-        }
-        Update: {
-          action?: string
-          actor_id?: string
-          actor_name?: string
-          consultation_id?: string
-          created_at?: string
-          id?: string
-          reason?: string | null
-          snapshot?: Json
-        }
-        Relationships: [
-          {
-            foreignKeyName: "consultation_approval_audit_consultation_id_fkey"
-            columns: ["consultation_id"]
-            isOneToOne: false
-            referencedRelation: "consultations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       consultation_attachments: {
         Row: {
           consultation_id: string
@@ -1525,35 +1259,6 @@ export type Database = {
             columns: ["consultation_id"]
             isOneToOne: false
             referencedRelation: "consultations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      consultation_document_fee_guard: {
-        Row: {
-          actor_id: string
-          backend_pid: number
-          source_document_id: string
-          transaction_id: number
-        }
-        Insert: {
-          actor_id: string
-          backend_pid: number
-          source_document_id: string
-          transaction_id: number
-        }
-        Update: {
-          actor_id?: string
-          backend_pid?: number
-          source_document_id?: string
-          transaction_id?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "consultation_document_fee_guard_source_document_id_fkey"
-            columns: ["source_document_id"]
-            isOneToOne: false
-            referencedRelation: "consultation_documents"
             referencedColumns: ["id"]
           },
         ]
@@ -1649,8 +1354,6 @@ export type Database = {
           price_tier: string | null
           quantity: number
           service_id: string | null
-          source_document_id: string | null
-          source_document_type: string | null
           unit_cost: number
         }
         Insert: {
@@ -1679,8 +1382,6 @@ export type Database = {
           price_tier?: string | null
           quantity?: number
           service_id?: string | null
-          source_document_id?: string | null
-          source_document_type?: string | null
           unit_cost?: number
         }
         Update: {
@@ -1709,8 +1410,6 @@ export type Database = {
           price_tier?: string | null
           quantity?: number
           service_id?: string | null
-          source_document_id?: string | null
-          source_document_type?: string | null
           unit_cost?: number
         }
         Relationships: [
@@ -1775,6 +1474,54 @@ export type Database = {
             columns: ["service_id"]
             isOneToOne: false
             referencedRelation: "services_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      completed_bill_correction_audit: {
+        Row: {
+          actor_id: string
+          after_state: Json
+          before_state: Json
+          consultation_id: string
+          created_at: string
+          id: string
+          queue_entry_id: string
+          reason: string
+        }
+        Insert: {
+          actor_id: string
+          after_state: Json
+          before_state: Json
+          consultation_id: string
+          created_at?: string
+          id?: string
+          queue_entry_id: string
+          reason: string
+        }
+        Update: {
+          actor_id?: string
+          after_state?: Json
+          before_state?: Json
+          consultation_id?: string
+          created_at?: string
+          id?: string
+          queue_entry_id?: string
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "completed_bill_correction_audit_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: false
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "completed_bill_correction_audit_queue_entry_id_fkey"
+            columns: ["queue_entry_id"]
+            isOneToOne: false
+            referencedRelation: "queue_entries"
             referencedColumns: ["id"]
           },
         ]
@@ -1960,6 +1707,47 @@ export type Database = {
             columns: ["queue_entry_id"]
             isOneToOne: false
             referencedRelation: "queue_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consultation_approval_audit: {
+        Row: {
+          action: string
+          actor_id: string
+          actor_name: string
+          consultation_id: string
+          created_at: string
+          id: string
+          reason: string | null
+          snapshot: Json
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          actor_name: string
+          consultation_id: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+          snapshot?: Json
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          actor_name?: string
+          consultation_id?: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+          snapshot?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultation_approval_audit_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: false
+            referencedRelation: "consultations"
             referencedColumns: ["id"]
           },
         ]
@@ -2291,39 +2079,27 @@ export type Database = {
       gallery_images: {
         Row: {
           alt_text: string | null
-          alt_text_en: string | null
-          alt_text_ms: string | null
           created_at: string
           display_order: number
           id: string
-          is_visible: boolean
           tags: string[] | null
           url: string
-          website_revision: number
         }
         Insert: {
           alt_text?: string | null
-          alt_text_en?: string | null
-          alt_text_ms?: string | null
           created_at?: string
           display_order?: number
           id?: string
-          is_visible?: boolean
           tags?: string[] | null
           url: string
-          website_revision?: number
         }
         Update: {
           alt_text?: string | null
-          alt_text_en?: string | null
-          alt_text_ms?: string | null
           created_at?: string
           display_order?: number
           id?: string
-          is_visible?: boolean
           tags?: string[] | null
           url?: string
-          website_revision?: number
         }
         Relationships: []
       }
@@ -2390,60 +2166,6 @@ export type Database = {
           location_name?: string | null
           refresh_token?: string
           updated_at?: string
-        }
-        Relationships: []
-      }
-      import_batches: {
-        Row: {
-          approved_at: string | null
-          approved_by: string | null
-          completed_at: string | null
-          created_by: string
-          error_summary: Json
-          id: string
-          imported_counts: Json
-          payload_hash: string | null
-          review_artifacts: Json
-          review_counts: Json
-          source_batch_id: string | null
-          source_counts: Json
-          source_system: string
-          started_at: string | null
-          status: string
-        }
-        Insert: {
-          approved_at?: string | null
-          approved_by?: string | null
-          completed_at?: string | null
-          created_by?: string
-          error_summary?: Json
-          id?: string
-          imported_counts?: Json
-          payload_hash?: string | null
-          review_artifacts?: Json
-          review_counts?: Json
-          source_batch_id?: string | null
-          source_counts?: Json
-          source_system: string
-          started_at?: string | null
-          status: string
-        }
-        Update: {
-          approved_at?: string | null
-          approved_by?: string | null
-          completed_at?: string | null
-          created_by?: string
-          error_summary?: Json
-          id?: string
-          imported_counts?: Json
-          payload_hash?: string | null
-          review_artifacts?: Json
-          review_counts?: Json
-          source_batch_id?: string | null
-          source_counts?: Json
-          source_system?: string
-          started_at?: string | null
-          status?: string
         }
         Relationships: []
       }
@@ -3063,81 +2785,6 @@ export type Database = {
         }
         Relationships: []
       }
-      management_dashboard_metric_audit: {
-        Row: {
-          edited_at: string
-          edited_by: string
-          id: number
-          metric_id: string | null
-          metric_key: string
-          month_start: string
-          new_value: Json | null
-          old_value: Json | null
-          operation: string
-        }
-        Insert: {
-          edited_at?: string
-          edited_by: string
-          id?: never
-          metric_id?: string | null
-          metric_key: string
-          month_start: string
-          new_value?: Json | null
-          old_value?: Json | null
-          operation: string
-        }
-        Update: {
-          edited_at?: string
-          edited_by?: string
-          id?: never
-          metric_id?: string | null
-          metric_key?: string
-          month_start?: string
-          new_value?: Json | null
-          old_value?: Json | null
-          operation?: string
-        }
-        Relationships: []
-      }
-      management_dashboard_monthly_metrics: {
-        Row: {
-          actual_numeric: number | null
-          created_at: string
-          id: string
-          metric_key: string
-          month_start: string
-          notes: string
-          status: string | null
-          target_numeric: number | null
-          updated_at: string
-          updated_by: string
-        }
-        Insert: {
-          actual_numeric?: number | null
-          created_at?: string
-          id?: string
-          metric_key: string
-          month_start: string
-          notes?: string
-          status?: string | null
-          target_numeric?: number | null
-          updated_at?: string
-          updated_by: string
-        }
-        Update: {
-          actual_numeric?: number | null
-          created_at?: string
-          id?: string
-          metric_key?: string
-          month_start?: string
-          notes?: string
-          status?: string | null
-          target_numeric?: number | null
-          updated_at?: string
-          updated_by?: string
-        }
-        Relationships: []
-      }
       monthly_payroll_summaries: {
         Row: {
           absence_deduction: number | null
@@ -3216,27 +2863,6 @@ export type Database = {
           updated_at?: string | null
           user_id?: string
           year?: number
-        }
-        Relationships: []
-      }
-      offline_consultation_write_guard: {
-        Row: {
-          actor_id: string
-          backend_pid: number
-          consultation_id: string
-          transaction_id: number
-        }
-        Insert: {
-          actor_id: string
-          backend_pid: number
-          consultation_id: string
-          transaction_id: number
-        }
-        Update: {
-          actor_id?: string
-          backend_pid?: number
-          consultation_id?: string
-          transaction_id?: number
         }
         Relationships: []
       }
@@ -3396,13 +3022,6 @@ export type Database = {
             foreignKeyName: "panel_claim_checkout_requests_queue_fkey"
             columns: ["queue_entry_id"]
             isOneToOne: true
-            referencedRelation: "insight_financials_view"
-            referencedColumns: ["queue_entry_id"]
-          },
-          {
-            foreignKeyName: "panel_claim_checkout_requests_queue_fkey"
-            columns: ["queue_entry_id"]
-            isOneToOne: true
             referencedRelation: "queue_entries"
             referencedColumns: ["id"]
           },
@@ -3454,13 +3073,6 @@ export type Database = {
             referencedRelation: "panel_claims"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "panel_claim_portion_audit_claim_fkey"
-            columns: ["panel_claim_id"]
-            isOneToOne: false
-            referencedRelation: "panel_claims_view"
-            referencedColumns: ["id"]
-          },
         ]
       }
       panel_claim_portion_receipts: {
@@ -3509,13 +3121,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "panel_claim_portion_receipts_claim_fkey"
-            columns: ["panel_claim_id"]
-            isOneToOne: false
-            referencedRelation: "panel_claims_view"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "panel_claim_portion_receipts_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
@@ -3543,7 +3148,7 @@ export type Database = {
           received_amount: number
           received_date: string | null
           remark: string | null
-          status: string | null
+          status: string
           updated_at: string
           updated_by: string
         }
@@ -3558,7 +3163,7 @@ export type Database = {
           received_amount?: number
           received_date?: string | null
           remark?: string | null
-          status?: string | null
+          status?: never
           updated_at?: string
           updated_by: string
         }
@@ -3573,7 +3178,7 @@ export type Database = {
           received_amount?: number
           received_date?: string | null
           remark?: string | null
-          status?: string | null
+          status?: never
           updated_at?: string
           updated_by?: string
         }
@@ -3590,13 +3195,6 @@ export type Database = {
             columns: ["panel_claim_id"]
             isOneToOne: false
             referencedRelation: "panel_claims"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "panel_claim_portions_panel_claim_fkey"
-            columns: ["panel_claim_id"]
-            isOneToOne: false
-            referencedRelation: "panel_claims_view"
             referencedColumns: ["id"]
           },
           {
@@ -3833,42 +3431,6 @@ export type Database = {
           },
         ]
       }
-      patient_external_ids: {
-        Row: {
-          import_batch_id: string
-          patient_id: string
-          source_patient_id: string
-          source_system: string
-        }
-        Insert: {
-          import_batch_id: string
-          patient_id: string
-          source_patient_id: string
-          source_system: string
-        }
-        Update: {
-          import_batch_id?: string
-          patient_id?: string
-          source_patient_id?: string
-          source_system?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "patient_external_ids_import_batch_id_fkey"
-            columns: ["import_batch_id"]
-            isOneToOne: false
-            referencedRelation: "import_batches"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "patient_external_ids_patient_id_fkey"
-            columns: ["patient_id"]
-            isOneToOne: false
-            referencedRelation: "patients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       patients: {
         Row: {
           address: string | null
@@ -3888,7 +3450,6 @@ export type Database = {
           panel_remarks: string | null
           passport_no: string | null
           phone: string | null
-          postcode: string | null
           principal_id: string | null
           reg_no: string | null
           registration_date: string
@@ -3916,7 +3477,6 @@ export type Database = {
           panel_remarks?: string | null
           passport_no?: string | null
           phone?: string | null
-          postcode?: string | null
           principal_id?: string | null
           reg_no?: string | null
           registration_date?: string
@@ -3944,7 +3504,6 @@ export type Database = {
           panel_remarks?: string | null
           passport_no?: string | null
           phone?: string | null
-          postcode?: string | null
           principal_id?: string | null
           reg_no?: string | null
           registration_date?: string
@@ -4923,7 +4482,7 @@ export type Database = {
       staff_messages: {
         Row: {
           content: string
-          created_at: string
+          created_at: string | null
           id: string
           receiver_id: string | null
           sender_id: string
@@ -4931,7 +4490,7 @@ export type Database = {
         }
         Insert: {
           content: string
-          created_at?: string
+          created_at?: string | null
           id?: string
           receiver_id?: string | null
           sender_id: string
@@ -4939,7 +4498,7 @@ export type Database = {
         }
         Update: {
           content?: string
-          created_at?: string
+          created_at?: string | null
           id?: string
           receiver_id?: string | null
           sender_id?: string
@@ -5525,7 +5084,6 @@ export type Database = {
           title_ms: string | null
           type: string
           updated_at: string
-          website_revision: number
           years_experience: number | null
         }
         Insert: {
@@ -5545,7 +5103,6 @@ export type Database = {
           title_ms?: string | null
           type: string
           updated_at?: string
-          website_revision?: number
           years_experience?: number | null
         }
         Update: {
@@ -5565,59 +5122,9 @@ export type Database = {
           title_ms?: string | null
           type?: string
           updated_at?: string
-          website_revision?: number
           years_experience?: number | null
         }
         Relationships: []
-      }
-      transaction_external_ids: {
-        Row: {
-          amount: number
-          import_batch_id: string
-          paid_amount: number
-          queue_entry_id: string
-          source_bill_id: string
-          source_system: string
-        }
-        Insert: {
-          amount: number
-          import_batch_id: string
-          paid_amount: number
-          queue_entry_id: string
-          source_bill_id: string
-          source_system: string
-        }
-        Update: {
-          amount?: number
-          import_batch_id?: string
-          paid_amount?: number
-          queue_entry_id?: string
-          source_bill_id?: string
-          source_system?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "transaction_external_ids_import_batch_id_fkey"
-            columns: ["import_batch_id"]
-            isOneToOne: false
-            referencedRelation: "import_batches"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "transaction_external_ids_queue_entry_id_fkey"
-            columns: ["queue_entry_id"]
-            isOneToOne: false
-            referencedRelation: "insight_financials_view"
-            referencedColumns: ["queue_entry_id"]
-          },
-          {
-            foreignKeyName: "transaction_external_ids_queue_entry_id_fkey"
-            columns: ["queue_entry_id"]
-            isOneToOne: false
-            referencedRelation: "queue_entries"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       user_activity_logs: {
         Row: {
@@ -5863,49 +5370,6 @@ export type Database = {
         }
         Relationships: []
       }
-      visit_external_ids: {
-        Row: {
-          import_batch_id: string
-          queue_entry_id: string
-          source_system: string
-          source_visit_id: string
-        }
-        Insert: {
-          import_batch_id: string
-          queue_entry_id: string
-          source_system: string
-          source_visit_id: string
-        }
-        Update: {
-          import_batch_id?: string
-          queue_entry_id?: string
-          source_system?: string
-          source_visit_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "visit_external_ids_import_batch_id_fkey"
-            columns: ["import_batch_id"]
-            isOneToOne: false
-            referencedRelation: "import_batches"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "visit_external_ids_queue_entry_id_fkey"
-            columns: ["queue_entry_id"]
-            isOneToOne: false
-            referencedRelation: "insight_financials_view"
-            referencedColumns: ["queue_entry_id"]
-          },
-          {
-            foreignKeyName: "visit_external_ids_queue_entry_id_fkey"
-            columns: ["queue_entry_id"]
-            isOneToOne: false
-            referencedRelation: "queue_entries"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       vital_signs: {
         Row: {
           blood_glucose: number | null
@@ -5984,49 +5448,37 @@ export type Database = {
           action: string
           actor_id: string | null
           created_at: string
-          from_status:
-            | Database["public"]["Enums"]["website_content_status"]
-            | null
+          from_status: Database["public"]["Enums"]["website_content_status"] | null
           id: string
           metadata: Json
           resource_id: string
           resource_type: string
           revision: number
-          to_status:
-            | Database["public"]["Enums"]["website_content_status"]
-            | null
+          to_status: Database["public"]["Enums"]["website_content_status"] | null
         }
         Insert: {
           action: string
           actor_id?: string | null
           created_at?: string
-          from_status?:
-            | Database["public"]["Enums"]["website_content_status"]
-            | null
+          from_status?: Database["public"]["Enums"]["website_content_status"] | null
           id?: string
           metadata?: Json
           resource_id: string
           resource_type: string
           revision: number
-          to_status?:
-            | Database["public"]["Enums"]["website_content_status"]
-            | null
+          to_status?: Database["public"]["Enums"]["website_content_status"] | null
         }
         Update: {
           action?: string
           actor_id?: string | null
           created_at?: string
-          from_status?:
-            | Database["public"]["Enums"]["website_content_status"]
-            | null
+          from_status?: Database["public"]["Enums"]["website_content_status"] | null
           id?: string
           metadata?: Json
           resource_id?: string
           resource_type?: string
           revision?: number
-          to_status?:
-            | Database["public"]["Enums"]["website_content_status"]
-            | null
+          to_status?: Database["public"]["Enums"]["website_content_status"] | null
         }
         Relationships: []
       }
@@ -6054,6 +5506,36 @@ export type Database = {
           resource_type?: string
           updated_at?: string
           updated_by?: string
+        }
+        Relationships: []
+      }
+      website_content_versions: {
+        Row: {
+          id: string
+          payload: Json
+          published_at: string
+          published_by: string
+          resource_id: string
+          resource_type: string
+          revision: number
+        }
+        Insert: {
+          id?: string
+          payload: Json
+          published_at?: string
+          published_by: string
+          resource_id: string
+          resource_type: string
+          revision: number
+        }
+        Update: {
+          id?: string
+          payload?: Json
+          published_at?: string
+          published_by?: string
+          resource_id?: string
+          resource_type?: string
+          revision?: number
         }
         Relationships: []
       }
@@ -6087,36 +5569,6 @@ export type Database = {
           trashed_at?: string | null
           updated_at?: string
           updated_by?: string | null
-        }
-        Relationships: []
-      }
-      website_content_versions: {
-        Row: {
-          id: string
-          payload: Json
-          published_at: string
-          published_by: string
-          resource_id: string
-          resource_type: string
-          revision: number
-        }
-        Insert: {
-          id?: string
-          payload: Json
-          published_at?: string
-          published_by: string
-          resource_id: string
-          resource_type: string
-          revision: number
-        }
-        Update: {
-          id?: string
-          payload?: Json
-          published_at?: string
-          published_by?: string
-          resource_id?: string
-          resource_type?: string
-          revision?: number
         }
         Relationships: []
       }
@@ -6332,7 +5784,6 @@ export type Database = {
           base_revision: number
           draft_content: Json
           page_id: string
-          publish_requested_at: string | null
           updated_at: string
           updated_by: string
         }
@@ -6340,7 +5791,6 @@ export type Database = {
           base_revision?: number
           draft_content?: Json
           page_id: string
-          publish_requested_at?: string | null
           updated_at?: string
           updated_by: string
         }
@@ -6348,7 +5798,6 @@ export type Database = {
           base_revision?: number
           draft_content?: Json
           page_id?: string
-          publish_requested_at?: string | null
           updated_at?: string
           updated_by?: string
         }
@@ -6462,33 +5911,24 @@ export type Database = {
       }
       website_tracking_settings: {
         Row: {
-          ads_conversion_id: string | null
-          ads_conversion_labels: Json
           consent_version: number
           enabled: boolean
-          measurement_id: string | null
           pixel_id: string | null
           provider: string
           updated_at: string
           updated_by: string | null
         }
         Insert: {
-          ads_conversion_id?: string | null
-          ads_conversion_labels?: Json
           consent_version?: number
           enabled?: boolean
-          measurement_id?: string | null
           pixel_id?: string | null
           provider: string
           updated_at?: string
           updated_by?: string | null
         }
         Update: {
-          ads_conversion_id?: string | null
-          ads_conversion_labels?: Json
           consent_version?: number
           enabled?: boolean
-          measurement_id?: string | null
           pixel_id?: string | null
           provider?: string
           updated_at?: string
@@ -6500,7 +5940,6 @@ export type Database = {
     Views: {
       insight_financials_view: {
         Row: {
-          cogs: number | null
           diagnosis_id: string | null
           diagnosis_name: string | null
           doctor_id: string | null
@@ -6512,7 +5951,6 @@ export type Database = {
           patient_reg_no: string | null
           payment_method: string | null
           profit: number | null
-          queue_entry_created_at: string | null
           queue_entry_id: string | null
           revenue: number | null
           visit_date: string | null
@@ -6914,6 +6352,91 @@ export type Database = {
       }
     }
     Functions: {
+      can_correct_completed_bill: {
+        Args: { _user_id: string }
+        Returns: boolean
+      }
+      can_manage_panel_claim_portions: {
+        Args: { _user_id: string }
+        Returns: boolean
+      }
+      cancel_panel_claim_portions: {
+        Args: {
+          p_expected_version: number
+          p_panel_claim_id: string
+          p_reason: string
+        }
+        Returns: undefined
+      }
+      bulk_submit_panel_claims: {
+        Args: { p_panel_claim_ids: string[]; p_submitted_date: string | null }
+        Returns: number
+      }
+      completed_bill_correction_state: {
+        Args: { p_consultation_id: string; p_queue_entry_id: string }
+        Returns: Json
+      }
+      correct_completed_bill: {
+        Args: {
+          p_discount_rm: number
+          p_expected_fingerprint: string
+          p_items: Json
+          p_payments: Json
+          p_queue_entry_id: string
+          p_reason: string
+          p_tax_pct: number
+        }
+        Returns: Json
+      }
+      discard_unstored_website_media: {
+        Args: { p_media_id: string }
+        Returns: undefined
+      }
+      finalize_website_media_deletion: {
+        Args: { p_media_id: string }
+        Returns: undefined
+      }
+      permanently_delete_website_media: {
+        Args: { p_media_id: string }
+        Returns: Json
+      }
+      permanently_delete_website_content: {
+        Args: {
+          p_expected_revision: number
+          p_resource_id: string
+          p_resource_type: string
+        }
+        Returns: undefined
+      }
+      publish_due_website_content: {
+        Args: { p_limit?: number }
+        Returns: Json
+      }
+      restore_website_content: {
+        Args: {
+          p_expected_revision: number
+          p_resource_id: string
+          p_resource_type: string
+        }
+        Returns: Json
+      }
+      schedule_website_content: {
+        Args: {
+          p_expected_revision: number
+          p_resource_id: string
+          p_resource_type: string
+          p_scheduled_at: string
+        }
+        Returns: Json
+      }
+      trash_website_content: {
+        Args: {
+          p_expected_revision: number
+          p_resource_id: string
+          p_resource_type: string
+        }
+        Returns: Json
+      }
       _promote_appointment_to_clinic_internal: {
         Args: { p_appointment_id: string; p_payment_reference?: string }
         Returns: string
@@ -6950,87 +6473,74 @@ export type Database = {
         }
         Returns: undefined
       }
-      apply_yezza_import: {
-        Args: {
-          p_actor_id: string
-          p_import_batch_id: string
-          p_payload: Json
-          p_payload_hash: string
-        }
-        Returns: Json
-      }
-      approve_yezza_import: {
-        Args: {
-          p_actor_id: string
-          p_payload_hash: string
-          p_review_artifacts: Json
-          p_review_counts: Json
-          p_source_batch_id: string
-          p_source_counts: Json
-        }
-        Returns: Json
-      }
-      assert_offline_consultation_editable: {
-        Args: { p_consultation_id: string }
-        Returns: boolean
-      }
       available_quantity: { Args: { _item_id: string }; Returns: number }
-      bulk_submit_panel_claims: {
-        Args: { p_panel_claim_ids: string[]; p_submitted_date: string }
-        Returns: number
-      }
-      can_checkout_visit: { Args: { _user_id: string }; Returns: boolean }
-      can_correct_completed_bill: {
-        Args: { _user_id: string }
-        Returns: boolean
-      }
-      can_edit_dispensary_prices: {
-        Args: { _user_id: string }
-        Returns: boolean
-      }
-      can_edit_management_dashboard: {
-        Args: { _user_id: string }
-        Returns: boolean
-      }
-      can_manage_clinic_permissions: {
-        Args: { _user_id?: string }
-        Returns: boolean
-      }
-      can_manage_imports: { Args: { _user_id?: string }; Returns: boolean }
-      can_manage_inventory: { Args: { _user_id: string }; Returns: boolean }
-      can_manage_panel_claim_portions: {
-        Args: { _user_id: string }
-        Returns: boolean
-      }
-      can_read_cross_doctor_consultation: {
-        Args: { _user_id: string }
-        Returns: boolean
-      }
-      can_read_operational_consultations: {
-        Args: { _user_id: string }
-        Returns: boolean
-      }
       can_view_insights: { Args: { _user_id: string }; Returns: boolean }
       can_view_inventory_costs: { Args: { _user_id: string }; Returns: boolean }
-      can_view_management_dashboard: {
-        Args: { _user_id: string }
-        Returns: boolean
+      delete_offline_consultation_attachment: {
+        Args: { p_attachment_id: string; p_consultation_id: string }
+        Returns: string
       }
       cancel_offline_consultation_attachment_upload: {
         Args: { p_reservation_id: string }
-        Returns: {
-          attachment_id: string
+        Returns: Array<{
+          attachment_id: string | null
           file_path: string
           status: string
-        }[]
+        }>
       }
-      cancel_panel_claim_portions: {
+      finalize_offline_consultation_attachment: {
+        Args: { p_reservation_id: string }
+        Returns: Database["public"]["Tables"]["consultation_attachments"]["Row"]
+      }
+      get_doctor_clinical_activity: {
+        Args: { _start_date: string; _end_date: string }
+        Returns: Array<{
+          activity_id: string
+          activity_kind: string
+          activity_date: string
+          activity_name: string
+          consultation_id: string
+          queue_entry_id: string
+          queue_created_at: string
+          queue_sequence: number | null
+          doctor_id: string | null
+          doctor_name: string
+          patient_name: string
+        }>
+      }
+      get_financial_control_details: {
         Args: {
-          p_expected_version: number
-          p_panel_claim_id: string
-          p_reason: string
+          _alert_key: string | null
+          _as_of_date: string
+          _end_date: string
+          _group_by: string
+          _metric: string
+          _page: number
+          _page_size: number
+          _start_date: string
         }
-        Returns: undefined
+        Returns: Json
+      }
+      get_financial_control_summary: {
+        Args: {
+          _as_of_date: string
+          _comparison_end: string
+          _comparison_start: string
+          _end_date: string
+          _start_date: string
+        }
+        Returns: Json
+      }
+      get_offline_consultation_audit: {
+        Args: { p_consultation_id: string }
+        Returns: Array<{
+          action: string
+          actor_id: string
+          actor_name: string
+          created_at: string
+          id: string
+          reason: string | null
+        }>
       }
       checkout_visit: {
         Args: {
@@ -7049,11 +6559,77 @@ export type Database = {
         }
         Returns: Json
       }
-      cleanup_appointment_submission_log: { Args: never; Returns: undefined }
-      close_offline_consultation_write_guard: {
-        Args: { p_actor_id: string; p_consultation_id: string }
-        Returns: undefined
+      record_payment_and_complete_visit: {
+        Args: {
+          p_amount: number
+          p_consultation_id: string | null
+          p_notes?: string | null
+          p_payment_method: string
+          p_payment_type: string
+          p_queue_entry_id: string
+        }
+        Returns: Json
       }
+      record_panel_claim_portion_payment: {
+        Args: {
+          p_amount: number
+          p_idempotency_key: string
+          p_payment_reference: string
+          p_portion_id: string
+          p_received_date: string
+          p_remark: string
+        }
+        Returns: Database["public"]["Tables"]["panel_claim_portions"]["Row"]
+      }
+      replace_panel_claim_portions: {
+        Args: {
+          p_expected_version: number
+          p_panel_claim_id: string
+          p_portions: Json
+          p_reason: string
+        }
+        Returns: Database["public"]["Tables"]["panel_claim_portions"]["Row"][]
+      }
+      update_panel_claim_workflow: {
+        Args: {
+          p_approved_amount: number | null
+          p_due_date: string | null
+          p_gl_document_url: string | null
+          p_panel_claim_id: string
+          p_payment_reference: string | null
+          p_received_amount: number | null
+          p_received_date: string | null
+          p_remarks: string | null
+          p_status: Database["public"]["Enums"]["panel_claim_status"] | null
+          p_submitted_date: string | null
+        }
+        Returns: Database["public"]["Tables"]["panel_claims"]["Row"]
+      }
+      review_offline_consultation: {
+        Args: {
+          p_action: string
+          p_consultation_id: string
+          p_expected_revision?: number | null
+          p_reason?: string | null
+        }
+        Returns: Database["public"]["Tables"]["consultations"]["Row"]
+      }
+      remove_consultation_item_dispensary: {
+        Args: {
+          p_consultation_id: string
+          p_item_id: string
+        }
+        Returns: string
+      }
+      update_consultation_item_dispensary: {
+        Args: {
+          p_consultation_id: string
+          p_item_id: string
+          p_updates: Json
+        }
+        Returns: string
+      }
+      cleanup_appointment_submission_log: { Args: never; Returns: undefined }
       commit_inventory: {
         Args: { _item_id: string; _qty: number }
         Returns: undefined
@@ -7069,89 +6645,12 @@ export type Database = {
         }
         Returns: Json
       }
-      completed_bill_correction_state: {
-        Args: { p_consultation_id: string; p_queue_entry_id: string }
-        Returns: Json
-      }
-      correct_completed_bill: {
-        Args: {
-          p_discount_rm: number
-          p_expected_fingerprint: string
-          p_items: Json
-          p_payments: Json
-          p_queue_entry_id: string
-          p_reason: string
-          p_tax_pct: number
-        }
-        Returns: Json
-      }
-      create_general_website_page: {
-        Args: { p_draft_content: Json; p_slug: string }
-        Returns: {
-          id: string
-          kind: string
-          revision: number
-          slug: string
-          status: string
-        }[]
-      }
-      delete_management_dashboard_metric: {
-        Args: { _metric_key: string; _month_start: string }
-        Returns: boolean
-      }
-      delete_offline_consultation_attachment: {
-        Args: { p_attachment_id: string; p_consultation_id: string }
-        Returns: string
-      }
-      discard_unstored_website_media: {
-        Args: { p_media_id: string }
-        Returns: undefined
-      }
-      ensure_panel_claim_for_queue: {
-        Args: { p_queue_entry_id: string }
-        Returns: string
-      }
       expire_inventory_batches: { Args: never; Returns: number }
-      finalize_offline_consultation_attachment: {
-        Args: { p_reservation_id: string }
-        Returns: {
-          consultation_id: string
-          content_type: string | null
-          created_at: string
-          file_name: string
-          file_path: string
-          id: string
-          remark: string | null
-          uploaded_by: string | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "consultation_attachments"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      finalize_website_media_deletion: {
-        Args: { p_media_id: string }
-        Returns: undefined
-      }
       fulfill_owe_slip: {
         Args: { _notes?: string; _qty: number; _slip_id: string }
         Returns: Json
       }
       generate_po_number: { Args: never; Returns: string }
-      get_clinic_health_metrics: {
-        Args: { _end_date: string; _start_date: string }
-        Returns: Json
-      }
-      get_clinic_permission_matrix: {
-        Args: never
-        Returns: {
-          allowed: boolean
-          permission_key: string
-          role: Database["public"]["Enums"]["app_role"]
-        }[]
-      }
       get_clinic_settings: {
         Args: never
         Returns: {
@@ -7189,25 +6688,14 @@ export type Database = {
           isSetofReturn: true
         }
       }
-      get_clinic_user_permission_details: {
-        Args: { _target_user_id: string }
-        Returns: {
-          effective_allowed: boolean
-          override_allowed: boolean
-          permission_key: string
-          role_allowed: boolean
-          updated_at: string
-          updated_by: string
-        }[]
-      }
       get_completed_bill_correction_context: {
         Args: { p_queue_entry_id: string }
         Returns: Json
       }
       get_completed_bill_correction_history: {
         Args: {
-          p_before_created_at?: string
-          p_before_id?: string
+          p_before_created_at?: string | null
+          p_before_id?: string | null
           p_limit?: number
           p_queue_entry_id: string
         }
@@ -7218,25 +6706,6 @@ export type Database = {
           created_at: string
           id: string
           reason: string
-        }[]
-      }
-      get_doctor_clinical_activity: {
-        Args: { _end_date: string; _start_date: string }
-        Returns: {
-          activity_date: string
-          activity_id: string
-          activity_kind: string
-          activity_name: string
-          consultation_id: string
-          doctor_id: string
-          doctor_name: string
-          patient_name: string
-          quantity: number
-          queue_created_at: string
-          queue_entry_id: string
-          queue_sequence: number
-          total_price: number
-          unit_price: number
         }[]
       }
       get_doctor_id_for_user: { Args: { _user_id: string }; Returns: string }
@@ -7250,29 +6719,6 @@ export type Database = {
           start_time: string
         }[]
       }
-      get_financial_control_details: {
-        Args: {
-          _alert_key: string
-          _as_of_date: string
-          _end_date: string
-          _group_by: string
-          _metric: string
-          _page: number
-          _page_size: number
-          _start_date: string
-        }
-        Returns: Json
-      }
-      get_financial_control_summary: {
-        Args: {
-          _as_of_date: string
-          _comparison_end: string
-          _comparison_start: string
-          _end_date: string
-          _start_date: string
-        }
-        Returns: Json
-      }
       get_insurance_provider_directory: {
         Args: { _active_only?: boolean }
         Returns: {
@@ -7281,40 +6727,8 @@ export type Database = {
           status: string
         }[]
       }
-      get_management_dashboard: {
-        Args: { _month_start: string }
-        Returns: Json
-      }
       get_next_queue_number: { Args: never; Returns: number }
-      get_offline_consultation_audit: {
-        Args: { p_consultation_id: string }
-        Returns: {
-          action: string
-          actor_id: string
-          actor_name: string
-          created_at: string
-          id: string
-          reason: string
-        }[]
-      }
-      get_offline_consultation_entry_state: {
-        Args: { p_consultation_id: string }
-        Returns: {
-          approval_revision: number
-          approval_status: string
-          approved_at: string
-          approved_by_name: string
-          consultation_id: string
-          consultation_status: string
-          doctor_id: string
-          doctor_name: string
-          entered_at: string
-          entered_by_name: string
-          queue_entry_id: string
-          queue_status: string
-          return_reason: string
-        }[]
-      }
+      get_server_now: { Args: never; Returns: string }
       get_video_room_signaling: {
         Args: { _room_code: string }
         Returns: {
@@ -7326,10 +6740,6 @@ export type Database = {
           room_code: string
           status: string
         }[]
-      }
-      has_clinic_permission: {
-        Args: { _permission_key: string; _user_id?: string }
-        Returns: boolean
       }
       has_role: {
         Args: {
@@ -7353,146 +6763,19 @@ export type Database = {
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_clinical: { Args: { _user_id: string }; Returns: boolean }
-      is_current_offline_consultation_doctor: {
-        Args: { p_consultation_id: string; p_user_id?: string }
-        Returns: boolean
-      }
       is_current_user_consultation_doctor: {
         Args: { _consultation_id: string }
         Returns: boolean
       }
-      is_eligible_offline_consultation_doctor: {
-        Args: { p_doctor_id: string }
-        Returns: boolean
-      }
-      is_exact_ops_staff: { Args: { p_user_id: string }; Returns: boolean }
       is_finance_admin: { Args: never; Returns: boolean }
       is_internal_staff: { Args: { _user_id: string }; Returns: boolean }
       is_ops_or_admin: { Args: { _user_id: string }; Returns: boolean }
       is_special_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff_or_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff_or_clinical: { Args: { _user_id: string }; Returns: boolean }
-      issue_consultation_document_with_fee: {
-        Args: {
-          _consultation_id: string
-          _content: string
-          _document_id: string
-          _orientation: string
-          _paper_size: string
-          _patient_id: string
-          _template_id: string
-          _template_name: string
-          _type: string
-        }
-        Returns: {
-          consultation_id: string
-          content: string
-          created_at: string
-          created_by: string | null
-          id: string
-          orientation: string
-          paper_size: string
-          patient_id: string
-          template_id: string | null
-          template_name: string
-          type: string | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "consultation_documents"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      link_clinic_appointment_checkin: {
-        Args: { _appointment_id: string; _queue_entry_id: string }
-        Returns: {
-          appointment_date: string
-          appointment_time: string
-          checked_in_at: string | null
-          created_at: string
-          doctor_id: string | null
-          id: string
-          notes: string | null
-          patient_id: string
-          queue_entry_id: string | null
-          source_appointment_id: string | null
-          source_consultation_id: string | null
-          status: Database["public"]["Enums"]["clinic_appointment_status"]
-          updated_at: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "clinic_appointments"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      list_eligible_offline_consultation_doctors: {
-        Args: never
-        Returns: {
-          avatar_url: string
-          id: string
-          name: string
-          on_duty: boolean
-          status: string
-          user_id: string
-        }[]
-      }
-      list_offline_consultation_entry_visits: {
-        Args: { p_end: string; p_start: string }
-        Returns: {
-          queue_entry_id: string
-        }[]
-      }
-      lock_completed_bill_item_mutation_boundary: {
-        Args: never
-        Returns: undefined
-      }
-      normalize_completed_bill_correction_reason: {
-        Args: { _reason: string }
-        Returns: string
-      }
-      offline_consultation_write_guard_active: {
-        Args: { p_actor_id: string; p_consultation_id: string }
-        Returns: boolean
-      }
-      open_offline_consultation_write_guard: {
-        Args: { p_actor_id: string; p_consultation_id: string }
-        Returns: undefined
-      }
-      permanently_delete_website_content: {
-        Args: {
-          p_expected_revision: number
-          p_resource_id: string
-          p_resource_type: string
-        }
-        Returns: undefined
-      }
-      permanently_delete_website_media: {
-        Args: { p_media_id: string }
-        Returns: Json
-      }
-      proceed_offline_consultation_to_dispensary: {
-        Args: { p_consultation_id: string; p_expected_revision: number }
-        Returns: string
-      }
       promote_appointment_to_clinic: {
         Args: { p_appointment_id: string; p_payment_reference?: string }
         Returns: string
-      }
-      publish_due_website_content: { Args: { p_limit?: number }; Returns: Json }
-      publish_website_navigation: {
-        Args: { p_expected_revision: number }
-        Returns: Json
-      }
-      publish_website_resource: {
-        Args: {
-          p_expected_revision: number
-          p_resource_id: string
-          p_resource_type: string
-        }
-        Returns: Json
       }
       recalc_client_invoice_total: {
         Args: { _invoice_id: string }
@@ -7512,290 +6795,46 @@ export type Database = {
         }
         Returns: string
       }
-      record_panel_claim_portion_payment: {
-        Args: {
-          p_amount: number
-          p_idempotency_key: string
-          p_payment_reference: string
-          p_portion_id: string
-          p_received_date: string
-          p_remark: string
-        }
-        Returns: {
-          amount: number
-          created_at: string
-          created_by: string
-          id: string
-          panel_claim_id: string
-          payment_reference: string | null
-          portion_no: number
-          received_amount: number
-          received_date: string | null
-          remark: string | null
-          status: string | null
-          updated_at: string
-          updated_by: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "panel_claim_portions"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      record_payment_and_complete_visit: {
-        Args: {
-          p_amount: number
-          p_consultation_id: string
-          p_notes?: string
-          p_payment_method: string
-          p_payment_type: string
-          p_queue_entry_id: string
-        }
-        Returns: Json
-      }
       refresh_diagnosis_correlation: { Args: never; Returns: undefined }
       release_inventory: {
         Args: { _item_id: string; _qty: number }
         Returns: undefined
       }
-      remove_consultation_item_dispensary: {
-        Args: { p_consultation_id: string; p_item_id: string }
-        Returns: string
-      }
-      replace_panel_claim_portions: {
-        Args: {
-          p_expected_version: number
-          p_panel_claim_id: string
-          p_portions: Json
-          p_reason: string
-        }
-        Returns: {
-          amount: number
-          created_at: string
-          created_by: string
-          id: string
-          panel_claim_id: string
-          payment_reference: string | null
-          portion_no: number
-          received_amount: number
-          received_date: string | null
-          remark: string | null
-          status: string | null
-          updated_at: string
-          updated_by: string
-        }[]
-        SetofOptions: {
-          from: "*"
-          to: "panel_claim_portions"
-          isOneToOne: false
-          isSetofReturn: true
-        }
-      }
       reserve_inventory: {
         Args: { _item_id: string; _qty: number }
         Returns: undefined
       }
-      reserve_offline_consultation_attachment: {
-        Args: {
-          p_consultation_id: string
-          p_content_type: string
-          p_file_name: string
-          p_file_size: number
-          p_remark?: string
-        }
-        Returns: {
-          expires_at: string
-          file_path: string
-          reservation_id: string
-        }[]
-      }
-      reset_clinic_user_permission_override: {
-        Args: { _permission_key?: string; _target_user_id: string }
-        Returns: undefined
-      }
-      restore_website_content: {
-        Args: {
-          p_expected_revision: number
-          p_resource_id: string
-          p_resource_type: string
-        }
-        Returns: Json
-      }
-      restore_website_navigation_version: {
-        Args: { p_version_id: string }
-        Returns: undefined
-      }
-      restore_website_resource_version: {
-        Args: {
-          p_resource_id: string
-          p_resource_type: string
-          p_version_id: string
-        }
-        Returns: undefined
-      }
-      review_offline_consultation: {
-        Args: {
-          p_action: string
-          p_consultation_id: string
-          p_expected_revision?: number
-          p_reason?: string
-        }
-        Returns: {
-          approval_revision: number
-          approval_status: string
-          approved_at: string | null
-          approved_by: string | null
-          case_note: string
-          created_at: string
-          deleted_at: string | null
-          deleted_by: string | null
-          diagnosis_id: string | null
-          diagnosis_text: string
-          dispense_note: string
-          doctor_id: string | null
-          entered_by: string | null
-          entry_source: string
-          id: string
-          locked_at: string | null
-          locked_by: string | null
-          original_consulted_at: string | null
-          patient_id: string
-          queue_entry_id: string
-          return_reason: string | null
-          returned_at: string | null
-          returned_by: string | null
-          status: string
-          updated_at: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "consultations"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
       safe_reset_queue_number_seq: { Args: never; Returns: undefined }
-      save_client_invoice_items: {
-        Args: { _invoice_id: string; _items: Json }
-        Returns: undefined
-      }
       save_offline_consultation: {
         Args: {
           p_case_note: string
-          p_diagnosis_id: string
+          p_diagnosis_id: string | null
           p_diagnosis_text: string
           p_dispense_note: string
           p_doctor_id: string
-          p_expected_revision: number
+          p_expected_revision: number | null
           p_original_consulted_at: string
           p_queue_entry_id: string
         }
-        Returns: {
-          approval_revision: number
-          approval_status: string
-          approved_at: string | null
-          approved_by: string | null
-          case_note: string
-          created_at: string
-          deleted_at: string | null
-          deleted_by: string | null
-          diagnosis_id: string | null
-          diagnosis_text: string
-          dispense_note: string
-          doctor_id: string | null
-          entered_by: string | null
-          entry_source: string
-          id: string
-          locked_at: string | null
-          locked_by: string | null
-          original_consulted_at: string | null
-          patient_id: string
-          queue_entry_id: string
-          return_reason: string | null
-          returned_at: string | null
-          returned_by: string | null
-          status: string
-          updated_at: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "consultations"
-          isOneToOne: true
-          isSetofReturn: false
-        }
+        Returns: Database["public"]["Tables"]["consultations"]["Row"]
       }
-      schedule_website_content: {
+      reserve_offline_consultation_attachment: {
         Args: {
-          p_expected_revision: number
-          p_resource_id: string
-          p_resource_type: string
-          p_scheduled_at: string
+          p_consultation_id: string
+          p_content_type: string | null
+          p_file_name: string
+          p_file_size: number
+          p_remark?: string | null
         }
-        Returns: Json
+        Returns: Array<{
+          expires_at: string
+          file_path: string
+          reservation_id: string
+        }>
       }
-      search_patient_explorer: {
-        Args: { p_filters: Json; p_page: number; p_page_size: number }
-        Returns: Json
-      }
-      set_clinic_document_fee: {
-        Args: { _amount: number; _document_type: string }
-        Returns: {
-          amount: number
-          document_type: string
-          updated_at: string
-          updated_by: string | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "clinic_document_fees"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      set_clinic_permission: {
-        Args: {
-          _allowed: boolean
-          _permission_key: string
-          _role: Database["public"]["Enums"]["app_role"]
-        }
+      save_client_invoice_items: {
+        Args: { _invoice_id: string; _items: Json }
         Returns: undefined
-      }
-      set_clinic_user_permission_override: {
-        Args: {
-          _allowed: boolean
-          _permission_key: string
-          _target_user_id: string
-        }
-        Returns: undefined
-      }
-      set_management_dashboard_metric: {
-        Args: {
-          _actual_numeric?: number
-          _metric_key: string
-          _month_start: string
-          _notes?: string
-          _status?: string
-          _target_numeric?: number
-        }
-        Returns: {
-          actual_numeric: number | null
-          created_at: string
-          id: string
-          metric_key: string
-          month_start: string
-          notes: string
-          status: string | null
-          target_numeric: number | null
-          updated_at: string
-          updated_by: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "management_dashboard_monthly_metrics"
-          isOneToOne: true
-          isSetofReturn: false
-        }
       }
       settle_multiple_debts: {
         Args: {
@@ -7812,65 +6851,6 @@ export type Database = {
       sync_roster_zone_assignments:
         | { Args: { _month: number; _year: number }; Returns: undefined }
         | { Args: { p_roster_id: string }; Returns: undefined }
-      trash_website_content: {
-        Args: {
-          p_expected_revision: number
-          p_resource_id: string
-          p_resource_type: string
-        }
-        Returns: Json
-      }
-      update_consultation_item_dispensary: {
-        Args: { p_consultation_id: string; p_item_id: string; p_updates: Json }
-        Returns: string
-      }
-      update_panel_claim_workflow: {
-        Args: {
-          p_approved_amount: number
-          p_due_date: string
-          p_gl_document_url: string
-          p_panel_claim_id: string
-          p_payment_reference: string
-          p_received_amount: number
-          p_received_date: string
-          p_remarks: string
-          p_status: Database["public"]["Enums"]["panel_claim_status"]
-          p_submitted_date: string
-        }
-        Returns: {
-          amount: number
-          approved_amount: number | null
-          claim_date: string
-          claim_no: string
-          created_at: string
-          due_date: string | null
-          gl_document_url: string | null
-          id: string
-          panel_id: string
-          patient_id: string
-          payment_reference: string | null
-          portions_version: number
-          queue_entry_id: string | null
-          received_amount: number | null
-          received_date: string | null
-          remarks: string | null
-          status: Database["public"]["Enums"]["panel_claim_status"]
-          submitted_date: string | null
-          updated_at: string
-          updated_by: string | null
-          write_off_amount: number | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "panel_claims"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      void_consultation_document_with_fee: {
-        Args: { _document_id: string }
-        Returns: undefined
-      }
     }
     Enums: {
       app_role:
@@ -8036,9 +7016,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       app_role: [
