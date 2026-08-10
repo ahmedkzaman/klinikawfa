@@ -7,5 +7,6 @@ describe("public service rich text font sizes", () => {
   it("maps Quill size classes to visible public font sizes", () => {
     expect(css).toContain(".service-rich-content .ql-size-large");
     expect(css).toContain(".service-rich-content .ql-size-huge");
+    expect(css).toContain("overflow-wrap: anywhere");
   });
 });
