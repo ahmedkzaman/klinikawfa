@@ -13,12 +13,14 @@ vi.mock("@/features/website-cms/api/resources", () => ({
 }));
 
 describe("services website editor", () => {
-  it("lists exactly the three canonical categories and provides no add-service action", async () => {
+  it("lists all eight SEO targets while retaining content editing for the three categories", async () => {
     render(<MemoryRouter><ServicesEditorList /></MemoryRouter>);
-    expect(await screen.findByText("Rawatan Am")).toBeInTheDocument();
-    expect(screen.getByText("Prosedur Minor")).toBeInTheDocument();
-    expect(screen.getByText("Pemeriksaan Kesihatan")).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: /edit/i })).toHaveLength(3);
+    expect(await screen.findByText("Rawatan Umum & Penyakit Akut")).toBeInTheDocument();
+    expect(screen.getByText("Prosedur Minor & Pembedahan")).toBeInTheDocument();
+    expect(screen.getByText("Pemeriksaan Kesihatan & Pekerjaan")).toBeInTheDocument();
+    expect(screen.getByText("Sunat Kuantan")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /edit seo/i })).toHaveLength(8);
+    expect(screen.getAllByRole("link", { name: /edit content/i })).toHaveLength(3);
     expect(screen.queryByRole("button", { name: /add service/i })).not.toBeInTheDocument();
   });
 });

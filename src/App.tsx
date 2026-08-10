@@ -119,6 +119,7 @@ import EditorDashboard from "./pages/editor/Dashboard";
 import { EditorProfile } from "./pages/editor/EditorProfile";
 import { ServicesEditorList } from "./pages/editor/Services";
 import { ServiceEditor } from "./pages/editor/ServiceEditor";
+import { ServiceSeoEditor } from "./pages/editor/ServiceSeoEditor";
 import { TeamEditorList, TeamWebsiteEditor } from "./pages/editor/Team";
 import { BlogEditorList, BlogWebsiteEditor } from "./pages/editor/Blog";
 import { PostsEditorList, PostsWebsiteEditor } from "./pages/editor/Posts";
@@ -193,6 +194,7 @@ const App = () => (
                 <Route path="pages/:id" element={<PageEditor />} />
                 <Route path="preview/:resourceType/:id" element={<DraftPreview />} />
                 <Route path="services" element={<ServicesEditorList />} />
+                <Route path="services/seo/:id" element={<ServiceSeoEditor />} />
                 <Route path="services/:id" element={<ServiceEditor />} />
                 <Route path="team" element={<TeamEditorList />} />
                 <Route path="team/:id" element={<TeamWebsiteEditor />} />

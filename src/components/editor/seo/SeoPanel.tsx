@@ -1,14 +1,95 @@
+import type { ReactNode } from "react";
+
+import { MediaSelectorDialog } from "@/components/editor/media/MediaSelectorDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { SeoFields } from "@/features/website-cms/domain/seo";
-import { MediaSelectorDialog } from "@/components/editor/media/MediaSelectorDialog";
+import type { WebsiteMediaFolder } from "@/features/website-cms/media/validation";
 
 import { GoogleSearchPreview } from "./GoogleSearchPreview";
 import { SocialPreview } from "./SocialPreview";
 
-export function SeoPanel({ value, language, onChange }: { value: SeoFields; language: "ms" | "en"; onChange(value: SeoFields): void }) {
-  const update = <K extends keyof SeoFields>(key: K, next: SeoFields[K]) => onChange({ ...value, [key]: next });
-  const previewUrl = value.canonicalUrl || "https://klinikawfa.com/";
-  return <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5"><div><h2 className="font-semibold text-slate-950">Search and social appearance</h2><p className="mt-1 text-sm text-slate-600">Guidance helps readability; longer valid text is not silently truncated.</p></div><div><Label htmlFor="seo-search-title">Search title</Label><Input className="mt-2" id="seo-search-title" maxLength={120} onChange={(event) => update("title", event.target.value)} value={value.title} /><p className="mt-1 text-xs text-slate-500">{value.title.length} / 60 characters</p></div><div><Label htmlFor="seo-description">Search description</Label><Textarea className="mt-2" id="seo-description" maxLength={320} onChange={(event) => update("description", event.target.value)} value={value.description} /><p className="mt-1 text-xs text-slate-500">{value.description.length} / 160 characters</p></div><div><Label htmlFor="seo-canonical">Canonical URL</Label><Input className="mt-2" id="seo-canonical" onChange={(event) => update("canonicalUrl", event.target.value)} placeholder="Automatic" type="url" value={value.canonicalUrl} /></div><div className="space-y-2"><Label>Social sharing image ({language === "ms" ? "Malay" : "English"})</Label><div><MediaSelectorDialog folder="blog" label={value.socialImageMediaId ? "Change social image" : "Choose social image"} onSelect={(media) => update("socialImageMediaId", media.id)} /></div></div><div className="flex flex-wrap gap-5"><label className="flex items-center gap-2 text-sm"><input checked={value.index} onChange={(event) => update("index", event.target.checked)} type="checkbox" />Allow search indexing</label><label className="flex items-center gap-2 text-sm"><input checked={value.follow} onChange={(event) => update("follow", event.target.checked)} type="checkbox" />Allow link following</label></div><div className="grid gap-4 lg:grid-cols-2"><GoogleSearchPreview description={value.description} title={value.title} url={previewUrl} /><SocialPreview description={value.socialDescription || value.description} title={value.socialTitle || value.title} /></div></section>;
+interface SeoPanelProps {
+  value: SeoFields;
+  language: "ms" | "en";
+  onChange(value: SeoFields): void;
+  canonicalUrl?: string;
+  canonicalReadOnly?: boolean;
+  headerAction?: ReactNode;
+  mediaFolder?: WebsiteMediaFolder;
+}
+
+export function SeoPanel({
+  value,
+  language,
+  onChange,
+  canonicalUrl,
+  canonicalReadOnly = false,
+  headerAction,
+  mediaFolder = "blog",
+}: SeoPanelProps) {
+  const update = <K extends keyof SeoFields>(key: K, next: SeoFields[K]) =>
+    onChange({ ...value, [key]: next });
+  const displayedCanonical = canonicalUrl ?? value.canonicalUrl;
+  const previewUrl = displayedCanonical || "https://klinikawfa.com/";
+
+  return (
+    <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-semibold text-slate-950">Search and social appearance</h2>
+          <p className="mt-1 text-sm text-slate-600">Guidance helps readability; longer valid text is not silently truncated.</p>
+        </div>
+        {headerAction}
+      </div>
+      <div>
+        <Label htmlFor="seo-search-title">Search title</Label>
+        <Input className="mt-2" id="seo-search-title" maxLength={120} onChange={(event) => update("title", event.target.value)} value={value.title} />
+        <p className="mt-1 text-xs text-slate-500">{value.title.length} / 60 characters</p>
+      </div>
+      <div>
+        <Label htmlFor="seo-description">Search description</Label>
+        <Textarea className="mt-2" id="seo-description" maxLength={320} onChange={(event) => update("description", event.target.value)} value={value.description} />
+        <p className="mt-1 text-xs text-slate-500">{value.description.length} / 160 characters</p>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <Label htmlFor="seo-social-title">Social title</Label>
+          <Input className="mt-2" id="seo-social-title" maxLength={120} onChange={(event) => update("socialTitle", event.target.value)} value={value.socialTitle} />
+        </div>
+        <div>
+          <Label htmlFor="seo-social-description">Social description</Label>
+          <Textarea className="mt-2" id="seo-social-description" maxLength={320} onChange={(event) => update("socialDescription", event.target.value)} value={value.socialDescription} />
+        </div>
+      </div>
+      <div>
+        <Label htmlFor="seo-canonical">Canonical URL</Label>
+        <Input
+          className="mt-2"
+          id="seo-canonical"
+          onChange={canonicalReadOnly ? undefined : (event) => update("canonicalUrl", event.target.value)}
+          placeholder="Automatic"
+          readOnly={canonicalReadOnly}
+          type="url"
+          value={displayedCanonical}
+        />
+        {canonicalReadOnly && <p className="mt-1 text-xs text-slate-500">This canonical is fixed to prevent duplicate or redirected service metadata.</p>}
+      </div>
+      <div className="space-y-2">
+        <Label>Social sharing image ({language === "ms" ? "Malay" : "English"})</Label>
+        <div>
+          <MediaSelectorDialog folder={mediaFolder} label={value.socialImageMediaId ? "Change social image" : "Choose social image"} onSelect={(media) => update("socialImageMediaId", media.id)} />
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-5">
+        <label className="flex items-center gap-2 text-sm"><input checked={value.index} onChange={(event) => update("index", event.target.checked)} type="checkbox" />Allow search indexing</label>
+        <label className="flex items-center gap-2 text-sm"><input checked={value.follow} onChange={(event) => update("follow", event.target.checked)} type="checkbox" />Allow link following</label>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <GoogleSearchPreview description={value.description} title={value.title} url={previewUrl} />
+        <SocialPreview description={value.socialDescription || value.description} title={value.socialTitle || value.title} />
+      </div>
+    </section>
+  );
 }

@@ -13,4 +13,21 @@ describe("SEO editor", () => {
     fireEvent.change(screen.getByLabelText("Canonical URL"), { target: { value: "https://klinikawfa.com/services" } });
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ canonicalUrl: "https://klinikawfa.com/services" }));
   });
+
+  it("can display a derived canonical without making it editable", () => {
+    const onChange = vi.fn();
+    render(
+      <SeoPanel
+        canonicalReadOnly
+        canonicalUrl="https://klinikawfa.com/services/sunat-kuantan/"
+        language="ms"
+        onChange={onChange}
+        value={emptySeoFields}
+      />,
+    );
+    expect(screen.getByLabelText("Canonical URL")).toHaveValue("https://klinikawfa.com/services/sunat-kuantan/");
+    expect(screen.getByLabelText("Canonical URL")).toHaveAttribute("readonly");
+    fireEvent.change(screen.getByLabelText("Canonical URL"), { target: { value: "https://example.com/" } });
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });

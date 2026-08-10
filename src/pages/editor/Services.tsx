@@ -1,9 +1,11 @@
-import { Loader2, Pencil } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Loader2, Pencil, Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { listServiceResources, type ServiceResourceSummary } from "@/features/website-cms/api/resources";
+import { CANONICAL_SERVICE_SEO_TARGETS } from "@/features/website-cms/service-seo/domain";
+import { resolveCanonicalServiceSlug } from "@/lib/serviceSlugMap";
 
 export function ServicesEditorList() {
   const [items, setItems] = useState<ServiceResourceSummary[]>([]);
@@ -12,14 +14,47 @@ export function ServicesEditorList() {
 
   useEffect(() => {
     let active = true;
-    void listServiceResources().then((rows) => { if (active) setItems(rows); }).catch(() => { if (active) setError(true); }).finally(() => { if (active) setLoading(false); });
+    void listServiceResources()
+      .then((rows) => { if (active) setItems(rows); })
+      .catch(() => { if (active) setError(true); })
+      .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
 
-  return <section className="space-y-6" aria-labelledby="services-editor-title">
-    <header><p className="text-sm font-medium text-blue-700">Public content</p><h1 className="mt-1 text-2xl font-semibold" id="services-editor-title">Services</h1><p className="mt-2 text-sm leading-6 text-slate-600">Edit the three approved service categories. Public aliases continue to resolve to these pages.</p></header>
-    {loading && <p className="flex items-center gap-2 rounded-xl border bg-white p-5 text-sm text-slate-600" role="status"><Loader2 className="h-4 w-4 animate-spin" />Loading services</p>}
-    {error && <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800" role="alert">Services could not be loaded. Refresh and try again.</p>}
-    {!loading && !error && <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">{items.map((item) => <li className="flex items-center justify-between gap-4 p-5" key={item.id}><div><h2 className="font-semibold text-slate-900">{item.title}</h2><p className="mt-1 text-xs text-slate-500">{item.slug}</p></div><Button asChild size="sm" variant="outline"><Link to={`/editor/services/${item.id}`}><Pencil className="mr-2 h-4 w-4" />Edit</Link></Button></li>)}</ul>}
-  </section>;
+  const contentByPath = useMemo(() => new Map(items.map((item) => [
+    `/services/${resolveCanonicalServiceSlug(item.slug)}/`,
+    item,
+  ])), [items]);
+
+  return (
+    <section className="space-y-6" aria-labelledby="services-editor-title">
+      <header>
+        <p className="text-sm font-medium text-blue-700">Public content</p>
+        <h1 className="mt-1 text-2xl font-semibold" id="services-editor-title">Services</h1>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Manage bilingual search and social metadata for every canonical service page. Category aliases continue to inherit their canonical page.</p>
+      </header>
+      {loading && <p className="flex items-center gap-2 rounded-xl border bg-white p-5 text-sm text-slate-600" role="status"><Loader2 className="h-4 w-4 animate-spin" />Loading services</p>}
+      {error && <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900" role="alert">Content links could not be loaded. SEO editing remains available.</p>}
+      {!loading && (
+        <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          {CANONICAL_SERVICE_SEO_TARGETS.map((target) => {
+            const content = contentByPath.get(target.path);
+            return (
+              <li className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between" key={target.id}>
+                <div>
+                  <h2 className="font-semibold text-slate-900">{target.labelMs}</h2>
+                  <p className="mt-1 text-sm text-slate-600">{target.labelEn}</p>
+                  <p className="mt-1 text-xs text-slate-500">{target.path}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {content && <Button asChild size="sm" variant="outline"><Link to={`/editor/services/${content.id}`}><Pencil className="mr-2 h-4 w-4" />Edit content</Link></Button>}
+                  <Button asChild size="sm"><Link to={`/editor/services/seo/${target.id}`}><Search className="mr-2 h-4 w-4" />Edit SEO</Link></Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
 }
