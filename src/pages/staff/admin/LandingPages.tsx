@@ -25,6 +25,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -186,16 +187,17 @@ export default function LandingPages() {
           .filter(Boolean),
       };
 
-      if (editingRecord) {
-        const { error } = await supabase
-          .from("clinic_services")
-          .update({ ...payload, updated_at: new Date().toISOString() })
-          .eq("id", editingRecord.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("clinic_services").insert([payload]);
-        if (error) throw error;
-      }
+      const { error } = await supabase.rpc("save_clinic_landing_page" as never, {
+        p_id: editingRecord?.id ?? null,
+        p_slug: payload.slug,
+        p_title: payload.title,
+        p_description: payload.description,
+        p_call_to_action: payload.call_to_action,
+        p_hero_image_url: payload.hero_image_url,
+        p_promo_video_url: payload.promo_video_url,
+        p_services_list: payload.services_list,
+      } as never);
+      if (error) throw error;
     },
     onSuccess: () => {
       toast.success(`Landing page ${editingRecord ? "updated" : "created"} successfully`);
@@ -213,7 +215,7 @@ export default function LandingPages() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("clinic_services").delete().eq("id", id);
+      const { error } = await supabase.rpc("delete_clinic_landing_page" as never, { p_id: id } as never);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -327,6 +329,9 @@ export default function LandingPages() {
             <DialogTitle>
               {editingRecord ? "Edit Landing Page" : "Create Landing Page"}
             </DialogTitle>
+            <DialogDescription>
+              Configure the public service URL, page content, media and included services.
+            </DialogDescription>
           </DialogHeader>
 
           <Form {...form}>
