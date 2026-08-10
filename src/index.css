@@ -555,10 +555,13 @@
 .service-rich-content {
   max-width: 100%;
   min-width: 0;
-  overflow-wrap: break-word;
+  overflow-wrap: normal;
   word-break: normal;
   hyphens: manual;
+  white-space: normal;
 }
+.service-rich-content a,
+.service-rich-content code { overflow-wrap: anywhere; }
 .service-rich-content .ql-align-center { text-align: center; }
 .service-rich-content .ql-align-right { text-align: right; }
 .service-rich-content .ql-align-justify { text-align: justify; }
