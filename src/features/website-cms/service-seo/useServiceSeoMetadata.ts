@@ -22,7 +22,7 @@ export function resolveServiceSeoMetadata(
   language: "ms" | "en",
   fallback: ResolvedServiceSeo,
 ): ResolvedServiceSeo {
-  if (!record) return fallback;
+  if (!record || !record.seoMs || !record.seoEn) return fallback;
   const selected = language === "en" ? record.seoEn : record.seoMs;
   const malay = record.seoMs;
   const pick = (selectedValue: string, malayValue: string, fallbackValue: string) =>

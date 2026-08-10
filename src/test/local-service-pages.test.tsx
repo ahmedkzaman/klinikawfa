@@ -21,6 +21,10 @@ vi.mock('@/features/analytics/GoogleAnalyticsController', () => ({
 
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {} }));
 
+vi.mock('@/features/website-cms/service-seo/useServiceSeoMetadata', () => ({
+  useServiceSeoMetadata: (_path: string, _language: string, fallback: unknown) => fallback,
+}));
+
 vi.mock('@/components/layout', () => ({
   MainLayout: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
 }));
@@ -150,12 +154,14 @@ describe('local SEO service pages', () => {
     render(
       <HelmetProvider>
         <MemoryRouter initialEntries={['/services/sunat-kuantan']}>
-          <Routes>
-            <Route
-              path="/services/sunat-kuantan"
-              element={<LocalServicePage slug="sunat-kuantan" />}
-            />
-          </Routes>
+          <LanguageProvider>
+            <Routes>
+              <Route
+                path="/services/sunat-kuantan"
+                element={<LocalServicePage slug="sunat-kuantan" />}
+              />
+            </Routes>
+          </LanguageProvider>
         </MemoryRouter>
       </HelmetProvider>,
     );
@@ -209,13 +215,13 @@ describe('local SEO service pages', () => {
         expect.arrayContaining([
           expect.objectContaining({
             '@type': 'WebPage',
-            name: LOCAL_SERVICE_PAGES['sunat-kuantan'].heading,
+            name: LOCAL_SERVICE_PAGES['sunat-kuantan'].title,
             description: LOCAL_SERVICE_PAGES['sunat-kuantan'].metaDescription,
             url: 'https://klinikawfa.com/services/sunat-kuantan/',
           }),
           expect.objectContaining({
             '@type': 'Service',
-            name: LOCAL_SERVICE_PAGES['sunat-kuantan'].heading,
+            name: LOCAL_SERVICE_PAGES['sunat-kuantan'].title,
             description: LOCAL_SERVICE_PAGES['sunat-kuantan'].metaDescription,
             url: 'https://klinikawfa.com/services/sunat-kuantan/',
           }),

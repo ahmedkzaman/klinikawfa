@@ -15,7 +15,9 @@ import {
   resolveServiceCategorySlug,
 } from "@/lib/serviceSlugMap";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useServiceSeoMetadata } from "@/features/website-cms/service-seo/useServiceSeoMetadata";
 import { buildBreadcrumbSchema, buildServiceSchema, buildWebPageSchema } from "@/lib/website/clinicSchema";
+import { canonicalUrl } from "@/lib/website/seoRoutes";
 
 const stripHtml = (html: string) =>
   (html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -56,6 +58,26 @@ export default function ServiceDetail() {
       return (data as ClinicService | null) ?? null;
     },
     enabled: !!dbSlug,
+  });
+
+  const title = service
+    ? (language === "en" ? service.title_en || service.title_ms || service.title : service.title_ms || service.title)
+    : "Klinik Awfa service";
+  const description = service
+    ? (language === "en" ? service.description_en || service.description_ms || service.description : service.description_ms || service.description)
+    : "Klinik Awfa healthcare service in KotaSAS, Kuantan.";
+  const canonicalSlug = resolveCanonicalServiceSlug(slug) ?? service?.slug ?? slug ?? "";
+  const servicePath = `/services/${canonicalSlug}`;
+  const schemaDescription = stripHtml(description).substring(0, 160);
+  const seo = useServiceSeoMetadata(servicePath, language, {
+    title,
+    description: schemaDescription,
+    socialTitle: title,
+    socialDescription: schemaDescription,
+    image: service?.hero_image_url || undefined,
+    canonicalUrl: canonicalUrl(servicePath),
+    noIndex: false,
+    noFollow: false,
   });
 
   if (isLoading) {
@@ -101,16 +123,11 @@ export default function ServiceDetail() {
     );
   }
 
-  const title = language === "en" ? service.title_en || service.title_ms || service.title : service.title_ms || service.title;
-  const description = language === "en" ? service.description_en || service.description_ms || service.description : service.description_ms || service.description;
   const callToAction = language === "en" ? service.call_to_action_en || service.call_to_action_ms || service.call_to_action : service.call_to_action_ms || service.call_to_action;
   const serviceItems = language === "en" && service.services_list_en?.length ? service.services_list_en : service.services_list_ms?.length ? service.services_list_ms : service.services_list;
-  const canonicalSlug = resolveCanonicalServiceSlug(slug) ?? service.slug;
-  const servicePath = `/services/${canonicalSlug}`;
-  const schemaDescription = stripHtml(description).substring(0, 160);
   const schemas = [
-    buildWebPageSchema({ path: servicePath, name: title, description: schemaDescription }),
-    buildServiceSchema({ path: servicePath, name: title, description: schemaDescription }),
+    buildWebPageSchema({ path: servicePath, name: seo.title, description: seo.description }),
+    buildServiceSchema({ path: servicePath, name: seo.title, description: seo.description }),
     buildBreadcrumbSchema([
       { name: 'Utama', path: '/' },
       { name: 'Perkhidmatan', path: '/services' },
@@ -121,10 +138,14 @@ export default function ServiceDetail() {
   return (
     <MainLayout>
       <SEOHead
-        title={title}
-        description={schemaDescription}
-        url={servicePath}
-        image={service.hero_image_url || undefined}
+        title={seo.title}
+        description={seo.description}
+        canonicalUrl={seo.canonicalUrl}
+        image={seo.image}
+        noFollow={seo.noFollow}
+        noIndex={seo.noIndex}
+        socialDescription={seo.socialDescription}
+        socialTitle={seo.socialTitle}
       />
       <SchemaMarkup schemas={schemas} />
 

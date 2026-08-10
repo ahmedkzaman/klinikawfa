@@ -5,6 +5,8 @@ import { SchemaMarkup, SEOHead } from '@/components/seo';
 import { Button } from '@/components/ui/button';
 import { LOCAL_SERVICE_PAGES, LOCAL_SERVICE_REVIEW } from '@/content/localServicePages';
 import { CLINIC_INFO } from '@/lib/constants';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { useServiceSeoMetadata } from '@/features/website-cms/service-seo/useServiceSeoMetadata';
 import {
   buildBreadcrumbSchema,
   buildServiceSchema,
@@ -18,12 +20,21 @@ interface LocalServicePageProps {
 
 export default function LocalServicePage({ slug }: LocalServicePageProps) {
   const content = LOCAL_SERVICE_PAGES[slug];
+  const { language } = useLanguage();
+  const servicePath = `/services/${content?.slug ?? slug}`;
+  const seo = useServiceSeoMetadata(servicePath, language, {
+    title: content?.title ?? "Klinik Awfa service",
+    description: content?.metaDescription ?? "Klinik Awfa healthcare service in KotaSAS, Kuantan.",
+    socialTitle: content?.title ?? "Klinik Awfa service",
+    socialDescription: content?.metaDescription ?? "Klinik Awfa healthcare service in KotaSAS, Kuantan.",
+    canonicalUrl: canonicalUrl(servicePath),
+    noIndex: false,
+    noFollow: false,
+  });
 
   if (!content) {
     return <Navigate to="/services" replace />;
   }
-
-  const servicePath = `/services/${content.slug}`;
   const breadcrumbItems = [
     { name: 'Utama', path: '/' },
     { name: 'Perkhidmatan', path: '/services' },
@@ -32,13 +43,13 @@ export default function LocalServicePage({ slug }: LocalServicePageProps) {
   const schemas = [
     buildWebPageSchema({
       path: servicePath,
-      name: content.heading,
-      description: content.metaDescription,
+      name: seo.title,
+      description: seo.description,
     }),
     buildServiceSchema({
       path: servicePath,
-      name: content.heading,
-      description: content.metaDescription,
+      name: seo.title,
+      description: seo.description,
     }),
     buildBreadcrumbSchema(breadcrumbItems),
   ];
@@ -46,9 +57,14 @@ export default function LocalServicePage({ slug }: LocalServicePageProps) {
   return (
     <MainLayout>
       <SEOHead
-        title={content.title}
-        description={content.metaDescription}
-        canonicalUrl={canonicalUrl(servicePath)}
+        title={seo.title}
+        description={seo.description}
+        canonicalUrl={seo.canonicalUrl}
+        image={seo.image}
+        noFollow={seo.noFollow}
+        noIndex={seo.noIndex}
+        socialDescription={seo.socialDescription}
+        socialTitle={seo.socialTitle}
       />
       <SchemaMarkup schemas={schemas} />
 
