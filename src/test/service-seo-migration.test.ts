@@ -9,6 +9,13 @@ const migrationName = readdirSync(migrationDirectory)
   .at(-1);
 const migrationPath = migrationName ? resolve(migrationDirectory, migrationName) : "";
 const sql = migrationPath && existsSync(migrationPath) ? readFileSync(migrationPath, "utf8") : "";
+const repairMigrationName = readdirSync(migrationDirectory)
+  .filter((name) => name.endsWith("_repair_empty_service_seo_payloads.sql"))
+  .sort()
+  .at(-1);
+const repairSql = repairMigrationName
+  ? readFileSync(resolve(migrationDirectory, repairMigrationName), "utf8")
+  : "";
 
 describe("service SEO database contract", () => {
   it("creates a public read-only registry with all canonical targets", () => {
@@ -55,5 +62,14 @@ describe("service SEO database contract", () => {
     expect(sql).toContain("seo_ms_social_image_path");
     expect(sql).toContain("seo_en_social_image_path");
     expect(sql).toContain("private.website_seo_payload_is_valid");
+  });
+
+  it("repairs seeded empty SEO objects and makes complete metadata the database default", () => {
+    expect(repairSql).toContain("alter column seo_ms set default");
+    expect(repairSql).toContain("alter column seo_en set default");
+    expect(repairSql).toContain("update public.website_service_seo");
+    for (const key of ["title", "description", "canonicalUrl", "socialTitle", "socialDescription", "socialImageMediaId", "index", "follow"]) {
+      expect(repairSql).toContain(`'${key}'`);
+    }
   });
 });

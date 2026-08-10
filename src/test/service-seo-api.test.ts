@@ -17,6 +17,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 import {
   fetchPublishedServiceSeo,
+  fetchServiceSeoForEditor,
   publishServiceSeo,
   saveServiceSeoDraft,
 } from "@/features/website-cms/service-seo/api";
@@ -62,6 +63,44 @@ describe("service SEO API", () => {
       baseRevision: 2,
     }));
     expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it("opens a newly seeded SEO target whose published metadata is still empty", async () => {
+    mocks.fetchResourceDraft.mockResolvedValue(null);
+    mocks.from.mockImplementation((table: string) => {
+      if (table === "website_service_seo") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              single: vi.fn().mockResolvedValue({
+                data: {
+                  id: "b9838947-9b48-4f1d-a378-21224c4b5c04",
+                  path: "/services/rawatan-telinga-kuantan/",
+                  label_ms: "Rawatan Telinga Kuantan",
+                  label_en: "Ear Treatment in Kuantan",
+                  source_kind: "local_landing",
+                  focus_phrase_ms: "",
+                  focus_phrase_en: "",
+                  seo_ms: {},
+                  seo_en: {},
+                  seo_ms_social_image_path: null,
+                  seo_en_social_image_path: null,
+                  website_revision: 0,
+                  published_at: null,
+                },
+                error: null,
+              }),
+            })),
+          })),
+        };
+      }
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    const result = await fetchServiceSeoForEditor("b9838947-9b48-4f1d-a378-21224c4b5c04");
+
+    expect(result.payload).toEqual(createEmptyServiceSeoPayload("/services/rawatan-telinga-kuantan/"));
+    expect(result.revision).toBe(0);
   });
 
   it("publishes through the guarded RPC and rejects malformed responses", async () => {

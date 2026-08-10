@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { LOCAL_SERVICE_PAGES } from "@/content/localServicePages";
 import { fetchResourceDraft, saveResourceDraft } from "@/features/website-cms/api/resources";
-import { seoFieldsSchema, type SeoFields } from "@/features/website-cms/domain/seo";
+import { emptySeoFields, seoFieldsSchema, type SeoFields } from "@/features/website-cms/domain/seo";
 import {
   serviceSeoPayloadSchema,
   type CanonicalServiceSeoPath,
@@ -134,7 +134,12 @@ export async function fetchServiceSeoForEditor(id: string): Promise<ServiceSeoEd
       .single(),
   ]);
   if (rowResult.error || !rowResult.data) throw new Error("Service SEO target could not be loaded");
-  const row = editorRowSchema.parse(rowResult.data);
+  const storedRow = rowResult.data as Record<string, unknown>;
+  const row = editorRowSchema.parse({
+    ...storedRow,
+    seo_ms: { ...emptySeoFields, ...(storedRow.seo_ms as Record<string, unknown> ?? {}) },
+    seo_en: { ...emptySeoFields, ...(storedRow.seo_en as Record<string, unknown> ?? {}) },
+  });
   const sourceContext = row.source_kind === "category"
     ? await categoryServiceContext(row.path as CanonicalServiceSeoPath)
     : { contextMs: localServiceContext(row.path as CanonicalServiceSeoPath) };
