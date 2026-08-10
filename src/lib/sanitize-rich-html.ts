@@ -33,5 +33,13 @@ const RICH_HTML_CONFIG = {
 
 export function sanitizeRichHtml(html: string): string {
   if (!html) return "";
-  return DOMPurify.sanitize(html, RICH_HTML_CONFIG) as unknown as string;
+  const sanitized = DOMPurify.sanitize(
+    html,
+    RICH_HTML_CONFIG,
+  ) as unknown as string;
+
+  // Quill can persist pasted or generated spaces as non-breaking spaces.
+  // A paragraph made entirely from them becomes one browser-wide token and
+  // either overflows its container or is forced to split through words.
+  return sanitized.replace(/&nbsp;|\u00a0|\u202f/gi, " ");
 }

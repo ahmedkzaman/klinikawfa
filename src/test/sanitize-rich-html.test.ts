@@ -46,6 +46,18 @@ describe("sanitizeRichHtml (GHSA-v3m3-f69x-jf25 mitigation)", () => {
     expect(sanitizeRichHtml(input)).toBe(input);
   });
 
+  it("converts editor non-breaking spaces into wrap-safe spaces", () => {
+    const input =
+      '<p><span class="ql-size-large">Pre-&nbsp;employment\u00a0checkups\u202fhelp patients</span></p>';
+
+    const clean = sanitizeRichHtml(input);
+
+    expect(clean).toBe(
+      '<p><span class="ql-size-large">Pre- employment checkups help patients</span></p>',
+    );
+    expect(clean).not.toMatch(/&nbsp;|\u00a0|\u202f/i);
+  });
+
   it("preserves HTTPS links, images, and videos with allowed attributes", () => {
     const clean = sanitizeRichHtml(
       '<a href="https://klinikawfa.com" target="_blank">go</a>' +
