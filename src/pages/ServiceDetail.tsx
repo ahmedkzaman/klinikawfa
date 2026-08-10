@@ -18,6 +18,9 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useServiceSeoMetadata } from "@/features/website-cms/service-seo/useServiceSeoMetadata";
 import { buildBreadcrumbSchema, buildServiceSchema, buildWebPageSchema } from "@/lib/website/clinicSchema";
 import { canonicalUrl } from "@/lib/website/seoRoutes";
+import { ServiceAeoSections } from "@/components/seo/ServiceAeoSections";
+import { buildCategoryServiceAeo } from "@/features/website-cms/service-seo/aeoContent";
+import { buildServiceStructuredData } from "@/lib/seo/serviceStructuredData";
 
 const stripHtml = (html: string) =>
   (html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -125,15 +128,8 @@ export default function ServiceDetail() {
 
   const callToAction = language === "en" ? service.call_to_action_en || service.call_to_action_ms || service.call_to_action : service.call_to_action_ms || service.call_to_action;
   const serviceItems = language === "en" && service.services_list_en?.length ? service.services_list_en : service.services_list_ms?.length ? service.services_list_ms : service.services_list;
-  const schemas = [
-    buildWebPageSchema({ path: servicePath, name: seo.title, description: seo.description }),
-    buildServiceSchema({ path: servicePath, name: seo.title, description: seo.description }),
-    buildBreadcrumbSchema([
-      { name: 'Utama', path: '/' },
-      { name: 'Perkhidmatan', path: '/services' },
-      { name: title, path: servicePath },
-    ]),
-  ];
+  const aeoContent = buildCategoryServiceAeo({ titleMs: service.title_ms || service.title, titleEn: service.title_en || service.title_ms || service.title, descriptionMs: stripHtml(service.description_ms || service.description), descriptionEn: stripHtml(service.description_en || service.description_ms || service.description) });
+  const schemas = buildServiceStructuredData({ path: servicePath, name: seo.title, description: seo.description, faqs: aeoContent.faqs });
 
   return (
     <MainLayout>
@@ -206,6 +202,8 @@ export default function ServiceDetail() {
           </CardContent>
         </Card>
       </section>
+
+      <ServiceAeoSections content={aeoContent} />
 
       {/* Bottom CTA */}
       <section className="bg-primary py-16 text-primary-foreground">

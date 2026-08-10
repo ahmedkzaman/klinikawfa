@@ -13,6 +13,9 @@ import {
   buildWebPageSchema,
 } from '@/lib/website/clinicSchema';
 import { canonicalUrl } from '@/lib/website/seoRoutes';
+import { ServiceAeoSections } from '@/components/seo/ServiceAeoSections';
+import { buildLocalServiceAeo } from '@/features/website-cms/service-seo/aeoContent';
+import { buildServiceStructuredData } from '@/lib/seo/serviceStructuredData';
 
 interface LocalServicePageProps {
   slug: string;
@@ -40,19 +43,7 @@ export default function LocalServicePage({ slug }: LocalServicePageProps) {
     { name: 'Perkhidmatan', path: '/services' },
     { name: content.heading, path: servicePath },
   ];
-  const schemas = [
-    buildWebPageSchema({
-      path: servicePath,
-      name: seo.title,
-      description: seo.description,
-    }),
-    buildServiceSchema({
-      path: servicePath,
-      name: seo.title,
-      description: seo.description,
-    }),
-    buildBreadcrumbSchema(breadcrumbItems),
-  ];
+  const schemas = buildServiceStructuredData({ path: servicePath, name: seo.title, description: seo.description, faqs: buildLocalServiceAeo(content).faqs });
 
   return (
     <MainLayout>
@@ -208,6 +199,7 @@ export default function LocalServicePage({ slug }: LocalServicePageProps) {
           </div>
         </aside>
       </div>
+      <ServiceAeoSections content={buildLocalServiceAeo(content)} />
     </MainLayout>
   );
 }
