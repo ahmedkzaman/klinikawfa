@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MainLayout } from '@/components/layout';
 import { SEOHead } from '@/components/seo';
+import { PublicPageSchema } from '@/components/seo/PublicPageSchema';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -42,6 +43,7 @@ export default function HealthTips() {
           : 'Health articles and guides from Klinik Awfa experts. Read health tips for the whole family.'}
         url="/health-tips"
       />
+      <PublicPageSchema path="/health-tips" name={language === 'ms' ? 'Tips Kesihatan Klinik Awfa' : 'Klinik Awfa Health Tips'} description={language === 'ms' ? 'Artikel kesihatan umum daripada Klinik Awfa.' : 'General health articles from Klinik Awfa.'} type="CollectionPage" />
 
       {/* Hero */}
       <section className="bg-gradient-to-b from-background to-primary/5 py-16 md:py-24">

@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 
 import { MainLayout } from "@/components/layout";
 import { SEOHead } from "@/components/seo";
+import { PublicPageSchema } from "@/components/seo/PublicPageSchema";
 import { GeneralPageRenderer } from "@/components/website/GeneralPageRenderer";
 import { useLanguage, type Language } from "@/contexts/LanguageContext";
 import { fetchPublishedGeneralPage } from "@/features/website-cms/api/pages";
@@ -24,6 +25,7 @@ function GeneralPageNotFound() {
         noIndex
         title="Page not found"
       />
+      <PublicPageSchema path={`/pages/${slug}`} name={seoTitle} description={seoDescription} />
       <section className="flex min-h-[50vh] items-center justify-center px-4 text-center">
         <div>
           <h1 className="text-4xl font-bold">404</h1>

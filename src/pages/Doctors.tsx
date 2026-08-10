@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { MainLayout } from '@/components/layout';
 import { SEOHead } from '@/components/seo';
+import { PublicPageSchema } from '@/components/seo/PublicPageSchema';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -160,6 +161,7 @@ export default function Doctors() {
           : 'Meet the experienced team of doctors at Klinik Awfa who always prioritize patient care.'}
         url="/doctors"
       />
+      <PublicPageSchema path="/doctors" name={language === 'ms' ? 'Doktor Klinik Awfa' : 'Klinik Awfa Doctors'} description={language === 'ms' ? 'Kenali pasukan doktor Klinik Awfa.' : 'Meet the doctors at Klinik Awfa.'} type="AboutPage" />
 
       {/* Hero Section */}
       {/* Hero Section */}

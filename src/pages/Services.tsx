@@ -1,5 +1,6 @@
 import { MainLayout } from '@/components/layout';
 import { SEOHead } from '@/components/seo';
+import { PublicPageSchema } from '@/components/seo/PublicPageSchema';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -64,6 +65,7 @@ export default function Services() {
           : 'Wide range of health services for your entire family at Klinik Awfa Kuantan.'}
         url="/services"
       />
+      <PublicPageSchema path="/services" name={language === 'ms' ? 'Perkhidmatan Klinik Awfa' : 'Klinik Awfa Services'} description={language === 'ms' ? 'Senarai perkhidmatan kesihatan Klinik Awfa di KotaSAS, Kuantan.' : 'Healthcare services available at Klinik Awfa in KotaSAS, Kuantan.'} type="CollectionPage" />
 
       {/* Hero */}
       <section className="bg-gradient-to-b from-background to-primary/5 py-16 md:py-24">

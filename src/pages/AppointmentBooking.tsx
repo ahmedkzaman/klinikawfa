@@ -16,6 +16,7 @@ import {
 
 import { MainLayout } from "@/components/layout";
 import { SEOHead } from "@/components/seo";
+import { PublicPageSchema } from "@/components/seo/PublicPageSchema";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -156,6 +157,7 @@ export default function AppointmentBooking() {
         title="Book Appointment | Klinik Awfa"
         description="Reserve your appointment slot at Klinik Awfa. Simple, secure, and confirmed once your booking fee is received."
       />
+      <PublicPageSchema path="/appointment" name={language === 'ms' ? 'Buat Temujanji Klinik Awfa' : 'Book an Appointment at Klinik Awfa'} description={language === 'ms' ? 'Tempah temujanji untuk mendapatkan rawatan di Klinik Awfa.' : 'Book an appointment for care at Klinik Awfa.'} type="ContactPage" />
       <section className="bg-slate-50 py-12 md:py-16">
         <div className="container max-w-2xl mx-auto px-4">
           <div className="text-center mb-8">

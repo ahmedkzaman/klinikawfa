@@ -1,5 +1,6 @@
 import { MainLayout } from '@/components/layout';
 import { SEOHead } from '@/components/seo';
+import { PublicPageSchema } from '@/components/seo/PublicPageSchema';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { CLINIC_INFO } from '@/lib/constants';
@@ -18,6 +19,7 @@ export default function Gallery() {
           : 'See the atmosphere at Klinik Awfa Kuantan. Photo gallery of our facilities and services.'}
         url="/gallery"
       />
+      <PublicPageSchema path="/gallery" name={language === 'ms' ? 'Galeri Klinik Awfa' : 'Klinik Awfa Gallery'} description={language === 'ms' ? 'Lihat galeri Klinik Awfa.' : 'View the Klinik Awfa gallery.'} type="CollectionPage" />
 
       {/* Hero */}
       {/* Hero */}

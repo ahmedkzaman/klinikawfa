@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { MainLayout } from '@/components/layout';
 import { SEOHead } from '@/components/seo';
+import { PublicPageSchema } from '@/components/seo/PublicPageSchema';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -96,7 +97,7 @@ export default function DoctorOnDuty() {
 
   return (
     <MainLayout>
-      <SEOHead title={title} description={desc} />
+      <SEOHead title={title} description={desc} /><PublicPageSchema path="/doctor-on-duty" name={title} description={desc} type="MedicalWebPage" />
 
       <section className="relative bg-gradient-to-br from-[#261d84] via-[#2d2496] to-[#1a1560] text-white py-16 md:py-20">
         <div className="container mx-auto px-4 text-center">
