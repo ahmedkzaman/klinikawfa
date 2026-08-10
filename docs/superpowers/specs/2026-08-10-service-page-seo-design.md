@@ -105,6 +105,14 @@ Both `ServiceDetail` and `LocalServicePage` resolve their canonical path and req
 
 Malay remains the default for static pre-rendering and crawler-facing HTML. English metadata updates when English mode is active.
 
+### GitHub Pages static metadata synchronization
+
+GitHub Pages serves copied static HTML files before the React application runs. The current deployment script stamps hard-coded metadata into those files, so runtime database changes alone would not reliably update search and social crawlers.
+
+The deployment SEO preparation script will therefore read the public published service SEO registry during a Pages build and stamp its Malay title, description, robots, canonical, and social metadata into each canonical service HTML file. Existing checked-in metadata remains the fail-safe when the registry is empty or Supabase is temporarily unavailable.
+
+The Pages workflow will continue to deploy after validated code changes and will also run on an hourly schedule. Publishing SEO updates the JavaScript-rendered metadata immediately; the crawler/social static HTML refreshes on the next successful scheduled deployment, normally within one hour. The editor will display this expectation after publication.
+
 ## Sitemap and Canonical Rules
 
 - Include all eight canonical service URLs in `public/sitemap.xml`.
@@ -178,6 +186,8 @@ The function must:
 - Every canonical service URL appears once in the sitemap.
 - Alias URLs do not appear in the sitemap and emit the correct canonical.
 - Pre-rendered HTML contains the published Malay title, description, robots, canonical, social tags, and JSON-LD.
+- The build-time metadata loader uses published registry values when available and checked-in fallbacks when the public registry cannot be reached.
+- The Pages workflow has an hourly scheduled trigger so published SEO reaches static crawler/social HTML without requiring a code commit.
 - All eight canonical URLs return HTTP 200 after deployment.
 - Live inspection confirms the expected metadata in both language modes.
 
