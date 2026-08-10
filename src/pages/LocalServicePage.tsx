@@ -43,7 +43,7 @@ export default function LocalServicePage({ slug }: LocalServicePageProps) {
     { name: 'Perkhidmatan', path: '/services' },
     { name: content.heading, path: servicePath },
   ];
-  const schemas = buildServiceStructuredData({ path: servicePath, name: seo.title, description: seo.description, faqs: buildLocalServiceAeo(content).faqs });
+  const schemas = buildServiceStructuredData({ path: servicePath, name: seo.title, breadcrumbName: content.heading, description: seo.description, faqs: buildLocalServiceAeo(content).faqs });
 
   return (
     <MainLayout>
