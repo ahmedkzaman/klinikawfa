@@ -3,6 +3,9 @@ project_id = "ncysmppzfjtiekfnomdv"
 [functions.generate-bio]
 verify_jwt = true
 
+[functions.translate-service-content]
+verify_jwt = true
+
 [functions.generate-tts]
 verify_jwt = true
 

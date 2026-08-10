@@ -1,4 +1,4 @@
-import { Loader2, Save, Send } from "lucide-react";
+import { Languages, Loader2, Save, Send } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -21,6 +21,7 @@ export function ServiceEditor() {
   const [baseRevision, setBaseRevision] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState<"save" | "publish" | null>(null);
+  const [translating, setTranslating] = useState(false);
   const [notice, setNotice] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   useEditorDirtyState(dirty);
 
@@ -32,6 +33,20 @@ export function ServiceEditor() {
 
   const update = <K extends keyof ServiceDraft>(key: K, next: ServiceDraft[K]) => { setValue((current) => current ? { ...current, [key]: next } : current); setDirty(true); setNotice(null); };
   const validate = () => value ? serviceDraftSchema.safeParse(value) : null;
+  const generateEnglish = async () => {
+    if (!value) return;
+    setTranslating(true); setNotice(null);
+    try {
+      const { data, error } = await (await import("@/integrations/supabase/client")).supabase.functions.invoke("translate-service-content", {
+        body: { title_ms: value.titleMs, description_ms: value.descriptionMs, cta_ms: value.ctaMs, services_ms: value.servicesMs },
+      });
+      if (error) throw error;
+      if (!data?.title_en || !data?.description_en || !Array.isArray(data.services_en)) throw new Error("Translation returned incomplete content");
+      setValue((current) => current ? { ...current, titleEn: data.title_en, descriptionEn: data.description_en, ctaEn: data.cta_en, servicesEn: data.services_en } : current);
+      setDirty(true); setNotice({ tone: "success", text: "English content generated from Malay. Please review before publishing." });
+    } catch (error) { setNotice({ tone: "error", text: error instanceof Error ? error.message : "English content could not be generated." }); }
+    finally { setTranslating(false); }
+  };
   const save = async () => {
     const parsed = validate(); if (!parsed?.success) { setNotice({ tone: "error", text: parsed?.error.issues[0]?.message ?? "Complete the required fields." }); return; }
     setBusy("save"); try { const saved = await saveResourceDraft({ baseRevision, payload: parsed.data, resourceId: id, resourceType: "service", updatedAt: null }); setValue(saved.payload); setBaseRevision(saved.baseRevision); setDirty(false); setNotice({ tone: "success", text: "Draft saved privately." }); } catch (error) { setNotice({ tone: "error", text: error instanceof Error ? error.message : "Draft could not be saved. Your changes remain in this form." }); } finally { setBusy(null); }
@@ -46,6 +61,7 @@ export function ServiceEditor() {
     <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm font-medium text-blue-700">Service category</p><h1 className="mt-1 text-2xl font-semibold">{value.titleMs}</h1><p className="mt-1 text-xs text-slate-500">{value.slug} · revision {baseRevision}</p></div><div className="flex gap-2"><Button onClick={() => navigate("/editor/services")} variant="outline">Back</Button><Button disabled={Boolean(busy)} onClick={() => void save()} variant="outline"><Save className="mr-2 h-4 w-4" />Save draft</Button><Button disabled={Boolean(busy)} onClick={() => void publish()}><Send className="mr-2 h-4 w-4" />Publish</Button></div></header>
     {notice && <p className={`rounded-lg border p-3 text-sm ${notice.tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800"}`} role={notice.tone === "error" ? "alert" : "status"}>{notice.text}</p>}
     <div className="space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex justify-end"><Button type="button" disabled={translating} onClick={() => void generateEnglish()} variant="outline"><Languages className="mr-2 h-4 w-4" />{translating ? "Generating English…" : "Generate English from Malay"}</Button></div>
       <Bilingual label="Title" ms={value.titleMs} en={value.titleEn} onMs={(x) => update("titleMs",x)} onEn={(x) => update("titleEn",x)} />
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
