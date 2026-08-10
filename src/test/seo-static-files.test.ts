@@ -15,7 +15,10 @@ const protectedPrefixes = [
   '/tv',
 ] as const;
 
-const localServiceHubs = [
+const canonicalServicePages = [
+  '/services/rawatan-umum/',
+  '/services/prosedur-kecil/',
+  '/services/pemeriksaan-kesihatan/',
   '/services/rawatan-telinga-kuantan/',
   '/services/minor-surgery-kutil-kuantan/',
   '/services/swab-test-demam-kuantan/',
@@ -42,7 +45,14 @@ describe('production SEO static files', () => {
     expect(sitemap).not.toContain(`<loc>https://klinikawfa.com${prefix}`);
   });
 
-  it.each(localServiceHubs)('submits %s in the sitemap', (path) => {
+  it.each(canonicalServicePages)('submits %s exactly once in the sitemap', (path) => {
     expect(sitemap).toContain(`<loc>https://klinikawfa.com${path}</loc>`);
+    expect(sitemap.match(new RegExp(`<loc>https://klinikawfa\\.com${path}</loc>`, 'g'))).toHaveLength(1);
+  });
+
+  it('does not submit legacy service aliases', () => {
+    for (const alias of ['/services/rawatan-am/', '/services/prosedur-minor/', '/services/pemeriksaan-darah/']) {
+      expect(sitemap).not.toContain(`<loc>https://klinikawfa.com${alias}</loc>`);
+    }
   });
 });

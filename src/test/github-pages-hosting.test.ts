@@ -14,7 +14,10 @@ const seoPrepareScriptPath = resolve(repoRoot, "scripts/prepare-public-seo-pages
 const readWorkflow = () => readFileSync(workflowPath, "utf8");
 
 describe("GitHub Pages hosting", () => {
-  const localSeoRoutes = [
+  const serviceSeoRoutes = [
+    "services/rawatan-umum",
+    "services/prosedur-kecil",
+    "services/pemeriksaan-kesihatan",
     "services/rawatan-telinga-kuantan",
     "services/minor-surgery-kutil-kuantan",
     "services/swab-test-demam-kuantan",
@@ -73,6 +76,13 @@ describe("GitHub Pages hosting", () => {
     expect(workflow).not.toContain("pull_request:");
   });
 
+  it("refreshes crawler HTML hourly only for a main commit that passed Security Gate", () => {
+    const workflow = readWorkflow();
+    expect(workflow).toContain('cron: "17 * * * *"');
+    expect(workflow).toContain("github.event_name == 'schedule'");
+    expect(workflow).toContain("Verify Security Gate result");
+  });
+
   it("uses immutable reviewed action pins and least privilege", () => {
     const workflow = readWorkflow();
     expect(workflow).toContain("actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0");
@@ -117,7 +127,7 @@ describe("GitHub Pages hosting", () => {
   it("prepares and validates a static Pages artifact for every local SEO hub", () => {
     const workflow = readWorkflow().replaceAll("\r\n", "\n");
 
-    for (const route of localSeoRoutes) {
+    for (const route of serviceSeoRoutes) {
       expect(workflow).toContain(`\n            ${route}\n`);
       expect(workflow).toContain(`test -f dist/${route}/index.html`);
     }
@@ -146,7 +156,7 @@ describe("GitHub Pages hosting", () => {
 
     try {
       writeFileSync(resolve(distFixture, "index.html"), indexHtml);
-      for (const route of ["services", ...localSeoRoutes]) {
+      for (const route of ["services", ...serviceSeoRoutes]) {
         const target = resolve(distFixture, route);
         mkdirSync(target, { recursive: true });
         cpSync(resolve(distFixture, "index.html"), resolve(target, "index.html"));
