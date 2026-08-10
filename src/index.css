@@ -552,6 +552,10 @@
 .service-rich-content h2,
 .service-rich-content h3 { @apply text-foreground font-bold mt-6 mb-3; }
 .service-rich-content p { @apply my-3; }
+/* Quill size classes are persisted in service HTML; mirror them on the public page. */
+.service-rich-content .ql-size-small { font-size: 0.75em; }
+.service-rich-content .ql-size-large { font-size: 1.5em; }
+.service-rich-content .ql-size-huge { font-size: 2.5em; }
 
 /* Quill editor sizing */
 .rich-text-editor-wrapper .ql-container { min-height: 220px; font-size: 0.95rem; }
