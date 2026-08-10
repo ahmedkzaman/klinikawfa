@@ -33,11 +33,11 @@ export function ServiceEditor() {
   const validate = () => value ? serviceDraftSchema.safeParse(value) : null;
   const save = async () => {
     const parsed = validate(); if (!parsed?.success) { setNotice({ tone: "error", text: parsed?.error.issues[0]?.message ?? "Complete the required fields." }); return; }
-    setBusy("save"); try { const saved = await saveResourceDraft({ baseRevision, payload: parsed.data, resourceId: id, resourceType: "service", updatedAt: null }); setValue(saved.payload); setDirty(false); setNotice({ tone: "success", text: "Draft saved privately." }); } catch { setNotice({ tone: "error", text: "Draft could not be saved. Your changes remain in this form." }); } finally { setBusy(null); }
+    setBusy("save"); try { const saved = await saveResourceDraft({ baseRevision, payload: parsed.data, resourceId: id, resourceType: "service", updatedAt: null }); setValue(saved.payload); setBaseRevision(saved.baseRevision); setDirty(false); setNotice({ tone: "success", text: "Draft saved privately." }); } catch (error) { setNotice({ tone: "error", text: error instanceof Error ? error.message : "Draft could not be saved. Your changes remain in this form." }); } finally { setBusy(null); }
   };
   const publish = async () => {
     const parsed = validate(); if (!parsed?.success) { setNotice({ tone: "error", text: parsed?.error.issues[0]?.message ?? "Complete the required fields." }); return; }
-    setBusy("publish"); try { await saveResourceDraft({ baseRevision, payload: parsed.data, resourceId: id, resourceType: "service", updatedAt: null }); const revision = await publishResourceDraft("service", id, baseRevision); setBaseRevision(revision); setDirty(false); setNotice({ tone: "success", text: "Service published successfully." }); } catch (error) { setNotice({ tone: "error", text: error instanceof Error ? error.message : "Service could not be published." }); } finally { setBusy(null); }
+    setBusy("publish"); try { const saved = await saveResourceDraft({ baseRevision, payload: parsed.data, resourceId: id, resourceType: "service", updatedAt: null }); const revision = await publishResourceDraft("service", id, saved.baseRevision); setBaseRevision(revision); setDirty(false); setNotice({ tone: "success", text: "Service published successfully." }); } catch (error) { setNotice({ tone: "error", text: error instanceof Error ? error.message : "Service could not be published." }); } finally { setBusy(null); }
   };
 
   if (!value) return <div className="rounded-xl border bg-white p-5 text-sm text-slate-600" role="status">{notice?.tone === "error" ? notice.text : <><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Loading service</>}</div>;

@@ -66,7 +66,7 @@ export async function saveResourceDraft<T>(input: ResourceDraftRecord<T>): Promi
     }, { onConflict: "resource_type,resource_id" })
     .select("resource_type,resource_id,draft_payload,base_revision,updated_at")
     .single();
-  if (error || !data) throw new Error("Draft could not be saved");
+  if (error || !data) throw new Error(error?.message || "Draft could not be saved");
   return {
     baseRevision: data.base_revision,
     payload: parseWebsiteResourceDraft(input.resourceType, data.draft_payload) as T,
