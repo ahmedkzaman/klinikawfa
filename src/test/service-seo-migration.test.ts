@@ -16,6 +16,9 @@ describe("service SEO database contract", () => {
     expect(sql).toContain("enable row level security");
     expect(sql).toContain("grant select on table public.website_service_seo to anon, authenticated");
     expect(sql).toContain("revoke insert, update, delete on table public.website_service_seo from anon, authenticated");
+    expect(sql).toMatch(/for select to anon\s+using \(published_at is not null\)/i);
+    expect(sql).toMatch(/for select to authenticated\s+using \(published_at is not null or \(select private\.can_manage_website\(\)\)\)/i);
+    expect(sql).toContain("website_service_seo_published_by_idx");
     for (const path of [
       "/services/rawatan-umum/",
       "/services/prosedur-kecil/",
