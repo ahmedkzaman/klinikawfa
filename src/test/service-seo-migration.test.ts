@@ -16,6 +16,13 @@ const repairMigrationName = readdirSync(migrationDirectory)
 const repairSql = repairMigrationName
   ? readFileSync(resolve(migrationDirectory, repairMigrationName), "utf8")
   : "";
+const publishFixMigrationName = readdirSync(migrationDirectory)
+  .filter((name) => name.endsWith("_fix_service_seo_object_key_count.sql"))
+  .sort()
+  .at(-1);
+const publishFixSql = publishFixMigrationName
+  ? readFileSync(resolve(migrationDirectory, publishFixMigrationName), "utf8")
+  : "";
 
 describe("service SEO database contract", () => {
   it("creates a public read-only registry with all canonical targets", () => {
@@ -71,5 +78,12 @@ describe("service SEO database contract", () => {
     for (const key of ["title", "description", "canonicalUrl", "socialTitle", "socialDescription", "socialImageMediaId", "index", "follow"]) {
       expect(repairSql).toContain(`'${key}'`);
     }
+  });
+
+  it("counts top-level SEO payload keys using supported PostgreSQL JSONB functions", () => {
+    expect(publishFixSql).toContain("pg_get_functiondef");
+    expect(publishFixSql).toContain("jsonb_object_length(v_payload)");
+    expect(publishFixSql).toMatch(/select count\(\*\)[\s\S]*pg_catalog\.jsonb_object_keys\(v_payload\)/i);
+    expect(publishFixSql).toContain("raise exception 'publish_service_seo definition was not recognized'");
   });
 });
