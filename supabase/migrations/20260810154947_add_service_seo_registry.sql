@@ -127,8 +127,8 @@ begin
     raise exception 'stale website resource revision' using errcode = '40001';
   end if;
   if jsonb_typeof(v_payload) <> 'object'
-     or (select array_agg(key order by key) from jsonb_object_keys(v_payload) key)
-        <> array['focusPhraseEn','focusPhraseMs','path','seoEn','seoMs'] then
+     or jsonb_object_length(v_payload) <> 5
+     or not (v_payload ?& array['focusPhraseEn','focusPhraseMs','path','seoEn','seoMs']) then
     raise exception 'invalid service SEO payload keys' using errcode = '22023';
   end if;
   if v_payload->>'path' <> v_path
