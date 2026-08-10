@@ -233,7 +233,7 @@ export default function DoctorOnDuty() {
                     {CLINIC_INFO.phone}
                   </a>
                 </Button>
-                <Button asChild variant="outline" className="border-white text-white hover:bg-white/10">
+                <Button asChild variant="outline" className="border-white bg-white text-[#261d84] hover:bg-white/90">
                   <a href={CLINIC_INFO.whatsapp} target="_blank" rel="noopener noreferrer">
                     <MessageCircle className="h-4 w-4 mr-2" />
                     WhatsApp
