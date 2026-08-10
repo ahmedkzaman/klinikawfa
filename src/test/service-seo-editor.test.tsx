@@ -7,7 +7,11 @@ const api = vi.hoisted(() => ({
   saveServiceSeoDraft: vi.fn(),
   publishServiceSeo: vi.fn(),
 }));
+const invoke = vi.hoisted(() => vi.fn());
 vi.mock("@/features/website-cms/service-seo/api", () => api);
+vi.mock("@/integrations/supabase/client", () => ({
+  supabase: { functions: { invoke } },
+}));
 
 import { createEmptyServiceSeoPayload } from "@/features/website-cms/service-seo/domain";
 import { ServiceSeoEditor } from "@/pages/editor/ServiceSeoEditor";
@@ -30,12 +34,19 @@ describe("service SEO editor", () => {
     const payload = createEmptyServiceSeoPayload("/services/rawatan-umum/");
     payload.seoMs.title = "Rawatan Umum Kuantan";
     payload.seoEn.title = "General Treatment Kuantan";
-    api.fetchServiceSeoForEditor.mockResolvedValue({ payload, revision: 2, publishedAt: null });
+    api.fetchServiceSeoForEditor.mockResolvedValue({
+      payload,
+      revision: 2,
+      publishedAt: null,
+      contextMs: "Published Malay service page content",
+      contextEn: "Published English service page content",
+    });
     api.saveServiceSeoDraft.mockImplementation(async (_id, revision, savedPayload) => ({
       baseRevision: revision,
       payload: savedPayload,
     }));
     api.publishServiceSeo.mockResolvedValue(3);
+    invoke.mockResolvedValue({ data: null, error: new Error("Generation unavailable") });
   });
 
   it("keeps Malay and English fields separate and locks the canonical URL", async () => {
@@ -57,5 +68,22 @@ describe("service SEO editor", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /publish seo/i }));
     await waitFor(() => expect(api.publishServiceSeo).toHaveBeenCalledWith(targetId, 2));
+  });
+
+  it("sends registered page content to AI and preserves the draft when generation fails", async () => {
+    renderEditor();
+    const title = await screen.findByLabelText("Search title");
+    fireEvent.change(title, { target: { value: "My unchanged draft title" } });
+    fireEvent.click(screen.getByRole("button", { name: /generate seo with ai/i }));
+
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("generate-service-seo", {
+      body: expect.objectContaining({
+        path: "/services/rawatan-umum/",
+        contentMs: "Published Malay service page content",
+        contentEn: "Published English service page content",
+      }),
+    }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Generation unavailable");
+    expect(screen.getByLabelText("Search title")).toHaveValue("My unchanged draft title");
   });
 });

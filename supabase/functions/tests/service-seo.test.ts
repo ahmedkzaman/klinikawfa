@@ -13,9 +13,23 @@ Deno.test("service SEO request validation accepts bounded public page context", 
     titleEn: "Circumcision in Kuantan",
     focusPhraseMs: "sunat kanak-kanak kuantan",
     focusPhraseEn: "child circumcision Kuantan",
+    contentMs: "Maklumat halaman perkhidmatan yang diterbitkan.",
   });
   assertEquals(result.path, "/services/sunat-kuantan/");
   assertEquals(result.focusPhraseMs, "sunat kanak-kanak kuantan");
+  assertEquals(result.contentMs, "Maklumat halaman perkhidmatan yang diterbitkan.");
+});
+
+Deno.test("service SEO request validation accepts optional empty focus phrases", () => {
+  const result = validateServiceSeoRequest({
+    path: "/services/rawatan-umum/",
+    titleMs: "Rawatan Umum",
+    titleEn: "General Treatment",
+    focusPhraseMs: "",
+    focusPhraseEn: "",
+  });
+  assertEquals(result.focusPhraseMs, "");
+  assertEquals(result.focusPhraseEn, "");
 });
 
 Deno.test("service SEO request validation rejects unknown pages and oversized input", () => {
@@ -23,6 +37,7 @@ Deno.test("service SEO request validation rejects unknown pages and oversized in
     null,
     { path: "/services/khatan/", titleMs: "Khatan", titleEn: "Circumcision" },
     { path: "/services/sunat-kuantan/", titleMs: "x".repeat(201), titleEn: "Circumcision" },
+    { path: "/services/sunat-kuantan/", titleMs: "Sunat", titleEn: "Circumcision", focusPhraseMs: "", focusPhraseEn: "", contentMs: "x".repeat(20_001) },
   ]) {
     let caught: unknown;
     try {

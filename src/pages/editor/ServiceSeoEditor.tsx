@@ -27,6 +27,7 @@ export function ServiceSeoEditor() {
   const target = getServiceSeoTargetById(id);
   const [value, setValue] = useState<ServiceSeoPayload | null>(null);
   const [baseRevision, setBaseRevision] = useState(0);
+  const [sourceContext, setSourceContext] = useState<{ ms?: string; en?: string }>({});
   const [language, setLanguage] = useState<"ms" | "en">("ms");
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState<"save" | "publish" | "generate" | null>(null);
@@ -44,6 +45,7 @@ export function ServiceSeoEditor() {
         if (!active) return;
         setValue(result.payload);
         setBaseRevision(result.revision);
+        setSourceContext({ ms: result.contextMs, en: result.contextEn });
       })
       .catch(() => { if (active) setNotice({ tone: "error", text: "Service SEO could not be loaded." }); });
     return () => { active = false; };
@@ -111,6 +113,8 @@ export function ServiceSeoEditor() {
           titleEn: target.labelEn,
           focusPhraseMs: value.focusPhraseMs,
           focusPhraseEn: value.focusPhraseEn,
+          contentMs: sourceContext.ms,
+          contentEn: sourceContext.en,
         },
       });
       if (error) throw error;

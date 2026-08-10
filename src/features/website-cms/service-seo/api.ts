@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { LOCAL_SERVICE_PAGES } from "@/content/localServicePages";
 import { fetchResourceDraft, saveResourceDraft } from "@/features/website-cms/api/resources";
 import { seoFieldsSchema, type SeoFields } from "@/features/website-cms/domain/seo";
 import {
@@ -43,6 +44,51 @@ export interface ServiceSeoEditorRecord {
   payload: ServiceSeoPayload;
   revision: number;
   publishedAt: string | null;
+  contextMs?: string;
+  contextEn?: string;
+}
+
+const categorySlugByPath: Partial<Record<CanonicalServiceSeoPath, string>> = {
+  "/services/rawatan-umum/": "rawatan-am",
+  "/services/prosedur-kecil/": "prosedur-minor",
+  "/services/pemeriksaan-kesihatan/": "pemeriksaan-kesihatan",
+};
+
+function localServiceContext(path: CanonicalServiceSeoPath): string | undefined {
+  const slug = path.split("/").filter(Boolean).at(-1);
+  const page = slug ? LOCAL_SERVICE_PAGES[slug] : undefined;
+  if (!page) return undefined;
+  return JSON.stringify({
+    title: page.title,
+    heading: page.heading,
+    introduction: page.introduction,
+    sections: page.sections.map(({ heading, paragraphs, bullets }) => ({ heading, paragraphs, bullets })),
+    faqs: page.faqs,
+  }).slice(0, 20_000);
+}
+
+async function categoryServiceContext(path: CanonicalServiceSeoPath): Promise<{ contextMs?: string; contextEn?: string }> {
+  const slug = categorySlugByPath[path];
+  if (!slug) return {};
+  const { data, error } = await supabase
+    .from("clinic_services")
+    .select("title,title_ms,title_en,description,description_ms,description_en,services_list,services_list_ms,services_list_en")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (error || !data) throw new Error("Service page content could not be loaded");
+  const row = data as typeof data & Record<string, unknown>;
+  return {
+    contextMs: JSON.stringify({
+      title: row.title_ms ?? row.title,
+      description: row.description_ms ?? row.description,
+      services: row.services_list_ms ?? row.services_list,
+    }).slice(0, 20_000),
+    contextEn: JSON.stringify({
+      title: row.title_en ?? "",
+      description: row.description_en ?? "",
+      services: row.services_list_en ?? [],
+    }).slice(0, 20_000),
+  };
 }
 
 function publicMediaUrl(storedPath: string | null): string | undefined {
@@ -89,8 +135,11 @@ export async function fetchServiceSeoForEditor(id: string): Promise<ServiceSeoEd
   ]);
   if (rowResult.error || !rowResult.data) throw new Error("Service SEO target could not be loaded");
   const row = editorRowSchema.parse(rowResult.data);
+  const sourceContext = row.source_kind === "category"
+    ? await categoryServiceContext(row.path as CanonicalServiceSeoPath)
+    : { contextMs: localServiceContext(row.path as CanonicalServiceSeoPath) };
   if (draft) {
-    return { payload: serviceSeoPayloadSchema.parse(draft.payload), revision: draft.baseRevision, publishedAt: row.published_at };
+    return { payload: serviceSeoPayloadSchema.parse(draft.payload), revision: draft.baseRevision, publishedAt: row.published_at, ...sourceContext };
   }
   return {
     payload: serviceSeoPayloadSchema.parse({
@@ -102,6 +151,7 @@ export async function fetchServiceSeoForEditor(id: string): Promise<ServiceSeoEd
     }),
     revision: row.website_revision,
     publishedAt: row.published_at,
+    ...sourceContext,
   };
 }
 

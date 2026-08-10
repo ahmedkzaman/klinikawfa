@@ -55,6 +55,13 @@ function boundedString(
   return normalized;
 }
 
+function optionalBoundedString(value: unknown, maxLength: number): string {
+  if (typeof value !== "string") throw new HttpError(400, "Invalid request");
+  const normalized = value.trim();
+  if (normalized.length > maxLength) throw new HttpError(400, "Target phrase is invalid");
+  return normalized;
+}
+
 export function validateServiceSeoRequest(value: unknown): ServiceSeoRequest {
   if (!isRecord(value) || Object.keys(value).some((key) => !REQUEST_KEYS.has(key))) {
     throw new HttpError(400, "Invalid request");
@@ -66,8 +73,8 @@ export function validateServiceSeoRequest(value: unknown): ServiceSeoRequest {
     path,
     titleMs: boundedString(value.titleMs, "Malay title", 200, 400),
     titleEn: boundedString(value.titleEn, "English title", 200, 400),
-    focusPhraseMs: boundedString(value.focusPhraseMs, "Malay target phrase", 160, 400),
-    focusPhraseEn: boundedString(value.focusPhraseEn, "English target phrase", 160, 400),
+    focusPhraseMs: optionalBoundedString(value.focusPhraseMs, 160),
+    focusPhraseEn: optionalBoundedString(value.focusPhraseEn, 160),
   };
   if (value.contentMs !== undefined) request.contentMs = boundedString(value.contentMs, "Malay content", 20_000, 400);
   if (value.contentEn !== undefined) request.contentEn = boundedString(value.contentEn, "English content", 20_000, 400);
