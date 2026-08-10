@@ -106,10 +106,10 @@ export default function DoctorOnDuty() {
               {language === 'ms' ? 'Jadual Doktor' : 'Doctor Schedule'}
             </span>
           </div>
-          <h1 className="text-3xl md:text-5xl font-bold mb-3">
+          <h1 className="text-3xl md:text-5xl font-bold mb-3 text-white">
             {language === 'ms' ? 'Doktor Bertugas' : 'Doctor On Duty'}
           </h1>
-          <p className="text-white/80 max-w-2xl mx-auto">
+          <p className="text-white/90 max-w-2xl mx-auto">
             {language === 'ms'
               ? 'Lihat doktor yang bertugas mengikut syif untuk rancang lawatan anda.'
               : 'See which doctor is on duty by shift so you can plan your visit.'}

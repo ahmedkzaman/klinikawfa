@@ -14,5 +14,7 @@ describe("DoctorOnDuty shift card prominence", () => {
     expect(source).toContain("h-32 w-32");
     expect(source).toContain("text-xl font-bold");
     expect(source).toContain("border-white bg-white text-[#261d84] hover:bg-white/90");
+    expect(source).toContain("text-3xl md:text-5xl font-bold mb-3 text-white");
+    expect(source).toContain("text-white/90 max-w-2xl mx-auto");
   });
 });
