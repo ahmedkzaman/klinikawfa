@@ -1,5 +1,6 @@
 export const WEBSITE_RESOURCE_TYPES = [
   "service",
+  "service_seo",
   "team_member",
   "blog_post",
   "gallery_image",

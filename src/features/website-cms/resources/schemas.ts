@@ -8,6 +8,7 @@ import {
   seoFieldsSchema,
 } from "@/features/website-cms/domain/seo";
 import { WEBSITE_RESOURCE_TYPES } from "@/features/website-cms/resources/types";
+import { serviceSeoPayloadSchema } from "@/features/website-cms/service-seo/domain";
 
 const requiredText = z.string().trim().min(1).max(20_000);
 const optionalText = z.string().trim().max(20_000).optional().default("");
@@ -37,6 +38,8 @@ export const serviceDraftSchema = z.object({
   heroImageUrl: safePublicUrl.optional().or(z.literal("")),
   promoVideoUrl: safePublicUrl.optional().or(z.literal("")),
 }).strict();
+
+export const serviceSeoDraftSchema = serviceSeoPayloadSchema;
 
 export const teamMemberDraftSchema = z.object({
   type: z.enum(["doctor", "team"]),
@@ -103,6 +106,7 @@ export const reviewDraftSchema = z.object({
 }).strict();
 
 export type ServiceDraft = z.infer<typeof serviceDraftSchema>;
+export type ServiceSeoDraft = z.infer<typeof serviceSeoDraftSchema>;
 export type TeamMemberDraft = z.infer<typeof teamMemberDraftSchema>;
 export type BlogPostDraft = z.infer<typeof blogPostDraftSchema>;
 export type GalleryImageDraft = z.infer<typeof galleryImageDraftSchema>;

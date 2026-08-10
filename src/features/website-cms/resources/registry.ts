@@ -5,12 +5,14 @@ import {
   galleryImageDraftSchema,
   reviewDraftSchema,
   serviceDraftSchema,
+  serviceSeoDraftSchema,
   teamMemberDraftSchema,
 } from "@/features/website-cms/resources/schemas";
 import type { WebsiteResourceType } from "@/features/website-cms/resources/types";
 
 export const websiteResourceRegistry: Readonly<Record<WebsiteResourceType, z.ZodTypeAny>> = {
   service: serviceDraftSchema,
+  service_seo: serviceSeoDraftSchema,
   team_member: teamMemberDraftSchema,
   blog_post: blogPostDraftSchema,
   gallery_image: galleryImageDraftSchema,

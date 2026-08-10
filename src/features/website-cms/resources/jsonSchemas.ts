@@ -20,6 +20,13 @@ export const websiteResourceJsonSchemas: Readonly<Record<WebsiteResourceType, Js
     descriptionMs: text, descriptionEn: optionalText, ctaMs: text, ctaEn: optionalText, servicesMs: textArray,
     servicesEn: textArray, heroImageUrl: optionalText, promoVideoUrl: optionalText,
   }),
+  service_seo: strictObject(["path", "focusPhraseMs", "focusPhraseEn", "seoMs", "seoEn"], {
+    path: { type: "string", pattern: "^/services/[a-z0-9-]+/$" },
+    focusPhraseMs: { type: "string", maxLength: 160 },
+    focusPhraseEn: { type: "string", maxLength: 160 },
+    seoMs: { type: "object" },
+    seoEn: { type: "object" },
+  }),
   team_member: strictObject(["type", "nameMs", "titleMs", "bioMs", "expertiseMs", "qualifications", "yearsExperience", "isActive", "displayOrder"], {
     type: { enum: ["doctor", "team"] }, nameMs: text, nameEn: optionalText, titleMs: text, titleEn: optionalText,
     bioMs: text, bioEn: optionalText, expertiseMs: textArray, expertiseEn: textArray, qualifications: textArray,
