@@ -35,6 +35,7 @@ interface ClinicService {
   call_to_action_en?: string | null;
   services_list_ms?: string[] | null;
   services_list_en?: string[] | null;
+  hero_image_url?: string | null;
 }
 
 export default function ServiceDetail() {
@@ -123,6 +124,7 @@ export default function ServiceDetail() {
         title={title}
         description={schemaDescription}
         url={servicePath}
+        image={service.hero_image_url || undefined}
       />
       <SchemaMarkup schemas={schemas} />
 
@@ -136,6 +138,14 @@ export default function ServiceDetail() {
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Services
           </Link>
           <h1 className="mb-4">{title}</h1>
+          {service.hero_image_url && (
+            <img
+              src={service.hero_image_url}
+              alt={`${title} di Klinik Awfa, Kuantan`}
+              className="mb-8 aspect-[16/7] w-full rounded-xl object-cover shadow-soft"
+              loading="eager"
+            />
+          )}
           <div
             className="service-rich-content prose max-w-none mb-8 text-muted-foreground"
             dangerouslySetInnerHTML={{
