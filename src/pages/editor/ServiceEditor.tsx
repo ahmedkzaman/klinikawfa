@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { LivePreview } from "@/components/editor/LivePreview";
+import { RichTextEditor } from "@/components/admin/RichTextEditor";
 import { WebsiteMediaUploader } from "@/components/editor/WebsiteMediaUploader";
 import { useEditorDirtyState } from "@/components/editor/useEditorDirtyNavigation";
 import { Button } from "@/components/ui/button";
@@ -46,7 +47,16 @@ export function ServiceEditor() {
     {notice && <p className={`rounded-lg border p-3 text-sm ${notice.tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800"}`} role={notice.tone === "error" ? "alert" : "status"}>{notice.text}</p>}
     <div className="space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <Bilingual label="Title" ms={value.titleMs} en={value.titleEn} onMs={(x) => update("titleMs",x)} onEn={(x) => update("titleEn",x)} />
-      <Bilingual label="Description (rich HTML)" ms={value.descriptionMs} en={value.descriptionEn} multiline onMs={(x) => update("descriptionMs",x)} onEn={(x) => update("descriptionEn",x)} />
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label>Description (Malay)</Label>
+          <RichTextEditor onChange={(x) => update("descriptionMs", x)} placeholder="Write the Malay service description" value={value.descriptionMs} />
+        </div>
+        <div className="space-y-2">
+          <Label>Description (English)</Label>
+          <RichTextEditor onChange={(x) => update("descriptionEn", x)} placeholder="Write the English service description" value={value.descriptionEn} />
+        </div>
+      </div>
       <Bilingual label="Call to action" ms={value.ctaMs} en={value.ctaEn} onMs={(x) => update("ctaMs",x)} onEn={(x) => update("ctaEn",x)} />
       <div className="grid gap-4 md:grid-cols-2"><ListField label="Service bullets (Malay)" value={value.servicesMs} onChange={(x) => update("servicesMs",x)} /><ListField label="Service bullets (English, optional)" value={value.servicesEn} onChange={(x) => update("servicesEn",x)} /></div>
       <div className="grid gap-4 md:grid-cols-2"><div><Field label="Hero image URL" value={value.heroImageUrl ?? ""} onChange={(x) => update("heroImageUrl",x)} /><WebsiteMediaUploader folder="services" onUploaded={(url) => update("heroImageUrl",url)} /></div><Field label="YouTube or public video URL" value={value.promoVideoUrl ?? ""} onChange={(x) => update("promoVideoUrl",x)} /></div>

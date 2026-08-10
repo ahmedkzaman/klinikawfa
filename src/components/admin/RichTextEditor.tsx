@@ -1,6 +1,7 @@
 import { useRef, useState, useMemo, useCallback } from "react";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
+import Quill from "quill";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -14,6 +15,10 @@ interface RichTextEditorProps {
 
 const sanitizeName = (name: string) =>
   name.toLowerCase().replace(/[^a-z0-9.]+/g, "-").replace(/-+/g, "-");
+
+const Font = Quill.import("formats/font") as { whitelist?: string[] };
+Font.whitelist = ["sans-serif", "serif", "monospace"];
+Quill.register(Font, true);
 
 export function RichTextEditor({
   value,
@@ -94,10 +99,15 @@ export function RichTextEditor({
   const modules = useMemo(
     () => ({
       toolbar: {
-        container: [
+          container: [
+          [{ font: ["sans-serif", "serif", "monospace"] }, { size: ["small", false, "large", "huge"] }],
           [{ header: [1, 2, 3, false] }],
           ["bold", "italic", "underline", "strike"],
+          [{ color: [] }, { background: [] }],
+          [{ align: [] }],
           [{ list: "ordered" }, { list: "bullet" }],
+          [{ indent: "-1" }, { indent: "+1" }],
+          ["blockquote"],
           ["link", "image", "video"],
           ["clean"],
         ],
@@ -113,12 +123,19 @@ export function RichTextEditor({
 
   const formats = [
     "header",
+    "font",
+    "size",
     "bold",
     "italic",
     "underline",
     "strike",
+    "color",
+    "background",
+    "align",
     "list",
     "bullet",
+    "indent",
+    "blockquote",
     "link",
     "image",
     "video",
