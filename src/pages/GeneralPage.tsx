@@ -25,7 +25,6 @@ function GeneralPageNotFound() {
         noIndex
         title="Page not found"
       />
-      <PublicPageSchema path={`/pages/${slug}`} name={seoTitle} description={seoDescription} />
       <section className="flex min-h-[50vh] items-center justify-center px-4 text-center">
         <div>
           <h1 className="text-4xl font-bold">404</h1>
@@ -98,6 +97,7 @@ export default function GeneralPage() {
         title={seoTitle}
         url={`/pages/${slug}`}
       />
+      <PublicPageSchema path={`/pages/${slug}`} name={seoTitle} description={seoDescription} />
       <GeneralPageRenderer content={result.content} />
     </MainLayout>
   );
