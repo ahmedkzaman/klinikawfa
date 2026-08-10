@@ -118,7 +118,7 @@ export default function DoctorOnDuty() {
       </section>
 
       <section className="py-12 bg-slate-50 min-h-[60vh]">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-5xl">
           {/* Date selector */}
           <Card className="mb-6 border-0 shadow-sm">
             <CardContent className="p-4 flex items-center justify-between gap-3">
@@ -153,39 +153,39 @@ export default function DoctorOnDuty() {
               <Loader2 className="h-8 w-8 animate-spin text-[#261d84]" />
             </div>
           ) : (
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-6 md:grid-cols-3">
               {rows.map((r) => {
                 const label = SHIFT_LABELS[r.shift]?.[language === 'ms' ? 'ms' : 'en'] || r.label;
                 return (
                   <Card key={r.shift} className="border-0 shadow-md overflow-hidden">
-                    <div className="bg-gradient-to-br from-[#261d84] to-[#3d33a8] text-white p-4 flex items-center justify-between">
+                    <div className="bg-gradient-to-br from-[#261d84] to-[#3d33a8] text-white p-5 flex items-center justify-between">
                       <div>
                         <div className="text-xs uppercase tracking-wider text-white/70">{r.shift}</div>
                         <div className="font-semibold">{label}</div>
                       </div>
                       <div className="text-white/90">{SHIFT_ICONS[r.shift]}</div>
                     </div>
-                    <CardContent className="p-5">
-                      <div className="flex items-center gap-2 text-slate-500 text-sm mb-4">
+                    <CardContent className="p-6 min-h-[260px]">
+                      <div className="flex items-center gap-2 text-slate-500 text-base mb-5">
                         <Clock className="h-4 w-4" />
                         <span>{r.start_time} – {r.end_time}</span>
                       </div>
                       {r.doctor_name ? (
                         <div className="flex flex-col items-center text-center">
-                          <div className="relative mb-3">
+                          <div className="relative mb-4">
                             <img
                               src={photoFor(r.doctor_name)}
                               alt={r.doctor_name}
                               loading="lazy"
-                              width={96}
-                              height={96}
-                              className="h-24 w-24 rounded-full object-cover ring-4 ring-[#261d84]/10 shadow-md"
+                              width={128}
+                              height={128}
+                              className="h-32 w-32 rounded-full object-cover ring-4 ring-[#261d84]/10 shadow-md"
                             />
                           </div>
-                          <div className="text-xs text-slate-500 mb-1">
+                          <div className="text-sm text-slate-500 mb-2">
                             {language === 'ms' ? 'Doktor Bertugas' : 'On Duty'}
                           </div>
-                          <div className="text-lg font-bold text-[#261d84]">
+                          <div className="text-xl font-bold text-[#261d84]">
                             {r.doctor_name}
                           </div>
                         </div>
