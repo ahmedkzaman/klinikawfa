@@ -8,5 +8,8 @@ describe("public service rich text font sizes", () => {
     expect(css).toContain(".service-rich-content .ql-size-large");
     expect(css).toContain(".service-rich-content .ql-size-huge");
     expect(css).toContain("overflow-wrap: anywhere");
+    expect(css).toContain(".service-rich-content .ql-align-center");
+    expect(css).toContain(".service-rich-content .ql-align-justify");
+    expect(css).not.toContain("word-break: break-word");
   });
 });
