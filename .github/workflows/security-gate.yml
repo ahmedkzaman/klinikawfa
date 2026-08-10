@@ -77,7 +77,7 @@ jobs:
         run: deno test supabase/functions/_shared/secure-random_test.ts
 
       - name: Deno tests (edge function auth helpers)
-        run: deno test --allow-net --allow-env supabase/functions/tests/ai.test.ts
+        run: deno test --allow-net --allow-env supabase/functions/tests/ai.test.ts supabase/functions/tests/service-seo.test.ts
 
       - name: Deno tests (scheduled website publishing)
         run: deno test supabase/functions/publish-scheduled-content/index_test.ts

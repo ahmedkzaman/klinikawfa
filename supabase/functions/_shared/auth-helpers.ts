@@ -7,7 +7,7 @@ export const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-export type RoleLabel = "clinical" | "ops" | "admin" | "special_admin";
+export type RoleLabel = "clinical" | "ops" | "admin" | "special_admin" | "website_manager";
 
 // Maps friendly labels to concrete app_role values stored in public.user_roles.
 const LABEL_TO_ROLES: Record<RoleLabel, string[]> = {
@@ -15,6 +15,7 @@ const LABEL_TO_ROLES: Record<RoleLabel, string[]> = {
   ops: ["staff", "ops_staff", "operations"],
   admin: ["admin", "doctor_admin"],
   special_admin: ["special_admin"],
+  website_manager: ["admin", "special_admin", "doctor_admin", "website_editor"],
 };
 
 export class HttpError extends Error {

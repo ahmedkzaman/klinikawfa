@@ -6,6 +6,9 @@ verify_jwt = true
 [functions.translate-service-content]
 verify_jwt = true
 
+[functions.generate-service-seo]
+verify_jwt = true
+
 [functions.generate-tts]
 verify_jwt = true
 

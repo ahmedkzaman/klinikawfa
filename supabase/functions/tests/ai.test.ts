@@ -214,6 +214,52 @@ Deno.test("sanitizeError surfaces HttpError safeMessage and masks unknown errors
   assertEquals(b.body.error, "Internal error");
 });
 
+Deno.test({
+  name: "website_manager allows website editors and rejects locums",
+  sanitizeOps: false,
+  sanitizeResources: false,
+  fn: async () => {
+    const originalFetch = globalThis.fetch;
+    let currentRole = "website_editor";
+    globalThis.fetch = ((input: Request | URL | string) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes("/auth/v1/user")) {
+        return Promise.resolve(new Response(JSON.stringify({ id: "user-1", aud: "authenticated" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }));
+      }
+      if (url.includes("/rest/v1/user_roles")) {
+        return Promise.resolve(new Response(JSON.stringify({ role: currentRole }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }));
+      }
+      return Promise.resolve(new Response("{}", { status: 599 }));
+    }) as typeof fetch;
+    try {
+      await requireRole(new Request("http://localhost/fn", {
+        method: "POST",
+        headers: { Authorization: "Bearer fake.jwt.token" },
+      }), ["website_manager"]);
+      currentRole = "locum";
+      let caught: unknown;
+      try {
+        await requireRole(new Request("http://localhost/fn", {
+          method: "POST",
+          headers: { Authorization: "Bearer fake.jwt.token" },
+        }), ["website_manager"]);
+      } catch (error) {
+        caught = error;
+      }
+      assert(caught instanceof HttpError);
+      assertEquals((caught as InstanceType<typeof HttpError>).status, 403);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  },
+});
+
 // ---------- withAuth CORS preflight and method gate ----------
 Deno.test("withAuth handles OPTIONS preflight and rejects non-POST", async () => {
   const handler = withAuth(
