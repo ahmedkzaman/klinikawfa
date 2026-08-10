@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { selectBilingual, type ServiceAeoContent } from '@/features/website-cms/service-seo/aeoContent';
 
-export function ServiceAeoSections({ content }: { content: ServiceAeoContent }) {
+export function ServiceAeoSections({ content, includeFaqs = true }: { content: ServiceAeoContent; includeFaqs?: boolean }) {
   const { language } = useLanguage();
   const text = (value: { ms: string; en: string }) => selectBilingual(value, language);
   const faqHeading = language === 'en' ? 'Frequently asked questions' : 'Soalan lazim';
@@ -31,7 +31,7 @@ export function ServiceAeoSections({ content }: { content: ServiceAeoContent }) 
         </section>
       )}
       {content.safetyNote && <p className="border-l-4 border-amber-400 pl-4 text-sm leading-6 text-muted-foreground">{text(content.safetyNote)}</p>}
-      {content.faqs.length > 0 && (
+      {includeFaqs && content.faqs.length > 0 && (
         <section aria-labelledby="service-faq">
           <h2 id="service-faq">{faqHeading}</h2>
           <div className="mt-5 divide-y divide-border rounded-xl border bg-card px-5 md:px-7">

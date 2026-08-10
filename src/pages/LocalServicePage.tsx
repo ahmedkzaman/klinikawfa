@@ -199,7 +199,7 @@ export default function LocalServicePage({ slug }: LocalServicePageProps) {
           </div>
         </aside>
       </div>
-      <ServiceAeoSections content={buildLocalServiceAeo(content)} />
+      <ServiceAeoSections content={buildLocalServiceAeo(content)} includeFaqs={false} />
     </MainLayout>
   );
 }
