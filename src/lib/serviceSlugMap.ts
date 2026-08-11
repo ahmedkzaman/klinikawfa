@@ -1,5 +1,5 @@
 // Maps individual service slugs from src/lib/constants.ts (SERVICES) to the
-// three canonical clinic_services category slugs stored in the database.
+// matching live clinic_services record stored in the database.
 // Used by ServiceDetail to resolve any listing link to a real DB row.
 export const SERVICE_CATEGORY_SLUG_MAP: Record<string, string> = {
   // Rawatan Am & Penyakit Akut
@@ -14,7 +14,10 @@ export const SERVICE_CATEGORY_SLUG_MAP: Record<string, string> = {
 
   // Prosedur Kecil / Minor & Pembedahan (public alias `prosedur-kecil` → DB `prosedur-minor`)
   'prosedur-kecil': 'prosedur-minor',
-  'penjagaan-telinga': 'prosedur-minor',
+  // Ear care has its own editable landing page and must not inherit the
+  // unrelated procedures/circumcision content from prosedur-minor.
+  'penjagaan-telinga': 'rawatan-telinga-microsuction-kuantan',
+  'rawatan-telinga-microsuction-kuantan': 'rawatan-telinga-microsuction-kuantan',
   'khatan': 'prosedur-minor',
   'ketumbuhan-ketuat': 'prosedur-minor',
 
@@ -36,6 +39,7 @@ const SERVICE_CATEGORY_CANONICAL_SLUGS: Record<string, string> = {
   'rawatan-am': 'rawatan-umum',
   'prosedur-minor': 'prosedur-kecil',
   'pemeriksaan-kesihatan': 'pemeriksaan-kesihatan',
+  'rawatan-telinga-microsuction-kuantan': 'rawatan-telinga-microsuction-kuantan',
 };
 
 export function resolveCanonicalServiceSlug(slug: string | undefined): string | undefined {

@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { HelmetProvider } from 'react-helmet-async';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import ServiceDetail from '@/pages/ServiceDetail';
@@ -40,13 +40,35 @@ afterEach(() => {
 });
 
 describe('ServiceDetail structured data', () => {
+  it('redirects the old ear-care alias to the dedicated canonical service URL', async () => {
+    const LocationProbe = () => <output data-testid="location">{useLocation().pathname}</output>;
+
+    render(
+      <HelmetProvider>
+        <MemoryRouter initialEntries={['/services/penjagaan-telinga']}>
+          <LanguageProvider>
+            <LocationProbe />
+            <Routes>
+              <Route path="/services/:slug" element={<ServiceDetail />} />
+            </Routes>
+          </LanguageProvider>
+        </MemoryRouter>
+      </HelmetProvider>,
+    );
+
+    expect(await screen.findByTestId('location')).toHaveTextContent(
+      '/services/rawatan-telinga-microsuction-kuantan',
+    );
+  });
+
   it.each([
     ['/services/rawatan-umum', 'https://klinikawfa.com/services/rawatan-umum/'],
     ['/services/rawatan-am', 'https://klinikawfa.com/services/rawatan-umum/'],
     ['/services/ujian-pantas', 'https://klinikawfa.com/services/rawatan-umum/'],
     ['/services/prosedur-kecil', 'https://klinikawfa.com/services/prosedur-kecil/'],
     ['/services/prosedur-minor', 'https://klinikawfa.com/services/prosedur-kecil/'],
-    ['/services/penjagaan-telinga', 'https://klinikawfa.com/services/prosedur-kecil/'],
+    ['/services/penjagaan-telinga', 'https://klinikawfa.com/services/rawatan-telinga-microsuction-kuantan/'],
+    ['/services/rawatan-telinga-microsuction-kuantan', 'https://klinikawfa.com/services/rawatan-telinga-microsuction-kuantan/'],
     ['/services/pemeriksaan-kesihatan', 'https://klinikawfa.com/services/pemeriksaan-kesihatan/'],
     ['/services/pemeriksaan-darah', 'https://klinikawfa.com/services/pemeriksaan-kesihatan/'],
   ])('publishes one category canonical and matching schemas for %s', async (route, expectedUrl) => {

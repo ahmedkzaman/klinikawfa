@@ -1,4 +1,4 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { MainLayout } from "@/components/layout/MainLayout";
@@ -21,9 +21,7 @@ import { canonicalUrl } from "@/lib/website/seoRoutes";
 import { ServiceAeoSections } from "@/components/seo/ServiceAeoSections";
 import { buildCategoryServiceAeo } from "@/features/website-cms/service-seo/aeoContent";
 import { buildServiceStructuredData } from "@/lib/seo/serviceStructuredData";
-
-const stripHtml = (html: string) =>
-  (html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+import { richHtmlToPlainText } from "@/lib/rich-html-to-plain-text";
 
 interface ClinicService {
   id: string;
@@ -71,7 +69,7 @@ export default function ServiceDetail() {
     : "Klinik Awfa healthcare service in KotaSAS, Kuantan.";
   const canonicalSlug = resolveCanonicalServiceSlug(slug) ?? service?.slug ?? slug ?? "";
   const servicePath = `/services/${canonicalSlug}`;
-  const schemaDescription = stripHtml(description).substring(0, 160);
+  const schemaDescription = richHtmlToPlainText(description).substring(0, 160);
   const seo = useServiceSeoMetadata(servicePath, language, {
     title,
     description: schemaDescription,
@@ -82,6 +80,10 @@ export default function ServiceDetail() {
     noIndex: false,
     noFollow: false,
   });
+
+  if (slug === "penjagaan-telinga" && canonicalSlug !== slug) {
+    return <Navigate to={servicePath} replace />;
+  }
 
   if (isLoading) {
     return (
@@ -128,7 +130,7 @@ export default function ServiceDetail() {
 
   const callToAction = language === "en" ? service.call_to_action_en || service.call_to_action_ms || service.call_to_action : service.call_to_action_ms || service.call_to_action;
   const serviceItems = language === "en" && service.services_list_en?.length ? service.services_list_en : service.services_list_ms?.length ? service.services_list_ms : service.services_list;
-  const aeoContent = buildCategoryServiceAeo({ titleMs: service.title_ms || service.title, titleEn: service.title_en || service.title_ms || service.title, descriptionMs: stripHtml(service.description_ms || service.description), descriptionEn: stripHtml(service.description_en || service.description_ms || service.description) });
+  const aeoContent = buildCategoryServiceAeo({ titleMs: service.title_ms || service.title, titleEn: service.title_en || service.title_ms || service.title, descriptionMs: richHtmlToPlainText(service.description_ms || service.description), descriptionEn: richHtmlToPlainText(service.description_en || service.description_ms || service.description) });
   const publishedFaqs = seo.faqs?.map((faq) => ({ question: { ms: faq.question, en: faq.question }, answer: { ms: faq.answer, en: faq.answer } }));
   const schemas = buildServiceStructuredData({ path: servicePath, name: seo.title, description: seo.answerSummary || seo.description, faqs: publishedFaqs?.length ? publishedFaqs : aeoContent.faqs });
 

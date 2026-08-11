@@ -71,7 +71,7 @@ export const SERVICES = [
   },
   {
     id: 'ear-care',
-    slug: 'penjagaan-telinga',
+    slug: 'rawatan-telinga-microsuction-kuantan',
     icon: 'Ear',
     titleMs: 'Penjagaan Telinga (Microsuction)',
     titleEn: 'Ear Care (Microsuction)',

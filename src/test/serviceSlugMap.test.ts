@@ -6,7 +6,12 @@ import {
 } from "@/lib/serviceSlugMap";
 import { SERVICES } from "@/lib/constants";
 
-const DB_SLUGS = ["rawatan-am", "prosedur-minor", "pemeriksaan-kesihatan"] as const;
+const DB_SLUGS = [
+  "rawatan-am",
+  "prosedur-minor",
+  "pemeriksaan-kesihatan",
+  "rawatan-telinga-microsuction-kuantan",
+] as const;
 
 const EXPECTED: Record<string, (typeof DB_SLUGS)[number]> = {
   // rawatan-am
@@ -19,7 +24,7 @@ const EXPECTED: Record<string, (typeof DB_SLUGS)[number]> = {
   "ujian-darah-penuh": "rawatan-am",
   "ujian-denggi": "rawatan-am",
   // prosedur-minor
-  "penjagaan-telinga": "prosedur-minor",
+  "rawatan-telinga-microsuction-kuantan": "rawatan-telinga-microsuction-kuantan",
   "khatan": "prosedur-minor",
   "ketumbuhan-ketuat": "prosedur-minor",
   // pemeriksaan-kesihatan
@@ -60,7 +65,7 @@ describe("resolveServiceCategorySlug", () => {
     expect(resolveServiceCategorySlug(undefined)).toBeUndefined();
   });
 
-  it("only maps to the three approved DB categories", () => {
+  it("only maps to approved live service records", () => {
     const allowed = new Set<string>(DB_SLUGS);
     for (const v of Object.values(SERVICE_CATEGORY_SLUG_MAP)) {
       expect(allowed.has(v)).toBe(true);
@@ -74,7 +79,8 @@ describe("resolveServiceCategorySlug", () => {
     ["ujian-pantas", "rawatan-umum"],
     ["prosedur-kecil", "prosedur-kecil"],
     ["prosedur-minor", "prosedur-kecil"],
-    ["penjagaan-telinga", "prosedur-kecil"],
+    ["penjagaan-telinga", "rawatan-telinga-microsuction-kuantan"],
+    ["rawatan-telinga-microsuction-kuantan", "rawatan-telinga-microsuction-kuantan"],
     ["khatan", "prosedur-kecil"],
     ["pemeriksaan-kesihatan", "pemeriksaan-kesihatan"],
     ["pemeriksaan-darah", "pemeriksaan-kesihatan"],
