@@ -180,4 +180,12 @@ describe("service SEO API", () => {
     mocks.rpc.mockResolvedValueOnce({ data: { revision: "bad" }, error: null });
     await expect(publishServiceSeo("b9838947-9b48-4f1d-a378-21224c4b5c01", 2)).rejects.toThrow("invalid");
   });
+
+  it("reports an immediate SEO revision conflict as stale content", async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: "PT409", message: "stale website SEO revision" } });
+
+    await expect(
+      publishServiceSeo("b9838947-9b48-4f1d-a378-21224c4b5c01", 2),
+    ).rejects.toThrow("Reload before publishing");
+  });
 });

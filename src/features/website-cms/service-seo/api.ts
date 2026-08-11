@@ -277,7 +277,7 @@ export async function publishServiceSeo(resourceId: string, expectedRevision: nu
     p_resource_id: resourceId,
     p_expected_revision: expectedRevision,
   } as never);
-  if (error?.code === "40001") throw new Error("This SEO changed after you opened it. Reload before publishing.");
+  if (error?.code === "40001" || error?.code === "PT409") throw new Error("This SEO changed after you opened it. Reload before publishing.");
   if (error) throw new Error(error.message || "Service SEO could not be published");
   const revision = Number((data as { revision?: unknown } | null)?.revision);
   if (!Number.isInteger(revision) || revision < 1) throw new Error("Publish response was invalid");

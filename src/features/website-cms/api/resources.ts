@@ -82,7 +82,7 @@ export async function publishResourceDraft(type: WebsiteResourceType, resourceId
     p_resource_id: resourceId,
     p_resource_type: type,
   });
-  if (error?.code === "40001") throw new StaleWebsiteResourceError();
+  if (error?.code === "40001" || error?.code === "PT409") throw new StaleWebsiteResourceError();
   if (error) throw new Error("Content could not be published");
   const revision = Number((data as { revision?: unknown } | null)?.revision);
   if (!Number.isInteger(revision) || revision < 1) throw new Error("Publish response was invalid");
