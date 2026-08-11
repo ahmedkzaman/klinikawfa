@@ -2,6 +2,7 @@ import { History, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { LivePreview } from "@/components/editor/LivePreview";
+import { DestinationPicker } from "@/components/editor/navigation/DestinationPicker";
 import { useEditorDirtyState } from "@/components/editor/useEditorDirtyNavigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,8 @@ import {
   saveNavigationDraft,
 } from "@/features/website-cms/api/navigation";
 import { navigationDraftSchema, type NavigationDraftItem } from "@/features/website-cms/navigation/schema";
+import { listWebsiteDestinations } from "@/features/website-cms/catalogue/api";
+import type { WebsiteDestination } from "@/features/website-cms/catalogue/domain";
 
 type Notice = { tone: "error" | "success"; text: string };
 
@@ -23,6 +26,8 @@ export function NavigationEditor() {
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [destinations, setDestinations] = useState<WebsiteDestination[]>([]);
+  const [catalogueWarning, setCatalogueWarning] = useState(false);
   useEditorDirtyState(dirty);
 
   const reload = async () => {
@@ -37,6 +42,10 @@ export function NavigationEditor() {
   useEffect(() => {
     void reload().catch(() => setNotice({ tone: "error", text: "Navigation could not be loaded." }));
     void reloadVersions().catch(() => setVersions([]));
+    void listWebsiteDestinations().then((result) => {
+      setDestinations(result.items);
+      setCatalogueWarning(result.errors.length > 0);
+    }).catch(() => setCatalogueWarning(true));
   }, []);
 
   const change = (id: string, key: keyof NavigationDraftItem, value: unknown) => {
@@ -78,6 +87,11 @@ export function NavigationEditor() {
   const publish = async () => {
     const value = validate();
     if (!value) return;
+    const trashed = value.find((item) => item.visible && destinations.some((destination) => destination.href === item.href && destination.status === "trash"));
+    if (trashed) {
+      setNotice({ tone: "error", text: `Cannot publish: ${trashed.labelMs} points to a page in Trash.` });
+      return;
+    }
     setBusy(true);
     try {
       await saveNavigationDraft(value, revision);
@@ -110,12 +124,29 @@ export function NavigationEditor() {
         <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={add}><Plus className="mr-2 h-4 w-4" />Add link</Button><Button variant="outline" disabled={busy} onClick={() => void save()}><Save className="mr-2 h-4 w-4" />Save draft</Button><Button disabled={busy} onClick={() => void publish()}><Send className="mr-2 h-4 w-4" />Publish</Button></div>
       </header>
       {notice && <p className={`rounded-lg border p-3 text-sm ${notice.tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800"}`} role={notice.tone === "error" ? "alert" : "status"}>{notice.text}</p>}
+      {catalogueWarning && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Some website pages could not be loaded. Existing custom URLs remain editable.</p>}
       <div className="space-y-3">
         {items.map((item) => (
           <article className="grid gap-3 rounded-xl border bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-[1fr_1fr_1.2fr_1fr_7rem_auto]" key={item.id}>
             <Input aria-label="Malay label" value={item.labelMs} onChange={(event) => change(item.id, "labelMs", event.target.value)} />
             <Input aria-label="English label" value={item.labelEn} onChange={(event) => change(item.id, "labelEn", event.target.value)} />
-            <Input aria-label="Link URL" value={item.href} onChange={(event) => change(item.id, "href", event.target.value)} />
+            <div className="space-y-2">
+              <DestinationPicker destinations={destinations} value={item.href} onSelect={(destination) => {
+                setItems((current) => current.map((candidate) => candidate.id === item.id ? {
+                  ...candidate,
+                  href: destination.href,
+                  labelMs: candidate.labelMs === "Pautan baharu" ? destination.titleMs : candidate.labelMs,
+                  labelEn: candidate.labelEn === "New link" ? destination.titleEn : candidate.labelEn,
+                } : candidate));
+                setDirty(true);
+                setNotice(null);
+              }} />
+              <Input aria-label="Link URL" value={item.href} onChange={(event) => change(item.id, "href", event.target.value)} />
+              {(() => {
+                const target = destinations.find((destination) => destination.href === item.href);
+                return target && target.status !== "published" && target.status !== "trash" ? <p className="text-xs text-amber-700">This destination is {target.status}; the link may not be publicly available yet.</p> : null;
+              })()}
+            </div>
             <select aria-label="Parent menu" className="h-10 rounded-md border bg-background px-3 text-sm" value={item.parentId ?? ""} onChange={(event) => change(item.id, "parentId", event.target.value || null)}>
               <option value="">Top-level link</option>
               {roots.filter((candidate) => candidate.id !== item.id).map((candidate) => <option key={candidate.id} value={candidate.id}>Under {candidate.labelMs}</option>)}

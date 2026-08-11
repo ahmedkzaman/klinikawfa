@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const allowedRoutes = new Set(["/","/services","/doctors","/doctor-on-duty","/appointment","/gallery","/health-tips","/privacy","/terms"]);
 export const navigationHrefSchema = z.string().trim().max(2048).refine((value) => {
-  if (allowedRoutes.has(value) || /^\/pages\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)) return true;
+  if (allowedRoutes.has(value) || /^\/(?:pages|services|health-tips)\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)) return true;
   try { const url = new URL(value); return url.protocol === "https:"; } catch { return false; }
 }, "Use an approved website route or HTTPS URL");
 
