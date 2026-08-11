@@ -19,6 +19,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 import {
   fetchPublishedServiceSeo,
   fetchServiceSeoForEditor,
+  generateAndSaveServiceAeoDraft,
   generateAndSaveServiceSeoDraft,
   publishServiceSeo,
   saveServiceSeoDraft,
@@ -131,6 +132,41 @@ describe("service SEO API", () => {
 
     expect(saved.payload.aeoEn.answerSummary).toBe("Doctor assessment.");
     expect(mocks.rpc).not.toHaveBeenCalledWith("publish_service_seo", expect.anything());
+  });
+
+  it("generates bilingual AEO while preserving every existing SEO field", async () => {
+    const payload = createEmptyServiceSeoPayload("/services/rawatan-umum/");
+    payload.focusPhraseMs = "rawatan umum kuantan";
+    payload.focusPhraseEn = "general treatment Kuantan";
+    payload.seoMs = { ...payload.seoMs, title: "Tajuk asal", description: "Penerangan asal", socialTitle: "Sosial asal", socialDescription: "Penerangan sosial asal", index: false };
+    payload.seoEn = { ...payload.seoEn, title: "Original title", description: "Original description", socialTitle: "Original social", socialDescription: "Original social description", socialImageMediaId: "b9838947-9b48-4f1d-a378-21224c4b5c09" };
+    const original = structuredClone(payload);
+    const record = {
+      payload,
+      revision: 7,
+      publishedAt: null,
+      target: { id: "b9838947-9b48-4f1d-a378-21224c4b5c01", path: payload.path, labelMs: "Rawatan Umum", labelEn: "General Treatment" },
+      contextMs: "Kandungan halaman",
+      contextEn: "Page content",
+    };
+    mocks.invoke.mockResolvedValue({ data: {
+      aeoMs: { answerSummary: "Jawapan baharu.", faqs: [{ question: "Soalan?", answer: "Jawapan." }] },
+      aeoEn: { answerSummary: "New answer.", faqs: [{ question: "Question?", answer: "Answer." }] },
+    }, error: null });
+    mocks.saveResourceDraft.mockImplementation(async (input) => ({ baseRevision: input.baseRevision, payload: input.payload }));
+
+    const saved = await generateAndSaveServiceAeoDraft({ resourceId: record.target.id, record });
+
+    expect(mocks.invoke).toHaveBeenCalledWith("generate-service-seo", expect.objectContaining({ body: expect.objectContaining({ mode: "aeo" }) }));
+    expect(saved.payload).toMatchObject({
+      ...original,
+      aeoMs: { answerSummary: "Jawapan baharu.", faqs: [{ question: "Soalan?", answer: "Jawapan." }] },
+      aeoEn: { answerSummary: "New answer.", faqs: [{ question: "Question?", answer: "Answer." }] },
+    });
+    expect(saved.payload.seoMs).toEqual(original.seoMs);
+    expect(saved.payload.seoEn).toEqual(original.seoEn);
+    expect(saved.payload.focusPhraseMs).toBe(original.focusPhraseMs);
+    expect(saved.payload.focusPhraseEn).toBe(original.focusPhraseEn);
   });
 
   it("publishes through the guarded RPC and rejects malformed responses", async () => {

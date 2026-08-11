@@ -3,6 +3,7 @@ import { HttpError } from "../_shared/auth-helpers.ts";
 const SERVICE_PATH_PATTERN = /^\/services\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/;
 
 const REQUEST_KEYS = new Set([
+  "mode",
   "path",
   "titleMs",
   "titleEn",
@@ -14,6 +15,7 @@ const REQUEST_KEYS = new Set([
 const LANGUAGE_KEYS = new Set(["title", "description", "socialTitle", "socialDescription"]);
 
 export type ServiceSeoRequest = {
+  mode: "seo_and_aeo" | "aeo";
   path: string;
   titleMs: string;
   titleEn: string;
@@ -29,6 +31,8 @@ export type GeneratedServiceSeo = {
   aeoMs: { answerSummary: string; faqs: Array<{ question: string; answer: string }> };
   aeoEn: { answerSummary: string; faqs: Array<{ question: string; answer: string }> };
 };
+
+export type GeneratedServiceAeo = Pick<GeneratedServiceSeo, "aeoMs" | "aeoEn">;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -63,6 +67,11 @@ export function validateServiceSeoRequest(value: unknown): ServiceSeoRequest {
   if (!SERVICE_PATH_PATTERN.test(path)) throw new HttpError(400, "Unknown service page");
 
   const request: ServiceSeoRequest = {
+    mode: value.mode === undefined
+      ? "seo_and_aeo"
+      : value.mode === "seo_and_aeo" || value.mode === "aeo"
+        ? value.mode
+        : (() => { throw new HttpError(400, "Invalid generation mode"); })(),
     path,
     titleMs: boundedString(value.titleMs, "Malay title", 200, 400),
     titleEn: boundedString(value.titleEn, "English title", 200, 400),
@@ -123,6 +132,23 @@ export function parseGeneratedServiceSeo(content: string): GeneratedServiceSeo {
   return {
     ms: parseLanguage(value.ms),
     en: parseLanguage(value.en),
+    aeoMs: parseAeoLanguage(value.aeoMs),
+    aeoEn: parseAeoLanguage(value.aeoEn),
+  };
+}
+
+export function parseGeneratedServiceAeo(content: string): GeneratedServiceAeo {
+  let value: unknown;
+  try {
+    value = JSON.parse(content);
+  } catch {
+    throw new HttpError(502, "SEO provider returned invalid content");
+  }
+  const keys = new Set(["aeoMs", "aeoEn"]);
+  if (!isRecord(value) || Object.keys(value).length !== keys.size || Object.keys(value).some((key) => !keys.has(key))) {
+    throw new HttpError(502, "SEO provider returned invalid content");
+  }
+  return {
     aeoMs: parseAeoLanguage(value.aeoMs),
     aeoEn: parseAeoLanguage(value.aeoEn),
   };

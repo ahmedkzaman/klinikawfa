@@ -198,6 +198,11 @@ const generatedSchema = z.object({
   aeoEn: serviceAeoLanguageSchema,
 }).strict();
 
+const generatedAeoSchema = z.object({
+  aeoMs: serviceAeoLanguageSchema,
+  aeoEn: serviceAeoLanguageSchema,
+}).strict();
+
 export async function generateAndSaveServiceSeoDraft(input: {
   resourceId: string;
   record: ServiceSeoEditorRecord;
@@ -220,6 +225,33 @@ export async function generateAndSaveServiceSeoDraft(input: {
     ...record.payload,
     seoMs: { ...record.payload.seoMs, ...generated.ms },
     seoEn: { ...record.payload.seoEn, ...generated.en },
+    aeoMs: generated.aeoMs,
+    aeoEn: generated.aeoEn,
+  });
+  return saveServiceSeoDraft(input.resourceId, record.revision, payload);
+}
+
+export async function generateAndSaveServiceAeoDraft(input: {
+  resourceId: string;
+  record: ServiceSeoEditorRecord;
+}) {
+  const { record } = input;
+  const { data, error } = await supabase.functions.invoke("generate-service-seo", {
+    body: {
+      mode: "aeo",
+      path: record.target.path,
+      titleMs: record.target.labelMs,
+      titleEn: record.target.labelEn,
+      focusPhraseMs: record.payload.focusPhraseMs,
+      focusPhraseEn: record.payload.focusPhraseEn,
+      contentMs: record.contextMs,
+      contentEn: record.contextEn,
+    },
+  });
+  if (error) throw error;
+  const generated = generatedAeoSchema.parse(data);
+  const payload = serviceSeoPayloadSchema.parse({
+    ...record.payload,
     aeoMs: generated.aeoMs,
     aeoEn: generated.aeoEn,
   });

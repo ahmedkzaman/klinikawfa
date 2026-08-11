@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   fetchServiceSeoForEditor,
+  generateAndSaveServiceAeoDraft,
   generateAndSaveServiceSeoDraft,
   publishServiceSeo,
   saveServiceSeoDraft,
@@ -31,7 +32,7 @@ export function ServiceSeoEditor() {
   const [baseRevision, setBaseRevision] = useState(0);
   const [language, setLanguage] = useState<"ms" | "en">("ms");
   const [dirty, setDirty] = useState(false);
-  const [busy, setBusy] = useState<"save" | "publish" | "generate" | null>(null);
+  const [busy, setBusy] = useState<"save" | "publish" | "generate" | "generate-aeo" | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   useEditorDirtyState(dirty);
 
@@ -115,6 +116,24 @@ export function ServiceSeoEditor() {
     }
   };
 
+  const generateAeo = async () => {
+    if (!value || !record) return;
+    setBusy("generate-aeo");
+    setNotice(null);
+    try {
+      const saved = await generateAndSaveServiceAeoDraft({ resourceId: id, record: { ...record, payload: value, revision: baseRevision } });
+      setValue(saved.payload);
+      setBaseRevision(saved.baseRevision);
+      setRecord((current) => current ? { ...current, payload: saved.payload, revision: saved.baseRevision } : current);
+      setDirty(false);
+      setNotice({ tone: "success", text: "Bilingual AEO suggestions were saved privately as a draft. Review the Malay and English content before publishing." });
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "AEO suggestions could not be generated." });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (!record || !value) {
     return <div className="rounded-xl border bg-white p-5 text-sm text-slate-600" role={notice?.tone === "error" ? "alert" : "status"}>{notice?.tone === "error" ? notice.text : <><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Loading service SEO</>}</div>;
   }
@@ -166,9 +185,15 @@ export function ServiceSeoEditor() {
         value={seo}
       />
       <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5">
-        <div>
-          <h2 className="font-semibold text-slate-900">Answer engine content ({language === "ms" ? "Malay" : "English"})</h2>
-          <p className="mt-1 text-sm text-slate-600">Published summaries and FAQs may appear in search answers and structured data.</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="font-semibold text-slate-900">Answer engine content ({language === "ms" ? "Malay" : "English"})</h2>
+            <p className="mt-1 text-sm text-slate-600">Published summaries and FAQs may appear in search answers and structured data.</p>
+          </div>
+          <Button disabled={Boolean(busy)} onClick={() => void generateAeo()} size="sm" variant="outline">
+            <Sparkles className="mr-2 h-4 w-4" />
+            {busy === "generate-aeo" ? "Generating AEO…" : "Generate AEO (Malay & English)"}
+          </Button>
         </div>
         <div>
           <Label htmlFor="service-aeo-summary">Direct answer summary</Label>

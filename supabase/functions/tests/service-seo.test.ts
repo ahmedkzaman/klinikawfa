@@ -2,9 +2,40 @@ import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.t
 
 const { HttpError } = await import("../_shared/auth-helpers.ts");
 const {
+  parseGeneratedServiceAeo,
   parseGeneratedServiceSeo,
   validateServiceSeoRequest,
 } = await import("../generate-service-seo/validation.ts");
+
+Deno.test("service SEO request validation accepts explicit AEO-only mode", () => {
+  const result = validateServiceSeoRequest({
+    mode: "aeo",
+    path: "/services/rawatan-umum/",
+    titleMs: "Rawatan Umum",
+    titleEn: "General Treatment",
+    focusPhraseMs: "rawatan umum kuantan",
+    focusPhraseEn: "general treatment Kuantan",
+  });
+  assertEquals(result.mode, "aeo");
+});
+
+Deno.test("service SEO request validation rejects unknown generation modes", () => {
+  let caught: unknown;
+  try {
+    validateServiceSeoRequest({
+      mode: "aeo-and-prices",
+      path: "/services/rawatan-umum/",
+      titleMs: "Rawatan Umum",
+      titleEn: "General Treatment",
+      focusPhraseMs: "",
+      focusPhraseEn: "",
+    });
+  } catch (error) {
+    caught = error;
+  }
+  assert(caught instanceof HttpError);
+  assertEquals((caught as InstanceType<typeof HttpError>).status, 400);
+});
 
 Deno.test("service SEO request validation accepts bounded public page context", () => {
   const result = validateServiceSeoRequest({
@@ -104,6 +135,27 @@ Deno.test("generated AEO validation rejects excessive FAQs and extra keys", () =
   ]) {
     let caught: unknown;
     try { parseGeneratedServiceSeo(JSON.stringify(payload)); } catch (error) { caught = error; }
+    assert(caught instanceof HttpError);
+    assertEquals((caught as InstanceType<typeof HttpError>).status, 502);
+  }
+});
+
+Deno.test("generated AEO-only validation returns strict bilingual suggestions", () => {
+  const payload = {
+    aeoMs: { answerSummary: "Penilaian doktor diperlukan.", faqs: [{ question: "Perlu penilaian?", answer: "Ya, doktor akan menilai kesesuaian." }] },
+    aeoEn: { answerSummary: "A doctor assessment is required.", faqs: [{ question: "Is assessment needed?", answer: "Yes, a doctor will assess suitability." }] },
+  };
+  assertEquals(parseGeneratedServiceAeo(JSON.stringify(payload)), payload);
+});
+
+Deno.test("generated AEO-only validation rejects malformed or extra content", () => {
+  for (const payload of [
+    { aeoMs: { answerSummary: "Ringkasan", faqs: [] } },
+    { aeoMs: { answerSummary: "Ringkasan", faqs: [] }, aeoEn: { answerSummary: "Summary", faqs: [] }, extra: true },
+    { aeoMs: { answerSummary: "Ringkasan", faqs: [] }, aeoEn: { answerSummary: "Summary", faqs: [{ question: "", answer: "Answer" }] } },
+  ]) {
+    let caught: unknown;
+    try { parseGeneratedServiceAeo(JSON.stringify(payload)); } catch (error) { caught = error; }
     assert(caught instanceof HttpError);
     assertEquals((caught as InstanceType<typeof HttpError>).status, 502);
   }
