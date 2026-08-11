@@ -23,6 +23,13 @@ const publishFixMigrationName = readdirSync(migrationDirectory)
 const publishFixSql = publishFixMigrationName
   ? readFileSync(resolve(migrationDirectory, publishFixMigrationName), "utf8")
   : "";
+const dynamicMigrationName = readdirSync(migrationDirectory)
+  .filter((name) => name.endsWith("_dynamic_service_seo_aeo.sql"))
+  .sort()
+  .at(-1);
+const dynamicSql = dynamicMigrationName
+  ? readFileSync(resolve(migrationDirectory, dynamicMigrationName), "utf8")
+  : "";
 
 describe("service SEO database contract", () => {
   it("creates a public read-only registry with all canonical targets", () => {
@@ -85,5 +92,32 @@ describe("service SEO database contract", () => {
     expect(publishFixSql).toContain("jsonb_object_length(v_payload)");
     expect(publishFixSql).toMatch(/select count\(\*\)[\s\S]*pg_catalog\.jsonb_object_keys\(v_payload\)/i);
     expect(publishFixSql).toContain("raise exception 'publish_service_seo definition was not recognized'");
+  });
+
+  it("links every dynamic service to one SEO and AEO registry record", () => {
+    expect(dynamicSql).toContain("add column if not exists service_id uuid");
+    expect(dynamicSql).toContain("references public.clinic_services(id) on delete cascade");
+    expect(dynamicSql).toContain("website_service_seo_service_id_uidx");
+    expect(dynamicSql).toContain("add column if not exists aeo_ms jsonb");
+    expect(dynamicSql).toContain("add column if not exists aeo_en jsonb");
+    expect(dynamicSql).toContain("from public.clinic_services service");
+    expect(dynamicSql).toMatch(/insert into public\.website_service_seo[\s\S]*on conflict \(path\) do update/i);
+  });
+
+  it("creates and deletes dynamic registry resources only through guarded RPCs", () => {
+    expect(dynamicSql).toContain("returns table (service_id uuid, seo_id uuid, created boolean)");
+    expect(dynamicSql).toContain("not public.is_admin(v_actor)");
+    expect(dynamicSql).toContain("insert into public.website_service_seo");
+    expect(dynamicSql).toContain("delete from public.website_content_drafts");
+    expect(dynamicSql).toContain("core service pages cannot be deleted");
+    expect(dynamicSql).toMatch(/revoke all on function public\.save_clinic_landing_page[\s\S]*from public, anon, authenticated/i);
+    expect(dynamicSql).toMatch(/grant execute on function public\.save_clinic_landing_page[\s\S]*to authenticated/i);
+  });
+
+  it("publishes only strict version two SEO and AEO payloads", () => {
+    expect(dynamicSql).toContain("array['aeoEn','aeoMs','focusPhraseEn','focusPhraseMs','path','schemaVersion','seoEn','seoMs']");
+    expect(dynamicSql).toContain("v_payload->'aeoMs'");
+    expect(dynamicSql).toContain("v_payload->'aeoEn'");
+    expect(dynamicSql).toContain("private.service_aeo_payload_is_valid");
   });
 });
