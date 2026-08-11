@@ -256,4 +256,3 @@ Use `gh run list` and `gh run watch` to require a successful Security Gate and s
 - [ ] **Step 6: Production smoke test**
 
 In the authenticated Website Editor, verify Pages lists fixed pages, services, generic pages, and blog posts; search and Edit work; Navigation can select service and blog destinations; private save does not change the live menu; and only explicit Publish changes the public header/footer.
-
