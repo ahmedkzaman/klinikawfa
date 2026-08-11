@@ -124,6 +124,13 @@ describe("GitHub Pages hosting", () => {
     expect(workflow).toContain('cp dist/index.html "dist/${route}/index.html"');
   });
 
+  it("pre-renders every fixed public route that must support direct navigation", () => {
+    const workflow = readWorkflow().replaceAll("\r\n", "\n");
+    for (const route of ["appointment", "terms"]) {
+      expect(workflow).toContain(`\n            ${route}\n`);
+    }
+  });
+
   it("prepares and validates a static Pages artifact for every local SEO hub", () => {
     const workflow = readWorkflow().replaceAll("\r\n", "\n");
 
