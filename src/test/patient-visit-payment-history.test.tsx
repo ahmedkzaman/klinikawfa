@@ -95,7 +95,8 @@ describe('patient visit payment history', () => {
       queueLabel: '260805-01',
       total: 100,
       patientPaid: 10,
-      panelReceived: 90,
+      panelReceived: 0,
+      panelOutstanding: 90,
       patientOutstanding: 0,
     });
     expect(result[1]).toMatchObject({
