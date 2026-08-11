@@ -43,7 +43,8 @@ export default function LocalServicePage({ slug }: LocalServicePageProps) {
     { name: 'Perkhidmatan', path: '/services' },
     { name: content.heading, path: servicePath },
   ];
-  const schemas = buildServiceStructuredData({ path: servicePath, name: seo.title, breadcrumbName: content.heading, description: seo.description, faqs: buildLocalServiceAeo(content).faqs });
+  const publishedFaqs = seo.faqs?.map((faq) => ({ question: { ms: faq.question, en: faq.question }, answer: { ms: faq.answer, en: faq.answer } }));
+  const schemas = buildServiceStructuredData({ path: servicePath, name: seo.title, breadcrumbName: content.heading, description: seo.answerSummary || seo.description, faqs: publishedFaqs?.length ? publishedFaqs : buildLocalServiceAeo(content).faqs });
 
   return (
     <MainLayout>

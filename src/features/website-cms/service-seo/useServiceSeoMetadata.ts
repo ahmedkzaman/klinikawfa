@@ -15,6 +15,8 @@ export interface ResolvedServiceSeo {
   canonicalUrl: string;
   noIndex: boolean;
   noFollow: boolean;
+  answerSummary?: string;
+  faqs?: Array<{ question: string; answer: string }>;
 }
 
 export function resolveServiceSeoMetadata(
@@ -25,6 +27,8 @@ export function resolveServiceSeoMetadata(
   if (!record || !record.seoMs || !record.seoEn) return fallback;
   const selected = language === "en" ? record.seoEn : record.seoMs;
   const malay = record.seoMs;
+  const selectedAeo = language === "en" ? record.aeoEn : record.aeoMs;
+  const malayAeo = record.aeoMs;
   const pick = (selectedValue: string, malayValue: string, fallbackValue: string) =>
     selectedValue.trim() || (language === "en" ? malayValue.trim() : "") || fallbackValue;
   return {
@@ -36,6 +40,8 @@ export function resolveServiceSeoMetadata(
     canonicalUrl: serviceSeoCanonicalUrl(record.path),
     noIndex: !selected.index,
     noFollow: !selected.follow,
+    answerSummary: selectedAeo?.answerSummary?.trim() || (language === "en" ? malayAeo?.answerSummary?.trim() : "") || undefined,
+    faqs: selectedAeo?.faqs?.length ? selectedAeo.faqs : (language === "en" ? malayAeo?.faqs : undefined),
   };
 }
 

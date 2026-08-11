@@ -129,7 +129,8 @@ export default function ServiceDetail() {
   const callToAction = language === "en" ? service.call_to_action_en || service.call_to_action_ms || service.call_to_action : service.call_to_action_ms || service.call_to_action;
   const serviceItems = language === "en" && service.services_list_en?.length ? service.services_list_en : service.services_list_ms?.length ? service.services_list_ms : service.services_list;
   const aeoContent = buildCategoryServiceAeo({ titleMs: service.title_ms || service.title, titleEn: service.title_en || service.title_ms || service.title, descriptionMs: stripHtml(service.description_ms || service.description), descriptionEn: stripHtml(service.description_en || service.description_ms || service.description) });
-  const schemas = buildServiceStructuredData({ path: servicePath, name: seo.title, description: seo.description, faqs: aeoContent.faqs });
+  const publishedFaqs = seo.faqs?.map((faq) => ({ question: { ms: faq.question, en: faq.question }, answer: { ms: faq.answer, en: faq.answer } }));
+  const schemas = buildServiceStructuredData({ path: servicePath, name: seo.title, description: seo.answerSummary || seo.description, faqs: publishedFaqs?.length ? publishedFaqs : aeoContent.faqs });
 
   return (
     <MainLayout>

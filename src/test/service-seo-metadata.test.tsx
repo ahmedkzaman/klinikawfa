@@ -55,6 +55,8 @@ describe("service SEO metadata resolver", () => {
       },
       imageMs: undefined,
       imageEn: undefined,
+      aeoMs: { answerSummary: "Jawapan ringkas.", faqs: [{ question: "Perlu penilaian?", answer: "Ya." }] },
+      aeoEn: { answerSummary: "Direct answer.", faqs: [{ question: "Is assessment needed?", answer: "Yes." }] },
     });
 
     const { result } = renderHook(
@@ -67,6 +69,8 @@ describe("service SEO metadata resolver", () => {
     expect(result.current.socialTitle).toBe("Ear Care at Klinik Awfa");
     expect(result.current.canonicalUrl).toBe("https://klinikawfa.com/services/rawatan-telinga-kuantan/");
     expect(result.current.noFollow).toBe(true);
+    expect(result.current.answerSummary).toBe("Direct answer.");
+    expect(result.current.faqs).toEqual([{ question: "Is assessment needed?", answer: "Yes." }]);
   });
 
   it("preserves current metadata when the registry request fails", async () => {
