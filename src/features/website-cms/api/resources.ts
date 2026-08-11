@@ -172,7 +172,7 @@ export async function fetchResourceForEditor(type: Exclude<WebsiteResourceType, 
 export interface ServiceResourceSummary {
   id: string;
   revision: number;
-  slug: ServiceDraft["slug"];
+  slug: string;
   title: string;
 }
 
@@ -180,10 +180,9 @@ export async function listServiceResources(): Promise<ServiceResourceSummary[]> 
   const { data, error } = await supabase
     .from("clinic_services")
     .select("id,slug,title")
-    .in("slug", ["rawatan-am", "prosedur-minor", "pemeriksaan-kesihatan"])
     .order("slug");
   if (error || !data) throw new Error("Services could not be loaded");
-  return data.map((row) => ({ id: row.id, revision: Number((row as { website_revision?: number }).website_revision ?? 0), slug: row.slug as ServiceDraft["slug"], title: row.title }));
+  return data.map((row) => ({ id: row.id, revision: Number((row as { website_revision?: number }).website_revision ?? 0), slug: row.slug, title: row.title }));
 }
 
 export async function fetchServiceResource(resourceId: string): Promise<{ draft: ServiceDraft; revision: number }> {

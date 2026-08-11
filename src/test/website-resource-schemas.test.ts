@@ -20,6 +20,7 @@ describe("website resource schemas", () => {
 
   it("requires Malay presentation content and rejects unknown keys", () => {
     expect(serviceDraftSchema.safeParse({ titleMs: "Rawatan", descriptionMs: "<p>Selamat</p>", ctaMs: "Hubungi", servicesMs: ["Konsultasi"], slug: "rawatan-am" }).success).toBe(true);
+    expect(serviceDraftSchema.safeParse({ titleMs: "Rawatan Telinga", descriptionMs: "<p>Selamat</p>", ctaMs: "Hubungi", servicesMs: ["Microsuction"], slug: "rawatan-telinga-microsuction-kuantan" }).success).toBe(true);
     expect(serviceDraftSchema.safeParse({ titleEn: "Care", slug: "rawatan-am" }).success).toBe(false);
     expect(serviceDraftSchema.safeParse({ titleMs: "Rawatan", descriptionMs: "x", ctaMs: "x", servicesMs: ["x"], slug: "rawatan-am", patientId: "secret" }).success).toBe(false);
   });

@@ -9,18 +9,27 @@ vi.mock("@/features/website-cms/api/resources", () => ({
     { id: "1", revision: 1, slug: "rawatan-am", title: "Rawatan Am" },
     { id: "2", revision: 1, slug: "prosedur-minor", title: "Prosedur Minor" },
     { id: "3", revision: 1, slug: "pemeriksaan-kesihatan", title: "Pemeriksaan Kesihatan" },
+    { id: "4", revision: 1, slug: "rawatan-telinga-microsuction-kuantan", title: "Rawatan Telinga & Ear Microsuction di Kuantan" },
   ]),
 }));
 
 describe("services website editor", () => {
-  it("lists all eight SEO targets while retaining content editing for the three categories", async () => {
+  it("lists all eight SEO targets while retaining content editing for every database service", async () => {
     render(<MemoryRouter><ServicesEditorList /></MemoryRouter>);
     expect(await screen.findByText("Rawatan Umum & Penyakit Akut")).toBeInTheDocument();
     expect(screen.getByText("Prosedur Minor & Pembedahan")).toBeInTheDocument();
     expect(screen.getByText("Pemeriksaan Kesihatan & Pekerjaan")).toBeInTheDocument();
     expect(screen.getByText("Sunat Kuantan")).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /edit seo/i })).toHaveLength(8);
-    expect(screen.getAllByRole("link", { name: /edit content/i })).toHaveLength(3);
+    expect(screen.getAllByRole("link", { name: /edit content/i })).toHaveLength(4);
     expect(screen.queryByRole("button", { name: /add service/i })).not.toBeInTheDocument();
+  });
+
+  it("includes newly created landing-page services with content editing", async () => {
+    render(<MemoryRouter><ServicesEditorList /></MemoryRouter>);
+
+    expect(await screen.findByText("Rawatan Telinga & Ear Microsuction di Kuantan")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /edit content: rawatan telinga & ear microsuction di kuantan/i }))
+      .toHaveAttribute("href", "/editor/services/4");
   });
 });

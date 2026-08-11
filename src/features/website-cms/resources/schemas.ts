@@ -26,7 +26,7 @@ const safePublicUrl = z.string().trim().max(2_048).refine((value) => {
 export const websiteResourceTypeSchema = z.enum(WEBSITE_RESOURCE_TYPES);
 
 export const serviceDraftSchema = z.object({
-  slug: z.enum(["rawatan-am", "prosedur-minor", "pemeriksaan-kesihatan"]),
+  slug,
   titleMs: requiredText,
   titleEn: optionalText,
   descriptionMs: requiredText,

@@ -16,7 +16,7 @@ const textArray = { type: "array", items: text, maxItems: 30 } as const;
 
 export const websiteResourceJsonSchemas: Readonly<Record<WebsiteResourceType, JsonSchema>> = {
   service: strictObject(["slug", "titleMs", "descriptionMs", "ctaMs", "servicesMs"], {
-    slug: { enum: ["rawatan-am", "prosedur-minor", "pemeriksaan-kesihatan"] }, titleMs: text, titleEn: optionalText,
+    slug: text, titleMs: text, titleEn: optionalText,
     descriptionMs: text, descriptionEn: optionalText, ctaMs: text, ctaEn: optionalText, servicesMs: textArray,
     servicesEn: textArray, heroImageUrl: optionalText, promoVideoUrl: optionalText,
   }),
