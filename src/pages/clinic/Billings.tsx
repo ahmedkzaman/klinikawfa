@@ -20,7 +20,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { usePaymentsLedger } from '@/hooks/clinic/usePayments';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import {
-  formatPaymentMethod,
+  formatBillingPaymentMethod,
   paymentMethodBadgeClass,
 } from '@/lib/clinic/paymentMethod';
 import { sumActiveBillingLines } from '@/lib/clinic/billingLedgerTotals';
@@ -41,6 +41,7 @@ interface LedgerEntry {
   queueLabel: string;
   patientId: string;
   patientName: string;
+  panelName: string | null;
   createdAt: string;
   clinicStatus: string;
   subtotal: number;
@@ -220,6 +221,7 @@ export default function Billings() {
           queueLabel: formatQueueNo(qe.created_at, qe.queue_sequence),
           patientId: qe.patient_id,
           patientName: qe.patients?.name ? toMalayTitleCase(qe.patients.name) : '—',
+          panelName: qe.insurance_providers?.name ?? null,
           createdAt: qe.created_at,
           clinicStatus: qe.clinic_status,
           subtotal: itemsByQueue[qe.id] ?? 0,
@@ -559,7 +561,14 @@ export default function Billings() {
                         paymentMethodBadgeClass(e.latestMethod),
                       )}
                     >
-                      {formatPaymentMethod(e.latestMethod, e.paid)}
+                      {formatBillingPaymentMethod({
+                        method: e.latestMethod,
+                        patientPaid: e.paid,
+                        expectsPanel:
+                          e.latestPaymentType === 'panel' ||
+                          e.latestPaymentType === 'insurance',
+                        panelName: e.panelName,
+                      })}
                     </Badge>
                   ) : (
                     <span className="text-xs text-slate-400">—</span>

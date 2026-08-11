@@ -34,6 +34,25 @@ export function formatPaymentMethod(
   return method;
 }
 
+export function formatBillingPaymentMethod({
+  method,
+  patientPaid,
+  expectsPanel,
+  panelName,
+}: {
+  method: string | null | undefined;
+  patientPaid: number;
+  expectsPanel: boolean;
+  panelName: string | null | undefined;
+}): string {
+  if (!expectsPanel) return formatPaymentMethod(method, patientPaid);
+
+  const methodPanelName = String(method ?? '').match(/^panel:\s*(.+?)(?:\s*\+\s*copay)?$/i)?.[1];
+  const provider = String(panelName ?? methodPanelName ?? '').trim();
+  const panelLabel = provider ? `Panel: ${provider}` : 'Panel';
+  return patientPaid > 0 ? `${panelLabel} + Copay` : panelLabel;
+}
+
 export function paymentMethodBadgeClass(method: string | null | undefined): string {
   switch (method) {
     case 'cash':
