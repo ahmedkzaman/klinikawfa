@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Consultation from '@/pages/clinic/Consultation';
 import ConsultationDetail from '@/pages/clinic/ConsultationDetail';
@@ -29,6 +29,7 @@ const test = vi.hoisted(() => {
       date_of_birth: '1990-01-01',
       national_id: '900101-01-0001',
       phone: '0123456789',
+      address: '12, Jalan Awfa\nBandar Kotasas, 25200 Kuantan, Pahang',
     },
     doctors: { id: 'doctor-1', name: 'Dr Eligible', avatar_url: null },
   };
@@ -217,7 +218,16 @@ describe('offline consultation pages', () => {
     test.state.role = 'ops_staff';
     test.state.currentDoctor = null;
     test.state.eligibleVisitIds = new Set(['queue-1']);
-    test.state.entry = { ...test.state.entry, assigned_doctor_id: 'doctor-1', clinic_status: 'with_doctor' };
+    test.state.entry = {
+      ...test.state.entry,
+      assigned_doctor_id: 'doctor-1',
+      clinic_status: 'with_doctor',
+      patients: {
+        ...test.state.entry.patients,
+        name: 'Patient One',
+        address: '12, Jalan Awfa\nBandar Kotasas, 25200 Kuantan, Pahang',
+      },
+    };
     test.state.consultation = {
       id: 'consultation-1', queue_entry_id: 'queue-1', patient_id: 'patient-1', doctor_id: 'doctor-1',
       case_note: 'Existing note', diagnosis_id: null, diagnosis_text: 'Existing diagnosis',
@@ -243,6 +253,36 @@ describe('offline consultation pages', () => {
   });
 
   afterEach(cleanup);
+
+  it('shows the full patient name and safely wrapped address in the identity card', () => {
+    const fullName = 'Nur Aleesya Amanda binti Mohd Syafiq Abdullah';
+    test.state.entry = {
+      ...test.state.entry,
+      patients: { ...test.state.entry.patients, name: fullName },
+    };
+
+    render(<ConsultationDetail />);
+
+    const name = screen.getByText(fullName);
+    expect(name).not.toHaveClass('truncate');
+    expect(name).toHaveClass('whitespace-normal', 'break-words');
+
+    const address = screen.getByText(/12, Jalan Awfa\s+Bandar Kotasas, 25200 Kuantan, Pahang/);
+    expect(address).toHaveClass('whitespace-pre-wrap', 'break-words', '[overflow-wrap:anywhere]');
+  });
+
+  it('shows an address fallback when the patient address is blank', () => {
+    test.state.entry = {
+      ...test.state.entry,
+      patients: { ...test.state.entry.patients, address: '   ' },
+    };
+
+    render(<ConsultationDetail />);
+
+    const addressField = screen.getByText('Address').parentElement;
+    expect(addressField).not.toBeNull();
+    expect(within(addressField!).getByText('—')).toBeInTheDocument();
+  });
 
   it('shows the RPC-authorized action only to operations staff and navigates with explicit state', async () => {
     render(<Consultation />);

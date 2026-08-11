@@ -1760,7 +1760,7 @@ export default function ConsultationDetail() {
                       </svg>
                     </div>
                     <div className="min-w-0">
-                      <h2 className="text-base font-semibold text-slate-800 truncate">
+                      <h2 className="text-base font-semibold leading-snug text-slate-800 whitespace-normal break-words">
                         {toMalayTitleCase(patient.name)}
                       </h2>
                       <p className="text-xs text-slate-500 mt-0.5">
@@ -1787,6 +1787,12 @@ export default function ConsultationDetail() {
                     <span className="text-xs text-slate-400 block">Gender</span>
                     {patient.gender || '—'}
                   </div>
+                </div>
+                <div className="text-sm text-slate-600">
+                  <span className="text-xs text-slate-400 block">Address</span>
+                  <p className="mt-0.5 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                    {patient.address?.trim() || '—'}
+                  </p>
                 </div>
                 <div>
                   <span className="inline-flex items-center rounded-full bg-slate-50 text-slate-600 text-xs px-2 py-0.5">
