@@ -252,10 +252,10 @@ export default function Doctors() {
                         <img
                           src={doctor.photo_url}
                           alt={language === 'ms' ? doctor.name_ms : doctor.name_en}
-                          className="h-28 w-28 rounded-full object-cover shadow-lg ring-4 ring-primary/20 md:h-36 md:w-36"
+                          className="h-[170px] w-[170px] rounded-full object-cover shadow-lg ring-4 ring-primary/20 md:h-[220px] md:w-[220px]"
                         />
                       ) : (
-                        <div className="flex h-28 w-28 items-center justify-center rounded-full bg-background shadow-lg ring-4 ring-primary/20 md:h-36 md:w-36">
+                        <div className="flex h-[170px] w-[170px] items-center justify-center rounded-full bg-background shadow-lg ring-4 ring-primary/20 md:h-[220px] md:w-[220px]">
                           <User className="h-14 w-14 text-primary md:h-18 md:w-18" />
                         </div>
                       )}
