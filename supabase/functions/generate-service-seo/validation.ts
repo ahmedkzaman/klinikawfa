@@ -1,15 +1,6 @@
 import { HttpError } from "../_shared/auth-helpers.ts";
 
-const SERVICE_PATHS = new Set([
-  "/services/rawatan-umum/",
-  "/services/prosedur-kecil/",
-  "/services/pemeriksaan-kesihatan/",
-  "/services/rawatan-telinga-kuantan/",
-  "/services/minor-surgery-kutil-kuantan/",
-  "/services/swab-test-demam-kuantan/",
-  "/services/pengurusan-berat-badan-kuantan/",
-  "/services/sunat-kuantan/",
-]);
+const SERVICE_PATH_PATTERN = /^\/services\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/;
 
 const REQUEST_KEYS = new Set([
   "path",
@@ -35,6 +26,8 @@ export type ServiceSeoRequest = {
 export type GeneratedServiceSeo = {
   ms: { title: string; description: string; socialTitle: string; socialDescription: string };
   en: { title: string; description: string; socialTitle: string; socialDescription: string };
+  aeoMs: { answerSummary: string; faqs: Array<{ question: string; answer: string }> };
+  aeoEn: { answerSummary: string; faqs: Array<{ question: string; answer: string }> };
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -67,7 +60,7 @@ export function validateServiceSeoRequest(value: unknown): ServiceSeoRequest {
     throw new HttpError(400, "Invalid request");
   }
   const path = boundedString(value.path, "path", 120, 400);
-  if (!SERVICE_PATHS.has(path)) throw new HttpError(400, "Unknown service page");
+  if (!SERVICE_PATH_PATTERN.test(path)) throw new HttpError(400, "Unknown service page");
 
   const request: ServiceSeoRequest = {
     path,
@@ -93,6 +86,29 @@ function parseLanguage(value: unknown): GeneratedServiceSeo["ms"] {
   };
 }
 
+function parseAeoLanguage(value: unknown): GeneratedServiceSeo["aeoMs"] {
+  const keys = new Set(["answerSummary", "faqs"]);
+  if (!isRecord(value) || Object.keys(value).length !== keys.size || Object.keys(value).some((key) => !keys.has(key))) {
+    throw new HttpError(502, "SEO provider returned invalid content");
+  }
+  if (!Array.isArray(value.faqs) || value.faqs.length > 12) {
+    throw new HttpError(502, "SEO provider returned invalid content");
+  }
+  const faqs = value.faqs.map((faq) => {
+    if (!isRecord(faq) || Object.keys(faq).length !== 2 || !("question" in faq) || !("answer" in faq)) {
+      throw new HttpError(502, "SEO provider returned invalid content");
+    }
+    return {
+      question: boundedString(faq.question, "FAQ question", 240, 502),
+      answer: boundedString(faq.answer, "FAQ answer", 1_200, 502),
+    };
+  });
+  return {
+    answerSummary: boundedString(value.answerSummary, "answer summary", 1_200, 502),
+    faqs,
+  };
+}
+
 export function parseGeneratedServiceSeo(content: string): GeneratedServiceSeo {
   let value: unknown;
   try {
@@ -100,8 +116,14 @@ export function parseGeneratedServiceSeo(content: string): GeneratedServiceSeo {
   } catch {
     throw new HttpError(502, "SEO provider returned invalid content");
   }
-  if (!isRecord(value) || Object.keys(value).length !== 2 || !("ms" in value) || !("en" in value)) {
+  const keys = new Set(["ms", "en", "aeoMs", "aeoEn"]);
+  if (!isRecord(value) || Object.keys(value).length !== keys.size || Object.keys(value).some((key) => !keys.has(key))) {
     throw new HttpError(502, "SEO provider returned invalid content");
   }
-  return { ms: parseLanguage(value.ms), en: parseLanguage(value.en) };
+  return {
+    ms: parseLanguage(value.ms),
+    en: parseLanguage(value.en),
+    aeoMs: parseAeoLanguage(value.aeoMs),
+    aeoEn: parseAeoLanguage(value.aeoEn),
+  };
 }

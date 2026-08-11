@@ -32,10 +32,21 @@ Deno.test("service SEO request validation accepts optional empty focus phrases",
   assertEquals(result.focusPhraseEn, "");
 });
 
-Deno.test("service SEO request validation rejects unknown pages and oversized input", () => {
+Deno.test("service SEO request validation accepts dynamic service paths", () => {
+  const result = validateServiceSeoRequest({
+    path: "/services/rawatan-telinga-microsuction-kuantan/",
+    titleMs: "Rawatan Telinga",
+    titleEn: "Ear Treatment",
+    focusPhraseMs: "",
+    focusPhraseEn: "",
+  });
+  assertEquals(result.path, "/services/rawatan-telinga-microsuction-kuantan/");
+});
+
+Deno.test("service SEO request validation rejects malformed paths and oversized input", () => {
   for (const input of [
     null,
-    { path: "/services/khatan/", titleMs: "Khatan", titleEn: "Circumcision" },
+    { path: "/services/Nested/Page/", titleMs: "Khatan", titleEn: "Circumcision" },
     { path: "/services/sunat-kuantan/", titleMs: "x".repeat(201), titleEn: "Circumcision" },
     { path: "/services/sunat-kuantan/", titleMs: "Sunat", titleEn: "Circumcision", focusPhraseMs: "", focusPhraseEn: "", contentMs: "x".repeat(20_001) },
   ]) {
@@ -74,6 +85,26 @@ Deno.test("generated service SEO validation returns strict bilingual suggestions
   const payload = {
     ms: { title: "Sunat Kuantan", description: "Penilaian dan prosedur sunat.", socialTitle: "Sunat di Klinik Awfa", socialDescription: "Maklumat penjagaan sunat." },
     en: { title: "Circumcision Kuantan", description: "Circumcision assessment and care.", socialTitle: "Circumcision at Klinik Awfa", socialDescription: "Learn about circumcision care." },
+    aeoMs: { answerSummary: "Penilaian doktor diperlukan.", faqs: [{ question: "Perlu penilaian?", answer: "Ya, doktor akan menilai kesesuaian." }] },
+    aeoEn: { answerSummary: "A doctor assessment is required.", faqs: [{ question: "Is assessment needed?", answer: "Yes, a doctor will assess suitability." }] },
   };
   assertEquals(parseGeneratedServiceSeo(JSON.stringify(payload)), payload);
+});
+
+Deno.test("generated AEO validation rejects excessive FAQs and extra keys", () => {
+  const base = {
+    ms: { title: "T", description: "D", socialTitle: "S", socialDescription: "SD" },
+    en: { title: "T", description: "D", socialTitle: "S", socialDescription: "SD" },
+    aeoMs: { answerSummary: "Ringkasan", faqs: [] },
+    aeoEn: { answerSummary: "Summary", faqs: [] },
+  };
+  for (const payload of [
+    { ...base, aeoEn: { answerSummary: "Summary", faqs: Array.from({ length: 13 }, (_, index) => ({ question: `Q${index}`, answer: "A" })) } },
+    { ...base, unexpected: true },
+  ]) {
+    let caught: unknown;
+    try { parseGeneratedServiceSeo(JSON.stringify(payload)); } catch (error) { caught = error; }
+    assert(caught instanceof HttpError);
+    assertEquals((caught as InstanceType<typeof HttpError>).status, 502);
+  }
 });
