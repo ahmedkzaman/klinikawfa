@@ -48,7 +48,7 @@ describe('calculateDualLedger', () => {
     });
   });
 
-  it('flags legacy over-attribution when co-payment plus panel claim exceeds the bill', () => {
+  it('caps a legacy full-bill panel claim after a patient co-payment', () => {
     expect(calculateDualLedger({
       billedTotal: 224,
       patientPayments: [10],
@@ -56,8 +56,10 @@ describe('calculateDualLedger', () => {
       panelClaim: { amount: 224, receivedAmount: 0, status: 'pending' },
     })).toMatchObject({
       patientOutstanding: 0,
-      excessAttribution: 10,
-      settlement: 'needs_attention',
+      panelCovered: 214,
+      panelOutstanding: 214,
+      excessAttribution: 0,
+      settlement: 'panel_due',
     });
   });
 
@@ -89,7 +91,7 @@ describe('calculateDualLedger', () => {
     });
   });
 
-  it('does not count a panel remittance as patient co-payment', () => {
+  it('does not count a panel allocation row as patient payment or panel remittance', () => {
     expect(calculateDualLedger({
       billedTotal: 103,
       patientPayments: [
@@ -101,10 +103,33 @@ describe('calculateDualLedger', () => {
       panelPayments: 93,
     })).toMatchObject({
       patientPaid: 10,
-      panelReceived: 93,
+      panelCovered: 93,
+      panelReceived: 0,
       patientOutstanding: 0,
-      panelOutstanding: 10,
-      settlement: 'needs_attention',
+      panelOutstanding: 93,
+      settlement: 'panel_due',
+    });
+  });
+
+  it('keeps QR patient payment separate and caps panel receivable to the unpaid bill balance', () => {
+    expect(calculateDualLedger({
+      billedTotal: 143,
+      patientPayments: [
+        { amount: 45, paymentMethod: 'panel' },
+        { amount: 98, paymentMethod: 'qr_pay' },
+      ],
+      expectsPanel: true,
+      panelClaim: { amount: 143, receivedAmount: 0, status: 'pending' },
+      panelPayments: 45,
+    })).toMatchObject({
+      patientPaid: 98,
+      panelCovered: 45,
+      panelReceived: 0,
+      patientOutstanding: 0,
+      panelOutstanding: 45,
+      unattributedBalance: 0,
+      excessAttribution: 0,
+      settlement: 'panel_due',
     });
   });
 });

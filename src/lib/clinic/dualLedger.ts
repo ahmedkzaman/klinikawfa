@@ -21,6 +21,7 @@ export interface DualLedgerInput {
   patientPayments?: PatientPayment[];
   expectsPanel?: boolean;
   panelClaim?: PanelClaimLedgerInput | null;
+  /** @deprecated Panel-method payment rows are allocation records, not panel remittances. */
   panelPayments?: number;
 }
 
@@ -55,12 +56,17 @@ export function calculateDualLedger(input: DualLedgerInput): DualLedgerState {
 
   const status = String(input.panelClaim?.status ?? '').toLowerCase();
   const hasActiveClaim = Boolean(input.panelClaim) && ACTIVE_CLAIM_STATUSES.has(status);
-  const panelCovered = hasActiveClaim ? Math.max(money(input.panelClaim?.amount), 0) : 0;
+  // A patient payment (cash, QR, card, transfer, etc.) can never also be
+  // receivable from the panel. Cap legacy/full-bill claims at the remainder.
+  const remainingAfterPatientPayment = Math.max(money(billedTotal - patientPaid), 0);
+  const panelCovered = hasActiveClaim
+    ? Math.min(Math.max(money(input.panelClaim?.amount), 0), remainingAfterPatientPayment)
+    : 0;
   const panelReceived = hasActiveClaim
-    ? Math.min(
-      Math.max(money(input.panelClaim?.receivedAmount) + money(input.panelPayments), 0),
-      panelCovered,
-    )
+    // Only an amount explicitly received against the claim is panel income.
+    // Legacy payment_method='panel' rows describe allocation and must not be
+    // added here, otherwise a patient QR/cash payment is double-attributed.
+    ? Math.min(Math.max(money(input.panelClaim?.receivedAmount), 0), panelCovered)
     : 0;
   const attributed = money(patientPaid + panelCovered);
   const excessAttribution = Math.max(money(attributed - billedTotal), 0);
