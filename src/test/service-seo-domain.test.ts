@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   CANONICAL_SERVICE_SEO_TARGETS,
+  createEmptyServiceSeoPayload,
   resolveServiceSeoPath,
   serviceSeoPayloadSchema,
 } from "@/features/website-cms/service-seo/domain";
@@ -30,8 +31,22 @@ describe("service SEO domain", () => {
     expect(resolveServiceSeoPath(input)).toBe(expected);
   });
 
-  it("rejects unknown service paths", () => {
-    expect(resolveServiceSeoPath("/services/not-a-page/")).toBeUndefined();
+  it("accepts normalized dynamic service paths", () => {
+    expect(resolveServiceSeoPath("/services/rawatan-telinga-microsuction-kuantan/?source=editor"))
+      .toBe("/services/rawatan-telinga-microsuction-kuantan/");
+  });
+
+  it.each(["/services/Two-Words/", "/services/nested/page/", "/other/page/"])(
+    "rejects malformed service path %s",
+    (path) => expect(resolveServiceSeoPath(path)).toBeUndefined(),
+  );
+
+  it("creates a versioned bilingual AEO draft", () => {
+    expect(createEmptyServiceSeoPayload("/services/microsuction-kuantan/")).toMatchObject({
+      schemaVersion: 2,
+      aeoMs: { answerSummary: "", faqs: [] },
+      aeoEn: { answerSummary: "", faqs: [] },
+    });
   });
 
   it("validates strict bilingual draft payloads with derived canonicals", () => {
@@ -59,11 +74,24 @@ describe("service SEO domain", () => {
         index: true,
         follow: true,
       },
+      schemaVersion: 2,
+      aeoMs: {
+        answerSummary: "Penilaian rawatan umum di KotaSAS, Kuantan.",
+        faqs: [{ question: "Perlu temujanji?", answer: "Hubungi klinik untuk semakan semasa." }],
+      },
+      aeoEn: {
+        answerSummary: "General treatment assessment in KotaSAS, Kuantan.",
+        faqs: [{ question: "Do I need an appointment?", answer: "Contact the clinic for current arrangements." }],
+      },
     } as const;
 
     expect(serviceSeoPayloadSchema.safeParse(valid).success).toBe(true);
     expect(serviceSeoPayloadSchema.safeParse({ ...valid, patientId: "must-not-exist" }).success).toBe(false);
-    expect(serviceSeoPayloadSchema.safeParse({ ...valid, path: "/services/khatan/" }).success).toBe(false);
+    expect(serviceSeoPayloadSchema.safeParse({ ...valid, path: "/services/khatan/" }).success).toBe(true);
+    expect(serviceSeoPayloadSchema.safeParse({
+      ...valid,
+      aeoEn: { ...valid.aeoEn, faqs: Array.from({ length: 13 }, (_, index) => ({ question: `Q${index}`, answer: "Answer" })) },
+    }).success).toBe(false);
     expect(serviceSeoPayloadSchema.safeParse({
       ...valid,
       seoMs: { ...valid.seoMs, canonicalUrl: "https://example.com/" },

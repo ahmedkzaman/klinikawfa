@@ -15,7 +15,14 @@ export const CANONICAL_SERVICE_SEO_PATHS = [
   "/services/sunat-kuantan/",
 ] as const;
 
-export type CanonicalServiceSeoPath = (typeof CANONICAL_SERVICE_SEO_PATHS)[number];
+export type CanonicalServiceSeoPath = string;
+export type ServiceSeoPath = CanonicalServiceSeoPath;
+
+export const serviceSeoPathSchema = z
+  .string()
+  .trim()
+  .max(120)
+  .regex(/^\/services\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/);
 
 export const CANONICAL_SERVICE_SEO_TARGETS = [
   { id: "b9838947-9b48-4f1d-a378-21224c4b5c01", path: CANONICAL_SERVICE_SEO_PATHS[0], labelMs: "Rawatan Umum & Penyakit Akut", labelEn: "General Treatment & Acute Illness", sourceKind: "category" },
@@ -41,25 +48,40 @@ if (ids.size !== CANONICAL_SERVICE_SEO_TARGETS.length || paths.size !== CANONICA
 }
 
 const editableSeoFieldsSchema = seoFieldsSchema.extend({ canonicalUrl: z.literal("") });
+const serviceAeoFaqSchema = z.object({
+  question: z.string().trim().min(1).max(240),
+  answer: z.string().trim().min(1).max(1_200),
+}).strict();
+export const serviceAeoLanguageSchema = z.object({
+  answerSummary: z.string().trim().max(1_200),
+  faqs: z.array(serviceAeoFaqSchema).max(12),
+}).strict();
 
 export const serviceSeoPayloadSchema = z.object({
-  path: z.enum(CANONICAL_SERVICE_SEO_PATHS),
+  schemaVersion: z.literal(2),
+  path: serviceSeoPathSchema,
   focusPhraseMs: z.string().trim().max(160),
   focusPhraseEn: z.string().trim().max(160),
   seoMs: editableSeoFieldsSchema,
   seoEn: editableSeoFieldsSchema,
+  aeoMs: serviceAeoLanguageSchema,
+  aeoEn: serviceAeoLanguageSchema,
 }).strict();
 
 export type ServiceSeoPayload = z.infer<typeof serviceSeoPayloadSchema>;
+export type ServiceAeoLanguage = z.infer<typeof serviceAeoLanguageSchema>;
 export type ServiceSeoTarget = (typeof CANONICAL_SERVICE_SEO_TARGETS)[number];
 
 export function createEmptyServiceSeoPayload(path: CanonicalServiceSeoPath): ServiceSeoPayload {
   return {
+    schemaVersion: 2,
     path,
     focusPhraseMs: "",
     focusPhraseEn: "",
     seoMs: { ...emptySeoFields },
     seoEn: { ...emptySeoFields },
+    aeoMs: { answerSummary: "", faqs: [] },
+    aeoEn: { answerSummary: "", faqs: [] },
   };
 }
 
@@ -67,12 +89,9 @@ export function resolveServiceSeoPath(pathname: string): CanonicalServiceSeoPath
   const cleanPath = pathname.split(/[?#]/, 1)[0].replace(/\/+$/, "");
   const match = cleanPath.match(/^\/services\/([^/]+)$/);
   if (!match) return undefined;
-  const canonicalSlug = resolveCanonicalServiceSlug(match[1]);
-  if (!canonicalSlug) return undefined;
+  const canonicalSlug = resolveCanonicalServiceSlug(match[1]) ?? match[1];
   const canonicalPath = `/services/${canonicalSlug}/`;
-  return paths.has(canonicalPath as CanonicalServiceSeoPath)
-    ? canonicalPath as CanonicalServiceSeoPath
-    : undefined;
+  return serviceSeoPathSchema.safeParse(canonicalPath).success ? canonicalPath : undefined;
 }
 
 export function getServiceSeoTargetById(id: string): ServiceSeoTarget | undefined {
