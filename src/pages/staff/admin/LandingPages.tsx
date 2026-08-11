@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { z } from "zod";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { formatDistanceToNow } from "date-fns";
@@ -9,6 +8,8 @@ import { Plus, Edit, Trash2, ExternalLink, Upload, Loader2, Check } from "lucide
 import { toast } from "sonner";
 // GHSA-v3m3-f69x-jf25: Quill HTML export must pass through the shared sanitizer.
 import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
+import { deleteLandingPage, saveLandingPage } from "@/features/website-cms/services/landingPageApi";
+import { DEFAULT_LANDING_PAGE_VALUES, landingPageFormSchema, type LandingPageFormValues } from "@/features/website-cms/services/landingPageDomain";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,32 +66,9 @@ interface ClinicService {
   updated_at: string;
 }
 
-const formSchema = z.object({
-  slug: z
-    .string()
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "No spaces, lowercase & hyphens only")
-    .max(80),
-  title: z.string().min(1, "Title is required").max(120),
-  description: z.string().min(1, "Description is required").max(20000),
-  call_to_action: z.string().min(1, "CTA is required").max(60),
-  hero_image_url: z.string().url("Must be a valid URL").optional().or(z.literal("")),
-  promo_video_url: z.string().url("Must be a valid URL").optional().or(z.literal("")),
-  services_list: z
-    .array(z.object({ value: z.string() }))
-    .min(1, "At least one service is required"),
-});
-
-type FormValues = z.infer<typeof formSchema>;
-
-const DEFAULTS: FormValues = {
-  slug: "",
-  title: "",
-  description: "",
-  call_to_action: "Book Appointment",
-  hero_image_url: "",
-  promo_video_url: "",
-  services_list: [{ value: "" }],
-};
+type FormValues = LandingPageFormValues;
+const formSchema = landingPageFormSchema;
+const DEFAULTS = DEFAULT_LANDING_PAGE_VALUES;
 
 const sanitizeName = (name: string) =>
   name.toLowerCase().replace(/[^a-z0-9.]+/g, "-").replace(/-+/g, "-");
@@ -166,8 +144,8 @@ export default function LandingPages() {
       const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(fileName);
       form.setValue(field, data.publicUrl, { shouldDirty: true, shouldValidate: true });
       toast.success("File uploaded");
-    } catch (err: any) {
-      toast.error(err?.message || "Upload failed");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploadingField(null);
     }
@@ -175,34 +153,13 @@ export default function LandingPages() {
 
   const saveMutation = useMutation({
     mutationFn: async (values: FormValues) => {
-      const payload = {
-        slug: values.slug,
-        title: values.title,
-        description: values.description,
-        call_to_action: values.call_to_action,
-        hero_image_url: values.hero_image_url || null,
-        promo_video_url: values.promo_video_url || null,
-        services_list: values.services_list
-          .map((s) => s.value.trim())
-          .filter(Boolean),
-      };
-
-      const { error } = await supabase.rpc("save_clinic_landing_page" as never, {
-        p_id: editingRecord?.id ?? null,
-        p_slug: payload.slug,
-        p_title: payload.title,
-        p_description: payload.description,
-        p_call_to_action: payload.call_to_action,
-        p_hero_image_url: payload.hero_image_url,
-        p_promo_video_url: payload.promo_video_url,
-        p_services_list: payload.services_list,
-      } as never);
-      if (error) throw error;
+      await saveLandingPage(values, editingRecord?.id ?? null);
     },
     onSuccess: () => {
       toast.success(`Landing page ${editingRecord ? "updated" : "created"} successfully`);
       setIsFormOpen(false);
       queryClient.invalidateQueries({ queryKey: ["clinic-services-admin"] });
+      queryClient.invalidateQueries({ queryKey: ["website-editor-services"] });
     },
     onError: (error: { code?: string; message?: string }) => {
       if (error?.code === "23505") {
@@ -215,14 +172,14 @@ export default function LandingPages() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.rpc("delete_clinic_landing_page" as never, { p_id: id } as never);
-      if (error) throw error;
+      await deleteLandingPage(id);
     },
     onSuccess: () => {
       toast.success("Landing page deleted");
       setIsDeleteOpen(false);
       setDeleteRecordId(null);
       queryClient.invalidateQueries({ queryKey: ["clinic-services-admin"] });
+      queryClient.invalidateQueries({ queryKey: ["website-editor-services"] });
     },
     onError: (error: { message?: string }) => {
       toast.error(error?.message || "Failed to delete landing page");
