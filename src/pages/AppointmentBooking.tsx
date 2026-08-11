@@ -20,6 +20,7 @@ import { PublicPageSchema } from "@/components/seo/PublicPageSchema";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -75,6 +76,7 @@ const TIME_SLOTS = generateTimeSlots();
 
 export default function AppointmentBooking() {
   const { toast } = useToast();
+  const { language } = useLanguage();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [bookingId, setBookingId] = useState<string | null>(null);
 

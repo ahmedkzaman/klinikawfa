@@ -128,6 +128,7 @@ import { MediaLibrary, MediaWorkspace } from "./pages/editor/MediaLibrary";
 import { ReviewsEditorList, ReviewWebsiteEditor } from "./pages/editor/Reviews";
 import { NavigationEditor } from "./pages/editor/Navigation";
 import GeneralPage from "./pages/GeneralPage";
+import TermsPage from "./pages/TermsPage";
 import { GoogleAnalyticsController } from "./features/analytics/GoogleAnalyticsController";
 import { RouteSeoGuard } from "./components/seo/RouteSeoGuard";
 
@@ -169,6 +170,7 @@ const App = () => (
               <Route path="/doctors" element={<Doctors />} />
               <Route path="/doctor-on-duty" element={<DoctorOnDuty />} />
               <Route path="/appointment" element={<AppointmentBooking />} />
+              <Route path="/terms" element={<TermsPage />} />
               <Route path="/gallery" element={<Gallery />} />
               <Route path="/health-tips" element={<HealthTips />} />
               <Route path="/health-tips/:slug" element={<BlogPost />} />
