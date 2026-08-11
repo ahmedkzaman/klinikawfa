@@ -284,6 +284,24 @@ describe('offline consultation pages', () => {
     expect(within(addressField!).getByText('—')).toBeInTheDocument();
   });
 
+  it('shows MyKad-derived age and gender when legacy demographics are missing', () => {
+    test.state.entry = {
+      ...test.state.entry,
+      patients: {
+        ...test.state.entry.patients,
+        national_id: '060309110289',
+        date_of_birth: null,
+        gender: null,
+      },
+    };
+
+    render(<ConsultationDetail />);
+
+    expect(screen.getByText('09 Mar 2006')).toBeInTheDocument();
+    expect(screen.getByText('male')).toBeInTheDocument();
+    expect(screen.queryByText('Age: Unknown')).not.toBeInTheDocument();
+  });
+
   it('shows the RPC-authorized action only to operations staff and navigates with explicit state', async () => {
     render(<Consultation />);
     const action = await screen.findByRole('button', { name: 'Enter offline consultation' });

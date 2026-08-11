@@ -110,6 +110,7 @@ import { VisitRemarksBanner } from '@/components/clinic/VisitRemarksBanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
+import { deriveMyKadDemographics } from '@/lib/clinic/myKadDemographics';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { useVisitConsultationFee } from '@/hooks/clinic/useVisitConsultationFee';
 import {
@@ -340,6 +341,9 @@ export default function ConsultationDetail() {
   const hasSeededFeeRef = useRef(false);
 
   const patient = entry?.patients;
+  const myKadDemographics = deriveMyKadDemographics(patient?.national_id);
+  const patientDateOfBirth = patient?.date_of_birth || myKadDemographics?.dateOfBirth || null;
+  const patientGender = patient?.gender || myKadDemographics?.gender || null;
   const isPanel =
     !!(entry as { panel_id?: string | null } | undefined)?.panel_id ||
     (entry?.payment_method ?? '').startsWith('panel');
@@ -1764,12 +1768,12 @@ export default function ConsultationDetail() {
                         {toMalayTitleCase(patient.name)}
                       </h2>
                       <p className="text-xs text-slate-500 mt-0.5">
-                        {patient.date_of_birth
-                          ? format(new Date(patient.date_of_birth), 'dd MMM yyyy')
+                        {patientDateOfBirth
+                          ? format(new Date(patientDateOfBirth), 'dd MMM yyyy')
                           : '—'}
                         {' '}
                         <span className="text-slate-400">
-                          (Age: {calculateClinicalAge(patient.date_of_birth)})
+                          (Age: {calculateClinicalAge(patientDateOfBirth)})
                         </span>
                       </p>
                     </div>
@@ -1785,7 +1789,7 @@ export default function ConsultationDetail() {
                   </div>
                   <div>
                     <span className="text-xs text-slate-400 block">Gender</span>
-                    {patient.gender || '—'}
+                    {patientGender || '—'}
                   </div>
                 </div>
                 <div className="text-sm text-slate-600">
