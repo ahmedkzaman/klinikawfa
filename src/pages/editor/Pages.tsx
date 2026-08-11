@@ -1,6 +1,5 @@
-import { ContentListPage } from "@/components/editor/content-list/ContentListPage";
-import { pageAdapter } from "@/features/website-cms/resources/pageAdapter";
+import { WebsitePagesCatalogue } from "@/components/editor/pages/WebsitePagesCatalogue";
 
 export function Pages() {
-  return <ContentListPage adapter={pageAdapter} resourceLabel="Pages" createHref="/editor/pages/new" />;
+  return <WebsitePagesCatalogue />;
 }

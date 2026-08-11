@@ -27,7 +27,6 @@ describe("website destination catalogue", () => {
 
   it("combines fixed, generic, service and post destinations with their owning editors", async () => {
     const result = await listWebsiteDestinations();
-
     expect(result.items).toEqual(expect.arrayContaining([
       expect.objectContaining({ href: "/", type: "fixed", editHref: "/editor/home" }),
       expect.objectContaining({ href: "/pages/about-us", type: "page", editHref: "/editor/pages/page-1" }),
@@ -51,4 +50,3 @@ describe("website destination catalogue", () => {
     expect(result.errors).toEqual(["page"]);
   });
 });
-

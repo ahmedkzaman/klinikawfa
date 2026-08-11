@@ -5,6 +5,7 @@ export type WebsiteDestinationType = "fixed" | "page" | "service" | "post";
 export interface WebsiteDestination {
   id: string;
   type: WebsiteDestinationType;
+  typeLabel?: string;
   titleMs: string;
   titleEn: string;
   href: string;
@@ -29,4 +30,3 @@ export const FIXED_WEBSITE_DESTINATIONS: WebsiteDestination[] = [
   { id: "fixed-privacy", type: "fixed", titleMs: "Privasi", titleEn: "Privacy", href: "/privacy", editHref: null, status: "published", updatedAt: null },
   { id: "fixed-terms", type: "fixed", titleMs: "Terma", titleEn: "Terms", href: "/terms", editHref: null, status: "published", updatedAt: null },
 ];
-

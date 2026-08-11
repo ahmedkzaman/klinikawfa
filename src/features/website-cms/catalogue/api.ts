@@ -1,5 +1,3 @@
-import { listEditorPages } from "@/features/website-cms/api/pages";
-import { listResourceSummaries, listServiceResources } from "@/features/website-cms/api/resources";
 import type { ContentStatus } from "@/features/website-cms/domain/content";
 import {
   FIXED_WEBSITE_DESTINATIONS,
@@ -11,10 +9,11 @@ import {
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export async function listWebsiteDestinations(): Promise<WebsiteDestinationCatalogueResult> {
+  const resourcesApi = import("@/features/website-cms/api/resources");
   const results = await Promise.allSettled([
-    listEditorPages(),
-    listServiceResources(),
-    listResourceSummaries("blog_post"),
+    loadPages(),
+    resourcesApi.then(({ listServiceResources }) => listServiceResources()),
+    resourcesApi.then(({ listResourceSummaries }) => listResourceSummaries("blog_post")),
   ]);
   const items = FIXED_WEBSITE_DESTINATIONS.map((item) => ({ ...item }));
   const errors: WebsiteDestinationType[] = [];
@@ -24,7 +23,7 @@ export async function listWebsiteDestinations(): Promise<WebsiteDestinationCatal
     for (const page of pages.value) {
       if (!slugPattern.test(page.slug)) continue;
       items.push({
-        id: `page-${page.id}`, type: "page", titleMs: titleFromSlug(page.slug), titleEn: titleFromSlug(page.slug),
+        id: `page-${page.id}`, type: "page", typeLabel: page.kind === "system_content" ? "System content" : "Page", titleMs: page.slug, titleEn: titleFromSlug(page.slug),
         href: `/pages/${page.slug}`, editHref: `/editor/pages/${page.id}`,
         status: normalizeStatus(page.status), updatedAt: page.updatedAt,
       });
@@ -62,6 +61,11 @@ export async function listWebsiteDestinations(): Promise<WebsiteDestinationCatal
   return { items: [...deduplicated.values()], errors };
 }
 
+async function loadPages() {
+  const { listEditorPages } = await import("@/features/website-cms/api/pages");
+  return listEditorPages();
+}
+
 function normalizeHref(href: string): string {
   return href === "/" ? href : href.replace(/\/+$/, "");
 }
@@ -73,4 +77,3 @@ function normalizeStatus(status: string): ContentStatus {
 function titleFromSlug(slug: string): string {
   return slug.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
 }
-
