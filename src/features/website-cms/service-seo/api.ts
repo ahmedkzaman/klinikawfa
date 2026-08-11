@@ -4,6 +4,8 @@ import { LOCAL_SERVICE_PAGES } from "@/content/localServicePages";
 import { fetchResourceDraft, saveResourceDraft } from "@/features/website-cms/api/resources";
 import { emptySeoFields, seoFieldsSchema, type SeoFields } from "@/features/website-cms/domain/seo";
 import {
+  createEmptyServiceSeoPayload,
+  serviceAeoLanguageSchema,
   serviceSeoPayloadSchema,
   type CanonicalServiceSeoPath,
   type ServiceSeoPayload,
@@ -19,6 +21,8 @@ const publishedRowSchema = z.object({
   seo_en_social_image_path: z.string().nullable(),
   website_revision: z.number().int().nonnegative(),
   published_at: z.string().nullable(),
+  aeo_ms: serviceAeoLanguageSchema.default({ answerSummary: "", faqs: [] }),
+  aeo_en: serviceAeoLanguageSchema.default({ answerSummary: "", faqs: [] }),
 });
 
 const editorRowSchema = publishedRowSchema.extend({
@@ -27,6 +31,7 @@ const editorRowSchema = publishedRowSchema.extend({
   label_ms: z.string(),
   label_en: z.string(),
   source_kind: z.enum(["category", "local_landing"]),
+  service_id: z.string().uuid().nullable().optional(),
 });
 
 export interface PublishedServiceSeo {
@@ -38,6 +43,8 @@ export interface PublishedServiceSeo {
   imageEn?: string;
   revision: number;
   publishedAt: string | null;
+  aeoMs: ServiceSeoPayload["aeoMs"];
+  aeoEn: ServiceSeoPayload["aeoEn"];
 }
 
 export interface ServiceSeoEditorRecord {
@@ -46,6 +53,7 @@ export interface ServiceSeoEditorRecord {
   publishedAt: string | null;
   contextMs?: string;
   contextEn?: string;
+  target: { id: string; path: CanonicalServiceSeoPath; labelMs: string; labelEn: string };
 }
 
 const categorySlugByPath: Partial<Record<CanonicalServiceSeoPath, string>> = {
@@ -91,6 +99,18 @@ async function categoryServiceContext(path: CanonicalServiceSeoPath): Promise<{ 
   };
 }
 
+async function databaseServiceContext(serviceId: string): Promise<{ contextMs?: string; contextEn?: string }> {
+  const { data, error } = await supabase.from("clinic_services")
+    .select("title,title_ms,title_en,description,description_ms,description_en,services_list,services_list_ms,services_list_en")
+    .eq("id", serviceId).single();
+  if (error || !data) throw new Error("Service page content could not be loaded");
+  const row = data as typeof data & Record<string, unknown>;
+  return {
+    contextMs: JSON.stringify({ title: row.title_ms ?? row.title, description: row.description_ms ?? row.description, services: row.services_list_ms ?? row.services_list }).slice(0, 20_000),
+    contextEn: JSON.stringify({ title: row.title_en ?? row.title, description: row.description_en ?? "", services: row.services_list_en ?? [] }).slice(0, 20_000),
+  };
+}
+
 function publicMediaUrl(storedPath: string | null): string | undefined {
   if (!storedPath) return undefined;
   const slash = storedPath.indexOf("/");
@@ -111,13 +131,15 @@ function mapPublishedRow(value: unknown): PublishedServiceSeo {
     imageEn: publicMediaUrl(row.seo_en_social_image_path),
     revision: row.website_revision,
     publishedAt: row.published_at,
+    aeoMs: row.aeo_ms,
+    aeoEn: row.aeo_en,
   };
 }
 
 export async function fetchPublishedServiceSeo(path: CanonicalServiceSeoPath): Promise<PublishedServiceSeo | null> {
   const { data, error } = await supabase
     .from("website_service_seo" as never)
-    .select("id,path,seo_ms,seo_en,seo_ms_social_image_path,seo_en_social_image_path,website_revision,published_at")
+    .select("id,path,seo_ms,seo_en,aeo_ms,aeo_en,seo_ms_social_image_path,seo_en_social_image_path,website_revision,published_at")
     .eq("path", path)
     .maybeSingle();
   if (error) throw new Error("Service SEO could not be loaded");
@@ -129,7 +151,7 @@ export async function fetchServiceSeoForEditor(id: string): Promise<ServiceSeoEd
     fetchResourceDraft<ServiceSeoPayload>("service_seo", id),
     supabase
       .from("website_service_seo" as never)
-      .select("id,path,label_ms,label_en,source_kind,focus_phrase_ms,focus_phrase_en,seo_ms,seo_en,seo_ms_social_image_path,seo_en_social_image_path,website_revision,published_at")
+      .select("id,service_id,path,label_ms,label_en,source_kind,focus_phrase_ms,focus_phrase_en,seo_ms,seo_en,aeo_ms,aeo_en,seo_ms_social_image_path,seo_en_social_image_path,website_revision,published_at")
       .eq("id", id)
       .single(),
   ]);
@@ -139,25 +161,69 @@ export async function fetchServiceSeoForEditor(id: string): Promise<ServiceSeoEd
     ...storedRow,
     seo_ms: { ...emptySeoFields, ...(storedRow.seo_ms as Record<string, unknown> ?? {}) },
     seo_en: { ...emptySeoFields, ...(storedRow.seo_en as Record<string, unknown> ?? {}) },
+    aeo_ms: storedRow.aeo_ms ?? { answerSummary: "", faqs: [] },
+    aeo_en: storedRow.aeo_en ?? { answerSummary: "", faqs: [] },
   });
-  const sourceContext = row.source_kind === "category"
-    ? await categoryServiceContext(row.path as CanonicalServiceSeoPath)
-    : { contextMs: localServiceContext(row.path as CanonicalServiceSeoPath) };
+  const sourceContext = row.service_id
+    ? await databaseServiceContext(row.service_id)
+    : row.source_kind === "category"
+      ? await categoryServiceContext(row.path as CanonicalServiceSeoPath)
+      : { contextMs: localServiceContext(row.path as CanonicalServiceSeoPath) };
   if (draft) {
-    return { payload: serviceSeoPayloadSchema.parse(draft.payload), revision: draft.baseRevision, publishedAt: row.published_at, ...sourceContext };
+    return { payload: serviceSeoPayloadSchema.parse(draft.payload), revision: draft.baseRevision, publishedAt: row.published_at, target: { id: row.id, path: row.path, labelMs: row.label_ms, labelEn: row.label_en }, ...sourceContext };
   }
+  const empty = createEmptyServiceSeoPayload(row.path);
   return {
     payload: serviceSeoPayloadSchema.parse({
+      schemaVersion: 2,
       path: row.path,
       focusPhraseMs: row.focus_phrase_ms,
       focusPhraseEn: row.focus_phrase_en,
       seoMs: row.seo_ms,
       seoEn: row.seo_en,
+      aeoMs: row.aeo_ms ?? empty.aeoMs,
+      aeoEn: row.aeo_en ?? empty.aeoEn,
     }),
     revision: row.website_revision,
     publishedAt: row.published_at,
     ...sourceContext,
+    target: { id: row.id, path: row.path, labelMs: row.label_ms, labelEn: row.label_en },
   };
+}
+
+const generatedSchema = z.object({
+  ms: z.object({ title: z.string(), description: z.string(), socialTitle: z.string(), socialDescription: z.string() }).strict(),
+  en: z.object({ title: z.string(), description: z.string(), socialTitle: z.string(), socialDescription: z.string() }).strict(),
+  aeoMs: serviceAeoLanguageSchema,
+  aeoEn: serviceAeoLanguageSchema,
+}).strict();
+
+export async function generateAndSaveServiceSeoDraft(input: {
+  resourceId: string;
+  record: ServiceSeoEditorRecord;
+}) {
+  const { record } = input;
+  const { data, error } = await supabase.functions.invoke("generate-service-seo", {
+    body: {
+      path: record.target.path,
+      titleMs: record.target.labelMs,
+      titleEn: record.target.labelEn,
+      focusPhraseMs: record.payload.focusPhraseMs,
+      focusPhraseEn: record.payload.focusPhraseEn,
+      contentMs: record.contextMs,
+      contentEn: record.contextEn,
+    },
+  });
+  if (error) throw error;
+  const generated = generatedSchema.parse(data);
+  const payload = serviceSeoPayloadSchema.parse({
+    ...record.payload,
+    seoMs: { ...record.payload.seoMs, ...generated.ms },
+    seoEn: { ...record.payload.seoEn, ...generated.en },
+    aeoMs: generated.aeoMs,
+    aeoEn: generated.aeoEn,
+  });
+  return saveServiceSeoDraft(input.resourceId, record.revision, payload);
 }
 
 export async function saveServiceSeoDraft(

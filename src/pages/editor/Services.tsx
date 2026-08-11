@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { listServiceResources, type ServiceResourceSummary } from "@/features/website-cms/api/resources";
 import { CANONICAL_SERVICE_SEO_TARGETS } from "@/features/website-cms/service-seo/domain";
+import { fetchServiceSeoForEditor, generateAndSaveServiceSeoDraft } from "@/features/website-cms/service-seo/api";
 import { deleteLandingPage, saveLandingPage } from "@/features/website-cms/services/landingPageApi";
 import { DEFAULT_LANDING_PAGE_VALUES, isProtectedServiceSlug, landingPageFormSchema, type LandingPageFormValues } from "@/features/website-cms/services/landingPageDomain";
 import { resolveCanonicalServiceSlug } from "@/lib/serviceSlugMap";
@@ -55,11 +56,20 @@ export function ServicesEditorList() {
     setSaving(true);
     setFormError("");
     try {
-      await saveLandingPage(parsed.data);
+      const result = await saveLandingPage(parsed.data);
       toast.success("Service page created");
       setCreateOpen(false);
       setForm(DEFAULT_LANDING_PAGE_VALUES);
       await loadServices().request;
+      if (result.created) {
+        try {
+          const record = await fetchServiceSeoForEditor(result.seoId);
+          await generateAndSaveServiceSeoDraft({ resourceId: result.seoId, record });
+          toast.success("SEO and AEO draft generated for review");
+        } catch {
+          toast.warning("Page created. SEO and AEO generation can be retried from Edit SEO.");
+        }
+      }
     } catch (cause) {
       const failure = cause as { code?: string; message?: string };
       setFormError(failure.code === "23505" ? "A service page with this URL slug already exists." : failure.message ?? "Service page could not be created.");
@@ -149,6 +159,7 @@ export function ServicesEditorList() {
                       <Pencil className="mr-2 h-4 w-4" />Edit content
                     </Link>
                   </Button>
+                  {item.seoId && <Button asChild size="sm"><Link aria-label={`Edit SEO: ${item.title}`} to={`/editor/services/seo/${item.seoId}`}><Search className="mr-2 h-4 w-4" />Edit SEO</Link></Button>}
                   {!isProtectedServiceSlug(item.slug) && (
                     <Button aria-label={`Delete ${item.title}`} onClick={() => setDeleteTarget(item)} size="sm" variant="destructive">
                       <Trash2 className="mr-2 h-4 w-4" />Delete

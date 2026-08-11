@@ -174,6 +174,7 @@ export interface ServiceResourceSummary {
   revision: number;
   slug: string;
   title: string;
+  seoId?: string;
 }
 
 export async function listServiceResources(): Promise<ServiceResourceSummary[]> {
@@ -182,7 +183,19 @@ export async function listServiceResources(): Promise<ServiceResourceSummary[]> 
     .select("id,slug,title")
     .order("slug");
   if (error || !data) throw new Error("Services could not be loaded");
-  return data.map((row) => ({ id: row.id, revision: Number((row as { website_revision?: number }).website_revision ?? 0), slug: row.slug, title: row.title }));
+  const ids = data.map((row) => row.id);
+  const seoByService = new Map<string, string>();
+  if (ids.length > 0) {
+    const { data: seoRows, error: seoError } = await supabase
+      .from("website_service_seo" as never)
+      .select("id,service_id")
+      .in("service_id", ids);
+    if (seoError) throw new Error("Service SEO links could not be loaded");
+    for (const row of (seoRows ?? []) as Array<{ id: string; service_id: string | null }>) {
+      if (row.service_id) seoByService.set(row.service_id, row.id);
+    }
+  }
+  return data.map((row) => ({ id: row.id, revision: Number((row as { website_revision?: number }).website_revision ?? 0), slug: row.slug, title: row.title, seoId: seoByService.get(row.id) }));
 }
 
 export async function fetchServiceResource(resourceId: string): Promise<{ draft: ServiceDraft; revision: number }> {

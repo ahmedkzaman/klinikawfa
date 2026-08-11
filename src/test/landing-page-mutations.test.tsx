@@ -41,7 +41,7 @@ describe("landing page mutations", () => {
         order: vi.fn().mockResolvedValue({ data: [], error: null }),
       })),
     });
-    mocks.rpc.mockResolvedValue({ data: "11111111-1111-4111-8111-111111111111", error: null });
+    mocks.rpc.mockResolvedValue({ data: [{ service_id: "11111111-1111-4111-8111-111111111111", seo_id: "22222222-2222-4222-8222-222222222222", created: true }], error: null });
   });
 
   it("creates a landing page through the guarded RPC instead of direct table writes", async () => {

@@ -14,13 +14,17 @@ vi.mock("@/features/website-cms/api/resources", () => ({
     { id: "1", revision: 1, slug: "rawatan-am", title: "Rawatan Am" },
     { id: "2", revision: 1, slug: "prosedur-minor", title: "Prosedur Minor" },
     { id: "3", revision: 1, slug: "pemeriksaan-kesihatan", title: "Pemeriksaan Kesihatan" },
-    { id: "4", revision: 1, slug: "rawatan-telinga-microsuction-kuantan", title: "Rawatan Telinga & Ear Microsuction di Kuantan" },
+    { id: "4", revision: 1, slug: "rawatan-telinga-microsuction-kuantan", title: "Rawatan Telinga & Ear Microsuction di Kuantan", seoId: "b9838947-9b48-4f1d-a378-21224c4b5c09" },
     { id: "5", revision: 1, slug: "rawatan-telinga-kuantan", title: "Rawatan Telinga Kuantan" },
   ]),
 }));
 vi.mock("@/features/website-cms/services/landingPageApi", () => ({
   saveLandingPage: mutationMocks.save,
   deleteLandingPage: mutationMocks.remove,
+}));
+vi.mock("@/features/website-cms/service-seo/api", () => ({
+  fetchServiceSeoForEditor: vi.fn(),
+  generateAndSaveServiceSeoDraft: vi.fn(),
 }));
 
 describe("services website editor", () => {
@@ -30,7 +34,7 @@ describe("services website editor", () => {
     expect(screen.getByText("Prosedur Minor & Pembedahan")).toBeInTheDocument();
     expect(screen.getByText("Pemeriksaan Kesihatan & Pekerjaan")).toBeInTheDocument();
     expect(screen.getByText("Sunat Kuantan")).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: /edit seo/i })).toHaveLength(8);
+    expect(screen.getAllByRole("link", { name: /edit seo/i })).toHaveLength(9);
     expect(screen.getAllByRole("link", { name: /edit content/i })).toHaveLength(5);
     expect(screen.queryByRole("button", { name: /add service/i })).not.toBeInTheDocument();
   });
@@ -41,6 +45,8 @@ describe("services website editor", () => {
     expect(await screen.findByText("Rawatan Telinga & Ear Microsuction di Kuantan")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /edit content: rawatan telinga & ear microsuction di kuantan/i }))
       .toHaveAttribute("href", "/editor/services/4");
+    expect(screen.getByRole("link", { name: /edit seo: rawatan telinga & ear microsuction di kuantan/i }))
+      .toHaveAttribute("href", "/editor/services/seo/b9838947-9b48-4f1d-a378-21224c4b5c09");
   });
 
   it("offers creation and deletion only for dynamic landing pages", async () => {

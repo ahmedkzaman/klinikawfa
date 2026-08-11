@@ -6,12 +6,9 @@ const api = vi.hoisted(() => ({
   fetchServiceSeoForEditor: vi.fn(),
   saveServiceSeoDraft: vi.fn(),
   publishServiceSeo: vi.fn(),
+  generateAndSaveServiceSeoDraft: vi.fn(),
 }));
-const invoke = vi.hoisted(() => vi.fn());
 vi.mock("@/features/website-cms/service-seo/api", () => api);
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { functions: { invoke } },
-}));
 
 import { createEmptyServiceSeoPayload } from "@/features/website-cms/service-seo/domain";
 import { ServiceSeoEditor } from "@/pages/editor/ServiceSeoEditor";
@@ -40,13 +37,14 @@ describe("service SEO editor", () => {
       publishedAt: null,
       contextMs: "Published Malay service page content",
       contextEn: "Published English service page content",
+      target: { id: targetId, path: "/services/rawatan-umum/", labelMs: "Rawatan Umum", labelEn: "General Treatment" },
     });
     api.saveServiceSeoDraft.mockImplementation(async (_id, revision, savedPayload) => ({
       baseRevision: revision,
       payload: savedPayload,
     }));
     api.publishServiceSeo.mockResolvedValue(3);
-    invoke.mockResolvedValue({ data: null, error: new Error("Generation unavailable") });
+    api.generateAndSaveServiceSeoDraft.mockRejectedValue(new Error("Generation unavailable"));
   });
 
   it("keeps Malay and English fields separate and locks the canonical URL", async () => {
@@ -76,13 +74,7 @@ describe("service SEO editor", () => {
     fireEvent.change(title, { target: { value: "My unchanged draft title" } });
     fireEvent.click(screen.getByRole("button", { name: /generate seo with ai/i }));
 
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("generate-service-seo", {
-      body: expect.objectContaining({
-        path: "/services/rawatan-umum/",
-        contentMs: "Published Malay service page content",
-        contentEn: "Published English service page content",
-      }),
-    }));
+    await waitFor(() => expect(api.generateAndSaveServiceSeoDraft).toHaveBeenCalledWith(expect.objectContaining({ resourceId: targetId })));
     expect(await screen.findByRole("alert")).toHaveTextContent("Generation unavailable");
     expect(screen.getByLabelText("Search title")).toHaveValue("My unchanged draft title");
   });

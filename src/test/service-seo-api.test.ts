@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   saveResourceDraft: vi.fn(),
   from: vi.fn(),
   rpc: vi.fn(),
+  invoke: vi.fn(),
 }));
 
 vi.mock("@/features/website-cms/api/resources", () => ({
@@ -12,12 +13,13 @@ vi.mock("@/features/website-cms/api/resources", () => ({
   saveResourceDraft: mocks.saveResourceDraft,
 }));
 vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { from: mocks.from, rpc: mocks.rpc },
+  supabase: { from: mocks.from, rpc: mocks.rpc, functions: { invoke: mocks.invoke } },
 }));
 
 import {
   fetchPublishedServiceSeo,
   fetchServiceSeoForEditor,
+  generateAndSaveServiceSeoDraft,
   publishServiceSeo,
   saveServiceSeoDraft,
 } from "@/features/website-cms/service-seo/api";
@@ -37,6 +39,8 @@ describe("service SEO API", () => {
         seo_en_social_image_path: null,
         website_revision: 1,
         published_at: "2026-08-10T10:00:00Z",
+        aeo_ms: { answerSummary: "", faqs: [] },
+        aeo_en: { answerSummary: "", faqs: [] },
       },
       error: null,
     });
@@ -87,6 +91,8 @@ describe("service SEO API", () => {
                   seo_en_social_image_path: null,
                   website_revision: 0,
                   published_at: null,
+                  aeo_ms: { answerSummary: "", faqs: [] },
+                  aeo_en: { answerSummary: "", faqs: [] },
                 },
                 error: null,
               }),
@@ -101,6 +107,30 @@ describe("service SEO API", () => {
 
     expect(result.payload).toEqual(createEmptyServiceSeoPayload("/services/rawatan-telinga-kuantan/"));
     expect(result.revision).toBe(0);
+  });
+
+  it("generates bilingual SEO and AEO and saves it only as a draft", async () => {
+    const payload = createEmptyServiceSeoPayload("/services/microsuction-kuantan/");
+    const record = {
+      payload,
+      revision: 0,
+      publishedAt: null,
+      target: { id: "b9838947-9b48-4f1d-a378-21224c4b5c09", path: payload.path, labelMs: "Rawatan Telinga", labelEn: "Ear Treatment" },
+      contextMs: "Kandungan halaman",
+      contextEn: "Page content",
+    };
+    mocks.invoke.mockResolvedValue({ data: {
+      ms: { title: "Rawatan Telinga", description: "Penerangan", socialTitle: "Rawatan Telinga", socialDescription: "Penerangan sosial" },
+      en: { title: "Ear Treatment", description: "Description", socialTitle: "Ear Treatment", socialDescription: "Social description" },
+      aeoMs: { answerSummary: "Penilaian doktor.", faqs: [] },
+      aeoEn: { answerSummary: "Doctor assessment.", faqs: [] },
+    }, error: null });
+    mocks.saveResourceDraft.mockImplementation(async (input) => ({ baseRevision: input.baseRevision, payload: input.payload }));
+
+    const saved = await generateAndSaveServiceSeoDraft({ resourceId: record.target.id, record });
+
+    expect(saved.payload.aeoEn.answerSummary).toBe("Doctor assessment.");
+    expect(mocks.rpc).not.toHaveBeenCalledWith("publish_service_seo", expect.anything());
   });
 
   it("publishes through the guarded RPC and rejects malformed responses", async () => {
