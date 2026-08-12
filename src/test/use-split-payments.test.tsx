@@ -135,4 +135,17 @@ describe('split payment mutations', () => {
     });
     expectCheckoutInvalidations(invalidateQueries);
   });
+
+  it('refreshes cached panel claim state after a portion void', async () => {
+    const queryClient = createQueryClient();
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useVoidPayment(), { wrapper: createWrapper(queryClient) });
+    await act(async () => {
+      await result.current.mutateAsync({ id: 'payment-1', queue_entry_id: 'queue-1', reason: 'Correction' });
+    });
+    expect(invalidateQueries.mock.calls.map(([filters]) => filters.queryKey)).toContainEqual([
+      'visit-panel-claim', 'queue-1',
+    ]);
+    expect(invalidateQueries.mock.calls.map(([filters]) => filters.queryKey)).toContainEqual(['panel_claims_summary']);
+  });
 });

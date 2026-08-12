@@ -170,20 +170,8 @@ BEGIN
     RAISE EXCEPTION 'STALE_PATIENT_OUTSTANDING: expected %',
       greatest(round(v_billed - v_paid, 2), 0) USING ERRCODE = '22023';
   END IF;
-  -- Legacy callers have no key: reject only an exact immediate replay while
-  -- preserving legitimate repeated partial collections at different times.
-  IF EXISTS (
-    SELECT 1 FROM public.payments prior
-    WHERE prior.queue_entry_id = NEW.queue_entry_id
-      AND prior.consultation_id IS NOT DISTINCT FROM NEW.consultation_id
-      AND prior.payment_method IS NOT DISTINCT FROM NEW.payment_method
-      AND prior.payment_type IS NOT DISTINCT FROM NEW.payment_type
-      AND prior.amount IS NOT DISTINCT FROM NEW.amount
-      AND prior.notes IS NOT DISTINCT FROM NEW.notes
-      AND prior.deleted_at IS NULL
-      AND prior.created_at >= pg_catalog.clock_timestamp() - interval '10 seconds'
-  ) THEN
-    RAISE EXCEPTION 'legacy_payment_replay_guard' USING ERRCODE = '23505';
+  IF coalesce(current_setting('app.authorized_payment_write', true), '') <> 'on' THEN
+    RAISE EXCEPTION 'DIRECT_PAYMENT_INSERT_FORBIDDEN' USING ERRCODE = '42501';
   END IF;
   RETURN NEW;
 END $function$;
@@ -449,12 +437,21 @@ BEGIN
        OR v_expected_patient_amount > v_current_patient_outstanding THEN
       RAISE EXCEPTION 'PANEL_PROVIDER_MISMATCH' USING ERRCODE = '22023';
     END IF;
+    PERFORM public.ensure_panel_claim_for_queue(p_queue_entry_id);
     SELECT claim.status::text INTO v_panel_claim_status
     FROM public.panel_claims AS claim
     WHERE claim.queue_entry_id = p_queue_entry_id
     FOR UPDATE;
-    IF FOUND AND v_panel_claim_status IS DISTINCT FROM 'pending' THEN
-      RAISE EXCEPTION 'PANEL_CLAIM_NOT_PENDING' USING ERRCODE = '23514';
+    IF NOT FOUND OR v_panel_claim_status IS DISTINCT FROM 'pending'
+       OR EXISTS (SELECT 1 FROM public.panel_claims claim
+          WHERE claim.queue_entry_id = p_queue_entry_id
+            AND (claim.submitted_date IS NOT NULL OR claim.approved_amount IS NOT NULL
+              OR coalesce(claim.received_amount, 0) <> 0 OR claim.payment_reference IS NOT NULL
+              OR claim.received_date IS NOT NULL))
+       OR EXISTS (SELECT 1 FROM public.panel_claim_portions portion
+          JOIN public.panel_claims claim ON claim.id = portion.panel_claim_id
+          WHERE claim.queue_entry_id = p_queue_entry_id) THEN
+      RAISE EXCEPTION 'PANEL_CLAIM_ALREADY_MATERIALIZED' USING ERRCODE = '23514';
     END IF;
   ELSIF v_queue.payment_method = 'panel' OR p_provider_id IS NOT NULL THEN
     RAISE EXCEPTION 'PAYMENT_TYPE_MISMATCH' USING ERRCODE = '22023';
@@ -468,6 +465,7 @@ BEGIN
       nullif(btrim(v_queue.payment_method), ''),
       CASE WHEN p_payment_type = 'panel' THEN 'panel' ELSE 'cash' END
     );
+    PERFORM set_config('app.authorized_payment_write', 'on', true);
     INSERT INTO public.payments (
       queue_entry_id,
       consultation_id,
@@ -487,6 +485,7 @@ BEGIN
     RETURNING id INTO v_payment_id;
     v_payment_ids := v_payment_ids || jsonb_build_array(v_payment_id);
   ELSE
+    PERFORM set_config('app.authorized_payment_write', 'on', true);
     FOR v_allocation IN
       SELECT
         btrim(allocation.payment_method) AS payment_method,
@@ -800,6 +799,7 @@ BEGIN
     FROM jsonb_to_recordset(p_payments)
       AS allocation(payment_method text, amount numeric, notes text)
   LOOP
+    PERFORM set_config('app.authorized_payment_write', 'on', true);
     INSERT INTO public.payments (
       queue_entry_id,
       consultation_id,
@@ -1081,8 +1081,8 @@ BEGIN
     END IF;
   END IF;
 
-  IF v_qe.clinic_status = 'completed' THEN
-    RAISE EXCEPTION 'ALREADY_COMPLETED' USING ERRCODE = '23514';
+  IF v_qe.clinic_status::text IS DISTINCT FROM 'dispensing_payment' THEN
+    RAISE EXCEPTION 'INVALID_CHECKOUT_STATUS' USING ERRCODE = '22023';
   END IF;
   IF p_consultation_id IS NULL THEN
     RAISE EXCEPTION 'CONSULTATION_REQUIRED' USING ERRCODE = '22023';
@@ -1224,6 +1224,7 @@ BEGIN
   END IF;
 
   IF p_amount_paid > 0 THEN
+    PERFORM set_config('app.authorized_payment_write', 'on', true);
     INSERT INTO public.payments (
       queue_entry_id,
       consultation_id,
@@ -1360,4 +1361,144 @@ REVOKE ALL ON FUNCTION public.checkout_visit(
 ) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.checkout_visit(
   uuid, uuid, numeric, numeric, text, text, uuid, jsonb, text, numeric, jsonb, uuid
+) TO authenticated;
+
+
+-- Preserve the deployed single-payment RPC while authorizing its trigger write.
+CREATE OR REPLACE FUNCTION public.record_payment_and_complete_visit(
+  p_queue_entry_id uuid,
+  p_consultation_id uuid,
+  p_payment_type text,
+  p_payment_method text,
+  p_amount numeric,
+  p_notes text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $function$
+DECLARE
+  v_queue_status text;
+  v_consultation_status text;
+  v_payment_id uuid;
+  v_amount numeric;
+  v_payment_method text;
+BEGIN
+  IF NOT public.can_checkout_visit(auth.uid()) THEN
+    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
+  END IF;
+  IF p_queue_entry_id IS NULL THEN
+    RAISE EXCEPTION 'QUEUE_ENTRY_REQUIRED' USING ERRCODE = '22023';
+  END IF;
+  IF p_payment_type IS NULL
+     OR p_payment_type NOT IN ('self_pay', 'panel') THEN
+    RAISE EXCEPTION 'INVALID_PAYMENT_TYPE' USING ERRCODE = '22023';
+  END IF;
+
+  v_payment_method := btrim(coalesce(p_payment_method, ''));
+  IF p_amount IS NULL
+     OR p_amount::text IN ('NaN', 'Infinity', '-Infinity') THEN
+    RAISE EXCEPTION 'INVALID_PAYMENT_AMOUNT' USING ERRCODE = '22023';
+  END IF;
+  v_amount := round(p_amount, 2);
+  IF v_amount < 0 OR v_amount > 999999999.99 THEN
+    RAISE EXCEPTION 'INVALID_PAYMENT_AMOUNT' USING ERRCODE = '22023';
+  END IF;
+  IF length(v_payment_method) = 0 THEN
+    RAISE EXCEPTION 'PAYMENT_METHOD_REQUIRED' USING ERRCODE = '22023';
+  END IF;
+
+  PERFORM public.lock_completed_bill_item_mutation_boundary();
+
+  SELECT qe.clinic_status
+    INTO v_queue_status
+  FROM public.queue_entries qe
+  WHERE qe.id = p_queue_entry_id
+    AND qe.deleted_at IS NULL
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'QUEUE_ENTRY_NOT_FOUND' USING ERRCODE = '22023';
+  END IF;
+  IF v_queue_status = 'completed' THEN
+    RAISE EXCEPTION 'ALREADY_COMPLETED' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_consultation_id IS NOT NULL THEN
+    SELECT c.status
+      INTO v_consultation_status
+    FROM public.consultations c
+    WHERE c.id = p_consultation_id
+      AND c.queue_entry_id = p_queue_entry_id
+      AND c.deleted_at IS NULL
+    FOR UPDATE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'CONSULTATION_NOT_IN_VISIT' USING ERRCODE = '22023';
+    END IF;
+
+    PERFORM 1
+    FROM public.consultation_items ci
+    WHERE ci.consultation_id = p_consultation_id
+      AND ci.deleted_at IS NULL
+    ORDER BY ci.id
+    FOR UPDATE;
+  END IF;
+
+  PERFORM 1
+  FROM public.payments p
+  WHERE p.queue_entry_id = p_queue_entry_id
+    AND p.deleted_at IS NULL
+  ORDER BY p.id
+  FOR UPDATE;
+
+  PERFORM set_config('app.authorized_payment_write', 'on', true);
+
+  INSERT INTO public.payments (
+    queue_entry_id,
+    consultation_id,
+    payment_type,
+    payment_method,
+    amount,
+    notes
+  )
+  VALUES (
+    p_queue_entry_id,
+    p_consultation_id,
+    p_payment_type,
+    v_payment_method,
+    v_amount,
+    nullif(p_notes, '')
+  )
+  RETURNING id INTO v_payment_id;
+
+  IF p_consultation_id IS NOT NULL THEN
+    UPDATE public.consultations
+    SET status = 'completed'
+    WHERE id = p_consultation_id
+      AND status <> 'completed';
+  END IF;
+
+  UPDATE public.queue_entries
+  SET clinic_status = 'completed'
+  WHERE id = p_queue_entry_id;
+
+  RETURN jsonb_build_object(
+    'payment_id', v_payment_id,
+    'amount', v_amount,
+    'status', 'completed'
+  );
+END;
+$function$;
+
+ALTER FUNCTION public.record_payment_and_complete_visit(
+  uuid, uuid, text, text, numeric, text
+) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.record_payment_and_complete_visit(
+  uuid, uuid, text, text, numeric, text
+) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.record_payment_and_complete_visit(
+  uuid, uuid, text, text, numeric, text
+) FROM anon;
+GRANT EXECUTE ON FUNCTION public.record_payment_and_complete_visit(
+  uuid, uuid, text, text, numeric, text
 ) TO authenticated;

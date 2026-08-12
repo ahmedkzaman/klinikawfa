@@ -273,7 +273,7 @@ BEGIN
   VALUES (
     '70000000-0000-4000-8000-000000000203',
     '70000000-0000-4000-8000-000000000103',
-    'registered', 'cash',
+    'dispensing_payment', 'cash',
     '70000000-0000-4000-8000-000000000001'
   );
   INSERT INTO public.consultations (
@@ -285,6 +285,13 @@ BEGIN
     '70000000-0000-4000-8000-000000000203',
     '70000000-0000-4000-8000-000000000103',
     'in_progress', '', '', ''
+  );
+  INSERT INTO public.consultation_items (
+    id, consultation_id, item_name, quantity, price, unit_cost
+  ) VALUES (
+    '70000000-0000-4000-8000-000000000511',
+    '70000000-0000-4000-8000-000000000303',
+    'TEST ONLY LEGACY CHECKOUT', 1, 25, 0
   );
 
   -- Split-payment fixtures: valid checkout, reusable validation target,
@@ -330,6 +337,12 @@ BEGIN
       'registered', 'panel',
       '70000000-0000-4000-8000-000000000801',
       '70000000-0000-4000-8000-000000000001'
+    ),
+    (
+      '70000000-0000-4000-8000-000000000210',
+      '70000000-0000-4000-8000-000000000103',
+      'dispensing_payment', 'cash', NULL,
+      '70000000-0000-4000-8000-000000000001'
     );
 
   INSERT INTO public.consultations (
@@ -372,6 +385,12 @@ BEGIN
       '70000000-0000-4000-8000-000000000209',
       '70000000-0000-4000-8000-000000000102',
       'in_progress', '', '', ''
+    ),
+    (
+      '70000000-0000-4000-8000-000000000310',
+      '70000000-0000-4000-8000-000000000210',
+      '70000000-0000-4000-8000-000000000103',
+      'in_progress', '', '', ''
     );
 
   INSERT INTO public.consultation_items (
@@ -409,6 +428,12 @@ BEGIN
       '70000000-0000-4000-8000-000000000510',
       '70000000-0000-4000-8000-000000000309',
       'TEST ONLY PANEL SAVED QUANTITY', 3, 10, 0,
+      '70000000-0000-4000-8000-000000000402', 2
+    ),
+    (
+      '70000000-0000-4000-8000-000000000512',
+      '70000000-0000-4000-8000-000000000310',
+      'TEST ONLY RETAINED SAVED QUANTITY', 3, 10, 0,
       '70000000-0000-4000-8000-000000000402', 2
     );
 
@@ -1143,6 +1168,22 @@ BEGIN
     RAISE EXCEPTION 'DUPLICATE_CHECKOUT_STATE_CHANGED';
   END IF;
 
+  -- Execute the retained dispensary checkout against the same corrected bill:
+  -- saved quantity 3 x RM10 = RM30 although only 2 were dispensed.
+  v_result := public.checkout_visit(
+    '70000000-0000-4000-8000-000000000210',
+    '70000000-0000-4000-8000-000000000310',
+    30, 30, 'cash', 'self_pay', NULL, '[]'::jsonb,
+    'TEST ONLY RETAINED SAVED QUANTITY', 0, NULL,
+    '70000000-0000-4000-8000-000000000a15'
+  );
+  IF (v_result->>'balance_due')::numeric IS DISTINCT FROM 0::numeric
+     OR (SELECT sum(amount) FROM public.payments
+         WHERE queue_entry_id = '70000000-0000-4000-8000-000000000210'
+           AND deleted_at IS NULL) IS DISTINCT FROM 30::numeric THEN
+    RAISE EXCEPTION 'RETAINED_CHECKOUT_SAVED_QUANTITY_30_MISMATCH';
+  END IF;
+
   -- Cash 40 + QR 60 creates two rows, completes once, and a network retry
   -- returns the exact durable result without inserting again.
   v_result := public.record_split_payments_and_complete_visit(
@@ -1360,7 +1401,7 @@ BEGIN
     );
     RAISE EXCEPTION 'MATERIALIZED_ACTIVE_PANEL_SPLIT_SUCCEEDED';
   EXCEPTION WHEN SQLSTATE '23514' THEN
-    IF SQLERRM <> 'PANEL_CLAIM_NOT_PENDING' THEN RAISE; END IF;
+    IF SQLERRM <> 'PANEL_CLAIM_ALREADY_MATERIALIZED' THEN RAISE; END IF;
   END;
   PERFORM public.test_only_set_panel_claim_status(
     '70000000-0000-4000-8000-000000000206', 'pending'

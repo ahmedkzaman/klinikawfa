@@ -243,6 +243,10 @@ export function useVoidPayment() {
     onSuccess: (queue_entry_id) => {
       qc.invalidateQueries({ queryKey: PAYMENTS_KEY(queue_entry_id) });
       qc.invalidateQueries({ queryKey: LEDGER_KEY });
+      qc.invalidateQueries({ queryKey: ['visit-panel-claim', queue_entry_id] });
+      qc.invalidateQueries({ queryKey: ['panel_claims'] });
+      qc.invalidateQueries({ queryKey: ['panel_claims_summary'] });
+      qc.invalidateQueries({ queryKey: ['panel_claim_items', queue_entry_id] });
     },
     onError: (error: Error) => toast.error(error.message),
   });

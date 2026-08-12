@@ -9,6 +9,17 @@ import { formatPaymentMethod } from '@/lib/clinic/paymentMethod';
 const PAGE = { w: 210, h: 297, margin: 15 } as const;
 const CONTENT_W = PAGE.w - PAGE.margin * 2;
 
+export function receiptPaymentLines(data: ReceiptData): Array<{ label: string; amount: number }> {
+  const portions = data.paymentPortions?.filter((portion) => portion.method !== 'panel') ?? [];
+  if (portions.length > 0) {
+    return portions.map((portion) => ({
+      label: formatPaymentMethod(portion.method, portion.amount),
+      amount: portion.amount,
+    }));
+  }
+  return [{ label: formatPaymentMethod(data.paymentMethod, data.amountPaid), amount: data.amountPaid }];
+}
+
 /** Fetch an image URL as a data URL, or null on failure (CORS, 404, etc.). */
 async function loadImageDataUrl(
   url: string,
@@ -248,22 +259,22 @@ async function buildReceiptPdf({ data, settings }: RenderOptions): Promise<jsPDF
   y += 6;
 
   // -------- Payment box --------
-  ensureRoom(16);
-  const payBoxH = 14;
+  const paymentLines = receiptPaymentLines(data);
+  const payBoxH = 10 + paymentLines.length * 5;
+  ensureRoom(payBoxH + 2);
   pdf.rect(PAGE.margin, y, CONTENT_W, payBoxH);
   pdf.setFontSize(9);
   pdf.setFont('helvetica', 'bold');
-  pdf.text('Paid via:', PAGE.margin + 2, y + 5);
+  pdf.text('Payment portions:', PAGE.margin + 2, y + 5);
   pdf.setFont('helvetica', 'normal');
-  pdf.text(
-    formatPaymentMethod(data.paymentMethod, data.amountPaid),
-    PAGE.margin + 20,
-    y + 5,
-  );
+  paymentLines.forEach((line, index) => {
+    pdf.text(line.label, PAGE.margin + 4, y + 10 + index * 5);
+    pdf.text(`RM ${line.amount.toFixed(2)}`, PAGE.w - PAGE.margin - 2, y + 10 + index * 5, { align: 'right' });
+  });
   pdf.setFont('helvetica', 'bold');
-  pdf.text('Amount Received:', PAGE.margin + 2, y + 10);
+  pdf.text('Total Received:', PAGE.margin + 2, y + payBoxH - 2);
   pdf.setFont('helvetica', 'normal');
-  pdf.text(`RM ${data.amountPaid.toFixed(2)}`, PAGE.margin + 34, y + 10);
+  pdf.text(`RM ${data.amountPaid.toFixed(2)}`, PAGE.w - PAGE.margin - 2, y + payBoxH - 2, { align: 'right' });
   y += payBoxH + 18;
 
   // -------- Signature lines --------

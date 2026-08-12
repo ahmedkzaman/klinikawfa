@@ -57,7 +57,7 @@ describe('split payment migration', () => {
 
   it('rejects active panel collection once its claim is materialized', () => {
     const active = sql.match(/create or replace function public\.record_split_payments_and_complete_visit[\s\S]*?\$function\$;/i)?.[0] ?? '';
-    expect(active).toMatch(/panel_claims[\s\S]*for update[\s\S]*PANEL_CLAIM_NOT_PENDING/i);
+    expect(active).toMatch(/panel_claims[\s\S]*for update[\s\S]*PANEL_CLAIM_ALREADY_MATERIALIZED/i);
     expect(harness).toContain('MATERIALIZED_ACTIVE_PANEL_SPLIT_SUCCEEDED');
   });
 
@@ -83,7 +83,9 @@ describe('split payment migration', () => {
     expect(sql).toMatch(/create table public\.payment_void_audit/i);
     expect(sql).toMatch(/create or replace function public\.void_payment_portion/i);
     expect(sql).toMatch(/grant execute on function public\.void_payment_portion\(uuid, text\) to authenticated/i);
-    expect(sql).toContain('legacy_payment_replay_guard');
+    expect(sql).toContain('DIRECT_PAYMENT_INSERT_FORBIDDEN');
+    expect(sql).toMatch(/record_payment_and_complete_visit[\s\S]*app\.authorized_payment_write/i);
+    expect(sql).not.toMatch(/interval '10 seconds'/i);
   });
 
   it('covers corrected quantity-three billing and production split-parent trigger behavior', () => {
@@ -91,6 +93,9 @@ describe('split payment migration', () => {
     expect(harness).toContain('SAVED_BILLED_QUANTITY_30_MISMATCH');
     expect(harness).toContain('guard_panel_claim_split_parent_mutation');
     expect(harness).toContain('void_payment_portion');
+    expect(harness.indexOf('CREATE FUNCTION public.test_only_seed_panel_claim_portion'))
+      .toBeLessThan(harness.indexOf('SET LOCAL ROLE authenticated'));
+    expect(harness).toMatch(/public\.checkout_visit\([\s\S]*30, 30, 'cash'[\s\S]*RETAINED_CHECKOUT_SAVED_QUANTITY_30_MISMATCH/i);
   });
 
   it('keeps the eight-column completed-panel fixture at eight values', () => {
