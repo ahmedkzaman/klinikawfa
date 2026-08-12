@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { softDelete } from '@/lib/clinic/softDelete';
 import type { PatientPaymentAllocation } from '@/lib/clinic/paymentAllocations';
 import type { PaymentRow } from '@/types/clinic';
 
@@ -195,6 +194,11 @@ export function useRecordSplitPaymentsAndCompleteVisit() {
       return data;
     },
     onSuccess: (_, vars) => invalidateSplitPaymentQueries(qc, vars.queue_entry_id),
+    onError: (error, vars) => {
+      if (error instanceof Error && error.message.includes('STALE_PATIENT_OUTSTANDING')) {
+        invalidateSplitPaymentQueries(qc, vars.queue_entry_id);
+      }
+    },
   });
 }
 
@@ -223,11 +227,16 @@ export function useVoidPayment() {
     mutationFn: async ({
       id,
       queue_entry_id,
+      reason,
     }: {
       id: string;
       queue_entry_id: string;
+      reason: string;
     }) => {
-      const { error } = await softDelete('payments', id);
+      const { error } = await supabase.rpc('void_payment_portion', {
+        p_payment_id: id,
+        p_reason: reason,
+      });
       if (error) throw error;
       return queue_entry_id;
     },

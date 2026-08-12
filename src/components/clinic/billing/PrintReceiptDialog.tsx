@@ -53,7 +53,7 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
 
       const { data: queuePayments, error: paymentsErr } = await supabase
         .from('payments')
-        .select('amount, payment_method')
+        .select('id, amount, payment_method, created_at')
         .eq('queue_entry_id', pay.queue_entry_id)
         .is('deleted_at', null);
       if (paymentsErr) throw paymentsErr;
@@ -117,7 +117,12 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
         paymentId: pay.id,
         paymentMethod: pay.payment_method,
         paymentType: pay.payment_type,
-        amountPaid: Number(pay.amount ?? 0),
+        amountPaid: (queuePayments ?? []).reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0),
+        paymentPortions: (queuePayments ?? []).map((payment) => ({
+          id: payment.id,
+          method: payment.payment_method,
+          amount: Number(payment.amount ?? 0),
+        })),
         createdAt: pay.created_at,
         queueLabel: qe?.queue_sequence
           ? formatQueueNo(qe.created_at ?? pay.created_at, qe.queue_sequence)

@@ -243,7 +243,7 @@ describe('RecordPaymentDialog split allocations', () => {
     fireEvent.change(screen.getByLabelText('Amount (RM)'), { target: { value: '2.675' } });
 
     expect(screen.getByText('Allocated RM2.68 / Remaining RM97.32')).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'Record Payment & Check Out' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record Payment' }));
 
     await waitFor(() => expect(state.recordSplit).toHaveBeenCalledTimes(1));
     expect(state.recordSplit).toHaveBeenCalledWith(expect.objectContaining({
@@ -255,7 +255,7 @@ describe('RecordPaymentDialog split allocations', () => {
   it('allows a partial collection on an already-completed visit', async () => {
     renderDialog({ completeVisitOnPayment: false });
     fireEvent.change(screen.getByLabelText('Amount (RM)'), { target: { value: '40' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Record Payment & Check Out' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record Payment' }));
 
     await waitFor(() => expect(state.recordSplit).toHaveBeenCalledTimes(1));
     expect(state.recordSplit).toHaveBeenCalledWith(expect.objectContaining({
@@ -263,5 +263,19 @@ describe('RecordPaymentDialog split allocations', () => {
       payments: [{ method: 'cash', amount: 40 }],
     }));
     expect(state.recordSplitAndComplete).not.toHaveBeenCalled();
+    expect(state.navigate).not.toHaveBeenCalled();
+    expect(state.toastSuccess).toHaveBeenCalledWith('Payment recorded');
+  });
+
+  it('makes completed panel patient collection reachable independently of panel outstanding', async () => {
+    renderDialog({ completeVisitOnPayment: false, defaultAmount: 0 });
+    fireEvent.click(screen.getByRole('radio', { name: 'Panel' }));
+    choosePanel();
+    fireEvent.change(screen.getByLabelText('Patient collection amount (RM)'), { target: { value: '30' } });
+    fireEvent.change(screen.getByLabelText('Amount (RM)'), { target: { value: '30' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Record Payment' }));
+    await waitFor(() => expect(state.recordSplit).toHaveBeenCalledWith(expect.objectContaining({
+      payment_type: 'panel', expected_patient_amount: 30,
+    })));
   });
 });

@@ -296,19 +296,19 @@ BEGIN
     (
       '70000000-0000-4000-8000-000000000204',
       '70000000-0000-4000-8000-000000000103',
-      'registered', 'cash', NULL,
+      'dispensing_payment', 'cash', NULL,
       '70000000-0000-4000-8000-000000000001'
     ),
     (
       '70000000-0000-4000-8000-000000000205',
       '70000000-0000-4000-8000-000000000103',
-      'registered', 'cash', NULL,
+      'dispensing_payment', 'cash', NULL,
       '70000000-0000-4000-8000-000000000001'
     ),
     (
       '70000000-0000-4000-8000-000000000206',
       '70000000-0000-4000-8000-000000000102',
-      'registered', 'panel',
+      'dispensing_payment', 'panel',
       '70000000-0000-4000-8000-000000000801',
       '70000000-0000-4000-8000-000000000001'
     ),
@@ -321,7 +321,7 @@ BEGIN
     (
       '70000000-0000-4000-8000-000000000208',
       '70000000-0000-4000-8000-000000000103',
-      'registered', 'cash', NULL,
+      'dispensing_payment', 'cash', NULL,
       '70000000-0000-4000-8000-000000000001'
     ),
     (
@@ -397,7 +397,7 @@ BEGIN
     (
       '70000000-0000-4000-8000-000000000508',
       '70000000-0000-4000-8000-000000000307',
-      'TEST ONLY COMPLETED COLLECTION', 2, 80, 0,
+      'TEST ONLY COMPLETED COLLECTION', 1, 80, 0,
       '70000000-0000-4000-8000-000000000402', 1
     ),
     (
@@ -408,8 +408,8 @@ BEGIN
     (
       '70000000-0000-4000-8000-000000000510',
       '70000000-0000-4000-8000-000000000309',
-      'TEST ONLY PANEL EFFECTIVE QUANTITY', 2, 80, 0,
-      '70000000-0000-4000-8000-000000000402', 1
+      'TEST ONLY PANEL SAVED QUANTITY', 3, 10, 0,
+      '70000000-0000-4000-8000-000000000402', 2
     );
 
   UPDATE public.consultations
@@ -471,6 +471,20 @@ AS $function$
   WHERE claim.queue_entry_id = p_queue_entry_id;
 $function$;
 
+CREATE FUNCTION public.test_only_payment_void_audit_count(
+  p_payment_id uuid,
+  p_reason text
+) RETURNS integer
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $function$
+  SELECT count(*)::integer
+  FROM public.payment_void_audit AS audit
+  WHERE audit.payment_id = p_payment_id
+    AND audit.reason = p_reason;
+$function$;
+
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 
@@ -521,12 +535,16 @@ DECLARE
   v_claim_approved numeric;
   v_replay_result jsonb;
   v_batch_count integer;
+  v_payment_id uuid;
 BEGIN
   PERFORM set_config(
     'request.jwt.claim.sub',
     '70000000-0000-4000-8000-000000000001',
     true
   );
+  IF to_regprocedure('private.guard_panel_claim_split_parent_mutation()') IS NULL THEN
+    RAISE EXCEPTION 'PRODUCTION_SPLIT_PARENT_GUARD_MISSING';
+  END IF;
   SELECT count(*) INTO v_current_count
   FROM public.inventory_items
   WHERE id = '70000000-0000-4000-8000-000000000401';
@@ -1207,6 +1225,41 @@ BEGIN
     IF SQLERRM <> 'IDEMPOTENCY_KEY_CONFLICT' THEN RAISE; END IF;
   END;
 
+  -- Billing staff can void exactly one completed tender atomically. The RPC
+  -- leaves its sibling active, records the reason, and returns the new debt.
+  SELECT id INTO STRICT v_payment_id
+  FROM public.payments
+  WHERE queue_entry_id = '70000000-0000-4000-8000-000000000204'
+    AND payment_method = 'cash'
+    AND deleted_at IS NULL;
+  v_result := public.void_payment_portion(v_payment_id, 'TEST ONLY wrong tender');
+  IF (v_result->>'patient_outstanding')::numeric IS DISTINCT FROM 40::numeric
+     OR (SELECT count(*) FROM public.payments
+         WHERE queue_entry_id = '70000000-0000-4000-8000-000000000204'
+           AND deleted_at IS NULL) IS DISTINCT FROM 1
+     OR public.test_only_payment_void_audit_count(
+          v_payment_id, 'TEST ONLY wrong tender'
+        ) IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'VOID_PAYMENT_PORTION_MISMATCH';
+  END IF;
+
+  -- The active-checkout RPC cannot resurrect cancelled visits.
+  UPDATE public.queue_entries SET clinic_status = 'cancelled'
+  WHERE id = '70000000-0000-4000-8000-000000000205';
+  BEGIN
+    PERFORM public.record_split_payments_and_complete_visit(
+      '70000000-0000-4000-8000-000000000205',
+      '70000000-0000-4000-8000-000000000305',
+      'self_pay', 100, '[{"payment_method":"cash","amount":100}]'::jsonb,
+      NULL, NULL, '70000000-0000-4000-8000-000000000a13'
+    );
+    RAISE EXCEPTION 'CANCELLED_SPLIT_CHECKOUT_SUCCEEDED';
+  EXCEPTION WHEN SQLSTATE '23514' THEN
+    IF SQLERRM <> 'INVALID_CHECKOUT_STATUS' THEN RAISE; END IF;
+  END;
+  UPDATE public.queue_entries SET clinic_status = 'dispensing_payment'
+  WHERE id = '70000000-0000-4000-8000-000000000205';
+
   -- Duplicate methods, under/over allocation, negative amounts, and methods
   -- outside the four physical tenders all fail with the validation SQLSTATE.
   BEGIN
@@ -1326,24 +1379,29 @@ BEGIN
     RAISE EXCEPTION 'COMPLETED_SPLIT_COLLECTION_MISMATCH';
   END IF;
 
-  -- Panel reconciliation uses dispensed_qty for inventory-backed lines. This
-  -- item was ordered twice but dispensed once: 80 billed - 30 paid = 50 claim.
+  -- Financials use authoritative saved billed quantity, not stock fulfillment:
+  -- quantity 3 x RM10 = RM30 although dispensed_qty is 2.
+  IF (SELECT sum(quantity * price) FROM public.consultation_items
+      WHERE consultation_id = '70000000-0000-4000-8000-000000000309')
+     IS DISTINCT FROM 30.00::numeric THEN
+    RAISE EXCEPTION 'SAVED_BILLED_QUANTITY_30_MISMATCH';
+  END IF;
   v_result := public.record_split_payments(
     '70000000-0000-4000-8000-000000000209',
     '70000000-0000-4000-8000-000000000309',
-    'panel', '[{"payment_method":"cash","amount":30}]'::jsonb,
-    'TEST ONLY PANEL EFFECTIVE QUANTITY',
+    'panel', '[{"payment_method":"cash","amount":10}]'::jsonb,
+    'TEST ONLY PANEL SAVED QUANTITY',
     '70000000-0000-4000-8000-000000000a12'
   );
   SELECT amount INTO STRICT v_claim_amount
   FROM public.panel_claims
   WHERE queue_entry_id = '70000000-0000-4000-8000-000000000209';
-  IF (v_result->>'balance_due')::numeric IS DISTINCT FROM 50::numeric
-     OR v_claim_amount IS DISTINCT FROM 50::numeric
+  IF (v_result->>'balance_due')::numeric IS DISTINCT FROM 20::numeric
+     OR v_claim_amount IS DISTINCT FROM 20::numeric
      OR (SELECT sum(amount) FROM public.payments
          WHERE queue_entry_id = '70000000-0000-4000-8000-000000000209'
-           AND deleted_at IS NULL) IS DISTINCT FROM 30::numeric THEN
-    RAISE EXCEPTION 'PANEL_EFFECTIVE_QUANTITY_RECONCILIATION_MISMATCH';
+           AND deleted_at IS NULL) IS DISTINCT FROM 10::numeric THEN
+    RAISE EXCEPTION 'PANEL_SAVED_QUANTITY_RECONCILIATION_MISMATCH';
   END IF;
 
   -- Four individually valid numeric portions whose aggregate exceeds the
@@ -1413,7 +1471,7 @@ BEGIN
     AND c.id = '70000000-0000-4000-8000-000000000308';
   IF v_current_count IS DISTINCT FROM 0
      OR v_batch_count IS DISTINCT FROM 0
-     OR v_queue_status IS DISTINCT FROM 'registered'
+     OR v_queue_status IS DISTINCT FROM 'dispensing_payment'
      OR v_consultation_status IS DISTINCT FROM 'in_progress' THEN
     RAISE EXCEPTION 'FORCED_SPLIT_ROLLBACK_FAILED';
   END IF;

@@ -2,9 +2,8 @@
 -- network retries idempotent. The batch table is intentionally RPC-only: RLS
 -- is enabled without general policies and direct privileges are revoked.
 
--- Keep panel receivables on the same effective-quantity basis as the split
--- payment RPCs. Inventory-backed lines use the actually dispensed quantity;
--- procedures and other non-inventory lines retain their ordered quantity.
+-- Keep panel receivables on the authoritative saved billed quantity used by
+-- invoices, corrections, receipts, and financial reporting.
 CREATE OR REPLACE FUNCTION public.ensure_panel_claim_for_queue(
   p_queue_entry_id uuid
 ) RETURNS uuid
@@ -34,11 +33,7 @@ BEGIN
   END IF;
 
   SELECT coalesce(sum(
-    item.price * CASE
-      WHEN item.item_id IS NOT NULL
-        THEN coalesce(item.dispensed_qty, item.quantity)
-      ELSE item.quantity
-    END
+    item.price * item.quantity
   ), 0)::numeric(10,2)
   INTO v_total_amount
   FROM public.consultations AS consultation
@@ -64,6 +59,14 @@ BEGIN
   FOR UPDATE;
 
   IF v_claim_id IS NOT NULL THEN
+    INSERT INTO private.panel_claim_split_correction_context (
+      transaction_id, panel_claim_id, actor_id, reason
+    ) VALUES (
+      pg_catalog.txid_current(), v_claim_id, coalesce(auth.uid(), v_patient_id),
+      'Patient payment reconciliation'
+    ) ON CONFLICT (transaction_id, panel_claim_id) DO UPDATE
+      SET actor_id = EXCLUDED.actor_id, reason = EXCLUDED.reason,
+          created_at = pg_catalog.now();
     UPDATE public.panel_claims AS claim
     SET amount = v_panel_amount
     WHERE claim.id = v_claim_id
@@ -129,6 +132,62 @@ ALTER TABLE public.payment_batches OWNER TO postgres;
 REVOKE ALL ON TABLE public.payment_batches FROM PUBLIC;
 REVOKE ALL ON TABLE public.payment_batches FROM anon;
 REVOKE ALL ON TABLE public.payment_batches FROM authenticated;
+
+-- Migration-first compatibility: legacy clients can still INSERT a single
+-- payment, but every insert now shares the billing lock and is bounded by the
+-- current saved bill. Split RPC inserts already hold a matching batch row.
+CREATE OR REPLACE FUNCTION private.guard_payment_insert()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = pg_catalog, public AS $function$
+DECLARE
+  v_status text;
+  v_billed numeric;
+  v_paid numeric;
+BEGIN
+  PERFORM public.lock_completed_bill_item_mutation_boundary();
+  SELECT queue.clinic_status::text INTO v_status
+  FROM public.queue_entries queue
+  WHERE queue.id = NEW.queue_entry_id AND queue.deleted_at IS NULL
+  FOR UPDATE;
+  IF NOT FOUND OR v_status NOT IN ('dispensing_payment', 'completed') THEN
+    RAISE EXCEPTION 'INVALID_PAYMENT_STATUS' USING ERRCODE = '22023';
+  END IF;
+  IF NEW.amount < 0 OR round(NEW.amount, 2) IS DISTINCT FROM NEW.amount THEN
+    RAISE EXCEPTION 'INVALID_PAYMENT_AMOUNT' USING ERRCODE = '22023';
+  END IF;
+  SELECT coalesce(sum(round(item.price * item.quantity, 2)), 0)
+  INTO v_billed FROM public.consultations consultation
+  JOIN public.consultation_items item ON item.consultation_id = consultation.id
+    AND item.deleted_at IS NULL
+  WHERE consultation.queue_entry_id = NEW.queue_entry_id
+    AND consultation.deleted_at IS NULL;
+  SELECT coalesce(sum(round(payment.amount, 2)), 0) INTO v_paid
+  FROM public.payments payment WHERE payment.queue_entry_id = NEW.queue_entry_id
+    AND payment.deleted_at IS NULL
+    AND lower(btrim(payment.payment_method)) <> 'panel';
+  IF lower(btrim(NEW.payment_method)) <> 'panel'
+     AND round(NEW.amount, 2) > greatest(round(v_billed - v_paid, 2), 0) THEN
+    RAISE EXCEPTION 'STALE_PATIENT_OUTSTANDING: expected %',
+      greatest(round(v_billed - v_paid, 2), 0) USING ERRCODE = '22023';
+  END IF;
+  RETURN NEW;
+END $function$;
+REVOKE ALL ON FUNCTION private.guard_payment_insert() FROM PUBLIC, anon, authenticated;
+CREATE TRIGGER guard_payment_insert BEFORE INSERT ON public.payments
+FOR EACH ROW EXECUTE FUNCTION private.guard_payment_insert();
+
+CREATE TABLE public.payment_void_audit (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  payment_id uuid NOT NULL REFERENCES public.payments(id),
+  queue_entry_id uuid NOT NULL REFERENCES public.queue_entries(id),
+  actor_id uuid NOT NULL,
+  amount numeric(12,2) NOT NULL,
+  payment_method text NOT NULL,
+  reason text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.payment_void_audit ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.payment_void_audit FROM PUBLIC, anon, authenticated;
 
 CREATE OR REPLACE FUNCTION public.record_split_payments_and_complete_visit(
   p_queue_entry_id uuid,
@@ -302,8 +361,8 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'QUEUE_ENTRY_NOT_FOUND' USING ERRCODE = '22023';
   END IF;
-  IF v_queue.clinic_status = 'completed' THEN
-    RAISE EXCEPTION 'ALREADY_COMPLETED' USING ERRCODE = '22023';
+  IF v_queue.clinic_status::text IS DISTINCT FROM 'dispensing_payment' THEN
+    RAISE EXCEPTION 'INVALID_CHECKOUT_STATUS' USING ERRCODE = '22023';
   END IF;
 
   SELECT consultation.status
@@ -342,11 +401,7 @@ BEGIN
   FOR UPDATE;
 
   SELECT coalesce(sum(round(
-    item.price * CASE
-      WHEN item.item_id IS NOT NULL
-        THEN coalesce(item.dispensed_qty, item.quantity)
-      ELSE item.quantity
-    END,
+    item.price * item.quantity,
     2
   )), 0)
   INTO v_billed_total
@@ -381,7 +436,8 @@ BEGIN
   ELSIF v_queue.payment_method = 'panel' OR p_provider_id IS NOT NULL THEN
     RAISE EXCEPTION 'PAYMENT_TYPE_MISMATCH' USING ERRCODE = '22023';
   ELSIF v_expected_patient_amount IS DISTINCT FROM v_current_patient_outstanding THEN
-    RAISE EXCEPTION 'STALE_PATIENT_OUTSTANDING' USING ERRCODE = '22023';
+    RAISE EXCEPTION 'STALE_PATIENT_OUTSTANDING: expected %',
+      v_current_patient_outstanding USING ERRCODE = '22023';
   END IF;
 
   IF v_allocation_count = 0 THEN
@@ -666,11 +722,7 @@ BEGIN
   FOR UPDATE;
 
   SELECT coalesce(sum(round(
-    item.price * CASE
-      WHEN item.item_id IS NOT NULL
-        THEN coalesce(item.dispensed_qty, item.quantity)
-      ELSE item.quantity
-    END,
+    item.price * item.quantity,
     2
   )), 0)
   INTO v_billed_total
@@ -769,6 +821,71 @@ BEGIN
   RETURN v_result;
 END;
 $function$;
+
+CREATE OR REPLACE FUNCTION public.void_payment_portion(
+  p_payment_id uuid,
+  p_reason text
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = pg_catalog, public AS $function$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_payment public.payments%ROWTYPE;
+  v_claim_status text;
+  v_billed numeric;
+  v_paid numeric;
+BEGIN
+  IF NOT public.can_checkout_visit(v_actor) THEN
+    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
+  END IF;
+  IF nullif(btrim(p_reason), '') IS NULL THEN
+    RAISE EXCEPTION 'VOID_REASON_REQUIRED' USING ERRCODE = '22023';
+  END IF;
+  PERFORM public.lock_completed_bill_item_mutation_boundary();
+  SELECT payment.* INTO v_payment FROM public.payments payment
+  WHERE payment.id = p_payment_id AND payment.deleted_at IS NULL FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAYMENT_NOT_FOUND' USING ERRCODE = '22023';
+  END IF;
+  IF lower(btrim(v_payment.payment_method)) = 'panel' THEN
+    RAISE EXCEPTION 'PANEL_PAYMENT_VOID_FORBIDDEN' USING ERRCODE = '23514';
+  END IF;
+  SELECT claim.status::text INTO v_claim_status
+  FROM public.panel_claims claim WHERE claim.queue_entry_id = v_payment.queue_entry_id
+  FOR UPDATE;
+  IF FOUND AND v_claim_status IS DISTINCT FROM 'pending' THEN
+    RAISE EXCEPTION 'PANEL_CLAIM_NOT_PENDING' USING ERRCODE = '23514';
+  END IF;
+  UPDATE public.payments SET deleted_at = now() WHERE id = p_payment_id;
+  INSERT INTO public.payment_void_audit (
+    payment_id, queue_entry_id, actor_id, amount, payment_method, reason
+  ) VALUES (
+    v_payment.id, v_payment.queue_entry_id, v_actor, v_payment.amount,
+    v_payment.payment_method, btrim(p_reason)
+  );
+  IF v_claim_status = 'pending' THEN
+    PERFORM public.ensure_panel_claim_for_queue(v_payment.queue_entry_id);
+  END IF;
+  SELECT coalesce(sum(round(item.price * item.quantity, 2)), 0)
+  INTO v_billed FROM public.consultations consultation
+  JOIN public.consultation_items item ON item.consultation_id = consultation.id
+    AND item.deleted_at IS NULL
+  WHERE consultation.queue_entry_id = v_payment.queue_entry_id
+    AND consultation.deleted_at IS NULL;
+  SELECT coalesce(sum(round(payment.amount, 2)), 0) INTO v_paid
+  FROM public.payments payment WHERE payment.queue_entry_id = v_payment.queue_entry_id
+    AND payment.deleted_at IS NULL
+    AND lower(btrim(payment.payment_method)) <> 'panel';
+  RETURN jsonb_build_object(
+    'payment_id', v_payment.id,
+    'queue_entry_id', v_payment.queue_entry_id,
+    'patient_outstanding', greatest(round(v_billed - v_paid, 2), 0)
+  );
+END $function$;
+
+ALTER FUNCTION public.void_payment_portion(uuid, text) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.void_payment_portion(uuid, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.void_payment_portion(uuid, text) TO authenticated;
 
 ALTER FUNCTION public.record_split_payments_and_complete_visit(
   uuid,uuid,text,numeric,jsonb,uuid,text,uuid

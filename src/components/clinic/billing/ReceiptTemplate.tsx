@@ -14,6 +14,7 @@ export interface ReceiptData {
   paymentMethod: string | null;
   paymentType: string | null;
   amountPaid: number;
+  paymentPortions?: Array<{ id: string; method: string | null; amount: number }>;
   createdAt: string;
   queueLabel: string | null;
   patientName: string;
@@ -228,10 +229,13 @@ export function ReceiptTemplate({ data, settings }: Props) {
 
         {/* Payment */}
         <div className="mt-6 border border-black p-3 text-xs">
-          <div>
-            <span className="font-semibold">Paid via:</span>{' '}
-            {formatPaymentMethod(data.paymentMethod, data.amountPaid)}
-          </div>
+          <div className="font-semibold mb-1">Payment portions:</div>
+          {(data.paymentPortions ?? [{ id: data.paymentId, method: data.paymentMethod, amount: data.amountPaid }]).map((portion) => (
+            <div key={portion.id} className="flex justify-between gap-4">
+              <span>{formatPaymentMethod(portion.method, portion.amount)}</span>
+              <span className="tabular-nums">RM {portion.amount.toFixed(2)}</span>
+            </div>
+          ))}
           <div>
             <span className="font-semibold">Amount Received:</span>{' '}
             <span className="tabular-nums">

@@ -130,9 +130,10 @@ export function BillingDetailsColumn({
   const outstanding = ledger.patientOutstanding;
 
   const handleVoid = async (id: string) => {
-    if (!confirm('Void this payment? This action is logged.')) return;
+    const reason = prompt('Reason for voiding this payment?')?.trim();
+    if (!reason) return;
     try {
-      await voidPayment.mutateAsync({ id, queue_entry_id: queueEntryId });
+      await voidPayment.mutateAsync({ id, queue_entry_id: queueEntryId, reason });
     } catch {
       // surfaced by hook
     }

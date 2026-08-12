@@ -126,6 +126,7 @@ export function RecordPaymentDialog({
   const [expectedBalance, setExpectedBalance] = useState(
     () => normalizeCurrencyAmount(Math.max(defaultAmount, 0)),
   );
+  const [panelPatientAmount, setPanelPatientAmount] = useState('0.00');
   const [openingPaymentMethod, setOpeningPaymentMethod] = useState(defaultPaymentMethod);
   const wasOpen = useRef(false);
 
@@ -147,6 +148,7 @@ export function RecordPaymentDialog({
     setProviderId('');
     setProviderOpen(false);
     setNotes('');
+    setPanelPatientAmount('0.00');
   }, [open, defaultAmount, defaultPaymentMethod]);
 
   const selectedProvider = useMemo(
@@ -165,12 +167,15 @@ export function RecordPaymentDialog({
     && (paymentType === 'panel' || expectedBalance === 0);
 
   const submittedAllocations = zeroPaymentCheckout ? [] : numericAllocations;
+  const allocationTarget = paymentType === 'panel' && !completeVisitOnPayment
+    ? normalizeCurrencyAmount(Number(panelPatientAmount) || 0)
+    : expectedBalance;
   const validation = validatePaymentAllocations({
     allocations: submittedAllocations,
-    expectedAmount: zeroPaymentCheckout ? 0 : expectedBalance,
+    expectedAmount: zeroPaymentCheckout ? 0 : allocationTarget,
     requireExact: paymentType === 'self_pay' && completeVisitOnPayment,
   });
-  const remaining = remainingAllocationAmount(expectedBalance, numericAllocations);
+  const remaining = remainingAllocationAmount(allocationTarget, numericAllocations);
 
   const activeMutation = completeVisitOnPayment
     ? recordSplitPaymentsAndCompleteVisit
@@ -178,6 +183,7 @@ export function RecordPaymentDialog({
   const isSubmitting = activeMutation.isPending;
   const submitDisabled = isSubmitting
     || !validation.valid
+    || (!completeVisitOnPayment && paymentType === 'self_pay' && expectedBalance === 0)
     || (paymentType === 'panel' && !selectedProvider);
   const addDisabled = allocations.length >= PHYSICAL_PAYMENT_METHODS.length || remaining === 0;
 
@@ -187,6 +193,7 @@ export function RecordPaymentDialog({
     setIdempotencyKey(crypto.randomUUID());
     setProviderId('');
     setProviderOpen(false);
+    setPanelPatientAmount(type === 'panel' ? '0.00' : expectedBalance.toFixed(2));
   }
 
   function updateAllocation(id: string, patch: Partial<EditableAllocation>) {
@@ -238,12 +245,18 @@ export function RecordPaymentDialog({
       });
 
       setIdempotencyKey(crypto.randomUUID());
-      toast.success('Payment recorded · Patient checked out');
+      toast.success(completeVisitOnPayment ? 'Payment recorded · Patient checked out' : 'Payment recorded');
       onOpenChange(false);
-      navigate('/clinic/queue');
+      if (completeVisitOnPayment) navigate('/clinic/queue');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Checkout failed';
-      toast.error(`Checkout failed: ${message}`);
+      const stale = message.match(/STALE_PATIENT_OUTSTANDING: expected\s+([0-9.]+)/i);
+      if (stale) {
+        setExpectedBalance(normalizeCurrencyAmount(Number(stale[1])));
+        toast.error(`Balance changed. Current patient outstanding is RM${Number(stale[1]).toFixed(2)}. Adjust the allocations and retry.`);
+      } else {
+        toast.error(`${completeVisitOnPayment ? 'Checkout' : 'Payment'} failed: ${message}`);
+      }
     }
   }
 
@@ -256,7 +269,7 @@ export function RecordPaymentDialog({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Record Payment & Check Out</DialogTitle>
+          <DialogTitle>{completeVisitOnPayment ? 'Record Payment & Check Out' : 'Record Payment'}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
@@ -331,6 +344,20 @@ export function RecordPaymentDialog({
                   </Command>
                 </PopoverContent>
               </Popover>
+            </div>
+          )}
+
+          {paymentType === 'panel' && !completeVisitOnPayment && (
+            <div className="space-y-2">
+              <Label htmlFor="panel-patient-amount">Patient collection amount (RM)</Label>
+              <Input
+                id="panel-patient-amount"
+                type="number"
+                min="0"
+                step="0.01"
+                value={panelPatientAmount}
+                onChange={(event) => setPanelPatientAmount(event.target.value)}
+              />
             </div>
           )}
 
@@ -442,7 +469,7 @@ export function RecordPaymentDialog({
                 Processing…
               </>
             ) : (
-              'Record Payment & Check Out'
+              completeVisitOnPayment ? 'Record Payment & Check Out' : 'Record Payment'
             )}
           </Button>
         </DialogFooter>

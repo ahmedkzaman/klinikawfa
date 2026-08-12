@@ -122,7 +122,12 @@ export function aggregateSalesInsights(rows: SalesPaymentRow[]): SalesInsights {
       method,
       collected: value.collected,
       paymentCount: value.paymentCount,
-    })).sort((a, b) => b.collected - a.collected),
+    })).sort((a, b) => {
+      const labels: Record<string, string> = {
+        cash: 'Cash', qr_pay: 'QR Pay', card: 'Card', transfer: 'Online Transfer',
+      };
+      return (labels[a.method] ?? a.method).localeCompare(labels[b.method] ?? b.method);
+    }),
     rows: rawRows,
   };
 }

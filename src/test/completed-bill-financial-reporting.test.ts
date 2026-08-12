@@ -46,7 +46,12 @@ vi.mock('@/integrations/supabase/client', () => ({
         select: () => chain,
         eq: () => chain,
         is: () => table === 'payments'
-          ? Promise.resolve({ data: [{ amount: 90 }], error: null })
+          ? Promise.resolve({ data: [{
+            id: receiptPayment.id,
+            amount: 90,
+            payment_method: 'card',
+            created_at: receiptPayment.created_at,
+          }], error: null })
           : chain,
         order: () => Promise.resolve({ data: activeCorrectedItems, error: null }),
         maybeSingle: () => Promise.resolve({ data: receiptPayment, error: null }),

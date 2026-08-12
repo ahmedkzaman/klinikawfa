@@ -6592,8 +6592,15 @@ export type Database = {
           p_provider_id: string | null
           p_queue_entry_id: string
         }
-        Returns: Json
-      }
+          Returns: Json
+        }
+        void_payment_portion: {
+          Args: {
+            p_payment_id: string
+            p_reason: string
+          }
+          Returns: Json
+        }
       record_panel_claim_portion_payment: {
         Args: {
           p_amount: number

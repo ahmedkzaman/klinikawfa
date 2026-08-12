@@ -42,20 +42,41 @@ describe('split payment migration', () => {
     }
   });
 
-  it('uses effective dispensed quantity and rejects unsafe completed panel claims', () => {
-    const effectiveQuantity = /item\.price \* case[\s\S]*?item\.item_id is not null[\s\S]*?coalesce\(item\.dispensed_qty, item\.quantity\)[\s\S]*?else item\.quantity/gi;
-    expect(sql.match(effectiveQuantity)).toHaveLength(3);
+  it('uses saved billed quantity and rejects unsafe completed panel claims', () => {
+    expect(sql).not.toContain('dispensed_qty');
+    expect(sql.match(/item\.price \* item\.quantity/gi)?.length).toBeGreaterThanOrEqual(3);
     expect(sql).toMatch(/select claim\.status::text[\s\S]*for update[\s\S]*v_panel_claim_status is distinct from 'pending'[\s\S]*PANEL_CLAIM_NOT_PENDING/i);
   });
 
-  it('reconciles panel claims with the same effective quantity under restricted privileges', () => {
+  it('reconciles panel claims through the split-parent correction capability', () => {
     const helper = sql.match(
       /create or replace function public\.ensure_panel_claim_for_queue[\s\S]*?\$function\$;/i,
     )?.[0] ?? '';
-    expect(helper).toMatch(/item\.price \* case[\s\S]*?item\.item_id is not null[\s\S]*?coalesce\(item\.dispensed_qty, item\.quantity\)[\s\S]*?else item\.quantity/i);
+    expect(helper).toMatch(/item\.price \* item\.quantity/i);
+    expect(helper).toContain('private.panel_claim_split_correction_context');
     expect(helper).toMatch(/security definer[\s\S]*?set search_path = pg_catalog, public/i);
     expect(sql).toMatch(/revoke all on function public\.ensure_panel_claim_for_queue\(uuid\) from public/i);
     expect(sql).toMatch(/grant execute on function public\.ensure_panel_claim_for_queue\(uuid\) to service_role/i);
+  });
+
+  it('only checks out dispensing-payment visits and reports the current stale balance', () => {
+    expect(sql).toMatch(/clinic_status::text is distinct from 'dispensing_payment'[\s\S]*INVALID_CHECKOUT_STATUS/i);
+    expect(sql).toMatch(/STALE_PATIENT_OUTSTANDING: expected %/i);
+  });
+
+  it('guards legacy inserts and exposes an audited atomic payment void RPC', () => {
+    expect(sql).toMatch(/create trigger guard_payment_insert[\s\S]*before insert on public\.payments/i);
+    expect(sql).toMatch(/lock_completed_bill_item_mutation_boundary/i);
+    expect(sql).toMatch(/create table public\.payment_void_audit/i);
+    expect(sql).toMatch(/create or replace function public\.void_payment_portion/i);
+    expect(sql).toMatch(/grant execute on function public\.void_payment_portion\(uuid, text\) to authenticated/i);
+  });
+
+  it('covers corrected quantity-three billing and production split-parent trigger behavior', () => {
+    expect(harness).toMatch(/TEST ONLY PANEL SAVED QUANTITY', 3, 10[\s\S]*000000000402', 2/i);
+    expect(harness).toContain('SAVED_BILLED_QUANTITY_30_MISMATCH');
+    expect(harness).toContain('guard_panel_claim_split_parent_mutation');
+    expect(harness).toContain('void_payment_portion');
   });
 
   it('keeps the eight-column completed-panel fixture at eight values', () => {

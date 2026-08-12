@@ -124,8 +124,8 @@ vi.mock('@/integrations/supabase/client', () => ({
           if (table === 'payments') {
             return Promise.resolve({
               data: [
-                { amount: 40, payment_method: 'cash' },
-                { amount: 60, payment_method: 'qr_pay' },
+                { id: 'cash-40', amount: 40, payment_method: 'cash', created_at: '2026-08-12T09:00:00Z' },
+                { id: 'qr-60', amount: 60, payment_method: 'qr_pay', created_at: '2026-08-12T09:01:00Z' },
               ],
               error: null,
             });
@@ -183,6 +183,10 @@ describe('split payment reporting', () => {
         { amount: 60, paymentMethod: 'qr_pay' },
       ],
     }));
+    expect(screen.getByText('Cash')).toBeVisible();
+    expect(screen.getByText('QR Pay')).toBeVisible();
+    expect(screen.getByText('RM 40.00')).toBeVisible();
+    expect(screen.getByText('RM 60.00')).toBeVisible();
   });
 
   it('renders combined self-pay methods while preserving the panel provider and copay label', async () => {
@@ -224,8 +228,8 @@ describe('split payment reporting', () => {
     ]);
 
     expect(result.byMethod).toEqual([
-      { method: 'qr_pay', collected: 60, paymentCount: 1 },
       { method: 'cash', collected: 40, paymentCount: 1 },
+      { method: 'qr_pay', collected: 60, paymentCount: 1 },
     ]);
   });
 });

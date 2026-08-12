@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   useRecordSplitPayments,
   useRecordSplitPaymentsAndCompleteVisit,
+  useVoidPayment,
 } from '@/hooks/clinic/usePayments';
 
 const { rpc } = vi.hoisted(() => ({ rpc: vi.fn() }));
@@ -14,6 +15,17 @@ vi.mock('@/integrations/supabase/client', () => ({ supabase: { rpc } }));
 function createQueryClient() {
   return new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+
+  it('voids one payment portion through the audited RPC', async () => {
+    const queryClient = createQueryClient();
+    const { result } = renderHook(() => useVoidPayment(), { wrapper: createWrapper(queryClient) });
+    await act(async () => {
+      await result.current.mutateAsync({ id: 'payment-1', queue_entry_id: 'queue-1', reason: 'Wrong tender' });
+    });
+    expect(rpc).toHaveBeenCalledWith('void_payment_portion', {
+      p_payment_id: 'payment-1', p_reason: 'Wrong tender',
+    });
   });
 }
 
