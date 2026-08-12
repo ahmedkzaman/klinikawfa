@@ -7,9 +7,9 @@ const fallbacks = Object.assign(Object.create(null), {
 const publicSchemaPages = Object.assign(Object.create(null), {
   'services/sunat-kuantan': {
     path: '/services/sunat-kuantan/',
-    name: 'Sunat Bayi, Kanak-kanak & Dewasa Kuantan | Klinik Awfa',
+    name: 'Klinik Sunat Kuantan untuk Bayi, Kanak-kanak & Dewasa | Klinik Awfa',
     breadcrumbName: sunatKuantanPublicContent.heading,
-    description: 'Khidmat sunat bayi, kanak-kanak dan dewasa di Kuantan dengan penilaian doktor dan penjagaan selepas prosedur di Klinik Awfa.',
+    description: 'Penilaian dan perkhidmatan sunat bayi, kanak-kanak dan dewasa di Klinik Awfa, KotaSAS, Kuantan, termasuk persediaan dan penjagaan selepas prosedur.',
     faqs: sunatKuantanPublicContent.faqs,
   },
 });

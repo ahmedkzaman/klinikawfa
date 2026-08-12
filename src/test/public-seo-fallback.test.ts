@@ -46,13 +46,15 @@ describe('public SEO crawler fallback', () => {
       expect(html).toContain('<h2>Sunat dewasa</h2>');
       expect(html).toContain('href="/appointment"');
       expect(html).not.toContain('clinic_queue');
-      expect(html).toContain('<script type="application/ld+json">');
-      const schemaJson = html.match(/<script type="application\/ld\+json">(.*?)<\/script>/)?.[1];
+      expect(html).toContain('<script data-rh="true" type="application/ld+json">');
+      const schemaJson = html.match(/<script data-rh="true" type="application\/ld\+json">(.*?)<\/script>/)?.[1];
       const schemas = JSON.parse(schemaJson || '[]');
       expect(schemas).toEqual(expect.arrayContaining([
         expect.objectContaining({ '@type': 'MedicalClinic', '@id': 'https://klinikawfa.com/#clinic' }),
         expect.objectContaining({
           '@type': 'Service',
+          name: 'Klinik Sunat Kuantan untuk Bayi, Kanak-kanak & Dewasa | Klinik Awfa',
+          description: 'Penilaian dan perkhidmatan sunat bayi, kanak-kanak dan dewasa di Klinik Awfa, KotaSAS, Kuantan, termasuk persediaan dan penjagaan selepas prosedur.',
           url: 'https://klinikawfa.com/services/sunat-kuantan/',
           provider: { '@id': 'https://klinikawfa.com/#clinic' },
         }),

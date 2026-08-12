@@ -39,8 +39,8 @@ const pages = {
     description: "Pengurusan berat badan dan program kurus di Kuantan dengan penilaian doktor, sasaran realistik dan pemantauan di Klinik Awfa.",
   },
   "services/sunat-kuantan": {
-    title: "Sunat Bayi, Kanak-kanak & Dewasa Kuantan | Klinik Awfa",
-    description: "Khidmat sunat bayi, kanak-kanak dan dewasa di Kuantan dengan penilaian doktor dan penjagaan selepas prosedur di Klinik Awfa.",
+    title: "Klinik Sunat Kuantan untuk Bayi, Kanak-kanak & Dewasa | Klinik Awfa",
+    description: "Penilaian dan perkhidmatan sunat bayi, kanak-kanak dan dewasa di Klinik Awfa, KotaSAS, Kuantan, termasuk persediaan dan penjagaan selepas prosedur.",
   },
 };
 
@@ -150,7 +150,7 @@ for (const [route, fallback] of Object.entries(pages)) {
   const schemas = buildPublicSeoSchemas(route);
   if (schemas?.length) {
     const json = JSON.stringify(schemas).replaceAll('<', '\\u003c');
-    html = html.replace('</head>', `<script type="application/ld+json">${json}</script>\n</head>`);
+    html = html.replace('</head>', `<script data-rh="true" type="application/ld+json">${json}</script>\n</head>`);
   }
 
   writeFileSync(htmlPath, html);

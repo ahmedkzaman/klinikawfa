@@ -219,6 +219,10 @@ describe('local SEO service pages', () => {
       const schemas = Array.from(
         document.head.querySelectorAll('script[type="application/ld+json"]'),
       ).map((script) => JSON.parse(script.textContent || '{}'));
+      expect(
+        Array.from(document.head.querySelectorAll('script[type="application/ld+json"]'))
+          .every((script) => script.getAttribute('data-rh') === 'true'),
+      ).toBe(true);
       expect(schemas).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
