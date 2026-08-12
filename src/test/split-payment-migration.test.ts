@@ -23,4 +23,38 @@ describe('split payment migration', () => {
     expect(sql).toMatch(/unique \(queue_entry_id, idempotency_key\)/i);
     expect(sql.indexOf('INSERT INTO public.payments')).toBeLessThan(sql.indexOf("SET clinic_status = 'completed'"));
   });
+
+  it('takes the shared advisory boundary before either batch row lock', () => {
+    const active = sql.match(
+      /create or replace function public\.record_split_payments_and_complete_visit[\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+    const completed = sql.match(
+      /create or replace function public\.record_split_payments\([\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+
+    for (const rpc of [active, completed]) {
+      expect(rpc.indexOf('PERFORM public.lock_completed_bill_item_mutation_boundary()'))
+        .toBeLessThan(rpc.indexOf('INSERT INTO public.payment_batches'));
+    }
+  });
+
+  it('uses effective dispensed quantity and rejects unsafe completed panel claims', () => {
+    const effectiveQuantity = /item\.price \* case[\s\S]*?item\.item_id is not null[\s\S]*?coalesce\(item\.dispensed_qty, item\.quantity\)[\s\S]*?else item\.quantity/gi;
+    expect(sql.match(effectiveQuantity)).toHaveLength(2);
+    expect(sql).toMatch(/select claim\.status::text[\s\S]*for update[\s\S]*v_panel_claim_status is distinct from 'pending'[\s\S]*PANEL_CLAIM_NOT_PENDING/i);
+  });
+
+  it('fingerprints the complete canonical request and bounds aggregate amounts', () => {
+    expect(sql).toMatch(/request_fingerprint text not null/i);
+    for (const field of [
+      'consultation_id',
+      'provider_id',
+      'notes',
+      'payments',
+    ]) {
+      expect(sql).toContain(`'${field}'`);
+    }
+    expect(sql).toMatch(/request_fingerprint is distinct from v_request_fingerprint/i);
+    expect(sql.match(/v_allocation_total > 9999999999\.99/g)).toHaveLength(2);
+  });
 });

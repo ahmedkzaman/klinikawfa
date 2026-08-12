@@ -10,6 +10,7 @@ CREATE TABLE public.payment_batches (
   payment_type text NOT NULL CHECK (payment_type IN ('self_pay', 'panel')),
   expected_patient_amount numeric(12,2) NOT NULL CHECK (expected_patient_amount >= 0),
   completes_visit boolean NOT NULL,
+  request_fingerprint text NOT NULL,
   result jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (queue_entry_id, idempotency_key)
@@ -48,6 +49,8 @@ DECLARE
   v_allocation_total numeric;
   v_distinct_method_count integer;
   v_invalid_allocation_count integer;
+  v_canonical_payments jsonb;
+  v_request_fingerprint text;
   v_allocation record;
   v_payment_id uuid;
   v_payment_ids jsonb := '[]'::jsonb;
@@ -108,9 +111,38 @@ BEGIN
 
   IF v_invalid_allocation_count <> 0
      OR v_distinct_method_count <> v_allocation_count
+     OR v_allocation_total > 9999999999.99
      OR round(v_allocation_total, 2) <> v_expected_patient_amount THEN
     RAISE EXCEPTION 'INVALID_PAYMENT_ALLOCATIONS' USING ERRCODE = '22023';
   END IF;
+
+  SELECT coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'payment_method', btrim(allocation.payment_method),
+        'amount', round(allocation.amount, 2),
+        'notes', nullif(btrim(allocation.notes), '')
+      )
+      ORDER BY btrim(allocation.payment_method)
+    ),
+    '[]'::jsonb
+  )
+  INTO v_canonical_payments
+  FROM jsonb_to_recordset(p_payments)
+    AS allocation(payment_method text, amount numeric, notes text);
+
+  v_request_fingerprint := md5(jsonb_build_object(
+    'queue_entry_id', p_queue_entry_id,
+    'consultation_id', p_consultation_id,
+    'payment_type', p_payment_type,
+    'expected_patient_amount', v_expected_patient_amount,
+    'payments', v_canonical_payments,
+    'provider_id', p_provider_id,
+    'notes', nullif(btrim(p_notes), ''),
+    'completes_visit', true
+  )::text);
+
+  PERFORM public.lock_completed_bill_item_mutation_boundary();
 
   INSERT INTO public.payment_batches (
     queue_entry_id,
@@ -118,7 +150,8 @@ BEGIN
     actor_id,
     payment_type,
     expected_patient_amount,
-    completes_visit
+    completes_visit,
+    request_fingerprint
   )
   VALUES (
     p_queue_entry_id,
@@ -126,7 +159,8 @@ BEGIN
     v_actor_id,
     p_payment_type,
     v_expected_patient_amount,
-    true
+    true,
+    v_request_fingerprint
   )
   ON CONFLICT (queue_entry_id, idempotency_key) DO NOTHING;
 
@@ -140,14 +174,13 @@ BEGIN
   IF v_batch.actor_id IS DISTINCT FROM v_actor_id
      OR v_batch.payment_type IS DISTINCT FROM p_payment_type
      OR v_batch.expected_patient_amount IS DISTINCT FROM v_expected_patient_amount
-     OR v_batch.completes_visit IS DISTINCT FROM true THEN
+     OR v_batch.completes_visit IS DISTINCT FROM true
+     OR v_batch.request_fingerprint IS DISTINCT FROM v_request_fingerprint THEN
     RAISE EXCEPTION 'IDEMPOTENCY_KEY_CONFLICT' USING ERRCODE = '23505';
   END IF;
   IF v_batch.result IS NOT NULL THEN
     RETURN v_batch.result;
   END IF;
-
-  PERFORM public.lock_completed_bill_item_mutation_boundary();
 
   SELECT
     queue_entry.clinic_status,
@@ -200,7 +233,14 @@ BEGIN
   ORDER BY payment.id
   FOR UPDATE;
 
-  SELECT coalesce(sum(round(item.price * item.quantity, 2)), 0)
+  SELECT coalesce(sum(round(
+    item.price * CASE
+      WHEN item.item_id IS NOT NULL
+        THEN coalesce(item.dispensed_qty, item.quantity)
+      ELSE item.quantity
+    END,
+    2
+  )), 0)
   INTO v_billed_total
   FROM public.consultations AS consultation
   JOIN public.consultation_items AS item
@@ -340,6 +380,9 @@ DECLARE
   v_allocation_total numeric;
   v_distinct_method_count integer;
   v_invalid_allocation_count integer;
+  v_canonical_payments jsonb;
+  v_request_fingerprint text;
+  v_panel_claim_status text;
   v_allocation record;
   v_payment_id uuid;
   v_payment_ids jsonb := '[]'::jsonb;
@@ -392,10 +435,35 @@ BEGIN
     AS allocation(payment_method text, amount numeric, notes text);
 
   IF v_invalid_allocation_count <> 0
-     OR v_distinct_method_count <> v_allocation_count THEN
+     OR v_distinct_method_count <> v_allocation_count
+     OR v_allocation_total > 9999999999.99 THEN
     RAISE EXCEPTION 'INVALID_PAYMENT_ALLOCATIONS' USING ERRCODE = '22023';
   END IF;
   v_allocation_total := round(v_allocation_total, 2);
+
+  SELECT jsonb_agg(
+    jsonb_build_object(
+      'payment_method', btrim(allocation.payment_method),
+      'amount', round(allocation.amount, 2),
+      'notes', nullif(btrim(allocation.notes), '')
+    )
+    ORDER BY btrim(allocation.payment_method)
+  )
+  INTO v_canonical_payments
+  FROM jsonb_to_recordset(p_payments)
+    AS allocation(payment_method text, amount numeric, notes text);
+
+  v_request_fingerprint := md5(jsonb_build_object(
+    'queue_entry_id', p_queue_entry_id,
+    'consultation_id', p_consultation_id,
+    'payment_type', p_payment_type,
+    'payments', v_canonical_payments,
+    'provider_id', NULL,
+    'notes', nullif(btrim(p_notes), ''),
+    'completes_visit', false
+  )::text);
+
+  PERFORM public.lock_completed_bill_item_mutation_boundary();
 
   INSERT INTO public.payment_batches (
     queue_entry_id,
@@ -403,7 +471,8 @@ BEGIN
     actor_id,
     payment_type,
     expected_patient_amount,
-    completes_visit
+    completes_visit,
+    request_fingerprint
   )
   VALUES (
     p_queue_entry_id,
@@ -411,7 +480,8 @@ BEGIN
     v_actor_id,
     p_payment_type,
     v_allocation_total,
-    false
+    false,
+    v_request_fingerprint
   )
   ON CONFLICT (queue_entry_id, idempotency_key) DO NOTHING;
 
@@ -425,14 +495,13 @@ BEGIN
   IF v_batch.actor_id IS DISTINCT FROM v_actor_id
      OR v_batch.payment_type IS DISTINCT FROM p_payment_type
      OR v_batch.expected_patient_amount IS DISTINCT FROM v_allocation_total
-     OR v_batch.completes_visit IS DISTINCT FROM false THEN
+     OR v_batch.completes_visit IS DISTINCT FROM false
+     OR v_batch.request_fingerprint IS DISTINCT FROM v_request_fingerprint THEN
     RAISE EXCEPTION 'IDEMPOTENCY_KEY_CONFLICT' USING ERRCODE = '23505';
   END IF;
   IF v_batch.result IS NOT NULL THEN
     RETURN v_batch.result;
   END IF;
-
-  PERFORM public.lock_completed_bill_item_mutation_boundary();
 
   SELECT
     queue_entry.clinic_status,
@@ -488,7 +557,14 @@ BEGIN
   ORDER BY payment.id
   FOR UPDATE;
 
-  SELECT coalesce(sum(round(item.price * item.quantity, 2)), 0)
+  SELECT coalesce(sum(round(
+    item.price * CASE
+      WHEN item.item_id IS NOT NULL
+        THEN coalesce(item.dispensed_qty, item.quantity)
+      ELSE item.quantity
+    END,
+    2
+  )), 0)
   INTO v_billed_total
   FROM public.consultations AS consultation
   JOIN public.consultation_items AS item
@@ -515,6 +591,15 @@ BEGIN
     IF v_queue.payment_method IS DISTINCT FROM 'panel'
        OR v_queue.panel_id IS NULL THEN
       RAISE EXCEPTION 'PAYMENT_TYPE_MISMATCH' USING ERRCODE = '22023';
+    END IF;
+
+    SELECT claim.status::text
+    INTO v_panel_claim_status
+    FROM public.panel_claims AS claim
+    WHERE claim.queue_entry_id = p_queue_entry_id
+    FOR UPDATE;
+    IF FOUND AND v_panel_claim_status IS DISTINCT FROM 'pending' THEN
+      RAISE EXCEPTION 'PANEL_CLAIM_NOT_PENDING' USING ERRCODE = '23514';
     END IF;
   ELSIF v_queue.payment_method = 'panel' THEN
     RAISE EXCEPTION 'PAYMENT_TYPE_MISMATCH' USING ERRCODE = '22023';

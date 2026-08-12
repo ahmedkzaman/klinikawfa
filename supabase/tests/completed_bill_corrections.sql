@@ -101,11 +101,17 @@ BEGIN
     id, name, stock, allocated_quantity, cost_price,
     price_to_patient_min, price_to_patient_max, status
   )
-  VALUES (
-    '70000000-0000-4000-8000-000000000401',
-    'TEST ONLY COMPLETED BILL MEDICINE',
-    50, 0, 3, 10, 20, 'active'
-  );
+  VALUES
+    (
+      '70000000-0000-4000-8000-000000000401',
+      'TEST ONLY COMPLETED BILL MEDICINE',
+      50, 0, 3, 10, 20, 'active'
+    ),
+    (
+      '70000000-0000-4000-8000-000000000402',
+      'TEST ONLY EFFECTIVE QUANTITY MEDICINE',
+      50, 0, 3, 10, 100, 'active'
+    );
   INSERT INTO public.patients (id, name, notes)
   VALUES
     (
@@ -223,7 +229,8 @@ BEGIN
     'in_progress', '', '', ''
   );
   INSERT INTO public.consultation_items (
-    id, consultation_id, item_name, quantity, price, unit_cost
+    id, consultation_id, item_name, quantity, price, unit_cost,
+    item_id, dispensed_qty
   )
   VALUES (
     '70000000-0000-4000-8000-000000000504',
@@ -355,33 +362,35 @@ BEGIN
     );
 
   INSERT INTO public.consultation_items (
-    id, consultation_id, item_name, quantity, price, unit_cost
+    id, consultation_id, item_name, quantity, price, unit_cost,
+    item_id, dispensed_qty
   )
   VALUES
     (
       '70000000-0000-4000-8000-000000000505',
       '70000000-0000-4000-8000-000000000304',
-      'TEST ONLY SPLIT CHECKOUT', 1, 100, 0
+      'TEST ONLY SPLIT CHECKOUT', 1, 100, 0, NULL, NULL
     ),
     (
       '70000000-0000-4000-8000-000000000506',
       '70000000-0000-4000-8000-000000000305',
-      'TEST ONLY SPLIT VALIDATION', 1, 100, 0
+      'TEST ONLY SPLIT VALIDATION', 1, 100, 0, NULL, NULL
     ),
     (
       '70000000-0000-4000-8000-000000000507',
       '70000000-0000-4000-8000-000000000306',
-      'TEST ONLY PANEL SPLIT CHECKOUT', 1, 100, 0
+      'TEST ONLY PANEL SPLIT CHECKOUT', 1, 100, 0, NULL, NULL
     ),
     (
       '70000000-0000-4000-8000-000000000508',
       '70000000-0000-4000-8000-000000000307',
-      'TEST ONLY COMPLETED COLLECTION', 1, 80, 0
+      'TEST ONLY COMPLETED COLLECTION', 2, 80, 0,
+      '70000000-0000-4000-8000-000000000402', 1
     ),
     (
       '70000000-0000-4000-8000-000000000509',
       '70000000-0000-4000-8000-000000000308',
-      'TEST ONLY FORCED SPLIT ROLLBACK', 1, 100, 0
+      'TEST ONLY FORCED SPLIT ROLLBACK', 1, 100, 0, NULL, NULL
     );
 
   UPDATE public.consultations
@@ -411,6 +420,31 @@ CREATE TRIGGER test_only_reject_second_split_payment
 BEFORE INSERT ON public.payments
 FOR EACH ROW
 EXECUTE FUNCTION public.test_only_reject_second_split_payment();
+
+CREATE FUNCTION public.test_only_payment_batch_count(p_queue_entry_id uuid)
+RETURNS integer
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $function$
+  SELECT count(*)::integer
+  FROM public.payment_batches AS batch
+  WHERE batch.queue_entry_id = p_queue_entry_id;
+$function$;
+
+CREATE FUNCTION public.test_only_set_panel_claim_status(
+  p_queue_entry_id uuid,
+  p_status public.panel_claim_status
+)
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $function$
+  UPDATE public.panel_claims AS claim
+  SET status = p_status
+  WHERE claim.queue_entry_id = p_queue_entry_id;
+$function$;
 
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
@@ -1063,7 +1097,7 @@ BEGIN
     '70000000-0000-4000-8000-000000000204',
     '70000000-0000-4000-8000-000000000304',
     'self_pay', 100,
-    '[{"payment_method":"cash","amount":40},{"payment_method":"qr_pay","amount":60}]'::jsonb,
+    '[{"payment_method":"qr_pay","amount":60},{"payment_method":"cash","amount":40}]'::jsonb,
     NULL, 'TEST ONLY SPLIT CHECKOUT',
     '70000000-0000-4000-8000-000000000a01'
   );
@@ -1071,9 +1105,9 @@ BEGIN
   FROM public.payments
   WHERE queue_entry_id = '70000000-0000-4000-8000-000000000204'
     AND deleted_at IS NULL;
-  SELECT count(*) INTO v_batch_count
-  FROM public.payment_batches
-  WHERE queue_entry_id = '70000000-0000-4000-8000-000000000204';
+  v_batch_count := public.test_only_payment_batch_count(
+    '70000000-0000-4000-8000-000000000204'
+  );
   SELECT qe.clinic_status, c.status
   INTO STRICT v_queue_status, v_consultation_status
   FROM public.queue_entries qe
@@ -1091,6 +1125,62 @@ BEGIN
            AND deleted_at IS NULL) IS DISTINCT FROM 100::numeric THEN
     RAISE EXCEPTION 'SPLIT_CHECKOUT_IDEMPOTENCY_MISMATCH';
   END IF;
+
+  -- Every request field represented by the active RPC must participate in
+  -- idempotency conflict detection, while tender order remains canonical.
+  BEGIN
+    PERFORM public.record_split_payments_and_complete_visit(
+      '70000000-0000-4000-8000-000000000204',
+      '70000000-0000-4000-8000-000000000305',
+      'self_pay', 100,
+      '[{"payment_method":"cash","amount":40},{"payment_method":"qr_pay","amount":60}]'::jsonb,
+      NULL, 'TEST ONLY SPLIT CHECKOUT',
+      '70000000-0000-4000-8000-000000000a01'
+    );
+    RAISE EXCEPTION 'IDEMPOTENCY_CONSULTATION_CONFLICT_MISSED';
+  EXCEPTION WHEN SQLSTATE '23505' THEN
+    IF SQLERRM <> 'IDEMPOTENCY_KEY_CONFLICT' THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM public.record_split_payments_and_complete_visit(
+      '70000000-0000-4000-8000-000000000204',
+      '70000000-0000-4000-8000-000000000304',
+      'self_pay', 100,
+      '[{"payment_method":"cash","amount":60},{"payment_method":"qr_pay","amount":40}]'::jsonb,
+      NULL, 'TEST ONLY SPLIT CHECKOUT',
+      '70000000-0000-4000-8000-000000000a01'
+    );
+    RAISE EXCEPTION 'IDEMPOTENCY_ALLOCATIONS_CONFLICT_MISSED';
+  EXCEPTION WHEN SQLSTATE '23505' THEN
+    IF SQLERRM <> 'IDEMPOTENCY_KEY_CONFLICT' THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM public.record_split_payments_and_complete_visit(
+      '70000000-0000-4000-8000-000000000204',
+      '70000000-0000-4000-8000-000000000304',
+      'self_pay', 100,
+      '[{"payment_method":"cash","amount":40},{"payment_method":"qr_pay","amount":60}]'::jsonb,
+      '70000000-0000-4000-8000-000000000801',
+      'TEST ONLY SPLIT CHECKOUT',
+      '70000000-0000-4000-8000-000000000a01'
+    );
+    RAISE EXCEPTION 'IDEMPOTENCY_PROVIDER_CONFLICT_MISSED';
+  EXCEPTION WHEN SQLSTATE '23505' THEN
+    IF SQLERRM <> 'IDEMPOTENCY_KEY_CONFLICT' THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM public.record_split_payments_and_complete_visit(
+      '70000000-0000-4000-8000-000000000204',
+      '70000000-0000-4000-8000-000000000304',
+      'self_pay', 100,
+      '[{"payment_method":"cash","amount":40},{"payment_method":"qr_pay","amount":60}]'::jsonb,
+      NULL, 'TEST ONLY CHANGED NOTES',
+      '70000000-0000-4000-8000-000000000a01'
+    );
+    RAISE EXCEPTION 'IDEMPOTENCY_NOTES_CONFLICT_MISSED';
+  EXCEPTION WHEN SQLSTATE '23505' THEN
+    IF SQLERRM <> 'IDEMPOTENCY_KEY_CONFLICT' THEN RAISE; END IF;
+  END;
 
   -- Duplicate methods, under/over allocation, negative amounts, and methods
   -- outside the four physical tenders all fail with the validation SQLSTATE.
@@ -1211,6 +1301,44 @@ BEGIN
     RAISE EXCEPTION 'COMPLETED_SPLIT_COLLECTION_MISMATCH';
   END IF;
 
+  -- Four individually valid numeric portions whose aggregate exceeds the
+  -- durable numeric(12,2) boundary must fail as validation, not overflow.
+  BEGIN
+    PERFORM public.record_split_payments(
+      '70000000-0000-4000-8000-000000000207',
+      '70000000-0000-4000-8000-000000000307',
+      'self_pay',
+      '[{"payment_method":"cash","amount":9999999999.99},{"payment_method":"qr_pay","amount":9999999999.99},{"payment_method":"card","amount":9999999999.99},{"payment_method":"transfer","amount":9999999999.99}]'::jsonb,
+      NULL, '70000000-0000-4000-8000-000000000a10'
+    );
+    RAISE EXCEPTION 'AGGREGATE_SPLIT_OVERFLOW_SUCCEEDED';
+  EXCEPTION WHEN SQLSTATE '22023' THEN
+    IF SQLERRM <> 'INVALID_PAYMENT_ALLOCATIONS' THEN RAISE; END IF;
+  END;
+
+  -- A materialized panel claim cannot be silently reallocated by a later
+  -- completed-visit co-payment batch.
+  PERFORM public.test_only_set_panel_claim_status(
+    '70000000-0000-4000-8000-000000000206',
+    'submitted'
+  );
+  BEGIN
+    PERFORM public.record_split_payments(
+      '70000000-0000-4000-8000-000000000206',
+      '70000000-0000-4000-8000-000000000306',
+      'panel', '[{"payment_method":"transfer","amount":10}]'::jsonb,
+      NULL, '70000000-0000-4000-8000-000000000a11'
+    );
+    RAISE EXCEPTION 'NONPENDING_PANEL_SPLIT_SUCCEEDED';
+  EXCEPTION WHEN SQLSTATE '23514' THEN
+    IF SQLERRM <> 'PANEL_CLAIM_NOT_PENDING' THEN RAISE; END IF;
+  END;
+  IF (SELECT count(*) FROM public.payments
+      WHERE queue_entry_id = '70000000-0000-4000-8000-000000000206'
+        AND deleted_at IS NULL) IS DISTINCT FROM 2 THEN
+    RAISE EXCEPTION 'NONPENDING_PANEL_SPLIT_CHANGED_PAYMENTS';
+  END IF;
+
   -- The test-only trigger rejects the QR row after Cash has inserted. The
   -- caught statement must leave no payment/batch row and no completion state.
   BEGIN
@@ -1229,9 +1357,9 @@ BEGIN
   SELECT count(*) INTO v_current_count
   FROM public.payments
   WHERE queue_entry_id = '70000000-0000-4000-8000-000000000208';
-  SELECT count(*) INTO v_batch_count
-  FROM public.payment_batches
-  WHERE queue_entry_id = '70000000-0000-4000-8000-000000000208';
+  v_batch_count := public.test_only_payment_batch_count(
+    '70000000-0000-4000-8000-000000000208'
+  );
   SELECT qe.clinic_status, c.status
   INTO STRICT v_queue_status, v_consultation_status
   FROM public.queue_entries qe
