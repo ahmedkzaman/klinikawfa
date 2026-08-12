@@ -1,3 +1,5 @@
+import sunatKuantanPublicContent from './sunatKuantanPublicContent.json';
+
 export interface LocalServicePageContent {
   slug: string;
   title: string;
@@ -345,80 +347,7 @@ export const LOCAL_SERVICE_PAGES: Record<string, LocalServicePageContent> = {
     metaDescription:
       'Penilaian dan perkhidmatan sunat bayi, kanak-kanak dan dewasa di Klinik Awfa, KotaSAS, Kuantan, termasuk persediaan dan penjagaan selepas prosedur.',
     eyebrow: 'Perkhidmatan sunat di KotaSAS',
-    heading: 'Sunat di Kuantan untuk bayi, kanak-kanak dan dewasa',
-    introduction:
-      'Keperluan persediaan, kaedah dan penjagaan selepas sunat berbeza mengikut umur serta keadaan kesihatan. Penilaian doktor diperlukan untuk memastikan prosedur boleh dirancang dengan teliti dan pesakit atau penjaga memahami pilihan, risiko serta tanda yang perlu dipantau.',
-    sections: [
-      {
-        id: 'sunat-bayi',
-        heading: 'Sunat bayi',
-        paragraphs: [
-          'Bagi bayi, doktor akan menilai umur, berat, penyusuan, sejarah kelahiran, masalah pendarahan dalam keluarga dan keadaan kemaluan. Bayi yang tidak sihat, demam, kuning yang masih memerlukan penilaian atau mempunyai bentuk anatomi tertentu mungkin perlu menangguhkan prosedur atau dirujuk.',
-          'Penjaga akan diterangkan tentang persediaan, kaedah yang dipertimbangkan dan cara menjaga kawasan selepas prosedur. Jangan sapukan krim, herba atau ubat tanpa arahan klinikal.',
-        ],
-      },
-      {
-        id: 'sunat-kanak-kanak',
-        heading: 'Sunat kanak-kanak',
-        paragraphs: [
-          'Persediaan kanak-kanak merangkumi penerangan yang sesuai dengan umur, semakan kesihatan dan perancangan sokongan penjaga. Maklumkan kepada doktor jika anak sangat cemas, mempunyai alahan, mengambil ubat atau pernah mengalami pendarahan yang sukar berhenti.',
-          'Doktor akan menilai sama ada prosedur boleh dilakukan di klinik dan berbincang tentang kawalan sakit serta penjagaan luka. Kerjasama dan keselamatan kanak-kanak menjadi sebahagian daripada pertimbangan kesesuaian.',
-        ],
-      },
-      {
-        id: 'sunat-dewasa',
-        heading: 'Sunat dewasa',
-        paragraphs: [
-          'Bagi orang dewasa, konsultasi memberi ruang untuk membincangkan sebab prosedur, sejarah kesihatan, ubat, pekerjaan dan tempoh pemulihan yang perlu dirancang. Diabetes, ubat pencair darah, jangkitan aktif atau masalah kulit perlu dimaklumkan kepada doktor.',
-          'Privasi dan persetujuan pesakit dihormati. Kaedah, risiko yang relevan, penjagaan luka dan jangkaan aktiviti akan diterangkan berdasarkan penilaian individu.',
-        ],
-      },
-      {
-        id: 'sebelum-prosedur',
-        heading: 'Persediaan sebelum sunat',
-        paragraphs: [
-          'Ikuti arahan klinik tentang makan, minum, kebersihan dan ubat. Jangan menghentikan ubat preskripsi tanpa arahan doktor. Bawa maklumat alahan dan senarai ubat; bagi kanak-kanak, penjaga yang sah perlu hadir untuk perbincangan serta persetujuan.',
-          'Kesesuaian prosedur dan masa pelaksanaannya bergantung pada penilaian doktor. Pemeriksaan awal mungkin membawa kepada penangguhan atau rujukan jika itu lebih selamat.',
-        ],
-      },
-      {
-        id: 'penjagaan-selepas',
-        heading: 'Penjagaan selepas sunat',
-        paragraphs: [
-          'Pesakit atau penjaga akan menerima arahan tentang kebersihan, balutan jika digunakan, ubat dan aktiviti. Sedikit ketidakselesaan atau bengkak boleh berlaku, tetapi tahap yang dijangka dan tempoh pemantauan akan diterangkan oleh doktor mengikut kaedah serta keadaan pesakit.',
-          'Hadiri susulan jika dijadualkan. Hubungi klinik jika anda tidak pasti tentang rupa luka atau cara penjagaan, dan elakkan menggunakan bahan tradisional pada luka tanpa nasihat.',
-        ],
-      },
-      {
-        id: 'tanda-amaran',
-        heading: 'Tanda amaran selepas prosedur',
-        paragraphs: [
-          'Dapatkan rawatan segera jika pendarahan tidak berhenti dengan langkah yang diarahkan, pesakit sukar kencing, menjadi sangat lemah, demam, sakit semakin kuat atau luka menunjukkan kemerahan yang merebak dan lelehan bernanah. Untuk bayi, kurang menyusu atau lampin yang kekal kering juga memerlukan perhatian.',
-        ],
-      },
-    ],
-    faqs: [
-      {
-        question: 'Adakah konsultasi diperlukan sebelum tarikh sunat?',
-        answer:
-          'Ya, penilaian membantu doktor menyemak kesihatan, anatomi, ubat dan faktor pendarahan serta menerangkan persediaan. Dalam sesetengah keadaan, prosedur perlu ditangguhkan atau dirujuk.',
-      },
-      {
-        question: 'Kaedah sunat mana yang akan digunakan?',
-        answer:
-          'Pilihan kaedah bergantung pada umur, anatomi, keadaan klinikal, ketersediaan dan pertimbangan doktor. Pilihan yang sesuai akan dibincangkan semasa konsultasi.',
-      },
-      {
-        question: 'Berapa lama perlu berehat selepas sunat?',
-        answer:
-          'Tempoh kembali ke sekolah, kerja, sukan atau aktiviti seksual berbeza mengikut umur, kaedah, jenis aktiviti dan pemulihan luka. Ikuti arahan khusus yang diberikan selepas prosedur.',
-      },
-      {
-        question: 'Bolehkah sunat dilakukan jika sedang demam atau batuk?',
-        answer:
-          'Maklumkan simptom kepada klinik sebelum hadir. Doktor akan menilai sama ada prosedur wajar diteruskan atau ditangguhkan demi keselamatan.',
-      },
-    ],
+    ...sunatKuantanPublicContent,
     relatedSlugs: ['minor-surgery-kutil-kuantan', 'rawatan-telinga-kuantan'],
     reviewedByLabel:
       'Maklumat kesihatan umum — prosedur dan kaedah dipilih selepas penilaian doktor serta persetujuan pesakit atau penjaga.',
