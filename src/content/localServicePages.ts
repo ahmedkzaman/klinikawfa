@@ -1,4 +1,5 @@
 import sunatKuantanPublicContent from './sunatKuantanPublicContent.json';
+import { SUNAT_KUANTAN_SEO_ROUTE } from './publicSeoRoutes';
 
 export interface LocalServicePageContent {
   slug: string;
@@ -343,9 +344,8 @@ export const LOCAL_SERVICE_PAGES: Record<string, LocalServicePageContent> = {
   },
   'sunat-kuantan': {
     slug: 'sunat-kuantan',
-    title: 'Klinik Sunat Kuantan untuk Bayi, Kanak-kanak & Dewasa | Klinik Awfa',
-    metaDescription:
-      'Penilaian dan perkhidmatan sunat bayi, kanak-kanak dan dewasa di Klinik Awfa, KotaSAS, Kuantan, termasuk persediaan dan penjagaan selepas prosedur.',
+    title: SUNAT_KUANTAN_SEO_ROUTE.title,
+    metaDescription: SUNAT_KUANTAN_SEO_ROUTE.description,
     eyebrow: 'Perkhidmatan sunat di KotaSAS',
     ...sunatKuantanPublicContent,
     relatedSlugs: ['minor-surgery-kutil-kuantan', 'rawatan-telinga-kuantan'],

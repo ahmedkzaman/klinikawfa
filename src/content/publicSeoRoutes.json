@@ -9,9 +9,9 @@
   { "path": "/services/swab-test-demam-kuantan/", "title": "Swab Test dan Pemeriksaan Demam di Kuantan | Klinik Awfa", "description": "Pemeriksaan demam dan swab test mengikut penilaian doktor di Klinik Awfa, KotaSAS, Kuantan.", "lastModified": "2026-07-27", "changeFrequency": "monthly", "priority": 0.9 },
   { "path": "/services/pengurusan-berat-badan-kuantan/", "title": "Pengurusan Berat Badan di Kuantan | Klinik Awfa", "description": "Pengurusan berat badan berasaskan penilaian doktor di Klinik Awfa, KotaSAS, Kuantan.", "lastModified": "2026-07-27", "changeFrequency": "monthly", "priority": 0.9 },
   { "path": "/services/sunat-kuantan/", "title": "Klinik Sunat Kuantan untuk Bayi, Kanak-kanak & Dewasa | Klinik Awfa", "description": "Penilaian dan perkhidmatan sunat bayi, kanak-kanak dan dewasa di Klinik Awfa, KotaSAS, Kuantan, termasuk persediaan dan penjagaan selepas prosedur.", "lastModified": "2026-08-12", "changeFrequency": "monthly", "priority": 0.9 },
-  { "path": "/doctors", "title": "Doktor | Klinik Awfa", "description": "Maklumat doktor Klinik Awfa.", "lastModified": "2026-07-27", "changeFrequency": "monthly", "priority": 0.8 },
-  { "path": "/doctor-on-duty", "title": "Doktor Bertugas | Klinik Awfa", "description": "Maklumat doktor bertugas di Klinik Awfa.", "lastModified": "2026-07-27", "changeFrequency": "daily", "priority": 0.7 },
-  { "path": "/appointment", "title": "Temujanji | Klinik Awfa", "description": "Maklumat temujanji Klinik Awfa.", "lastModified": "2026-07-27", "changeFrequency": "monthly", "priority": 0.8 },
-  { "path": "/gallery", "title": "Galeri | Klinik Awfa", "description": "Galeri Klinik Awfa.", "lastModified": "2026-07-27", "changeFrequency": "monthly", "priority": 0.7 },
-  { "path": "/health-tips", "title": "Tip Kesihatan | Klinik Awfa", "description": "Tip kesihatan daripada Klinik Awfa.", "lastModified": "2026-07-27", "changeFrequency": "weekly", "priority": 0.8 }
+  { "path": "/doctors/", "title": "Doktor | Klinik Awfa", "description": "Maklumat doktor Klinik Awfa.", "lastModified": "2026-07-27", "changeFrequency": "monthly", "priority": 0.8 },
+  { "path": "/doctor-on-duty/", "title": "Doktor Bertugas | Klinik Awfa", "description": "Maklumat doktor bertugas di Klinik Awfa.", "lastModified": "2026-07-27", "changeFrequency": "daily", "priority": 0.7 },
+  { "path": "/appointment/", "title": "Temujanji | Klinik Awfa", "description": "Maklumat temujanji Klinik Awfa.", "lastModified": "2026-07-27", "changeFrequency": "monthly", "priority": 0.8 },
+  { "path": "/gallery/", "title": "Galeri | Klinik Awfa", "description": "Galeri Klinik Awfa.", "lastModified": "2026-07-27", "changeFrequency": "monthly", "priority": 0.7 },
+  { "path": "/health-tips/", "title": "Tip Kesihatan | Klinik Awfa", "description": "Tip kesihatan daripada Klinik Awfa.", "lastModified": "2026-07-27", "changeFrequency": "weekly", "priority": 0.8 }
 ]

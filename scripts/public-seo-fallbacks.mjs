@@ -1,4 +1,8 @@
 import sunatKuantanPublicContent from '../src/content/sunatKuantanPublicContent.json' with { type: 'json' };
+import publicSeoRoutes from '../src/content/publicSeoRoutes.json' with { type: 'json' };
+
+const sunatSeoRoute = publicSeoRoutes.find(({ path }) => path === '/services/sunat-kuantan/');
+if (!sunatSeoRoute) throw new Error('The public SEO manifest is missing the canonical Sunat route.');
 
 const fallbacks = Object.assign(Object.create(null), {
   'services/sunat-kuantan': sunatKuantanPublicContent,
@@ -7,12 +11,23 @@ const fallbacks = Object.assign(Object.create(null), {
 const publicSchemaPages = Object.assign(Object.create(null), {
   'services/sunat-kuantan': {
     path: '/services/sunat-kuantan/',
-    name: 'Klinik Sunat Kuantan untuk Bayi, Kanak-kanak & Dewasa | Klinik Awfa',
+    name: sunatSeoRoute.title,
     breadcrumbName: sunatKuantanPublicContent.heading,
-    description: 'Penilaian dan perkhidmatan sunat bayi, kanak-kanak dan dewasa di Klinik Awfa, KotaSAS, Kuantan, termasuk persediaan dan penjagaan selepas prosedur.',
+    description: sunatSeoRoute.description,
     faqs: sunatKuantanPublicContent.faqs,
   },
 });
+
+const clinic = {
+  name: 'Klinik Awfa',
+  address: 'B2 & B4, Jalan KS 1/12, KotaSAS Avenue, 25200 Kuantan, Pahang',
+  hours: 'Setiap Hari / Every Day, 8.00 pagi - 12.00 tengah malam',
+  phone: '+60 18-252 3531',
+  phoneLink: 'tel:+60182523531',
+  whatsapp: 'https://wa.me/60182523531',
+  map: 'https://maps.google.com/?q=3.871944656053272,103.27734116870465',
+  reviewDate: '2026-07-27',
+};
 
 const siteOrigin = 'https://klinikawfa.com';
 const clinicEntityId = `${siteOrigin}/#clinic`;
@@ -61,6 +76,8 @@ export function buildPublicSeoFallback(route) {
     <p>${escapeHtml(page.introduction)}</p>
     ${page.sections.map((section) => `<section><h2>${escapeHtml(section.heading)}</h2>${section.paragraphs.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join('')}</section>`).join('')}
     <section><h2>Soalan lazim</h2><dl>${page.faqs.map((faq) => `<div><dt>${escapeHtml(faq.question)}</dt><dd>${escapeHtml(faq.answer)}</dd></div>`).join('')}</dl></section>
-    <p><a href="/appointment">Buat temujanji</a> · <a href="/services/">Lihat perkhidmatan Klinik Awfa</a></p>
+    <section><h2>Maklumat Klinik Awfa</h2><address>${escapeHtml(clinic.address)}</address><p>${escapeHtml(clinic.hours)}</p><p><a href="${escapeHtml(clinic.phoneLink)}">Telefon ${escapeHtml(clinic.phone)}</a> · <a href="${escapeHtml(clinic.whatsapp)}">WhatsApp Klinik Awfa</a> · <a href="${escapeHtml(clinic.map)}">Lihat lokasi klinik</a></p></section>
+    <section><h2>Semakan kandungan</h2><p>Disemak oleh ${escapeHtml(clinic.name)} · Tarikh semakan: <time datetime="${escapeHtml(clinic.reviewDate)}">${escapeHtml(clinic.reviewDate)}</time></p></section>
+    <nav aria-label="Pautan perkhidmatan"><a href="/appointment">Buat temujanji</a> · <a href="/doctors">Lihat doktor Klinik Awfa</a> · <a href="/services/minor-surgery-kutil-kuantan">Minor surgery dan rawatan kutil di Kuantan</a> · <a href="/services/">Lihat perkhidmatan Klinik Awfa</a></nav>
   </main>`;
 }

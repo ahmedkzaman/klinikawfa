@@ -1,7 +1,8 @@
 # Sunat Kuantan Combined Local SEO Design
 
-**Date:** 2026-08-12  
-**Status:** Approved direction; awaiting written-spec review
+**Date:** 2026-08-12
+
+**Status:** Approved
 
 ## Objective
 

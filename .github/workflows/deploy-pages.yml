@@ -79,6 +79,9 @@ jobs:
         run: npm ci
 
       - name: Generate and validate public sitemap
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: |
           node scripts/generate-sitemap.mjs
           test "$(grep -F -c '<loc>https://klinikawfa.com/services/sunat-kuantan/</loc>' public/sitemap.xml)" -eq 1
