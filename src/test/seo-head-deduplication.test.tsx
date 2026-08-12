@@ -101,7 +101,7 @@ describe('SEO fallback head hydration', () => {
 
     await waitFor(() => {
       expect(document.title).toBe(
-        'Sunat di Kuantan untuk Bayi, Kanak-kanak dan Dewasa | Klinik Awfa',
+        'Klinik Sunat Kuantan untuk Bayi, Kanak-kanak & Dewasa | Klinik Awfa',
       );
       expect(document.head.querySelector('link[rel="canonical"]')).toHaveAttribute(
         'href',

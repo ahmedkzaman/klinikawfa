@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { buildServiceStructuredData } from '@/lib/seo/serviceStructuredData';
 
+type StructuredDataNode = Record<string, unknown> & {
+  '@type'?: string;
+  mainEntity?: Array<{
+    name?: string;
+    acceptedAnswer?: { text?: string };
+  }>;
+};
+
 describe('service structured data', () => {
   it('builds absolute service, clinic, breadcrumb, and matching FAQ entities', () => {
     const result = buildServiceStructuredData({
@@ -9,7 +17,7 @@ describe('service structured data', () => {
       description: 'A test service.',
       faqs: [{ question: { ms: 'Soalan?', en: 'Question?' }, answer: { ms: 'Jawapan.', en: 'Answer.' } }],
     });
-    const graph = result as Array<Record<string, any>>;
+    const graph = result as StructuredDataNode[];
     expect(graph).toEqual(expect.arrayContaining([
       expect.objectContaining({ '@type': 'MedicalClinic', '@id': 'https://klinikawfa.com/#clinic' }),
       expect.objectContaining({

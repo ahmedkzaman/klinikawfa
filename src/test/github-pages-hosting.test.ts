@@ -193,7 +193,7 @@ describe("GitHub Pages hosting", () => {
 
       const sunat = readFileSync(resolve(distFixture, "services/sunat-kuantan/index.html"), "utf8");
       expect(sunat).toContain(
-        '<title data-rh="true">Sunat Bayi, Kanak-kanak &amp; Dewasa Kuantan | Klinik Awfa</title>',
+        '<title data-rh="true">Klinik Sunat Kuantan untuk Bayi, Kanak-kanak &amp; Dewasa | Klinik Awfa</title>',
       );
       expect(sunat).toContain(
         '<link data-rh="true" rel="canonical" href="https://klinikawfa.com/services/sunat-kuantan/" />',

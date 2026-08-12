@@ -31,12 +31,22 @@ function isPrivatePath(path) {
   return privatePrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
 
+function isValidPublicPath(path) {
+  if (!/^\/[A-Za-z0-9._~!$'()*+,;=:@%/-]*$/.test(path)) return false;
+
+  try {
+    return !decodeURIComponent(path).split('/').some((segment) => segment === '.' || segment === '..');
+  } catch {
+    return false;
+  }
+}
+
 function validateRoute(route, index) {
   if (!route || typeof route !== 'object') {
     throw new Error(`Route ${index} must be an object.`);
   }
 
-  if (typeof route.path !== 'string' || !/^\/[A-Za-z0-9._~!$'()*+,;=:@%/-]*$/.test(route.path)) {
+  if (typeof route.path !== 'string' || !isValidPublicPath(route.path)) {
     throw new Error(`Route ${index} has an invalid public path.`);
   }
 
