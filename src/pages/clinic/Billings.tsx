@@ -55,6 +55,7 @@ interface LedgerEntry {
   unitemizedAdditionalCharges: number;
   latestPaymentType: 'self_pay' | 'panel' | 'insurance';
   latestMethod: string | null;
+  displayMethod: string;
   patientPaymentMethods: string[];
   latestPaymentId: string | null;
 }
@@ -239,6 +240,7 @@ export default function Billings() {
           unitemizedAdditionalCharges: 0,
           latestPaymentType: pType,
           latestMethod: p.payment_method ?? null,
+          displayMethod: '',
           patientPaymentMethods: p.payment_method && p.payment_method !== 'panel'
             ? [p.payment_method]
             : [],
@@ -267,6 +269,13 @@ export default function Billings() {
       e.unattributedBalance = state.unattributedBalance;
       e.creditDue = state.creditDue;
       e.unitemizedAdditionalCharges = 0;
+      e.displayMethod = formatBillingPaymentMethod({
+        method: e.latestMethod,
+        patientPaid: e.paid,
+        expectsPanel,
+        panelName: e.panelName,
+        patientMethods: e.patientPaymentMethods,
+      });
     });
     return list.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),

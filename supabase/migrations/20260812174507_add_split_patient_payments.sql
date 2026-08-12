@@ -170,6 +170,21 @@ BEGIN
     RAISE EXCEPTION 'STALE_PATIENT_OUTSTANDING: expected %',
       greatest(round(v_billed - v_paid, 2), 0) USING ERRCODE = '22023';
   END IF;
+  -- Legacy callers have no key: reject only an exact immediate replay while
+  -- preserving legitimate repeated partial collections at different times.
+  IF EXISTS (
+    SELECT 1 FROM public.payments prior
+    WHERE prior.queue_entry_id = NEW.queue_entry_id
+      AND prior.consultation_id IS NOT DISTINCT FROM NEW.consultation_id
+      AND prior.payment_method IS NOT DISTINCT FROM NEW.payment_method
+      AND prior.payment_type IS NOT DISTINCT FROM NEW.payment_type
+      AND prior.amount IS NOT DISTINCT FROM NEW.amount
+      AND prior.notes IS NOT DISTINCT FROM NEW.notes
+      AND prior.deleted_at IS NULL
+      AND prior.created_at >= pg_catalog.clock_timestamp() - interval '10 seconds'
+  ) THEN
+    RAISE EXCEPTION 'legacy_payment_replay_guard' USING ERRCODE = '23505';
+  END IF;
   RETURN NEW;
 END $function$;
 REVOKE ALL ON FUNCTION private.guard_payment_insert() FROM PUBLIC, anon, authenticated;
@@ -223,6 +238,7 @@ DECLARE
   v_payment_ids jsonb := '[]'::jsonb;
   v_result jsonb;
   v_zero_method text;
+  v_panel_claim_status text;
 BEGIN
   IF NOT public.can_checkout_visit(auth.uid()) THEN
     RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
@@ -432,6 +448,13 @@ BEGIN
        OR p_provider_id IS DISTINCT FROM v_queue.panel_id
        OR v_expected_patient_amount > v_current_patient_outstanding THEN
       RAISE EXCEPTION 'PANEL_PROVIDER_MISMATCH' USING ERRCODE = '22023';
+    END IF;
+    SELECT claim.status::text INTO v_panel_claim_status
+    FROM public.panel_claims AS claim
+    WHERE claim.queue_entry_id = p_queue_entry_id
+    FOR UPDATE;
+    IF FOUND AND v_panel_claim_status IS DISTINCT FROM 'pending' THEN
+      RAISE EXCEPTION 'PANEL_CLAIM_NOT_PENDING' USING ERRCODE = '23514';
     END IF;
   ELSIF v_queue.payment_method = 'panel' OR p_provider_id IS NOT NULL THEN
     RAISE EXCEPTION 'PAYMENT_TYPE_MISMATCH' USING ERRCODE = '22023';
@@ -911,4 +934,430 @@ REVOKE ALL ON FUNCTION public.record_split_payments(
 ) FROM anon;
 GRANT EXECUTE ON FUNCTION public.record_split_payments(
   uuid,uuid,text,jsonb,text,uuid
+) TO authenticated;
+
+
+-- Retain the legacy dispensary checkout API while aligning its financial basis.
+CREATE OR REPLACE FUNCTION public.checkout_visit(
+  p_queue_entry_id uuid,
+  p_consultation_id uuid,
+  p_total_amount numeric,
+  p_amount_paid numeric,
+  p_payment_method text,
+  p_payment_type text DEFAULT 'self_pay'::text,
+  p_panel_provider_id uuid DEFAULT NULL::uuid,
+  p_other_charges jsonb DEFAULT '[]'::jsonb,
+  p_notes text DEFAULT NULL::text,
+  p_panel_covered_amount numeric DEFAULT NULL::numeric,
+  p_panel_portions jsonb DEFAULT NULL::jsonb,
+  p_checkout_idempotency_key uuid DEFAULT NULL::uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $function$
+DECLARE
+  v_actor_id uuid := auth.uid();
+  v_qe record;
+  v_consultation_status text;
+  v_payment_id uuid;
+  v_status text;
+  v_charge jsonb;
+  v_charge_amount numeric;
+  v_method text := p_payment_method;
+  v_authoritative_balance numeric(12,2);
+  v_item_total numeric(12,2);
+  v_existing_paid numeric(12,2);
+  v_panel_covered_amount numeric(12,2) := 0;
+  v_patient_liability numeric(12,2);
+  v_claim_id uuid;
+  v_claim public.panel_claims%ROWTYPE;
+  v_portions jsonb := '[]'::jsonb;
+  v_result jsonb;
+  v_request_fingerprint text;
+  v_existing_request public.panel_claim_checkout_requests%ROWTYPE;
+BEGIN
+  IF NOT public.can_checkout_visit(v_actor_id) THEN
+    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
+  END IF;
+  IF p_queue_entry_id IS NULL THEN
+    RAISE EXCEPTION 'QUEUE_ENTRY_REQUIRED' USING ERRCODE = '22023';
+  END IF;
+  IF p_total_amount IS NULL
+     OR p_total_amount::text IN ('NaN', 'Infinity', '-Infinity')
+     OR p_total_amount < 0
+     OR p_total_amount <> pg_catalog.round(p_total_amount, 2) THEN
+    RAISE EXCEPTION 'INVALID_TOTAL' USING ERRCODE = '22023';
+  END IF;
+  IF p_amount_paid IS NULL
+     OR p_amount_paid::text IN ('NaN', 'Infinity', '-Infinity')
+     OR p_amount_paid < 0
+     OR p_amount_paid <> pg_catalog.round(p_amount_paid, 2) THEN
+    RAISE EXCEPTION 'INVALID_AMOUNT' USING ERRCODE = '22023';
+  END IF;
+  IF p_payment_type NOT IN ('self_pay', 'panel') THEN
+    RAISE EXCEPTION 'INVALID_PAYMENT_TYPE' USING ERRCODE = '22023';
+  END IF;
+  IF p_other_charges IS NULL OR pg_catalog.jsonb_typeof(p_other_charges) <> 'array' THEN
+    RAISE EXCEPTION 'OTHER_CHARGES_MUST_BE_ARRAY' USING ERRCODE = '22023';
+  END IF;
+  IF p_panel_portions IS NOT NULL
+     AND pg_catalog.jsonb_typeof(p_panel_portions) <> 'array' THEN
+    RAISE EXCEPTION 'PORTIONS_MUST_BE_ARRAY' USING ERRCODE = '22023';
+  END IF;
+  IF p_panel_portions IS NOT NULL
+     AND p_checkout_idempotency_key IS NULL THEN
+    RAISE EXCEPTION 'IDEMPOTENCY_KEY_REQUIRED' USING ERRCODE = '22023';
+  END IF;
+  IF p_panel_portions IS NOT NULL
+     AND NOT public.can_manage_panel_claim_portions(v_actor_id) THEN
+    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
+  END IF;
+
+  v_request_fingerprint := pg_catalog.md5(
+    pg_catalog.jsonb_build_object(
+      'queue_entry_id', p_queue_entry_id,
+      'consultation_id', p_consultation_id,
+      'total_amount', pg_catalog.round(p_total_amount, 2),
+      'amount_paid', pg_catalog.round(p_amount_paid, 2),
+      'payment_method', nullif(pg_catalog.btrim(p_payment_method), ''),
+      'payment_type', p_payment_type,
+      'panel_provider_id', p_panel_provider_id,
+      'other_charges', p_other_charges,
+      'notes', p_notes,
+      'panel_covered_amount', p_panel_covered_amount,
+      'panel_portions', p_panel_portions
+    )::text
+  );
+
+  IF p_checkout_idempotency_key IS NOT NULL THEN
+    SELECT request.*
+      INTO v_existing_request
+    FROM public.panel_claim_checkout_requests AS request
+    WHERE request.idempotency_key = p_checkout_idempotency_key;
+
+    IF FOUND THEN
+      IF v_existing_request.queue_entry_id <> p_queue_entry_id
+         OR v_existing_request.request_fingerprint <> v_request_fingerprint THEN
+        RAISE EXCEPTION 'IDEMPOTENCY_KEY_CONFLICT' USING ERRCODE = '23505';
+      END IF;
+      IF v_existing_request.result IS NOT NULL THEN
+        RETURN v_existing_request.result;
+      END IF;
+    END IF;
+  END IF;
+
+  PERFORM public.lock_completed_bill_item_mutation_boundary();
+
+  SELECT
+    queue_entry.clinic_status,
+    queue_entry.payment_method,
+    queue_entry.panel_id,
+    queue_entry.patient_id
+  INTO v_qe
+  FROM public.queue_entries AS queue_entry
+  WHERE queue_entry.id = p_queue_entry_id
+    AND queue_entry.deleted_at IS NULL
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'QUEUE_ENTRY_NOT_FOUND' USING ERRCODE = '22023';
+  END IF;
+
+  -- A concurrent retry waits on the queue lock. Re-read its durable result
+  -- before treating the now-completed visit as a second checkout.
+  IF p_checkout_idempotency_key IS NOT NULL THEN
+    SELECT request.*
+      INTO v_existing_request
+    FROM public.panel_claim_checkout_requests AS request
+    WHERE request.idempotency_key = p_checkout_idempotency_key;
+    IF FOUND AND v_existing_request.result IS NOT NULL THEN
+      IF v_existing_request.queue_entry_id <> p_queue_entry_id
+         OR v_existing_request.request_fingerprint <> v_request_fingerprint THEN
+        RAISE EXCEPTION 'IDEMPOTENCY_KEY_CONFLICT' USING ERRCODE = '23505';
+      END IF;
+      RETURN v_existing_request.result;
+    END IF;
+  END IF;
+
+  IF v_qe.clinic_status = 'completed' THEN
+    RAISE EXCEPTION 'ALREADY_COMPLETED' USING ERRCODE = '23514';
+  END IF;
+  IF p_consultation_id IS NULL THEN
+    RAISE EXCEPTION 'CONSULTATION_REQUIRED' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT consultation.status
+    INTO v_consultation_status
+  FROM public.consultations AS consultation
+  WHERE consultation.id = p_consultation_id
+    AND consultation.queue_entry_id = p_queue_entry_id
+    AND consultation.deleted_at IS NULL
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'CONSULTATION_NOT_IN_VISIT' USING ERRCODE = '22023';
+  END IF;
+
+  PERFORM 1
+  FROM public.consultation_items AS item
+  WHERE item.consultation_id = p_consultation_id
+    AND item.deleted_at IS NULL
+  ORDER BY item.id
+  FOR UPDATE;
+
+  PERFORM 1
+  FROM public.payments AS payment
+  WHERE payment.queue_entry_id = p_queue_entry_id
+    AND payment.deleted_at IS NULL
+  ORDER BY payment.id
+  FOR UPDATE;
+
+  IF p_payment_type = 'panel' THEN
+    IF v_qe.payment_method <> 'panel'
+       OR v_qe.panel_id IS NULL
+       OR p_panel_provider_id IS DISTINCT FROM v_qe.panel_id THEN
+      RAISE EXCEPTION 'PANEL_PROVIDER_MISMATCH' USING ERRCODE = '23514';
+    END IF;
+    IF p_panel_covered_amount IS NULL
+       OR p_panel_covered_amount::text IN ('NaN', 'Infinity', '-Infinity')
+       OR p_panel_covered_amount < 0
+       OR p_panel_covered_amount <> pg_catalog.round(p_panel_covered_amount, 2) THEN
+      RAISE EXCEPTION 'INVALID_PANEL_COVERED_AMOUNT' USING ERRCODE = '22023';
+    END IF;
+    v_panel_covered_amount := pg_catalog.round(p_panel_covered_amount, 2);
+  ELSIF coalesce(p_panel_covered_amount, 0) <> 0
+        OR p_panel_portions IS NOT NULL
+        OR p_panel_provider_id IS NOT NULL THEN
+    RAISE EXCEPTION 'PANEL_DATA_REQUIRES_PANEL_CHECKOUT' USING ERRCODE = '23514';
+  END IF;
+
+  IF p_checkout_idempotency_key IS NOT NULL THEN
+    INSERT INTO public.panel_claim_checkout_requests (
+      idempotency_key,
+      queue_entry_id,
+      request_fingerprint,
+      created_by
+    )
+    VALUES (
+      p_checkout_idempotency_key,
+      p_queue_entry_id,
+      v_request_fingerprint,
+      v_actor_id
+    );
+  END IF;
+
+  FOR v_charge IN
+    SELECT value
+    FROM pg_catalog.jsonb_array_elements(p_other_charges)
+  LOOP
+    IF coalesce(pg_catalog.btrim(v_charge->>'name'), '') = '' THEN
+      CONTINUE;
+    END IF;
+
+    BEGIN
+      v_charge_amount := (v_charge->>'amount')::numeric;
+    EXCEPTION WHEN invalid_text_representation THEN
+      RAISE EXCEPTION 'INVALID_OTHER_CHARGE_AMOUNT' USING ERRCODE = '22023';
+    END;
+
+    IF v_charge_amount IS NULL
+       OR v_charge_amount::text IN ('NaN', 'Infinity', '-Infinity')
+       OR v_charge_amount < 0
+       OR v_charge_amount <> pg_catalog.round(v_charge_amount, 2) THEN
+      RAISE EXCEPTION 'INVALID_OTHER_CHARGE_AMOUNT' USING ERRCODE = '22023';
+    END IF;
+
+    INSERT INTO public.consultation_items (
+      consultation_id,
+      item_name,
+      quantity,
+      price
+    )
+    VALUES (
+      p_consultation_id,
+      pg_catalog.btrim(v_charge->>'name'),
+      1,
+      v_charge_amount
+    );
+  END LOOP;
+
+  SELECT coalesce(
+    pg_catalog.sum(
+      item.price * item.quantity
+    ),
+      0
+    )::numeric(12,2)
+    INTO v_item_total
+  FROM public.consultations AS consultation
+  JOIN public.consultation_items AS item
+    ON item.consultation_id = consultation.id
+   AND item.deleted_at IS NULL
+  WHERE consultation.queue_entry_id = p_queue_entry_id
+    AND consultation.deleted_at IS NULL;
+
+  SELECT coalesce(pg_catalog.sum(payment.amount), 0)::numeric(12,2)
+    INTO v_existing_paid
+  FROM public.payments AS payment
+  WHERE payment.queue_entry_id = p_queue_entry_id
+    AND payment.deleted_at IS NULL;
+
+  v_authoritative_balance := greatest(v_item_total - v_existing_paid, 0);
+  IF pg_catalog.round(p_total_amount, 2) <> v_authoritative_balance THEN
+    RAISE EXCEPTION 'CHECKOUT_TOTAL_MISMATCH' USING ERRCODE = '40001';
+  END IF;
+  IF v_panel_covered_amount > v_authoritative_balance THEN
+    RAISE EXCEPTION 'PANEL_COVERAGE_EXCEEDS_BALANCE' USING ERRCODE = '23514';
+  END IF;
+
+  v_patient_liability := v_authoritative_balance - v_panel_covered_amount;
+  IF p_amount_paid > v_patient_liability THEN
+    RAISE EXCEPTION 'OVERPAYMENT' USING ERRCODE = '23514';
+  END IF;
+
+  IF p_amount_paid = 0 THEN
+    v_method := NULL;
+  ELSIF v_method IS NULL OR pg_catalog.btrim(v_method) = '' THEN
+    RAISE EXCEPTION 'PAYMENT_METHOD_REQUIRED' USING ERRCODE = '22023';
+  ELSE
+    v_method := pg_catalog.btrim(v_method);
+  END IF;
+
+  IF p_amount_paid > 0 THEN
+    INSERT INTO public.payments (
+      queue_entry_id,
+      consultation_id,
+      payment_type,
+      payment_method,
+      amount,
+      notes
+    )
+    VALUES (
+      p_queue_entry_id,
+      p_consultation_id,
+      p_payment_type,
+      v_method,
+      p_amount_paid,
+      nullif(p_notes, '')
+    )
+    RETURNING id INTO v_payment_id;
+  END IF;
+
+  v_status := CASE
+    WHEN p_amount_paid = v_patient_liability THEN 'paid'
+    ELSE 'partial'
+  END;
+
+  UPDATE public.consultations AS consultation
+  SET status = 'completed'
+  WHERE consultation.id = p_consultation_id
+    AND consultation.status <> 'completed';
+
+  UPDATE public.queue_entries AS queue_entry
+  SET clinic_status = 'completed'
+  WHERE queue_entry.id = p_queue_entry_id;
+
+  IF p_payment_type = 'panel' THEN
+    v_claim_id := public.ensure_panel_claim_for_queue(p_queue_entry_id);
+    IF v_claim_id IS NULL THEN
+      RAISE EXCEPTION 'PANEL_CLAIM_NOT_FOUND' USING ERRCODE = '23514';
+    END IF;
+
+    SELECT claim.*
+      INTO v_claim
+    FROM public.panel_claims AS claim
+    WHERE claim.id = v_claim_id
+      AND claim.queue_entry_id = p_queue_entry_id
+      AND claim.panel_id = v_qe.panel_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'PANEL_CLAIM_NOT_FOUND' USING ERRCODE = '23514';
+    END IF;
+    IF v_claim.status <> 'pending'
+       OR v_claim.submitted_date IS NOT NULL
+       OR v_claim.approved_amount IS NOT NULL
+       OR coalesce(v_claim.received_amount, 0) <> 0
+       OR v_claim.payment_reference IS NOT NULL
+       OR v_claim.received_date IS NOT NULL THEN
+      RAISE EXCEPTION 'PANEL_CLAIM_ALREADY_MATERIALIZED' USING ERRCODE = '23514';
+    END IF;
+    IF EXISTS (
+         SELECT 1
+         FROM public.panel_claim_portions AS portion
+         WHERE portion.panel_claim_id = v_claim_id
+       )
+       OR EXISTS (
+         SELECT 1
+         FROM public.panel_claim_portion_receipts AS receipt
+         WHERE receipt.panel_claim_id = v_claim_id
+       ) THEN
+      RAISE EXCEPTION 'PANEL_CLAIM_SPLIT_LOCKED' USING ERRCODE = '23514';
+    END IF;
+
+    UPDATE public.panel_claims AS claim
+    SET amount = v_panel_covered_amount,
+        received_amount = 0,
+        payment_reference = NULL,
+        received_date = NULL,
+        updated_by = v_actor_id,
+        updated_at = pg_catalog.now()
+    WHERE claim.id = v_claim_id;
+
+    SELECT claim.*
+      INTO v_claim
+    FROM public.panel_claims AS claim
+    WHERE claim.id = v_claim_id;
+
+    IF p_panel_portions IS NOT NULL THEN
+      SELECT coalesce(
+        pg_catalog.jsonb_agg(pg_catalog.to_jsonb(portion) ORDER BY portion.portion_no),
+        '[]'::jsonb
+      )
+        INTO v_portions
+      FROM public.replace_panel_claim_portions(
+        v_claim_id,
+        p_panel_portions,
+        'Created during dispensary checkout',
+        v_claim.portions_version
+      ) AS portion;
+
+      SELECT claim.*
+        INTO v_claim
+      FROM public.panel_claims AS claim
+      WHERE claim.id = v_claim_id;
+    END IF;
+  END IF;
+
+  v_result := pg_catalog.jsonb_build_object(
+    'payment_id', v_payment_id,
+    'status', v_status,
+    'balance_due', greatest(v_patient_liability - p_amount_paid, 0),
+    'panel_claim_id', v_claim_id,
+    'panel_claim', CASE
+      WHEN v_claim_id IS NULL THEN NULL
+      ELSE pg_catalog.to_jsonb(v_claim)
+    END,
+    'portions', v_portions
+  );
+
+  IF p_checkout_idempotency_key IS NOT NULL THEN
+    UPDATE public.panel_claim_checkout_requests AS request
+    SET result = v_result,
+        completed_at = pg_catalog.now()
+    WHERE request.idempotency_key = p_checkout_idempotency_key;
+  END IF;
+
+  RETURN v_result;
+END;
+$function$;
+
+ALTER FUNCTION public.checkout_visit(
+  uuid, uuid, numeric, numeric, text, text, uuid, jsonb, text, numeric, jsonb, uuid
+) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.checkout_visit(
+  uuid, uuid, numeric, numeric, text, text, uuid, jsonb, text, numeric, jsonb, uuid
+) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.checkout_visit(
+  uuid, uuid, numeric, numeric, text, text, uuid, jsonb, text, numeric, jsonb, uuid
 ) TO authenticated;

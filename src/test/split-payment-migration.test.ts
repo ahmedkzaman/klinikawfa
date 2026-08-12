@@ -48,6 +48,19 @@ describe('split payment migration', () => {
     expect(sql).toMatch(/select claim\.status::text[\s\S]*for update[\s\S]*v_panel_claim_status is distinct from 'pending'[\s\S]*PANEL_CLAIM_NOT_PENDING/i);
   });
 
+  it('replaces retained checkout_visit with the saved quantity basis', () => {
+    const retained = sql.match(/create or replace function public\.checkout_visit[\s\S]*?\$function\$;/i)?.[0] ?? '';
+    expect(retained).toContain('item.price * item.quantity');
+    expect(retained).not.toContain('dispensed_qty');
+    expect(harness).toContain('RETAINED_CHECKOUT_SAVED_QUANTITY_30_MISMATCH');
+  });
+
+  it('rejects active panel collection once its claim is materialized', () => {
+    const active = sql.match(/create or replace function public\.record_split_payments_and_complete_visit[\s\S]*?\$function\$;/i)?.[0] ?? '';
+    expect(active).toMatch(/panel_claims[\s\S]*for update[\s\S]*PANEL_CLAIM_NOT_PENDING/i);
+    expect(harness).toContain('MATERIALIZED_ACTIVE_PANEL_SPLIT_SUCCEEDED');
+  });
+
   it('reconciles panel claims through the split-parent correction capability', () => {
     const helper = sql.match(
       /create or replace function public\.ensure_panel_claim_for_queue[\s\S]*?\$function\$;/i,
@@ -70,6 +83,7 @@ describe('split payment migration', () => {
     expect(sql).toMatch(/create table public\.payment_void_audit/i);
     expect(sql).toMatch(/create or replace function public\.void_payment_portion/i);
     expect(sql).toMatch(/grant execute on function public\.void_payment_portion\(uuid, text\) to authenticated/i);
+    expect(sql).toContain('legacy_payment_replay_guard');
   });
 
   it('covers corrected quantity-three billing and production split-parent trigger behavior', () => {

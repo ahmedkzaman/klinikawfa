@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { downloadReceiptPdf, printReceipt } from '@/lib/clinic/printReceipt';
 
 const { calculateDualLedgerSpy } = vi.hoisted(() => ({
   calculateDualLedgerSpy: vi.fn(),
@@ -126,6 +127,7 @@ vi.mock('@/integrations/supabase/client', () => ({
               data: [
                 { id: 'cash-40', amount: 40, payment_method: 'cash', created_at: '2026-08-12T09:00:00Z' },
                 { id: 'qr-60', amount: 60, payment_method: 'qr_pay', created_at: '2026-08-12T09:01:00Z' },
+                { id: 'panel-marker', amount: 0, payment_method: 'panel', created_at: '2026-08-12T09:02:00Z' },
               ],
               error: null,
             });
@@ -187,6 +189,21 @@ describe('split payment reporting', () => {
     expect(screen.getByText('QR Pay')).toBeVisible();
     expect(screen.getByText('RM 40.00')).toBeVisible();
     expect(screen.getByText('RM 60.00')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: /print/i }));
+    fireEvent.click(screen.getByRole('button', { name: /download pdf/i }));
+    await waitFor(() => {
+      expect(printReceipt).toHaveBeenCalledWith(expect.objectContaining({
+        amountPaid: 100,
+        paymentPortions: expect.arrayContaining([
+          expect.objectContaining({ method: 'cash', amount: 40 }),
+          expect.objectContaining({ method: 'qr_pay', amount: 60 }),
+        ]),
+      }), expect.anything());
+      expect(downloadReceiptPdf).toHaveBeenCalledWith(expect.objectContaining({ amountPaid: 100 }), expect.anything());
+      expect(printReceipt).not.toHaveBeenCalledWith(expect.objectContaining({
+        paymentPortions: expect.arrayContaining([expect.objectContaining({ method: 'panel' })]),
+      }), expect.anything());
+    });
   });
 
   it('renders combined self-pay methods while preserving the panel provider and copay label', async () => {
@@ -228,8 +245,8 @@ describe('split payment reporting', () => {
     ]);
 
     expect(result.byMethod).toEqual([
-      { method: 'cash', collected: 40, paymentCount: 1 },
       { method: 'qr_pay', collected: 60, paymentCount: 1 },
+      { method: 'cash', collected: 40, paymentCount: 1 },
     ]);
   });
 });

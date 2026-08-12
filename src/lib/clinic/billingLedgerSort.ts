@@ -10,6 +10,7 @@ export interface SortableBillingEntry {
   paid: number;
   outstanding: number;
   latestMethod: string | null;
+  displayMethod?: string;
 }
 
 export function sortBillingEntries<T extends SortableBillingEntry>(
@@ -47,14 +48,16 @@ function compareMethods<T extends SortableBillingEntry>(
   b: T,
   direction: BillingSortDirection,
 ): number {
-  const aBlank = !a.latestMethod?.trim();
-  const bBlank = !b.latestMethod?.trim();
+  const aLabel = a.displayMethod ?? formatPaymentMethod(a.latestMethod, a.paid);
+  const bLabel = b.displayMethod ?? formatPaymentMethod(b.latestMethod, b.paid);
+  const aBlank = !aLabel.trim();
+  const bBlank = !bLabel.trim();
   if (aBlank && bBlank) return 0;
   if (aBlank) return 1;
   if (bBlank) return -1;
 
-  const labelCompare = formatPaymentMethod(a.latestMethod, a.paid).localeCompare(
-    formatPaymentMethod(b.latestMethod, b.paid),
+  const labelCompare = aLabel.localeCompare(
+    bLabel,
     undefined,
     { sensitivity: 'base' },
   );

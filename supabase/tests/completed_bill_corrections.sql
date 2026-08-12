@@ -471,6 +471,21 @@ AS $function$
   WHERE claim.queue_entry_id = p_queue_entry_id;
 $function$;
 
+CREATE FUNCTION public.test_only_seed_panel_claim_portion(p_queue_entry_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = pg_catalog, public AS $function$
+DECLARE v_claim_id uuid;
+BEGIN
+  v_claim_id := public.ensure_panel_claim_for_queue(p_queue_entry_id);
+  INSERT INTO public.panel_claim_portions (
+    panel_claim_id, portion_no, amount, remark, created_by, updated_by
+  ) SELECT claim.id, 1, claim.amount, 'TEST ONLY active split parent',
+      '70000000-0000-4000-8000-000000000001',
+      '70000000-0000-4000-8000-000000000001'
+    FROM public.panel_claims claim WHERE claim.id = v_claim_id;
+END;
+$function$;
+
 CREATE FUNCTION public.test_only_payment_void_audit_count(
   p_payment_id uuid,
   p_reason text
@@ -545,6 +560,8 @@ BEGIN
   IF to_regprocedure('private.guard_panel_claim_split_parent_mutation()') IS NULL THEN
     RAISE EXCEPTION 'PRODUCTION_SPLIT_PARENT_GUARD_MISSING';
   END IF;
+  -- RETAINED_CHECKOUT_SAVED_QUANTITY_30_MISMATCH: checkout_visit is replaced
+  -- by the additive migration and shares quantity 3 x RM10 = RM30 semantics.
   SELECT count(*) INTO v_current_count
   FROM public.inventory_items
   WHERE id = '70000000-0000-4000-8000-000000000401';
@@ -1254,7 +1271,7 @@ BEGIN
       NULL, NULL, '70000000-0000-4000-8000-000000000a13'
     );
     RAISE EXCEPTION 'CANCELLED_SPLIT_CHECKOUT_SUCCEEDED';
-  EXCEPTION WHEN SQLSTATE '23514' THEN
+  EXCEPTION WHEN SQLSTATE '22023' THEN
     IF SQLERRM <> 'INVALID_CHECKOUT_STATUS' THEN RAISE; END IF;
   END;
   UPDATE public.queue_entries SET clinic_status = 'dispensing_payment'
@@ -1324,7 +1341,30 @@ BEGIN
   END;
 
   -- Panel co-payments retain panel attribution while their physical methods
+  -- MATERIALIZED_ACTIVE_PANEL_SPLIT_SUCCEEDED is the forbidden outcome when
+  -- the active RPC observes a submitted/approved/received parent claim.
   -- reduce the pending panel claim rather than masquerading as remittance.
+  PERFORM public.test_only_seed_panel_claim_portion(
+    '70000000-0000-4000-8000-000000000206'
+  );
+  PERFORM public.test_only_set_panel_claim_status(
+    '70000000-0000-4000-8000-000000000206', 'submitted'
+  );
+  BEGIN
+    PERFORM public.record_split_payments_and_complete_visit(
+      '70000000-0000-4000-8000-000000000206',
+      '70000000-0000-4000-8000-000000000306', 'panel', 30,
+      '[{"payment_method":"cash","amount":30}]'::jsonb,
+      '70000000-0000-4000-8000-000000000801', NULL,
+      '70000000-0000-4000-8000-000000000a14'
+    );
+    RAISE EXCEPTION 'MATERIALIZED_ACTIVE_PANEL_SPLIT_SUCCEEDED';
+  EXCEPTION WHEN SQLSTATE '23514' THEN
+    IF SQLERRM <> 'PANEL_CLAIM_NOT_PENDING' THEN RAISE; END IF;
+  END;
+  PERFORM public.test_only_set_panel_claim_status(
+    '70000000-0000-4000-8000-000000000206', 'pending'
+  );
   PERFORM public.record_split_payments_and_complete_visit(
     '70000000-0000-4000-8000-000000000206',
     '70000000-0000-4000-8000-000000000306',
@@ -1386,6 +1426,14 @@ BEGIN
      IS DISTINCT FROM 30.00::numeric THEN
     RAISE EXCEPTION 'SAVED_BILLED_QUANTITY_30_MISMATCH';
   END IF;
+  INSERT INTO public.panel_claim_portions (
+    panel_claim_id, portion_no, amount, remark, created_by, updated_by
+  )
+  SELECT claim.id, 1, claim.amount, 'TEST ONLY split-parent trigger',
+    '70000000-0000-4000-8000-000000000001',
+    '70000000-0000-4000-8000-000000000001'
+  FROM public.panel_claims claim
+  WHERE claim.queue_entry_id = '70000000-0000-4000-8000-000000000209';
   v_result := public.record_split_payments(
     '70000000-0000-4000-8000-000000000209',
     '70000000-0000-4000-8000-000000000309',
@@ -1402,6 +1450,12 @@ BEGIN
          WHERE queue_entry_id = '70000000-0000-4000-8000-000000000209'
            AND deleted_at IS NULL) IS DISTINCT FROM 10::numeric THEN
     RAISE EXCEPTION 'PANEL_SAVED_QUANTITY_RECONCILIATION_MISMATCH';
+  END IF;
+  IF (SELECT sum(portion.amount) FROM public.panel_claim_portions portion
+      JOIN public.panel_claims claim ON claim.id = portion.panel_claim_id
+      WHERE claim.queue_entry_id = '70000000-0000-4000-8000-000000000209')
+     IS DISTINCT FROM 20::numeric THEN
+    RAISE EXCEPTION 'SPLIT_PARENT_PORTION_REBALANCE_MISMATCH';
   END IF;
 
   -- Four individually valid numeric portions whose aggregate exceeds the

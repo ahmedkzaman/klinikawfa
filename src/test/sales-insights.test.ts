@@ -19,6 +19,15 @@ const payment = (
 });
 
 describe('aggregateSalesInsights', () => {
+  it('keeps high-value transfer in the top-three method cards', () => {
+    const result = aggregateSalesInsights([
+      payment({ id: '1', created_at: '2026-08-01T00:00:00Z', amount: 1, payment_method: 'cash' }),
+      payment({ id: '2', created_at: '2026-08-01T00:00:00Z', amount: 2, payment_method: 'qr_pay' }),
+      payment({ id: '3', created_at: '2026-08-01T00:00:00Z', amount: 3, payment_method: 'card' }),
+      payment({ id: '4', created_at: '2026-08-01T00:00:00Z', amount: 1000, payment_method: 'transfer' }),
+    ]);
+    expect(result.byMethod.slice(0, 3).map((row) => row.method)).toContain('transfer');
+  });
   it('totals all signed finite payments and groups them by local day and method', () => {
     const result = aggregateSalesInsights([
       payment({ id: 'p1', created_at: '2026-07-23T01:00:00+08:00', amount: '100.50' }),

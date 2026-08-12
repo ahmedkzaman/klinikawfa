@@ -190,7 +190,7 @@ export function useRecordSplitPaymentsAndCompleteVisit() {
         p_notes: input.notes ?? null,
         p_idempotency_key: input.idempotency_key,
       });
-      if (error) throw error;
+      if (error) throw new Error(error.message || 'Split payment checkout failed');
       return data;
     },
     onSuccess: (_, vars) => invalidateSplitPaymentQueries(qc, vars.queue_entry_id),

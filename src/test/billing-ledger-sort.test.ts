@@ -9,6 +9,7 @@ const rows = [
     paid: 80,
     outstanding: 0,
     latestMethod: 'card',
+    displayMethod: 'Card',
   },
   {
     queueEntryId: 'queue-a',
@@ -17,6 +18,7 @@ const rows = [
     paid: 20,
     outstanding: 20,
     latestMethod: 'cash',
+    displayMethod: 'Cash + QR Pay',
   },
   {
     queueEntryId: 'queue-c',
@@ -25,6 +27,7 @@ const rows = [
     paid: 0,
     outstanding: 120,
     latestMethod: null,
+    displayMethod: '',
   },
   {
     queueEntryId: 'queue-d',
@@ -33,6 +36,7 @@ const rows = [
     paid: 40,
     outstanding: 0,
     latestMethod: 'qr_pay',
+    displayMethod: 'QR Pay',
   },
 ];
 
@@ -68,6 +72,14 @@ describe('sortBillingEntries', () => {
       'queue-d',
       'queue-c',
     ]);
+  });
+
+  it('uses the combined label rather than the latest tender', () => {
+    const combined = [
+      { ...rows[0], queueEntryId: 'combined', latestMethod: 'cash', displayMethod: 'Cash + QR Pay' },
+      { ...rows[1], queueEntryId: 'cash', latestMethod: 'qr_pay', displayMethod: 'Cash' },
+    ];
+    expect(ids(sortBillingEntries(combined, 'method', 'asc'))).toEqual(['cash', 'combined']);
   });
 
   it('keeps blank methods last in either direction', () => {

@@ -184,6 +184,7 @@ export function RecordPaymentDialog({
   const submitDisabled = isSubmitting
     || !validation.valid
     || (!completeVisitOnPayment && paymentType === 'self_pay' && expectedBalance === 0)
+    || (!completeVisitOnPayment && allocationTarget === 0)
     || (paymentType === 'panel' && !selectedProvider);
   const addDisabled = allocations.length >= PHYSICAL_PAYMENT_METHODS.length || remaining === 0;
 

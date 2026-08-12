@@ -87,6 +87,24 @@ describe('split payment mutations', () => {
     expectCheckoutInvalidations(invalidateQueries);
   });
 
+  it('normalizes a plain PostgREST stale error and refreshes billing queries', async () => {
+    rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: '22023', message: 'STALE_PATIENT_OUTSTANDING: expected 42.50', details: null, hint: null },
+    });
+    const queryClient = createQueryClient();
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useRecordSplitPaymentsAndCompleteVisit(), {
+      wrapper: createWrapper(queryClient),
+    });
+    await expect(result.current.mutateAsync({
+      queue_entry_id: 'queue-1', consultation_id: 'consultation-1', payment_type: 'self_pay',
+      expected_patient_amount: 50, payments: [{ method: 'cash', amount: 50 }],
+      idempotency_key: '00000000-0000-4000-8000-000000000003',
+    })).rejects.toThrow('STALE_PATIENT_OUTSTANDING: expected 42.50');
+    expectCheckoutInvalidations(invalidateQueries);
+  });
+
   it('records an additional split tender through the post-completion RPC', async () => {
     const queryClient = createQueryClient();
     const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
