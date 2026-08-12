@@ -2,6 +2,8 @@
 
 This checklist is for the clinic owner after the website update is live. It helps Google recognise `https://klinikawfa.com/` as Klinik Awfa's official website. It does not guarantee a particular ranking or timing.
 
+For the Sunat Kuantan page, use the separate [Sunat Kuantan launch and measurement checklist](sunat-kuantan-launch-checklist.md). It distinguishes owner-controlled Google Business Profile/Search Console actions from checks of the deployed site and records the baseline, 4-week, and 12-week reviews.
+
 ## 1. Check ownership in Google Search Console
 
 1. Open [Google Search Console](https://search.google.com/search-console/).
@@ -24,6 +26,8 @@ Use **URL inspection** in Search Console to inspect each page below after deploy
 - `https://klinikawfa.com/services/swab-test-demam-kuantan`
 - `https://klinikawfa.com/services/pengurusan-berat-badan-kuantan`
 - `https://klinikawfa.com/services/sunat-kuantan`
+
+For the Sunat page, first run **Test Live URL**, confirm crawl/indexing is allowed, then request indexing once after it passes. Record the inspection result in the Sunat checklist.
 
 For the home page, also check **Page indexing** and confirm the Google-selected canonical is `https://klinikawfa.com/`.
 
