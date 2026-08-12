@@ -341,9 +341,9 @@ export const LOCAL_SERVICE_PAGES: Record<string, LocalServicePageContent> = {
   },
   'sunat-kuantan': {
     slug: 'sunat-kuantan',
-    title: 'Sunat di Kuantan untuk Bayi, Kanak-kanak dan Dewasa',
+    title: 'Klinik Sunat Kuantan untuk Bayi, Kanak-kanak & Dewasa | Klinik Awfa',
     metaDescription:
-      'Penilaian dan perancangan sunat bayi, kanak-kanak serta dewasa di Klinik Awfa, KotaSAS, Kuantan, tertakluk pada kesesuaian klinikal.',
+      'Penilaian dan perkhidmatan sunat bayi, kanak-kanak dan dewasa di Klinik Awfa, KotaSAS, Kuantan, termasuk persediaan dan penjagaan selepas prosedur.',
     eyebrow: 'Perkhidmatan sunat di KotaSAS',
     heading: 'Sunat di Kuantan untuk bayi, kanak-kanak dan dewasa',
     introduction:
