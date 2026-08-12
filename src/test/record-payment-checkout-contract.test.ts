@@ -16,17 +16,18 @@ describe('record payment checkout contract', () => {
   const completedVisit = readSource('src/pages/clinic/VisitDetail.tsx');
   const paymentHooks = readSource('src/hooks/clinic/usePayments.ts');
 
-  it('routes only the active visit path through the atomic checkout mutation', () => {
-    expect(dialog).toContain('useRecordPaymentAndCompleteVisit');
+  it('routes only the active visit path through the atomic split checkout mutation', () => {
+    expect(dialog).toContain('useRecordSplitPaymentsAndCompleteVisit');
+    expect(dialog).toContain('useRecordSplitPayments');
     expect(dialog).toMatch(
-      /if \(completeVisitOnPayment\)[\s\S]*recordPaymentAndCompleteVisit\.mutateAsync[\s\S]*else[\s\S]*recordPayment\.mutateAsync/,
+      /completeVisitOnPayment[\s\S]*\?[\s\S]*recordSplitPaymentsAndCompleteVisit[\s\S]*:[\s\S]*recordSplitPayments/,
     );
     expect(dialog).not.toContain('useUpdateConsultation');
     expect(dialog).not.toContain('useUpdateQueueEntry');
     expect(dialog).not.toContain("status: 'completed'");
     expect(dialog).not.toContain("clinic_status: 'completed'");
     expect(paymentHooks).toMatch(
-      /supabase\.rpc\(\s*['"]record_payment_and_complete_visit['"]/,
+      /supabase\.rpc\(\s*['"]record_split_payments_and_complete_visit['"]/,
     );
   });
 

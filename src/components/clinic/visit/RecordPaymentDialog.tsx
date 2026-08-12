@@ -37,15 +37,25 @@ import {
 import { cn } from '@/lib/utils';
 import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
 import {
-  useRecordPayment,
-  useRecordPaymentAndCompleteVisit,
+  useRecordSplitPayments,
+  useRecordSplitPaymentsAndCompleteVisit,
 } from '@/hooks/clinic/usePayments';
+import { PAYMENT_METHOD_OPTIONS } from '@/lib/clinic/paymentMethod';
+import {
+  PHYSICAL_PAYMENT_METHODS,
+  remainingAllocationAmount,
+  validatePaymentAllocations,
+  type PatientPaymentAllocation,
+  type PhysicalPaymentMethod,
+} from '@/lib/clinic/paymentAllocations';
 
 type PaymentType = 'self_pay' | 'panel';
 
-import { PAYMENT_METHOD_OPTIONS } from '@/lib/clinic/paymentMethod';
-
-const SELF_PAY_METHODS = PAYMENT_METHOD_OPTIONS;
+interface EditableAllocation {
+  id: string;
+  method: PhysicalPaymentMethod | '';
+  amount: string;
+}
 
 interface Props {
   open: boolean;
@@ -59,13 +69,34 @@ interface Props {
   defaultPaymentMethod?: string;
 }
 
+function canonicalDefaultMethod(method: string | undefined): PhysicalPaymentMethod | '' {
+  const candidate = method ?? 'cash';
+  return PHYSICAL_PAYMENT_METHODS.includes(candidate as PhysicalPaymentMethod)
+    ? candidate as PhysicalPaymentMethod
+    : '';
+}
 
-/**
- * Payment dialog with an atomic server checkout mode for active visits.
- *
- * Completed visit records use the existing insert-only additional-payment path.
- * On failure the dialog remains open with form state intact for a safe retry.
- */
+function numericAllocation(row: EditableAllocation): PatientPaymentAllocation {
+  const amount = Number.parseFloat(row.amount);
+  return {
+    method: row.method,
+    amount: Number.isFinite(amount) ? amount : 0,
+  };
+}
+
+function createInitialAllocation(
+  type: PaymentType,
+  defaultPaymentMethod: string | undefined,
+  expectedBalance: number,
+): EditableAllocation {
+  return {
+    id: crypto.randomUUID(),
+    method: canonicalDefaultMethod(defaultPaymentMethod),
+    amount: type === 'panel' ? '0.00' : expectedBalance.toFixed(2),
+  };
+}
+
+/** Payment dialog supporting atomic multi-method patient payment batches. */
 export function RecordPaymentDialog({
   open,
   onOpenChange,
@@ -75,76 +106,95 @@ export function RecordPaymentDialog({
   completeVisitOnPayment = false,
   defaultPaymentMethod,
 }: Props) {
-
   const navigate = useNavigate();
   const { data: providers = [] } = useInsuranceProviders({ activeOnly: true });
-  const recordPayment = useRecordPayment();
-  const recordPaymentAndCompleteVisit = useRecordPaymentAndCompleteVisit();
+  const recordSplitPayments = useRecordSplitPayments();
+  const recordSplitPaymentsAndCompleteVisit = useRecordSplitPaymentsAndCompleteVisit();
 
   const [paymentType, setPaymentType] = useState<PaymentType>('self_pay');
-  const [selfPayMethod, setSelfPayMethod] = useState<string>('');
-  const [providerId, setProviderId] = useState<string>('');
+  const [allocations, setAllocations] = useState<EditableAllocation[]>([]);
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [providerId, setProviderId] = useState('');
   const [providerOpen, setProviderOpen] = useState(false);
-  const [amount, setAmount] = useState<string>(defaultAmount.toFixed(2));
-  const [notes, setNotes] = useState<string>('');
+  const [notes, setNotes] = useState('');
 
-  // Reset every time the dialog opens.
-  useEffect(() => {
-    if (open) {
-      setPaymentType('self_pay');
-      setSelfPayMethod(defaultPaymentMethod ?? 'cash');
-      setProviderId('');
-      setProviderOpen(false);
-      setAmount(Math.max(defaultAmount, 0).toFixed(2));
-      setNotes('');
-    }
-  }, [open, defaultAmount, defaultPaymentMethod]);
+  const expectedBalance = Math.max(defaultAmount, 0);
 
-  // When the user toggles between self-pay and panel, reset the default amount
-  // (panel defaults to RM 0.00; self-pay defaults to outstanding). The selected
-  // payment method is preserved across tabs so a panel copayment keeps the
-  // physical method (cash / QR / card / transfer) the front desk picked.
   useEffect(() => {
+    if (!open) return;
+    setPaymentType('self_pay');
+    setAllocations([createInitialAllocation(
+      'self_pay',
+      defaultPaymentMethod,
+      expectedBalance,
+    )]);
+    setIdempotencyKey(crypto.randomUUID());
     setProviderId('');
     setProviderOpen(false);
-    setAmount(
-      paymentType === 'panel'
-        ? '0.00'
-        : Math.max(defaultAmount, 0).toFixed(2),
-    );
-  }, [paymentType, defaultAmount]);
-
+    setNotes('');
+  }, [open, expectedBalance, defaultPaymentMethod]);
 
   const selectedProvider = useMemo(
-    () => providers.find((p) => p.id === providerId) ?? null,
+    () => providers.find((provider) => provider.id === providerId) ?? null,
     [providers, providerId],
   );
 
-  const isSubmitting = completeVisitOnPayment
-    ? recordPaymentAndCompleteVisit.isPending
-    : recordPayment.isPending;
+  const numericAllocations = useMemo(
+    () => allocations.map(numericAllocation),
+    [allocations],
+  );
 
-  const numericAmountPreview = parseFloat(amount);
-  const submitDisabled =
-    isSubmitting ||
-    (Number.isFinite(numericAmountPreview) && numericAmountPreview > 0 && !selfPayMethod) ||
-    (paymentType === 'panel' && !providerId);
+  const zeroPaymentCheckout = allocations.length === 1
+    && allocations[0].amount.trim() !== ''
+    && Number(allocations[0].amount) === 0
+    && (paymentType === 'panel' || expectedBalance === 0);
 
-  const submittingLabel = recordPayment.isPending
-    ? 'Recording payment…'
-    : 'Processing…';
+  const submittedAllocations = zeroPaymentCheckout ? [] : numericAllocations;
+  const validation = validatePaymentAllocations({
+    allocations: submittedAllocations,
+    expectedAmount: zeroPaymentCheckout ? 0 : expectedBalance,
+    requireExact: paymentType === 'self_pay' && completeVisitOnPayment,
+  });
+  const remaining = remainingAllocationAmount(expectedBalance, numericAllocations);
+
+  const activeMutation = completeVisitOnPayment
+    ? recordSplitPaymentsAndCompleteVisit
+    : recordSplitPayments;
+  const isSubmitting = activeMutation.isPending;
+  const submitDisabled = isSubmitting
+    || !validation.valid
+    || (paymentType === 'panel' && !selectedProvider);
+  const addDisabled = allocations.length >= PHYSICAL_PAYMENT_METHODS.length || remaining === 0;
+
+  function resetForPaymentType(type: PaymentType) {
+    setPaymentType(type);
+    setAllocations([createInitialAllocation(type, defaultPaymentMethod, expectedBalance)]);
+    setIdempotencyKey(crypto.randomUUID());
+    setProviderId('');
+    setProviderOpen(false);
+  }
+
+  function updateAllocation(id: string, patch: Partial<EditableAllocation>) {
+    setAllocations((current) => current.map((row) => (
+      row.id === id ? { ...row, ...patch } : row
+    )));
+  }
+
+  function addAllocation() {
+    if (addDisabled) return;
+    setAllocations((current) => [
+      ...current,
+      { id: crypto.randomUUID(), method: '', amount: remaining.toFixed(2) },
+    ]);
+  }
+
+  function removeAllocation(id: string) {
+    setAllocations((current) => current.filter((row) => row.id !== id));
+  }
 
   async function handleSubmit() {
-    // ── Validation ───────────────────────────────────────────────────────────
-    const numericAmount = parseFloat(amount);
-    if (!Number.isFinite(numericAmount) || numericAmount < 0) {
-      toast.error('Amount must be a number ≥ 0');
-      return;
-    }
-    // RM 0 self-pay is allowed for no-charge visits (e.g. quick consult, advice
-    // only). Treat it as a zero-amount checkout that still completes the visit.
-    if (numericAmount > 0 && !selfPayMethod) {
-      toast.error('Please select a payment method');
+    if (!validation.valid) {
+      toast.error(validation.errors[0] ?? 'Check the payment allocations.');
       return;
     }
     if (paymentType === 'panel' && !selectedProvider) {
@@ -152,60 +202,41 @@ export function RecordPaymentDialog({
       return;
     }
 
-    // Panel string is recorded ONLY when the panel covers 100% of the bill.
-    // Any out-of-pocket amount (even RM 0.50) records the physical method.
-    const resolvedMethodLabel =
-      paymentType === 'panel' && numericAmount === 0 && selectedProvider
-        ? `Panel: ${selectedProvider.name}`
-        : selfPayMethod;
+    const payments = submittedAllocations.map((row) => ({
+      method: row.method,
+      amount: Number(row.amount.toFixed(2)),
+    }));
+    const expectedPatientAmount = paymentType === 'self_pay' && completeVisitOnPayment
+      ? expectedBalance
+      : validation.total;
 
-    let finalNotes = notes.trim();
-    if (paymentType === 'panel' && selectedProvider) {
-      finalNotes = finalNotes
-        ? `Provider: ${selectedProvider.name}\n${finalNotes}`
-        : `Provider: ${selectedProvider.name}`;
-    }
-
-    // Active checkout is one server transaction. Completed visits retain the
-    // insert-only additional-payment path.
     try {
-      if (completeVisitOnPayment) {
-        await recordPaymentAndCompleteVisit.mutateAsync({
-          queue_entry_id: queueEntryId,
-          consultation_id: consultationId,
-          payment_type: paymentType,
-          payment_method: resolvedMethodLabel,
-          amount: numericAmount,
-          notes: finalNotes || null,
-        });
-      } else {
-        await recordPayment.mutateAsync({
-          queue_entry_id: queueEntryId,
-          consultation_id: consultationId,
-          payment_type: paymentType,
-          payment_method: resolvedMethodLabel,
-          amount: numericAmount,
-          notes: finalNotes || null,
-        });
-      }
+      await activeMutation.mutateAsync({
+        queue_entry_id: queueEntryId,
+        consultation_id: consultationId,
+        payment_type: paymentType,
+        expected_patient_amount: Number(expectedPatientAmount.toFixed(2)),
+        payments,
+        provider_id: selectedProvider?.id ?? null,
+        notes: notes.trim() || null,
+        idempotency_key: idempotencyKey,
+      });
 
+      setIdempotencyKey(crypto.randomUUID());
       toast.success('Payment recorded · Patient checked out');
       onOpenChange(false);
       navigate('/clinic/queue');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Checkout failed';
-      toast.error(`Checkout failed: ${msg}`);
-      // Intentionally do NOT close the dialog or navigate — leave state intact
-      // so the staff can adjust and retry.
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Checkout failed';
+      toast.error(`Checkout failed: ${message}`);
     }
   }
 
   return (
     <Dialog
       open={open}
-      onOpenChange={(o) => {
-        // Block closing while a step is in flight.
-        if (!isSubmitting) onOpenChange(o);
+      onOpenChange={(nextOpen) => {
+        if (!isSubmitting) onOpenChange(nextOpen);
       }}
     >
       <DialogContent className="sm:max-w-md">
@@ -214,12 +245,11 @@ export function RecordPaymentDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Payment type */}
           <div className="space-y-2">
             <Label>Payment Type</Label>
             <RadioGroup
               value={paymentType}
-              onValueChange={(v) => setPaymentType(v as PaymentType)}
+              onValueChange={(value) => resetForPaymentType(value as PaymentType)}
               className="flex gap-4"
             >
               <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -233,32 +263,13 @@ export function RecordPaymentDialog({
             </RadioGroup>
           </div>
 
-          {/* Payment method — shown for both self-pay and panel (copayment) */}
-          <div className="space-y-2">
-            <Label htmlFor="pay-method">
-              {paymentType === 'panel' ? 'Copayment Method' : 'Payment Method'}
-            </Label>
-            <Select value={selfPayMethod} onValueChange={setSelfPayMethod}>
-              <SelectTrigger id="pay-method">
-                <SelectValue placeholder="Select method" />
-              </SelectTrigger>
-              <SelectContent>
-                {SELF_PAY_METHODS.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Panel provider picker — panel tab only */}
           {paymentType === 'panel' && (
             <div className="space-y-2">
-              <Label>Panel</Label>
+              <Label htmlFor="panel-provider">Panel</Label>
               <Popover open={providerOpen} onOpenChange={setProviderOpen}>
                 <PopoverTrigger asChild>
                   <Button
+                    id="panel-provider"
                     type="button"
                     variant="outline"
                     role="combobox"
@@ -266,18 +277,9 @@ export function RecordPaymentDialog({
                     className="w-full justify-between font-normal"
                   >
                     {selectedProvider ? (
-                      <span className="flex items-center gap-2 min-w-0">
-                        <span className="truncate">{selectedProvider.name}</span>
-                        {selectedProvider.panel_code && (
-                          <span className="text-xs text-muted-foreground shrink-0">
-                            ({selectedProvider.panel_code})
-                          </span>
-                        )}
-                      </span>
+                      <span className="truncate">{selectedProvider.name}</span>
                     ) : (
-                      <span className="text-muted-foreground">
-                        Search and select a panel…
-                      </span>
+                      <span className="text-muted-foreground">Search and select a panel…</span>
                     )}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
@@ -291,27 +293,22 @@ export function RecordPaymentDialog({
                     <CommandList>
                       <CommandEmpty>No panels found.</CommandEmpty>
                       <CommandGroup>
-                        {providers.map((p) => (
+                        {providers.map((provider) => (
                           <CommandItem
-                            key={p.id}
-                            value={`${p.name} ${p.panel_code ?? ''}`}
+                            key={provider.id}
+                            value={provider.name}
                             onSelect={() => {
-                              setProviderId(p.id);
+                              setProviderId(provider.id);
                               setProviderOpen(false);
                             }}
                           >
                             <Check
                               className={cn(
                                 'mr-2 h-4 w-4',
-                                providerId === p.id ? 'opacity-100' : 'opacity-0',
+                                providerId === provider.id ? 'opacity-100' : 'opacity-0',
                               )}
                             />
-                            <span className="flex-1 truncate">{p.name}</span>
-                            {p.panel_code && (
-                              <span className="text-xs text-muted-foreground ml-2">
-                                {p.panel_code}
-                              </span>
-                            )}
+                            <span className="flex-1 truncate">{provider.name}</span>
                           </CommandItem>
                         ))}
                       </CommandGroup>
@@ -322,33 +319,93 @@ export function RecordPaymentDialog({
             </div>
           )}
 
-          {/* Amount */}
-          <div className="space-y-2">
-            <Label htmlFor="amount">
-              Amount (RM)
-              {paymentType === 'panel' && (
-                <span className="text-xs text-muted-foreground font-normal ml-2">
-                  (default 0.00; edit for co-payment)
-                </span>
-              )}
-            </Label>
-            <Input
-              id="amount"
-              type="number"
-              step="0.01"
-              min="0"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
+          <div className="space-y-3">
+            <Label>{paymentType === 'panel' ? 'Co-payment methods' : 'Payment methods'}</Label>
+            {allocations.map((row, index) => {
+              const methodId = `payment-method-${row.id}`;
+              const amountId = `payment-amount-${row.id}`;
+              const suffix = index === 0 ? '' : ` ${index + 1}`;
+              return (
+                <div key={row.id} className="grid grid-cols-[1fr_8rem_auto] items-end gap-2">
+                  <div className="space-y-2">
+                    <Label htmlFor={methodId}>Payment method{suffix}</Label>
+                    <Select
+                      value={row.method}
+                      onValueChange={(method) => updateAllocation(row.id, {
+                        method: method as PhysicalPaymentMethod,
+                      })}
+                    >
+                      <SelectTrigger id={methodId}>
+                        <SelectValue placeholder="Select method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PAYMENT_METHOD_OPTIONS.map((method) => (
+                          <SelectItem
+                            key={method.value}
+                            value={method.value}
+                            disabled={allocations.some((other) => (
+                              other.id !== row.id && other.method === method.value
+                            ))}
+                          >
+                            {method.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={amountId}>Amount{suffix} (RM)</Label>
+                    <Input
+                      id={amountId}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={row.amount}
+                      onChange={(event) => updateAllocation(row.id, { amount: event.target.value })}
+                    />
+                  </div>
+                  {allocations.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeAllocation(row.id)}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addAllocation}
+                disabled={addDisabled}
+              >
+                Add payment method
+              </Button>
+              <p className="text-sm text-muted-foreground text-right">
+                Allocated RM{validation.total.toFixed(2)} / Remaining RM{remaining.toFixed(2)}
+              </p>
+            </div>
+
+            {validation.errors.length > 0 && !zeroPaymentCheckout && (
+              <div className="space-y-1 text-sm text-destructive" role="alert">
+                {validation.errors.map((error) => <p key={error}>{error}</p>)}
+              </div>
+            )}
           </div>
 
-          {/* Notes */}
           <div className="space-y-2">
             <Label htmlFor="notes">Notes (optional)</Label>
             <Textarea
               id="notes"
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(event) => setNotes(event.target.value)}
               rows={2}
               placeholder="Reference number, remarks…"
             />
@@ -367,7 +424,7 @@ export function RecordPaymentDialog({
             {isSubmitting ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                {submittingLabel}
+                Processing…
               </>
             ) : (
               'Record Payment & Check Out'
