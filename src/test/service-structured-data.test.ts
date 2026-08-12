@@ -10,8 +10,15 @@ describe('service structured data', () => {
       faqs: [{ question: { ms: 'Soalan?', en: 'Question?' }, answer: { ms: 'Jawapan.', en: 'Answer.' } }],
     });
     const graph = result as Array<Record<string, any>>;
-    expect(graph.find((item) => item['@type'] === 'MedicalClinic')).toBeTruthy();
-    expect(graph.find((item) => item['@type'] === 'Service')?.url).toBe('https://klinikawfa.com/services/test/');
+    expect(graph).toEqual(expect.arrayContaining([
+      expect.objectContaining({ '@type': 'MedicalClinic', '@id': 'https://klinikawfa.com/#clinic' }),
+      expect.objectContaining({
+        '@type': 'Service',
+        url: 'https://klinikawfa.com/services/test/',
+        provider: { '@id': 'https://klinikawfa.com/#clinic' },
+      }),
+      expect.objectContaining({ '@type': 'FAQPage' }),
+    ]));
     const faq = graph.find((item) => item['@type'] === 'FAQPage');
     expect(faq?.mainEntity[0].name).toBe('Soalan?');
     expect(faq?.mainEntity[0].acceptedAnswer.text).toBe('Jawapan.');

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { buildPublicSeoFallback } from '../../scripts/public-seo-fallbacks.mjs';
+import { buildPublicSeoFallback, buildPublicSeoSchemas } from '../../scripts/public-seo-fallbacks.mjs';
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(testDir, '../..');
@@ -46,6 +46,18 @@ describe('public SEO crawler fallback', () => {
       expect(html).toContain('<h2>Sunat dewasa</h2>');
       expect(html).toContain('href="/appointment"');
       expect(html).not.toContain('clinic_queue');
+      expect(html).toContain('<script type="application/ld+json">');
+      const schemaJson = html.match(/<script type="application\/ld\+json">(.*?)<\/script>/)?.[1];
+      const schemas = JSON.parse(schemaJson || '[]');
+      expect(schemas).toEqual(expect.arrayContaining([
+        expect.objectContaining({ '@type': 'MedicalClinic', '@id': 'https://klinikawfa.com/#clinic' }),
+        expect.objectContaining({
+          '@type': 'Service',
+          url: 'https://klinikawfa.com/services/sunat-kuantan/',
+          provider: { '@id': 'https://klinikawfa.com/#clinic' },
+        }),
+        expect.objectContaining({ '@type': 'FAQPage' }),
+      ]));
     } finally {
       rmSync(distFixture, { recursive: true, force: true });
     }
@@ -86,6 +98,29 @@ describe('public SEO crawler fallback', () => {
     expect(fallback).toContain(
       'Maklumkan simptom kepada klinik sebelum hadir. Doktor akan menilai sama ada prosedur wajar diteruskan atau ditangguhkan demi keselamatan.',
     );
+  });
+
+  it('builds a public-facts-only graph whose FAQs match the visible Sunat fallback', () => {
+    const schemas = buildPublicSeoSchemas('services/sunat-kuantan');
+    const fallback = buildPublicSeoFallback('services/sunat-kuantan');
+
+    expect(schemas).toEqual(expect.arrayContaining([
+      expect.objectContaining({ '@type': 'WebPage', url: 'https://klinikawfa.com/services/sunat-kuantan/' }),
+      expect.objectContaining({ '@type': 'BreadcrumbList' }),
+    ]));
+    const faq = schemas?.find((schema) => schema['@type'] === 'FAQPage');
+    expect(faq).toMatchObject({
+      mainEntity: expect.arrayContaining([
+        expect.objectContaining({
+          name: 'Adakah konsultasi diperlukan sebelum tarikh sunat?',
+          acceptedAnswer: expect.objectContaining({
+            text: 'Ya, penilaian membantu doktor menyemak kesihatan, anatomi, ubat dan faktor pendarahan serta menerangkan persediaan. Dalam sesetengah keadaan, prosedur perlu ditangguhkan atau dirujuk.',
+          }),
+        }),
+      ]),
+    });
+    expect(fallback).toContain(String((faq as { mainEntity: Array<{ name: string }> }).mainEntity[0].name));
+    expect(fallback).toContain(String((faq as { mainEntity: Array<{ acceptedAnswer: { text: string } }> }).mainEntity[0].acceptedAnswer.text));
   });
 
   it.each(['__proto__', 'constructor', 'toString'])('returns undefined for unsupported inherited route %s', (route) => {

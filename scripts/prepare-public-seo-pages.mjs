@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildPublicSeoFallback } from "./public-seo-fallbacks.mjs";
+import { buildPublicSeoFallback, buildPublicSeoSchemas } from "./public-seo-fallbacks.mjs";
 
 const siteOrigin = "https://klinikawfa.com";
 const defaultImage = `${siteOrigin}/klinik-awfa-exterior.webp`;
@@ -145,6 +145,12 @@ for (const [route, fallback] of Object.entries(pages)) {
   const seoFallback = buildPublicSeoFallback(route);
   if (seoFallback) {
     html = html.replace('<div id="root"></div>', `<div id="root">${seoFallback}</div>`);
+  }
+
+  const schemas = buildPublicSeoSchemas(route);
+  if (schemas?.length) {
+    const json = JSON.stringify(schemas).replaceAll('<', '\\u003c');
+    html = html.replace('</head>', `<script type="application/ld+json">${json}</script>\n</head>`);
   }
 
   writeFileSync(htmlPath, html);
