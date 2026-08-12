@@ -250,7 +250,9 @@ export default function Doctors() {
               {doctors.map((doctor) => (
                 <Card 
                   key={doctor.id} 
+                  aria-labelledby={`doctor-${doctor.id}`}
                   className="group overflow-hidden border-border/50 shadow-soft transition-all hover:shadow-card"
+                  role="article"
                 >
                   {/* Photo or Placeholder */}
                   <div className="relative aspect-[16/10] bg-gradient-to-br from-primary/10 via-primary/5 to-background">
@@ -278,7 +280,7 @@ export default function Doctors() {
                   <CardContent className="p-6 md:p-8">
                     {/* Name & Title */}
                     <div className="mb-5">
-                      <h3 className="text-2xl font-bold md:text-3xl">
+                      <h3 id={`doctor-${doctor.id}`} className="text-2xl font-bold md:text-3xl">
                         {language === 'ms' ? doctor.name_ms : doctor.name_en}
                       </h3>
                       <p className="text-lg text-muted-foreground">
