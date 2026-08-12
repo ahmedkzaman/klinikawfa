@@ -5,6 +5,8 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { buildPublicSeoFallback, buildPublicSeoSchemas } from '../../scripts/public-seo-fallbacks.mjs';
+import { LOCAL_SERVICE_REVIEW } from '@/content/localServicePages';
+import { CLINIC_INFO } from '@/lib/constants';
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(testDir, '../..');
@@ -45,6 +47,19 @@ describe('public SEO crawler fallback', () => {
       expect(html).toContain('<h2>Sunat kanak-kanak</h2>');
       expect(html).toContain('<h2>Sunat dewasa</h2>');
       expect(html).toContain('href="/appointment"');
+      expect(html).toContain(
+        `<address>${CLINIC_INFO.address.full.replaceAll('&', '&amp;')}</address>`,
+      );
+      expect(html).toContain(`${CLINIC_INFO.hours.days}, ${CLINIC_INFO.hours.timeMalay}`);
+      expect(html).toContain(`href="${CLINIC_INFO.phoneLink}"`);
+      expect(html).toContain(`href="${CLINIC_INFO.whatsapp}"`);
+      expect(html).toContain(`href="${CLINIC_INFO.googleMapsUrl.replaceAll('&', '&amp;')}"`);
+      expect(html).toContain('href="/doctors"');
+      expect(html).toContain('href="/services/minor-surgery-kutil-kuantan"');
+      expect(html).toContain(`Disemak oleh ${LOCAL_SERVICE_REVIEW.organization}`);
+      expect(html).toContain(
+        `<time datetime="${LOCAL_SERVICE_REVIEW.date}">${LOCAL_SERVICE_REVIEW.date}</time>`,
+      );
       expect(html).not.toContain('clinic_queue');
       expect(html).toContain('<script data-rh="true" type="application/ld+json">');
       const schemaJson = html.match(/<script data-rh="true" type="application\/ld\+json">(.*?)<\/script>/)?.[1];

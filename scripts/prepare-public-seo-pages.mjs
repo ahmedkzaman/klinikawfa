@@ -1,9 +1,13 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildPublicSeoFallback, buildPublicSeoSchemas } from "./public-seo-fallbacks.mjs";
+import publicSeoRoutes from "../src/content/publicSeoRoutes.json" with { type: "json" };
+import { loadPublishedServiceSeoRows } from "./published-service-seo-registry.mjs";
 
 const siteOrigin = "https://klinikawfa.com";
 const defaultImage = `${siteOrigin}/klinik-awfa-exterior.webp`;
+const sunatSeoRoute = publicSeoRoutes.find(({ path }) => path === "/services/sunat-kuantan/");
+if (!sunatSeoRoute) throw new Error("The public SEO manifest is missing the canonical Sunat route.");
 
 const pages = {
   services: {
@@ -39,8 +43,8 @@ const pages = {
     description: "Pengurusan berat badan dan program kurus di Kuantan dengan penilaian doktor, sasaran realistik dan pemantauan di Klinik Awfa.",
   },
   "services/sunat-kuantan": {
-    title: "Klinik Sunat Kuantan untuk Bayi, Kanak-kanak & Dewasa | Klinik Awfa",
-    description: "Penilaian dan perkhidmatan sunat bayi, kanak-kanak dan dewasa di Klinik Awfa, KotaSAS, Kuantan, termasuk persediaan dan penjagaan selepas prosedur.",
+    title: sunatSeoRoute.title,
+    description: sunatSeoRoute.description,
   },
 };
 
@@ -86,26 +90,8 @@ function validateRegistryRow(row) {
 }
 
 async function loadPublishedRegistry() {
-  try {
-    let rows;
-    if (process.env.SERVICE_SEO_REGISTRY_JSON) {
-      rows = JSON.parse(process.env.SERVICE_SEO_REGISTRY_JSON);
-    } else {
-      const base = process.env.VITE_SUPABASE_URL?.replace(/\/+$/, "");
-      const key = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      if (!base || !key) return new Map();
-      const response = await fetch(`${base}/rest/v1/website_service_seo?select=path,seo_ms,seo_ms_social_image_path&published_at=not.is.null`, {
-        headers: { apikey: key, Authorization: `Bearer ${key}` },
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      rows = await response.json();
-    }
-    if (!Array.isArray(rows)) throw new Error("registry is not an array");
-    return new Map(rows.map(validateRegistryRow).filter(Boolean).map(({ route, metadata }) => [route, metadata]));
-  } catch (error) {
-    console.warn(`[service-seo] using checked-in crawler fallbacks: ${error instanceof Error ? error.message : "registry unavailable"}`);
-    return new Map();
-  }
+  const rows = await loadPublishedServiceSeoRows();
+  return new Map(rows.map(validateRegistryRow).filter(Boolean).map(({ route, metadata }) => [route, metadata]));
 }
 
 const distDir = process.argv[2] || "dist";

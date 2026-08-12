@@ -10,6 +10,10 @@ import { LanguageProvider } from '@/contexts/LanguageContext';
 import LocalServicePage from '@/pages/LocalServicePage';
 import Services from '@/pages/Services';
 
+const serviceSeoOverride = vi.hoisted(() => ({
+  current: null as null | { faqs: Array<{ question: string; answer: string }> },
+}));
+
 vi.mock('@/contexts/AuthContext', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useAuth: () => ({ user: null, isStaffOrAdmin: false }),
@@ -22,7 +26,9 @@ vi.mock('@/features/analytics/GoogleAnalyticsController', () => ({
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {} }));
 
 vi.mock('@/features/website-cms/service-seo/useServiceSeoMetadata', () => ({
-  useServiceSeoMetadata: (_path: string, _language: string, fallback: unknown) => fallback,
+  useServiceSeoMetadata: (_path: string, _language: string, fallback: object) => (
+    serviceSeoOverride.current ? { ...fallback, ...serviceSeoOverride.current } : fallback
+  ),
 }));
 
 vi.mock('@/components/layout', () => ({
@@ -47,6 +53,7 @@ vi.stubGlobal(
 
 afterEach(() => {
   cleanup();
+  serviceSeoOverride.current = null;
   window.history.replaceState({}, '', '/');
 });
 
@@ -248,6 +255,57 @@ describe('local SEO service pages', () => {
           }),
         ]),
       );
+    });
+  });
+
+  it('renders the same published CMS FAQs that it exposes in FAQ schema', async () => {
+    serviceSeoOverride.current = {
+      faqs: [
+        {
+          question: 'Soalan CMS yang diterbitkan?',
+          answer: 'Jawapan CMS yang berbeza daripada kandungan sandaran.',
+        },
+      ],
+    };
+
+    render(
+      <HelmetProvider>
+        <MemoryRouter initialEntries={['/services/sunat-kuantan']}>
+          <LanguageProvider>
+            <Routes>
+              <Route
+                path="/services/sunat-kuantan"
+                element={<LocalServicePage slug="sunat-kuantan" />}
+              />
+            </Routes>
+          </LanguageProvider>
+        </MemoryRouter>
+      </HelmetProvider>,
+    );
+
+    expect(screen.getByText('Soalan CMS yang diterbitkan?')).toBeVisible();
+    expect(screen.getByText('Jawapan CMS yang berbeza daripada kandungan sandaran.')).toBeVisible();
+    expect(
+      screen.queryByText('Adakah konsultasi diperlukan sebelum tarikh sunat?'),
+    ).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      const faqSchema = Array.from(
+        document.head.querySelectorAll('script[type="application/ld+json"]'),
+      )
+        .map((script) => JSON.parse(script.textContent || '{}'))
+        .find((schema) => schema['@type'] === 'FAQPage');
+
+      expect(faqSchema).toMatchObject({
+        mainEntity: [
+          {
+            name: 'Soalan CMS yang diterbitkan?',
+            acceptedAnswer: {
+              text: 'Jawapan CMS yang berbeza daripada kandungan sandaran.',
+            },
+          },
+        ],
+      });
     });
   });
 });

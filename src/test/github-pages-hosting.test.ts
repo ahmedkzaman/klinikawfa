@@ -83,6 +83,22 @@ describe("GitHub Pages hosting", () => {
     expect(workflow).toContain("Verify Security Gate result");
   });
 
+  it("makes the published service registry available before generating the sitemap", () => {
+    const workflow = readWorkflow();
+    const sitemapStep = workflow.slice(
+      workflow.indexOf("- name: Generate and validate public sitemap"),
+      workflow.indexOf("- name: Build production site"),
+    );
+
+    expect(sitemapStep).toContain(
+      "VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}",
+    );
+    expect(sitemapStep).toContain(
+      "VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}",
+    );
+    expect(sitemapStep).toContain("node scripts/generate-sitemap.mjs");
+  });
+
   it("uses immutable reviewed action pins and least privilege", () => {
     const workflow = readWorkflow();
     expect(workflow).toContain("actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0");

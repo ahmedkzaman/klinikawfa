@@ -43,8 +43,18 @@ export default function LocalServicePage({ slug }: LocalServicePageProps) {
     { name: 'Perkhidmatan', path: '/services' },
     { name: content.heading, path: servicePath },
   ];
-  const publishedFaqs = seo.faqs?.map((faq) => ({ question: { ms: faq.question, en: faq.question }, answer: { ms: faq.answer, en: faq.answer } }));
-  const schemas = buildServiceStructuredData({ path: servicePath, name: seo.title, breadcrumbName: content.heading, description: seo.answerSummary || seo.description, faqs: publishedFaqs?.length ? publishedFaqs : buildLocalServiceAeo(content).faqs });
+  const resolvedFaqs = seo.faqs?.length ? seo.faqs : content.faqs;
+  const schemaFaqs = resolvedFaqs.map((faq) => ({
+    question: { ms: faq.question, en: faq.question },
+    answer: { ms: faq.answer, en: faq.answer },
+  }));
+  const schemas = buildServiceStructuredData({
+    path: servicePath,
+    name: seo.title,
+    breadcrumbName: content.heading,
+    description: seo.answerSummary || seo.description,
+    faqs: schemaFaqs,
+  });
 
   return (
     <MainLayout>
@@ -143,7 +153,7 @@ export default function LocalServicePage({ slug }: LocalServicePageProps) {
               Soalan lazim
             </h2>
             <div className="divide-y divide-border rounded-2xl border bg-card px-5 md:px-7">
-              {content.faqs.map((faq) => (
+              {resolvedFaqs.map((faq) => (
                 <div key={faq.question} className="py-6">
                   <h3 className="text-lg font-semibold">{faq.question}</h3>
                   <p className="mt-2 leading-7 text-muted-foreground">{faq.answer}</p>

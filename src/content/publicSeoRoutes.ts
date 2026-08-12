@@ -39,3 +39,11 @@ function validatePublicSeoRoutes(value: unknown): readonly PublicSeoRoute[] {
 }
 
 export const PUBLIC_SEO_ROUTES = validatePublicSeoRoutes(routeData);
+
+export const SUNAT_KUANTAN_SEO_ROUTE = PUBLIC_SEO_ROUTES.find(
+  (route) => route.path === '/services/sunat-kuantan/',
+);
+
+if (!SUNAT_KUANTAN_SEO_ROUTE) {
+  throw new Error('publicSeoRoutes.json must contain the canonical Sunat route');
+}

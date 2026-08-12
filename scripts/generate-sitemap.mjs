@@ -1,4 +1,8 @@
 import { readFileSync, writeFileSync } from 'node:fs';
+import {
+  buildPublishedLastModifiedOverlay,
+  loadPublishedServiceSeoRows,
+} from './published-service-seo-registry.mjs';
 
 const SITE_ORIGIN = 'https://klinikawfa.com';
 const manifestPath = new URL('../src/content/publicSeoRoutes.json', import.meta.url);
@@ -16,9 +20,10 @@ const privatePrefixes = [
 ];
 const changeFrequencies = new Set(['always', 'hourly', 'daily', 'weekly', 'monthly', 'yearly', 'never']);
 const sunatPath = '/services/sunat-kuantan/';
-const sunatLastModified = '2026-08-12';
 
 const routes = JSON.parse(readFileSync(manifestPath, 'utf8'));
+const publishedRows = await loadPublishedServiceSeoRows();
+const lastModifiedOverlay = buildPublishedLastModifiedOverlay(publishedRows);
 
 function isValidIsoDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -31,13 +36,14 @@ function isPrivatePath(path) {
   return privatePrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
 
-function isValidPublicPath(path) {
-  if (!/^\/[A-Za-z0-9._~!$'()*+,;=:@%/-]*$/.test(path)) return false;
+function decodeValidPublicPath(path) {
+  if (!/^\/[A-Za-z0-9._~!$'()*+,;=:@%/-]*$/.test(path)) return null;
 
   try {
-    return !decodeURIComponent(path).split('/').some((segment) => segment === '.' || segment === '..');
+    const decodedPath = decodeURIComponent(path);
+    return decodedPath.split('/').some((segment) => segment === '.' || segment === '..') ? null : decodedPath;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -46,16 +52,17 @@ function validateRoute(route, index) {
     throw new Error(`Route ${index} must be an object.`);
   }
 
-  if (typeof route.path !== 'string' || !isValidPublicPath(route.path)) {
+  const decodedPath = typeof route.path === 'string' ? decodeValidPublicPath(route.path) : null;
+  if (!decodedPath) {
     throw new Error(`Route ${index} has an invalid public path.`);
   }
 
-  if (isPrivatePath(route.path)) {
+  if (isPrivatePath(decodedPath)) {
     throw new Error(`Route ${route.path} is private and cannot be included in the sitemap.`);
   }
 
-  if (route.path.startsWith('/services/') && !route.path.endsWith('/')) {
-    throw new Error(`Service route ${route.path} must use a trailing slash.`);
+  if (route.path !== '/' && !route.path.endsWith('/')) {
+    throw new Error(`Public route ${route.path} must use a trailing slash.`);
   }
 
   if (typeof route.lastModified !== 'string' || !isValidIsoDate(route.lastModified)) {
@@ -87,11 +94,16 @@ routes.forEach((route, index) => {
 });
 
 const sunatRoutes = routes.filter((route) => route.path === sunatPath);
-if (sunatRoutes.length !== 1 || sunatRoutes[0].lastModified !== sunatLastModified) {
-  throw new Error(`The sitemap must contain one ${sunatPath} entry dated ${sunatLastModified}.`);
+if (sunatRoutes.length !== 1) {
+  throw new Error(`The sitemap must contain one ${sunatPath} entry.`);
 }
 
-const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${routes
+const sitemapRoutes = routes.map((route) => ({
+  ...route,
+  lastModified: lastModifiedOverlay.get(route.path) ?? route.lastModified,
+}));
+
+const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapRoutes
   .map(
     (route) => `  <url>\n    <loc>${SITE_ORIGIN}${route.path}</loc>\n    <lastmod>${route.lastModified}</lastmod>\n    <changefreq>${route.changeFrequency}</changefreq>\n    <priority>${route.priority.toFixed(1)}</priority>\n  </url>`,
   )
