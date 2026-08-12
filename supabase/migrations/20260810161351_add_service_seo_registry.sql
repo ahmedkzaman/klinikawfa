@@ -19,19 +19,15 @@ create table public.website_service_seo (
   updated_at timestamptz not null default now()
 );
 
-create index website_service_seo_published_by_idx
-on public.website_service_seo (published_by)
-where published_by is not null;
-
 alter table public.website_service_seo enable row level security;
 
-create policy "Published service SEO is anonymously readable"
-on public.website_service_seo for select to anon
+create policy "Published service SEO is publicly readable"
+on public.website_service_seo for select to anon, authenticated
 using (published_at is not null);
 
-create policy "Authenticated users read published or managed service SEO"
+create policy "Website managers can read service SEO registry"
 on public.website_service_seo for select to authenticated
-using (published_at is not null or (select private.can_manage_website()));
+using ((select private.can_manage_website()));
 
 revoke all on table public.website_service_seo from public, anon, authenticated;
 grant select on table public.website_service_seo to anon, authenticated;
