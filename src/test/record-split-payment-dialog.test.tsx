@@ -58,7 +58,7 @@ function renderDialog({
   defaultAmount?: number;
   onOpenChange?: (open: boolean) => void;
 } = {}) {
-  render(
+  const view = render(
     <RecordPaymentDialog
       open
       onOpenChange={onOpenChange}
@@ -68,7 +68,7 @@ function renderDialog({
       completeVisitOnPayment={completeVisitOnPayment}
     />,
   );
-  return { onOpenChange };
+  return { onOpenChange, ...view };
 }
 
 function addSecondAllocation(firstAmount = '40') {
@@ -201,6 +201,55 @@ describe('RecordPaymentDialog split allocations', () => {
 
     expect(state.recordSplitAndComplete.mock.calls[1][0].idempotency_key)
       .toBe(state.recordSplitAndComplete.mock.calls[0][0].idempotency_key);
+  });
+
+  it('keeps the failed request stable when live props change while the dialog stays open', async () => {
+    state.recordSplitAndComplete
+      .mockRejectedValueOnce(new Error('Connection closed after commit'))
+      .mockResolvedValueOnce({ payment_ids: ['payment-1', 'payment-2'] });
+    const { onOpenChange, rerender } = renderDialog();
+    addSecondAllocation();
+    chooseSecondMethod();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Record Payment & Check Out' }));
+    await waitFor(() => expect(state.recordSplitAndComplete).toHaveBeenCalledTimes(1));
+    const firstRequest = state.recordSplitAndComplete.mock.calls[0][0];
+
+    rerender(
+      <RecordPaymentDialog
+        open
+        onOpenChange={onOpenChange}
+        queueEntryId="queue-1"
+        consultationId="consultation-1"
+        defaultAmount={150}
+        defaultPaymentMethod="card"
+        completeVisitOnPayment
+      />,
+    );
+
+    expect(screen.getByLabelText('Amount (RM)')).toHaveValue(40);
+    expect(screen.getByLabelText('Amount 2 (RM)')).toHaveValue(60);
+    expect(screen.getByLabelText('Payment method')).toHaveTextContent('Cash');
+    expect(screen.getByLabelText('Payment method 2')).toHaveTextContent('QR Pay / E-Wallet');
+    expect(screen.getByText('Allocated RM100.00 / Remaining RM0.00')).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Record Payment & Check Out' }));
+    await waitFor(() => expect(state.recordSplitAndComplete).toHaveBeenCalledTimes(2));
+    expect(state.recordSplitAndComplete.mock.calls[1][0]).toEqual(firstRequest);
+  });
+
+  it('normalizes fractional sen consistently before validation and submission', async () => {
+    renderDialog({ completeVisitOnPayment: false });
+    fireEvent.change(screen.getByLabelText('Amount (RM)'), { target: { value: '2.675' } });
+
+    expect(screen.getByText('Allocated RM2.68 / Remaining RM97.32')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Record Payment & Check Out' }));
+
+    await waitFor(() => expect(state.recordSplit).toHaveBeenCalledTimes(1));
+    expect(state.recordSplit).toHaveBeenCalledWith(expect.objectContaining({
+      expected_patient_amount: 2.68,
+      payments: [{ method: 'cash', amount: 2.68 }],
+    }));
   });
 
   it('allows a partial collection on an already-completed visit', async () => {

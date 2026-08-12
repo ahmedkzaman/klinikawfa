@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -43,7 +43,9 @@ import {
 import { PAYMENT_METHOD_OPTIONS } from '@/lib/clinic/paymentMethod';
 import {
   PHYSICAL_PAYMENT_METHODS,
+  fromSen,
   remainingAllocationAmount,
+  toSen,
   validatePaymentAllocations,
   type PatientPaymentAllocation,
   type PhysicalPaymentMethod,
@@ -76,11 +78,15 @@ function canonicalDefaultMethod(method: string | undefined): PhysicalPaymentMeth
     : '';
 }
 
+function normalizeCurrencyAmount(amount: number) {
+  return fromSen(toSen(amount));
+}
+
 function numericAllocation(row: EditableAllocation): PatientPaymentAllocation {
   const amount = Number.parseFloat(row.amount);
   return {
     method: row.method,
-    amount: Number.isFinite(amount) ? amount : 0,
+    amount: Number.isFinite(amount) ? normalizeCurrencyAmount(amount) : 0,
   };
 }
 
@@ -117,22 +123,31 @@ export function RecordPaymentDialog({
   const [providerId, setProviderId] = useState('');
   const [providerOpen, setProviderOpen] = useState(false);
   const [notes, setNotes] = useState('');
-
-  const expectedBalance = Math.max(defaultAmount, 0);
+  const [expectedBalance, setExpectedBalance] = useState(
+    () => normalizeCurrencyAmount(Math.max(defaultAmount, 0)),
+  );
+  const [openingPaymentMethod, setOpeningPaymentMethod] = useState(defaultPaymentMethod);
+  const wasOpen = useRef(false);
 
   useEffect(() => {
-    if (!open) return;
+    const isOpening = open && !wasOpen.current;
+    wasOpen.current = open;
+    if (!isOpening) return;
+
+    const openingBalance = normalizeCurrencyAmount(Math.max(defaultAmount, 0));
+    setExpectedBalance(openingBalance);
+    setOpeningPaymentMethod(defaultPaymentMethod);
     setPaymentType('self_pay');
     setAllocations([createInitialAllocation(
       'self_pay',
       defaultPaymentMethod,
-      expectedBalance,
+      openingBalance,
     )]);
     setIdempotencyKey(crypto.randomUUID());
     setProviderId('');
     setProviderOpen(false);
     setNotes('');
-  }, [open, expectedBalance, defaultPaymentMethod]);
+  }, [open, defaultAmount, defaultPaymentMethod]);
 
   const selectedProvider = useMemo(
     () => providers.find((provider) => provider.id === providerId) ?? null,
@@ -168,7 +183,7 @@ export function RecordPaymentDialog({
 
   function resetForPaymentType(type: PaymentType) {
     setPaymentType(type);
-    setAllocations([createInitialAllocation(type, defaultPaymentMethod, expectedBalance)]);
+    setAllocations([createInitialAllocation(type, openingPaymentMethod, expectedBalance)]);
     setIdempotencyKey(crypto.randomUUID());
     setProviderId('');
     setProviderOpen(false);
@@ -204,7 +219,7 @@ export function RecordPaymentDialog({
 
     const payments = submittedAllocations.map((row) => ({
       method: row.method,
-      amount: Number(row.amount.toFixed(2)),
+      amount: row.amount,
     }));
     const expectedPatientAmount = paymentType === 'self_pay' && completeVisitOnPayment
       ? expectedBalance
@@ -215,7 +230,7 @@ export function RecordPaymentDialog({
         queue_entry_id: queueEntryId,
         consultation_id: consultationId,
         payment_type: paymentType,
-        expected_patient_amount: Number(expectedPatientAmount.toFixed(2)),
+        expected_patient_amount: expectedPatientAmount,
         payments,
         provider_id: selectedProvider?.id ?? null,
         notes: notes.trim() || null,
