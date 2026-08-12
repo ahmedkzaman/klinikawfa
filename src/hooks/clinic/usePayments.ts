@@ -3,10 +3,33 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { softDelete } from '@/lib/clinic/softDelete';
+import type { PatientPaymentAllocation } from '@/lib/clinic/paymentAllocations';
 import type { PaymentRow } from '@/types/clinic';
 
 const PAYMENTS_KEY = (queueEntryId: string) => ['payments', queueEntryId] as const;
 const LEDGER_KEY = ['payments_ledger'] as const;
+
+export interface SplitPaymentInput {
+  queue_entry_id: string;
+  consultation_id: string | null;
+  payment_type: 'self_pay' | 'panel';
+  expected_patient_amount: number;
+  payments: PatientPaymentAllocation[];
+  provider_id?: string | null;
+  notes?: string | null;
+  idempotency_key: string;
+}
+
+function splitPaymentRows(payments: PatientPaymentAllocation[]) {
+  return payments.map(({ method, amount }) => ({ payment_method: method, amount }));
+}
+
+function invalidateSplitPaymentQueries(qc: ReturnType<typeof useQueryClient>, queueEntryId: string) {
+  qc.invalidateQueries({ queryKey: PAYMENTS_KEY(queueEntryId) });
+  qc.invalidateQueries({ queryKey: LEDGER_KEY });
+  qc.invalidateQueries({ queryKey: ['consultation'] });
+  qc.invalidateQueries({ queryKey: ['clinic'] });
+}
 
 /** Active payments for a queue entry, with realtime updates. */
 export function usePayments(queueEntryId: string | undefined) {
@@ -151,6 +174,46 @@ export function useRecordPaymentAndCompleteVisit() {
       qc.invalidateQueries({ queryKey: ['consultation'] });
       qc.invalidateQueries({ queryKey: ['clinic'] });
     },
+  });
+}
+
+export function useRecordSplitPaymentsAndCompleteVisit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: SplitPaymentInput) => {
+      const { data, error } = await supabase.rpc('record_split_payments_and_complete_visit', {
+        p_queue_entry_id: input.queue_entry_id,
+        p_consultation_id: input.consultation_id,
+        p_payment_type: input.payment_type,
+        p_expected_patient_amount: input.expected_patient_amount,
+        p_payments: splitPaymentRows(input.payments),
+        p_provider_id: input.provider_id ?? null,
+        p_notes: input.notes ?? null,
+        p_idempotency_key: input.idempotency_key,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, vars) => invalidateSplitPaymentQueries(qc, vars.queue_entry_id),
+  });
+}
+
+export function useRecordSplitPayments() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: SplitPaymentInput) => {
+      const { data, error } = await supabase.rpc('record_split_payments', {
+        p_queue_entry_id: input.queue_entry_id,
+        p_consultation_id: input.consultation_id,
+        p_payment_type: input.payment_type,
+        p_payments: splitPaymentRows(input.payments),
+        p_notes: input.notes ?? null,
+        p_idempotency_key: input.idempotency_key,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, vars) => invalidateSplitPaymentQueries(qc, vars.queue_entry_id),
   });
 }
 

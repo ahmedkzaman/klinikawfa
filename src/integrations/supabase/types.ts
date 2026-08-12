@@ -6570,6 +6570,30 @@ export type Database = {
         }
         Returns: Json
       }
+      record_split_payments: {
+        Args: {
+          p_consultation_id: string
+          p_idempotency_key: string
+          p_notes: string | null
+          p_payment_type: string
+          p_payments: Json
+          p_queue_entry_id: string
+        }
+        Returns: Json
+      }
+      record_split_payments_and_complete_visit: {
+        Args: {
+          p_consultation_id: string
+          p_expected_patient_amount: number
+          p_idempotency_key: string
+          p_notes: string | null
+          p_payment_type: string
+          p_payments: Json
+          p_provider_id: string | null
+          p_queue_entry_id: string
+        }
+        Returns: Json
+      }
       record_panel_claim_portion_payment: {
         Args: {
           p_amount: number
