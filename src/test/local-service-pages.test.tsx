@@ -198,7 +198,7 @@ describe('local SEO service pages', () => {
     ).toHaveAttribute('href', '/services/minor-surgery-kutil-kuantan');
 
     await waitFor(() => {
-      expect(document.title).toBe(`${LOCAL_SERVICE_PAGES['sunat-kuantan'].title} | Klinik Awfa`);
+      expect(document.title).toBe(LOCAL_SERVICE_PAGES['sunat-kuantan'].title);
       expect(document.head.querySelector('meta[name="description"]')).toHaveAttribute(
         'content',
         LOCAL_SERVICE_PAGES['sunat-kuantan'].metaDescription,
