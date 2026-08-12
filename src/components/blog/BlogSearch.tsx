@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -12,15 +12,20 @@ interface BlogSearchProps {
 export default function BlogSearch({ value, onChange }: BlogSearchProps) {
   const { language } = useLanguage();
   const [localValue, setLocalValue] = useState(value);
+  const onChangeRef = useRef(onChange);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => {
-      onChange(localValue);
+      onChangeRef.current(localValue);
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [localValue, onChange]);
+  }, [localValue]);
 
   // Sync with external value changes
   useEffect(() => {
