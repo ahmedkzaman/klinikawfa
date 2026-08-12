@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { buildPublicSeoFallback } from "./public-seo-fallbacks.mjs";
 
 const siteOrigin = "https://klinikawfa.com";
 const defaultImage = `${siteOrigin}/klinik-awfa-exterior.webp`;
@@ -140,6 +141,11 @@ for (const [route, fallback] of Object.entries(pages)) {
   html = replaceTag(html, /<meta[^>]+name=["']twitter:title["'][^>]*>/i, `<meta data-rh="true" name="twitter:title" content="${socialTitle}" />`);
   html = replaceTag(html, /<meta[^>]+name=["']twitter:description["'][^>]*>/i, `<meta data-rh="true" name="twitter:description" content="${socialDescription}" />`);
   html = replaceTag(html, /<meta[^>]+name=["']twitter:image["'][^>]*>/i, `<meta data-rh="true" name="twitter:image" content="${image}" />`);
+
+  const seoFallback = buildPublicSeoFallback(route);
+  if (seoFallback) {
+    html = html.replace('<div id="root"></div>', `<div id="root">${seoFallback}</div>`);
+  }
 
   writeFileSync(htmlPath, html);
 }

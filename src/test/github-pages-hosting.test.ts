@@ -157,7 +157,7 @@ describe("GitHub Pages hosting", () => {
       '<meta name="twitter:title" content="Klinik Awfa KotaSAS | Klinik Keluarga di Kuantan" />',
       '<meta name="twitter:description" content="Homepage description" />',
       "</head>",
-      "<body></body>",
+      '<body><div id="root"></div></body>',
       "</html>",
     ].join("\n");
 
@@ -198,6 +198,7 @@ describe("GitHub Pages hosting", () => {
       expect(sunat).toContain(
         '<link data-rh="true" rel="canonical" href="https://klinikawfa.com/services/sunat-kuantan/" />',
       );
+      expect(sunat).toContain('<h1>Sunat di Kuantan untuk bayi, kanak-kanak dan dewasa</h1>');
     } finally {
       rmSync(distFixture, { recursive: true, force: true });
     }
