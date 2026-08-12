@@ -54,6 +54,14 @@ describe('generated public sitemap', () => {
     ).toThrow('invalid public path');
   });
 
+  it.each(['/%63linic/', '/%61dmin/'])('rejects a private route hidden by percent encoding: %s', (path) => {
+    expect(() =>
+      runGeneratorWithManifest((routes) => {
+        routes[0].path = path;
+      }),
+    ).toThrow('private and cannot be included in the sitemap');
+  });
+
   it('rejects a Sunat lastmod that is not bound to its canonical URL', () => {
     expect(() =>
       runGeneratorWithManifest((routes) => {

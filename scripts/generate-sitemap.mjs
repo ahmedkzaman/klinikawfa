@@ -31,13 +31,14 @@ function isPrivatePath(path) {
   return privatePrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
 
-function isValidPublicPath(path) {
-  if (!/^\/[A-Za-z0-9._~!$'()*+,;=:@%/-]*$/.test(path)) return false;
+function decodeValidPublicPath(path) {
+  if (!/^\/[A-Za-z0-9._~!$'()*+,;=:@%/-]*$/.test(path)) return null;
 
   try {
-    return !decodeURIComponent(path).split('/').some((segment) => segment === '.' || segment === '..');
+    const decodedPath = decodeURIComponent(path);
+    return decodedPath.split('/').some((segment) => segment === '.' || segment === '..') ? null : decodedPath;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -46,11 +47,12 @@ function validateRoute(route, index) {
     throw new Error(`Route ${index} must be an object.`);
   }
 
-  if (typeof route.path !== 'string' || !isValidPublicPath(route.path)) {
+  const decodedPath = typeof route.path === 'string' ? decodeValidPublicPath(route.path) : null;
+  if (!decodedPath) {
     throw new Error(`Route ${index} has an invalid public path.`);
   }
 
-  if (isPrivatePath(route.path)) {
+  if (isPrivatePath(decodedPath)) {
     throw new Error(`Route ${route.path} is private and cannot be included in the sitemap.`);
   }
 
