@@ -2,6 +2,114 @@
 -- network retries idempotent. The batch table is intentionally RPC-only: RLS
 -- is enabled without general policies and direct privileges are revoked.
 
+-- Keep panel receivables on the same effective-quantity basis as the split
+-- payment RPCs. Inventory-backed lines use the actually dispensed quantity;
+-- procedures and other non-inventory lines retain their ordered quantity.
+CREATE OR REPLACE FUNCTION public.ensure_panel_claim_for_queue(
+  p_queue_entry_id uuid
+) RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $function$
+DECLARE
+  v_panel_id uuid;
+  v_patient_id uuid;
+  v_total_amount numeric(10,2);
+  v_patient_paid numeric(10,2);
+  v_panel_amount numeric(10,2);
+  v_claim_id uuid;
+  v_claim_no text;
+  v_seq integer;
+BEGIN
+  SELECT queue.panel_id, queue.patient_id
+  INTO v_panel_id, v_patient_id
+  FROM public.queue_entries AS queue
+  WHERE queue.id = p_queue_entry_id
+    AND queue.payment_method = 'panel'
+    AND queue.panel_id IS NOT NULL;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT coalesce(sum(
+    item.price * CASE
+      WHEN item.item_id IS NOT NULL
+        THEN coalesce(item.dispensed_qty, item.quantity)
+      ELSE item.quantity
+    END
+  ), 0)::numeric(10,2)
+  INTO v_total_amount
+  FROM public.consultations AS consultation
+  LEFT JOIN public.consultation_items AS item
+    ON item.consultation_id = consultation.id
+   AND item.deleted_at IS NULL
+  WHERE consultation.queue_entry_id = p_queue_entry_id
+    AND consultation.deleted_at IS NULL;
+
+  SELECT coalesce(sum(payment.amount), 0)::numeric(10,2)
+  INTO v_patient_paid
+  FROM public.payments AS payment
+  WHERE payment.queue_entry_id = p_queue_entry_id
+    AND payment.deleted_at IS NULL
+    AND lower(btrim(payment.payment_method)) <> 'panel';
+
+  v_panel_amount := greatest(v_total_amount - v_patient_paid, 0)::numeric(10,2);
+
+  SELECT claim.id
+  INTO v_claim_id
+  FROM public.panel_claims AS claim
+  WHERE claim.queue_entry_id = p_queue_entry_id
+  FOR UPDATE;
+
+  IF v_claim_id IS NOT NULL THEN
+    UPDATE public.panel_claims AS claim
+    SET amount = v_panel_amount
+    WHERE claim.id = v_claim_id
+      AND claim.status = 'pending'
+      AND claim.amount IS DISTINCT FROM v_panel_amount;
+    RETURN v_claim_id;
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtext('panel-claim-' || CURRENT_DATE::text));
+
+  SELECT count(*) + 1
+  INTO v_seq
+  FROM public.panel_claims
+  WHERE claim_date = CURRENT_DATE;
+
+  v_claim_no :=
+    'PC-' || to_char(CURRENT_DATE, 'YYYYMMDD') || '-' || lpad(v_seq::text, 4, '0');
+
+  INSERT INTO public.panel_claims (
+    panel_id, patient_id, queue_entry_id, claim_no, amount, status, claim_date
+  ) VALUES (
+    v_panel_id, v_patient_id, p_queue_entry_id, v_claim_no,
+    v_panel_amount, 'pending', CURRENT_DATE
+  )
+  ON CONFLICT (queue_entry_id) DO UPDATE
+    SET amount = v_panel_amount
+    WHERE panel_claims.status = 'pending'
+  RETURNING id INTO v_claim_id;
+
+  IF v_claim_id IS NULL THEN
+    SELECT claim.id
+    INTO v_claim_id
+    FROM public.panel_claims AS claim
+    WHERE claim.queue_entry_id = p_queue_entry_id;
+  END IF;
+
+  RETURN v_claim_id;
+END
+$function$;
+
+ALTER FUNCTION public.ensure_panel_claim_for_queue(uuid) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.ensure_panel_claim_for_queue(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.ensure_panel_claim_for_queue(uuid) FROM anon;
+REVOKE ALL ON FUNCTION public.ensure_panel_claim_for_queue(uuid) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.ensure_panel_claim_for_queue(uuid) TO service_role;
+
 CREATE TABLE public.payment_batches (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   queue_entry_id uuid NOT NULL REFERENCES public.queue_entries(id),

@@ -236,7 +236,7 @@ BEGIN
     '70000000-0000-4000-8000-000000000504',
     '70000000-0000-4000-8000-000000000302',
     'TEST ONLY PANEL PROCEDURE',
-    1, 100, 20
+    1, 100, 20, NULL, NULL
   );
   UPDATE public.consultations
   SET status = 'completed'
@@ -323,6 +323,13 @@ BEGIN
       '70000000-0000-4000-8000-000000000103',
       'registered', 'cash', NULL,
       '70000000-0000-4000-8000-000000000001'
+    ),
+    (
+      '70000000-0000-4000-8000-000000000209',
+      '70000000-0000-4000-8000-000000000102',
+      'registered', 'panel',
+      '70000000-0000-4000-8000-000000000801',
+      '70000000-0000-4000-8000-000000000001'
     );
 
   INSERT INTO public.consultations (
@@ -359,6 +366,12 @@ BEGIN
       '70000000-0000-4000-8000-000000000208',
       '70000000-0000-4000-8000-000000000103',
       'in_progress', '', '', ''
+    ),
+    (
+      '70000000-0000-4000-8000-000000000309',
+      '70000000-0000-4000-8000-000000000209',
+      '70000000-0000-4000-8000-000000000102',
+      'in_progress', '', '', ''
     );
 
   INSERT INTO public.consultation_items (
@@ -391,6 +404,12 @@ BEGIN
       '70000000-0000-4000-8000-000000000509',
       '70000000-0000-4000-8000-000000000308',
       'TEST ONLY FORCED SPLIT ROLLBACK', 1, 100, 0, NULL, NULL
+    ),
+    (
+      '70000000-0000-4000-8000-000000000510',
+      '70000000-0000-4000-8000-000000000309',
+      'TEST ONLY PANEL EFFECTIVE QUANTITY', 2, 80, 0,
+      '70000000-0000-4000-8000-000000000402', 1
     );
 
   UPDATE public.consultations
@@ -399,6 +418,12 @@ BEGIN
   UPDATE public.queue_entries
   SET clinic_status = 'completed'
   WHERE id = '70000000-0000-4000-8000-000000000207';
+  UPDATE public.consultations
+  SET status = 'completed'
+  WHERE id = '70000000-0000-4000-8000-000000000309';
+  UPDATE public.queue_entries
+  SET clinic_status = 'completed'
+  WHERE id = '70000000-0000-4000-8000-000000000209';
 END
 $setup$;
 
@@ -1299,6 +1324,26 @@ BEGIN
      OR (v_result->>'amount')::numeric IS DISTINCT FROM 50::numeric
      OR (v_result->>'balance_due')::numeric IS DISTINCT FROM 30::numeric THEN
     RAISE EXCEPTION 'COMPLETED_SPLIT_COLLECTION_MISMATCH';
+  END IF;
+
+  -- Panel reconciliation uses dispensed_qty for inventory-backed lines. This
+  -- item was ordered twice but dispensed once: 80 billed - 30 paid = 50 claim.
+  v_result := public.record_split_payments(
+    '70000000-0000-4000-8000-000000000209',
+    '70000000-0000-4000-8000-000000000309',
+    'panel', '[{"payment_method":"cash","amount":30}]'::jsonb,
+    'TEST ONLY PANEL EFFECTIVE QUANTITY',
+    '70000000-0000-4000-8000-000000000a12'
+  );
+  SELECT amount INTO STRICT v_claim_amount
+  FROM public.panel_claims
+  WHERE queue_entry_id = '70000000-0000-4000-8000-000000000209';
+  IF (v_result->>'balance_due')::numeric IS DISTINCT FROM 50::numeric
+     OR v_claim_amount IS DISTINCT FROM 50::numeric
+     OR (SELECT sum(amount) FROM public.payments
+         WHERE queue_entry_id = '70000000-0000-4000-8000-000000000209'
+           AND deleted_at IS NULL) IS DISTINCT FROM 30::numeric THEN
+    RAISE EXCEPTION 'PANEL_EFFECTIVE_QUANTITY_RECONCILIATION_MISMATCH';
   END IF;
 
   -- Four individually valid numeric portions whose aggregate exceeds the
