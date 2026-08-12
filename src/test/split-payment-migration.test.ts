@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const sql = readFileSync(resolve(
   process.cwd(),
-  'supabase/migrations/20260812120000_add_split_patient_payments.sql',
+  'supabase/migrations/20260812174507_add_split_patient_payments.sql',
 ), 'utf8');
 const harness = readFileSync(resolve(
   process.cwd(),

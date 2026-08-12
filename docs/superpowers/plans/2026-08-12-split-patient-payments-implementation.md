@@ -28,7 +28,7 @@
 
 - Create `src/lib/clinic/paymentAllocations.ts`: allocation types, sen conversion, validation, remainder calculation, and method summary.
 - Create `src/test/payment-allocations.test.ts`: pure domain tests.
-- Create `supabase/migrations/20260812120000_add_split_patient_payments.sql`: checkout batch table plus the two atomic RPCs.
+- Create `supabase/migrations/20260812174507_add_split_patient_payments.sql`: checkout batch table plus the two atomic RPCs.
 - Create `src/test/split-payment-migration.test.ts`: migration contract and authorization assertions.
 - Modify `supabase/tests/completed_bill_corrections.sql`: executable transaction, idempotency, panel, and completed-visit cases.
 - Modify `src/integrations/supabase/types.ts`: generated-style RPC argument/return declarations.
@@ -191,7 +191,7 @@ git commit -m "feat: add split payment allocation domain"
 ### Task 2: Atomic and Idempotent Database RPCs
 
 **Files:**
-- Create: `supabase/migrations/20260812120000_add_split_patient_payments.sql`
+- Create: `supabase/migrations/20260812174507_add_split_patient_payments.sql`
 - Create: `src/test/split-payment-migration.test.ts`
 - Modify: `supabase/tests/completed_bill_corrections.sql`
 
@@ -209,7 +209,7 @@ import { describe, expect, it } from 'vitest';
 
 const sql = readFileSync(resolve(
   process.cwd(),
-  'supabase/migrations/20260812120000_add_split_patient_payments.sql',
+  'supabase/migrations/20260812174507_add_split_patient_payments.sql',
 ), 'utf8');
 
 describe('split payment migration', () => {
@@ -346,7 +346,7 @@ Expected: every pgTAP assertion passes and the command exits with code 0.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add supabase/migrations/20260812120000_add_split_patient_payments.sql src/test/split-payment-migration.test.ts supabase/tests/completed_bill_corrections.sql
+git add supabase/migrations/20260812174507_add_split_patient_payments.sql src/test/split-payment-migration.test.ts supabase/tests/completed_bill_corrections.sql
 git commit -m "feat: add atomic split payment RPCs"
 ```
 
@@ -616,7 +616,7 @@ Run: `npx.cmd supabase link --project-ref nhjbqdiyptjqherdfbqk`
 
 Run: `npx.cmd supabase db push --linked`
 
-Confirm the output lists `20260812120000_add_split_patient_payments.sql` as applied. Then run `git push origin HEAD:main`. Do not push frontend code that calls the new RPC before the migration succeeds.
+Confirm the output lists `20260812174507_add_split_patient_payments.sql` as applied. Then run `git push origin HEAD:main`. Do not push frontend code that calls the new RPC before the migration succeeds.
 
 - [ ] **Step 5: Perform controlled production smoke tests**
 
