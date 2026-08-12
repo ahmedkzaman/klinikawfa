@@ -57,6 +57,7 @@ import {
 
 import { useFinancialInsights, type RawFinancialRow } from '@/hooks/clinic/useFinancialInsights';
 import { useSalesInsights, type SalesInsightRow } from '@/hooks/clinic/useSalesInsights';
+import { usePanelBilledInsights } from '@/hooks/clinic/usePanelBilledInsights';
 import { ScoreboardsTab } from '@/components/clinic/insight/ScoreboardsTab';
 import { LeaderboardsTab } from '@/components/clinic/insight/LeaderboardsTab';
 import { ValuationTab } from '@/components/clinic/insight/ValuationTab';
@@ -185,6 +186,12 @@ export default function Insight() {
     isError: salesIsError,
     error: salesError,
   } = useSalesInsights(startDate, endDate);
+  const {
+    data: panelBilledData,
+    isLoading: panelBilledLoading,
+    isError: panelBilledIsError,
+    error: panelBilledError,
+  } = usePanelBilledInsights(startDate, endDate);
 
   const summary = data?.summary;
   const topItems = data?.topItems ?? [];
@@ -336,7 +343,15 @@ export default function Insight() {
               </Card>
             )}
 
-            {isLoading || salesLoading ? (
+            {panelBilledIsError && (
+              <Card className={bento}>
+                <CardContent className="py-6 text-sm text-rose-600">
+                  Failed to load panel billed amount: {(panelBilledError as Error)?.message ?? 'Unknown error'}
+                </CardContent>
+              </Card>
+            )}
+
+            {isLoading || salesLoading || panelBilledLoading ? (
               <InsightSkeleton />
             ) : (
               <>
@@ -398,23 +413,32 @@ export default function Insight() {
                         </ResponsiveContainer>
                       </div>
                     )}
-                    {salesByMethod.length > 0 && (
-                      <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        {salesByMethod.slice(0, 3).map((method) => (
-                          <div key={method.method} className={softTile}>
-                            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                              {method.method}
-                            </div>
-                            <div className="text-lg font-semibold text-slate-900">
-                              {formatRM(method.collected)}
-                            </div>
-                            <div className="text-xs text-slate-500">
-                              {method.paymentCount} payment{method.paymentCount === 1 ? '' : 's'}
-                            </div>
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                      {salesByMethod.slice(0, 3).map((method) => (
+                        <div key={method.method} className={softTile}>
+                          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                            {method.method}
                           </div>
-                        ))}
+                          <div className="text-lg font-semibold text-slate-900">
+                            {formatRM(method.collected)}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            {method.paymentCount} payment{method.paymentCount === 1 ? '' : 's'}
+                          </div>
+                        </div>
+                      ))}
+                      <div className={softTile}>
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                          Panel Billed
+                        </div>
+                        <div className="text-lg font-semibold text-slate-900">
+                          {formatRM(panelBilledData?.totalBilled ?? 0)}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {panelBilledData?.claimCount ?? 0} claim{panelBilledData?.claimCount === 1 ? '' : 's'}
+                        </div>
                       </div>
-                    )}
+                    </div>
                   </CardContent>
                 </Card>
 

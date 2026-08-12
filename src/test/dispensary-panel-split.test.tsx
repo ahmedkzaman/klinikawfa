@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { useEffect } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
@@ -7,6 +8,7 @@ const state = vi.hoisted(() => ({
   invalidateQueries: vi.fn(),
   checkout: vi.fn(),
   legacySetCheckoutPortions: vi.fn(),
+  includeOtherCharge: false,
 }));
 
 vi.mock('react-router-dom', async () => {
@@ -131,7 +133,22 @@ vi.mock('@/components/clinic/StatusBadge', () => ({ StatusBadge: () => null }));
 vi.mock('@/components/clinic/patient/FollowUpScheduler', () => ({ FollowUpScheduler: () => null }));
 vi.mock('@/components/clinic/visit/VisitDetailsColumn', () => ({ VisitDetailsColumn: () => null }));
 vi.mock('@/components/clinic/visit/AttachmentsCard', () => ({ AttachmentsCard: () => null }));
-vi.mock('@/components/clinic/visit/BillingDetailsColumn', () => ({ BillingDetailsColumn: () => null }));
+vi.mock('@/components/clinic/visit/BillingDetailsColumn', () => ({
+  BillingDetailsColumn: ({ onChargesChange }: {
+    onChargesChange?: (charges: Array<{ charge_type_id: string; name: string; amount: number }>) => void;
+  }) => {
+    useEffect(() => {
+      onChargesChange?.(state.includeOtherCharge
+        ? [{
+            charge_type_id: 'regulatory-charge-type-1',
+            name: 'Regulatory Compliance Charges',
+            amount: 15,
+          }]
+        : []);
+    }, [onChargesChange]);
+    return null;
+  },
+}));
 vi.mock('@/components/clinic/visit/DispensePanel', () => ({ DispensePanel: () => null }));
 vi.mock('@/components/clinic/PatientAlertBanner', () => ({ PatientAlertBanner: () => null }));
 vi.mock('@/components/clinic/VisitRemarksBanner', () => ({ VisitRemarksBanner: () => null }));
@@ -156,6 +173,7 @@ describe('dispensary panel payment split', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.role = 'ops_staff';
+    state.includeOtherCharge = false;
     state.checkout.mockResolvedValue({
       data: { status: 'partial', balance_due: 100, payment_id: null },
       error: null,
@@ -176,6 +194,22 @@ describe('dispensary panel payment split', () => {
       p_panel_covered_amount: 100,
       p_panel_portions: null,
       p_checkout_idempotency_key: expect.any(String),
+    }));
+  });
+
+  it('preserves the charge type identity when checkout saves an other charge', async () => {
+    state.includeOtherCharge = true;
+    await renderCheckout();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Complete Panel Checkout' }));
+
+    await waitFor(() => expect(state.checkout).toHaveBeenCalledTimes(1));
+    expect(state.checkout).toHaveBeenCalledWith('checkout_visit', expect.objectContaining({
+      p_other_charges: [{
+        charge_type_id: 'regulatory-charge-type-1',
+        name: 'Regulatory Compliance Charges',
+        amount: 15,
+      }],
     }));
   });
 

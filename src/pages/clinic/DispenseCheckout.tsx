@@ -612,6 +612,7 @@ export default function DispenseCheckout() {
         p_payment_type: panelId ? 'panel' : 'self_pay',
         p_panel_provider_id: panelId ?? null,
         p_other_charges: selectedCharges.map((c) => ({
+          charge_type_id: c.charge_type_id,
           name: c.name,
           amount: c.amount,
         })),
