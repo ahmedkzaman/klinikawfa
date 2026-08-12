@@ -55,6 +55,7 @@ interface LedgerEntry {
   unitemizedAdditionalCharges: number;
   latestPaymentType: 'self_pay' | 'panel' | 'insurance';
   latestMethod: string | null;
+  patientPaymentMethods: string[];
   latestPaymentId: string | null;
 }
 
@@ -211,7 +212,10 @@ export default function Billings() {
 
       if (existing) {
         if (p.payment_method === 'panel') existing.panelPayments += amt;
-        else existing.paid += amt;
+        else {
+          existing.paid += amt;
+          if (p.payment_method) existing.patientPaymentMethods.push(p.payment_method);
+        }
         existing.latestPaymentType = pType;
         existing.latestMethod = p.payment_method ?? existing.latestMethod;
         existing.latestPaymentId = p.id;
@@ -235,6 +239,9 @@ export default function Billings() {
           unitemizedAdditionalCharges: 0,
           latestPaymentType: pType,
           latestMethod: p.payment_method ?? null,
+          patientPaymentMethods: p.payment_method && p.payment_method !== 'panel'
+            ? [p.payment_method]
+            : [],
           latestPaymentId: p.id,
         });
       }
@@ -568,6 +575,7 @@ export default function Billings() {
                           e.latestPaymentType === 'panel' ||
                           e.latestPaymentType === 'insurance',
                         panelName: e.panelName,
+                        patientMethods: e.patientPaymentMethods,
                       })}
                     </Badge>
                   ) : (

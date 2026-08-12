@@ -11,6 +11,8 @@
  * to colour-code the four canonical methods (legacy/panel falls back to slate).
  */
 
+import { summarizePaymentMethods } from '@/lib/clinic/paymentAllocations';
+
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   cash: 'Cash',
   qr_pay: 'QR Pay',
@@ -39,13 +41,18 @@ export function formatBillingPaymentMethod({
   patientPaid,
   expectsPanel,
   panelName,
+  patientMethods,
 }: {
   method: string | null | undefined;
   patientPaid: number;
   expectsPanel: boolean;
   panelName: string | null | undefined;
+  patientMethods?: Array<string | null | undefined>;
 }): string {
-  if (!expectsPanel) return formatPaymentMethod(method, patientPaid);
+  if (!expectsPanel) {
+    const summary = summarizePaymentMethods(patientMethods ?? []);
+    return summary || formatPaymentMethod(method, patientPaid);
+  }
 
   const methodPanelName = String(method ?? '').match(/^panel:\s*(.+?)(?:\s*\+\s*copay)?$/i)?.[1];
   const provider = String(panelName ?? methodPanelName ?? '').trim();

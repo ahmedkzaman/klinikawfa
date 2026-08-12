@@ -29,4 +29,24 @@ describe('formatBillingPaymentMethod', () => {
       panelName: null,
     })).toBe('QR Pay');
   });
+
+  it('summarizes every physical method used for a self-pay visit', () => {
+    expect(formatBillingPaymentMethod({
+      method: 'qr_pay',
+      patientPaid: 100,
+      expectsPanel: false,
+      panelName: null,
+      patientMethods: ['cash', 'qr_pay'],
+    })).toBe('Cash + QR Pay');
+  });
+
+  it('keeps the panel provider and copay label when a panel visit uses multiple physical methods', () => {
+    expect(formatBillingPaymentMethod({
+      method: 'qr_pay',
+      patientPaid: 100,
+      expectsPanel: true,
+      panelName: 'AIA',
+      patientMethods: ['cash', 'qr_pay'],
+    })).toBe('Panel: AIA + Copay');
+  });
 });
