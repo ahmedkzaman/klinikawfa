@@ -7,10 +7,12 @@ const {
   useFinancialControlSummaryMock,
   useFinancialInsightsMock,
   useSalesInsightsMock,
+  usePanelBilledInsightsMock,
 } = vi.hoisted(() => ({
   useFinancialControlSummaryMock: vi.fn(),
   useFinancialInsightsMock: vi.fn(),
   useSalesInsightsMock: vi.fn(),
+  usePanelBilledInsightsMock: vi.fn(),
 }));
 
 vi.mock('@/hooks/clinic/useFinancialControl', () => ({
@@ -23,6 +25,10 @@ vi.mock('@/hooks/clinic/useFinancialInsights', () => ({
 
 vi.mock('@/hooks/clinic/useSalesInsights', () => ({
   useSalesInsights: useSalesInsightsMock,
+}));
+
+vi.mock('@/hooks/clinic/usePanelBilledInsights', () => ({
+  usePanelBilledInsights: usePanelBilledInsightsMock,
 }));
 
 vi.mock('@/components/clinic/insight/management/FinancialDetailSheet', () => ({
@@ -123,6 +129,12 @@ describe('Insight Management integration', () => {
     });
     useSalesInsightsMock.mockReturnValue({
       data: undefined,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    usePanelBilledInsightsMock.mockReturnValue({
+      data: { totalBilled: 0, claimCount: 0 },
       isLoading: false,
       isError: false,
       error: null,
