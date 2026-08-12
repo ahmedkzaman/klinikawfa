@@ -136,7 +136,11 @@ export default function Services() {
                   to={`/services/${service.slug}`}
                   className="rounded-xl border border-border bg-background p-5 font-semibold text-primary shadow-sm transition-colors hover:border-primary hover:bg-primary/5"
                 >
-                  {service.heading}
+                  {service.slug === 'sunat-kuantan'
+                    ? language === 'ms'
+                      ? 'Perkhidmatan sunat di Kuantan'
+                      : 'Circumcision services in Kuantan'
+                    : service.heading}
                 </Link>
               ))}
             </div>

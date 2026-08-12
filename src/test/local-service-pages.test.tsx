@@ -189,6 +189,14 @@ describe('local SEO service pages', () => {
       'href',
       '/appointment',
     );
+    expect(screen.getByRole('link', { name: /lihat doktor klinik awfa/i })).toHaveAttribute(
+      'href',
+      '/doctors',
+    );
+    expect(screen.getByRole('link', { name: /lihat semua perkhidmatan/i })).toHaveAttribute(
+      'href',
+      '/services',
+    );
     expect(screen.getByRole('link', { name: /whatsapp/i })).toHaveAttribute(
       'href',
       CLINIC_INFO.whatsapp,

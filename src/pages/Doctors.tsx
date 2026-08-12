@@ -5,6 +5,7 @@ import { PublicPageSchema } from '@/components/seo/PublicPageSchema';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Link } from 'react-router-dom';
 import { CLINIC_INFO } from '@/lib/constants';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
@@ -22,6 +23,12 @@ import {
 } from 'lucide-react';
 
 type TeamMember = Tables<'team_members'>;
+
+function offersCircumcision(doctor: Partial<TeamMember>) {
+  return [...(doctor.expertise_ms ?? []), ...(doctor.expertise_en ?? [])].some((expertise) =>
+    /khatan|circumcision/i.test(expertise),
+  );
+}
 
 // Mock data to display when database is empty
 const mockDoctors: Partial<TeamMember>[] = [
@@ -312,6 +319,17 @@ export default function Doctors() {
                           ))}
                         </div>
                       </div>
+                    )}
+
+                    {offersCircumcision(doctor) && (
+                      <Link
+                        className="mb-5 inline-flex font-semibold text-primary hover:underline"
+                        to="/services/sunat-kuantan"
+                      >
+                        {language === 'ms'
+                          ? 'Lihat perkhidmatan sunat di Kuantan'
+                          : 'View circumcision services in Kuantan'}
+                      </Link>
                     )}
 
                     {/* Bio */}

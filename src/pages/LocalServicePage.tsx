@@ -87,12 +87,18 @@ export default function LocalServicePage({ slug }: LocalServicePageProps) {
             {content.introduction}
           </p>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <Button asChild size="lg">
               <Link to="/appointment">
                 <CalendarDays className="mr-2 h-5 w-5" aria-hidden="true" />
                 Buat temujanji
               </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <Link to="/doctors">Lihat doktor Klinik Awfa</Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <Link to="/services">Lihat semua perkhidmatan</Link>
             </Button>
             <Button asChild size="lg" variant="outline">
               <a href={CLINIC_INFO.whatsapp} rel="noopener noreferrer" target="_blank">
