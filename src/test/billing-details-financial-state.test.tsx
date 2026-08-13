@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import type { ConsultationItemRow, PaymentRow } from '@/types/clinic';
 
-vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ isSpecialAdmin: false }) }));
+vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ isSpecialAdmin: false, role: 'ops_staff' }) }));
 vi.mock('@/hooks/clinic/usePayments', () => ({ useVoidPayment: () => ({ mutateAsync: vi.fn() }) }));
 vi.mock('@/hooks/clinic/useClinicChargeTypes', () => ({ useClinicChargeTypes: () => ({ data: [] }) }));
 vi.mock('@/components/clinic/billing/PrintReceiptDialog', () => ({ PrintReceiptDialog: () => null }));
@@ -45,5 +45,63 @@ describe('BillingDetailsColumn financial state', () => {
     expect(screen.getAllByText('Paid').length).toBeGreaterThan(0);
     expect(screen.getAllByText('RM 30.00').length).toBeGreaterThanOrEqual(3);
     expect(screen.queryByText('Refund/Credit Due')).not.toBeInTheDocument();
+  });
+  it('disables record and hides void controls while a panel claim is loading or materialized', () => {
+    const payment = {
+      id: 'payment-1', amount: 10, payment_method: 'cash', payment_type: 'panel',
+      created_at: '2026-07-28T09:00:00.000Z',
+    } as PaymentRow;
+    const { rerender } = render(
+      <MemoryRouter>
+        <BillingDetailsColumn
+          queueEntryId="queue-1"
+          consultationId="consultation-1"
+          items={[item]}
+          payments={[payment]}
+          expectsPanel
+          panelClaimLoading
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Record Payment' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Void payment' })).not.toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter>
+        <BillingDetailsColumn
+          queueEntryId="queue-1"
+          consultationId="consultation-1"
+          items={[item]}
+          payments={[payment]}
+          expectsPanel
+          panelClaim={{
+            id: 'claim-1', amount: 90, receivedAmount: 10, status: 'approved',
+            isMaterialized: true, hasConfiguredPortions: true,
+          }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Record Payment' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Void payment' })).not.toBeInTheDocument();
+    expect(screen.getByText(/panel claim has entered processing/i)).toBeVisible();
+
+    rerender(
+      <MemoryRouter>
+        <BillingDetailsColumn
+          queueEntryId="queue-1"
+          consultationId="consultation-1"
+          items={[item]}
+          payments={[payment]}
+          expectsPanel
+          panelClaimError
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Record Payment' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Void payment' })).not.toBeInTheDocument();
+    expect(screen.getByText(/panel claim status is unavailable/i)).toBeVisible();
   });
 });

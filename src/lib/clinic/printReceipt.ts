@@ -58,7 +58,7 @@ async function buildReceiptPdf({ data, settings }: RenderOptions): Promise<jsPDF
   const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
   pdf.setFont('helvetica', 'normal');
 
-  const shortId = data.paymentId.slice(0, 8).toUpperCase();
+  const shortId = (data.receiptId ?? data.paymentId).slice(0, 8).toUpperCase();
   const dt = new Date(data.createdAt);
   const sst = settings.sst_number?.trim() || '';
 
@@ -197,30 +197,69 @@ async function buildReceiptPdf({ data, settings }: RenderOptions): Promise<jsPDF
     pdf.setFont('helvetica', 'normal');
     y += rowMinH;
   } else {
-    data.items.forEach((line, idx) => {
-      const itemCol = cols[1];
-      const wrapped = pdf.splitTextToSize(
-        line.name,
-        itemCol.w - cellPadX * 2,
-      ) as string[];
-      const rowH = Math.max(rowMinH, wrapped.length * 4 + 2);
-      ensureRoom(rowH);
-      // borders
-      cols.forEach((c, i) => pdf.rect(colX[i], y, c.w, rowH));
-      // text baselines
-      const baseY = y + 4;
-      pdf.text(String(idx + 1), colX[0] + cellPadX, baseY);
-      pdf.text(wrapped, colX[1] + cellPadX, baseY);
-      pdf.text(String(line.quantity), colX[2] + cols[2].w - cellPadX, baseY, {
-        align: 'right',
+    const hasInvoiceGroups = Boolean(data.invoiceGroups?.length);
+    const invoiceGroups = data.invoiceGroups?.length
+      ? data.invoiceGroups
+      : [{ id: 'receipt-items', label: '', subtotal: data.subtotal, items: data.items }];
+    let itemNumber = 0;
+
+    invoiceGroups.forEach((group) => {
+      if (hasInvoiceGroups) {
+        ensureRoom(rowMinH);
+        pdf.rect(PAGE.margin, y, CONTENT_W, rowMinH);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(group.label, PAGE.margin + cellPadX, y + rowMinH / 2 + 1.4);
+        pdf.setFont('helvetica', 'normal');
+        y += rowMinH;
+      }
+
+      group.items.forEach((line) => {
+        itemNumber += 1;
+        const itemCol = cols[1];
+        const wrapped = pdf.splitTextToSize(
+          line.name,
+          itemCol.w - cellPadX * 2,
+        ) as string[];
+        const rowH = Math.max(rowMinH, wrapped.length * 4 + 2);
+        ensureRoom(rowH);
+        // borders
+        cols.forEach((c, i) => pdf.rect(colX[i], y, c.w, rowH));
+        // text baselines
+        const baseY = y + 4;
+        pdf.text(String(itemNumber), colX[0] + cellPadX, baseY);
+        pdf.text(wrapped, colX[1] + cellPadX, baseY);
+        pdf.text(String(line.quantity), colX[2] + cols[2].w - cellPadX, baseY, {
+          align: 'right',
+        });
+        pdf.text(line.unit_price.toFixed(2), colX[3] + cols[3].w - cellPadX, baseY, {
+          align: 'right',
+        });
+        pdf.text(line.line_total.toFixed(2), colX[4] + cols[4].w - cellPadX, baseY, {
+          align: 'right',
+        });
+        y += rowH;
       });
-      pdf.text(line.unit_price.toFixed(2), colX[3] + cols[3].w - cellPadX, baseY, {
-        align: 'right',
-      });
-      pdf.text(line.line_total.toFixed(2), colX[4] + cols[4].w - cellPadX, baseY, {
-        align: 'right',
-      });
-      y += rowH;
+
+      if (hasInvoiceGroups) {
+        ensureRoom(rowMinH);
+        pdf.rect(PAGE.margin, y, colX[4] - PAGE.margin, rowMinH);
+        pdf.rect(colX[4], y, cols[4].w, rowMinH);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(
+          'Invoice subtotal (RM)',
+          colX[4] - cellPadX,
+          y + rowMinH / 2 + 1.4,
+          { align: 'right' },
+        );
+        pdf.text(
+          group.subtotal.toFixed(2),
+          tableRight - cellPadX,
+          y + rowMinH / 2 + 1.4,
+          { align: 'right' },
+        );
+        pdf.setFont('helvetica', 'normal');
+        y += rowMinH;
+      }
     });
   }
 
@@ -248,6 +287,9 @@ async function buildReceiptPdf({ data, settings }: RenderOptions): Promise<jsPDF
     drawTotalsRow('Subtotal (RM)', data.subtotal.toFixed(2));
   }
   drawTotalsRow('Invoice Total (RM)', data.invoiceTotal.toFixed(2), { bold: true });
+  if ((data.panelBilled ?? 0) > 0) {
+    drawTotalsRow('Billed to Panel (RM)', data.panelBilled!.toFixed(2), { bold: true });
+  }
   drawTotalsRow('THIS RECEIPT AMOUNT (RM)', data.amountPaid.toFixed(2), { bold: true });
   if (data.balanceRemaining > 0) {
     drawTotalsRow('Balance Remaining (RM)', data.balanceRemaining.toFixed(2), {
@@ -312,7 +354,7 @@ export async function downloadReceiptPdf(
 ): Promise<void> {
   try {
     const pdf = await buildReceiptPdf({ data, settings });
-    const shortId = data.paymentId.slice(0, 8).toUpperCase();
+    const shortId = (data.receiptId ?? data.paymentId).slice(0, 8).toUpperCase();
     pdf.save(`Receipt-${shortId}.pdf`);
   } catch (e) {
     console.error('Receipt PDF download failed', e);

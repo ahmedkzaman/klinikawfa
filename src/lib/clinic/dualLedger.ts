@@ -105,3 +105,17 @@ export function calculateDualLedger(input: DualLedgerInput): DualLedgerState {
     settlement,
   };
 }
+
+/**
+ * Amount still collectible from the patient after active panel coverage.
+ * Panel invoices represent uncovered value as unattributed balance, while
+ * self-pay invoices use patientOutstanding.
+ */
+export function sumPatientCollectibleBalance(
+  ledgers: Array<Pick<DualLedgerState, 'patientOutstanding' | 'unattributedBalance'>>,
+): number {
+  return money(ledgers.reduce(
+    (sum, ledger) => sum + ledger.patientOutstanding + ledger.unattributedBalance,
+    0,
+  ));
+}

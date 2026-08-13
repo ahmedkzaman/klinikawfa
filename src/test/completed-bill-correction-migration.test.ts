@@ -332,7 +332,8 @@ describe('completed bill correction migration', () => {
     expect(harness).toMatch(/stale_bill/i);
     expect(harness).toMatch(/panel_claim_row_mismatch/i);
     expect(harness).toMatch(/audit_snapshot_failed/i);
-    expect(harness).toMatch(/already_completed/i);
+    expect(harness).toMatch(/idempotency_key_conflict/i);
+    expect(harness).toMatch(/debt_keyed_replay_mismatch/i);
     [
       'ATOMIC_ROLLBACK_AUDIT_CHANGED',
       'CORRECTED_PAYMENT_ROW_MISMATCH',

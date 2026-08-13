@@ -17,14 +17,16 @@ mkdirSync(outDir, { recursive: true });
 const env = {
   API_URL: process.env.STAGING_API_URL!,
   SERVICE_KEY: process.env.STAGING_SERVICE_ROLE_KEY!,
+  ANON_KEY: process.env.STAGING_ANON_KEY!,
+  AUTH_TOKEN: process.env.STAGING_AUTH_TOKEN!,
 };
 
 const K6 = process.env.K6_BIN ?? "k6";
 
 const SCENARIOS: { script: string; envExtra: Record<string,string> }[] = [
-  { script: "checkout-race.k6.js",     envExtra: { QUEUE_ID: "q0000000-0000-0000-0000-000000000001", CONSULTATION_ID: "x0000000-0000-0000-0000-000000000001" } },
-  { script: "queue-status-race.k6.js", envExtra: { QUEUE_ID: "q0000000-0000-0000-0000-000000000003" } },
-  { script: "settle-debt-race.k6.js",  envExtra: { QUEUE_ID: "q0000000-0000-0000-0000-000000000002", CONSULTATION_IDS: '["x0000000-0000-0000-0000-000000000002"]', AMOUNT: "150" } },
+  { script: "checkout-race.k6.js",     envExtra: { QUEUE_ID: "a0000000-0000-4000-8000-000000000001", CONSULTATION_ID: "c1000000-0000-4000-8000-000000000001" } },
+  { script: "queue-status-race.k6.js", envExtra: { QUEUE_ID: "a0000000-0000-4000-8000-000000000003" } },
+  { script: "settle-debt-race.k6.js",  envExtra: { QUEUE_ID: "a0000000-0000-4000-8000-000000000002", CONSULTATION_IDS: '["c1000000-0000-4000-8000-000000000002","c1000000-0000-4000-8000-000000000004"]', AMOUNT: "150", IDEMPOTENCY_KEY: "d0000000-0000-4000-8000-000000000002" } },
   { script: "owe-slip-race.k6.js",     envExtra: { SLIP_ID: "05100000-0000-0000-0000-000000000001" } },
   { script: "fefo-race.k6.js",         envExtra: { ITEM_ID: "11110000-0000-0000-0000-000000000001" } },
 ];

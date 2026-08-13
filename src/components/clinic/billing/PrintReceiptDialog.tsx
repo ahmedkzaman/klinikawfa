@@ -1,21 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Printer, Loader2, Download } from 'lucide-react';
+import { Download, Loader2, Printer } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
-import { formatQueueNo } from '@/lib/clinic/queueNumber';
-import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 import { downloadReceiptPdf, printReceipt } from '@/lib/clinic/printReceipt';
-import { sumActiveBillingLines } from '@/lib/clinic/billingLedgerTotals';
-import { calculateDualLedger } from '@/lib/clinic/dualLedger';
+import {
+  buildReceiptData,
+  type PaymentBatchReceiptSnapshot,
+} from '@/lib/clinic/receiptPayload';
 import { ReceiptTemplate, type ReceiptData } from './ReceiptTemplate';
 
 interface Props {
@@ -28,122 +28,18 @@ interface Props {
 
 export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload = false }: Props) {
   const { settings } = useClinicSettings();
-
-  const { data, isLoading } = useQuery<ReceiptData | null>({
+  const { data, isLoading, error: receiptError } = useQuery<ReceiptData | null>({
     queryKey: ['receipt_payload', paymentId],
-    enabled: open && !!paymentId,
+    enabled: open && Boolean(paymentId),
     queryFn: async () => {
       if (!paymentId) return null;
-      const { data: pay, error } = await supabase
-        .from('payments')
-        .select(
-          `
-          id, batch_id, payment_method, payment_type, amount, created_at,
-          queue_entry_id, consultation_id,
-          queue_entries (
-            queue_sequence, created_at,
-            patients ( name, national_id, date_of_birth )
-          )
-        `,
-        )
-        .eq('id', paymentId)
-        .maybeSingle();
-      if (error) throw error;
-      if (!pay) return null;
-
-      const { data: allQueuePayments, error: paymentsErr } = await supabase
-        .from('payments')
-        .select('id, batch_id, amount, payment_method, created_at')
-        .eq('queue_entry_id', pay.queue_entry_id)
-        .is('deleted_at', null);
-      if (paymentsErr) throw paymentsErr;
-      const queuePayments = pay.batch_id
-        ? (allQueuePayments ?? []).filter((payment) => payment.batch_id === pay.batch_id)
-        : [{ id: pay.id, batch_id: null, amount: pay.amount, payment_method: pay.payment_method, created_at: pay.created_at }];
-
-      const { data: claims, error: claimsErr } = await supabase
-        .from('panel_claims')
-        .select('amount, received_amount, status')
-        .eq('queue_entry_id', pay.queue_entry_id);
-      if (claimsErr) throw claimsErr;
-      const activeClaims = (claims ?? []).filter((claim) =>
-        ['pending', 'submitted', 'approved', 'received'].includes(String(claim.status).toLowerCase()),
-      );
-
-      let items: ReceiptData['items'] = [];
-      let subtotal = 0;
-      if (pay.consultation_id) {
-        const { data: rows, error: itemsErr } = await supabase
-          .from('consultation_items')
-          .select('item_name, quantity, price, item_id')
-          .eq('consultation_id', pay.consultation_id)
-          .is('deleted_at', null)
-          .order('created_at', { ascending: true });
-        if (itemsErr) throw itemsErr;
-        items = (rows ?? []).map((r) => {
-          const qty = Number(r.quantity ?? 0);
-          const unit = Number(r.price ?? 0);
-          const lineTotal = sumActiveBillingLines([{ price: unit, quantity: qty }]);
-          return {
-            name: r.item_name,
-            quantity: qty,
-            unit_price: unit,
-            line_total: lineTotal,
-          };
-        });
-        subtotal = sumActiveBillingLines(rows ?? []);
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const qe: any = (pay as any).queue_entries;
-      const patient = qe?.patients ?? null;
-      const panelAmount = activeClaims.reduce((sum, claim) => sum + Number(claim.amount ?? 0), 0);
-      const panelReceived = activeClaims.reduce((sum, claim) => sum + Number(claim.received_amount ?? 0), 0);
-      const panelPayments = (allQueuePayments ?? []).reduce((sum, payment) =>
-        sum + (payment.payment_method === 'panel' ? Number(payment.amount ?? 0) : 0), 0);
-      const patientPortions = (queuePayments ?? []).filter((payment) => payment.payment_method !== 'panel');
-      const allPatientPayments = (allQueuePayments ?? []).filter((payment) => payment.payment_method !== 'panel');
-      const ledger = calculateDualLedger({
-        billedTotal: subtotal,
-        patientPayments: allPatientPayments.map((payment) => ({
-          amount: Number(payment.amount ?? 0),
-          paymentMethod: payment.payment_method,
-        })),
-        panelPayments,
-        expectsPanel: pay.payment_type === 'panel' || pay.payment_type === 'insurance',
-        panelClaim: activeClaims.length ? {
-          amount: panelAmount,
-          receivedAmount: panelReceived,
-          status: String(activeClaims[0].status),
-        } : null,
+      const { data: snapshot, error } = await supabase.rpc('get_payment_batch_receipt', {
+        p_payment_id: paymentId,
       });
-
-      return {
-        paymentId: pay.id,
-        paymentMethod: pay.payment_method,
-        paymentType: pay.payment_type,
-        amountPaid: patientPortions.reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0),
-        paymentPortions: patientPortions.map((payment) => ({
-          id: payment.id,
-          method: payment.payment_method,
-          amount: Number(payment.amount ?? 0),
-        })),
-        createdAt: pay.created_at,
-        queueLabel: qe?.queue_sequence
-          ? formatQueueNo(qe.created_at ?? pay.created_at, qe.queue_sequence)
-          : null,
-        patientName: patient?.name ?? 'Walk-in',
-        patientIc: patient?.national_id ?? null,
-        patientAge: patient?.date_of_birth
-          ? calculateClinicalAge(patient.date_of_birth).replace(/^Age:\s*/i, '')
-          : null,
-        items,
-        subtotal,
-        invoiceTotal: subtotal,
-        balanceRemaining: ledger.patientOutstanding,
-        panelBilled: ledger.panelCovered,
-        panelOutstanding: ledger.panelOutstanding,
-      } satisfies ReceiptData;
+      if (error) throw new Error(error.message || 'Failed to load receipt');
+      return buildReceiptData(
+        (snapshot ?? {}) as unknown as PaymentBatchReceiptSnapshot,
+      );
     },
   });
 
@@ -176,7 +72,7 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
     if (!open || !autoDownload || !data || isLoading || downloading) return;
     if (autoDownloadTriggeredRef.current === data.paymentId) return;
     autoDownloadTriggeredRef.current = data.paymentId;
-    (async () => {
+    void (async () => {
       await handleDownloadPdf();
       onOpenChange(false);
     })();
@@ -187,8 +83,6 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
     if (!open) autoDownloadTriggeredRef.current = null;
   }, [open]);
 
-
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg p-0 gap-0">
@@ -197,7 +91,11 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
         </DialogHeader>
 
         <div className="max-h-[70vh] overflow-y-auto bg-slate-100 p-4">
-          {isLoading || !data ? (
+          {receiptError ? (
+            <div role="alert" className="py-16 text-center text-sm text-destructive">
+              {receiptError instanceof Error ? receiptError.message : 'Failed to load receipt'}
+            </div>
+          ) : isLoading || !data ? (
             <div className="flex items-center justify-center py-16 text-slate-500">
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
               Loading receipt…
@@ -210,11 +108,7 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
         </div>
 
         <DialogFooter className="px-4 py-3 border-t no-print">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
           <Button
@@ -243,4 +137,3 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
     </Dialog>
   );
 }
-

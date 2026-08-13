@@ -115,6 +115,33 @@ vi.mock('@/lib/clinic/dualLedger', async () => {
 
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
+    rpc: () => Promise.resolve({
+      data: {
+        payment: { ...clickedPayment, deleted_at: null },
+        receipt_id: 'batch-first',
+        selected_queue_entry_ids: ['queue-split'],
+        payments: [
+          { id: 'cash-40', batch_id: 'batch-first', amount: 40, payment_method: 'cash', payment_type: 'self_pay', created_at: '2026-08-12T09:00:00Z', queue_entry_id: 'queue-split', consultation_id: 'consultation-split', deleted_at: null },
+          { id: 'qr-60', batch_id: 'batch-first', amount: 60, payment_method: 'qr_pay', payment_type: 'self_pay', created_at: '2026-08-12T09:01:00Z', queue_entry_id: 'queue-split', consultation_id: 'consultation-split', deleted_at: null },
+          { id: 'panel-marker', batch_id: 'batch-first', amount: 0, payment_method: 'panel', payment_type: 'panel', created_at: '2026-08-12T09:02:00Z', queue_entry_id: 'queue-split', consultation_id: 'consultation-split', deleted_at: null },
+        ],
+        ledger_payments: [
+          { id: 'cash-40', batch_id: 'batch-first', amount: 40, payment_method: 'cash', payment_type: 'self_pay', created_at: '2026-08-12T09:00:00Z', queue_entry_id: 'queue-split', consultation_id: 'consultation-split', deleted_at: null },
+          { id: 'qr-60', batch_id: 'batch-first', amount: 60, payment_method: 'qr_pay', payment_type: 'self_pay', created_at: '2026-08-12T09:01:00Z', queue_entry_id: 'queue-split', consultation_id: 'consultation-split', deleted_at: null },
+          { id: 'later-card', batch_id: 'batch-later', amount: 20, payment_method: 'card', payment_type: 'self_pay', created_at: '2026-08-12T10:00:00Z', queue_entry_id: 'queue-split', consultation_id: 'consultation-split', deleted_at: null },
+        ],
+        queue_entries: [{
+          id: 'queue-split',
+          queue_sequence: 1,
+          created_at: '2026-08-12T09:00:00.000Z',
+          patient: { name: 'Aminah', national_id: null, date_of_birth: null },
+        }],
+        consultations: [{ id: 'consultation-split', queue_entry_id: 'queue-split' }],
+        items: [{ consultation_id: 'consultation-split', item_name: 'Consultation', quantity: 1, price: 100 }],
+        panel_claims: [],
+      },
+      error: null,
+    }),
     from: (table: string) => {
       const chain = {
         select: () => chain,

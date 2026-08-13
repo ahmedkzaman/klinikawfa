@@ -1,9 +1,32 @@
 import { useQuery } from '@tanstack/react-query';
 
 export interface VisitPanelClaim {
+  id: string;
   amount: number;
   receivedAmount: number;
   status: string | null;
+  hasConfiguredPortions: boolean;
+  isMaterialized: boolean;
+}
+
+interface PanelClaimPortionSnapshot {
+  id: string;
+  received_amount: number | null;
+  payment_reference: string | null;
+  received_date: string | null;
+}
+
+interface PanelClaimSnapshot {
+  id: string;
+  amount: number | null;
+  received_amount: number | null;
+  status: string | null;
+  submitted_date: string | null;
+  approved_amount: number | null;
+  payment_reference: string | null;
+  received_date: string | null;
+  is_materialized: boolean;
+  portions: PanelClaimPortionSnapshot[] | null;
 }
 
 export function useVisitPanelClaim(queueEntryId?: string | null) {
@@ -14,21 +37,19 @@ export function useVisitPanelClaim(queueEntryId?: string | null) {
       // Load the client only when the query actually runs. This keeps the
       // read-only visit component testable without requiring browser env vars.
       const { supabase } = await import('@/integrations/supabase/client');
-      const { data, error } = await supabase
-        .from('panel_claims')
-        .select('amount, received_amount, status')
-        .eq('queue_entry_id', queueEntryId!)
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.rpc('get_visit_financial_snapshot', {
+        p_queue_entry_id: queueEntryId!,
+      });
       if (error) throw error;
-      if (!data?.length) return null;
-      const active = data.filter((claim) =>
-        ['pending', 'submitted', 'approved', 'received'].includes(String(claim.status).toLowerCase()),
-      );
-      const source = active.length ? active : data.slice(0, 1);
+      const claim = (data as unknown as { claim?: PanelClaimSnapshot | null } | null)?.claim ?? null;
+      if (!claim) return null;
       return {
-        amount: source.reduce((sum, claim) => sum + Number(claim.amount ?? 0), 0),
-        receivedAmount: source.reduce((sum, claim) => sum + Number(claim.received_amount ?? 0), 0),
-        status: active.length ? String(active[0].status) : String(source[0].status),
+        id: claim.id,
+        amount: Number(claim.amount ?? 0),
+        receivedAmount: Number(claim.received_amount ?? 0),
+        status: claim.status === null ? null : String(claim.status),
+        hasConfiguredPortions: (claim.portions?.length ?? 0) > 0,
+        isMaterialized: claim.is_materialized === true,
       };
     },
   });

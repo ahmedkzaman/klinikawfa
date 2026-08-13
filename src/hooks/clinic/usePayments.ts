@@ -19,6 +19,22 @@ export interface SplitPaymentInput {
   idempotency_key: string;
 }
 
+export interface SettleMultipleDebtsInput {
+  queue_entry_id: string;
+  consultation_ids: string[];
+  amount_paid: number;
+  payment_method: string | null;
+  notes?: string | null;
+  idempotency_key: string;
+  patient_id: string;
+}
+
+export interface SettleMultipleDebtsResult {
+  payment_ids?: string[];
+  total_collected?: number;
+  debt_remaining?: number;
+}
+
 function splitPaymentRows(payments: PatientPaymentAllocation[]) {
   return payments.map(({ method, amount }) => ({ payment_method: method, amount }));
 }
@@ -32,6 +48,16 @@ function invalidateSplitPaymentQueries(qc: ReturnType<typeof useQueryClient>, qu
   qc.invalidateQueries({ queryKey: ['panel_claims'] });
   qc.invalidateQueries({ queryKey: ['panel_claims_summary'] });
   qc.invalidateQueries({ queryKey: ['panel_claim_items', queueEntryId] });
+}
+
+function invalidateDebtQueries(qc: ReturnType<typeof useQueryClient>, patientId: string) {
+  qc.invalidateQueries({ queryKey: ['clinic'] });
+  qc.invalidateQueries({ queryKey: ['payments'] });
+  qc.invalidateQueries({ queryKey: LEDGER_KEY });
+  qc.invalidateQueries({ queryKey: ['patient_outstanding', patientId] });
+  qc.invalidateQueries({ queryKey: ['debt', 'unpaid-visits', patientId] });
+  qc.invalidateQueries({ queryKey: ['panel_claims'] });
+  qc.invalidateQueries({ queryKey: ['panel_claims_summary'] });
 }
 
 /** Active payments for a queue entry, with realtime updates. */
@@ -229,6 +255,30 @@ export function useRecordSplitPayments() {
     onError: (error, vars) => {
       if (error instanceof Error && error.message.includes('STALE_PATIENT_OUTSTANDING')) {
         invalidateSplitPaymentQueries(qc, vars.queue_entry_id);
+      }
+    },
+  });
+}
+
+export function useSettleMultipleDebts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: SettleMultipleDebtsInput) => {
+      const { data, error } = await supabase.rpc('settle_multiple_debts', {
+        p_queue_entry_id: input.queue_entry_id,
+        p_consultation_ids: input.consultation_ids,
+        p_amount_paid: input.amount_paid,
+        p_payment_method: input.payment_method,
+        p_notes: input.notes ?? null,
+        p_idempotency_key: input.idempotency_key,
+      });
+      if (error) throw new Error(error.message || 'Failed to settle debt');
+      return (data ?? {}) as SettleMultipleDebtsResult;
+    },
+    onSuccess: (_, vars) => invalidateDebtQueries(qc, vars.patient_id),
+    onError: (error, vars) => {
+      if (error instanceof Error && error.message.includes('STALE_PATIENT_OUTSTANDING')) {
+        invalidateDebtQueries(qc, vars.patient_id);
       }
     },
   });

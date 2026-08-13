@@ -128,6 +128,11 @@ BEGIN
       '70000000-0000-4000-8000-000000000103',
       'TEST ONLY COMPLETED BILL CHECKOUT PATIENT',
       ''
+    ),
+    (
+      '70000000-0000-4000-8000-000000000104',
+      'TEST ONLY MULTI DEBT PATIENT',
+      ''
     );
 
   INSERT INTO public.queue_entries (
@@ -437,6 +442,159 @@ BEGIN
       '70000000-0000-4000-8000-000000000402', 2
     );
 
+  -- Multi-debt fixtures deliberately separate the payment-only coordinator
+  -- from the two historical ledgers. One visit is self-pay (RM60); the other
+  -- is panel (RM100 bill, RM70 active claim, RM30 patient liability).
+  INSERT INTO public.queue_entries (
+    id, patient_id, clinic_status, payment_method, panel_id, visit_type,
+    visit_purpose, created_by, created_at
+  )
+  VALUES
+    (
+      '70000000-0000-4000-8000-000000000211',
+      '70000000-0000-4000-8000-000000000104',
+      'registered', 'cash', NULL, 'consultation',
+      'TEST ONLY DEBT CASH VISIT',
+      '70000000-0000-4000-8000-000000000001',
+      '2025-01-01 08:00:00+00'::timestamptz
+    ),
+    (
+      '70000000-0000-4000-8000-000000000212',
+      '70000000-0000-4000-8000-000000000104',
+      'registered', 'panel',
+      '70000000-0000-4000-8000-000000000801', 'consultation',
+      'TEST ONLY DEBT PANEL VISIT',
+      '70000000-0000-4000-8000-000000000001',
+      '2025-02-01 08:00:00+00'::timestamptz
+    ),
+    (
+      '70000000-0000-4000-8000-000000000213',
+      '70000000-0000-4000-8000-000000000104',
+      'sent_to_dispensary', 'cash', NULL, 'payment_only',
+      'TEST ONLY KEYED DEBT COORDINATOR',
+      '70000000-0000-4000-8000-000000000001', now()
+    ),
+    (
+      '70000000-0000-4000-8000-000000000214',
+      '70000000-0000-4000-8000-000000000104',
+      'registered', 'cash', NULL, 'consultation',
+      'TEST ONLY LEGACY DEBT VISIT',
+      '70000000-0000-4000-8000-000000000001',
+      '2025-03-01 08:00:00+00'::timestamptz
+    ),
+    (
+      '70000000-0000-4000-8000-000000000215',
+      '70000000-0000-4000-8000-000000000104',
+      'sent_to_dispensary', 'cash', NULL, 'payment_only',
+      'TEST ONLY LEGACY DEBT COORDINATOR',
+      '70000000-0000-4000-8000-000000000001', now()
+    ),
+    (
+      '70000000-0000-4000-8000-000000000216',
+      '70000000-0000-4000-8000-000000000102',
+      'registered', 'panel',
+      '70000000-0000-4000-8000-000000000801', 'consultation',
+      'TEST ONLY ZERO PANEL PORTION',
+      '70000000-0000-4000-8000-000000000001', now()
+    ),
+    (
+      '70000000-0000-4000-8000-000000000217',
+      '70000000-0000-4000-8000-000000000104',
+      'dispensing_payment', 'cash', NULL, 'consultation',
+      'TEST ONLY ACTIVE VISIT IS NOT PAST DEBT',
+      '70000000-0000-4000-8000-000000000001', now()
+    );
+
+  INSERT INTO public.consultations (
+    id, queue_entry_id, patient_id, status, case_note, diagnosis_text,
+    dispense_note, created_at
+  )
+  VALUES
+    (
+      '70000000-0000-4000-8000-000000000311',
+      '70000000-0000-4000-8000-000000000211',
+      '70000000-0000-4000-8000-000000000104',
+      'in_progress', '', '', '', '2025-01-01 08:00:00+00'::timestamptz
+    ),
+    (
+      '70000000-0000-4000-8000-000000000312',
+      '70000000-0000-4000-8000-000000000212',
+      '70000000-0000-4000-8000-000000000104',
+      'in_progress', '', '', '', '2025-02-01 08:00:00+00'::timestamptz
+    ),
+    (
+      '70000000-0000-4000-8000-000000000313',
+      '70000000-0000-4000-8000-000000000214',
+      '70000000-0000-4000-8000-000000000104',
+      'in_progress', '', '', '', '2025-03-01 08:00:00+00'::timestamptz
+    ),
+    (
+      '70000000-0000-4000-8000-000000000316',
+      '70000000-0000-4000-8000-000000000216',
+      '70000000-0000-4000-8000-000000000102',
+      'in_progress', '', '', '', now()
+    ),
+    (
+      '70000000-0000-4000-8000-000000000317',
+      '70000000-0000-4000-8000-000000000217',
+      '70000000-0000-4000-8000-000000000104',
+      'in_progress', '', '', '', now()
+    );
+
+  INSERT INTO public.consultation_items (
+    id, consultation_id, item_name, quantity, price, unit_cost
+  )
+  VALUES
+    (
+      '70000000-0000-4000-8000-000000000513',
+      '70000000-0000-4000-8000-000000000311',
+      'TEST ONLY DEBT CASH BILL', 1, 60, 0
+    ),
+    (
+      '70000000-0000-4000-8000-000000000514',
+      '70000000-0000-4000-8000-000000000312',
+      'TEST ONLY DEBT PANEL BILL', 1, 100, 0
+    ),
+    (
+      '70000000-0000-4000-8000-000000000515',
+      '70000000-0000-4000-8000-000000000313',
+      'TEST ONLY LEGACY DEBT BILL', 1, 25, 0
+    ),
+    (
+      '70000000-0000-4000-8000-000000000516',
+      '70000000-0000-4000-8000-000000000316',
+      'TEST ONLY ZERO PANEL BILL', 1, 10, 0
+    ),
+    (
+      '70000000-0000-4000-8000-000000000517',
+      '70000000-0000-4000-8000-000000000317',
+      'TEST ONLY ACTIVE VISIT BILL', 1, 20, 0
+    );
+
+  UPDATE public.consultations
+  SET status = 'completed'
+  WHERE id IN (
+    '70000000-0000-4000-8000-000000000311',
+    '70000000-0000-4000-8000-000000000312',
+    '70000000-0000-4000-8000-000000000313',
+    '70000000-0000-4000-8000-000000000316'
+  );
+  UPDATE public.queue_entries
+  SET clinic_status = 'completed'
+  WHERE id IN (
+    '70000000-0000-4000-8000-000000000211',
+    '70000000-0000-4000-8000-000000000212',
+    '70000000-0000-4000-8000-000000000214',
+    '70000000-0000-4000-8000-000000000216'
+  );
+  UPDATE public.panel_claims
+  SET amount = 70
+  WHERE queue_entry_id = '70000000-0000-4000-8000-000000000212'
+    AND status = 'pending';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'TEST_DEBT_PANEL_CLAIM_NOT_CREATED';
+  END IF;
+
   UPDATE public.consultations
   SET status = 'completed'
   WHERE id = '70000000-0000-4000-8000-000000000307';
@@ -449,7 +607,7 @@ BEGIN
   UPDATE public.queue_entries
   SET clinic_status = 'completed'
   WHERE id = '70000000-0000-4000-8000-000000000209';
-END
+END;
 $setup$;
 
 CREATE FUNCTION public.test_only_reject_second_split_payment()
@@ -479,7 +637,8 @@ SET search_path = pg_catalog, public
 AS $function$
   SELECT count(*)::integer
   FROM public.payment_batches AS batch
-  WHERE batch.queue_entry_id = p_queue_entry_id;
+  WHERE batch.queue_entry_id = p_queue_entry_id
+     OR batch.coordination_queue_entry_id = p_queue_entry_id;
 $function$;
 
 CREATE FUNCTION public.test_only_set_panel_claim_status(
@@ -504,10 +663,17 @@ BEGIN
   v_claim_id := public.ensure_panel_claim_for_queue(p_queue_entry_id);
   INSERT INTO public.panel_claim_portions (
     panel_claim_id, portion_no, amount, remark, created_by, updated_by
-  ) SELECT claim.id, 1, claim.amount, 'TEST ONLY active split parent',
+  ) SELECT claim.id, seed.portion_no,
+      CASE seed.portion_no
+        WHEN 1 THEN round(claim.amount / 2, 2)
+        ELSE claim.amount - round(claim.amount / 2, 2)
+      END,
+      'TEST ONLY active split parent ' || seed.portion_no,
       '70000000-0000-4000-8000-000000000001',
       '70000000-0000-4000-8000-000000000001'
-    FROM public.panel_claims claim WHERE claim.id = v_claim_id;
+    FROM public.panel_claims claim
+    CROSS JOIN (VALUES (1), (2)) AS seed(portion_no)
+    WHERE claim.id = v_claim_id;
 END;
 $function$;
 
@@ -516,6 +682,22 @@ RETURNS void LANGUAGE sql SECURITY DEFINER
 SET search_path = pg_catalog, public AS $function$
   DELETE FROM public.panel_claim_portions portion USING public.panel_claims claim
   WHERE portion.panel_claim_id=claim.id AND claim.queue_entry_id=p_queue_entry_id;
+$function$;
+
+CREATE FUNCTION public.test_only_zero_panel_portion_audit_count(
+  p_queue_entry_id uuid
+) RETURNS integer
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $function$
+  SELECT count(*)::integer
+  FROM public.panel_claim_portion_audit AS audit
+  JOIN public.panel_claims AS claim
+    ON claim.id = audit.panel_claim_id
+  WHERE claim.queue_entry_id = p_queue_entry_id
+    AND audit.action = 'corrected'
+    AND audit.new_values = '[]'::jsonb;
 $function$;
 
 CREATE FUNCTION public.test_only_payment_void_audit_count(
@@ -1191,6 +1373,161 @@ BEGIN
     RAISE EXCEPTION 'RETAINED_CHECKOUT_SAVED_QUANTITY_30_MISMATCH';
   END IF;
 
+  -- Past debt is a completed historical ledger only. An active checkout must
+  -- neither appear in the selector snapshot nor be accepted by settlement.
+  v_context := public.get_patient_debt_snapshot(
+    '70000000-0000-4000-8000-000000000104'
+  );
+  IF EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(v_context->'consultations') AS row
+    WHERE row->>'id' = '70000000-0000-4000-8000-000000000317'
+  ) THEN
+    RAISE EXCEPTION 'ACTIVE_VISIT_EXPOSED_AS_PAST_DEBT';
+  END IF;
+  BEGIN
+    PERFORM public.settle_multiple_debts(
+      '70000000-0000-4000-8000-000000000215',
+      ARRAY['70000000-0000-4000-8000-000000000317'::uuid],
+      1, 'cash', 'TEST ONLY ACTIVE VISIT IS NOT DEBT',
+      '70000000-0000-4000-8000-000000000a22'
+    );
+    RAISE EXCEPTION 'ACTIVE_VISIT_DEBT_REJECTION_MISSED';
+  EXCEPTION WHEN SQLSTATE '23503' THEN
+    IF SQLERRM <> 'CONSULTATION_NOT_PATIENT_DEBT' THEN RAISE; END IF;
+  END;
+
+  -- A keyed multi-debt settlement posts each allocation to its historical
+  -- visit ledger while the payment-only ticket coordinates one durable batch.
+  -- The RM70 active panel claim leaves RM30 patient liability on the RM100
+  -- panel visit, so RM75 pays RM60 cash debt + RM15 panel patient debt.
+  v_result := public.settle_multiple_debts(
+    '70000000-0000-4000-8000-000000000213',
+    ARRAY[
+      '70000000-0000-4000-8000-000000000311'::uuid,
+      '70000000-0000-4000-8000-000000000312'::uuid
+    ],
+    75, 'cash', 'TEST ONLY KEYED MULTI DEBT',
+    '70000000-0000-4000-8000-000000000a20'
+  );
+  v_replay_result := public.settle_multiple_debts(
+    '70000000-0000-4000-8000-000000000213',
+    ARRAY[
+      '70000000-0000-4000-8000-000000000311'::uuid,
+      '70000000-0000-4000-8000-000000000312'::uuid
+    ],
+    75, 'cash', 'TEST ONLY KEYED MULTI DEBT',
+    '70000000-0000-4000-8000-000000000a20'
+  );
+  v_batch_count := public.test_only_payment_batch_count(
+    '70000000-0000-4000-8000-000000000213'
+  );
+  SELECT clinic_status::text INTO STRICT v_queue_status
+  FROM public.queue_entries
+  WHERE id = '70000000-0000-4000-8000-000000000213';
+  IF v_result IS DISTINCT FROM v_replay_result
+     OR v_batch_count IS DISTINCT FROM 1
+     OR v_queue_status IS DISTINCT FROM 'completed'
+     OR (SELECT count(*) FROM public.payments
+         WHERE queue_entry_id IN (
+           '70000000-0000-4000-8000-000000000211',
+           '70000000-0000-4000-8000-000000000212'
+         ) AND deleted_at IS NULL) IS DISTINCT FROM 2
+     OR (SELECT count(DISTINCT batch_id) FROM public.payments
+         WHERE queue_entry_id IN (
+           '70000000-0000-4000-8000-000000000211',
+           '70000000-0000-4000-8000-000000000212'
+         ) AND deleted_at IS NULL) IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'DEBT_KEYED_REPLAY_MISMATCH';
+  END IF;
+  IF EXISTS (
+       SELECT 1 FROM public.payments
+       WHERE queue_entry_id = '70000000-0000-4000-8000-000000000213'
+     )
+     OR (SELECT coalesce(sum(amount), 0) FROM public.payments
+         WHERE queue_entry_id = '70000000-0000-4000-8000-000000000211'
+           AND consultation_id = '70000000-0000-4000-8000-000000000311'
+           AND deleted_at IS NULL) IS DISTINCT FROM 60::numeric
+     OR (SELECT coalesce(sum(amount), 0) FROM public.payments
+         WHERE queue_entry_id = '70000000-0000-4000-8000-000000000212'
+           AND consultation_id = '70000000-0000-4000-8000-000000000312'
+           AND deleted_at IS NULL) IS DISTINCT FROM 15::numeric THEN
+    RAISE EXCEPTION 'DEBT_ORIGINAL_QUEUE_ATTRIBUTION_MISMATCH';
+  END IF;
+  IF (v_result->>'debt_remaining')::numeric IS DISTINCT FROM 15::numeric
+     OR (SELECT amount FROM public.panel_claims
+         WHERE queue_entry_id = '70000000-0000-4000-8000-000000000212')
+        IS DISTINCT FROM 70::numeric THEN
+    RAISE EXCEPTION 'DEBT_PANEL_COVERAGE_MISMATCH';
+  END IF;
+  -- The durable batch is closed when its result is stored. A cached client
+  -- cannot append a tender to the returned batch UUID and corrupt the receipt.
+  BEGIN
+    INSERT INTO public.payments (
+      batch_id, queue_entry_id, consultation_id, payment_type,
+      payment_method, amount, notes
+    ) VALUES (
+      (v_result->>'batch_id')::uuid,
+      '70000000-0000-4000-8000-000000000212',
+      '70000000-0000-4000-8000-000000000312',
+      'self_pay', 'cash', 1, 'TEST ONLY FORBIDDEN BATCH APPEND'
+    );
+    RAISE EXCEPTION 'PAYMENT_BATCH_APPEND_REJECTION_MISSED';
+  EXCEPTION WHEN SQLSTATE '42501' THEN
+    IF SQLERRM <> 'PAYMENT_BATCH_WRITE_FORBIDDEN' THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM public.settle_multiple_debts(
+      '70000000-0000-4000-8000-000000000213',
+      ARRAY[
+        '70000000-0000-4000-8000-000000000311'::uuid,
+        '70000000-0000-4000-8000-000000000312'::uuid
+      ],
+      75, 'cash', 'TEST ONLY CHANGED DEBT NOTES',
+      '70000000-0000-4000-8000-000000000a20'
+    );
+    RAISE EXCEPTION 'DEBT_IDEMPOTENCY_CONFLICT_MISSED';
+  EXCEPTION WHEN SQLSTATE '23505' THEN
+    IF SQLERRM <> 'IDEMPOTENCY_KEY_CONFLICT' THEN RAISE; END IF;
+  END;
+
+  -- A coordinator may only settle consultations belonging to its patient.
+  -- The failed keyed statement must roll its provisional batch back so the
+  -- same coordinator remains usable by the five-argument compatibility call.
+  BEGIN
+    PERFORM public.settle_multiple_debts(
+      '70000000-0000-4000-8000-000000000215',
+      ARRAY['70000000-0000-4000-8000-000000000316'::uuid],
+      1, 'cash', 'TEST ONLY WRONG PATIENT DEBT',
+      '70000000-0000-4000-8000-000000000a21'
+    );
+    RAISE EXCEPTION 'DEBT_WRONG_PATIENT_REJECTION_MISSED';
+  EXCEPTION WHEN SQLSTATE '23503' THEN
+    IF SQLERRM <> 'CONSULTATION_NOT_PATIENT_DEBT' THEN RAISE; END IF;
+  END;
+
+  -- The five-argument cached-client overload remains executable, but its
+  -- generated batch and payment still use the coordinator/original split.
+  v_result := public.settle_multiple_debts(
+    '70000000-0000-4000-8000-000000000215',
+    ARRAY['70000000-0000-4000-8000-000000000313'::uuid],
+    25, 'card', 'TEST ONLY LEGACY DEBT OVERLOAD'
+  );
+  IF (v_result->>'total_collected')::numeric IS DISTINCT FROM 25::numeric
+     OR public.test_only_payment_batch_count(
+          '70000000-0000-4000-8000-000000000215'
+        ) IS DISTINCT FROM 1
+     OR EXISTS (
+       SELECT 1 FROM public.payments
+       WHERE queue_entry_id = '70000000-0000-4000-8000-000000000215'
+     )
+     OR (SELECT coalesce(sum(amount), 0) FROM public.payments
+         WHERE queue_entry_id = '70000000-0000-4000-8000-000000000214'
+           AND consultation_id = '70000000-0000-4000-8000-000000000313'
+           AND deleted_at IS NULL) IS DISTINCT FROM 25::numeric THEN
+    RAISE EXCEPTION 'DEBT_LEGACY_OVERLOAD_MISMATCH';
+  END IF;
+
   -- Cash 40 + QR 60 creates two rows, completes once, and a network retry
   -- returns the exact durable result without inserting again.
   v_result := public.record_split_payments_and_complete_visit(
@@ -1302,6 +1639,8 @@ BEGIN
      OR (SELECT count(*) FROM public.payments
          WHERE queue_entry_id = '70000000-0000-4000-8000-000000000204'
            AND deleted_at IS NULL) IS DISTINCT FROM 1
+     OR (SELECT deleted_by FROM public.payments WHERE id = v_payment_id)
+          IS DISTINCT FROM '70000000-0000-4000-8000-000000000001'::uuid
      OR public.test_only_payment_void_audit_count(
           v_payment_id, 'TEST ONLY wrong tender'
         ) IS DISTINCT FROM 1 THEN
@@ -1477,14 +1816,9 @@ BEGIN
      IS DISTINCT FROM 30.00::numeric THEN
     RAISE EXCEPTION 'SAVED_BILLED_QUANTITY_30_MISMATCH';
   END IF;
-  INSERT INTO public.panel_claim_portions (
-    panel_claim_id, portion_no, amount, remark, created_by, updated_by
-  )
-  SELECT claim.id, 1, claim.amount, 'TEST ONLY split-parent trigger',
-    '70000000-0000-4000-8000-000000000001',
-    '70000000-0000-4000-8000-000000000001'
-  FROM public.panel_claims claim
-  WHERE claim.queue_entry_id = '70000000-0000-4000-8000-000000000209';
+  PERFORM public.test_only_seed_panel_claim_portion(
+    '70000000-0000-4000-8000-000000000209'
+  );
   v_result := public.record_split_payments(
     '70000000-0000-4000-8000-000000000209',
     '70000000-0000-4000-8000-000000000309',
@@ -1506,7 +1840,38 @@ BEGIN
       JOIN public.panel_claims claim ON claim.id = portion.panel_claim_id
       WHERE claim.queue_entry_id = '70000000-0000-4000-8000-000000000209')
      IS DISTINCT FROM 20::numeric THEN
-    RAISE EXCEPTION 'SPLIT_PARENT_PORTION_REBALANCE_MISMATCH';
+    RAISE EXCEPTION 'PENDING_PANEL_PORTION_RECONCILIATION_MISMATCH';
+  END IF;
+
+  -- Collecting the entire patient portion of a pending, unreceived split
+  -- reduces the parent to zero and removes the now-empty configured portion
+  -- through the production rebalancer, preserving its immutable audit trail.
+  PERFORM public.test_only_seed_panel_claim_portion(
+    '70000000-0000-4000-8000-000000000216'
+  );
+  v_result := public.record_split_payments(
+    '70000000-0000-4000-8000-000000000216',
+    '70000000-0000-4000-8000-000000000316',
+    'panel', '[{"payment_method":"cash","amount":10}]'::jsonb,
+    'TEST ONLY ZERO PANEL PORTION',
+    '70000000-0000-4000-8000-000000000a16'
+  );
+  SELECT amount, status::text INTO STRICT v_claim_amount, v_claim_status
+  FROM public.panel_claims
+  WHERE queue_entry_id = '70000000-0000-4000-8000-000000000216';
+  IF v_claim_amount IS DISTINCT FROM 0::numeric
+     OR v_claim_status IS DISTINCT FROM 'pending'
+     OR EXISTS (
+       SELECT 1
+       FROM public.panel_claim_portions AS portion
+       JOIN public.panel_claims AS claim
+         ON claim.id = portion.panel_claim_id
+       WHERE claim.queue_entry_id = '70000000-0000-4000-8000-000000000216'
+     )
+     OR public.test_only_zero_panel_portion_audit_count(
+          '70000000-0000-4000-8000-000000000216'
+        ) IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'ZERO_PANEL_PORTION_CLEANUP_MISMATCH';
   END IF;
 
   -- Four individually valid numeric portions whose aggregate exceeds the
@@ -1580,9 +1945,10 @@ BEGIN
      OR v_consultation_status IS DISTINCT FROM 'in_progress' THEN
     RAISE EXCEPTION 'FORCED_SPLIT_ROLLBACK_FAILED';
   END IF;
-END
+END;
 $verify$;
 
+SET CONSTRAINTS ALL IMMEDIATE;
 RESET ROLE;
 ROLLBACK;
 

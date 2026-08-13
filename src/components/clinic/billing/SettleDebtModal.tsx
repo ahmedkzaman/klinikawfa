@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Loader2, Printer } from 'lucide-react';
@@ -36,7 +36,16 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { PAYMENT_METHOD_OPTIONS } from '@/lib/clinic/paymentMethod';
+import {
+  buildCanonicalUnpaidVisits,
+  type DebtConsultationSnapshot,
+  type DebtItemSnapshot,
+  type DebtPanelClaimSnapshot,
+  type DebtPaymentSnapshot,
+  type UnpaidVisit,
+} from '@/lib/clinic/debtOutstanding';
 import { formatRm } from '@/hooks/clinic/usePatientFinancials';
+import { useSettleMultipleDebts } from '@/hooks/clinic/usePayments';
 import { toMalayTitleCase } from '@/lib/textCase';
 import { cn } from '@/lib/utils';
 import { PrintReceiptDialog } from './PrintReceiptDialog';
@@ -48,84 +57,49 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
-interface UnpaidVisit {
-  consultation_id: string;
-  created_at: string;
-  doctor_name: string | null;
-  total: number;
-  paid: number;
-  outstanding: number;
-}
-
 function useUnpaidVisits(patientId: string | null | undefined) {
   return useQuery<UnpaidVisit[]>({
     queryKey: ['debt', 'unpaid-visits', patientId ?? ''],
     enabled: !!patientId,
     staleTime: 10_000,
     queryFn: async () => {
-      const { data: cs, error } = await supabase
-        .from('consultations')
-        .select(
-          `id, created_at, doctors:doctor_id ( name ),
-           consultation_items!left ( price, quantity, deleted_at ),
-           payments!left ( amount, deleted_at )`,
-        )
-        .eq('patient_id', patientId!)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: true });
+      const { data, error } = await supabase.rpc('get_patient_debt_snapshot', {
+        p_patient_id: patientId!,
+      });
+      if (error) throw new Error(error.message || 'Failed to load patient debt');
+      const snapshot = (data ?? {}) as unknown as {
+        consultations?: DebtConsultationSnapshot[];
+        items?: DebtItemSnapshot[];
+        payments?: DebtPaymentSnapshot[];
+        panel_claims?: DebtPanelClaimSnapshot[];
+      };
 
-      if (error) throw error;
-
-      const rows: UnpaidVisit[] = [];
-      for (const c of cs ?? []) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const items = ((c as any).consultation_items ?? []) as Array<{
-          price: number | null;
-          quantity: number | null;
-          deleted_at: string | null;
-        }>;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const pays = ((c as any).payments ?? []) as Array<{
-          amount: number | null;
-          deleted_at: string | null;
-        }>;
-        const total = items
-          .filter((i) => !i.deleted_at)
-          .reduce((a, i) => a + Number(i.price ?? 0) * Number(i.quantity ?? 0), 0);
-        const paid = pays
-          .filter((p) => !p.deleted_at)
-          .reduce((a, p) => a + Number(p.amount ?? 0), 0);
-        const outstanding = +(total - paid).toFixed(2);
-        if (outstanding > 0.005) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const doc = (c as any).doctors;
-          rows.push({
-            consultation_id: c.id as string,
-            created_at: c.created_at as string,
-            doctor_name: Array.isArray(doc) ? doc[0]?.name ?? null : doc?.name ?? null,
-            total,
-            paid,
-            outstanding,
-          });
-        }
-      }
-      return rows;
+      return buildCanonicalUnpaidVisits({
+        consultations: snapshot.consultations ?? [],
+        items: snapshot.items ?? [],
+        payments: snapshot.payments ?? [],
+        panelClaims: snapshot.panel_claims ?? [],
+      });
     },
   });
 }
 
 export function SettleDebtModal({ entry, open, onOpenChange }: Props) {
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
-  const qc = useQueryClient();
+  const settleDebts = useSettleMultipleDebts();
   const patientId = entry?.patient_id ?? null;
-  const { data: visits = [], isLoading } = useUnpaidVisits(patientId);
+  const {
+    data: visits = [],
+    isLoading,
+    isFetching,
+    isError: debtSnapshotError,
+  } = useUnpaidVisits(patientId);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [amountInput, setAmountInput] = useState<string>('');
   const [userEditedAmount, setUserEditedAmount] = useState(false);
   const [method, setMethod] = useState<string>('cash');
   const [notes, setNotes] = useState('');
-  const [submitting, setSubmitting] = useState(false);
   const [zeroConfirm, setZeroConfirm] = useState(false);
   const [printPaymentId, setPrintPaymentId] = useState<string | null>(null);
 
@@ -136,7 +110,6 @@ export function SettleDebtModal({ entry, open, onOpenChange }: Props) {
       setUserEditedAmount(false);
       setMethod('cash');
       setNotes('');
-      setSubmitting(false);
       setZeroConfirm(false);
       setPrintPaymentId(null);
     }
@@ -159,6 +132,7 @@ export function SettleDebtModal({ entry, open, onOpenChange }: Props) {
 
   const amountNum = parseFloat(amountInput);
   const amount = Number.isFinite(amountNum) ? Math.max(amountNum, 0) : 0;
+  const submitting = settleDebts.isPending;
   const overpaid = amount > selectedTotal + 0.0001;
   const remaining = Math.max(selectedTotal - amount, 0);
 
@@ -179,7 +153,7 @@ export function SettleDebtModal({ entry, open, onOpenChange }: Props) {
   };
 
   const canSubmit = (() => {
-    if (submitting || overpaid) return false;
+    if (submitting || isLoading || isFetching || debtSnapshotError || overpaid) return false;
     if (amount === 0) return true;
     if (selectedRows.length === 0) return false;
     if (!method) return false;
@@ -192,27 +166,17 @@ export function SettleDebtModal({ entry, open, onOpenChange }: Props) {
 
   const submit = async () => {
     if (!entry) return;
-    setSubmitting(true);
     try {
-      const { data, error } = await supabase.rpc('settle_multiple_debts', {
-        p_queue_entry_id: entry.id,
-        p_consultation_ids: selectedRows.map((v) => v.consultation_id),
-        p_amount_paid: amount,
-        p_payment_method: amount > 0 ? method : null,
-        p_notes: notes.trim() || null,
-        p_idempotency_key: idempotencyKey,
+      const result = await settleDebts.mutateAsync({
+        queue_entry_id: entry.id,
+        consultation_ids: selectedRows.map((v) => v.consultation_id),
+        amount_paid: amount,
+        payment_method: amount > 0 ? method : null,
+        notes: notes.trim() || null,
+        idempotency_key: idempotencyKey,
+        patient_id: entry.patient_id,
       });
-      if (error) throw error;
       setIdempotencyKey(crypto.randomUUID());
-      const result = (data ?? {}) as {
-        payment_ids?: string[];
-        total_collected?: number;
-        debt_remaining?: number;
-      };
-      qc.invalidateQueries({ queryKey: ['clinic', 'queue-entries'] });
-      qc.invalidateQueries({ queryKey: ['payments'] });
-      qc.invalidateQueries({ queryKey: ['patient_outstanding', patientId ?? ''] });
-      qc.invalidateQueries({ queryKey: ['debt', 'unpaid-visits', patientId ?? ''] });
 
       const collected = Number(result.total_collected ?? 0);
       const debtLeft = Number(result.debt_remaining ?? 0);
@@ -235,9 +199,8 @@ export function SettleDebtModal({ entry, open, onOpenChange }: Props) {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to settle debt';
+      if (msg.includes('STALE_PATIENT_OUTSTANDING')) setUserEditedAmount(false);
       toast.error(msg);
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -285,9 +248,13 @@ export function SettleDebtModal({ entry, open, onOpenChange }: Props) {
             </div>
 
             <ScrollArea className="flex-1 min-h-[200px] max-h-[40vh] rounded-md border">
-              {isLoading ? (
+              {isLoading || isFetching ? (
                 <div className="flex items-center justify-center py-10 text-slate-400 text-sm">
                   <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading…
+                </div>
+              ) : debtSnapshotError ? (
+                <div role="alert" className="py-10 px-4 text-center text-sm text-rose-600">
+                  Patient debt is currently unavailable. Refresh before collecting payment.
                 </div>
               ) : visits.length === 0 ? (
                 <div className="py-10 text-center text-sm text-slate-400">
@@ -322,6 +289,7 @@ export function SettleDebtModal({ entry, open, onOpenChange }: Props) {
                           </div>
                           <p className="text-[11px] text-slate-400 mt-0.5">
                             Total {formatRm(v.total)} · Paid {formatRm(v.paid)}
+                            {v.panel_covered > 0 && ` · Panel ${formatRm(v.panel_covered)}`}
                           </p>
                         </div>
                         <p className="text-sm font-semibold text-rose-600 tabular-nums">

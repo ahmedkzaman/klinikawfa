@@ -49,7 +49,13 @@ export default function VisitDetail() {
   const { data: consultation } = useConsultation(queueEntryId);
   const { data: items = [], refetch: refetchItems } = useConsultationItems(consultation?.id);
   const { data: payments = [], refetch: refetchPayments } = usePayments(queueEntryId);
-  const { data: panelClaim = null, refetch: refetchPanelClaim } = useVisitPanelClaim(queueEntryId);
+  const {
+    data: panelClaim = null,
+    isLoading: panelClaimLoading,
+    isFetching: panelClaimFetching,
+    isError: panelClaimError,
+    refetch: refetchPanelClaim,
+  } = useVisitPanelClaim(queueEntryId);
   const { paymentId: focusedPaymentId } = useMemo(
     () => parsePaymentVisitLocation(location.search),
     [location.search],
@@ -79,6 +85,11 @@ export default function VisitDetail() {
       ),
     [items],
   );
+  const expectsPanel =
+    entry?.payment_method === 'panel' ||
+    panelClaim !== null ||
+    payments.some((payment) =>
+      payment.payment_type === 'panel' || payment.payment_type === 'insurance');
   const financial = useMemo(() => calculateDualLedger({
     billedTotal: subtotal,
     patientPayments: payments.map((payment) => ({
@@ -89,16 +100,13 @@ export default function VisitDetail() {
     panelPayments: payments
       .filter((payment) => payment.payment_method === 'panel')
       .reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0),
-    expectsPanel:
-      entry?.payment_type === 'panel' ||
-      entry?.payment_type === 'insurance' ||
-      payments.some((payment) => payment.payment_type === 'panel' || payment.payment_type === 'insurance'),
+    expectsPanel,
     panelClaim: panelClaim ? {
       amount: panelClaim.amount,
       receivedAmount: panelClaim.receivedAmount,
       status: panelClaim.status,
     } : null,
-  }), [entry?.payment_type, panelClaim, payments, subtotal]);
+  }), [expectsPanel, panelClaim, payments, subtotal]);
 
   if (isLoading) {
     return (
@@ -253,11 +261,9 @@ export default function VisitDetail() {
             payments={payments}
             focusedPaymentId={focusedPaymentId}
             panelClaim={panelClaim}
-            expectsPanel={
-              entry.payment_type === 'panel' ||
-              entry.payment_type === 'insurance' ||
-              payments.some((payment) => payment.payment_type === 'panel' || payment.payment_type === 'insurance')
-            }
+            panelClaimLoading={panelClaimLoading || panelClaimFetching}
+            panelClaimError={panelClaimError}
+            expectsPanel={expectsPanel}
           />
         </div>
       </div>

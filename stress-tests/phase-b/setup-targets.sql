@@ -17,7 +17,7 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.queue_entries
   (id, patient_id, visit_type, clinic_status, visit_purpose, queue_sequence)
 VALUES
-  ('q0000000-0000-0000-0000-000000000001',
+  ('a0000000-0000-4000-8000-000000000001',
    'c0000000-0000-0000-0000-000000000001',
    'consultation', 'sent_to_dispensary', 'k6-checkout', 9001)
 ON CONFLICT (id) DO NOTHING;
@@ -25,44 +25,62 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.consultations
   (id, patient_id, queue_entry_id, status)
 VALUES
-  ('x0000000-0000-0000-0000-000000000001',
+  ('c1000000-0000-4000-8000-000000000001',
    'c0000000-0000-0000-0000-000000000001',
-   'q0000000-0000-0000-0000-000000000001', 'in_progress')
+   'a0000000-0000-4000-8000-000000000001', 'in_progress')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.consultation_items
   (id, consultation_id, item_name, quantity, price)
 VALUES
-  ('i0000000-0000-0000-0000-000000000099',
-   'x0000000-0000-0000-0000-000000000001',
+  ('e1000000-0000-4000-8000-000000000099',
+   'c1000000-0000-4000-8000-000000000001',
    'K6 Race Consultation Fee', 1, 50.00)
 ON CONFLICT (id) DO NOTHING;
 
 -- =============================================================
--- 2. settle-debt-race: payment_only ticket + historical RM150 debt
+-- 2. settle-debt-race: payment_only ticket + two historical RM150 ledgers
 -- =============================================================
 INSERT INTO public.queue_entries
-  (id, patient_id, visit_type, clinic_status, visit_purpose, queue_sequence)
+  (id, patient_id, visit_type, clinic_status, visit_purpose, queue_sequence,
+   payment_method, created_at)
 VALUES
-  ('q0000000-0000-0000-0000-000000000002',
+  ('a0000000-0000-4000-8000-000000000002',
    'c0000000-0000-0000-0000-000000000001',
-   'payment_only', 'sent_to_dispensary', 'k6-settle', 9002)
+   'payment_only', 'sent_to_dispensary', 'k6-settle', 9002,
+   'cash', now()),
+  ('a0000000-0000-4000-8000-000000000004',
+   'c0000000-0000-0000-0000-000000000001',
+   'consultation', 'completed', 'k6-debt-original-a', 9004,
+   'cash', '2023-01-01'::timestamptz),
+  ('a0000000-0000-4000-8000-000000000005',
+   'c0000000-0000-0000-0000-000000000001',
+   'consultation', 'completed', 'k6-debt-original-b', 9005,
+   'cash', '2023-02-01'::timestamptz)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.consultations
-  (id, patient_id, status, created_at)
+  (id, patient_id, queue_entry_id, status, created_at)
 VALUES
-  ('x0000000-0000-0000-0000-000000000002',
+  ('c1000000-0000-4000-8000-000000000002',
    'c0000000-0000-0000-0000-000000000001',
-   'completed', '2023-01-01'::timestamptz)
+   'a0000000-0000-4000-8000-000000000004',
+   'completed', '2023-01-01'::timestamptz),
+  ('c1000000-0000-4000-8000-000000000004',
+   'c0000000-0000-0000-0000-000000000001',
+   'a0000000-0000-4000-8000-000000000005',
+   'completed', '2023-02-01'::timestamptz)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.consultation_items
   (id, consultation_id, item_name, price, quantity)
 VALUES
-  ('i0000000-0000-0000-0000-000000000001',
-   'x0000000-0000-0000-0000-000000000002',
-   'K6 Race Outstanding Debt', 150.00, 1)
+  ('e1000000-0000-4000-8000-000000000001',
+   'c1000000-0000-4000-8000-000000000002',
+   'K6 Race Outstanding Debt A', 100.00, 1),
+  ('e1000000-0000-4000-8000-000000000004',
+   'c1000000-0000-4000-8000-000000000004',
+   'K6 Race Outstanding Debt B', 50.00, 1)
 ON CONFLICT (id) DO NOTHING;
 -- NO payments row → debt is exactly RM150.
 
@@ -89,7 +107,7 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.consultations
   (id, patient_id, status, created_at)
 VALUES
-  ('x0000000-0000-0000-0000-000000000003',
+  ('c1000000-0000-4000-8000-000000000003',
    'c0000000-0000-0000-0000-000000000001',
    'completed', '2024-06-01'::timestamptz)
 ON CONFLICT (id) DO NOTHING;
@@ -97,8 +115,8 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.consultation_items
   (id, consultation_id, item_name, quantity, price)
 VALUES
-  ('i0000000-0000-0000-0000-000000000003',
-   'x0000000-0000-0000-0000-000000000003',
+  ('e1000000-0000-4000-8000-000000000003',
+   'c1000000-0000-4000-8000-000000000003',
    'K6 Race Panadol', 10, 2.50)
 ON CONFLICT (id) DO NOTHING;
 
@@ -107,8 +125,8 @@ INSERT INTO public.pharmacy_owe_slips
    inventory_item_id, qty_owed, qty_fulfilled, status)
 VALUES
   ('05100000-0000-0000-0000-000000000001',
-   'i0000000-0000-0000-0000-000000000003',
-   'x0000000-0000-0000-0000-000000000003',
+   'e1000000-0000-4000-8000-000000000003',
+   'c1000000-0000-4000-8000-000000000003',
    'c0000000-0000-0000-0000-000000000001',
    '11110000-0000-0000-0000-000000000001',
    10, 0, 'open')
@@ -120,7 +138,7 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.queue_entries
   (id, patient_id, visit_type, clinic_status, visit_purpose, queue_sequence)
 VALUES
-  ('q0000000-0000-0000-0000-000000000003',
+  ('a0000000-0000-4000-8000-000000000003',
    'c0000000-0000-0000-0000-000000000001',
    'consultation', 'registered', 'k6-status', 9003)
 ON CONFLICT (id) DO NOTHING;

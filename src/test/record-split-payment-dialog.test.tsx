@@ -278,4 +278,22 @@ describe('RecordPaymentDialog split allocations', () => {
       payment_type: 'panel', expected_patient_amount: 30,
     })));
   });
+
+  it('updates the completed panel collection target after a stale-balance rejection', async () => {
+    state.recordSplit.mockRejectedValueOnce(
+      new Error('STALE_PATIENT_OUTSTANDING: expected 18.50'),
+    );
+    renderDialog({ completeVisitOnPayment: false, defaultAmount: 0 });
+    fireEvent.click(screen.getByRole('radio', { name: 'Panel' }));
+    choosePanel();
+    fireEvent.change(screen.getByLabelText('Patient collection amount (RM)'), {
+      target: { value: '30' },
+    });
+    fireEvent.change(screen.getByLabelText('Amount (RM)'), { target: { value: '30' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Record Payment' }));
+
+    await waitFor(() => expect(state.recordSplit).toHaveBeenCalledTimes(1));
+    expect(screen.getByLabelText('Patient collection amount (RM)')).toHaveValue(18.5);
+    expect(screen.getByText('Allocated amount exceeds the balance by RM11.50.')).toBeVisible();
+  });
 });

@@ -41,6 +41,30 @@ vi.mock('@/lib/clinic/printReceipt', () => ({
 
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
+    rpc: () => Promise.resolve({
+      data: {
+        payment: { ...receiptPayment, batch_id: null, deleted_at: null },
+        receipt_id: receiptPayment.id,
+        selected_queue_entry_ids: ['queue-1'],
+        payments: [{ ...receiptPayment, batch_id: null, deleted_at: null }],
+        ledger_payments: [{ ...receiptPayment, batch_id: null, deleted_at: null }],
+        queue_entries: [{
+          id: 'queue-1',
+          queue_sequence: 1,
+          created_at: receiptPayment.created_at,
+          patient: { name: 'Aminah', national_id: null, date_of_birth: null },
+        }],
+        consultations: [{ id: 'consultation-1', queue_entry_id: 'queue-1' }],
+        items: activeCorrectedItems.map((item) => ({
+          consultation_id: 'consultation-1',
+          item_name: item.item_name,
+          quantity: item.quantity,
+          price: item.price,
+        })),
+        panel_claims: [],
+      },
+      error: null,
+    }),
     from: (table: string) => {
       const chain = {
         select: () => chain,

@@ -43,6 +43,8 @@ interface Props {
   payments: PaymentRow[];
   focusedPaymentId?: string | null;
   panelClaim?: VisitPanelClaim | null;
+  panelClaimLoading?: boolean;
+  panelClaimError?: boolean;
   expectsPanel?: boolean;
   completeVisitOnPayment?: boolean;
   hasUnsavedPanelPortions?: boolean;
@@ -65,6 +67,8 @@ export function BillingDetailsColumn({
   payments,
   focusedPaymentId = null,
   panelClaim = null,
+  panelClaimLoading = false,
+  panelClaimError = false,
   expectsPanel = false,
   completeVisitOnPayment = false,
   hasUnsavedPanelPortions = false,
@@ -131,6 +135,9 @@ export function BillingDetailsColumn({
   }), [expectsPanel, panelClaim, payments, total]);
   const paid = ledger.patientPaid;
   const outstanding = ledger.patientOutstanding;
+  const panelMutationLocked = expectsPanel && (
+    panelClaimLoading || panelClaimError || panelClaim?.isMaterialized === true
+  );
 
   const handleVoid = async (id: string) => {
     const reason = prompt('Reason for voiding this payment?')?.trim();
@@ -297,8 +304,12 @@ export function BillingDetailsColumn({
             type="button"
             className="w-full"
             onClick={() => setDialogOpen(true)}
-            disabled={!queueEntryId || (completeVisitOnPayment && (otherChargesTotal > 0 || hasUnsavedPanelPortions))}
-            title={completeVisitOnPayment && otherChargesTotal > 0 ? 'Save Other Charges by completing checkout before recording payment.' : undefined}
+            disabled={!queueEntryId || panelMutationLocked || (completeVisitOnPayment && (otherChargesTotal > 0 || hasUnsavedPanelPortions))}
+            title={panelMutationLocked
+              ? 'Patient payment changes are locked while the panel claim status is unavailable or in processing.'
+              : completeVisitOnPayment && otherChargesTotal > 0
+                ? 'Save Other Charges by completing checkout before recording payment.'
+                : undefined}
           >
             <Plus className="h-4 w-4 mr-2" />
             Record Payment
@@ -308,6 +319,15 @@ export function BillingDetailsColumn({
           )}
           {completeVisitOnPayment && hasUnsavedPanelPortions && (
             <p className="text-xs text-muted-foreground">Complete checkout to save configured panel portions before recording payment.</p>
+          )}
+          {expectsPanel && panelClaimLoading && (
+            <p className="text-xs text-muted-foreground">Checking panel claim processing status before allowing payment changes.</p>
+          )}
+          {expectsPanel && !panelClaimLoading && panelClaimError && (
+            <p className="text-xs text-muted-foreground">Panel claim status is unavailable. Refresh before changing patient payments.</p>
+          )}
+          {expectsPanel && !panelClaimLoading && !panelClaimError && panelClaim?.isMaterialized && (
+            <p className="text-xs text-muted-foreground">This panel claim has entered processing. Patient payment changes are locked.</p>
           )}
         </div>
 
@@ -384,7 +404,7 @@ export function BillingDetailsColumn({
                   >
                     <Printer className="h-3.5 w-3.5" />
                   </Button>
-                  {canCorrectBill && (
+                  {canCorrectBill && !panelMutationLocked && (
                     <Button
                       type="button"
                       variant="ghost"

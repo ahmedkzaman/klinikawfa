@@ -6,6 +6,7 @@ import {
   useRecordSplitPayments,
   useRecordSplitPaymentsAndCompleteVisit,
   useRecordPayment,
+  useSettleMultipleDebts,
   useVoidPayment,
 } from '@/hooks/clinic/usePayments';
 
@@ -167,5 +168,41 @@ describe('split payment mutations', () => {
       'visit-panel-claim', 'queue-1',
     ]);
     expect(invalidateQueries.mock.calls.map(([filters]) => filters.queryKey)).toContainEqual(['panel_claims_summary']);
+  });
+
+  it('normalizes debt PostgREST stale errors and refreshes canonical patient ledgers', async () => {
+    rpc.mockResolvedValueOnce({
+      data: null,
+      error: {
+        code: '22023',
+        message: 'STALE_PATIENT_OUTSTANDING: expected 25.00',
+        details: null,
+        hint: null,
+      },
+    });
+    const queryClient = createQueryClient();
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useSettleMultipleDebts(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await expect(result.current.mutateAsync({
+      queue_entry_id: 'ticket-1',
+      consultation_ids: ['consultation-1'],
+      amount_paid: 30,
+      payment_method: 'cash',
+      notes: null,
+      idempotency_key: '00000000-0000-4000-8000-000000000777',
+      patient_id: 'patient-1',
+    })).rejects.toThrow('STALE_PATIENT_OUTSTANDING: expected 25.00');
+
+    expect(rpc).toHaveBeenCalledWith('settle_multiple_debts', expect.objectContaining({
+      p_idempotency_key: '00000000-0000-4000-8000-000000000777',
+    }));
+    const keys = invalidateQueries.mock.calls.map(([filters]) => filters.queryKey);
+    expect(keys).toContainEqual(['patient_outstanding', 'patient-1']);
+    expect(keys).toContainEqual(['debt', 'unpaid-visits', 'patient-1']);
+    expect(keys).toContainEqual(['payments_ledger']);
+    expect(keys).toContainEqual(['panel_claims']);
   });
 });

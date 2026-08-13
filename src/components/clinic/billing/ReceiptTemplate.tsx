@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { format } from 'date-fns';
 import { formatPaymentMethod } from '@/lib/clinic/paymentMethod';
 import type { ClinicSettings } from '@/hooks/clinic/useClinicSettings';
@@ -11,6 +12,8 @@ export interface ReceiptItem {
 
 export interface ReceiptData {
   paymentId: string;
+  /** Durable correlation printed as the receipt number (batch for split/debt). */
+  receiptId?: string;
   paymentMethod: string | null;
   paymentType: string | null;
   amountPaid: number;
@@ -21,6 +24,12 @@ export interface ReceiptData {
   patientIc: string | null;
   patientAge?: string;
   items: ReceiptItem[];
+  invoiceGroups?: Array<{
+    id: string;
+    label: string;
+    subtotal: number;
+    items: ReceiptItem[];
+  }>;
   subtotal: number;
   invoiceTotal: number;
   balanceRemaining: number;
@@ -36,12 +45,17 @@ interface Props {
 }
 
 export function ReceiptTemplate({ data, settings }: Props) {
-  const shortId = data.paymentId.slice(0, 8).toUpperCase();
+  const shortId = (data.receiptId ?? data.paymentId).slice(0, 8).toUpperCase();
   const dt = new Date(data.createdAt);
   const sst = settings.sst_number?.trim() || '';
   const baseTextPx = settings.letterhead_text_px ?? 12;
   const titlePx = Math.round(baseTextPx * 1.4);
   const balance = data.balanceRemaining;
+  const hasInvoiceGroups = Boolean(data.invoiceGroups?.length);
+  const invoiceGroups = data.invoiceGroups?.length
+    ? data.invoiceGroups
+    : [{ id: 'receipt-items', label: '', subtotal: data.subtotal, items: data.items }];
+  let itemNumber = 0;
 
   return (
     <div
@@ -132,16 +146,6 @@ export function ReceiptTemplate({ data, settings }: Props) {
                 Total (RM)
               </th>
             </tr>
-            {(data.panelBilled ?? 0) > 0 && (
-              <tr>
-                <td colSpan={4} className="border border-black px-2 py-1 text-right font-semibold">
-                  Billed to Panel (RM)
-                </td>
-                <td className="border border-black px-2 py-1 text-right font-semibold tabular-nums">
-                  {data.panelBilled!.toFixed(2)}
-                </td>
-              </tr>
-            )}
           </thead>
           <tbody>
             {data.items.length === 0 ? (
@@ -154,24 +158,45 @@ export function ReceiptTemplate({ data, settings }: Props) {
                 </td>
               </tr>
             ) : (
-              data.items.map((line, idx) => (
-                <tr key={idx}>
-                  <td className="border border-black px-2 py-1 align-top">
-                    {idx + 1}
-                  </td>
-                  <td className="border border-black px-2 py-1 align-top">
-                    {line.name}
-                  </td>
-                  <td className="border border-black px-2 py-1 text-right align-top tabular-nums">
-                    {line.quantity}
-                  </td>
-                  <td className="border border-black px-2 py-1 text-right align-top tabular-nums">
-                    {line.unit_price.toFixed(2)}
-                  </td>
-                  <td className="border border-black px-2 py-1 text-right align-top tabular-nums">
-                    {line.line_total.toFixed(2)}
-                  </td>
-                </tr>
+              invoiceGroups.map((group) => (
+                <Fragment key={group.id}>
+                  {hasInvoiceGroups && (
+                    <tr>
+                      <td colSpan={5} className="border border-black bg-gray-100 px-2 py-1 font-semibold">
+                        {group.label}
+                      </td>
+                    </tr>
+                  )}
+                  {group.items.map((line, idx) => {
+                    itemNumber += 1;
+                    return (
+                      <tr key={`${group.id}-${idx}`}>
+                        <td className="border border-black px-2 py-1 align-top">
+                          {itemNumber}
+                        </td>
+                        <td className="border border-black px-2 py-1 align-top">
+                          {line.name}
+                        </td>
+                        <td className="border border-black px-2 py-1 text-right align-top tabular-nums">
+                          {line.quantity}
+                        </td>
+                        <td className="border border-black px-2 py-1 text-right align-top tabular-nums">
+                          {line.unit_price.toFixed(2)}
+                        </td>
+                        <td className="border border-black px-2 py-1 text-right align-top tabular-nums">
+                          {line.line_total.toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {hasInvoiceGroups && (
+                    <tr>
+                      <td colSpan={5} className="border border-black px-2 py-1 text-right font-semibold tabular-nums">
+                        Invoice subtotal RM {group.subtotal.toFixed(2)}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))
             )}
           </tbody>
@@ -200,6 +225,16 @@ export function ReceiptTemplate({ data, settings }: Props) {
                 {data.invoiceTotal.toFixed(2)}
               </td>
             </tr>
+            {(data.panelBilled ?? 0) > 0 && (
+              <tr>
+                <td colSpan={4} className="border border-black px-2 py-1 text-right font-semibold">
+                  Billed to Panel (RM)
+                </td>
+                <td className="border border-black px-2 py-1 text-right font-semibold tabular-nums">
+                  {data.panelBilled!.toFixed(2)}
+                </td>
+              </tr>
+            )}
             <tr>
               <td
                 colSpan={4}

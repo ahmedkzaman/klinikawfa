@@ -3578,16 +3578,60 @@ export type Database = {
         ]
       }
       payment_batches: {
-        Row: { id: string; queue_entry_id: string; idempotency_key: string; actor_id: string; payment_type: string; expected_patient_amount: number; completes_visit: boolean; request_fingerprint: string; result: Json | null; created_at: string }
-        Insert: { id?: string; queue_entry_id: string; idempotency_key: string; actor_id: string; payment_type: string; expected_patient_amount: number; completes_visit: boolean; request_fingerprint: string; result?: Json | null; created_at?: string }
-        Update: { id?: string; queue_entry_id?: string; idempotency_key?: string; actor_id?: string; payment_type?: string; expected_patient_amount?: number; completes_visit?: boolean; request_fingerprint?: string; result?: Json | null; created_at?: string }
-        Relationships: []
+        Row: { id: string; queue_entry_id: string | null; coordination_queue_entry_id: string | null; idempotency_key: string; actor_id: string; payment_type: string; expected_patient_amount: number; completes_visit: boolean; request_fingerprint: string; selected_queue_entry_ids: string[]; result: Json | null; created_at: string }
+        Insert: { id?: string; queue_entry_id?: string | null; coordination_queue_entry_id?: string | null; idempotency_key: string; actor_id?: string; payment_type: string; expected_patient_amount: number; completes_visit: boolean; request_fingerprint: string; selected_queue_entry_ids?: string[]; result?: Json | null; created_at?: string }
+        Update: { id?: string; queue_entry_id?: string | null; coordination_queue_entry_id?: string | null; idempotency_key?: string; actor_id?: string; payment_type?: string; expected_patient_amount?: number; completes_visit?: boolean; request_fingerprint?: string; selected_queue_entry_ids?: string[]; result?: Json | null; created_at?: string }
+        Relationships: [
+          {
+            foreignKeyName: "payment_batches_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_batches_coordination_queue_entry_id_fkey"
+            columns: ["coordination_queue_entry_id"]
+            isOneToOne: false
+            referencedRelation: "queue_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_batches_queue_entry_id_fkey"
+            columns: ["queue_entry_id"]
+            isOneToOne: false
+            referencedRelation: "queue_entries"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payment_void_audit: {
         Row: { id: string; payment_id: string; queue_entry_id: string; actor_id: string; amount: number; payment_method: string; reason: string; created_at: string }
         Insert: { id?: string; payment_id: string; queue_entry_id: string; actor_id: string; amount: number; payment_method: string; reason: string; created_at?: string }
         Update: { id?: string; payment_id?: string; queue_entry_id?: string; actor_id?: string; amount?: number; payment_method?: string; reason?: string; created_at?: string }
-        Relationships: [{ foreignKeyName: "payment_void_audit_payment_id_fkey"; columns: ["payment_id"]; isOneToOne: false; referencedRelation: "payments"; referencedColumns: ["id"] }]
+        Relationships: [
+          {
+            foreignKeyName: "payment_void_audit_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_void_audit_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_void_audit_queue_entry_id_fkey"
+            columns: ["queue_entry_id"]
+            isOneToOne: false
+            referencedRelation: "queue_entries"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payments: {
         Row: {
@@ -6553,6 +6597,18 @@ export type Database = {
         }
         Returns: Json
       }
+      get_patient_debt_snapshot: {
+        Args: { p_patient_id: string }
+        Returns: Json
+      }
+      get_payment_batch_receipt: {
+        Args: { p_payment_id: string }
+        Returns: Json
+      }
+      get_visit_financial_snapshot: {
+        Args: { p_queue_entry_id: string }
+        Returns: Json
+      }
       get_offline_consultation_audit: {
         Args: { p_consultation_id: string }
         Returns: Array<{
@@ -6889,17 +6945,25 @@ export type Database = {
         Args: { _invoice_id: string; _items: Json }
         Returns: undefined
       }
-      settle_multiple_debts: {
-        Args: {
-          p_amount_paid: number
-          p_consultation_ids: string[]
-          p_notes?: string
-          p_payment_method: string
-          p_queue_entry_id: string
-          p_idempotency_key?: string
-        }
-        Returns: Json
-      }
+      settle_multiple_debts: | { Args: {
+              p_amount_paid: number
+              p_consultation_ids: string[]
+              p_idempotency_key: string
+              p_notes: string | null
+              p_payment_method: string | null
+              p_queue_entry_id: string
+            }
+            Returns: Json
+          }
+        | { Args: {
+              p_amount_paid: number
+              p_consultation_ids: string[]
+              p_notes?: string | null
+              p_payment_method: string | null
+              p_queue_entry_id: string
+            }
+            Returns: Json
+          }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       sync_roster_zone_assignments:

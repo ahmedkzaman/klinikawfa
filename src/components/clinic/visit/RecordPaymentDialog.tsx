@@ -253,8 +253,12 @@ export function RecordPaymentDialog({
       const message = error instanceof Error ? error.message : 'Checkout failed';
       const stale = message.match(/STALE_PATIENT_OUTSTANDING: expected\s+([0-9.]+)/i);
       if (stale) {
-        setExpectedBalance(normalizeCurrencyAmount(Number(stale[1])));
-        toast.error(`Balance changed. Current patient outstanding is RM${Number(stale[1]).toFixed(2)}. Adjust the allocations and retry.`);
+        const currentBalance = normalizeCurrencyAmount(Number(stale[1]));
+        setExpectedBalance(currentBalance);
+        if (paymentType === 'panel' && !completeVisitOnPayment) {
+          setPanelPatientAmount(currentBalance.toFixed(2));
+        }
+        toast.error(`Balance changed. Current patient outstanding is RM${currentBalance.toFixed(2)}. Adjust the allocations and retry.`);
       } else {
         toast.error(`${completeVisitOnPayment ? 'Checkout' : 'Payment'} failed: ${message}`);
       }
