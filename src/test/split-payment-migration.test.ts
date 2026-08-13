@@ -77,14 +77,16 @@ describe('split payment migration', () => {
     expect(sql).toMatch(/STALE_PATIENT_OUTSTANDING: expected %/i);
   });
 
-  it('guards legacy inserts and exposes an audited atomic payment void RPC', () => {
-    expect(sql).toMatch(/create trigger guard_payment_insert[\s\S]*before insert on public\.payments/i);
+  it('uses staged RPC migration without a spoofable GUC and exposes an audited atomic payment void RPC', () => {
+    expect(sql).not.toMatch(/create trigger guard_payment_insert[\s\S]*before insert on public\.payments/i);
     expect(sql).toMatch(/lock_completed_bill_item_mutation_boundary/i);
     expect(sql).toMatch(/create table public\.payment_void_audit/i);
     expect(sql).toMatch(/create or replace function public\.void_payment_portion/i);
     expect(sql).toMatch(/grant execute on function public\.void_payment_portion\(uuid, text\) to authenticated/i);
-    expect(sql).toContain('DIRECT_PAYMENT_INSERT_FORBIDDEN');
-    expect(sql).toMatch(/record_payment_and_complete_visit[\s\S]*app\.authorized_payment_write/i);
+    expect(sql).not.toContain('DIRECT_PAYMENT_INSERT_FORBIDDEN');
+    expect(sql).not.toContain('app.authorized_payment_write');
+    expect(sql).toMatch(/record_payment_and_complete_visit[\s\S]*SET search_path = pg_catalog, public/i);
+    expect(sql).toMatch(/p_payment_type = 'self_pay'[\s\S]*NOT IN \('cash', 'qr_pay', 'card', 'transfer'\)/i);
     expect(sql).not.toMatch(/interval '10 seconds'/i);
   });
 

@@ -294,11 +294,15 @@ export function BillingDetailsColumn({
             type="button"
             className="w-full"
             onClick={() => setDialogOpen(true)}
-            disabled={!queueEntryId}
+            disabled={!queueEntryId || (completeVisitOnPayment && otherChargesTotal > 0)}
+            title={completeVisitOnPayment && otherChargesTotal > 0 ? 'Save Other Charges by completing checkout before recording payment.' : undefined}
           >
             <Plus className="h-4 w-4 mr-2" />
             Record Payment
           </Button>
+          {completeVisitOnPayment && otherChargesTotal > 0 && (
+            <p className="text-xs text-muted-foreground">Complete checkout to save Other Charges before recording payment.</p>
+          )}
         </div>
 
 

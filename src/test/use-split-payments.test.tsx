@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   useRecordSplitPayments,
   useRecordSplitPaymentsAndCompleteVisit,
+  useRecordPayment,
   useVoidPayment,
 } from '@/hooks/clinic/usePayments';
 
@@ -134,6 +135,21 @@ describe('split payment mutations', () => {
       p_idempotency_key: '00000000-0000-4000-8000-000000000002',
     });
     expectCheckoutInvalidations(invalidateQueries);
+  });
+
+  it('routes the legacy hook through the durable idempotent RPC', async () => {
+    const queryClient = createQueryClient();
+    const { result } = renderHook(() => useRecordPayment(), { wrapper: createWrapper(queryClient) });
+    await act(async () => result.current.mutateAsync({
+      queue_entry_id: 'queue-1', consultation_id: 'consultation-1', payment_type: 'self_pay',
+      payment_method: 'cash', amount: 20,
+      idempotency_key: '00000000-0000-4000-8000-000000000099',
+    }));
+    expect(rpc).toHaveBeenCalledWith('record_split_payments', {
+      p_queue_entry_id: 'queue-1', p_consultation_id: 'consultation-1', p_payment_type: 'self_pay',
+      p_payments: [{ payment_method: 'cash', amount: 20 }], p_notes: null,
+      p_idempotency_key: '00000000-0000-4000-8000-000000000099',
+    });
   });
 
   it('refreshes cached panel claim state after a portion void', async () => {

@@ -125,12 +125,16 @@ export function useRecordPayment() {
       payment_method: string;
       amount: number;
       notes?: string | null;
+      idempotency_key: string;
     }) => {
-      const { data, error } = await supabase
-        .from('payments')
-        .insert(input)
-        .select()
-        .single();
+      const { data, error } = await supabase.rpc('record_split_payments', {
+        p_queue_entry_id: input.queue_entry_id,
+        p_consultation_id: input.consultation_id ?? null,
+        p_payment_type: input.payment_type,
+        p_payments: [{ payment_method: input.payment_method, amount: input.amount }],
+        p_notes: input.notes ?? null,
+        p_idempotency_key: input.idempotency_key,
+      });
       if (error) throw error;
       return data;
     },

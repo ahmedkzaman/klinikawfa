@@ -133,51 +133,9 @@ REVOKE ALL ON TABLE public.payment_batches FROM PUBLIC;
 REVOKE ALL ON TABLE public.payment_batches FROM anon;
 REVOKE ALL ON TABLE public.payment_batches FROM authenticated;
 
--- Migration-first compatibility: legacy clients can still INSERT a single
--- payment, but every insert now shares the billing lock and is bounded by the
--- current saved bill. Split RPC inserts already hold a matching batch row.
-CREATE OR REPLACE FUNCTION private.guard_payment_insert()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = pg_catalog, public AS $function$
-DECLARE
-  v_status text;
-  v_billed numeric;
-  v_paid numeric;
-BEGIN
-  PERFORM public.lock_completed_bill_item_mutation_boundary();
-  SELECT queue.clinic_status::text INTO v_status
-  FROM public.queue_entries queue
-  WHERE queue.id = NEW.queue_entry_id AND queue.deleted_at IS NULL
-  FOR UPDATE;
-  IF NOT FOUND OR v_status NOT IN ('dispensing_payment', 'completed') THEN
-    RAISE EXCEPTION 'INVALID_PAYMENT_STATUS' USING ERRCODE = '22023';
-  END IF;
-  IF NEW.amount < 0 OR round(NEW.amount, 2) IS DISTINCT FROM NEW.amount THEN
-    RAISE EXCEPTION 'INVALID_PAYMENT_AMOUNT' USING ERRCODE = '22023';
-  END IF;
-  SELECT coalesce(sum(round(item.price * item.quantity, 2)), 0)
-  INTO v_billed FROM public.consultations consultation
-  JOIN public.consultation_items item ON item.consultation_id = consultation.id
-    AND item.deleted_at IS NULL
-  WHERE consultation.queue_entry_id = NEW.queue_entry_id
-    AND consultation.deleted_at IS NULL;
-  SELECT coalesce(sum(round(payment.amount, 2)), 0) INTO v_paid
-  FROM public.payments payment WHERE payment.queue_entry_id = NEW.queue_entry_id
-    AND payment.deleted_at IS NULL
-    AND lower(btrim(payment.payment_method)) <> 'panel';
-  IF lower(btrim(NEW.payment_method)) <> 'panel'
-     AND round(NEW.amount, 2) > greatest(round(v_billed - v_paid, 2), 0) THEN
-    RAISE EXCEPTION 'STALE_PATIENT_OUTSTANDING: expected %',
-      greatest(round(v_billed - v_paid, 2), 0) USING ERRCODE = '22023';
-  END IF;
-  IF coalesce(current_setting('app.authorized_payment_write', true), '') <> 'on' THEN
-    RAISE EXCEPTION 'DIRECT_PAYMENT_INSERT_FORBIDDEN' USING ERRCODE = '42501';
-  END IF;
-  RETURN NEW;
-END $function$;
-REVOKE ALL ON FUNCTION private.guard_payment_insert() FROM PUBLIC, anon, authenticated;
-CREATE TRIGGER guard_payment_insert BEFORE INSERT ON public.payments
-FOR EACH ROW EXECUTE FUNCTION private.guard_payment_insert();
+-- Direct INSERT remains available during the migration-first compatibility
+-- window for already-cached clients. New clients use the keyed RPC below.
+-- Revoke direct writes only in a later migration after the cache window.
 
 CREATE TABLE public.payment_void_audit (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -465,7 +423,6 @@ BEGIN
       nullif(btrim(v_queue.payment_method), ''),
       CASE WHEN p_payment_type = 'panel' THEN 'panel' ELSE 'cash' END
     );
-    PERFORM set_config('app.authorized_payment_write', 'on', true);
     INSERT INTO public.payments (
       queue_entry_id,
       consultation_id,
@@ -485,7 +442,6 @@ BEGIN
     RETURNING id INTO v_payment_id;
     v_payment_ids := v_payment_ids || jsonb_build_array(v_payment_id);
   ELSE
-    PERFORM set_config('app.authorized_payment_write', 'on', true);
     FOR v_allocation IN
       SELECT
         btrim(allocation.payment_method) AS payment_method,
@@ -799,7 +755,6 @@ BEGIN
     FROM jsonb_to_recordset(p_payments)
       AS allocation(payment_method text, amount numeric, notes text)
   LOOP
-    PERFORM set_config('app.authorized_payment_write', 'on', true);
     INSERT INTO public.payments (
       queue_entry_id,
       consultation_id,
@@ -1224,7 +1179,6 @@ BEGIN
   END IF;
 
   IF p_amount_paid > 0 THEN
-    PERFORM set_config('app.authorized_payment_write', 'on', true);
     INSERT INTO public.payments (
       queue_entry_id,
       consultation_id,
@@ -1364,7 +1318,7 @@ GRANT EXECUTE ON FUNCTION public.checkout_visit(
 ) TO authenticated;
 
 
--- Preserve the deployed single-payment RPC while authorizing its trigger write.
+-- Preserve and harden the deployed single-payment RPC for cached clients.
 CREATE OR REPLACE FUNCTION public.record_payment_and_complete_visit(
   p_queue_entry_id uuid,
   p_consultation_id uuid,
@@ -1376,7 +1330,7 @@ CREATE OR REPLACE FUNCTION public.record_payment_and_complete_visit(
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public
 AS $function$
 DECLARE
   v_queue_status text;
@@ -1384,6 +1338,8 @@ DECLARE
   v_payment_id uuid;
   v_amount numeric;
   v_payment_method text;
+  v_billed_total numeric;
+  v_existing_paid numeric;
 BEGIN
   IF NOT public.can_checkout_visit(auth.uid()) THEN
     RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
@@ -1405,8 +1361,12 @@ BEGIN
   IF v_amount < 0 OR v_amount > 999999999.99 THEN
     RAISE EXCEPTION 'INVALID_PAYMENT_AMOUNT' USING ERRCODE = '22023';
   END IF;
-  IF length(v_payment_method) = 0 THEN
-    RAISE EXCEPTION 'PAYMENT_METHOD_REQUIRED' USING ERRCODE = '22023';
+  v_payment_method := lower(v_payment_method);
+  IF p_payment_type = 'self_pay' AND v_payment_method NOT IN ('cash', 'qr_pay', 'card', 'transfer') THEN
+    RAISE EXCEPTION 'INVALID_PAYMENT_METHOD' USING ERRCODE = '22023';
+  END IF;
+  IF p_payment_type = 'panel' AND (v_payment_method <> 'panel' OR v_amount <> 0) THEN
+    RAISE EXCEPTION 'INVALID_PANEL_PAYMENT' USING ERRCODE = '22023';
   END IF;
 
   PERFORM public.lock_completed_bill_item_mutation_boundary();
@@ -1420,8 +1380,8 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'QUEUE_ENTRY_NOT_FOUND' USING ERRCODE = '22023';
   END IF;
-  IF v_queue_status = 'completed' THEN
-    RAISE EXCEPTION 'ALREADY_COMPLETED' USING ERRCODE = '22023';
+  IF v_queue_status <> 'dispensing_payment' THEN
+    RAISE EXCEPTION 'INVALID_PAYMENT_STATUS' USING ERRCODE = '22023';
   END IF;
 
   IF p_consultation_id IS NOT NULL THEN
@@ -1451,7 +1411,30 @@ BEGIN
   ORDER BY p.id
   FOR UPDATE;
 
-  PERFORM set_config('app.authorized_payment_write', 'on', true);
+  SELECT coalesce(sum(round(ci.price * ci.quantity, 2)), 0)
+    INTO v_billed_total
+  FROM public.consultations c
+  JOIN public.consultation_items ci ON ci.consultation_id = c.id AND ci.deleted_at IS NULL
+  WHERE c.queue_entry_id = p_queue_entry_id AND c.deleted_at IS NULL;
+  SELECT coalesce(sum(round(p.amount, 2)), 0)
+    INTO v_existing_paid
+  FROM public.payments p
+  WHERE p.queue_entry_id = p_queue_entry_id AND p.deleted_at IS NULL
+    AND lower(btrim(p.payment_method)) <> 'panel';
+  IF p_payment_type = 'self_pay'
+     AND v_amount > greatest(round(v_billed_total - v_existing_paid, 2), 0) THEN
+    RAISE EXCEPTION 'STALE_PATIENT_OUTSTANDING: expected %',
+      greatest(round(v_billed_total - v_existing_paid, 2), 0) USING ERRCODE = '22023';
+  END IF;
+  IF p_payment_type = 'panel' THEN
+    PERFORM public.ensure_panel_claim_for_queue(p_queue_entry_id);
+    IF NOT EXISTS (
+      SELECT 1 FROM public.queue_entries qe
+      WHERE qe.id = p_queue_entry_id AND qe.payment_method = 'panel' AND qe.panel_id IS NOT NULL
+    ) THEN
+      RAISE EXCEPTION 'INVALID_PANEL_PAYMENT' USING ERRCODE = '22023';
+    END IF;
+  END IF;
 
   INSERT INTO public.payments (
     queue_entry_id,
@@ -1502,3 +1485,43 @@ REVOKE ALL ON FUNCTION public.record_payment_and_complete_visit(
 GRANT EXECUTE ON FUNCTION public.record_payment_and_complete_visit(
   uuid, uuid, text, text, numeric, text
 ) TO authenticated;
+
+-- Keep the payment-only workflow while putting its historical writer behind a
+-- canonical, bounded, fixed-search-path facade. The legacy core retains its
+-- deterministic consultation/queue locks and saved-quantity FIFO allocation.
+ALTER FUNCTION public.settle_multiple_debts(uuid, uuid[], numeric, text, text)
+  RENAME TO settle_multiple_debts_legacy_core;
+ALTER FUNCTION public.settle_multiple_debts_legacy_core(uuid, uuid[], numeric, text, text)
+  SET search_path = pg_catalog, public;
+REVOKE ALL ON FUNCTION public.settle_multiple_debts_legacy_core(uuid, uuid[], numeric, text, text)
+  FROM PUBLIC, anon, authenticated;
+
+CREATE FUNCTION public.settle_multiple_debts(
+  p_queue_entry_id uuid, p_consultation_ids uuid[], p_amount_paid numeric,
+  p_payment_method text, p_notes text DEFAULT NULL
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $function$
+DECLARE v_method text := lower(btrim(coalesce(p_payment_method, '')));
+BEGIN
+  IF NOT public.can_checkout_visit(auth.uid()) THEN
+    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
+  END IF;
+  IF p_amount_paid IS NULL OR p_amount_paid::text IN ('NaN', 'Infinity', '-Infinity')
+     OR p_amount_paid < 0 OR p_amount_paid > 999999999.99
+     OR round(p_amount_paid, 2) IS DISTINCT FROM p_amount_paid THEN
+    RAISE EXCEPTION 'INVALID_AMOUNT' USING ERRCODE = '22023';
+  END IF;
+  IF p_amount_paid > 0 AND v_method NOT IN ('cash', 'qr_pay', 'card', 'transfer') THEN
+    RAISE EXCEPTION 'INVALID_PAYMENT_METHOD' USING ERRCODE = '22023';
+  END IF;
+  RETURN public.settle_multiple_debts_legacy_core(
+    p_queue_entry_id, p_consultation_ids, p_amount_paid,
+    CASE WHEN p_amount_paid = 0 THEN NULL ELSE v_method END, p_notes
+  );
+END;
+$function$;
+ALTER FUNCTION public.settle_multiple_debts(uuid, uuid[], numeric, text, text) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.settle_multiple_debts(uuid, uuid[], numeric, text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.settle_multiple_debts(uuid, uuid[], numeric, text, text) TO authenticated;

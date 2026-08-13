@@ -39,4 +39,9 @@ describe('record payment checkout contract', () => {
     );
     expect(completedVisit).not.toContain('completeVisitOnPayment');
   });
+
+  it('cannot record payment while checkout has unsaved Other Charges', () => {
+    expect(billing).toContain('completeVisitOnPayment && otherChargesTotal > 0');
+    expect(billing).toContain('Complete checkout to save Other Charges before recording payment.');
+  });
 });
