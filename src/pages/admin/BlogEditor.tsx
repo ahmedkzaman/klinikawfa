@@ -20,10 +20,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { ArrowLeft, Loader2, Save, Globe, Clock, Upload, X, ImageIcon, CalendarClock, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { AIWritingAssistant } from '@/components/blog';
+import { RichTextEditor } from '@/components/admin/RichTextEditor';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { format, parseISO, set } from 'date-fns';
+import type { TablesInsert } from '@/integrations/supabase/types';
 
 interface BlogCategory {
   id: string;
@@ -54,6 +56,7 @@ export default function BlogEditor() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingInlineMedia, setUploadingInlineMedia] = useState(false);
   const [categories, setCategories] = useState<BlogCategory[]>([]);
   const [activeTab, setActiveTab] = useState<'ms' | 'en'>('ms');
 
@@ -180,19 +183,19 @@ export default function BlogEditor() {
           return;
         }
 
-        const scheduledAtValue = (post as any).scheduled_at;
+        const scheduledAtValue = post.scheduled_at;
         setFormData({
           title: post.title,
-          title_ms: (post as any).title_ms || post.title || '',
-          title_en: (post as any).title_en || post.title || '',
+          title_ms: post.title_ms || post.title || '',
+          title_en: post.title_en || post.title || '',
           slug: post.slug,
           content: post.content,
-          content_ms: (post as any).content_ms || post.content || '',
-          content_en: (post as any).content_en || post.content || '',
-          excerpt_ms: (post as any).excerpt_ms || '',
-          excerpt_en: (post as any).excerpt_en || '',
-          featured_image: (post as any).featured_image || '',
-          reading_time: (post as any).reading_time || 5,
+          content_ms: post.content_ms || post.content || '',
+          content_en: post.content_en || post.content || '',
+          excerpt_ms: post.excerpt_ms || '',
+          excerpt_en: post.excerpt_en || '',
+          featured_image: post.featured_image || '',
+          reading_time: post.reading_time || 5,
           category_id: post.category_id || '',
           published: post.published,
           scheduled_at: scheduledAtValue || null,
@@ -328,6 +331,17 @@ export default function BlogEditor() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (uploadingInlineMedia) {
+      toast({
+        title: language === 'ms' ? 'Sila tunggu' : 'Please wait',
+        description: language === 'ms'
+          ? 'Media dalam kandungan masih dimuat naik.'
+          : 'Inline content media is still uploading.',
+        variant: 'destructive',
+      });
+      return;
+    }
     
     // Validate required fields
     const hasContent = formData.title_ms.trim() || formData.title_en.trim();
@@ -363,7 +377,7 @@ export default function BlogEditor() {
         scheduledAtValue = scheduledDateTime.toISOString();
       }
 
-      const postData = {
+      const postData: TablesInsert<'blog_posts'> = {
         title: formData.title_ms.trim() || formData.title_en.trim(),
         title_ms: formData.title_ms.trim() || null,
         title_en: formData.title_en.trim() || null,
@@ -385,7 +399,7 @@ export default function BlogEditor() {
       if (isNew) {
         const { error } = await supabase
           .from('blog_posts')
-          .insert(postData as any);
+          .insert(postData);
 
         if (error) throw error;
 
@@ -396,7 +410,7 @@ export default function BlogEditor() {
       } else {
         const { error } = await supabase
           .from('blog_posts')
-          .update(postData as any)
+          .update(postData)
           .eq('id', id);
 
         if (error) throw error;
@@ -410,11 +424,12 @@ export default function BlogEditor() {
       // Clear draft on successful save
       clearDraft();
       navigate('/staff/website/blog');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error saving post:', error);
       
       let errorMessage = language === 'ms' ? 'Gagal menyimpan post.' : 'Failed to save post.';
-      if (error.message?.includes('duplicate key') || error.message?.includes('unique constraint')) {
+      const detail = error instanceof Error ? error.message : '';
+      if (detail.includes('duplicate key') || detail.includes('unique constraint')) {
         errorMessage = language === 'ms' 
           ? 'Slug sudah digunakan. Sila gunakan slug lain.'
           : 'Slug already exists. Please use a different slug.';
@@ -519,18 +534,13 @@ export default function BlogEditor() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="content_ms">Kandungan (BM) *</Label>
-                      <Textarea
-                        id="content_ms"
+                      <Label>Kandungan (BM) *</Label>
+                      <RichTextEditor
                         value={formData.content_ms}
-                        onChange={(e) => setFormData(prev => ({ ...prev, content_ms: e.target.value, content: e.target.value }))}
+                        onChange={(value) => setFormData(prev => ({ ...prev, content_ms: value, content: value }))}
+                        onUploadStateChange={setUploadingInlineMedia}
                         placeholder="Tulis kandungan dalam Bahasa Melayu..."
-                        rows={15}
-                        className="font-mono text-sm"
                       />
-                      <p className="text-xs text-muted-foreground">
-                        Anda boleh menggunakan Markdown untuk pemformatan
-                      </p>
                     </div>
                   </TabsContent>
 
@@ -557,18 +567,13 @@ export default function BlogEditor() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="content_en">Content (EN) *</Label>
-                      <Textarea
-                        id="content_en"
+                      <Label>Content (EN) *</Label>
+                      <RichTextEditor
                         value={formData.content_en}
-                        onChange={(e) => setFormData(prev => ({ ...prev, content_en: e.target.value }))}
+                        onChange={(value) => setFormData(prev => ({ ...prev, content_en: value }))}
+                        onUploadStateChange={setUploadingInlineMedia}
                         placeholder="Write content in English..."
-                        rows={15}
-                        className="font-mono text-sm"
                       />
-                      <p className="text-xs text-muted-foreground">
-                        You can use Markdown for formatting
-                      </p>
                     </div>
                   </TabsContent>
                 </Tabs>
@@ -829,7 +834,7 @@ export default function BlogEditor() {
               </CardContent>
             </Card>
 
-            <Button type="submit" className="w-full" disabled={saving}>
+            <Button type="submit" className="w-full" disabled={saving || uploadingInlineMedia}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <Save className="mr-2 h-4 w-4" />
               {language === 'ms' ? 'Simpan' : 'Save'}
