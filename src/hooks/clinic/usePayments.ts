@@ -112,6 +112,8 @@ export type LedgerPayment = PaymentRow & {
     clinic_status: string;
     created_at: string;
     patient_id: string;
+    payment_method: string | null;
+    panel_id: string | null;
     patients: { name: string; phone: string | null } | null;
     insurance_providers: { name: string } | null;
   } | null;
@@ -129,6 +131,7 @@ export function usePaymentsLedger(fromISO: string, toISO: string) {
           *,
           queue_entries (
             id, queue_sequence, clinic_status, created_at, patient_id,
+            payment_method, panel_id,
             patients ( name, phone ),
             insurance_providers:panel_id ( name )
           )

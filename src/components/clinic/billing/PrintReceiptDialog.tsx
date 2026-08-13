@@ -14,6 +14,7 @@ import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
 import { downloadReceiptPdf, printReceipt } from '@/lib/clinic/printReceipt';
 import {
   buildReceiptData,
+  receiptErrorMessage,
   type PaymentBatchReceiptSnapshot,
 } from '@/lib/clinic/receiptPayload';
 import { ReceiptTemplate, type ReceiptData } from './ReceiptTemplate';
@@ -93,7 +94,7 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
         <div className="max-h-[70vh] overflow-y-auto bg-slate-100 p-4">
           {receiptError ? (
             <div role="alert" className="py-16 text-center text-sm text-destructive">
-              {receiptError instanceof Error ? receiptError.message : 'Failed to load receipt'}
+              {receiptErrorMessage(receiptError)}
             </div>
           ) : isLoading || !data ? (
             <div className="flex items-center justify-center py-16 text-slate-500">

@@ -92,6 +92,36 @@ BEGIN
 
   v_new_cents := (p_new_amount * 100)::bigint;
   IF v_new_cents < v_minimum_cents THEN
+    -- A wholly unreceived split is only a draft allocation. If the corrected
+    -- claim is too small to keep every positive draft portion (notably RM0.01
+    -- with the production two-portion integrity rule), collapse it back to an
+    -- unsplit pending claim. Receipt-backed portions remain immutable.
+    IF NOT EXISTS (
+      SELECT 1
+      FROM public.panel_claim_portions AS portion
+      WHERE portion.panel_claim_id = p_panel_claim_id
+        AND (
+          coalesce(portion.received_amount, 0) <> 0
+          OR portion.payment_reference IS NOT NULL
+          OR portion.received_date IS NOT NULL
+        )
+    ) AND NOT EXISTS (
+      SELECT 1
+      FROM public.panel_claim_portion_receipts AS receipt
+      WHERE receipt.panel_claim_id = p_panel_claim_id
+    ) THEN
+      DELETE FROM public.panel_claim_portions AS portion
+      WHERE portion.panel_claim_id = p_panel_claim_id;
+
+      INSERT INTO public.panel_claim_portion_audit (
+        panel_claim_id, action, actor_id, old_values, new_values, reason
+      ) VALUES (
+        p_panel_claim_id, 'corrected', p_actor_id, v_old_values, '[]'::jsonb,
+        nullif(pg_catalog.btrim(p_reason), '')
+      );
+      RETURN;
+    END IF;
+
     RAISE EXCEPTION 'PANEL_SPLIT_CORRECTION_BELOW_RECEIPTS'
       USING ERRCODE = '23514';
   END IF;
@@ -235,6 +265,18 @@ BEGIN
     DELETE FROM private.panel_claim_split_correction_context AS context
     WHERE context.transaction_id = pg_catalog.txid_current()
       AND context.panel_claim_id = OLD.id;
+
+    -- A positive correction below the minimum representable split collapses a
+    -- wholly unreceived draft back to an unsplit claim. Do not run split-parent
+    -- aggregate checks against the intentionally empty child set.
+    IF NEW.amount > 0 AND NOT EXISTS (
+      SELECT 1
+      FROM public.panel_claim_portions AS portion
+      WHERE portion.panel_claim_id = OLD.id
+    ) THEN
+      NEW.portions_version := OLD.portions_version + 1;
+      RETURN NEW;
+    END IF;
   END IF;
 
   SELECT
@@ -425,11 +467,12 @@ CREATE TABLE public.payment_batches (
   actor_id uuid NOT NULL DEFAULT auth.uid()
     CONSTRAINT payment_batches_actor_id_fkey
     REFERENCES public.profiles(id),
-  payment_type text NOT NULL CHECK (payment_type IN ('self_pay', 'panel')),
+  payment_type text NOT NULL CHECK (payment_type IN ('self_pay', 'panel', 'mixed')),
   expected_patient_amount numeric(12,2) NOT NULL CHECK (expected_patient_amount >= 0),
   completes_visit boolean NOT NULL,
   request_fingerprint text NOT NULL,
   selected_queue_entry_ids uuid[] NOT NULL DEFAULT ARRAY[]::uuid[],
+  allocation_payment_types jsonb NOT NULL DEFAULT '{}'::jsonb,
   result jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT payment_batches_single_origin_check CHECK (
@@ -450,6 +493,8 @@ REVOKE ALL ON TABLE public.payment_batches FROM service_role;
 
 ALTER TABLE public.payments ADD COLUMN batch_id uuid
   REFERENCES public.payment_batches(id) ON DELETE RESTRICT;
+ALTER TABLE public.payments ADD COLUMN created_by uuid DEFAULT auth.uid()
+  CONSTRAINT payments_created_by_fkey REFERENCES public.profiles(id);
 CREATE INDEX payments_batch_id_idx ON public.payments(batch_id) WHERE deleted_at IS NULL;
 
 -- A payment batch is writable only by its owning RPC transaction. A private,
@@ -699,6 +744,9 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'PAYMENT_NOT_FOUND' USING ERRCODE = '22023';
   END IF;
+  IF v_payment.deleted_at IS NOT NULL THEN
+    RAISE EXCEPTION 'PAYMENT_VOIDED' USING ERRCODE = '22023';
+  END IF;
 
   IF v_payment.batch_id IS NOT NULL THEN
     SELECT batch.* INTO STRICT v_batch
@@ -742,6 +790,8 @@ BEGIN
       'deleted_at', v_payment.deleted_at
     ),
     'receipt_id', coalesce(v_payment.batch_id, v_payment.id),
+    'batch_payment_type', v_batch.payment_type,
+    'allocation_payment_types', coalesce(v_batch.allocation_payment_types, '{}'::jsonb),
     'selected_queue_entry_ids', pg_catalog.to_jsonb(v_queue_entry_ids),
     'payments', coalesce((
       SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
@@ -756,8 +806,9 @@ BEGIN
           'deleted_at', payment.deleted_at
         ) ORDER BY payment.created_at, payment.id)
       FROM public.payments AS payment
-      WHERE (v_payment.batch_id IS NOT NULL AND payment.batch_id = v_payment.batch_id)
-         OR (v_payment.batch_id IS NULL AND payment.id = v_payment.id)
+      WHERE ((v_payment.batch_id IS NOT NULL AND payment.batch_id = v_payment.batch_id)
+         OR (v_payment.batch_id IS NULL AND payment.id = v_payment.id))
+        AND payment.deleted_at IS NULL
     ), '[]'::jsonb),
     'ledger_payments', coalesce((
       SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
@@ -781,6 +832,9 @@ BEGIN
           'id', queue.id,
           'queue_sequence', queue.queue_sequence,
           'created_at', queue.created_at,
+          'payment_method', queue.payment_method,
+          'panel_id', queue.panel_id,
+          'panel_provider_name', provider.name,
           'patient', pg_catalog.jsonb_build_object(
             'name', patient.name,
             'national_id', patient.national_id,
@@ -790,6 +844,7 @@ BEGIN
       )
       FROM public.queue_entries AS queue
       JOIN public.patients AS patient ON patient.id = queue.patient_id
+      LEFT JOIN public.insurance_providers AS provider ON provider.id = queue.panel_id
       WHERE queue.id = ANY(v_queue_entry_ids)
     ), '[]'::jsonb),
     'consultations', coalesce((
@@ -907,7 +962,8 @@ BEGIN
       RAISE EXCEPTION 'PAYMENT_BATCH_WRITE_FORBIDDEN' USING ERRCODE = '42501';
     END IF;
     SELECT batch.* INTO v_batch FROM public.payment_batches batch WHERE batch.id=NEW.batch_id FOR UPDATE;
-    IF NOT FOUND OR v_batch.payment_type <> NEW.payment_type
+    IF NOT FOUND OR (v_batch.payment_type <> NEW.payment_type
+       AND v_batch.payment_type <> 'mixed')
        OR v_batch.actor_id IS DISTINCT FROM auth.uid()
        OR v_batch.result IS NOT NULL THEN
       RAISE EXCEPTION 'PAYMENT_BATCH_MISMATCH' USING ERRCODE='23503';
@@ -928,7 +984,9 @@ BEGIN
       END IF;
     END IF;
   END IF;
-  IF NEW.payment_type='panel' AND EXISTS (
+  IF NEW.payment_type='panel'
+     AND v_batch.payment_type IS DISTINCT FROM 'mixed'
+     AND EXISTS (
     SELECT 1 FROM public.panel_claims claim
     WHERE claim.queue_entry_id=NEW.queue_entry_id
       AND private.panel_claim_is_materialized(claim.id)
@@ -967,6 +1025,31 @@ REVOKE ALL ON FUNCTION private.reconcile_cached_panel_payment()
   FROM PUBLIC, anon, authenticated, service_role;
 CREATE TRIGGER reconcile_cached_panel_payment AFTER INSERT ON public.payments
 FOR EACH ROW EXECUTE FUNCTION private.reconcile_cached_panel_payment();
+
+-- Row identity and authorship are immutable even while correction-safe
+-- amount/method/note edits and audited soft deletion remain available.
+CREATE OR REPLACE FUNCTION private.prevent_payment_provenance_change()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = pg_catalog, public AS $function$
+BEGIN
+  IF OLD.id IS DISTINCT FROM NEW.id
+     OR OLD.queue_entry_id IS DISTINCT FROM NEW.queue_entry_id
+     OR OLD.consultation_id IS DISTINCT FROM NEW.consultation_id
+     OR OLD.payment_type IS DISTINCT FROM NEW.payment_type
+     OR OLD.batch_id IS DISTINCT FROM NEW.batch_id
+     OR OLD.created_by IS DISTINCT FROM NEW.created_by
+     OR OLD.created_at IS DISTINCT FROM NEW.created_at THEN
+    RAISE EXCEPTION 'PAYMENT_PROVENANCE_IMMUTABLE' USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+ALTER FUNCTION private.prevent_payment_provenance_change() OWNER TO postgres;
+REVOKE ALL ON FUNCTION private.prevent_payment_provenance_change()
+  FROM PUBLIC, anon, authenticated, service_role;
+CREATE TRIGGER prevent_payment_provenance_change
+BEFORE UPDATE ON public.payments
+FOR EACH ROW EXECUTE FUNCTION private.prevent_payment_provenance_change();
 
 -- Direct INSERT remains available during the migration-first compatibility
 -- window for already-cached clients. New clients use the keyed RPC below.
@@ -2497,7 +2580,8 @@ BEGIN
       'consultation_ids', v_canonical_consultation_ids,
       'amount_paid', v_amount,
       'payment_method', v_method,
-      'notes', v_notes
+      'notes', v_notes,
+      'payment_type_source', 'original_visit'
     )::text,
     'sha256'
   ), 'hex');
@@ -2519,7 +2603,7 @@ BEGIN
     p_queue_entry_id,
     p_idempotency_key,
     v_actor_id,
-    'self_pay',
+    'mixed',
     v_amount,
     true,
     v_fingerprint,
@@ -2536,7 +2620,7 @@ BEGIN
 
   IF v_batch.actor_id IS DISTINCT FROM v_actor_id
      OR v_batch.queue_entry_id IS NOT NULL
-     OR v_batch.payment_type IS DISTINCT FROM 'self_pay'
+     OR v_batch.payment_type IS DISTINCT FROM 'mixed'
      OR v_batch.expected_patient_amount IS DISTINCT FROM v_amount
      OR v_batch.completes_visit IS DISTINCT FROM true
      OR v_batch.request_fingerprint IS DISTINCT FROM v_fingerprint THEN
@@ -2663,13 +2747,14 @@ BEGIN
     patient_paid numeric NOT NULL,
     panel_covered numeric NOT NULL,
     outstanding numeric NOT NULL,
+    payment_type text NOT NULL,
     sort_ts timestamptz NOT NULL
   ) ON COMMIT DROP;
   DELETE FROM pg_temp._canonical_debt_rows;
 
   INSERT INTO pg_temp._canonical_debt_rows (
     queue_entry_id, consultation_id, billed, patient_paid,
-    panel_covered, outstanding, sort_ts
+    panel_covered, outstanding, payment_type, sort_ts
   )
   WITH selected AS (
     SELECT DISTINCT ON (consultation.queue_entry_id)
@@ -2687,6 +2772,8 @@ BEGIN
       original_queue.id AS queue_entry_id,
       selected.consultation_id,
       selected.sort_ts,
+      original_queue.payment_method AS queue_payment_method,
+      original_queue.panel_id,
       coalesce((
         SELECT sum(round(item.price * item.quantity, 2))
         FROM public.consultations AS visit_consultation
@@ -2730,8 +2817,22 @@ BEGIN
           ), 2),
       0
     ) AS outstanding,
+    CASE
+      WHEN totals.queue_payment_method = 'panel'
+        OR totals.panel_id IS NOT NULL
+        OR greatest(round(totals.active_panel_claim, 2), 0) > 0
+      THEN 'panel'
+      ELSE 'self_pay'
+    END AS payment_type,
     totals.sort_ts
   FROM totals;
+
+  UPDATE public.payment_batches AS batch
+  SET allocation_payment_types = coalesce((
+    SELECT pg_catalog.jsonb_object_agg(debt.queue_entry_id::text, debt.payment_type)
+    FROM pg_temp._canonical_debt_rows AS debt
+  ), '{}'::jsonb)
+  WHERE batch.id = v_batch.id;
 
   SELECT coalesce(sum(debt.outstanding), 0)
   INTO v_total
@@ -2756,7 +2857,7 @@ BEGIN
         batch_id, queue_entry_id, consultation_id, payment_type,
         payment_method, amount, notes
       ) VALUES (
-        v_batch.id, v_row.queue_entry_id, v_row.consultation_id, 'self_pay',
+        v_batch.id, v_row.queue_entry_id, v_row.consultation_id, v_row.payment_type,
         v_method, v_apply, v_notes
       )
       RETURNING id INTO v_payment_id;
@@ -2766,6 +2867,7 @@ BEGIN
         'payment_id', v_payment_id,
         'queue_entry_id', v_row.queue_entry_id,
         'consultation_id', v_row.consultation_id,
+        'payment_type', v_row.payment_type,
         'amount', v_apply
       ));
       v_remaining := round(v_remaining - v_apply, 2);

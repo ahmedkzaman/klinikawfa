@@ -21,6 +21,9 @@ interface ReceiptQueueSnapshot {
   id: string;
   queue_sequence: number | null;
   created_at: string;
+  payment_method?: string | null;
+  panel_id?: string | null;
+  panel_provider_name?: string | null;
   patient: {
     name: string;
     national_id: string | null;
@@ -50,6 +53,8 @@ interface ReceiptPanelClaimSnapshot {
 export interface PaymentBatchReceiptSnapshot {
   payment: ReceiptPaymentSnapshot | null;
   receipt_id: string | null;
+  batch_payment_type?: string | null;
+  allocation_payment_types?: Record<string, string> | null;
   selected_queue_entry_ids: string[] | null;
   payments: ReceiptPaymentSnapshot[] | null;
   ledger_payments: ReceiptPaymentSnapshot[] | null;
@@ -64,9 +69,16 @@ function timestamp(value: string | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
 }
 
+export function receiptErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return message.includes('PAYMENT_VOIDED')
+    ? 'Payment voided — receipt unavailable.'
+    : message || 'Failed to load receipt';
+}
+
 export function buildReceiptData(snapshot: PaymentBatchReceiptSnapshot): ReceiptData | null {
   const clicked = snapshot.payment;
-  if (!clicked) return null;
+  if (!clicked || clicked.deleted_at) return null;
 
   const batchPayments = (snapshot.payments ?? []).filter((payment) => !payment.deleted_at);
   const receiptPayments = batchPayments.length > 0 ? batchPayments : [clicked];
@@ -128,8 +140,12 @@ export function buildReceiptData(snapshot: PaymentBatchReceiptSnapshot): Receipt
         })),
       panelPayments: queuePayments.reduce((sum, payment) =>
         sum + (payment.payment_method === 'panel' ? Number(payment.amount ?? 0) : 0), 0),
-      expectsPanel: queueClaims.length > 0 || queuePayments.some((payment) =>
-        payment.payment_type === 'panel' || payment.payment_type === 'insurance'),
+      expectsPanel: queueMetadata.get(group.id)?.payment_method === 'panel'
+        || Boolean(queueMetadata.get(group.id)?.panel_id)
+        || Boolean(queueMetadata.get(group.id)?.panel_provider_name)
+        || queueClaims.length > 0
+        || queuePayments.some((payment) =>
+          payment.payment_type === 'panel' || payment.payment_type === 'insurance'),
       panelClaim: queueClaims.length > 0 ? {
         amount: queueClaims.reduce((sum, claim) => sum + Number(claim.amount ?? 0), 0),
         receivedAmount: queueClaims.reduce(

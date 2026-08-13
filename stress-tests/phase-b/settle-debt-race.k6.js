@@ -1,6 +1,9 @@
 import http from "k6/http";
 import { check } from "k6";
-export const options = { scenarios: { race: { executor: "shared-iterations", vus: 50, iterations: 50, maxDuration: "30s" } } };
+export const options = {
+  scenarios: { race: { executor: "shared-iterations", vus: 50, iterations: 50, maxDuration: "30s" } },
+  thresholds: { checks: ["rate==1"], http_req_failed: ["rate==0"] },
+};
 const url = `${__ENV.API_URL}/rest/v1/rpc/settle_multiple_debts`;
 const headers = { "Content-Type": "application/json", apikey: __ENV.ANON_KEY, Authorization: `Bearer ${__ENV.AUTH_TOKEN}` };
 const supportedRpcError = /STALE_PATIENT_OUTSTANDING|INVALID_PAYMENT_ONLY_STATUS|IDEMPOTENCY_KEY_CONFLICT/;

@@ -69,6 +69,8 @@ interface Props {
   completeVisitOnPayment?: boolean;
   /** Canonical method code (cash | qr_pay | card | transfer) to pre-select for self-pay. */
   defaultPaymentMethod?: string;
+  /** Stored visit payer context; completed collections never reselect providers. */
+  storedPanelProvider?: { id: string; name: string } | null;
 }
 
 function canonicalDefaultMethod(method: string | undefined): PhysicalPaymentMethod | '' {
@@ -111,6 +113,7 @@ export function RecordPaymentDialog({
   defaultAmount,
   completeVisitOnPayment = false,
   defaultPaymentMethod,
+  storedPanelProvider = null,
 }: Props) {
   const navigate = useNavigate();
   const { data: providers = [] } = useInsuranceProviders({ activeOnly: true });
@@ -138,9 +141,12 @@ export function RecordPaymentDialog({
     const openingBalance = normalizeCurrencyAmount(Math.max(defaultAmount, 0));
     setExpectedBalance(openingBalance);
     setOpeningPaymentMethod(defaultPaymentMethod);
-    setPaymentType('self_pay');
+    const openingType: PaymentType = !completeVisitOnPayment && storedPanelProvider
+      ? 'panel'
+      : 'self_pay';
+    setPaymentType(openingType);
     setAllocations([createInitialAllocation(
-      'self_pay',
+      openingType,
       defaultPaymentMethod,
       openingBalance,
     )]);
@@ -148,13 +154,14 @@ export function RecordPaymentDialog({
     setProviderId('');
     setProviderOpen(false);
     setNotes('');
-    setPanelPatientAmount('0.00');
-  }, [open, defaultAmount, defaultPaymentMethod]);
+    setPanelPatientAmount(openingType === 'panel' ? openingBalance.toFixed(2) : '0.00');
+  }, [open, defaultAmount, defaultPaymentMethod, completeVisitOnPayment, storedPanelProvider]);
 
-  const selectedProvider = useMemo(
-    () => providers.find((provider) => provider.id === providerId) ?? null,
-    [providers, providerId],
-  );
+  const selectedProvider = useMemo(() => (
+    !completeVisitOnPayment
+      ? storedPanelProvider
+      : providers.find((provider) => provider.id === providerId) ?? null
+  ), [completeVisitOnPayment, providers, providerId, storedPanelProvider]);
 
   const numericAllocations = useMemo(
     () => allocations.map(numericAllocation),
@@ -278,7 +285,7 @@ export function RecordPaymentDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <div className="space-y-2">
+          {(!storedPanelProvider || completeVisitOnPayment) && <div className="space-y-2">
             <Label>Payment Type</Label>
             <RadioGroup
               value={paymentType}
@@ -294,9 +301,27 @@ export function RecordPaymentDialog({
                 Panel
               </label>
             </RadioGroup>
-          </div>
+          </div>}
 
-          {paymentType === 'panel' && (
+          {paymentType === 'panel' && !completeVisitOnPayment && storedPanelProvider && (
+            <div className="space-y-2">
+              <Label>Panel</Label>
+              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                {storedPanelProvider.name}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Provider is fixed from the completed visit.
+              </p>
+            </div>
+          )}
+
+          {paymentType === 'panel' && !completeVisitOnPayment && !storedPanelProvider && (
+            <p role="alert" className="text-xs text-destructive">
+              This completed visit has no stored panel provider. Refresh the visit before collecting payment.
+            </p>
+          )}
+
+          {paymentType === 'panel' && completeVisitOnPayment && (
             <div className="space-y-2">
               <Label htmlFor="panel-provider">Panel</Label>
               <Popover open={providerOpen} onOpenChange={setProviderOpen}>

@@ -52,10 +52,12 @@ import { RecordPaymentDialog } from '@/components/clinic/visit/RecordPaymentDial
 function renderDialog({
   completeVisitOnPayment = true,
   defaultAmount = 100,
+  storedPanelProvider,
   onOpenChange = vi.fn(),
 }: {
   completeVisitOnPayment?: boolean;
   defaultAmount?: number;
+  storedPanelProvider?: { id: string; name: string } | null;
   onOpenChange?: (open: boolean) => void;
 } = {}) {
   const view = render(
@@ -66,6 +68,7 @@ function renderDialog({
       consultationId="consultation-1"
       defaultAmount={defaultAmount}
       completeVisitOnPayment={completeVisitOnPayment}
+      storedPanelProvider={storedPanelProvider}
     />,
   );
   return { onOpenChange, ...view };
@@ -268,9 +271,11 @@ describe('RecordPaymentDialog split allocations', () => {
   });
 
   it('makes completed panel patient collection reachable independently of panel outstanding', async () => {
-    renderDialog({ completeVisitOnPayment: false, defaultAmount: 0 });
-    fireEvent.click(screen.getByRole('radio', { name: 'Panel' }));
-    choosePanel();
+    renderDialog({
+      completeVisitOnPayment: false,
+      defaultAmount: 0,
+      storedPanelProvider: { id: 'panel-1', name: 'Care Panel' },
+    });
     fireEvent.change(screen.getByLabelText('Patient collection amount (RM)'), { target: { value: '30' } });
     fireEvent.change(screen.getByLabelText('Amount (RM)'), { target: { value: '30' } });
     fireEvent.click(screen.getByRole('button', { name: 'Record Payment' }));
@@ -283,9 +288,11 @@ describe('RecordPaymentDialog split allocations', () => {
     state.recordSplit.mockRejectedValueOnce(
       new Error('STALE_PATIENT_OUTSTANDING: expected 18.50'),
     );
-    renderDialog({ completeVisitOnPayment: false, defaultAmount: 0 });
-    fireEvent.click(screen.getByRole('radio', { name: 'Panel' }));
-    choosePanel();
+    renderDialog({
+      completeVisitOnPayment: false,
+      defaultAmount: 0,
+      storedPanelProvider: { id: 'panel-1', name: 'Care Panel' },
+    });
     fireEvent.change(screen.getByLabelText('Patient collection amount (RM)'), {
       target: { value: '30' },
     });
@@ -295,5 +302,23 @@ describe('RecordPaymentDialog split allocations', () => {
     await waitFor(() => expect(state.recordSplit).toHaveBeenCalledTimes(1));
     expect(screen.getByLabelText('Patient collection amount (RM)')).toHaveValue(18.5);
     expect(screen.getByText('Allocated amount exceeds the balance by RM11.50.')).toBeVisible();
+  });
+
+  it('uses the completed visit stored provider read-only even when it is inactive', async () => {
+    renderDialog({
+      completeVisitOnPayment: false,
+      defaultAmount: 30,
+      storedPanelProvider: { id: 'inactive-panel', name: 'Archived Employer Panel' },
+    });
+    expect(screen.getByText('Archived Employer Panel')).toBeVisible();
+    expect(screen.queryByRole('radio', { name: 'Self-pay' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Panel' })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Patient collection amount (RM)'), { target: { value: '30' } });
+    fireEvent.change(screen.getByLabelText('Amount (RM)'), { target: { value: '30' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Record Payment' }));
+
+    await waitFor(() => expect(state.recordSplit).toHaveBeenCalledWith(expect.objectContaining({
+      payment_type: 'panel', provider_id: 'inactive-panel',
+    })));
   });
 });

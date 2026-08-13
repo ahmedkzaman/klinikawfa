@@ -264,6 +264,7 @@ export default function VisitDetail() {
             panelClaimLoading={panelClaimLoading || panelClaimFetching}
             panelClaimError={panelClaimError}
             expectsPanel={expectsPanel}
+            storedPanelProvider={entry?.insurance_providers ?? null}
           />
         </div>
       </div>

@@ -14,6 +14,9 @@ const stress = readFileSync(resolve(
   process.cwd(),
   'stress-tests/phase-b/settle-debt-race.k6.js',
 ), 'utf8');
+const stressSetup = readFileSync(resolve(
+  process.cwd(), 'stress-tests/phase-b/setup-targets.sql',
+), 'utf8');
 
 function functionBody(name: string, parameterMarker?: string): string {
   const definitions = Array.from(sql.matchAll(new RegExp(
@@ -140,6 +143,13 @@ describe('split payment migration', () => {
     expect(debt).toMatch(/panel_covered[\s\S]*outstanding/i);
     expect(sql).toMatch(/selected_queue_entry_ids uuid\[\] not null/i);
     expect(debt).toMatch(/selected_queue_entry_ids[\s\S]*v_original_queue_ids/i);
+    expect(sql).toMatch(/payment_type in \('self_pay', 'panel', 'mixed'\)/i);
+    expect(debt).toMatch(/payment_type_source[\s\S]*original_visit/i);
+    expect(debt).toMatch(/original_queue\.payment_method[\s\S]*panel_id[\s\S]*payment_type/i);
+    expect(debt).toMatch(/v_row\.payment_type/i);
+    expect(sql).toMatch(/new\.payment_type='panel'[\s\S]*v_batch\.payment_type is distinct from 'mixed'[\s\S]*panel_claim_is_materialized/i);
+    expect(harness).toContain('DEBT_PANEL_PAYMENT_TYPE_MISMATCH');
+    expect(harness).toContain('DEBT_MATERIALIZED_PANEL_ALLOCATION_MISMATCH');
   });
 
   it('recovers a keyed debt replay before rejecting the now-completed coordinator', () => {
@@ -282,6 +292,48 @@ describe('split payment migration', () => {
     expect(sql).toMatch(/create table private\.payment_batch_write_context/i);
     expect(sql.match(/insert into private\.payment_batch_write_context/gi)).toHaveLength(3);
     expect(sql.match(/delete from private\.payment_batch_write_context/gi)).toHaveLength(3);
+  });
+
+  it('makes payment provenance immutable on every update path', () => {
+    expect(sql).toMatch(/add column created_by uuid default auth\.uid\(\)/i);
+    expect(sql).toMatch(/create trigger prevent_payment_provenance_change\s+before update on public\.payments/i);
+    expect(sql).toMatch(/old\.queue_entry_id is distinct from new\.queue_entry_id/i);
+    expect(sql).toMatch(/old\.consultation_id is distinct from new\.consultation_id/i);
+    expect(sql).toMatch(/old\.payment_type is distinct from new\.payment_type/i);
+    expect(sql).toMatch(/old\.batch_id is distinct from new\.batch_id/i);
+    expect(sql).toMatch(/old\.created_by is distinct from new\.created_by/i);
+    expect(sql).toMatch(/old\.created_at is distinct from new\.created_at/i);
+    expect(harness).toContain('PAYMENT_PROVENANCE_FORGERY_SUCCEEDED');
+  });
+
+  it('rejects voided clicked payments from receipt reconstruction', () => {
+    const receipt = functionBody('get_payment_batch_receipt');
+    expect(receipt).toMatch(/v_payment\.deleted_at is not null[\s\S]*PAYMENT_VOIDED/i);
+    expect(receipt).toMatch(/payment\.deleted_at is null/i);
+    expect(harness).toContain('VOIDED_RECEIPT_REJECTION_MISSED');
+  });
+
+  it('collapses wholly unreceived draft portions at the one-sen boundary', () => {
+    const reconciler = sql.match(
+      /create or replace function private\.rebalance_panel_claim_portions[\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+    expect(reconciler).toMatch(/v_new_cents < v_minimum_cents[\s\S]*delete from public\.panel_claim_portions/i);
+    expect(sql).toMatch(/new\.amount > 0 and not exists \([\s\S]*panel_claim_portions[\s\S]*new\.portions_version := old\.portions_version \+ 1[\s\S]*return new/i);
+    expect(harness).toContain('ONE_CENT_PANEL_PORTION_RECONCILIATION_MISMATCH');
+    expect(harness).toContain('ONE_CENT_PANEL_PORTION_AUDIT_MISMATCH');
+  });
+
+  it('runs Phase B debt settlement from the real checkout status with keyed thresholds', () => {
+    expect(stressSetup).toMatch(/a0000000-0000-4000-8000-000000000001[\s\S]*'dispensing_payment'/i);
+    expect(stress).toMatch(/thresholds[\s\S]*checks[\s\S]*http_req_failed/i);
+    expect(stress).toContain('__ENV.AUTH_TOKEN');
+    expect(stress).not.toContain('__ENV.SERVICE_KEY');
+  });
+
+  it('executes billing snapshot permissions instead of only reporting role names', () => {
+    expect(harness).toContain('PURCHASER_VISIT_SNAPSHOT_MISMATCH');
+    expect(harness).toContain('STAFF_NURSE_RECEIPT_SNAPSHOT_MISMATCH');
+    expect(harness).toMatch(/'allowed_roles'[\s\S]*'purchaser'[\s\S]*'staff_nurse'/i);
   });
 
   it('covers corrected quantity-three billing and production split-parent trigger behavior', () => {

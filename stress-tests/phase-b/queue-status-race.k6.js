@@ -1,12 +1,12 @@
 // Concurrent direct UPDATE on queue_entries.clinic_status via PostgREST PATCH.
 import http from "k6/http";
 import { check } from "k6";
-export const options = { scenarios: { race: { executor: "shared-iterations", vus: 50, iterations: 50, maxDuration: "30s" } } };
+export const options = { scenarios: { race: { executor: "shared-iterations", vus: 50, iterations: 50, maxDuration: "30s" } }, thresholds: { checks: ["rate==1"] } };
 const url = `${__ENV.API_URL}/rest/v1/queue_entries?id=eq.${__ENV.QUEUE_ID}`;
 const headers = {
   "Content-Type": "application/json",
-  apikey: __ENV.SERVICE_KEY,
-  Authorization: `Bearer ${__ENV.SERVICE_KEY}`,
+  apikey: __ENV.ANON_KEY,
+  Authorization: `Bearer ${__ENV.AUTH_TOKEN}`,
   Prefer: "return=representation",
 };
 export default function () {

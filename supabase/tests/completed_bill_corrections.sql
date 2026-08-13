@@ -607,6 +607,18 @@ BEGIN
   UPDATE public.queue_entries
   SET clinic_status = 'completed'
   WHERE id = '70000000-0000-4000-8000-000000000209';
+
+  -- Keep one non-completed payment row so authenticated UPDATE RLS reaches
+  -- the production provenance trigger instead of filtering the row first.
+  INSERT INTO public.payments (
+    id, queue_entry_id, consultation_id, payment_type,
+    payment_method, amount, notes
+  ) VALUES (
+    '70000000-0000-4000-8000-000000000618',
+    '70000000-0000-4000-8000-000000000217',
+    '70000000-0000-4000-8000-000000000317',
+    'self_pay', 'cash', 0, 'TEST ONLY PROVENANCE GUARD'
+  );
 END;
 $setup$;
 
@@ -1401,6 +1413,9 @@ BEGIN
   -- visit ledger while the payment-only ticket coordinates one durable batch.
   -- The RM70 active panel claim leaves RM30 patient liability on the RM100
   -- panel visit, so RM75 pays RM60 cash debt + RM15 panel patient debt.
+  PERFORM public.test_only_set_panel_claim_status(
+    '70000000-0000-4000-8000-000000000212', 'submitted'
+  );
   v_result := public.settle_multiple_debts(
     '70000000-0000-4000-8000-000000000213',
     ARRAY[
@@ -1460,6 +1475,47 @@ BEGIN
         IS DISTINCT FROM 70::numeric THEN
     RAISE EXCEPTION 'DEBT_PANEL_COVERAGE_MISMATCH';
   END IF;
+  IF (SELECT payment_type FROM public.payments
+      WHERE queue_entry_id = '70000000-0000-4000-8000-000000000211'
+        AND batch_id = (v_result->>'batch_id')::uuid) IS DISTINCT FROM 'self_pay'
+     OR (SELECT payment_type FROM public.payments
+         WHERE queue_entry_id = '70000000-0000-4000-8000-000000000212'
+           AND batch_id = (v_result->>'batch_id')::uuid) IS DISTINCT FROM 'panel'
+     OR (SELECT payment_type FROM public.payment_batches
+         WHERE id = (v_result->>'batch_id')::uuid) IS DISTINCT FROM 'mixed' THEN
+    RAISE EXCEPTION 'DEBT_PANEL_PAYMENT_TYPE_MISMATCH';
+  END IF;
+  IF (SELECT status::text FROM public.panel_claims
+      WHERE queue_entry_id = '70000000-0000-4000-8000-000000000212')
+     IS DISTINCT FROM 'submitted' THEN
+    RAISE EXCEPTION 'DEBT_MATERIALIZED_PANEL_ALLOCATION_MISMATCH';
+  END IF;
+
+  -- Checkout-capable purchaser and staff-nurse roles execute the narrow
+  -- snapshot APIs and verify their actual response shapes.
+  PERFORM set_config(
+    'request.jwt.claim.sub', '70000000-0000-4000-8000-000000000013', true
+  );
+  v_context := public.get_visit_financial_snapshot(
+    '70000000-0000-4000-8000-000000000212'
+  );
+  IF NOT (v_context ? 'claim')
+     OR (v_context->'claim'->>'amount')::numeric IS DISTINCT FROM 70::numeric THEN
+    RAISE EXCEPTION 'PURCHASER_VISIT_SNAPSHOT_MISMATCH';
+  END IF;
+  PERFORM set_config(
+    'request.jwt.claim.sub', '70000000-0000-4000-8000-000000000014', true
+  );
+  v_payment_id := (v_result->'payment_ids'->>0)::uuid;
+  v_context := public.get_payment_batch_receipt(v_payment_id);
+  IF v_context->>'receipt_id' IS DISTINCT FROM v_result->>'batch_id'
+     OR jsonb_array_length(v_context->'payments') IS DISTINCT FROM 2
+     OR jsonb_array_length(v_context->'queue_entries') IS DISTINCT FROM 2 THEN
+    RAISE EXCEPTION 'STAFF_NURSE_RECEIPT_SNAPSHOT_MISMATCH';
+  END IF;
+  PERFORM set_config(
+    'request.jwt.claim.sub', '70000000-0000-4000-8000-000000000001', true
+  );
   -- The durable batch is closed when its result is stored. A cached client
   -- cannot append a tender to the returned batch UUID and corrupt the receipt.
   BEGIN
@@ -1475,6 +1531,18 @@ BEGIN
     RAISE EXCEPTION 'PAYMENT_BATCH_APPEND_REJECTION_MISSED';
   EXCEPTION WHEN SQLSTATE '42501' THEN
     IF SQLERRM <> 'PAYMENT_BATCH_WRITE_FORBIDDEN' THEN RAISE; END IF;
+  END;
+
+  -- An authenticated cached client cannot move even an otherwise-updatable
+  -- active payment onto another visit or attach it to a returned batch.
+  BEGIN
+    UPDATE public.payments
+    SET queue_entry_id = '70000000-0000-4000-8000-000000000211',
+        batch_id = (v_result->>'batch_id')::uuid
+    WHERE id = '70000000-0000-4000-8000-000000000618';
+    RAISE EXCEPTION 'PAYMENT_PROVENANCE_FORGERY_SUCCEEDED';
+  EXCEPTION WHEN SQLSTATE '42501' THEN
+    IF SQLERRM <> 'PAYMENT_PROVENANCE_IMMUTABLE' THEN RAISE; END IF;
   END;
   BEGIN
     PERFORM public.settle_multiple_debts(
@@ -1646,6 +1714,12 @@ BEGIN
         ) IS DISTINCT FROM 1 THEN
     RAISE EXCEPTION 'VOID_PAYMENT_PORTION_MISMATCH';
   END IF;
+  BEGIN
+    PERFORM public.get_payment_batch_receipt(v_payment_id);
+    RAISE EXCEPTION 'VOIDED_RECEIPT_REJECTION_MISSED';
+  EXCEPTION WHEN SQLSTATE '22023' THEN
+    IF SQLERRM <> 'PAYMENT_VOIDED' THEN RAISE; END IF;
+  END;
 
   -- The active-checkout RPC cannot resurrect cancelled visits.
   UPDATE public.queue_entries SET clinic_status = 'cancelled'
@@ -1843,6 +1917,35 @@ BEGIN
     RAISE EXCEPTION 'PENDING_PANEL_PORTION_RECONCILIATION_MISMATCH';
   END IF;
 
+  -- An inactive provider remains the stored payer for a completed visit. A
+  -- near-total copayment may reduce its wholly unreceived draft split to one
+  -- sen by collapsing the no-longer-representable split to an unsplit claim.
+  UPDATE public.insurance_providers SET status = 'inactive'
+  WHERE id = '70000000-0000-4000-8000-000000000801';
+  v_result := public.record_split_payments(
+    '70000000-0000-4000-8000-000000000209',
+    '70000000-0000-4000-8000-000000000309',
+    'panel', '[{"payment_method":"transfer","amount":19.99}]'::jsonb,
+    'TEST ONLY ONE CENT PANEL PORTION',
+    '70000000-0000-4000-8000-000000000a17'
+  );
+  SELECT amount INTO STRICT v_claim_amount
+  FROM public.panel_claims
+  WHERE queue_entry_id = '70000000-0000-4000-8000-000000000209';
+  IF v_claim_amount IS DISTINCT FROM 0.01::numeric
+     OR EXISTS (
+       SELECT 1 FROM public.panel_claim_portions AS portion
+       JOIN public.panel_claims AS claim ON claim.id = portion.panel_claim_id
+       WHERE claim.queue_entry_id = '70000000-0000-4000-8000-000000000209'
+     ) THEN
+    RAISE EXCEPTION 'ONE_CENT_PANEL_PORTION_RECONCILIATION_MISMATCH';
+  END IF;
+  IF public.test_only_zero_panel_portion_audit_count(
+       '70000000-0000-4000-8000-000000000209'
+     ) IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'ONE_CENT_PANEL_PORTION_AUDIT_MISMATCH';
+  END IF;
+
   -- Collecting the entire patient portion of a pending, unreceived split
   -- reduces the parent to zero and removes the now-empty configured portion
   -- through the production rebalancer, preserving its immutable audit trail.
@@ -1958,11 +2061,11 @@ SELECT jsonb_build_object(
   'jwt_claims', 'synthetic',
   'allowed_roles', ARRAY[
     'ops_staff', 'operations', 'staff',
-    'admin', 'special_admin', 'doctor_admin'
+    'admin', 'special_admin', 'doctor_admin',
+    'purchaser', 'staff_nurse'
   ],
   'denied_roles', ARRAY[
-    'locum', 'resident_doctor', 'purchaser',
-    'staff_nurse', 'website_editor', 'guest'
+    'locum', 'resident_doctor', 'website_editor', 'guest'
   ],
   'medicine_inventory', 'pass',
   'atomic_rollback', 'pass',

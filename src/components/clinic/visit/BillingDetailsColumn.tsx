@@ -46,6 +46,7 @@ interface Props {
   panelClaimLoading?: boolean;
   panelClaimError?: boolean;
   expectsPanel?: boolean;
+  storedPanelProvider?: { id: string; name: string } | null;
   completeVisitOnPayment?: boolean;
   hasUnsavedPanelPortions?: boolean;
   /** When true, render the "Other Charges" picker. Selections are NOT
@@ -70,6 +71,7 @@ export function BillingDetailsColumn({
   panelClaimLoading = false,
   panelClaimError = false,
   expectsPanel = false,
+  storedPanelProvider = null,
   completeVisitOnPayment = false,
   hasUnsavedPanelPortions = false,
   showOtherCharges = false,
@@ -435,6 +437,7 @@ export function BillingDetailsColumn({
         defaultAmount={outstanding}
         defaultPaymentMethod={paymentMethod}
         completeVisitOnPayment={completeVisitOnPayment}
+        storedPanelProvider={storedPanelProvider}
       />
 
       <PrintReceiptDialog

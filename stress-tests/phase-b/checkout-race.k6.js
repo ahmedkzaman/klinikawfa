@@ -1,4 +1,4 @@
-// k6 run -e API_URL=... -e SERVICE_KEY=... -e QUEUE_ID=... -e CONSULTATION_ID=... checkout-race.k6.js
+// k6 run -e API_URL=... -e ANON_KEY=... -e AUTH_TOKEN=... checkout-race.k6.js
 import http from "k6/http";
 import { check } from "k6";
 
@@ -6,13 +6,14 @@ export const options = {
   scenarios: {
     race: { executor: "shared-iterations", vus: 50, iterations: 50, maxDuration: "30s" },
   },
+  thresholds: { checks: ["rate==1"] },
 };
 
 const url = `${__ENV.API_URL}/rest/v1/rpc/checkout_visit`;
 const headers = {
   "Content-Type": "application/json",
-  apikey: __ENV.SERVICE_KEY,
-  Authorization: `Bearer ${__ENV.SERVICE_KEY}`,
+  apikey: __ENV.ANON_KEY,
+  Authorization: `Bearer ${__ENV.AUTH_TOKEN}`,
 };
 
 export default function () {

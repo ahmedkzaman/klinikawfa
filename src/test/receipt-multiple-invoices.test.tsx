@@ -4,7 +4,11 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ReceiptTemplate, type ReceiptData } from '@/components/clinic/billing/ReceiptTemplate';
 import { calculateDualLedger, sumPatientCollectibleBalance } from '@/lib/clinic/dualLedger';
-import { buildReceiptData, type PaymentBatchReceiptSnapshot } from '@/lib/clinic/receiptPayload';
+import {
+  buildReceiptData,
+  receiptErrorMessage,
+  type PaymentBatchReceiptSnapshot,
+} from '@/lib/clinic/receiptPayload';
 
 describe('multi-invoice debt receipt', () => {
   it('loads durable batch invoice provenance through the authorized receipt snapshot', () => {
@@ -117,5 +121,63 @@ describe('multi-invoice debt receipt', () => {
     });
 
     expect(sumPatientCollectibleBalance([ledger])).toBe(15);
+  });
+
+  it('classifies a historical panel invoice from its durable queue payer context', () => {
+    const data = buildReceiptData({
+      payment: {
+        id: 'payment-panel-copay', batch_id: 'batch-mixed', amount: 10,
+        payment_method: 'cash', payment_type: 'panel', created_at: '2026-08-13T08:00:00Z',
+        queue_entry_id: 'queue-panel', consultation_id: 'consultation-panel', deleted_at: null,
+      },
+      receipt_id: 'batch-mixed',
+      selected_queue_entry_ids: ['queue-panel'],
+      payments: [{
+        id: 'payment-panel-copay', batch_id: 'batch-mixed', amount: 10,
+        payment_method: 'cash', payment_type: 'panel', created_at: '2026-08-13T08:00:00Z',
+        queue_entry_id: 'queue-panel', consultation_id: 'consultation-panel', deleted_at: null,
+      }],
+      ledger_payments: [{
+        id: 'later-self-pay-copy', batch_id: null, amount: 10,
+        payment_method: 'cash', payment_type: 'self_pay', created_at: '2026-08-14T08:00:00Z',
+        queue_entry_id: 'queue-panel', consultation_id: 'consultation-panel', deleted_at: null,
+      }],
+      queue_entries: [{
+        id: 'queue-panel', queue_sequence: 7, created_at: '2026-08-01T08:00:00Z',
+        payment_method: 'panel', panel_id: 'provider-inactive', panel_provider_name: 'Legacy Panel',
+        patient: { name: 'Aminah', national_id: null, date_of_birth: null },
+      }],
+      consultations: [{ id: 'consultation-panel', queue_entry_id: 'queue-panel' }],
+      items: [{ consultation_id: 'consultation-panel', item_name: 'Consultation', quantity: 1, price: 100 }],
+      panel_claims: [{
+        queue_entry_id: 'queue-panel', amount: 70, received_amount: 0, status: 'pending',
+      }],
+    } satisfies PaymentBatchReceiptSnapshot);
+
+    expect(data).toMatchObject({ paymentType: 'panel', panelBilled: 70, balanceRemaining: 20 });
+  });
+
+  it('never falls back to a voided clicked tender when building a receipt', () => {
+    const clicked = {
+      id: 'voided-click', batch_id: 'batch-1', amount: 25, payment_method: 'cash',
+      payment_type: 'self_pay', created_at: '2026-08-13T08:00:00Z',
+      queue_entry_id: 'queue-a', consultation_id: 'consultation-a',
+      deleted_at: '2026-08-14T08:00:00Z',
+    };
+    const snapshot = {
+      payment: clicked,
+      receipt_id: 'batch-1',
+      selected_queue_entry_ids: ['queue-a'],
+      payments: [clicked],
+      ledger_payments: [],
+      queue_entries: [], consultations: [], items: [], panel_claims: [],
+    } satisfies PaymentBatchReceiptSnapshot;
+
+    expect(buildReceiptData(snapshot)).toBeNull();
+  });
+
+  it('explains that print and download are unavailable for a voided payment', () => {
+    expect(receiptErrorMessage(new Error('PAYMENT_VOIDED')))
+      .toBe('Payment voided — receipt unavailable.');
   });
 });

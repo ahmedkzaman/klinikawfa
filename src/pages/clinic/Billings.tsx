@@ -33,6 +33,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import type { ConsultationRow, ConsultationItemRow } from '@/types/clinic';
 import { calculateDualLedger } from '@/lib/clinic/dualLedger';
+import { classifyBillingPayer } from '@/lib/clinic/billingPayer';
 
 type TabKey = 'paid' | 'panel' | 'self_pay';
 
@@ -54,6 +55,10 @@ interface LedgerEntry {
   unattributedBalance: number;
   unitemizedAdditionalCharges: number;
   latestPaymentType: 'self_pay' | 'panel' | 'insurance';
+  expectsPanel: boolean;
+  queuePaymentMethod: string | null;
+  panelId: string | null;
+  paymentTypes: string[];
   latestMethod: string | null;
   displayMethod: string;
   patientPaymentMethods: string[];
@@ -218,6 +223,7 @@ export default function Billings() {
           if (p.payment_method) existing.patientPaymentMethods.push(p.payment_method);
         }
         existing.latestPaymentType = pType;
+        existing.paymentTypes.push(pType);
         existing.latestMethod = p.payment_method ?? existing.latestMethod;
         existing.latestPaymentId = p.id;
       } else {
@@ -239,6 +245,10 @@ export default function Billings() {
           unattributedBalance: 0,
           unitemizedAdditionalCharges: 0,
           latestPaymentType: pType,
+          expectsPanel: false,
+          queuePaymentMethod: qe.payment_method,
+          panelId: qe.panel_id,
+          paymentTypes: [pType],
           latestMethod: p.payment_method ?? null,
           displayMethod: '',
           patientPaymentMethods: p.payment_method && p.payment_method !== 'panel'
@@ -252,8 +262,17 @@ export default function Billings() {
 
     const list = Array.from(byQueue.values());
     list.forEach((e) => {
-      const expectsPanel = e.latestPaymentType === 'panel' || e.latestPaymentType === 'insurance';
       const claim = claimsByQueue[e.queueEntryId];
+      const payer = classifyBillingPayer({
+        queuePaymentMethod: e.queuePaymentMethod,
+        panelId: e.panelId,
+        panelProviderName: e.panelName,
+        hasActiveClaim: Boolean(claim),
+        paymentTypes: e.paymentTypes,
+      });
+      const { expectsPanel } = payer;
+      e.expectsPanel = expectsPanel;
+      e.latestPaymentType = payer.paymentType;
       const state = calculateDualLedger({
         billedTotal: e.subtotal,
         patientPayments: [e.paid],
@@ -292,12 +311,11 @@ export default function Billings() {
       return entries.filter(
         (e) =>
           e.panelOutstanding > 0 &&
-          (e.latestPaymentType === 'panel' ||
-            e.latestPaymentType === 'insurance'),
+          e.expectsPanel,
       );
     }
     return entries.filter(
-      (e) => e.outstanding > 0 && e.latestPaymentType === 'self_pay',
+      (e) => e.outstanding > 0 && !e.expectsPanel,
     );
   }, [entries, activeTab]);
 
@@ -310,11 +328,10 @@ export default function Billings() {
     const panelRows = entries.filter(
       (e) =>
         e.panelOutstanding > 0 &&
-        (e.latestPaymentType === 'panel' ||
-          e.latestPaymentType === 'insurance'),
+        e.expectsPanel,
     );
     const selfPayRows = entries.filter(
-      (e) => e.outstanding > 0 && e.latestPaymentType === 'self_pay',
+      (e) => e.outstanding > 0 && !e.expectsPanel,
     );
     return {
       paid: entries.filter(
@@ -580,9 +597,7 @@ export default function Billings() {
                       {formatBillingPaymentMethod({
                         method: e.latestMethod,
                         patientPaid: e.paid,
-                        expectsPanel:
-                          e.latestPaymentType === 'panel' ||
-                          e.latestPaymentType === 'insurance',
+                        expectsPanel: e.expectsPanel,
                         panelName: e.panelName,
                         patientMethods: e.patientPaymentMethods,
                       })}

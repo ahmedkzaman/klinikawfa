@@ -3578,9 +3578,9 @@ export type Database = {
         ]
       }
       payment_batches: {
-        Row: { id: string; queue_entry_id: string | null; coordination_queue_entry_id: string | null; idempotency_key: string; actor_id: string; payment_type: string; expected_patient_amount: number; completes_visit: boolean; request_fingerprint: string; selected_queue_entry_ids: string[]; result: Json | null; created_at: string }
-        Insert: { id?: string; queue_entry_id?: string | null; coordination_queue_entry_id?: string | null; idempotency_key: string; actor_id?: string; payment_type: string; expected_patient_amount: number; completes_visit: boolean; request_fingerprint: string; selected_queue_entry_ids?: string[]; result?: Json | null; created_at?: string }
-        Update: { id?: string; queue_entry_id?: string | null; coordination_queue_entry_id?: string | null; idempotency_key?: string; actor_id?: string; payment_type?: string; expected_patient_amount?: number; completes_visit?: boolean; request_fingerprint?: string; selected_queue_entry_ids?: string[]; result?: Json | null; created_at?: string }
+        Row: { id: string; queue_entry_id: string | null; coordination_queue_entry_id: string | null; idempotency_key: string; actor_id: string; payment_type: string; expected_patient_amount: number; completes_visit: boolean; request_fingerprint: string; selected_queue_entry_ids: string[]; allocation_payment_types: Json; result: Json | null; created_at: string }
+        Insert: { id?: string; queue_entry_id?: string | null; coordination_queue_entry_id?: string | null; idempotency_key: string; actor_id?: string; payment_type: string; expected_patient_amount: number; completes_visit: boolean; request_fingerprint: string; selected_queue_entry_ids?: string[]; allocation_payment_types?: Json; result?: Json | null; created_at?: string }
+        Update: { id?: string; queue_entry_id?: string | null; coordination_queue_entry_id?: string | null; idempotency_key?: string; actor_id?: string; payment_type?: string; expected_patient_amount?: number; completes_visit?: boolean; request_fingerprint?: string; selected_queue_entry_ids?: string[]; allocation_payment_types?: Json; result?: Json | null; created_at?: string }
         Relationships: [
           {
             foreignKeyName: "payment_batches_actor_id_fkey"
@@ -3638,6 +3638,7 @@ export type Database = {
           amount: number
           batch_id: string | null
           consultation_id: string | null
+          created_by: string | null
           created_at: string
           deleted_at: string | null
           deleted_by: string | null
@@ -3652,6 +3653,7 @@ export type Database = {
           amount?: number
           batch_id?: string | null
           consultation_id?: string | null
+          created_by?: string | null
           created_at?: string
           deleted_at?: string | null
           deleted_by?: string | null
@@ -3666,6 +3668,7 @@ export type Database = {
           amount?: number
           batch_id?: string | null
           consultation_id?: string | null
+          created_by?: string | null
           created_at?: string
           deleted_at?: string | null
           deleted_by?: string | null
@@ -3677,6 +3680,13 @@ export type Database = {
           queue_entry_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "payments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "payments_batch_id_fkey"
             columns: ["batch_id"]

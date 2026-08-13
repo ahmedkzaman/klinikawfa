@@ -19,7 +19,7 @@ INSERT INTO public.queue_entries
 VALUES
   ('a0000000-0000-4000-8000-000000000001',
    'c0000000-0000-0000-0000-000000000001',
-   'consultation', 'sent_to_dispensary', 'k6-checkout', 9001)
+   'consultation', 'dispensing_payment', 'k6-checkout', 9001)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.consultations
