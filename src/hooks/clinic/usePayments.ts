@@ -28,6 +28,10 @@ function invalidateSplitPaymentQueries(qc: ReturnType<typeof useQueryClient>, qu
   qc.invalidateQueries({ queryKey: LEDGER_KEY });
   qc.invalidateQueries({ queryKey: ['consultation'] });
   qc.invalidateQueries({ queryKey: ['clinic'] });
+  qc.invalidateQueries({ queryKey: ['visit-panel-claim', queueEntryId] });
+  qc.invalidateQueries({ queryKey: ['panel_claims'] });
+  qc.invalidateQueries({ queryKey: ['panel_claims_summary'] });
+  qc.invalidateQueries({ queryKey: ['panel_claim_items', queueEntryId] });
 }
 
 /** Active payments for a queue entry, with realtime updates. */

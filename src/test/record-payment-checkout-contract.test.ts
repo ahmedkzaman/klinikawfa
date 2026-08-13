@@ -44,4 +44,10 @@ describe('record payment checkout contract', () => {
     expect(billing).toContain('completeVisitOnPayment && otherChargesTotal > 0');
     expect(billing).toContain('Complete checkout to save Other Charges before recording payment.');
   });
+
+  it('submits the saved billed quantity rather than dispensed quantity', () => {
+    const subtotalBlock = checkout.match(/const subtotalCents[\s\S]*?\[items\],/)?.[0] ?? '';
+    expect(subtotalBlock).toContain('Number(item.quantity ?? 0)');
+    expect(subtotalBlock).not.toContain('dispensed_qty');
+  });
 });

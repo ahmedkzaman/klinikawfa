@@ -332,10 +332,7 @@ export default function DispenseCheckout() {
   const subtotalCents = useMemo(
     () =>
       Math.round(items.reduce((acc, item) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const dispensed = (item as any).dispensed_qty as number | null;
-        const qty =
-          dispensed != null && item.item_id ? dispensed : Number(item.quantity ?? 0);
+        const qty = Number(item.quantity ?? 0);
         return acc + Number(item.price ?? 0) * qty;
       }, 0) * 100),
     [items],

@@ -42,6 +42,10 @@ function expectCheckoutInvalidations(invalidateQueries: ReturnType<typeof vi.spy
     ['payments_ledger'],
     ['consultation'],
     ['clinic'],
+    ['visit-panel-claim', 'queue-1'],
+    ['panel_claims'],
+    ['panel_claims_summary'],
+    ['panel_claim_items', 'queue-1'],
   ]);
 }
 

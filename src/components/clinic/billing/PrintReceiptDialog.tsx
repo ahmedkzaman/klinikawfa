@@ -38,7 +38,7 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
         .from('payments')
         .select(
           `
-          id, payment_method, payment_type, amount, created_at,
+          id, batch_id, payment_method, payment_type, amount, created_at,
           queue_entry_id, consultation_id,
           queue_entries (
             queue_sequence, created_at,
@@ -51,12 +51,15 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
       if (error) throw error;
       if (!pay) return null;
 
-      const { data: queuePayments, error: paymentsErr } = await supabase
+      const { data: allQueuePayments, error: paymentsErr } = await supabase
         .from('payments')
-        .select('id, amount, payment_method, created_at')
+        .select('id, batch_id, amount, payment_method, created_at')
         .eq('queue_entry_id', pay.queue_entry_id)
         .is('deleted_at', null);
       if (paymentsErr) throw paymentsErr;
+      const queuePayments = pay.batch_id
+        ? (allQueuePayments ?? []).filter((payment) => payment.batch_id === pay.batch_id)
+        : [{ id: pay.id, batch_id: null, amount: pay.amount, payment_method: pay.payment_method, created_at: pay.created_at }];
 
       const { data: claims, error: claimsErr } = await supabase
         .from('panel_claims')

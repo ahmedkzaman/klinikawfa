@@ -511,6 +511,13 @@ BEGIN
 END;
 $function$;
 
+CREATE FUNCTION public.test_only_clear_panel_claim_portions(p_queue_entry_id uuid)
+RETURNS void LANGUAGE sql SECURITY DEFINER
+SET search_path = pg_catalog, public AS $function$
+  DELETE FROM public.panel_claim_portions portion USING public.panel_claims claim
+  WHERE portion.panel_claim_id=claim.id AND claim.queue_entry_id=p_queue_entry_id;
+$function$;
+
 CREATE FUNCTION public.test_only_payment_void_audit_count(
   p_payment_id uuid,
   p_reason text
@@ -1145,7 +1152,7 @@ BEGIN
     );
     RAISE EXCEPTION 'DUPLICATE_CHECKOUT_SUCCEEDED';
   EXCEPTION WHEN SQLSTATE '22023' THEN
-    IF SQLERRM <> 'ALREADY_COMPLETED' THEN RAISE; END IF;
+    IF SQLERRM <> 'INVALID_PAYMENT_STATUS' THEN RAISE; END IF;
   END;
   SELECT qe.clinic_status, c.status
   INTO STRICT v_queue_status, v_consultation_status
@@ -1405,6 +1412,9 @@ BEGIN
   END;
   PERFORM public.test_only_set_panel_claim_status(
     '70000000-0000-4000-8000-000000000206', 'pending'
+  );
+  PERFORM public.test_only_clear_panel_claim_portions(
+    '70000000-0000-4000-8000-000000000206'
   );
   PERFORM public.record_split_payments_and_complete_visit(
     '70000000-0000-4000-8000-000000000206',

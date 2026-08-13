@@ -3078,6 +3078,7 @@ export type Database = {
       panel_claim_portion_receipts: {
         Row: {
           amount: number
+          batch_id: string | null
           created_at: string
           created_by: string
           id: string
@@ -3232,6 +3233,7 @@ export type Database = {
         }
         Insert: {
           amount?: number
+          batch_id?: string | null
           approved_amount?: number | null
           claim_date?: string
           claim_no: string
@@ -3255,6 +3257,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          batch_id?: string | null
           approved_amount?: number | null
           claim_date?: string
           claim_no?: string
@@ -3277,6 +3280,13 @@ export type Database = {
           write_off_amount?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "payments_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "payment_batches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "fk_panel_claims_updated_by"
             columns: ["updated_by"]

@@ -14,6 +14,7 @@ const clickedPayment = {
   payment_method: 'qr_pay',
   payment_type: 'self_pay',
   amount: 60,
+  batch_id: 'batch-first',
   created_at: '2026-08-12T09:01:00.000Z',
   queue_entry_id: 'queue-split',
   consultation_id: 'consultation-split',
@@ -125,9 +126,10 @@ vi.mock('@/integrations/supabase/client', () => ({
           if (table === 'payments') {
             return Promise.resolve({
               data: [
-                { id: 'cash-40', amount: 40, payment_method: 'cash', created_at: '2026-08-12T09:00:00Z' },
-                { id: 'qr-60', amount: 60, payment_method: 'qr_pay', created_at: '2026-08-12T09:01:00Z' },
-                { id: 'panel-marker', amount: 0, payment_method: 'panel', created_at: '2026-08-12T09:02:00Z' },
+                { id: 'cash-40', batch_id: 'batch-first', amount: 40, payment_method: 'cash', created_at: '2026-08-12T09:00:00Z' },
+                { id: 'qr-60', batch_id: 'batch-first', amount: 60, payment_method: 'qr_pay', created_at: '2026-08-12T09:01:00Z' },
+                { id: 'panel-marker', batch_id: 'batch-first', amount: 0, payment_method: 'panel', created_at: '2026-08-12T09:02:00Z' },
+                { id: 'later-card', batch_id: 'batch-later', amount: 20, payment_method: 'card', created_at: '2026-08-12T10:00:00Z' },
               ],
               error: null,
             });
@@ -188,6 +190,7 @@ describe('split payment reporting', () => {
     expect(screen.getByText('Cash')).toBeVisible();
     expect(screen.getByText('QR Pay')).toBeVisible();
     expect(screen.getByText('RM 40.00')).toBeVisible();
+    expect(screen.queryByText('RM 20.00')).not.toBeInTheDocument();
     expect(screen.getByText('RM 60.00')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: /print/i }));
     fireEvent.click(screen.getByRole('button', { name: /download pdf/i }));

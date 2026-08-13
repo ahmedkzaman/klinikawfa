@@ -85,9 +85,19 @@ describe('split payment migration', () => {
     expect(sql).toMatch(/grant execute on function public\.void_payment_portion\(uuid, text\) to authenticated/i);
     expect(sql).not.toContain('DIRECT_PAYMENT_INSERT_FORBIDDEN');
     expect(sql).not.toContain('app.authorized_payment_write');
+    expect(sql).toMatch(/create trigger validate_payment_insert before insert on public\.payments/i);
+    expect(sql).toMatch(/create trigger prevent_payment_void_audit_change/i);
+    expect(sql).toMatch(/can_correct_completed_bill\(v_actor\)/i);
     expect(sql).toMatch(/record_payment_and_complete_visit[\s\S]*SET search_path = pg_catalog, public/i);
-    expect(sql).toMatch(/p_payment_type = 'self_pay'[\s\S]*NOT IN \('cash', 'qr_pay', 'card', 'transfer'\)/i);
+    expect(sql).toMatch(/v_payment_method NOT IN \('cash', 'qr_pay', 'card', 'transfer', 'panel'\)/i);
     expect(sql).not.toMatch(/interval '10 seconds'/i);
+  });
+
+  it('correlates split tenders to a receipt batch and hardens payment-only settlement', () => {
+    expect(sql).toMatch(/alter table public\.payments add column batch_id uuid/i);
+    expect(sql).toMatch(/insert into public\.payments \(\s*batch_id,[\s\S]*?values \(\s*v_batch\.id,/i);
+    expect(sql).toMatch(/revoke all on function public\.settle_multiple_debts_legacy_core[\s\S]*service_role/i);
+    expect(sql).toMatch(/v_qe\.visit_type <> 'payment_only' or v_qe\.status <> 'sent_to_dispensary'/i);
   });
 
   it('covers corrected quantity-three billing and production split-parent trigger behavior', () => {
