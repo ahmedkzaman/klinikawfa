@@ -119,8 +119,18 @@ function downloadCSV(rows: RawFinancialRow[], startDate: Date, endDate: Date) {
   URL.revokeObjectURL(url);
 }
 
+function paymentExportCategory(row: SalesInsightRow): string {
+  const method = String(row.paymentMethod ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (method === 'card' || method.includes('credit') || method.includes('debit')) return 'card';
+  if (method === 'qr_pay' || method.includes('qr') || method.includes('duitnow')) return 'QR pay';
+  if (method === 'cash') return 'cash';
+  if (method.includes('ewallet') || method.includes('e_wallet') || method.includes('tng') || method.includes('touch')) return 'e-wallet';
+  if (method === 'panel' || row.paymentType === 'panel' || row.paymentType === 'insurance') return 'panel billed';
+  return 'other';
+}
+
 function downloadSalesCSV(rows: SalesInsightRow[], startDate: Date, endDate: Date) {
-  const header = ['created_at', 'payment_id', 'queue_entry_id', 'consultation_id', 'payment_type', 'payment_method', 'amount'];
+  const header = ['created_at', 'payment_id', 'queue_entry_id', 'consultation_id', 'payment_type', 'payment_method', 'category', 'amount'];
   const lines = [header.join(',')];
   for (const r of rows) {
     lines.push([
@@ -130,6 +140,7 @@ function downloadSalesCSV(rows: SalesInsightRow[], startDate: Date, endDate: Dat
       csvEscape(r.consultationId),
       csvEscape(r.paymentType),
       csvEscape(r.paymentMethod),
+      csvEscape(paymentExportCategory(r)),
       csvEscape(r.amount.toFixed(2)),
     ].join(','));
   }
@@ -138,6 +149,24 @@ function downloadSalesCSV(rows: SalesInsightRow[], startDate: Date, endDate: Dat
   const link = document.createElement('a');
   link.href = url;
   link.download = `clinic_sales_${format(startDate, 'yyyyMMdd')}_to_${format(endDate, 'yyyyMMdd')}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function downloadDailyConsultationRevenueCSV(rows: RawFinancialRow[], startDate: Date, endDate: Date) {
+  const totals = new Map<string, number>();
+  for (const row of rows) totals.set(row.visit_date, (totals.get(row.visit_date) ?? 0) + Number(row.revenue || 0));
+  const lines = [['date', 'consultation_revenue'].join(',')];
+  for (const [date, revenue] of [...totals.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push([csvEscape(date), csvEscape(revenue.toFixed(2))].join(','));
+  }
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `daily_consultation_revenue_${format(startDate, 'yyyyMMdd')}_to_${format(endDate, 'yyyyMMdd')}.csv`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -201,6 +230,7 @@ export default function Insight() {
   const salesSummary = salesData?.summary;
   const salesByMethod = salesData?.byMethod ?? [];
   const salesRows = salesData?.rows ?? [];
+  const salesExportRows = salesData?.allRows ?? salesRows;
 
   const chartData = useMemo(
     () =>
@@ -229,9 +259,15 @@ export default function Insight() {
   };
 
   const handleSalesDownload = () => {
-    if (salesRows.length === 0) return;
-    downloadSalesCSV(salesRows, startDate, endDate);
-    toast.success(`Exported ${salesRows.length} sales row${salesRows.length === 1 ? '' : 's'} to CSV.`);
+    if (salesExportRows.length === 0) return;
+    downloadSalesCSV(salesExportRows, startDate, endDate);
+    toast.success(`Exported ${salesExportRows.length} payment row${salesExportRows.length === 1 ? '' : 's'} to CSV.`);
+  };
+
+  const handleDailyRevenueDownload = () => {
+    if (rows.length === 0) return;
+    downloadDailyConsultationRevenueCSV(rows, startDate, endDate);
+    toast.success('Exported daily consultation revenue to CSV.');
   };
 
   const TAB_TRIGGER =
@@ -299,12 +335,22 @@ export default function Insight() {
 
             <Button
               onClick={handleSalesDownload}
-              disabled={salesLoading || salesRows.length === 0}
+              disabled={salesLoading || salesExportRows.length === 0}
               variant="outline"
               className={secondaryBtn}
             >
               <Download className="mr-2 h-4 w-4" />
               Collected CSV
+            </Button>
+
+            <Button
+              onClick={handleDailyRevenueDownload}
+              disabled={isLoading || rows.length === 0}
+              variant="outline"
+              className={secondaryBtn}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Daily Consultation Revenue
             </Button>
           </div>
         </div>

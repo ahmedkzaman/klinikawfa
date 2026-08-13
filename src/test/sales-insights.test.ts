@@ -90,6 +90,7 @@ describe('aggregateSalesInsights', () => {
       { method: 'qr_pay', collected: 98, paymentCount: 1 },
     ]);
     expect(result.rows.map((row) => row.paymentId)).toEqual(['cash-1']);
+    expect(result.allRows.map((row) => row.paymentId)).toEqual(['cash-1', 'panel-marker']);
   });
 
   it('uses inclusive local calendar-day boundaries', () => {

@@ -46,6 +46,8 @@ export interface SalesInsights {
   dailyTrends: SalesDailyTrendPoint[];
   byMethod: SalesMethodRow[];
   rows: SalesInsightRow[];
+  /** All active payment rows, including panel-billed allocation rows for exports. */
+  allRows: SalesInsightRow[];
 }
 
 function finiteAmount(value: number | string | null): number {
@@ -88,6 +90,20 @@ export function aggregateSalesInsights(rows: SalesPaymentRow[]): SalesInsights {
   const dailyMap = new Map<string, number>();
   const methodMap = new Map<string, { collected: number; paymentCount: number }>();
 
+  const mapRow = (row: SalesPaymentRow): SalesInsightRow => {
+    const amount = finiteAmount(row.amount);
+    return {
+      paymentId: row.id,
+      createdAt: row.created_at,
+      queueEntryId: row.queue_entry_id,
+      consultationId: row.consultation_id,
+      paymentType: row.payment_type,
+      paymentMethod: row.payment_method,
+      amount,
+    };
+  };
+
+  const allRows = rows.map(mapRow);
   const collectedRows = rows.filter((row) => !isPanelAllocationMarker(row));
 
   const rawRows = collectedRows.map((row) => {
@@ -105,15 +121,7 @@ export function aggregateSalesInsights(rows: SalesPaymentRow[]): SalesInsights {
     methodTotal.paymentCount += 1;
     methodMap.set(method, methodTotal);
 
-    return {
-      paymentId: row.id,
-      createdAt: row.created_at,
-      queueEntryId: row.queue_entry_id,
-      consultationId: row.consultation_id,
-      paymentType: row.payment_type,
-      paymentMethod: row.payment_method,
-      amount,
-    };
+    return mapRow(row);
   });
 
   return {
@@ -130,5 +138,6 @@ export function aggregateSalesInsights(rows: SalesPaymentRow[]): SalesInsights {
       paymentCount: value.paymentCount,
     })).sort((a, b) => b.collected - a.collected),
     rows: rawRows,
+    allRows,
   };
 }
