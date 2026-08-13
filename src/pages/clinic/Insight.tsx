@@ -161,12 +161,55 @@ function downloadSalesCSV(rows: SalesInsightRow[], panelClaims: Array<{ queue_en
   URL.revokeObjectURL(url);
 }
 
-function downloadDailyConsultationRevenueCSV(rows: RawFinancialRow[], startDate: Date, endDate: Date) {
-  const totals = new Map<string, number>();
-  for (const row of rows) totals.set(row.visit_date, (totals.get(row.visit_date) ?? 0) + Number(row.revenue || 0));
-  const lines = [['date', 'consultation_revenue'].join(',')];
-  for (const [date, revenue] of [...totals.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-    lines.push([csvEscape(date), csvEscape(revenue.toFixed(2))].join(','));
+function downloadDailyConsultationRevenueCSV(
+  rows: RawFinancialRow[],
+  panelClaims: Array<{ queue_entry_id?: string | null; claim_date?: string | null; amount: number | string | null }>,
+  startDate: Date,
+  endDate: Date,
+) {
+  type DailyTotals = { card: number; qrPay: number; cash: number; eWallet: number; panelBilled: number; other: number };
+  const totals = new Map<string, DailyTotals>();
+  const getTotals = (date: string) => {
+    const existing = totals.get(date);
+    if (existing) return existing;
+    const next = { card: 0, qrPay: 0, cash: 0, eWallet: 0, panelBilled: 0, other: 0 };
+    totals.set(date, next);
+    return next;
+  };
+  const panelQueueIds = new Set(panelClaims.map((claim) => claim.queue_entry_id).filter(Boolean));
+  for (const row of rows) {
+    // Panel claims are reported from the claim ledger below, not repeated once per billed item.
+    if (panelQueueIds.has(row.queue_entry_id)) continue;
+    const daily = getTotals(row.visit_date);
+    const category = paymentExportCategory({
+      paymentMethod: row.payment_method,
+      paymentType: row.payment_method === 'panel' ? 'panel' : 'self_pay',
+    } as SalesInsightRow);
+    const amount = Number(row.revenue || 0);
+    if (category === 'card') daily.card += amount;
+    else if (category === 'QR pay') daily.qrPay += amount;
+    else if (category === 'cash') daily.cash += amount;
+    else if (category === 'e-wallet') daily.eWallet += amount;
+    else daily.other += amount;
+  }
+  for (const claim of panelClaims) {
+    const date = claim.claim_date;
+    if (!date) continue;
+    getTotals(date).panelBilled += Number(claim.amount ?? 0);
+  }
+  const lines = [['date', 'card', 'qr_pay', 'cash', 'e_wallet', 'panel_billed', 'other_methods', 'consultation_revenue'].join(',')];
+  for (const [date, daily] of [...totals.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const revenue = daily.card + daily.qrPay + daily.cash + daily.eWallet + daily.panelBilled + daily.other;
+    lines.push([
+      csvEscape(date),
+      daily.card.toFixed(2),
+      daily.qrPay.toFixed(2),
+      daily.cash.toFixed(2),
+      daily.eWallet.toFixed(2),
+      daily.panelBilled.toFixed(2),
+      daily.other.toFixed(2),
+      revenue.toFixed(2),
+    ].join(','));
   }
   const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -272,7 +315,7 @@ export default function Insight() {
 
   const handleDailyRevenueDownload = () => {
     if (rows.length === 0) return;
-    downloadDailyConsultationRevenueCSV(rows, startDate, endDate);
+    downloadDailyConsultationRevenueCSV(rows, panelBilledData?.claims ?? [], startDate, endDate);
     toast.success('Exported daily consultation revenue to CSV.');
   };
 
