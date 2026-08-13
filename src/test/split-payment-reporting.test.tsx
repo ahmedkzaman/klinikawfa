@@ -185,6 +185,7 @@ describe('split payment reporting', () => {
       patientPayments: [
         { amount: 40, paymentMethod: 'cash' },
         { amount: 60, paymentMethod: 'qr_pay' },
+        { amount: 20, paymentMethod: 'card' },
       ],
     }));
     expect(screen.getByText('Cash')).toBeVisible();

@@ -3078,7 +3078,6 @@ export type Database = {
       panel_claim_portion_receipts: {
         Row: {
           amount: number
-          batch_id: string | null
           created_at: string
           created_by: string
           id: string
@@ -3233,7 +3232,6 @@ export type Database = {
         }
         Insert: {
           amount?: number
-          batch_id?: string | null
           approved_amount?: number | null
           claim_date?: string
           claim_no: string
@@ -3257,7 +3255,6 @@ export type Database = {
         }
         Update: {
           amount?: number
-          batch_id?: string | null
           approved_amount?: number | null
           claim_date?: string
           claim_no?: string
@@ -3280,13 +3277,6 @@ export type Database = {
           write_off_amount?: number | null
         }
         Relationships: [
-          {
-            foreignKeyName: "payments_batch_id_fkey"
-            columns: ["batch_id"]
-            isOneToOne: false
-            referencedRelation: "payment_batches"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "fk_panel_claims_updated_by"
             columns: ["updated_by"]
@@ -3587,9 +3577,22 @@ export type Database = {
           },
         ]
       }
+      payment_batches: {
+        Row: { id: string; queue_entry_id: string; consultation_id: string | null; idempotency_key: string; actor_id: string; payment_type: string; expected_patient_amount: number; completes_visit: boolean; request_fingerprint: string; result: Json | null; created_at: string }
+        Insert: { id?: string; queue_entry_id: string; consultation_id?: string | null; idempotency_key: string; actor_id: string; payment_type: string; expected_patient_amount: number; completes_visit: boolean; request_fingerprint: string; result?: Json | null; created_at?: string }
+        Update: { id?: string; queue_entry_id?: string; consultation_id?: string | null; idempotency_key?: string; actor_id?: string; payment_type?: string; expected_patient_amount?: number; completes_visit?: boolean; request_fingerprint?: string; result?: Json | null; created_at?: string }
+        Relationships: []
+      }
+      payment_void_audit: {
+        Row: { id: string; payment_id: string; queue_entry_id: string; actor_id: string; amount: number; payment_method: string; reason: string; created_at: string }
+        Insert: { id?: string; payment_id: string; queue_entry_id: string; actor_id: string; amount: number; payment_method: string; reason: string; created_at?: string }
+        Update: { id?: string; payment_id?: string; queue_entry_id?: string; actor_id?: string; amount?: number; payment_method?: string; reason?: string; created_at?: string }
+        Relationships: [{ foreignKeyName: "payment_void_audit_payment_id_fkey"; columns: ["payment_id"]; isOneToOne: false; referencedRelation: "payments"; referencedColumns: ["id"] }]
+      }
       payments: {
         Row: {
           amount: number
+          batch_id: string | null
           consultation_id: string | null
           created_at: string
           deleted_at: string | null
@@ -3603,6 +3606,7 @@ export type Database = {
         }
         Insert: {
           amount?: number
+          batch_id?: string | null
           consultation_id?: string | null
           created_at?: string
           deleted_at?: string | null
@@ -3616,6 +3620,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          batch_id?: string | null
           consultation_id?: string | null
           created_at?: string
           deleted_at?: string | null
@@ -3628,6 +3633,13 @@ export type Database = {
           queue_entry_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "payments_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "payment_batches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "payments_consultation_id_fkey"
             columns: ["consultation_id"]

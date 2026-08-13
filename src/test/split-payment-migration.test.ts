@@ -98,6 +98,10 @@ describe('split payment migration', () => {
     expect(sql).toMatch(/insert into public\.payments \(\s*batch_id,[\s\S]*?values \(\s*v_batch\.id,/i);
     expect(sql).toMatch(/revoke all on function public\.settle_multiple_debts_legacy_core[\s\S]*service_role/i);
     expect(sql).toMatch(/v_qe\.visit_type <> 'payment_only' or v_qe\.status <> 'sent_to_dispensary'/i);
+    expect(sql).not.toMatch(/grant execute on function public\.settle_multiple_debts\([^;]+service_role/i);
+    expect(sql).toContain('PAYMENT_CONSULTATION_MISMATCH');
+    expect(sql).toContain('PAYMENT_BATCH_MISMATCH');
+    expect(sql).toMatch(/v_visit_type = 'payment_only'[\s\S]*v_consultation_patient <> v_queue_patient/i);
   });
 
   it('covers corrected quantity-three billing and production split-parent trigger behavior', () => {

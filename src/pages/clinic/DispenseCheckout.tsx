@@ -638,6 +638,8 @@ export default function DispenseCheckout() {
       qc.invalidateQueries({ queryKey: ['queue_entries'] });
       qc.invalidateQueries({ queryKey: ['panel_claims'] });
       qc.invalidateQueries({ queryKey: ['panel_claims_summary'] });
+      qc.invalidateQueries({ queryKey: ['visit-panel-claim', queueEntryId] });
+      qc.invalidateQueries({ queryKey: ['panel_claim_items', queueEntryId] });
 
       const successMessage = isPanelOnly
         ? 'Panel checkout completed'

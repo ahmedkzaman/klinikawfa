@@ -144,9 +144,10 @@ CREATE OR REPLACE FUNCTION private.validate_payment_insert()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = pg_catalog, public AS $function$
 DECLARE v_status text; v_visit_type text; v_billed numeric; v_paid numeric; v_method text;
+  v_queue_patient uuid; v_consultation_queue uuid; v_consultation_patient uuid; v_batch public.payment_batches%ROWTYPE;
 BEGIN
   v_method := lower(btrim(coalesce(NEW.payment_method, '')));
-  SELECT qe.clinic_status::text, qe.visit_type::text INTO v_status, v_visit_type
+  SELECT qe.clinic_status::text, qe.visit_type::text, qe.patient_id INTO v_status, v_visit_type, v_queue_patient
   FROM public.queue_entries qe WHERE qe.id = NEW.queue_entry_id AND qe.deleted_at IS NULL FOR UPDATE;
   IF NOT FOUND OR (v_status NOT IN ('dispensing_payment', 'completed')
     AND NOT (v_visit_type = 'payment_only' AND v_status = 'sent_to_dispensary')) THEN
@@ -161,11 +162,25 @@ BEGIN
      (v_method <> 'panel' AND v_method NOT IN ('cash','qr_pay','card','transfer')) THEN
     RAISE EXCEPTION 'INVALID_PAYMENT_METHOD' USING ERRCODE = '22023';
   END IF;
+  IF NEW.consultation_id IS NOT NULL THEN
+    SELECT c.queue_entry_id, c.patient_id INTO v_consultation_queue, v_consultation_patient
+    FROM public.consultations c WHERE c.id=NEW.consultation_id AND c.deleted_at IS NULL FOR UPDATE;
+    IF NOT FOUND OR (v_visit_type <> 'payment_only' AND v_consultation_queue <> NEW.queue_entry_id)
+       OR (v_visit_type = 'payment_only' AND v_consultation_patient <> v_queue_patient) THEN
+      RAISE EXCEPTION 'PAYMENT_CONSULTATION_MISMATCH' USING ERRCODE='23503';
+    END IF;
+  END IF;
+  IF NEW.batch_id IS NOT NULL THEN
+    SELECT batch.* INTO v_batch FROM public.payment_batches batch WHERE batch.id=NEW.batch_id FOR UPDATE;
+    IF NOT FOUND OR v_batch.queue_entry_id <> NEW.queue_entry_id OR v_batch.payment_type <> NEW.payment_type
+       OR v_batch.actor_id IS DISTINCT FROM auth.uid() THEN
+      RAISE EXCEPTION 'PAYMENT_BATCH_MISMATCH' USING ERRCODE='23503';
+    END IF;
+  END IF;
   SELECT coalesce(sum(round(ci.price * ci.quantity, 2)),0) INTO v_billed
-  FROM public.consultations c JOIN public.consultation_items ci ON ci.consultation_id=c.id AND ci.deleted_at IS NULL
-  WHERE c.queue_entry_id=NEW.queue_entry_id AND c.deleted_at IS NULL;
+  FROM public.consultation_items ci WHERE ci.consultation_id=NEW.consultation_id AND ci.deleted_at IS NULL;
   SELECT coalesce(sum(round(p.amount,2)),0) INTO v_paid FROM public.payments p
-  WHERE p.queue_entry_id=NEW.queue_entry_id AND p.deleted_at IS NULL
+  WHERE p.consultation_id=NEW.consultation_id AND p.deleted_at IS NULL
     AND lower(btrim(p.payment_method)) <> 'panel';
   IF v_method <> 'panel' AND NEW.amount > greatest(round(v_billed-v_paid,2),0) THEN
     RAISE EXCEPTION 'STALE_PATIENT_OUTSTANDING: expected %', greatest(round(v_billed-v_paid,2),0)
@@ -1484,10 +1499,15 @@ BEGIN
   FROM public.payments p
   WHERE p.queue_entry_id = p_queue_entry_id AND p.deleted_at IS NULL
     AND lower(btrim(p.payment_method)) <> 'panel';
-  IF v_payment_method <> 'panel'
+  IF p_payment_type = 'self_pay'
      AND v_amount IS DISTINCT FROM greatest(round(v_billed_total - v_existing_paid, 2), 0) THEN
     RAISE EXCEPTION 'STALE_PATIENT_OUTSTANDING: expected %',
       greatest(round(v_billed_total - v_existing_paid, 2), 0) USING ERRCODE = '22023';
+  END IF;
+  IF p_payment_type = 'panel' AND v_payment_method <> 'panel'
+     AND (v_amount <= 0 OR v_amount > greatest(round(v_billed_total-v_existing_paid,2),0)) THEN
+    RAISE EXCEPTION 'STALE_PATIENT_OUTSTANDING: expected %', greatest(round(v_billed_total-v_existing_paid,2),0)
+      USING ERRCODE='22023';
   END IF;
   IF p_payment_type = 'panel' THEN
     IF NOT EXISTS (
@@ -1529,6 +1549,10 @@ BEGIN
     nullif(p_notes, '')
   )
   RETURNING id INTO v_payment_id;
+
+  IF p_payment_type='panel' AND v_payment_method <> 'panel' THEN
+    PERFORM public.ensure_panel_claim_for_queue(p_queue_entry_id);
+  END IF;
 
   IF p_consultation_id IS NOT NULL THEN
     UPDATE public.consultations
@@ -1606,4 +1630,3 @@ $function$;
 ALTER FUNCTION public.settle_multiple_debts(uuid, uuid[], numeric, text, text) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.settle_multiple_debts(uuid, uuid[], numeric, text, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.settle_multiple_debts(uuid, uuid[], numeric, text, text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.settle_multiple_debts(uuid, uuid[], numeric, text, text) TO service_role;
