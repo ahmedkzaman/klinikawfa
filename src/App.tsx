@@ -100,8 +100,6 @@ import Appointments from "./pages/clinic/Appointments";
 import QueueTV from "./pages/tv/QueueTV";
 
 import LeadsManagement from "./pages/admin/LeadsManagement";
-import BlogManagement from "./pages/admin/BlogManagement";
-import BlogEditor from "./pages/admin/BlogEditor";
 import GalleryManagement from "./pages/admin/GalleryManagement";
 import TeamManagement from "./pages/admin/TeamManagement";
 import TeamEditor from "./pages/admin/TeamEditor";
@@ -260,8 +258,8 @@ const App = () => (
                 <Route path="website/team" element={<TeamManagement />} />
                 <Route path="website/team/:id" element={<TeamEditor />} />
                 
-                <Route path="website/blog" element={<BlogManagement />} />
-                <Route path="website/blog/:id" element={<BlogEditor />} />
+                <Route path="website/blog" element={<BlogEditorList />} />
+                <Route path="website/blog/:id" element={<BlogWebsiteEditor />} />
                 <Route path="website/gallery" element={<GalleryManagement />} />
                 <Route path="website/reviews" element={<ReviewsManagement />} />
                 <Route path="website/settings" element={<AdminSettings />} />
