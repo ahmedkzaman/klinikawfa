@@ -39,9 +39,9 @@ describe('usePanelBilledInsights', () => {
     const options = useQuery.mock.calls.at(-1)?.[0] as QueryOptions<unknown>;
 
     expect(options.queryKey).toEqual(['panel-billed-insights', '2026-08-10', '2026-08-10']);
-    await expect(options.queryFn()).resolves.toEqual({ totalBilled: 250, claimCount: 2 });
+    await expect(options.queryFn()).resolves.toMatchObject({ totalBilled: 250, claimCount: 2, claims: expect.any(Array) });
     expect(from).toHaveBeenCalledWith('panel_claims');
-    expect(select).toHaveBeenCalledWith('amount, status');
+    expect(select).toHaveBeenCalledWith('queue_entry_id, claim_date, amount, status');
     expect(gte).toHaveBeenCalledWith('claim_date', '2026-08-10');
     expect(lte).toHaveBeenCalledWith('claim_date', '2026-08-10');
     expect(not).toHaveBeenCalledWith('status', 'in', '(rejected,cancelled)');
