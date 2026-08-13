@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils';
 import { toMalayTitleCase } from '@/lib/textCase';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
+import { assertRefreshSucceeded } from '@/lib/clinic/queryRefresh';
 import {
   bento,
   bentoHeader,
@@ -46,7 +47,9 @@ export default function VisitDetail() {
   const [, setBillingRevision] = useState(0);
 
   const { data: entry, isLoading } = useQueueEntry(queueEntryId);
-  const { data: consultation } = useConsultation(queueEntryId);
+  const consultationQuery = useConsultation(queueEntryId);
+  const { data: consultation } = consultationQuery;
+  const { refetch: refetchConsultation } = consultationQuery;
   const itemsQuery = useConsultationItems(consultation?.id);
   const paymentsQuery = usePayments(queueEntryId);
   const items = useMemo(() => itemsQuery.data ?? [], [itemsQuery.data]);
@@ -60,8 +63,12 @@ export default function VisitDetail() {
     isError: panelClaimError,
     refetch: refetchPanelClaim,
   } = useVisitPanelClaim(queueEntryId);
-  const financialDataError = itemsQuery.isError || paymentsQuery.isError || panelClaimError;
+  const financialDataError = consultationQuery.isError
+    || itemsQuery.isError
+    || paymentsQuery.isError
+    || panelClaimError;
   const financialDataLoading = itemsQuery.isLoading || paymentsQuery.isLoading
+    || consultationQuery.isLoading || consultationQuery.isFetching
     || panelClaimLoading || panelClaimFetching;
   const { paymentId: focusedPaymentId } = useMemo(
     () => parsePaymentVisitLocation(location.search),
@@ -77,11 +84,24 @@ export default function VisitDetail() {
   );
 
   const refreshBilling = useCallback(async () => {
-    const refreshes = [refetchItems(), refetchPayments(), refetchPanelClaim()];
+    const refreshes = [
+      refetchConsultation(),
+      refetchItems(),
+      refetchPayments(),
+      refetchPanelClaim(),
+    ];
     if (canReadCorrectionHistory) refreshes.push(correctionHistory.refetch());
-    await Promise.all(refreshes);
+    const results = await Promise.all(refreshes);
+    assertRefreshSucceeded(results, 'Billing refresh');
     setBillingRevision((revision) => revision + 1);
-  }, [canReadCorrectionHistory, correctionHistory, refetchItems, refetchPanelClaim, refetchPayments]);
+  }, [
+    canReadCorrectionHistory,
+    correctionHistory,
+    refetchConsultation,
+    refetchItems,
+    refetchPanelClaim,
+    refetchPayments,
+  ]);
 
   const subtotal = useMemo(
     () => financialDataError ? null :

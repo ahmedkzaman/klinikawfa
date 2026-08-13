@@ -71,6 +71,16 @@ const tabs: Array<{ key: TabKey; label: string }> = [
   { key: 'self_pay', label: 'Outstanding Self-Pay' },
 ];
 
+const BILLING_ID_CHUNK_SIZE = 500;
+
+function chunkIds(ids: string[], size = BILLING_ID_CHUNK_SIZE): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += size) {
+    chunks.push(ids.slice(i, i + size));
+  }
+  return chunks;
+}
+
 const sortableHeaders: Partial<
   Record<string, { key: BillingSortKey; label: string }>
 > = {
@@ -122,29 +132,38 @@ export default function Billings() {
     queryKey: ['ledger_item_totals', queueEntryIds.slice().sort().join(',')],
     enabled: queueEntryIds.length > 0,
     queryFn: async () => {
-      const { data: consultations, error: cErr } = await supabase
-        .from('consultations')
-        .select('id, queue_entry_id')
-        .in('queue_entry_id', queueEntryIds)
-        .is('deleted_at', null);
-      if (cErr) throw cErr;
+      const consultations = (await Promise.all(chunkIds(queueEntryIds).map((ids) =>
+        fetchAllBillingRows(async (from, to) => {
+          const { data, error } = await supabase
+            .from('consultations')
+            .select('id, queue_entry_id')
+            .in('queue_entry_id', ids)
+            .is('deleted_at', null)
+            .order('id', { ascending: true })
+            .range(from, to);
+          if (error) throw error;
+          return data ?? [];
+        }),
+      ))).flat();
 
       const consultationIds = (consultations ?? []).map(
         (c: Pick<ConsultationRow, 'id' | 'queue_entry_id'>) => c.id,
       );
       if (consultationIds.length === 0) return {};
 
-      const items = await fetchAllBillingRows(async (from, to) => {
-        const { data, error } = await supabase
-          .from('consultation_items')
-          .select('consultation_id, price, quantity')
-          .in('consultation_id', consultationIds)
-          .is('deleted_at', null)
-          .order('id', { ascending: true })
-          .range(from, to);
-        if (error) throw error;
-        return data ?? [];
-      });
+      const items = (await Promise.all(chunkIds(consultationIds).map((ids) =>
+        fetchAllBillingRows(async (from, to) => {
+          const { data, error } = await supabase
+            .from('consultation_items')
+            .select('consultation_id, price, quantity')
+            .in('consultation_id', ids)
+            .is('deleted_at', null)
+            .order('id', { ascending: true })
+            .range(from, to);
+          if (error) throw error;
+          return data ?? [];
+        }),
+      ))).flat();
 
       const linesByConsultation: Record<
         string,
@@ -180,11 +199,18 @@ export default function Billings() {
     queryKey: ['billing-panel-claims', queueEntryIds.slice().sort().join(',')],
     enabled: queueEntryIds.length > 0,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('panel_claims')
-        .select('queue_entry_id, amount, received_amount, status')
-        .in('queue_entry_id', queueEntryIds);
-      if (error) throw error;
+      const data = (await Promise.all(chunkIds(queueEntryIds).map((ids) =>
+        fetchAllBillingRows(async (from, to) => {
+          const { data: rows, error } = await supabase
+            .from('panel_claims')
+            .select('queue_entry_id, amount, received_amount, status')
+            .in('queue_entry_id', ids)
+            .order('id', { ascending: true })
+            .range(from, to);
+          if (error) throw error;
+          return rows ?? [];
+        }),
+      ))).flat();
       const grouped: Record<string, { amount: number; receivedAmount: number; status: string }> = {};
       for (const claim of data ?? []) {
         const id = claim.queue_entry_id;

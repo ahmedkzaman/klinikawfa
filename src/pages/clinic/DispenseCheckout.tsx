@@ -75,6 +75,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
+import { assertRefreshSucceeded } from '@/lib/clinic/queryRefresh';
 import { calculateClinicalAge } from '@/lib/clinic/clinicalAge';
 import { PAYMENT_METHOD_OPTIONS } from '@/lib/clinic/paymentMethod';
 import { canEditDispensary } from '@/lib/clinic/dispensaryPermissions';
@@ -926,7 +927,8 @@ export default function DispenseCheckout() {
             showOtherCharges
             onChargesChange={handleChargesChange}
             onRefreshBalance={async () => {
-              await Promise.all([refetchItems(), refetchPayments()]);
+              const results = await Promise.all([refetchItems(), refetchPayments()]);
+              assertRefreshSucceeded(results, 'Billing refresh');
             }}
           />
         </div>

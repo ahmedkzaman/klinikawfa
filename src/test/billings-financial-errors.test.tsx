@@ -42,13 +42,16 @@ vi.mock('@/integrations/supabase/client', () => ({
     from: (table: string) => {
       const builder: Record<string, unknown> & { then?: Promise<unknown>['then'] } = {};
       for (const method of ['select', 'in', 'is', 'order']) builder[method] = () => builder;
-      builder.range = () => Promise.resolve({ data: [], error: null });
-      builder.then = (resolve, reject) => Promise.resolve(
+      const response = () => (
         state.queryErrorTable === table
           ? { data: null, error: { message: `${table} failed` } }
           : table === 'consultations'
             ? { data: [{ id: 'consultation-1', queue_entry_id: 'queue-1' }], error: null }
-            : { data: [], error: null },
+            : { data: [], error: null }
+      );
+      builder.range = () => Promise.resolve(response());
+      builder.then = (resolve, reject) => Promise.resolve(
+        response(),
       ).then(resolve, reject);
       return builder;
     },

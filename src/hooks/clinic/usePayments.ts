@@ -8,6 +8,7 @@ import { fetchAllBillingRows } from '@/lib/clinic/fetchAllBillingRows';
 
 const PAYMENTS_KEY = (queueEntryId: string) => ['payments', queueEntryId] as const;
 const LEDGER_KEY = ['payments_ledger'] as const;
+const LEDGER_ID_CHUNK_SIZE = 500;
 
 export interface SplitPaymentInput {
   queue_entry_id: string;
@@ -59,6 +60,14 @@ function invalidateDebtQueries(qc: ReturnType<typeof useQueryClient>, patientId:
   qc.invalidateQueries({ queryKey: ['debt', 'unpaid-visits', patientId] });
   qc.invalidateQueries({ queryKey: ['panel_claims'] });
   qc.invalidateQueries({ queryKey: ['panel_claims_summary'] });
+}
+
+function chunkIds(ids: string[], size = LEDGER_ID_CHUNK_SIZE): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += size) {
+    chunks.push(ids.slice(i, i + size));
+  }
+  return chunks;
 }
 
 /** Active payments for a queue entry, with realtime updates. */
@@ -183,7 +192,8 @@ export function usePaymentsLedger(fromISO: string, toISO: string) {
 
       const payments = queueEntryIds.length === 0
         ? []
-        : await fetchAllBillingRows(async (from, to) => {
+        : (await Promise.all(chunkIds(queueEntryIds).map((ids) =>
+          fetchAllBillingRows(async (from, to) => {
           const { data, error } = await supabase
             .from('payments')
             .select(`
@@ -195,14 +205,18 @@ export function usePaymentsLedger(fromISO: string, toISO: string) {
                 insurance_providers:panel_id ( name )
               )
             `)
-            .in('queue_entry_id', queueEntryIds)
+            .in('queue_entry_id', ids)
             .is('deleted_at', null)
             .order('created_at', { ascending: true })
             .order('id', { ascending: true })
             .range(from, to);
           if (error) throw error;
           return (data ?? []) as unknown as LedgerPayment[];
-        });
+          }),
+        ))).flat().sort((a, b) => (
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          || a.id.localeCompare(b.id)
+        ));
 
       return { visits, paymentEvents, payments, queueEntryIds };
     },

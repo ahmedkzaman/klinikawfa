@@ -282,6 +282,26 @@ describe('RecordPaymentDialog split allocations', () => {
     expect(screen.queryByRole('button', { name: 'Start new payment' })).not.toBeInTheDocument();
   });
 
+  it('does not rotate the idempotency key by changing payment type after an ambiguous failure', async () => {
+    state.recordSplitAndComplete
+      .mockRejectedValueOnce(new Error('Connection closed after commit'))
+      .mockResolvedValueOnce({ payment_ids: ['payment-1'] });
+    renderDialog({ onRefreshBalance: vi.fn().mockResolvedValue(undefined) });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Record Payment & Check Out' }));
+    await waitFor(() => expect(state.recordSplitAndComplete).toHaveBeenCalledTimes(1));
+    const firstRequest = state.recordSplitAndComplete.mock.calls[0][0];
+
+    expect(screen.getByRole('radio', { name: 'Self-pay' })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: 'Panel' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('radio', { name: 'Panel' }));
+    expect(screen.getByRole('radio', { name: 'Self-pay' })).toBeChecked();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Record Payment & Check Out' }));
+    await waitFor(() => expect(state.recordSplitAndComplete).toHaveBeenCalledTimes(2));
+    expect(state.recordSplitAndComplete.mock.calls[1][0]).toEqual(firstRequest);
+  });
+
   it('keeps the failed request stable when live props change while the dialog stays open', async () => {
     state.recordSplitAndComplete
       .mockRejectedValueOnce(new Error('Connection closed after commit'))

@@ -27,7 +27,8 @@ export type PatientVisitPaymentHistorySourceRow = {
   id: string;
   queue_sequence: number | null;
   created_at: string;
-  payment_type?: string | null;
+  payment_method?: string | null;
+  panel_id?: string | null;
   payments?: HistoryPaymentRow[] | null;
   panel_claims?: HistoryPanelClaimRow[] | null;
   consultations?: Array<{
@@ -103,8 +104,9 @@ export function mapPatientVisitPaymentHistoryRows(
           .filter((payment) => payment.payment_method === 'panel')
           .reduce((sum, payment) => sum + money(payment.amount), 0),
         expectsPanel:
-          row.payment_type === 'panel' ||
-          row.payment_type === 'insurance' ||
+          row.payment_method?.trim().toLowerCase() === 'panel' ||
+          Boolean(row.panel_id) ||
+          activeClaims.length > 0 ||
           payments.some((payment) => payment.payment_type === 'panel' || payment.payment_type === 'insurance'),
         panelClaim,
       });
@@ -141,7 +143,8 @@ export function usePatientVisitPaymentHistory(patientId: string | null | undefin
           id,
           queue_sequence,
           created_at,
-          payment_type,
+          payment_method,
+          panel_id,
           consultations:consultations!consultations_queue_entry_id_fkey (
             consultation_items!left ( quantity, price, deleted_at )
           ),

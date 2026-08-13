@@ -351,6 +351,8 @@ export function BillingDetailsColumn({
                 const paymentDate = format(new Date(p.created_at), 'd MMM, h:mm a');
                 const paymentAmount = Number(p.amount ?? 0);
                 const isFocused = focusedPaymentId === p.id;
+                const isPanelAllocationMarker =
+                  p.payment_method?.trim().toLowerCase() === 'panel';
                 return (
                 <div
                   key={p.id}
@@ -408,7 +410,7 @@ export function BillingDetailsColumn({
                   >
                     <Printer className="h-3.5 w-3.5" />
                   </Button>
-                  {canCorrectBill && !panelMutationLocked && (
+                  {canCorrectBill && !panelMutationLocked && !isPanelAllocationMarker && (
                     <Button
                       type="button"
                       variant="ghost"

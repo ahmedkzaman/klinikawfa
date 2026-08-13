@@ -69,6 +69,29 @@ describe('aggregateSalesInsights', () => {
     expect(result.rows.map((row) => row.amount)).toEqual([100.5, 25, -10, 0]);
   });
 
+  it('excludes panel allocation markers from collected sales', () => {
+    const result = aggregateSalesInsights([
+      payment({ id: 'cash-1', created_at: '2026-08-10T09:00:00+08:00', amount: 98, payment_method: 'qr_pay' }),
+      payment({
+        id: 'panel-marker',
+        created_at: '2026-08-10T09:01:00+08:00',
+        amount: 45,
+        payment_type: 'panel',
+        payment_method: 'panel',
+      }),
+    ]);
+
+    expect(result.summary).toEqual({
+      totalCollected: 98,
+      paymentCount: 1,
+      visitCount: 1,
+    });
+    expect(result.byMethod).toEqual([
+      { method: 'qr_pay', collected: 98, paymentCount: 1 },
+    ]);
+    expect(result.rows.map((row) => row.paymentId)).toEqual(['cash-1']);
+  });
+
   it('uses inclusive local calendar-day boundaries', () => {
     const start = new Date(2026, 6, 23, 14, 30);
     const end = new Date(2026, 6, 25, 9, 15);

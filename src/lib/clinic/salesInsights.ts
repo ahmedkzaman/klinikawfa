@@ -64,6 +64,10 @@ function clinicDateKey(timestamp: string): string {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
+function isPanelAllocationMarker(row: SalesPaymentRow): boolean {
+  return row.payment_method?.trim().toLowerCase() === 'panel';
+}
+
 export function getLocalDateRangeBounds(startDate: Date, endDate: Date) {
   const startKey = format(startDate, 'yyyy-MM-dd');
   const endExclusiveKey = format(addDays(endDate, 1), 'yyyy-MM-dd');
@@ -84,7 +88,9 @@ export function aggregateSalesInsights(rows: SalesPaymentRow[]): SalesInsights {
   const dailyMap = new Map<string, number>();
   const methodMap = new Map<string, { collected: number; paymentCount: number }>();
 
-  const rawRows = rows.map((row) => {
+  const collectedRows = rows.filter((row) => !isPanelAllocationMarker(row));
+
+  const rawRows = collectedRows.map((row) => {
     const amount = finiteAmount(row.amount);
     const day = clinicDateKey(row.created_at);
     const method = row.payment_method?.trim() || 'unknown';

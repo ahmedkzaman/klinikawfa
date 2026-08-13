@@ -168,36 +168,42 @@ vi.mock('@/integrations/supabase/client', () => ({
       error: null,
     }),
     from: (table: string) => {
+      const rowsForTable = () => {
+        if (table === 'consultations') {
+          return [
+            { id: 'consultation-self', queue_entry_id: 'queue-self' },
+            { id: 'consultation-panel', queue_entry_id: 'queue-panel' },
+          ];
+        }
+        if (table === 'consultation_items') {
+          return [
+            { consultation_id: 'consultation-self', item_name: 'Consultation', quantity: 1, price: 100, item_id: null },
+            { consultation_id: 'consultation-panel', item_name: 'Consultation', quantity: 1, price: 175, item_id: null },
+          ];
+        }
+        if (table === 'panel_claims') {
+          return [
+            { queue_entry_id: 'queue-panel', amount: 75, received_amount: 0, status: 'pending' },
+          ];
+        }
+        if (table === 'payments') {
+          return [
+            { id: 'cash-40', batch_id: 'batch-first', amount: 40, payment_method: 'cash', created_at: '2026-08-12T09:00:00Z' },
+            { id: 'qr-60', batch_id: 'batch-first', amount: 60, payment_method: 'qr_pay', created_at: '2026-08-12T09:01:00Z' },
+            { id: 'panel-marker', batch_id: 'batch-first', amount: 0, payment_method: 'panel', created_at: '2026-08-12T09:02:00Z' },
+            { id: 'later-card', batch_id: 'batch-later', amount: 20, payment_method: 'card', created_at: '2026-08-12T10:00:00Z' },
+          ];
+        }
+        return [];
+      };
       const chain = {
         select: () => chain,
         eq: () => chain,
-        in: () => table === 'panel_claims'
-          ? Promise.resolve({ data: [], error: null })
-          : chain,
-        is: () => {
-          if (table === 'payments') {
-            return Promise.resolve({
-              data: [
-                { id: 'cash-40', batch_id: 'batch-first', amount: 40, payment_method: 'cash', created_at: '2026-08-12T09:00:00Z' },
-                { id: 'qr-60', batch_id: 'batch-first', amount: 60, payment_method: 'qr_pay', created_at: '2026-08-12T09:01:00Z' },
-                { id: 'panel-marker', batch_id: 'batch-first', amount: 0, payment_method: 'panel', created_at: '2026-08-12T09:02:00Z' },
-                { id: 'later-card', batch_id: 'batch-later', amount: 20, payment_method: 'card', created_at: '2026-08-12T10:00:00Z' },
-              ],
-              error: null,
-            });
-          }
-          if (table === 'consultations') {
-            return Promise.resolve({ data: [], error: null });
-          }
-          return chain;
-        },
-        order: () => Promise.resolve({
-          data: [{
-            item_name: 'Consultation',
-            quantity: 1,
-            price: 100,
-            item_id: null,
-          }],
+        in: () => chain,
+        is: () => chain,
+        order: () => chain,
+        range: (from: number, to: number) => Promise.resolve({
+          data: rowsForTable().slice(from, to + 1),
           error: null,
         }),
         maybeSingle: () => Promise.resolve({ data: clickedPayment, error: null }),
@@ -278,10 +284,11 @@ describe('split payment reporting', () => {
     );
 
     expect(await screen.findByText('Cash + QR Pay')).toBeVisible();
-    expect(await screen.findByText('Panel: AIA + Copay')).toBeVisible();
     const legacyLabel = screen.getByText('Legacy / Other');
     expect(legacyLabel.parentElement?.parentElement).toHaveTextContent('RM 0.00');
     expect(legacyLabel.parentElement?.parentElement).not.toHaveTextContent('RM 75.00');
+    fireEvent.click(screen.getByRole('button', { name: /Outstanding Panel/ }));
+    expect(await screen.findByText('Panel: AIA + Copay')).toBeVisible();
   });
 
   it('allocates split rows to their actual Insight payment-method totals', () => {

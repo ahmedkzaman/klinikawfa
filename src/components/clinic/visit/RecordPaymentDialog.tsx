@@ -50,6 +50,7 @@ import {
   type PatientPaymentAllocation,
   type PhysicalPaymentMethod,
 } from '@/lib/clinic/paymentAllocations';
+import { assertRefreshSucceeded } from '@/lib/clinic/queryRefresh';
 
 type PaymentType = 'self_pay' | 'panel';
 
@@ -273,6 +274,10 @@ export function RecordPaymentDialog({
   const addDisabled = allocations.length >= PHYSICAL_PAYMENT_METHODS.length || remaining === 0;
 
   function resetForPaymentType(type: PaymentType) {
+    if (hasPendingAttempt) {
+      toast.error('Refresh the balance before changing payment type.');
+      return;
+    }
     setPaymentType(type);
     setAllocations([createInitialAllocation(type, openingPaymentMethod, expectedBalance)]);
     setIdempotencyKey(crypto.randomUUID());
@@ -370,7 +375,8 @@ export function RecordPaymentDialog({
     if (!onRefreshBalance) return;
     setStartingNewPayment(true);
     try {
-      await onRefreshBalance();
+      const refreshResult = await onRefreshBalance();
+      assertRefreshSucceeded(refreshResult, 'Balance refresh');
       clearPendingDraft(queueEntryId);
       const refreshedBalance = normalizeCurrencyAmount(Math.max(latestDefaultAmount.current, 0));
       const nextType: PaymentType = !completeVisitOnPayment && storedPanelProvider
@@ -413,6 +419,7 @@ export function RecordPaymentDialog({
               value={paymentType}
               onValueChange={(value) => resetForPaymentType(value as PaymentType)}
               className="flex gap-4"
+              disabled={hasPendingAttempt || isSubmitting}
             >
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <RadioGroupItem value="self_pay" id="pt-self" />
