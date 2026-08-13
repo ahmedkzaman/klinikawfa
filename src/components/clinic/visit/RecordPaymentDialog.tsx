@@ -71,6 +71,56 @@ interface Props {
   defaultPaymentMethod?: string;
   /** Stored visit payer context; completed collections never reselect providers. */
   storedPanelProvider?: { id: string; name: string } | null;
+  /** Refreshes the authoritative bill/payments before staff discard an
+   * ambiguous request and deliberately start with a new idempotency key. */
+  onRefreshBalance?: () => Promise<unknown>;
+}
+
+interface PendingPaymentDraft {
+  version: 1;
+  queueEntryId: string;
+  consultationId: string | null;
+  completeVisitOnPayment: boolean;
+  paymentType: PaymentType;
+  allocations: EditableAllocation[];
+  idempotencyKey: string;
+  providerId: string;
+  notes: string;
+  expectedBalance: number;
+  panelPatientAmount: string;
+  openingPaymentMethod?: string;
+}
+
+const pendingDraftKey = (queueEntryId: string) => `clinic:pending-payment:${queueEntryId}`;
+
+function readPendingDraft(queueEntryId: string): PendingPaymentDraft | null {
+  try {
+    const raw = window.sessionStorage.getItem(pendingDraftKey(queueEntryId));
+    if (!raw) return null;
+    const draft = JSON.parse(raw) as Partial<PendingPaymentDraft>;
+    if (draft.version !== 1 || draft.queueEntryId !== queueEntryId
+        || !draft.idempotencyKey || !Array.isArray(draft.allocations)) return null;
+    return draft as PendingPaymentDraft;
+  } catch {
+    return null;
+  }
+}
+
+function writePendingDraft(draft: PendingPaymentDraft) {
+  try {
+    window.sessionStorage.setItem(pendingDraftKey(draft.queueEntryId), JSON.stringify(draft));
+  } catch {
+    // The in-memory state still preserves safe same-dialog retries when storage
+    // is unavailable (for example, hardened private browsing policies).
+  }
+}
+
+function clearPendingDraft(queueEntryId: string) {
+  try {
+    window.sessionStorage.removeItem(pendingDraftKey(queueEntryId));
+  } catch {
+    // See writePendingDraft.
+  }
 }
 
 function canonicalDefaultMethod(method: string | undefined): PhysicalPaymentMethod | '' {
@@ -114,6 +164,7 @@ export function RecordPaymentDialog({
   completeVisitOnPayment = false,
   defaultPaymentMethod,
   storedPanelProvider = null,
+  onRefreshBalance,
 }: Props) {
   const navigate = useNavigate();
   const { data: providers = [] } = useInsuranceProviders({ activeOnly: true });
@@ -131,12 +182,34 @@ export function RecordPaymentDialog({
   );
   const [panelPatientAmount, setPanelPatientAmount] = useState('0.00');
   const [openingPaymentMethod, setOpeningPaymentMethod] = useState(defaultPaymentMethod);
+  const [hasPendingAttempt, setHasPendingAttempt] = useState(false);
+  const [startingNewPayment, setStartingNewPayment] = useState(false);
   const wasOpen = useRef(false);
+  const latestDefaultAmount = useRef(defaultAmount);
+  latestDefaultAmount.current = defaultAmount;
 
   useEffect(() => {
     const isOpening = open && !wasOpen.current;
     wasOpen.current = open;
     if (!isOpening) return;
+
+    const saved = readPendingDraft(queueEntryId);
+    if (saved
+        && saved.consultationId === consultationId
+        && saved.completeVisitOnPayment === completeVisitOnPayment) {
+      setExpectedBalance(saved.expectedBalance);
+      setOpeningPaymentMethod(saved.openingPaymentMethod);
+      setPaymentType(saved.paymentType);
+      setAllocations(saved.allocations);
+      setIdempotencyKey(saved.idempotencyKey);
+      setProviderId(saved.providerId);
+      setProviderOpen(false);
+      setNotes(saved.notes);
+      setPanelPatientAmount(saved.panelPatientAmount);
+      setHasPendingAttempt(true);
+      return;
+    }
+    if (saved) clearPendingDraft(queueEntryId);
 
     const openingBalance = normalizeCurrencyAmount(Math.max(defaultAmount, 0));
     setExpectedBalance(openingBalance);
@@ -155,7 +228,11 @@ export function RecordPaymentDialog({
     setProviderOpen(false);
     setNotes('');
     setPanelPatientAmount(openingType === 'panel' ? openingBalance.toFixed(2) : '0.00');
-  }, [open, defaultAmount, defaultPaymentMethod, completeVisitOnPayment, storedPanelProvider]);
+    setHasPendingAttempt(false);
+  }, [
+    open, queueEntryId, consultationId, defaultAmount, defaultPaymentMethod,
+    completeVisitOnPayment, storedPanelProvider,
+  ]);
 
   const selectedProvider = useMemo(() => (
     !completeVisitOnPayment
@@ -187,7 +264,7 @@ export function RecordPaymentDialog({
   const activeMutation = completeVisitOnPayment
     ? recordSplitPaymentsAndCompleteVisit
     : recordSplitPayments;
-  const isSubmitting = activeMutation.isPending;
+  const isSubmitting = activeMutation.isPending || startingNewPayment;
   const submitDisabled = isSubmitting
     || !validation.valid
     || (!completeVisitOnPayment && paymentType === 'self_pay' && expectedBalance === 0)
@@ -240,6 +317,21 @@ export function RecordPaymentDialog({
       ? expectedBalance
       : validation.total;
 
+    writePendingDraft({
+      version: 1,
+      queueEntryId,
+      consultationId,
+      completeVisitOnPayment,
+      paymentType,
+      allocations,
+      idempotencyKey,
+      providerId,
+      notes,
+      expectedBalance,
+      panelPatientAmount,
+      openingPaymentMethod,
+    });
+
     try {
       await activeMutation.mutateAsync({
         queue_entry_id: queueEntryId,
@@ -252,11 +344,13 @@ export function RecordPaymentDialog({
         idempotency_key: idempotencyKey,
       });
 
-      setIdempotencyKey(crypto.randomUUID());
+      clearPendingDraft(queueEntryId);
+      setHasPendingAttempt(false);
       toast.success(completeVisitOnPayment ? 'Payment recorded · Patient checked out' : 'Payment recorded');
       onOpenChange(false);
       if (completeVisitOnPayment) navigate('/clinic/queue');
     } catch (error) {
+      setHasPendingAttempt(true);
       const message = error instanceof Error ? error.message : 'Checkout failed';
       const stale = message.match(/STALE_PATIENT_OUTSTANDING: expected\s+([0-9.]+)/i);
       if (stale) {
@@ -269,6 +363,34 @@ export function RecordPaymentDialog({
       } else {
         toast.error(`${completeVisitOnPayment ? 'Checkout' : 'Payment'} failed: ${message}`);
       }
+    }
+  }
+
+  async function handleStartNewPayment() {
+    if (!onRefreshBalance) return;
+    setStartingNewPayment(true);
+    try {
+      await onRefreshBalance();
+      clearPendingDraft(queueEntryId);
+      const refreshedBalance = normalizeCurrencyAmount(Math.max(latestDefaultAmount.current, 0));
+      const nextType: PaymentType = !completeVisitOnPayment && storedPanelProvider
+        ? 'panel'
+        : 'self_pay';
+      setExpectedBalance(refreshedBalance);
+      setOpeningPaymentMethod(defaultPaymentMethod);
+      setPaymentType(nextType);
+      setAllocations([createInitialAllocation(nextType, defaultPaymentMethod, refreshedBalance)]);
+      setIdempotencyKey(crypto.randomUUID());
+      setProviderId('');
+      setProviderOpen(false);
+      setNotes('');
+      setPanelPatientAmount(nextType === 'panel' ? refreshedBalance.toFixed(2) : '0.00');
+      setHasPendingAttempt(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Balance refresh failed';
+      toast.error(`Could not start a new payment: ${message}`);
+    } finally {
+      setStartingNewPayment(false);
     }
   }
 
@@ -482,9 +604,26 @@ export function RecordPaymentDialog({
               placeholder="Reference number, remarks…"
             />
           </div>
+
+          {hasPendingAttempt && (
+            <div role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+              This payment may already have reached the server. Retry the same payment to recover its result,
+              or refresh the balance before deliberately starting a new payment.
+            </div>
+          )}
         </div>
 
         <DialogFooter>
+          {hasPendingAttempt && onRefreshBalance && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleStartNewPayment}
+              disabled={isSubmitting}
+            >
+              {startingNewPayment ? 'Refreshing…' : 'Start new payment'}
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}

@@ -51,7 +51,25 @@ const ledgerRows = vi.hoisted(() => [
 ]);
 
 vi.mock('@/hooks/clinic/usePayments', () => ({
-  usePaymentsLedger: () => ({ data: ledgerRows, isLoading: false }),
+  usePaymentsLedger: () => ({
+    data: {
+      visits: ledgerRows.map(({ queue_entries }) => ({
+        ...queue_entries,
+        payment_method: 'self_pay',
+        panel_id: null,
+        insurance_providers: null,
+      })),
+      paymentEvents: ledgerRows.map(({ queue_entries, ...payment }) => ({
+        ...payment,
+        queue_entry_id: queue_entries.id,
+        deleted_at: null,
+      })),
+      payments: ledgerRows,
+      queueEntryIds: ledgerRows.map(({ queue_entries }) => queue_entries.id),
+    },
+    isLoading: false,
+    isError: false,
+  }),
 }));
 
 vi.mock('@tanstack/react-query', async () => {
@@ -60,9 +78,12 @@ vi.mock('@tanstack/react-query', async () => {
   );
   return {
     ...actual,
-    useQuery: () => ({
-      data: { 'queue-old': 60, 'queue-new': 20, 'queue-mid': 100 },
+    useQuery: ({ queryKey }: { queryKey: string[] }) => ({
+      data: queryKey[0] === 'ledger_item_totals'
+        ? { 'queue-old': 60, 'queue-new': 20, 'queue-mid': 100 }
+        : {},
       isLoading: false,
+      isError: false,
     }),
   };
 });

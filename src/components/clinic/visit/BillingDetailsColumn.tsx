@@ -59,6 +59,7 @@ interface Props {
     paid: number;
     outstanding: number;
   }) => void;
+  onRefreshBalance?: () => Promise<unknown>;
 }
 
 export function BillingDetailsColumn({
@@ -76,6 +77,7 @@ export function BillingDetailsColumn({
   hasUnsavedPanelPortions = false,
   showOtherCharges = false,
   onChargesChange,
+  onRefreshBalance,
 }: Props) {
   const { role } = useAuth();
   const canCorrectBill = ['ops_staff', 'operations', 'staff', 'admin', 'special_admin', 'doctor_admin', 'purchaser', 'staff_nurse'].includes(role ?? '');
@@ -438,6 +440,7 @@ export function BillingDetailsColumn({
         defaultPaymentMethod={paymentMethod}
         completeVisitOnPayment={completeVisitOnPayment}
         storedPanelProvider={storedPanelProvider}
+        onRefreshBalance={onRefreshBalance}
       />
 
       <PrintReceiptDialog

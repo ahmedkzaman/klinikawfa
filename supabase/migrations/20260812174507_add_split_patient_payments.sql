@@ -898,23 +898,35 @@ RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = pg_catalog, public AS $function$
 DECLARE v_status text; v_visit_type text; v_billed numeric; v_paid numeric; v_method text;
   v_queue_patient uuid; v_consultation_queue uuid; v_consultation_patient uuid;
+  v_queue_payment_method text; v_queue_panel_id uuid;
   v_batch_coordinator_patient uuid; v_provider_name text;
   v_batch public.payment_batches%ROWTYPE;
 BEGIN
+  -- Direct INSERT remains available only for the bounded cached-client window,
+  -- so authorship and event time must still be owned by the server. Overwrite
+  -- caller values instead of freezing forged provenance after the fact.
+  NEW.created_by := auth.uid();
+  NEW.created_at := pg_catalog.statement_timestamp();
+  IF NEW.created_by IS NULL THEN
+    RAISE EXCEPTION 'PAYMENT_ACTOR_REQUIRED' USING ERRCODE = '42501';
+  END IF;
+
   v_method := lower(btrim(coalesce(NEW.payment_method, '')));
-  SELECT qe.clinic_status::text, qe.visit_type::text, qe.patient_id INTO v_status, v_visit_type, v_queue_patient
+  SELECT qe.clinic_status::text, qe.visit_type::text, qe.patient_id,
+         qe.payment_method, qe.panel_id
+  INTO v_status, v_visit_type, v_queue_patient,
+       v_queue_payment_method, v_queue_panel_id
   FROM public.queue_entries qe WHERE qe.id = NEW.queue_entry_id AND qe.deleted_at IS NULL FOR UPDATE;
   IF NOT FOUND OR (v_status NOT IN ('dispensing_payment', 'completed')
     AND NOT (v_visit_type = 'payment_only' AND v_status = 'sent_to_dispensary')) THEN
     RAISE EXCEPTION 'INVALID_PAYMENT_STATUS' USING ERRCODE = '22023';
   END IF;
-  IF NEW.payment_type = 'panel' AND NOT EXISTS (
-    SELECT 1
-    FROM public.queue_entries AS queue
-    WHERE queue.id = NEW.queue_entry_id
-      AND queue.payment_method = 'panel'
-      AND queue.panel_id IS NOT NULL
-  ) THEN
+  IF v_queue_payment_method = 'panel'
+     AND NEW.payment_type IS DISTINCT FROM 'panel' THEN
+    RAISE EXCEPTION 'PAYMENT_TYPE_MISMATCH' USING ERRCODE = '22023';
+  ELSIF NEW.payment_type = 'panel'
+     AND (v_queue_payment_method IS DISTINCT FROM 'panel'
+          OR v_queue_panel_id IS NULL) THEN
     RAISE EXCEPTION 'INVALID_PANEL_PAYMENT' USING ERRCODE = '22023';
   END IF;
   IF NEW.amount IS NULL OR NEW.amount::text IN ('NaN','Infinity','-Infinity') OR NEW.amount < 0

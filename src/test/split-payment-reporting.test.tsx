@@ -90,10 +90,35 @@ const ledgerRows = [
       insurance_providers: { name: 'AIA' },
     },
   },
+  {
+    id: 'panel-allocation-marker',
+    amount: 75,
+    payment_method: 'panel',
+    payment_type: 'panel',
+    created_at: '2026-08-12T10:02:00.000Z',
+    queue_entries: {
+      id: 'queue-panel',
+      created_at: '2026-08-12T10:00:00.000Z',
+      queue_sequence: 2,
+      patient_id: 'patient-panel',
+      clinic_status: 'completed',
+      patients: { name: 'Panel Patient' },
+      insurance_providers: { name: 'AIA' },
+    },
+  },
 ];
 
 vi.mock('@/hooks/clinic/usePayments', () => ({
-  usePaymentsLedger: () => ({ data: ledgerRows, isLoading: false }),
+  usePaymentsLedger: () => ({
+    data: {
+      payments: ledgerRows,
+      paymentEvents: ledgerRows,
+      visits: [],
+      queueEntryIds: ['queue-self', 'queue-panel'],
+    },
+    isLoading: false,
+    isError: false,
+  }),
 }));
 
 vi.mock('@/hooks/clinic/useClinicSettings', () => ({
@@ -221,7 +246,6 @@ describe('split payment reporting', () => {
     expect(screen.queryByText('RM 20.00')).not.toBeInTheDocument();
     expect(screen.getByText('RM 60.00')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: /print/i }));
-    fireEvent.click(screen.getByRole('button', { name: /download pdf/i }));
     await waitFor(() => {
       expect(printReceipt).toHaveBeenCalledWith(expect.objectContaining({
         amountPaid: 100,
@@ -230,6 +254,10 @@ describe('split payment reporting', () => {
           expect.objectContaining({ method: 'qr_pay', amount: 60 }),
         ]),
       }), expect.anything());
+    });
+    await waitFor(() => expect(screen.getByRole('button', { name: /download pdf/i })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: /download pdf/i }));
+    await waitFor(() => {
       expect(downloadReceiptPdf).toHaveBeenCalledWith(expect.objectContaining({ amountPaid: 100 }), expect.anything());
       expect(printReceipt).not.toHaveBeenCalledWith(expect.objectContaining({
         paymentPortions: expect.arrayContaining([expect.objectContaining({ method: 'panel' })]),
@@ -251,6 +279,9 @@ describe('split payment reporting', () => {
 
     expect(await screen.findByText('Cash + QR Pay')).toBeVisible();
     expect(await screen.findByText('Panel: AIA + Copay')).toBeVisible();
+    const legacyLabel = screen.getByText('Legacy / Other');
+    expect(legacyLabel.parentElement?.parentElement).toHaveTextContent('RM 0.00');
+    expect(legacyLabel.parentElement?.parentElement).not.toHaveTextContent('RM 75.00');
   });
 
   it('allocates split rows to their actual Insight payment-method totals', () => {

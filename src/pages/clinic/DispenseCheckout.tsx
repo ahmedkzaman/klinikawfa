@@ -172,10 +172,10 @@ export default function DispenseCheckout() {
   const patient = entry?.patients;
 
   const { data: consultation, isFetched: consultationFetched, refetch: refetchConsultation } = useConsultation(queueEntryId);
-  const { data: items = [] } = useConsultationItems(consultation?.id);
+  const { data: items = [], refetch: refetchItems } = useConsultationItems(consultation?.id);
   const { settings: clinicSettings } = useClinicSettings();
   const { data: labelSettings } = useDrugLabelSettings();
-  const { data: payments = [] } = usePayments(queueEntryId);
+  const { data: payments = [], refetch: refetchPayments } = usePayments(queueEntryId);
   const { data: attachedDocs = [] } = useConsultationDocuments(consultation?.id);
   const { data: docTemplates = [] } = useDocumentTemplates();
   const { data: activePanels = [] } = useInsuranceProviders({ activeOnly: true });
@@ -925,6 +925,9 @@ export default function DispenseCheckout() {
             hasUnsavedPanelPortions={splitPanelPayment}
             showOtherCharges
             onChargesChange={handleChargesChange}
+            onRefreshBalance={async () => {
+              await Promise.all([refetchItems(), refetchPayments()]);
+            }}
           />
         </div>
 

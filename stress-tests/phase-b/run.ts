@@ -3,6 +3,9 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { runPhaseBCommands } from './runnerContract';
+import { loadStagingEnv } from '../loadStagingEnv';
+
+loadStagingEnv(path.join(import.meta.dir, '..', '.env.staging'));
 
 const outIdx = process.argv.indexOf('--out');
 const outDir = path.join(outIdx >= 0 ? process.argv[outIdx + 1] : 'reports', 'phase-b');
@@ -24,6 +27,12 @@ const SCENARIOS: { script: string; envExtra: Record<string, string> }[] = [
 
 runPhaseBCommands({
   spawn: spawnSync,
+  preflight: {
+    label: 'Phase B authenticated staff JWT preflight',
+    command: process.execPath,
+    args: [path.join(import.meta.dir, 'auth-preflight.ts')],
+    options: { stdio: 'inherit', env: process.env },
+  },
   setup: {
     label: 'Phase B setup', command: 'psql',
     args: [process.env.STAGING_DB_URL!, '-v', 'ON_ERROR_STOP=1', '-f', path.join(import.meta.dir, 'setup-targets.sql')],
@@ -35,6 +44,12 @@ runPhaseBCommands({
     args: ['run', '--summary-export', path.join(outDir, script.replace('.k6.js', '.json')), path.join(import.meta.dir, script)],
     options: { stdio: 'inherit', env: { ...process.env, ...env, ...envExtra } },
   })),
+  validate: {
+    label: 'Phase B post-race invariants',
+    command: process.execPath,
+    args: [path.join(import.meta.dir, 'validate.ts'), '--out', outDir],
+    options: { stdio: 'inherit', env: process.env },
+  },
   teardown: {
     label: 'Phase B teardown', command: 'psql',
     args: [process.env.STAGING_DB_URL!, '-v', 'ON_ERROR_STOP=1', '-f', path.join(import.meta.dir, 'teardown-targets.sql')],

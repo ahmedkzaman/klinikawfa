@@ -306,6 +306,28 @@ describe('split payment migration', () => {
     expect(harness).toContain('PAYMENT_PROVENANCE_FORGERY_SUCCEEDED');
   });
 
+  it('owns insert provenance at the database boundary for cached authenticated writers', () => {
+    const guard = sql.match(
+      /create or replace function private\.validate_payment_insert[\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+    expect(guard).toMatch(/new\.created_by\s*:=\s*auth\.uid\(\)/i);
+    expect(guard).toMatch(/new\.created_at\s*:=\s*(?:pg_catalog\.)?(?:statement_timestamp|now)\(\)/i);
+    expect(guard.indexOf('NEW.created_by')).toBeLessThan(guard.indexOf('RETURN NEW'));
+    expect(harness).toContain('DIRECT_PAYMENT_PROVENANCE_MISMATCH');
+  });
+
+  it('requires cached physical panel tenders to retain panel attribution and full claim guards', () => {
+    const guard = sql.match(
+      /create or replace function private\.validate_payment_insert[\s\S]*?\$function\$;/i,
+    )?.[0] ?? '';
+    expect(guard).toMatch(/v_queue_payment_method[\s\S]*new\.payment_type\s+is\s+distinct\s+from\s+'panel'[\s\S]*PAYMENT_TYPE_MISMATCH/i);
+    expect(guard).toMatch(/private\.panel_claim_is_materialized\(claim\.id\)/i);
+    expect(sql).toMatch(/reconcile_cached_panel_payment[\s\S]*new\.payment_type\s*=\s*'panel'[\s\S]*ensure_panel_claim_for_queue/i);
+    expect(harness).toContain('DIRECT_PANEL_SELF_PAY_REJECTION_MISSED');
+    expect(harness).toContain('DIRECT_MATERIALIZED_PANEL_REJECTION_MISSED');
+    expect(harness).toContain('DIRECT_PANEL_RECONCILIATION_MISMATCH');
+  });
+
   it('rejects voided clicked payments from receipt reconstruction', () => {
     const receipt = functionBody('get_payment_batch_receipt');
     expect(receipt).toMatch(/v_payment\.deleted_at is not null[\s\S]*PAYMENT_VOIDED/i);

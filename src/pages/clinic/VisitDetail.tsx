@@ -47,8 +47,12 @@ export default function VisitDetail() {
 
   const { data: entry, isLoading } = useQueueEntry(queueEntryId);
   const { data: consultation } = useConsultation(queueEntryId);
-  const { data: items = [], refetch: refetchItems } = useConsultationItems(consultation?.id);
-  const { data: payments = [], refetch: refetchPayments } = usePayments(queueEntryId);
+  const itemsQuery = useConsultationItems(consultation?.id);
+  const paymentsQuery = usePayments(queueEntryId);
+  const items = useMemo(() => itemsQuery.data ?? [], [itemsQuery.data]);
+  const payments = useMemo(() => paymentsQuery.data ?? [], [paymentsQuery.data]);
+  const { refetch: refetchItems } = itemsQuery;
+  const { refetch: refetchPayments } = paymentsQuery;
   const {
     data: panelClaim = null,
     isLoading: panelClaimLoading,
@@ -56,6 +60,9 @@ export default function VisitDetail() {
     isError: panelClaimError,
     refetch: refetchPanelClaim,
   } = useVisitPanelClaim(queueEntryId);
+  const financialDataError = itemsQuery.isError || paymentsQuery.isError || panelClaimError;
+  const financialDataLoading = itemsQuery.isLoading || paymentsQuery.isLoading
+    || panelClaimLoading || panelClaimFetching;
   const { paymentId: focusedPaymentId } = useMemo(
     () => parsePaymentVisitLocation(location.search),
     [location.search],
@@ -77,20 +84,20 @@ export default function VisitDetail() {
   }, [canReadCorrectionHistory, correctionHistory, refetchItems, refetchPanelClaim, refetchPayments]);
 
   const subtotal = useMemo(
-    () =>
+    () => financialDataError ? null :
       items.reduce(
         (acc, item) =>
           acc + Number(item.price ?? 0) * Number(item.quantity ?? 0),
         0,
       ),
-    [items],
+    [financialDataError, items],
   );
   const expectsPanel =
     entry?.payment_method === 'panel' ||
     panelClaim !== null ||
     payments.some((payment) =>
       payment.payment_type === 'panel' || payment.payment_type === 'insurance');
-  const financial = useMemo(() => calculateDualLedger({
+  const financial = useMemo(() => subtotal === null ? null : calculateDualLedger({
     billedTotal: subtotal,
     patientPayments: payments.map((payment) => ({
       amount: Number(payment.amount ?? 0),
@@ -172,12 +179,21 @@ export default function VisitDetail() {
           {consultation?.status && (
             <StatusGroup label="Consultation" status={consultation.status} />
           )}
-          {canCorrect && (
+          {canCorrect && !financialDataError && (
             <Button type="button" variant="outline" onClick={() => setCorrectionOpen(true)}>
               Edit completed bill
             </Button>
           )}
         </div>
+
+        {financialDataError && (
+          <div role="alert" className={cn(bento, 'p-4 text-sm text-rose-700')}>
+            <p className="font-semibold">Financial details are unavailable.</p>
+            <p className="mt-1 text-rose-600">
+              Billing items, payments, or panel claims could not be loaded. Refresh before relying on balances.
+            </p>
+          </div>
+        )}
 
         {/* 3-column workspace (read-only) */}
         <div className="grid lg:grid-cols-[280px_1fr_360px] gap-4 items-start">
@@ -214,10 +230,12 @@ export default function VisitDetail() {
                   '—'
                 }
               />
-              <Field
-                label="Patient outstanding"
-                value={`RM ${financial.patientOutstanding.toFixed(2)}`}
-              />
+              {financial && (
+                <Field
+                  label="Patient outstanding"
+                  value={`RM ${financial.patientOutstanding.toFixed(2)}`}
+                />
+              )}
             </div>
           </div>
 
@@ -254,18 +272,27 @@ export default function VisitDetail() {
             )}
           </div>
 
-          <BillingDetailsColumn
-            queueEntryId={queueEntryId!}
-            consultationId={consultation?.id ?? null}
-            items={items}
-            payments={payments}
-            focusedPaymentId={focusedPaymentId}
-            panelClaim={panelClaim}
-            panelClaimLoading={panelClaimLoading || panelClaimFetching}
-            panelClaimError={panelClaimError}
-            expectsPanel={expectsPanel}
-            storedPanelProvider={entry?.insurance_providers ?? null}
-          />
+          {financialDataError ? (
+            <div className={cn(bento, 'p-4 text-sm text-slate-500')}>
+              Financial controls are hidden until all billing data reloads successfully.
+            </div>
+          ) : financialDataLoading ? (
+            <Skeleton className="h-96 rounded-2xl" />
+          ) : (
+            <BillingDetailsColumn
+              queueEntryId={queueEntryId!}
+              consultationId={consultation?.id ?? null}
+              items={items}
+              payments={payments}
+              focusedPaymentId={focusedPaymentId}
+              panelClaim={panelClaim}
+              panelClaimLoading={panelClaimLoading || panelClaimFetching}
+              panelClaimError={panelClaimError}
+              expectsPanel={expectsPanel}
+              storedPanelProvider={entry?.insurance_providers ?? null}
+              onRefreshBalance={refreshBilling}
+            />
+          )}
         </div>
       </div>
       {canCorrect && queueEntryId && (

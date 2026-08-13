@@ -29,7 +29,13 @@ interface Props {
 
 export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload = false }: Props) {
   const { settings } = useClinicSettings();
-  const { data, isLoading, error: receiptError } = useQuery<ReceiptData | null>({
+  const {
+    data,
+    isLoading,
+    isFetching,
+    error: receiptError,
+    refetch,
+  } = useQuery<ReceiptData | null>({
     queryKey: ['receipt_payload', paymentId],
     enabled: open && Boolean(paymentId),
     queryFn: async () => {
@@ -42,6 +48,8 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
         (snapshot ?? {}) as unknown as PaymentBatchReceiptSnapshot,
       );
     },
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   const receiptRef = useRef<HTMLDivElement>(null);
@@ -49,20 +57,22 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
   const [printing, setPrinting] = useState(false);
 
   const handlePrint = async () => {
-    if (!data) return;
     setPrinting(true);
     try {
-      await printReceipt(data, settings);
+      const fresh = await refetch();
+      if (fresh.error || !fresh.data) return;
+      await printReceipt(fresh.data, settings);
     } finally {
       setPrinting(false);
     }
   };
 
   const handleDownloadPdf = async () => {
-    if (!data) return;
     setDownloading(true);
     try {
-      await downloadReceiptPdf(data, settings);
+      const fresh = await refetch();
+      if (fresh.error || !fresh.data) return;
+      await downloadReceiptPdf(fresh.data, settings);
     } finally {
       setDownloading(false);
     }
@@ -70,7 +80,7 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
 
   const autoDownloadTriggeredRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!open || !autoDownload || !data || isLoading || downloading) return;
+    if (!open || !autoDownload || !data || receiptError || isLoading || isFetching || downloading) return;
     if (autoDownloadTriggeredRef.current === data.paymentId) return;
     autoDownloadTriggeredRef.current = data.paymentId;
     void (async () => {
@@ -78,7 +88,7 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
       onOpenChange(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, autoDownload, data, isLoading]);
+  }, [open, autoDownload, data, receiptError, isLoading, isFetching]);
 
   useEffect(() => {
     if (!open) autoDownloadTriggeredRef.current = null;
@@ -96,7 +106,7 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
             <div role="alert" className="py-16 text-center text-sm text-destructive">
               {receiptErrorMessage(receiptError)}
             </div>
-          ) : isLoading || !data ? (
+          ) : isLoading || isFetching || !data ? (
             <div className="flex items-center justify-center py-16 text-slate-500">
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
               Loading receipt…
@@ -115,7 +125,7 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
           <Button
             type="button"
             variant="outline"
-            disabled={!data || downloading}
+            disabled={!data || Boolean(receiptError) || isFetching || downloading}
             onClick={handleDownloadPdf}
           >
             {downloading ? (
@@ -125,7 +135,11 @@ export function PrintReceiptDialog({ open, onOpenChange, paymentId, autoDownload
             )}
             Download PDF
           </Button>
-          <Button type="button" disabled={!data || printing} onClick={handlePrint}>
+          <Button
+            type="button"
+            disabled={!data || Boolean(receiptError) || isFetching || printing}
+            onClick={handlePrint}
+          >
             {printing ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (

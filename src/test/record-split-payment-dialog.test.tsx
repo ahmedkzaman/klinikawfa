@@ -54,11 +54,13 @@ function renderDialog({
   defaultAmount = 100,
   storedPanelProvider,
   onOpenChange = vi.fn(),
+  onRefreshBalance,
 }: {
   completeVisitOnPayment?: boolean;
   defaultAmount?: number;
   storedPanelProvider?: { id: string; name: string } | null;
   onOpenChange?: (open: boolean) => void;
+  onRefreshBalance?: () => Promise<unknown>;
 } = {}) {
   const view = render(
     <RecordPaymentDialog
@@ -69,6 +71,7 @@ function renderDialog({
       defaultAmount={defaultAmount}
       completeVisitOnPayment={completeVisitOnPayment}
       storedPanelProvider={storedPanelProvider}
+      onRefreshBalance={onRefreshBalance}
     />,
   );
   return { onOpenChange, ...view };
@@ -94,6 +97,7 @@ function choosePanel() {
 describe('RecordPaymentDialog split allocations', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.sessionStorage.clear();
     state.recordSplit.mockResolvedValue({ payment_ids: ['payment-1'] });
     state.recordSplitAndComplete.mockResolvedValue({ payment_ids: ['payment-1'] });
   });
@@ -204,6 +208,78 @@ describe('RecordPaymentDialog split allocations', () => {
 
     expect(state.recordSplitAndComplete.mock.calls[1][0].idempotency_key)
       .toBe(state.recordSplitAndComplete.mock.calls[0][0].idempotency_key);
+  });
+
+  it('restores the same attempted rows and idempotency key after close and reopen', async () => {
+    state.recordSplitAndComplete
+      .mockRejectedValueOnce(new Error('Connection closed after commit'))
+      .mockResolvedValueOnce({ payment_ids: ['payment-1', 'payment-2'] });
+    const { onOpenChange, rerender } = renderDialog();
+    addSecondAllocation();
+    chooseSecondMethod();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Record Payment & Check Out' }));
+    await waitFor(() => expect(state.recordSplitAndComplete).toHaveBeenCalledTimes(1));
+    const firstRequest = state.recordSplitAndComplete.mock.calls[0][0];
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    rerender(
+      <RecordPaymentDialog
+        open={false}
+        onOpenChange={onOpenChange}
+        queueEntryId="queue-1"
+        consultationId="consultation-1"
+        defaultAmount={100}
+        completeVisitOnPayment
+      />,
+    );
+    rerender(
+      <RecordPaymentDialog
+        open
+        onOpenChange={onOpenChange}
+        queueEntryId="queue-1"
+        consultationId="consultation-1"
+        defaultAmount={100}
+        completeVisitOnPayment
+      />,
+    );
+
+    expect(screen.getByLabelText('Amount (RM)')).toHaveValue(40);
+    expect(screen.getByLabelText('Amount 2 (RM)')).toHaveValue(60);
+    expect(screen.getByLabelText('Payment method 2')).toHaveTextContent('QR Pay / E-Wallet');
+    fireEvent.click(screen.getByRole('button', { name: 'Record Payment & Check Out' }));
+    await waitFor(() => expect(state.recordSplitAndComplete).toHaveBeenCalledTimes(2));
+    expect(state.recordSplitAndComplete.mock.calls[1][0]).toEqual(firstRequest);
+  });
+
+  it('starts a new idempotency request only through an explicit refreshed-balance action', async () => {
+    state.recordSplitAndComplete
+      .mockRejectedValueOnce(new Error('Connection closed after commit'))
+      .mockResolvedValueOnce({ payment_ids: ['payment-new'] });
+    const onRefreshBalance = vi.fn().mockResolvedValue(undefined);
+    renderDialog({ onRefreshBalance });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Record Payment & Check Out' }));
+    await waitFor(() => expect(state.recordSplitAndComplete).toHaveBeenCalledTimes(1));
+    const firstKey = state.recordSplitAndComplete.mock.calls[0][0].idempotency_key;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start new payment' }));
+    await waitFor(() => expect(onRefreshBalance).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Record Payment & Check Out' }));
+    await waitFor(() => expect(state.recordSplitAndComplete).toHaveBeenCalledTimes(2));
+    expect(state.recordSplitAndComplete.mock.calls[1][0].idempotency_key).not.toBe(firstKey);
+  });
+
+  it('does not offer to discard an ambiguous request without an authoritative refresh', async () => {
+    state.recordSplitAndComplete.mockRejectedValueOnce(new Error('Connection closed after commit'));
+    renderDialog();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Record Payment & Check Out' }));
+    await waitFor(() => expect(state.recordSplitAndComplete).toHaveBeenCalledTimes(1));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/may already have reached the server/i);
+    expect(screen.queryByRole('button', { name: 'Start new payment' })).not.toBeInTheDocument();
   });
 
   it('keeps the failed request stable when live props change while the dialog stays open', async () => {

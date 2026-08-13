@@ -12,6 +12,14 @@
 
 BEGIN;
 
+-- Setup writes run as postgres, but payment provenance now deliberately
+-- requires the same authenticated actor context as every cached/RPC write.
+SELECT set_config(
+  'request.jwt.claim.sub',
+  '70000000-0000-4000-8000-000000000001',
+  true
+);
+
 DO $setup$
 DECLARE
   v_actor uuid;
@@ -777,6 +785,8 @@ DECLARE
   v_replay_result jsonb;
   v_batch_count integer;
   v_payment_id uuid;
+  v_payment_created_by uuid;
+  v_payment_created_at timestamptz;
 BEGIN
   PERFORM set_config(
     'request.jwt.claim.sub',
@@ -786,6 +796,92 @@ BEGIN
   IF to_regprocedure('private.guard_panel_claim_split_parent_mutation()') IS NULL THEN
     RAISE EXCEPTION 'PRODUCTION_SPLIT_PARENT_GUARD_MISSING';
   END IF;
+
+  -- Cached authenticated writes cannot forge the immutable actor or event
+  -- timestamp. The deliberate exception rolls the successful probe back so
+  -- later amount/count assertions keep their original fixtures.
+  BEGIN
+    INSERT INTO public.payments (
+      id, queue_entry_id, consultation_id, payment_type,
+      payment_method, amount, notes, created_by, created_at
+    ) VALUES (
+      '70000000-0000-4000-8000-000000000619',
+      '70000000-0000-4000-8000-000000000217',
+      '70000000-0000-4000-8000-000000000317',
+      'self_pay', 'cash', 1, 'TEST ONLY DIRECT PROVENANCE',
+      '70000000-0000-4000-8000-000000000002',
+      '2000-01-01 00:00:00+00'::timestamptz
+    )
+    RETURNING created_by, created_at
+    INTO STRICT v_payment_created_by, v_payment_created_at;
+    IF v_payment_created_by IS DISTINCT FROM
+         '70000000-0000-4000-8000-000000000001'::uuid
+       OR v_payment_created_at IS DISTINCT FROM statement_timestamp() THEN
+      RAISE EXCEPTION 'DIRECT_PAYMENT_PROVENANCE_MISMATCH';
+    END IF;
+    RAISE EXCEPTION 'TEST_ONLY_DIRECT_PROVENANCE_ROLLBACK';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'TEST_ONLY_DIRECT_PROVENANCE_ROLLBACK' THEN RAISE; END IF;
+  END;
+
+  -- A panel visit may never be relabelled self-pay by a cached client.
+  BEGIN
+    INSERT INTO public.payments (
+      queue_entry_id, consultation_id, payment_type,
+      payment_method, amount, notes
+    ) VALUES (
+      '70000000-0000-4000-8000-000000000212',
+      '70000000-0000-4000-8000-000000000312',
+      'self_pay', 'cash', 1, 'TEST ONLY WRONG PANEL ATTRIBUTION'
+    );
+    RAISE EXCEPTION 'DIRECT_PANEL_SELF_PAY_REJECTION_MISSED';
+  EXCEPTION WHEN SQLSTATE '22023' THEN
+    IF SQLERRM <> 'PAYMENT_TYPE_MISMATCH' THEN RAISE; END IF;
+  END;
+
+  -- The complete materialization predicate applies to cached physical copays,
+  -- not only to zero-value allocation markers.
+  PERFORM public.test_only_set_panel_claim_status(
+    '70000000-0000-4000-8000-000000000212', 'submitted'
+  );
+  BEGIN
+    INSERT INTO public.payments (
+      queue_entry_id, consultation_id, payment_type,
+      payment_method, amount, notes
+    ) VALUES (
+      '70000000-0000-4000-8000-000000000212',
+      '70000000-0000-4000-8000-000000000312',
+      'panel', 'cash', 10, 'TEST ONLY MATERIALIZED PANEL COPAY'
+    );
+    RAISE EXCEPTION 'DIRECT_MATERIALIZED_PANEL_REJECTION_MISSED';
+  EXCEPTION WHEN SQLSTATE '23514' THEN
+    IF SQLERRM <> 'PANEL_CLAIM_ALREADY_MATERIALIZED' THEN RAISE; END IF;
+  END;
+  PERFORM public.test_only_set_panel_claim_status(
+    '70000000-0000-4000-8000-000000000212', 'pending'
+  );
+
+  -- A permitted pending cached copay is reconciled immediately. Roll the
+  -- successful probe back after observing the parent claim change.
+  BEGIN
+    INSERT INTO public.payments (
+      queue_entry_id, consultation_id, payment_type,
+      payment_method, amount, notes
+    ) VALUES (
+      '70000000-0000-4000-8000-000000000212',
+      '70000000-0000-4000-8000-000000000312',
+      'panel', 'cash', 10, 'TEST ONLY CACHED PANEL RECONCILIATION'
+    );
+    IF (SELECT amount FROM public.panel_claims
+        WHERE queue_entry_id = '70000000-0000-4000-8000-000000000212')
+         IS DISTINCT FROM 90::numeric THEN
+      RAISE EXCEPTION 'DIRECT_PANEL_RECONCILIATION_MISMATCH';
+    END IF;
+    RAISE EXCEPTION 'TEST_ONLY_DIRECT_PANEL_ROLLBACK';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'TEST_ONLY_DIRECT_PANEL_ROLLBACK' THEN RAISE; END IF;
+  END;
+
   -- RETAINED_CHECKOUT_SAVED_QUANTITY_30_MISMATCH: checkout_visit is replaced
   -- by the additive migration and shares quantity 3 x RM10 = RM30 semantics.
   SELECT count(*) INTO v_current_count

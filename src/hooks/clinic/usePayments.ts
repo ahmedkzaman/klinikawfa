@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import type { PatientPaymentAllocation } from '@/lib/clinic/paymentAllocations';
 import type { PaymentRow } from '@/types/clinic';
+import { fetchAllBillingRows } from '@/lib/clinic/fetchAllBillingRows';
 
 const PAYMENTS_KEY = (queueEntryId: string) => ['payments', queueEntryId] as const;
 const LEDGER_KEY = ['payments_ledger'] as const;
@@ -119,30 +120,91 @@ export type LedgerPayment = PaymentRow & {
   } | null;
 };
 
+export type LedgerVisit = NonNullable<LedgerPayment['queue_entries']>;
+
+export type LedgerPaymentEvent = Pick<
+  PaymentRow,
+  'id' | 'queue_entry_id' | 'amount' | 'payment_method' | 'payment_type' | 'created_at' | 'deleted_at'
+>;
+
+export interface PaymentsLedgerData {
+  /** Visits whose visit timestamp falls in the selected period. */
+  visits: LedgerVisit[];
+  /** Physical/payment allocation events whose own timestamp falls in-period. */
+  paymentEvents: LedgerPaymentEvent[];
+  /** Complete active payment history for every visit selected by either source. */
+  payments: LedgerPayment[];
+  queueEntryIds: string[];
+}
+
 /** Joined payments + queue entries within a date range, for the Billings ledger. */
 export function usePaymentsLedger(fromISO: string, toISO: string) {
-  return useQuery<LedgerPayment[]>({
+  return useQuery<PaymentsLedgerData>({
     queryKey: [...LEDGER_KEY, fromISO, toISO],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('payments')
-        .select(
-          `
-          *,
-          queue_entries (
-            id, queue_sequence, clinic_status, created_at, patient_id,
-            payment_method, panel_id,
-            patients ( name, phone ),
-            insurance_providers:panel_id ( name )
-          )
-        `,
-        )
-        .is('deleted_at', null)
-        .gte('created_at', fromISO)
-        .lte('created_at', toISO)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as unknown as LedgerPayment[];
+      const [visits, paymentEvents] = await Promise.all([
+        fetchAllBillingRows(async (from, to) => {
+          const { data, error } = await supabase
+            .from('queue_entries')
+            .select(`
+              id, queue_sequence, clinic_status, created_at, patient_id,
+              payment_method, panel_id,
+              patients ( name, phone ),
+              insurance_providers:panel_id ( name )
+            `)
+            .is('deleted_at', null)
+            .gte('created_at', fromISO)
+            .lte('created_at', toISO)
+            .order('created_at', { ascending: true })
+            .order('id', { ascending: true })
+            .range(from, to);
+          if (error) throw error;
+          return (data ?? []) as unknown as LedgerVisit[];
+        }),
+        fetchAllBillingRows(async (from, to) => {
+          const { data, error } = await supabase
+            .from('payments')
+            .select('id, queue_entry_id, amount, payment_method, payment_type, created_at, deleted_at')
+            .is('deleted_at', null)
+            .gte('created_at', fromISO)
+            .lte('created_at', toISO)
+            .order('created_at', { ascending: true })
+            .order('id', { ascending: true })
+            .range(from, to);
+          if (error) throw error;
+          return (data ?? []) as unknown as LedgerPaymentEvent[];
+        }),
+      ]);
+
+      const queueEntryIds = Array.from(new Set([
+        ...visits.map((visit) => visit.id),
+        ...paymentEvents.map((payment) => payment.queue_entry_id),
+      ])).sort();
+
+      const payments = queueEntryIds.length === 0
+        ? []
+        : await fetchAllBillingRows(async (from, to) => {
+          const { data, error } = await supabase
+            .from('payments')
+            .select(`
+              *,
+              queue_entries (
+                id, queue_sequence, clinic_status, created_at, patient_id,
+                payment_method, panel_id,
+                patients ( name, phone ),
+                insurance_providers:panel_id ( name )
+              )
+            `)
+            .in('queue_entry_id', queueEntryIds)
+            .is('deleted_at', null)
+            .order('created_at', { ascending: true })
+            .order('id', { ascending: true })
+            .range(from, to);
+          if (error) throw error;
+          return (data ?? []) as unknown as LedgerPayment[];
+        });
+
+      return { visits, paymentEvents, payments, queueEntryIds };
     },
     staleTime: 30_000,
   });
@@ -309,6 +371,11 @@ export function useVoidPayment() {
     onSuccess: (queue_entry_id) => {
       qc.invalidateQueries({ queryKey: PAYMENTS_KEY(queue_entry_id) });
       qc.invalidateQueries({ queryKey: LEDGER_KEY });
+      // Any payment in a batch can key the same receipt. Invalidate every
+      // active preview and remove inactive sibling-keyed payloads so a voided
+      // tender can never survive through the five-minute global query cache.
+      qc.invalidateQueries({ queryKey: ['receipt_payload'] });
+      qc.removeQueries({ queryKey: ['receipt_payload'], type: 'inactive' });
       qc.invalidateQueries({ queryKey: ['visit-panel-claim', queue_entry_id] });
       qc.invalidateQueries({ queryKey: ['panel_claims'] });
       qc.invalidateQueries({ queryKey: ['panel_claims_summary'] });

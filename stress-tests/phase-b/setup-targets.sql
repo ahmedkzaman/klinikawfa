@@ -1,5 +1,9 @@
--- Phase B target seeds. Idempotent (ON CONFLICT DO NOTHING).
--- Run BEFORE k6 scenarios; teardown lives in setup-targets-teardown.sql.
+-- Phase B target seeds. Reset the fixed fixture namespace first so an
+-- interrupted prior run cannot preserve completed queues, depleted inventory,
+-- stale payment batches, or fulfilled slips.
+\ir teardown-targets.sql
+
+-- Run BEFORE k6 scenarios; run.ts validates invariants before teardown.
 -- Schema-corrected vs the original draft:
 --   - patients column is `national_id` not `ic_number`
 --   - inventory table is `inventory_item_batches` not `inventory_batches`

@@ -26,7 +26,7 @@ export default function () {
   });
   const res = http.post(url, body, { headers });
   check(res, {
-    "200 or ALREADY_COMPLETED": (r) =>
-      r.status === 200 || (r.status >= 400 && /ALREADY_COMPLETED/.test(r.body)),
+    "200 or locked checkout loser": (r) =>
+      r.status === 200 || (r.status >= 400 && /INVALID_CHECKOUT_STATUS/.test(r.body)),
   });
 }

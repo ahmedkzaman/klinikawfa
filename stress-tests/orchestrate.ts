@@ -6,8 +6,11 @@
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { loadStagingEnv } from "./loadStagingEnv";
 
-const ROOT = path.dirname(new URL(import.meta.url).pathname);
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
+loadStagingEnv(path.join(ROOT, ".env.staging"));
 const args = process.argv.slice(2);
 const phaseArg = args[args.indexOf("--phase") + 1];
 const phases = phaseArg ? [phaseArg] : ["a", "b", "c", "d"];
@@ -41,7 +44,6 @@ try {
   }
   if (phases.includes("b")) {
     sh(`bun run phase-b/run.ts --out ${reportDir}`);
-    sh(`bun run phase-b/validate.ts --out ${reportDir}`);
   }
   if (phases.includes("c")) {
     sh(`bunx playwright test --config=phase-c/playwright.config.ts --reporter=json > ${reportDir}/phase-c.json`);

@@ -11,5 +11,18 @@ const headers = {
 };
 export default function () {
   const res = http.patch(url, JSON.stringify({ clinic_status: "with_doctor" }), { headers });
-  check(res, { "2xx": (r) => r.status >= 200 && r.status < 300 });
+  check(res, {
+    "queue mutation returned the target row": (r) => {
+      if (r.status < 200 || r.status >= 300) return false;
+      try {
+        const rows = JSON.parse(r.body);
+        return Array.isArray(rows)
+          && rows.length === 1
+          && rows[0].id === __ENV.QUEUE_ID
+          && rows[0].clinic_status === "with_doctor";
+      } catch {
+        return false;
+      }
+    },
+  });
 }

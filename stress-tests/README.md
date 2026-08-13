@@ -37,6 +37,25 @@ Project creation, region, and compute tier must match production exactly. Do thi
    - `STAGING_ANON_KEY`
    - `STAGING_SERVICE_ROLE_KEY`
    - `STAGING_API_URL`  (e.g. `https://<ref>.supabase.co`)
+   - `STAGING_AUTH_TOKEN` â€” a fresh `access_token` for a real staging user
+     whose role is staff/admin. Never use the anon or service-role key here.
+
+   Acquire the staff JWT immediately before Phase B (it expires). With a
+   staging-only staff email/password, request a session and copy only the
+   returned `access_token` into the ignored `.env.staging` file:
+
+   ```bash
+   curl --fail-with-body --silent --show-error \
+     "$STAGING_API_URL/auth/v1/token?grant_type=password" \
+     -H "apikey: $STAGING_ANON_KEY" \
+     -H 'Content-Type: application/json' \
+     --data '{"email":"<staging-staff-email>","password":"<staging-password>"}' \
+     | jq -r '.access_token'
+   ```
+
+   Before any fixture mutation, Phase B calls `/auth/v1/user` and the guarded
+   `is_staff_or_admin` RPC. An expired token, a non-user JWT, or a non-staff
+   account fails the run before setup.
 
 The harness asserts `STAGING_PROJECT_REF` is populated and `!== ncysmppzfjtiekfnomdv` before doing anything.
 

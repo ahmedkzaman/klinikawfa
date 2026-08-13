@@ -160,6 +160,7 @@ describe('split payment mutations', () => {
   it('refreshes cached panel claim state after a portion void', async () => {
     const queryClient = createQueryClient();
     const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
+    const removeQueries = vi.spyOn(queryClient, 'removeQueries');
     const { result } = renderHook(() => useVoidPayment(), { wrapper: createWrapper(queryClient) });
     await act(async () => {
       await result.current.mutateAsync({ id: 'payment-1', queue_entry_id: 'queue-1', reason: 'Correction' });
@@ -168,6 +169,8 @@ describe('split payment mutations', () => {
       'visit-panel-claim', 'queue-1',
     ]);
     expect(invalidateQueries.mock.calls.map(([filters]) => filters.queryKey)).toContainEqual(['panel_claims_summary']);
+    expect(invalidateQueries.mock.calls.map(([filters]) => filters.queryKey)).toContainEqual(['receipt_payload']);
+    expect(removeQueries.mock.calls.map(([filters]) => filters.queryKey)).toContainEqual(['receipt_payload']);
   });
 
   it('normalizes debt PostgREST stale errors and refreshes canonical patient ledgers', async () => {

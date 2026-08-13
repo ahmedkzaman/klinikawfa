@@ -3653,7 +3653,7 @@ export type Database = {
           amount?: number
           batch_id?: string | null
           consultation_id?: string | null
-          created_by?: string | null
+          created_by?: string
           created_at?: string
           deleted_at?: string | null
           deleted_by?: string | null

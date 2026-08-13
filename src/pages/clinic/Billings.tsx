@@ -17,7 +17,7 @@ import {
 } from '@/lib/clinic/bentoTokens';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { usePaymentsLedger } from '@/hooks/clinic/usePayments';
+import { usePaymentsLedger, type LedgerVisit } from '@/hooks/clinic/usePayments';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import {
   formatBillingPaymentMethod,
@@ -98,26 +98,28 @@ export default function Billings() {
   const fromISO = useMemo(() => new Date(`${from}T00:00:00`).toISOString(), [from]);
   const toISO = useMemo(() => new Date(`${to}T23:59:59`).toISOString(), [to]);
 
-  const { data: ledger = [], isLoading: ledgerLoading } = usePaymentsLedger(
+  const ledgerQuery = usePaymentsLedger(
     fromISO,
     toISO,
+  );
+  const ledgerData = ledgerQuery.data;
+  const ledger = useMemo(() => ledgerData?.payments ?? [], [ledgerData?.payments]);
+  const paymentEvents = useMemo(
+    () => ledgerData?.paymentEvents ?? [],
+    [ledgerData?.paymentEvents],
   );
 
   // Collect unique queue_entry_ids and fetch consultation_items totals.
   const queueEntryIds = useMemo(
     () =>
-      Array.from(
-        new Set(
-          ledger.map((p) => p.queue_entries?.id).filter(Boolean) as string[],
-        ),
-      ),
-    [ledger],
+      ledgerData?.queueEntryIds ?? [],
+    [ledgerData?.queueEntryIds],
   );
 
-  const { data: itemsByQueue = {}, isLoading: itemsLoading } = useQuery<
+  const itemsQuery = useQuery<
     Record<string, number>
   >({
-    queryKey: ['ledger_item_totals', queueEntryIds.sort().join(',')],
+    queryKey: ['ledger_item_totals', queueEntryIds.slice().sort().join(',')],
     enabled: queueEntryIds.length > 0,
     queryFn: async () => {
       const { data: consultations, error: cErr } = await supabase
@@ -168,8 +170,9 @@ export default function Billings() {
       return totalsByQueue;
     },
   });
+  const itemsByQueue = useMemo(() => itemsQuery.data ?? {}, [itemsQuery.data]);
 
-  const { data: claimsByQueue = {}, isLoading: claimsLoading } = useQuery<Record<string, {
+  const claimsQuery = useQuery<Record<string, {
     amount: number;
     receivedAmount: number;
     status: string;
@@ -197,9 +200,39 @@ export default function Billings() {
       return grouped;
     },
   });
+  const claimsByQueue = useMemo(() => claimsQuery.data ?? {}, [claimsQuery.data]);
 
   const entries: LedgerEntry[] = useMemo(() => {
     const byQueue = new Map<string, LedgerEntry>();
+    const createEntry = (qe: LedgerVisit): LedgerEntry => ({
+      queueEntryId: qe.id,
+      queueLabel: formatQueueNo(qe.created_at, qe.queue_sequence),
+      patientId: qe.patient_id,
+      patientName: qe.patients?.name ? toMalayTitleCase(qe.patients.name) : '—',
+      panelName: qe.insurance_providers?.name ?? null,
+      createdAt: qe.created_at,
+      clinicStatus: qe.clinic_status,
+      subtotal: itemsByQueue[qe.id] ?? 0,
+      paid: 0,
+      panelPayments: 0,
+      outstanding: 0,
+      creditDue: 0,
+      panelCovered: 0,
+      panelOutstanding: 0,
+      unattributedBalance: 0,
+      unitemizedAdditionalCharges: 0,
+      latestPaymentType: 'self_pay',
+      expectsPanel: false,
+      queuePaymentMethod: qe.payment_method,
+      panelId: qe.panel_id,
+      paymentTypes: [],
+      latestMethod: null,
+      displayMethod: '',
+      patientPaymentMethods: [],
+      latestPaymentId: null,
+    });
+
+    for (const visit of ledgerData?.visits ?? []) byQueue.set(visit.id, createEntry(visit));
     // Sort by created_at ascending so the LAST iteration wins for "latest".
     const sortedAsc = [...ledger].sort(
       (a, b) =>
@@ -209,54 +242,23 @@ export default function Billings() {
     for (const p of sortedAsc) {
       const qe = p.queue_entries;
       if (!qe) continue;
-      const existing = byQueue.get(qe.id);
+      const existing = byQueue.get(qe.id) ?? createEntry(qe);
       const amt = Number(p.amount ?? 0);
       const pType = (p.payment_type ?? 'self_pay') as
         | 'self_pay'
         | 'panel'
         | 'insurance';
 
-      if (existing) {
-        if (p.payment_method === 'panel') existing.panelPayments += amt;
-        else {
-          existing.paid += amt;
-          if (p.payment_method) existing.patientPaymentMethods.push(p.payment_method);
-        }
-        existing.latestPaymentType = pType;
-        existing.paymentTypes.push(pType);
-        existing.latestMethod = p.payment_method ?? existing.latestMethod;
-        existing.latestPaymentId = p.id;
-      } else {
-        byQueue.set(qe.id, {
-          queueEntryId: qe.id,
-          queueLabel: formatQueueNo(qe.created_at, qe.queue_sequence),
-          patientId: qe.patient_id,
-          patientName: qe.patients?.name ? toMalayTitleCase(qe.patients.name) : '—',
-          panelName: qe.insurance_providers?.name ?? null,
-          createdAt: qe.created_at,
-          clinicStatus: qe.clinic_status,
-          subtotal: itemsByQueue[qe.id] ?? 0,
-          paid: p.payment_method === 'panel' ? 0 : amt,
-          panelPayments: p.payment_method === 'panel' ? amt : 0,
-          outstanding: 0,
-          creditDue: 0,
-          panelCovered: 0,
-          panelOutstanding: 0,
-          unattributedBalance: 0,
-          unitemizedAdditionalCharges: 0,
-          latestPaymentType: pType,
-          expectsPanel: false,
-          queuePaymentMethod: qe.payment_method,
-          panelId: qe.panel_id,
-          paymentTypes: [pType],
-          latestMethod: p.payment_method ?? null,
-          displayMethod: '',
-          patientPaymentMethods: p.payment_method && p.payment_method !== 'panel'
-            ? [p.payment_method]
-            : [],
-          latestPaymentId: p.id,
-        });
+      if (p.payment_method === 'panel') existing.panelPayments += amt;
+      else {
+        existing.paid += amt;
+        if (p.payment_method) existing.patientPaymentMethods.push(p.payment_method);
       }
+      existing.latestPaymentType = pType;
+      existing.paymentTypes.push(pType);
+      existing.latestMethod = p.payment_method ?? existing.latestMethod;
+      existing.latestPaymentId = p.id;
+      byQueue.set(qe.id, existing);
 
     }
 
@@ -299,7 +301,7 @@ export default function Billings() {
     return list.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
-  }, [claimsByQueue, ledger, itemsByQueue]);
+  }, [claimsByQueue, ledger, ledgerData?.visits, itemsByQueue]);
 
   const filtered = useMemo<LedgerEntry[]>(() => {
     if (activeTab === 'paid') {
@@ -342,7 +344,13 @@ export default function Billings() {
     };
   }, [entries]);
 
-  const isLoading = ledgerLoading || itemsLoading || claimsLoading;
+  const isLoading = ledgerQuery.isLoading || itemsQuery.isLoading || claimsQuery.isLoading;
+  const financialErrorSources = [
+    ledgerQuery.isError ? 'visit/payment ledger' : null,
+    itemsQuery.isError ? 'billing items' : null,
+    claimsQuery.isError ? 'panel claims' : null,
+  ].filter((source): source is string => Boolean(source));
+  const hasFinancialError = financialErrorSources.length > 0;
 
   const handleSort = (key: BillingSortKey) => {
     setSort((current) => {
@@ -369,7 +377,8 @@ export default function Billings() {
       transfer: 0,
       other: 0,
     };
-    for (const p of ledger) {
+    for (const p of paymentEvents) {
+      if (p.payment_method?.trim().toLowerCase() === 'panel') continue;
       const amt = Number(p.amount ?? 0);
       const key = p.payment_method && totals[p.payment_method] !== undefined
         ? p.payment_method
@@ -377,7 +386,7 @@ export default function Billings() {
       totals[key] += amt;
     }
     return totals;
-  }, [ledger]);
+  }, [paymentEvents]);
 
 
   return (
@@ -420,7 +429,7 @@ export default function Billings() {
         </div>
 
         {/* Pill tabs */}
-        <div className={cn(bento, 'p-2 flex items-center gap-1 flex-wrap')}>
+        {!hasFinancialError && <div className={cn(bento, 'p-2 flex items-center gap-1 flex-wrap')}>
           {tabs.map((tab) => {
             const active = activeTab === tab.key;
             return (
@@ -446,10 +455,10 @@ export default function Billings() {
               </button>
             );
           })}
-        </div>
+        </div>}
 
         {/* Daily method totals — only on Paid tab, computed from raw ledger */}
-        {activeTab === 'paid' && (
+        {!hasFinancialError && activeTab === 'paid' && (
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {[
               { key: 'cash', label: 'Cash' },
@@ -528,7 +537,14 @@ export default function Billings() {
           </div>
 
 
-          {isLoading ? (
+          {hasFinancialError ? (
+            <div role="alert" className="px-5 py-12 text-center text-sm text-rose-700">
+              <p className="font-semibold">Billing data is unavailable.</p>
+              <p className="mt-1 text-rose-600">
+                {financialErrorSources.join(', ')} unavailable. Refresh before relying on balances or totals.
+              </p>
+            </div>
+          ) : isLoading ? (
             <div className="p-4 space-y-3">
               {[1, 2, 3].map((i) => (
                 <Skeleton key={i} className="h-10 w-full" />

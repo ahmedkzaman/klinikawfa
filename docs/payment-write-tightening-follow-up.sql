@@ -7,4 +7,3 @@
 -- Copy the statements below into the generated migration, review, dry-run,
 -- then deploy through the normal release workflow.
 REVOKE INSERT, UPDATE ON TABLE public.payments FROM authenticated;
-

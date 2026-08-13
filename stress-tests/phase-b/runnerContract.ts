@@ -23,16 +23,38 @@ function execute(spawn: Spawn, spec: PhaseBCommand): void {
 
 export function runPhaseBCommands(input: {
   spawn: Spawn;
+  preflight?: PhaseBCommand;
   setup: PhaseBCommand;
   scenarios: PhaseBCommand[];
+  validate?: PhaseBCommand;
   teardown: PhaseBCommand;
 }): void {
+  // Authentication is a true preflight: an invalid/expired token must not
+  // cause setup or even cleanup writes against the staging fixture namespace.
+  if (input.preflight) execute(input.spawn, input.preflight);
+
   let primaryError: Error | null = null;
+  let setupSucceeded = false;
   try {
     execute(input.spawn, input.setup);
+    setupSucceeded = true;
     for (const scenario of input.scenarios) execute(input.spawn, scenario);
   } catch (error) {
     primaryError = error instanceof Error ? error : new Error(String(error));
+  }
+
+  // Preserve the raced state long enough to inspect invariants even when a
+  // k6 check failed. A failed setup is the exception: its partial state is
+  // cleaned directly because the validation fixture is not trustworthy.
+  if (setupSucceeded && input.validate) {
+    try {
+      execute(input.spawn, input.validate);
+    } catch (error) {
+      const validationError = error instanceof Error ? error : new Error(String(error));
+      primaryError = primaryError
+        ? new Error(`${primaryError.message}; ${validationError.message}`)
+        : validationError;
+    }
   }
 
   try {
