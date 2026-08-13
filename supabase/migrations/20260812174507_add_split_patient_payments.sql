@@ -67,6 +67,11 @@ BEGIN
     ) ON CONFLICT (transaction_id, panel_claim_id) DO UPDATE
       SET actor_id = EXCLUDED.actor_id, reason = EXCLUDED.reason,
           created_at = pg_catalog.now();
+    IF v_panel_amount = 0 AND NOT EXISTS (
+      SELECT 1 FROM public.panel_claim_portion_receipts receipt WHERE receipt.panel_claim_id=v_claim_id
+    ) THEN
+      DELETE FROM public.panel_claim_portions portion WHERE portion.panel_claim_id=v_claim_id;
+    END IF;
     UPDATE public.panel_claims AS claim
     SET amount = v_panel_amount
     WHERE claim.id = v_claim_id
@@ -177,6 +182,14 @@ BEGIN
       RAISE EXCEPTION 'PAYMENT_BATCH_MISMATCH' USING ERRCODE='23503';
     END IF;
   END IF;
+  IF NEW.payment_type='panel' AND EXISTS (
+    SELECT 1 FROM public.panel_claims claim WHERE claim.queue_entry_id=NEW.queue_entry_id AND (
+      claim.status::text <> 'pending' OR claim.submitted_date IS NOT NULL OR claim.approved_amount IS NOT NULL
+      OR coalesce(claim.received_amount,0) <> 0 OR claim.payment_reference IS NOT NULL OR claim.received_date IS NOT NULL
+      OR EXISTS (SELECT 1 FROM public.panel_claim_portions portion WHERE portion.panel_claim_id=claim.id)
+      OR EXISTS (SELECT 1 FROM public.panel_claim_portion_receipts receipt WHERE receipt.panel_claim_id=claim.id)
+    )
+  ) THEN RAISE EXCEPTION 'PANEL_CLAIM_ALREADY_MATERIALIZED' USING ERRCODE='23514'; END IF;
   SELECT coalesce(sum(round(ci.price * ci.quantity, 2)),0) INTO v_billed
   FROM public.consultation_items ci WHERE ci.consultation_id=NEW.consultation_id AND ci.deleted_at IS NULL;
   SELECT coalesce(sum(round(p.amount,2)),0) INTO v_paid FROM public.payments p
@@ -191,6 +204,18 @@ END $function$;
 REVOKE ALL ON FUNCTION private.validate_payment_insert() FROM PUBLIC, anon, authenticated;
 CREATE TRIGGER validate_payment_insert BEFORE INSERT ON public.payments
 FOR EACH ROW EXECUTE FUNCTION private.validate_payment_insert();
+
+CREATE OR REPLACE FUNCTION private.reconcile_cached_panel_payment()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog, public AS $function$
+BEGIN
+  IF NEW.batch_id IS NULL AND NEW.payment_type='panel' AND lower(btrim(NEW.payment_method)) <> 'panel' THEN
+    PERFORM public.ensure_panel_claim_for_queue(NEW.queue_entry_id);
+  END IF;
+  RETURN NEW;
+END $function$;
+REVOKE ALL ON FUNCTION private.reconcile_cached_panel_payment() FROM PUBLIC, anon, authenticated;
+CREATE TRIGGER reconcile_cached_panel_payment AFTER INSERT ON public.payments
+FOR EACH ROW EXECUTE FUNCTION private.reconcile_cached_panel_payment();
 
 -- Direct INSERT remains available during the migration-first compatibility
 -- window for already-cached clients. New clients use the keyed RPC below.
@@ -818,7 +843,8 @@ BEGIN
   END IF;
 
   IF v_allocation_total > v_current_patient_outstanding THEN
-    RAISE EXCEPTION 'INVALID_PAYMENT_ALLOCATIONS' USING ERRCODE = '22023';
+    RAISE EXCEPTION 'STALE_PATIENT_OUTSTANDING: expected %', v_current_patient_outstanding
+      USING ERRCODE = '22023';
   END IF;
 
   FOR v_allocation IN
@@ -907,8 +933,15 @@ BEGIN
   SELECT claim.status::text INTO v_claim_status
   FROM public.panel_claims claim WHERE claim.queue_entry_id = v_payment.queue_entry_id
   FOR UPDATE;
-  IF FOUND AND v_claim_status IS DISTINCT FROM 'pending' THEN
-    RAISE EXCEPTION 'PANEL_CLAIM_NOT_PENDING' USING ERRCODE = '23514';
+  IF FOUND AND EXISTS (
+    SELECT 1 FROM public.panel_claims claim WHERE claim.queue_entry_id=v_payment.queue_entry_id AND (
+      claim.status::text <> 'pending' OR claim.submitted_date IS NOT NULL OR claim.approved_amount IS NOT NULL
+      OR coalesce(claim.received_amount,0) <> 0 OR claim.payment_reference IS NOT NULL OR claim.received_date IS NOT NULL
+      OR EXISTS (SELECT 1 FROM public.panel_claim_portions portion WHERE portion.panel_claim_id=claim.id)
+      OR EXISTS (SELECT 1 FROM public.panel_claim_portion_receipts receipt WHERE receipt.panel_claim_id=claim.id)
+    )
+  ) THEN
+    RAISE EXCEPTION 'PANEL_CLAIM_ALREADY_MATERIALIZED' USING ERRCODE = '23514';
   END IF;
   UPDATE public.payments SET deleted_at = now() WHERE id = p_payment_id;
   INSERT INTO public.payment_void_audit (
@@ -1417,6 +1450,7 @@ DECLARE
   v_billed_total numeric;
   v_existing_paid numeric;
   v_claim record;
+  v_provider_name text;
 BEGIN
   IF NOT public.can_checkout_visit(auth.uid()) THEN
     RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
@@ -1440,6 +1474,10 @@ BEGIN
     RAISE EXCEPTION 'INVALID_PAYMENT_AMOUNT' USING ERRCODE = '22023';
   END IF;
   v_payment_method := lower(v_payment_method);
+  IF v_payment_method LIKE 'panel:%' THEN
+    v_provider_name := btrim(substr(v_payment_method, length('panel:') + 1));
+    v_payment_method := 'panel';
+  END IF;
   IF v_payment_method NOT IN ('cash', 'qr_pay', 'card', 'transfer', 'panel') THEN
     RAISE EXCEPTION 'INVALID_PAYMENT_METHOD' USING ERRCODE = '22023';
   END IF;
@@ -1515,6 +1553,12 @@ BEGIN
       WHERE qe.id = p_queue_entry_id AND qe.payment_method = 'panel' AND qe.panel_id IS NOT NULL
     ) THEN
       RAISE EXCEPTION 'INVALID_PANEL_PAYMENT' USING ERRCODE = '22023';
+    END IF;
+    IF v_provider_name IS NOT NULL AND NOT EXISTS (
+      SELECT 1 FROM public.queue_entries qe JOIN public.insurance_providers provider ON provider.id=qe.panel_id
+      WHERE qe.id=p_queue_entry_id AND lower(btrim(provider.name))=v_provider_name
+    ) THEN
+      RAISE EXCEPTION 'INVALID_PANEL_PROVIDER' USING ERRCODE='22023';
     END IF;
     SELECT claim.* INTO v_claim FROM public.panel_claims claim
     WHERE claim.queue_entry_id=p_queue_entry_id FOR UPDATE;

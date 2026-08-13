@@ -45,6 +45,7 @@ interface Props {
   panelClaim?: VisitPanelClaim | null;
   expectsPanel?: boolean;
   completeVisitOnPayment?: boolean;
+  hasUnsavedPanelPortions?: boolean;
   /** When true, render the "Other Charges" picker. Selections are NOT
    *  persisted on toggle — parent commits them at checkout via onChargesChange. */
   showOtherCharges?: boolean;
@@ -66,10 +67,12 @@ export function BillingDetailsColumn({
   panelClaim = null,
   expectsPanel = false,
   completeVisitOnPayment = false,
+  hasUnsavedPanelPortions = false,
   showOtherCharges = false,
   onChargesChange,
 }: Props) {
-  const { isSpecialAdmin } = useAuth();
+  const { role } = useAuth();
+  const canCorrectBill = ['ops_staff', 'operations', 'staff', 'admin', 'special_admin', 'doctor_admin', 'purchaser', 'staff_nurse'].includes(role ?? '');
   const voidPayment = useVoidPayment();
   const { data: chargeTypes = [] } = useClinicChargeTypes({ activeOnly: true });
 
@@ -294,7 +297,7 @@ export function BillingDetailsColumn({
             type="button"
             className="w-full"
             onClick={() => setDialogOpen(true)}
-            disabled={!queueEntryId || (completeVisitOnPayment && otherChargesTotal > 0)}
+            disabled={!queueEntryId || (completeVisitOnPayment && (otherChargesTotal > 0 || hasUnsavedPanelPortions))}
             title={completeVisitOnPayment && otherChargesTotal > 0 ? 'Save Other Charges by completing checkout before recording payment.' : undefined}
           >
             <Plus className="h-4 w-4 mr-2" />
@@ -302,6 +305,9 @@ export function BillingDetailsColumn({
           </Button>
           {completeVisitOnPayment && otherChargesTotal > 0 && (
             <p className="text-xs text-muted-foreground">Complete checkout to save Other Charges before recording payment.</p>
+          )}
+          {completeVisitOnPayment && hasUnsavedPanelPortions && (
+            <p className="text-xs text-muted-foreground">Complete checkout to save configured panel portions before recording payment.</p>
           )}
         </div>
 
@@ -378,7 +384,7 @@ export function BillingDetailsColumn({
                   >
                     <Printer className="h-3.5 w-3.5" />
                   </Button>
-                  {isSpecialAdmin && (
+                  {canCorrectBill && (
                     <Button
                       type="button"
                       variant="ghost"

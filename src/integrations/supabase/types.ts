@@ -3578,9 +3578,9 @@ export type Database = {
         ]
       }
       payment_batches: {
-        Row: { id: string; queue_entry_id: string; consultation_id: string | null; idempotency_key: string; actor_id: string; payment_type: string; expected_patient_amount: number; completes_visit: boolean; request_fingerprint: string; result: Json | null; created_at: string }
-        Insert: { id?: string; queue_entry_id: string; consultation_id?: string | null; idempotency_key: string; actor_id: string; payment_type: string; expected_patient_amount: number; completes_visit: boolean; request_fingerprint: string; result?: Json | null; created_at?: string }
-        Update: { id?: string; queue_entry_id?: string; consultation_id?: string | null; idempotency_key?: string; actor_id?: string; payment_type?: string; expected_patient_amount?: number; completes_visit?: boolean; request_fingerprint?: string; result?: Json | null; created_at?: string }
+        Row: { id: string; queue_entry_id: string; idempotency_key: string; actor_id: string; payment_type: string; expected_patient_amount: number; completes_visit: boolean; request_fingerprint: string; result: Json | null; created_at: string }
+        Insert: { id?: string; queue_entry_id: string; idempotency_key: string; actor_id: string; payment_type: string; expected_patient_amount: number; completes_visit: boolean; request_fingerprint: string; result?: Json | null; created_at?: string }
+        Update: { id?: string; queue_entry_id?: string; idempotency_key?: string; actor_id?: string; payment_type?: string; expected_patient_amount?: number; completes_visit?: boolean; request_fingerprint?: string; result?: Json | null; created_at?: string }
         Relationships: []
       }
       payment_void_audit: {

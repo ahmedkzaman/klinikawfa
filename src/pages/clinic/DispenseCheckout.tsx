@@ -922,6 +922,7 @@ export default function DispenseCheckout() {
             items={items}
             payments={payments}
             completeVisitOnPayment
+            hasUnsavedPanelPortions={splitPanelPayment}
             showOtherCharges
             onChargesChange={handleChargesChange}
           />

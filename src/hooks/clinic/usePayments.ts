@@ -222,10 +222,15 @@ export function useRecordSplitPayments() {
         p_notes: input.notes ?? null,
         p_idempotency_key: input.idempotency_key,
       });
-      if (error) throw error;
+      if (error) throw new Error(error.message || 'Split payment failed');
       return data;
     },
     onSuccess: (_, vars) => invalidateSplitPaymentQueries(qc, vars.queue_entry_id),
+    onError: (error, vars) => {
+      if (error instanceof Error && error.message.includes('STALE_PATIENT_OUTSTANDING')) {
+        invalidateSplitPaymentQueries(qc, vars.queue_entry_id);
+      }
+    },
   });
 }
 

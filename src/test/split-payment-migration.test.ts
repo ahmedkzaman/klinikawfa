@@ -101,6 +101,9 @@ describe('split payment migration', () => {
     expect(sql).not.toMatch(/grant execute on function public\.settle_multiple_debts\([^;]+service_role/i);
     expect(sql).toContain('PAYMENT_CONSULTATION_MISMATCH');
     expect(sql).toContain('PAYMENT_BATCH_MISMATCH');
+    expect(sql).toMatch(/create trigger reconcile_cached_panel_payment after insert/i);
+    expect(sql).toMatch(/v_panel_amount = 0[\s\S]*delete from public\.panel_claim_portions/i);
+    expect(sql).toMatch(/can_correct_completed_bill\(v_actor\)[\s\S]*PANEL_CLAIM_ALREADY_MATERIALIZED/i);
     expect(sql).toMatch(/v_visit_type = 'payment_only'[\s\S]*v_consultation_patient <> v_queue_patient/i);
   });
 

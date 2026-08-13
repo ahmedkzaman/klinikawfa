@@ -6,6 +6,8 @@ describe('generated split payment schema contract', () => {
   it('places batch types only on payments and declares new tables', () => {
     expect(types).toContain('payment_batches: {');
     expect(types).toContain('payment_void_audit: {');
+    const batches = types.match(/payment_batches: \{[\s\S]*?payment_void_audit:/)?.[0] ?? '';
+    expect(batches).not.toContain('consultation_id');
     const payments = types.match(/payments: \{[\s\S]*?performance_appraisals:/)?.[0] ?? '';
     expect(payments).toContain('batch_id: string | null');
     expect(payments).toContain('payments_batch_id_fkey');
