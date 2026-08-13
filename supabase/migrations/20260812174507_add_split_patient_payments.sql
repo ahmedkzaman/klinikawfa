@@ -1642,6 +1642,56 @@ REVOKE ALL ON FUNCTION public.settle_multiple_debts_legacy_core(uuid, uuid[], nu
 
 CREATE FUNCTION public.settle_multiple_debts(
   p_queue_entry_id uuid, p_consultation_ids uuid[], p_amount_paid numeric,
+  p_payment_method text, p_notes text, p_idempotency_key uuid
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog, public AS $function$
+DECLARE v_qe record; v_method text:=lower(btrim(coalesce(p_payment_method,''))); v_total numeric:=0;
+  v_remaining numeric; v_apply numeric; v_row record; v_payment_id uuid; v_ids jsonb:='[]';
+  v_batch public.payment_batches%ROWTYPE; v_result jsonb; v_fingerprint text;
+BEGIN
+  IF NOT public.can_checkout_visit(auth.uid()) THEN RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE='42501'; END IF;
+  IF p_idempotency_key IS NULL THEN RAISE EXCEPTION 'IDEMPOTENCY_KEY_REQUIRED' USING ERRCODE='22023'; END IF;
+  IF p_amount_paid IS NULL OR p_amount_paid::text IN ('NaN','Infinity','-Infinity') OR p_amount_paid<0
+     OR round(p_amount_paid,2) IS DISTINCT FROM p_amount_paid THEN RAISE EXCEPTION 'INVALID_AMOUNT' USING ERRCODE='22023'; END IF;
+  IF p_amount_paid>0 AND v_method NOT IN ('cash','qr_pay','card','transfer') THEN RAISE EXCEPTION 'INVALID_PAYMENT_METHOD' USING ERRCODE='22023'; END IF;
+  SELECT qe.* INTO v_qe FROM public.queue_entries qe WHERE qe.id=p_queue_entry_id AND qe.deleted_at IS NULL FOR UPDATE;
+  IF NOT FOUND OR v_qe.visit_type::text<>'payment_only' OR v_qe.clinic_status::text<>'sent_to_dispensary' THEN
+    RAISE EXCEPTION 'INVALID_PAYMENT_ONLY_STATUS' USING ERRCODE='22023'; END IF;
+  CREATE TEMP TABLE IF NOT EXISTS _debt_rows(consultation_id uuid primary key, outstanding numeric, sort_ts timestamptz) ON COMMIT DROP;
+  DELETE FROM _debt_rows;
+  FOR v_row IN SELECT c.id,c.created_at FROM public.consultations c
+    WHERE c.id=ANY(coalesce(p_consultation_ids,ARRAY[]::uuid[])) AND c.patient_id=v_qe.patient_id AND c.deleted_at IS NULL
+    ORDER BY c.created_at,c.id FOR UPDATE
+  LOOP
+    PERFORM 1 FROM public.queue_entries q JOIN public.consultations c ON c.queue_entry_id=q.id
+      WHERE c.id=v_row.id ORDER BY q.id FOR UPDATE OF q;
+    PERFORM 1 FROM public.payments p WHERE p.consultation_id=v_row.id AND p.deleted_at IS NULL ORDER BY p.id FOR UPDATE;
+    INSERT INTO _debt_rows VALUES(v_row.id, greatest(
+      coalesce((SELECT sum(round(ci.price*ci.quantity,2)) FROM public.consultation_items ci WHERE ci.consultation_id=v_row.id AND ci.deleted_at IS NULL),0)
+      -coalesce((SELECT sum(round(p.amount,2)) FROM public.payments p WHERE p.consultation_id=v_row.id AND p.deleted_at IS NULL AND lower(btrim(p.payment_method))<>'panel'),0),0),v_row.created_at);
+  END LOOP;
+  SELECT coalesce(sum(outstanding),0) INTO v_total FROM _debt_rows;
+  IF p_amount_paid>v_total THEN RAISE EXCEPTION 'STALE_PATIENT_OUTSTANDING: expected %',v_total USING ERRCODE='22023'; END IF;
+  v_fingerprint:=encode(digest(jsonb_build_object('q',p_queue_entry_id,'c',p_consultation_ids,'a',p_amount_paid,'m',v_method,'n',p_notes)::text,'sha256'),'hex');
+  INSERT INTO public.payment_batches(queue_entry_id,idempotency_key,actor_id,payment_type,expected_patient_amount,completes_visit,request_fingerprint)
+    VALUES(p_queue_entry_id,p_idempotency_key,auth.uid(),'self_pay',p_amount_paid,true,v_fingerprint)
+    ON CONFLICT(queue_entry_id,idempotency_key) DO NOTHING;
+  SELECT * INTO v_batch FROM public.payment_batches b WHERE b.queue_entry_id=p_queue_entry_id AND b.idempotency_key=p_idempotency_key FOR UPDATE;
+  IF v_batch.request_fingerprint<>v_fingerprint THEN RAISE EXCEPTION 'IDEMPOTENCY_KEY_REUSED' USING ERRCODE='22023'; END IF;
+  IF v_batch.result IS NOT NULL THEN RETURN v_batch.result; END IF;
+  v_remaining:=p_amount_paid;
+  FOR v_row IN SELECT * FROM _debt_rows ORDER BY sort_ts,consultation_id LOOP
+    EXIT WHEN v_remaining<=0; v_apply:=least(v_remaining,v_row.outstanding);
+    IF v_apply>0 THEN INSERT INTO public.payments(batch_id,queue_entry_id,consultation_id,payment_type,payment_method,amount,notes)
+      VALUES(v_batch.id,p_queue_entry_id,v_row.consultation_id,'self_pay',v_method,v_apply,p_notes) RETURNING id INTO v_payment_id;
+      v_ids:=v_ids||jsonb_build_array(v_payment_id); v_remaining:=v_remaining-v_apply; END IF;
+  END LOOP;
+  UPDATE public.queue_entries SET clinic_status='completed' WHERE id=p_queue_entry_id;
+  v_result:=jsonb_build_object('batch_id',v_batch.id,'payment_ids',v_ids,'total_collected',p_amount_paid,'debt_remaining',greatest(v_total-p_amount_paid,0));
+  UPDATE public.payment_batches SET result=v_result WHERE id=v_batch.id; RETURN v_result;
+END $function$;
+
+CREATE FUNCTION public.settle_multiple_debts(
+  p_queue_entry_id uuid, p_consultation_ids uuid[], p_amount_paid numeric,
   p_payment_method text, p_notes text DEFAULT NULL
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER
@@ -1649,28 +1699,11 @@ SET search_path = pg_catalog, public
 AS $function$
 DECLARE v_method text := lower(btrim(coalesce(p_payment_method, ''))); v_qe record;
 BEGIN
-  IF NOT public.can_checkout_visit(auth.uid()) THEN
-    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
-  END IF;
-  IF p_amount_paid IS NULL OR p_amount_paid::text IN ('NaN', 'Infinity', '-Infinity')
-     OR p_amount_paid < 0 OR p_amount_paid > 999999999.99
-     OR round(p_amount_paid, 2) IS DISTINCT FROM p_amount_paid THEN
-    RAISE EXCEPTION 'INVALID_AMOUNT' USING ERRCODE = '22023';
-  END IF;
-  IF p_amount_paid > 0 AND v_method NOT IN ('cash', 'qr_pay', 'card', 'transfer') THEN
-    RAISE EXCEPTION 'INVALID_PAYMENT_METHOD' USING ERRCODE = '22023';
-  END IF;
-  SELECT qe.clinic_status::text AS status, qe.visit_type::text AS visit_type INTO v_qe
-  FROM public.queue_entries qe WHERE qe.id=p_queue_entry_id AND qe.deleted_at IS NULL FOR UPDATE;
-  IF NOT FOUND OR v_qe.visit_type <> 'payment_only' OR v_qe.status <> 'sent_to_dispensary' THEN
-    RAISE EXCEPTION 'INVALID_PAYMENT_ONLY_STATUS' USING ERRCODE='22023';
-  END IF;
-  RETURN public.settle_multiple_debts_legacy_core(
-    p_queue_entry_id, p_consultation_ids, p_amount_paid,
-    CASE WHEN p_amount_paid = 0 THEN NULL ELSE v_method END, p_notes
-  );
+  RETURN public.settle_multiple_debts(p_queue_entry_id,p_consultation_ids,p_amount_paid,p_payment_method,p_notes,gen_random_uuid());
 END;
 $function$;
 ALTER FUNCTION public.settle_multiple_debts(uuid, uuid[], numeric, text, text) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.settle_multiple_debts(uuid, uuid[], numeric, text, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.settle_multiple_debts(uuid, uuid[], numeric, text, text) TO authenticated;
+REVOKE ALL ON FUNCTION public.settle_multiple_debts(uuid,uuid[],numeric,text,text,uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.settle_multiple_debts(uuid,uuid[],numeric,text,text,uuid) TO authenticated;

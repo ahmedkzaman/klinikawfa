@@ -115,6 +115,7 @@ function useUnpaidVisits(patientId: string | null | undefined) {
 }
 
 export function SettleDebtModal({ entry, open, onOpenChange }: Props) {
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const qc = useQueryClient();
   const patientId = entry?.patient_id ?? null;
   const { data: visits = [], isLoading } = useUnpaidVisits(patientId);
@@ -199,8 +200,10 @@ export function SettleDebtModal({ entry, open, onOpenChange }: Props) {
         p_amount_paid: amount,
         p_payment_method: amount > 0 ? method : null,
         p_notes: notes.trim() || null,
+        p_idempotency_key: idempotencyKey,
       });
       if (error) throw error;
+      setIdempotencyKey(crypto.randomUUID());
       const result = (data ?? {}) as {
         payment_ids?: string[];
         total_collected?: number;

@@ -6896,6 +6896,7 @@ export type Database = {
           p_notes?: string
           p_payment_method: string
           p_queue_entry_id: string
+          p_idempotency_key?: string
         }
         Returns: Json
       }

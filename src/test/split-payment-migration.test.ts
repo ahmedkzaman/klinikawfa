@@ -97,7 +97,7 @@ describe('split payment migration', () => {
     expect(sql).toMatch(/alter table public\.payments add column batch_id uuid/i);
     expect(sql).toMatch(/insert into public\.payments \(\s*batch_id,[\s\S]*?values \(\s*v_batch\.id,/i);
     expect(sql).toMatch(/revoke all on function public\.settle_multiple_debts_legacy_core[\s\S]*service_role/i);
-    expect(sql).toMatch(/v_qe\.visit_type <> 'payment_only' or v_qe\.status <> 'sent_to_dispensary'/i);
+    expect(sql).toMatch(/v_qe\.visit_type::text<>'payment_only' or v_qe\.clinic_status::text<>'sent_to_dispensary'/i);
     expect(sql).not.toMatch(/grant execute on function public\.settle_multiple_debts\([^;]+service_role/i);
     expect(sql).toContain('PAYMENT_CONSULTATION_MISMATCH');
     expect(sql).toContain('PAYMENT_BATCH_MISMATCH');
@@ -105,6 +105,10 @@ describe('split payment migration', () => {
     expect(sql).toMatch(/v_panel_amount = 0[\s\S]*delete from public\.panel_claim_portions/i);
     expect(sql).toMatch(/can_correct_completed_bill\(v_actor\)[\s\S]*PANEL_CLAIM_ALREADY_MATERIALIZED/i);
     expect(sql).toMatch(/v_visit_type = 'payment_only'[\s\S]*v_consultation_patient <> v_queue_patient/i);
+    expect(sql).toMatch(/settle_multiple_debts\([\s\S]*p_idempotency_key uuid[\s\S]*can_checkout_visit\(auth\.uid\(\)\)/i);
+    expect(sql).toMatch(/insert into public\.payments\(batch_id,[\s\S]*v_batch\.id/i);
+    expect(sql).toMatch(/'batch_id',v_batch\.id,'payment_ids',v_ids/i);
+    expect(sql).not.toMatch(/return public\.settle_multiple_debts_legacy_core/i);
   });
 
   it('covers corrected quantity-three billing and production split-parent trigger behavior', () => {
