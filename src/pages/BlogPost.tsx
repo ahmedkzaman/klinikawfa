@@ -174,7 +174,7 @@ export default function BlogPost() {
 
         {/* Article content */}
         {/<[a-z][\s\S]*>/i.test(content) ? (
-          <div className="prose mb-12 max-w-none" dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(content) }} />
+          <div className="blog-rich-content prose mb-12 max-w-none" dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(content) }} />
         ) : (
           <MarkdownRenderer content={content} className="mb-12" />
         )}
