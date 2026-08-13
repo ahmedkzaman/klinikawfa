@@ -129,8 +129,12 @@ function paymentExportCategory(row: SalesInsightRow): string {
   return 'other';
 }
 
-function downloadSalesCSV(rows: SalesInsightRow[], startDate: Date, endDate: Date) {
+function downloadSalesCSV(rows: SalesInsightRow[], panelClaims: Array<{ queue_entry_id?: string | null; amount: number | string | null }>, startDate: Date, endDate: Date) {
   const header = ['created_at', 'payment_id', 'queue_entry_id', 'consultation_id', 'payment_type', 'payment_method', 'category', 'amount'];
+  const panelAmountByQueue = new Map<string, number>();
+  for (const claim of panelClaims) {
+    if (claim.queue_entry_id) panelAmountByQueue.set(claim.queue_entry_id, Number(claim.amount ?? 0));
+  }
   const lines = [header.join(',')];
   for (const r of rows) {
     lines.push([
@@ -141,7 +145,9 @@ function downloadSalesCSV(rows: SalesInsightRow[], startDate: Date, endDate: Dat
       csvEscape(r.paymentType),
       csvEscape(r.paymentMethod),
       csvEscape(paymentExportCategory(r)),
-      csvEscape(r.amount.toFixed(2)),
+      csvEscape((paymentExportCategory(r) === 'panel billed'
+        ? panelAmountByQueue.get(r.queueEntryId ?? '') ?? r.amount
+        : r.amount).toFixed(2)),
     ].join(','));
   }
   const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
@@ -260,7 +266,7 @@ export default function Insight() {
 
   const handleSalesDownload = () => {
     if (salesExportRows.length === 0) return;
-    downloadSalesCSV(salesExportRows, startDate, endDate);
+    downloadSalesCSV(salesExportRows, panelBilledData?.claims ?? [], startDate, endDate);
     toast.success(`Exported ${salesExportRows.length} payment row${salesExportRows.length === 1 ? '' : 's'} to CSV.`);
   };
 

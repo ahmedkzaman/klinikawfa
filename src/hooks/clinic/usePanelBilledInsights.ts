@@ -17,7 +17,7 @@ export function usePanelBilledInsights(startDate: Date, endDate: Date) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('panel_claims')
-        .select('amount, status')
+        .select('queue_entry_id, claim_date, amount, status')
         .gte('claim_date', startKey)
         .lte('claim_date', endKey)
         .not('status', 'in', '(rejected,cancelled)');

@@ -11,14 +11,14 @@ describe('aggregatePanelBilledClaims', () => {
       { amount: 25, status: 'received' },
       { amount: 500, status: 'rejected' },
       { amount: 900, status: 'cancelled' },
-    ])).toEqual({ totalBilled: 250.5, claimCount: 4 });
+    ])).toMatchObject({ totalBilled: 250.5, claimCount: 4 });
   });
 
   it('returns zero totals for no eligible claims and normalizes invalid amounts to zero', () => {
     expect(aggregatePanelBilledClaims([
       { amount: 'invalid', status: 'pending' },
       { amount: 20, status: 'cancelled' },
-    ])).toEqual({ totalBilled: 0, claimCount: 1 });
-    expect(aggregatePanelBilledClaims([])).toEqual({ totalBilled: 0, claimCount: 0 });
+    ])).toMatchObject({ totalBilled: 0, claimCount: 1 });
+    expect(aggregatePanelBilledClaims([])).toMatchObject({ totalBilled: 0, claimCount: 0 });
   });
 });

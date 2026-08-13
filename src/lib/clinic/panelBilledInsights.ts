@@ -7,6 +7,8 @@ export type PanelClaimStatus =
   | 'cancelled';
 
 export interface PanelClaimRow {
+  queue_entry_id?: string | null;
+  claim_date?: string | null;
   amount: number | string | null;
   status: PanelClaimStatus;
 }
@@ -14,6 +16,7 @@ export interface PanelClaimRow {
 export interface PanelBilledSummary {
   totalBilled: number;
   claimCount: number;
+  claims: PanelClaimRow[];
 }
 
 const BILLED_STATUSES = new Set<PanelClaimStatus>([
@@ -33,6 +36,7 @@ export function aggregatePanelBilledClaims(rows: PanelClaimRow[]): PanelBilledSu
     const amount = Number(row.amount ?? 0);
     summary.totalBilled += Number.isFinite(amount) ? amount : 0;
     summary.claimCount += 1;
+    summary.claims.push(row);
     return summary;
-  }, { totalBilled: 0, claimCount: 0 });
+  }, { totalBilled: 0, claimCount: 0, claims: [] });
 }
