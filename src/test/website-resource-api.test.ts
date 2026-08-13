@@ -31,7 +31,7 @@ describe("website resource publishing API", () => {
 describe("immediate website revision conflict migration", () => {
   it("changes stale website conflicts from retryable 40001 to HTTP 409", () => {
     const sql = readFileSync(
-      join(process.cwd(), "supabase/migrations/20260811072723_return_immediate_website_revision_conflicts.sql"),
+      join(process.cwd(), "supabase/migrations/20260811073059_return_immediate_website_revision_conflicts.sql"),
       "utf8",
     );
 

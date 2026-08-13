@@ -16,6 +16,7 @@ const history = vi.hoisted(() => ({
   refetch: vi.fn(),
 }));
 const historyHook = vi.hoisted(() => vi.fn());
+const refetchConsultation = vi.hoisted(() => vi.fn());
 const refetchItems = vi.hoisted(() => vi.fn());
 const refetchPayments = vi.hoisted(() => vi.fn());
 
@@ -43,6 +44,7 @@ vi.mock('@/hooks/clinic/useConsultations', () => ({
       diagnosis_text: null,
       case_note: visit.caseNote,
     },
+    refetch: refetchConsultation,
   }),
 }));
 vi.mock('@/hooks/clinic/useConsultationItems', () => ({
@@ -108,6 +110,7 @@ describe('completed visit bill correction', () => {
     history.isError = false;
     history.refetch.mockReset();
     historyHook.mockReset();
+    refetchConsultation.mockReset();
     refetchItems.mockReset();
     refetchPayments.mockReset();
   });
@@ -163,6 +166,7 @@ describe('completed visit bill correction', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Apply correction' }));
 
     await waitFor(() => expect(refetchItems).toHaveBeenCalledTimes(1));
+    expect(refetchConsultation).toHaveBeenCalledTimes(1);
     expect(refetchPayments).toHaveBeenCalledTimes(1);
     expect(screen.getByText('Items total: RM 75.00')).toBeVisible();
     expect(screen.getByText('Payments total: RM 75.00')).toBeVisible();
