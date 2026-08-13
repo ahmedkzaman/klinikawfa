@@ -195,6 +195,7 @@ export default function Billings() {
     amount: number;
     receivedAmount: number;
     status: string;
+    panelName: string | null;
   }>>({
     queryKey: ['billing-panel-claims', queueEntryIds.slice().sort().join(',')],
     enabled: queueEntryIds.length > 0,
@@ -203,7 +204,7 @@ export default function Billings() {
         fetchAllBillingRows(async (from, to) => {
           const { data: rows, error } = await supabase
             .from('panel_claims')
-            .select('queue_entry_id, amount, received_amount, status')
+            .select('queue_entry_id, amount, received_amount, status, panel_id, insurance_providers:panel_id ( name )')
             .in('queue_entry_id', ids)
             .order('id', { ascending: true })
             .range(from, to);
@@ -211,13 +212,18 @@ export default function Billings() {
           return rows ?? [];
         }),
       ))).flat();
-      const grouped: Record<string, { amount: number; receivedAmount: number; status: string }> = {};
+      const grouped: Record<string, { amount: number; receivedAmount: number; status: string; panelName: string | null }> = {};
       for (const claim of data ?? []) {
         const id = claim.queue_entry_id;
         if (!id) continue;
         const status = String(claim.status ?? '').toLowerCase();
         if (!['pending', 'submitted', 'approved', 'received'].includes(status)) continue;
-        const current = grouped[id] ?? { amount: 0, receivedAmount: 0, status };
+        const current = grouped[id] ?? {
+          amount: 0,
+          receivedAmount: 0,
+          status,
+          panelName: (claim as { insurance_providers?: { name?: string | null } | null }).insurance_providers?.name ?? null,
+        };
         current.amount += Number(claim.amount ?? 0);
         current.receivedAmount += Number(claim.received_amount ?? 0);
         current.status = status;
@@ -291,10 +297,14 @@ export default function Billings() {
     const list = Array.from(byQueue.values());
     list.forEach((e) => {
       const claim = claimsByQueue[e.queueEntryId];
+      // A late self-pay → panel conversion may create the panel claim before
+      // queue_entries is backfilled. Treat the claim/provider as authoritative
+      // for this financial view so the row no longer appears as self-pay.
+      if (claim?.panelName && !e.panelName) e.panelName = claim.panelName;
       const payer = classifyBillingPayer({
         queuePaymentMethod: e.queuePaymentMethod,
         panelId: e.panelId,
-        panelProviderName: e.panelName,
+        panelProviderName: e.panelName ?? claim?.panelName,
         hasActiveClaim: Boolean(claim),
         paymentTypes: e.paymentTypes,
       });
