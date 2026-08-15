@@ -6,12 +6,40 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { attendancePresetRange, type AttendancePeriodPreset, useAttendanceHeatmap } from '@/hooks/clinic/useAttendanceHeatmap';
-import type { AttendanceHeatmapCell } from '@/lib/clinic/attendanceHeatmap';
+import { assessDoctorOffDays, type AttendanceHeatmapCell, type DoctorOffDayAssessment } from '@/lib/clinic/attendanceHeatmap';
+import { fitAttendanceRegression, type AttendanceRegressionResult } from '@/lib/clinic/attendanceRegression';
 import { cn } from '@/lib/utils';
 
 const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const hours = Array.from({ length: 16 }, (_, index) => index + 8);
 const emptyCells: AttendanceHeatmapCell[] = [];
+
+function unavailableRegression(reason: string, observationCount: number): AttendanceRegressionResult {
+  return {
+    status: 'unavailable',
+    diagnostics: {
+      family: 'negative_binomial',
+      converged: false,
+      iterations: 0,
+      usableWeeks: 0,
+      observationCount,
+      dispersion: Number.NaN,
+      warnings: [reason],
+    },
+    reasons: [reason],
+  };
+}
+
+function unavailableAssessments(reason: string): DoctorOffDayAssessment[] {
+  return [{
+    status: 'unavailable',
+    weekday: null,
+    forecast: null,
+    safetyScore: null,
+    reasons: [reason],
+    passedChecks: [],
+  }];
+}
 
 function timeRange(hour: number): string {
   return `${String(hour).padStart(2, '0')}:00–${String((hour + 1) % 24).padStart(2, '0')}:00`;
@@ -61,6 +89,20 @@ export function PatientAttendanceHeatmap() {
   const report = query.data;
   const cells = report?.cells ?? emptyCells;
   const hasAttendanceData = report?.hasAttendanceData ?? cells.length > 0;
+  const regression = useMemo(() => {
+    try {
+      return fitAttendanceRegression(query.data?.observations ?? [], doctorId);
+    } catch {
+      return unavailableRegression('Attendance regression is unavailable. Descriptive heatmap remains available.', query.data?.observations.length ?? 0);
+    }
+  }, [query.data?.observations, doctorId]);
+  const offDayAssessments = useMemo(() => {
+    try {
+      return assessDoctorOffDays(cells, regression, doctorId);
+    } catch {
+      return unavailableAssessments('Off-day safety assessment is unavailable. Descriptive heatmap remains available.');
+    }
+  }, [cells, regression, doctorId]);
   const cellsBySlot = useMemo(() => new Map(cells.map((cell) => [`${cell.weekday}-${cell.hour}`, cell])), [cells]);
   const maximum = Math.max(0, ...cells.flatMap((cell) => cellStatus(cell) === 'covered' && cell.averageVisits !== null ? [cell.averageVisits] : []));
 
@@ -103,7 +145,7 @@ export function PatientAttendanceHeatmap() {
           </>}
         </CardContent>
       </Card>
-      {!query.isLoading && !query.isError && !invalidRange && hasAttendanceData && <AttendanceRecommendations cells={cells} selectedDoctorId={doctorId} />}
+      {!query.isLoading && !query.isError && !invalidRange && hasAttendanceData && <AttendanceRecommendations cells={cells} selectedDoctorId={doctorId} regression={regression} offDayAssessments={offDayAssessments} />}
       <AttendanceHeatmapCellDetails cell={selectedCell} open={selectedCell !== null} onOpenChange={(open) => !open && setSelectedCell(null)} />
     </div>
   );

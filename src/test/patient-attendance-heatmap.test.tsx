@@ -2,12 +2,26 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const useAttendanceHeatmap = vi.hoisted(() => vi.fn());
+const attendanceModel = vi.hoisted(() => ({
+  fitAttendanceRegression: vi.fn(),
+  assessDoctorOffDays: vi.fn(),
+}));
 
 vi.mock('@/hooks/clinic/useAttendanceHeatmap', () => ({
   attendancePresetRange: vi.fn(({ preset }: { preset: string }) => preset === 'custom'
     ? { startDate: '2026-08-10', endDate: '2026-08-15' }
     : { startDate: '2026-05-25', endDate: '2026-08-16' }),
   useAttendanceHeatmap,
+}));
+
+vi.mock('@/lib/clinic/attendanceRegression', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/clinic/attendanceRegression')>(),
+  fitAttendanceRegression: attendanceModel.fitAttendanceRegression,
+}));
+
+vi.mock('@/lib/clinic/attendanceHeatmap', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/clinic/attendanceHeatmap')>(),
+  assessDoctorOffDays: attendanceModel.assessDoctorOffDays,
 }));
 
 import { PatientAttendanceHeatmap } from '@/components/clinic/dashboard/PatientAttendanceHeatmap';
@@ -19,6 +33,7 @@ const report = {
   },
   doctors: [{ id: 'doctor-1', name: 'Dr Aina' }],
   warnings: ['Roster coverage is incomplete for some periods.'],
+  observations: [],
   cells: [
     {
       weekday: 1 as const, hour: 8, totalVisits: 16, rawTotalVisits: 17, operatingOccurrences: 8,
@@ -60,9 +75,39 @@ const report = {
   ],
 };
 
+const readyRegression = {
+  status: 'ready' as const,
+  diagnostics: {
+    family: 'negative_binomial' as const, converged: true, iterations: 4,
+    usableWeeks: 12, observationCount: 96, dispersion: 0.4, warnings: [],
+  },
+  hourly: [],
+  weekdays: [],
+};
+
+const suggestedAssessment = {
+  status: 'suggested' as const,
+  weekday: 2 as const,
+  safetyScore: 0.14,
+  reasons: [],
+  passedChecks: [
+    'At least 8 comparable dates.',
+    'Daily upper prediction is below the busy-day threshold.',
+    'Backup doctor coverage is complete.',
+  ],
+  forecast: {
+    weekday: 2 as const, expectedTotal: 3.24, lowerPrediction: 1.1, upperPrediction: 5.38,
+    highestExpectedHour: { weekday: 2 as const, hour: 9, expectedVisits: 1.56, lowerPrediction: 0.2, upperPrediction: 2.92 },
+    highestObservedPeak: 4, averageWaitMinutes: 12.4, comparableDates: 12, backupCoverageRate: 1,
+  },
+};
+
 describe('PatientAttendanceHeatmap', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     useAttendanceHeatmap.mockReturnValue({ data: report, isLoading: false, isError: false, error: null });
+    attendanceModel.fitAttendanceRegression.mockReturnValue(readyRegression);
+    attendanceModel.assessDoctorOffDays.mockReturnValue([suggestedAssessment]);
   });
 
   it('renders an accessible Monday–Sunday, 08:00–00:00 heatmap with colour-independent statuses', () => {
@@ -120,6 +165,71 @@ describe('PatientAttendanceHeatmap', () => {
     expect(screen.getAllByText(/Peak staffing/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Possible doctor off-day.*suggestion only/i)).toBeInTheDocument();
     expect(screen.getAllByText(/sample/i).length).toBeGreaterThan(0);
+  });
+
+  it('shows a suggested off-day with predicted and observed safety evidence', () => {
+    render(<PatientAttendanceHeatmap />);
+
+    expect(screen.getByText('Possible doctor off-day — suggestion only')).toBeInTheDocument();
+    expect(screen.getByText(/Predicted visits:\s*3\.2/i)).toBeInTheDocument();
+    expect(screen.getByText(/Prediction range:\s*1\.1–5\.4/i)).toBeInTheDocument();
+    expect(screen.getByText(/Highest-risk hour:\s*09:00/i)).toBeInTheDocument();
+    expect(screen.getByText(/Observed peak:\s*4\.0/i)).toBeInTheDocument();
+    expect(screen.getByText(/Backup coverage:\s*100\.0%/i)).toBeInTheDocument();
+    expect(screen.getByText(/Planning aid only — confirm against roster and current operations\./i)).toBeInTheDocument();
+  });
+
+  it('shows the highest-priority safety reasons when no weekday is safe', () => {
+    attendanceModel.assessDoctorOffDays.mockReturnValue([{
+      ...suggestedAssessment,
+      status: 'rejected', safetyScore: null,
+      reasons: ['Average wait exceeds 45 minutes.', 'Backup doctor coverage is incomplete.', 'Prediction volatility is too high.', 'This lower-priority reason is hidden initially.'],
+      passedChecks: [],
+    }]);
+    render(<PatientAttendanceHeatmap />);
+
+    expect(screen.getByText('No safe off-day recommendation')).toBeInTheDocument();
+    expect(screen.getAllByText('Average wait exceeds 45 minutes.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Backup doctor coverage is incomplete.').length).toBeGreaterThan(0);
+    expect(screen.getByLabelText(/safety checks/i)).toBeInTheDocument();
+    expect(screen.getByText('View all checks')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['fewer than 12 weeks', ['Not enough data for regression recommendation']],
+    ['a non-convergent model', ['Regression model did not converge']],
+  ])('keeps the descriptive heatmap available with %s', (_scenario, reasons) => {
+    attendanceModel.assessDoctorOffDays.mockReturnValue([{
+      status: 'unavailable', weekday: null, forecast: null, safetyScore: null, reasons, passedChecks: [],
+    }]);
+    render(<PatientAttendanceHeatmap />);
+
+    expect(screen.getByText('No safe off-day recommendation')).toBeInTheDocument();
+    expect(screen.getAllByText(reasons[0]).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Covered average/i).length).toBeGreaterThan(0);
+  });
+
+  it('shows missing backup coverage for the selected doctor', () => {
+    attendanceModel.assessDoctorOffDays.mockReturnValue([{
+      ...suggestedAssessment,
+      status: 'rejected', safetyScore: null,
+      reasons: ['Backup doctor coverage is incomplete.'], passedChecks: [],
+      forecast: { ...suggestedAssessment.forecast, backupCoverageRate: 0 },
+    }]);
+    render(<PatientAttendanceHeatmap />);
+    fireEvent.change(screen.getByLabelText(/treating doctor/i), { target: { value: 'doctor-1' } });
+
+    expect(screen.getByText(/selected treating doctor/i)).toBeInTheDocument();
+    expect(screen.getAllByText('Backup doctor coverage is incomplete.').length).toBeGreaterThan(0);
+  });
+
+  it('does not refit the model when opening a heatmap cell', () => {
+    render(<PatientAttendanceHeatmap />);
+    expect(attendanceModel.fitAttendanceRegression).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: /Monday 08:00–09:00.*2.*wait alert/i }));
+
+    expect(attendanceModel.fitAttendanceRegression).toHaveBeenCalledTimes(1);
   });
 
   it.each([

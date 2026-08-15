@@ -1,10 +1,15 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { buildAttendanceRecommendations, type AttendanceHeatmapCell } from '@/lib/clinic/attendanceHeatmap';
+import {
+  buildAttendanceRecommendations,
+  type AttendanceHeatmapCell,
+  type DoctorOffDayAssessment,
+} from '@/lib/clinic/attendanceHeatmap';
+import type { AttendanceRegressionResult } from '@/lib/clinic/attendanceRegression';
 
 const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-function hour(hour: number): string {
-  return `${String(hour).padStart(2, '0')}:00`;
+function hour(value: number): string {
+  return `${String(value).padStart(2, '0')}:00`;
 }
 
 function evidence(item: { sampleSize: number; evidence: { averageVisits: number | null; peakVisits: number | null; averageWaitMinutes: number | null } }): string {
@@ -14,9 +19,84 @@ function evidence(item: { sampleSize: number; evidence: { averageVisits: number 
   return values.join(' · ');
 }
 
-export function AttendanceRecommendations({ cells, selectedDoctorId }: {
+function decimal(value: number): string {
+  return value.toFixed(1);
+}
+
+function offDayReasons(assessments: DoctorOffDayAssessment[]): string[] {
+  return [...new Set(assessments.flatMap((assessment) => assessment.reasons))];
+}
+
+function OffDayRecommendation({ assessment, usableWeeks }: {
+  assessment: DoctorOffDayAssessment;
+  usableWeeks: number;
+}) {
+  const forecast = assessment.forecast;
+  if (!forecast) return null;
+
+  const whySafest = assessment.passedChecks.length > 0
+    ? `Ranked safest because it passed: ${assessment.passedChecks.slice(0, 3).join(' ')}`
+    : 'Ranked safest among the assessed weekdays.';
+
+  return (
+    <li className="rounded-md bg-slate-50 p-3">
+      <p className="font-medium text-slate-800">{weekdays[forecast.weekday - 1]} — possible doctor off-day</p>
+      <ul className="mt-2 grid gap-1 text-sm sm:grid-cols-2">
+        <li>Predicted visits: {decimal(forecast.expectedTotal)}</li>
+        <li>Prediction range: {decimal(forecast.lowerPrediction)}–{decimal(forecast.upperPrediction)}</li>
+        <li>Highest-risk hour: {hour(forecast.highestExpectedHour.hour)} ({decimal(forecast.highestExpectedHour.expectedVisits)})</li>
+        <li>Hour prediction range: {decimal(forecast.highestExpectedHour.lowerPrediction)}–{decimal(forecast.highestExpectedHour.upperPrediction)}</li>
+        <li>Observed peak: {decimal(forecast.highestObservedPeak)}</li>
+        <li>Average wait: {forecast.averageWaitMinutes === null ? 'unavailable' : `${decimal(forecast.averageWaitMinutes)} min`}</li>
+        <li>Usable weeks / comparable dates: {usableWeeks} / {forecast.comparableDates}</li>
+        <li>Backup coverage: {decimal(forecast.backupCoverageRate * 100)}%</li>
+        <li>Safety score: {assessment.safetyScore === null ? 'unavailable' : decimal(assessment.safetyScore)}</li>
+      </ul>
+      <p className="mt-2 text-sm text-slate-700">{whySafest}</p>
+    </li>
+  );
+}
+
+function OffDayAssessmentPanel({ assessments, regression }: {
+  assessments: DoctorOffDayAssessment[];
+  regression: AttendanceRegressionResult;
+}) {
+  const suggestions = assessments.filter((assessment) => assessment.status === 'suggested' && assessment.forecast !== null);
+  const reasons = offDayReasons(assessments);
+  const checks = assessments.flatMap((assessment) => [
+    ...assessment.reasons.map((reason) => ({ outcome: 'Does not pass', reason })),
+    ...assessment.passedChecks.map((reason) => ({ outcome: 'Passes', reason })),
+  ]);
+
+  return (
+    <section aria-label="Possible doctor off-day suggestion">
+      <h3 className="text-sm font-semibold text-slate-800">Possible doctor off-day — suggestion only</h3>
+      <p className="mt-1 text-sm text-slate-600">Planning aid only — confirm against roster and current operations.</p>
+      {suggestions.length > 0 ? (
+        <ul className="mt-2 space-y-2 text-sm text-slate-600">
+          {suggestions.map((assessment) => <OffDayRecommendation key={assessment.weekday} assessment={assessment} usableWeeks={regression.diagnostics.usableWeeks} />)}
+        </ul>
+      ) : (
+        <div className="mt-2 rounded-md bg-slate-50 p-3 text-sm text-slate-700">
+          <h4 className="font-medium text-slate-800">No safe off-day recommendation</h4>
+          {reasons.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5">{reasons.slice(0, 3).map((reason) => <li key={reason}>{reason}</li>)}</ul>}
+          <details className="mt-3" aria-label="Safety checks">
+            <summary className="cursor-pointer font-medium text-slate-800">View all checks</summary>
+            {checks.length > 0
+              ? <ul className="mt-2 list-disc space-y-1 pl-5">{checks.map(({ outcome, reason }, index) => <li key={`${outcome}-${reason}-${index}`}><span className="font-medium">{outcome}:</span> {reason}</li>)}</ul>
+              : <p className="mt-2">No detailed safety checks are available.</p>}
+          </details>
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function AttendanceRecommendations({ cells, selectedDoctorId, regression, offDayAssessments }: {
   cells: AttendanceHeatmapCell[];
   selectedDoctorId: string | null;
+  regression: AttendanceRegressionResult;
+  offDayAssessments: DoctorOffDayAssessment[];
 }) {
   const recommendations = buildAttendanceRecommendations(cells, selectedDoctorId);
   const sections = [
@@ -24,11 +104,6 @@ export function AttendanceRecommendations({ cells, selectedDoctorId }: {
       title: 'Training windows',
       items: recommendations.trainingWindows,
       description: (item: typeof recommendations.trainingWindows[number]) => `${weekdays[item.weekday - 1]} ${hour(item.startHour)}–${hour(item.endHour)} · Training window · ${evidence(item)}`,
-    },
-    {
-      title: 'Possible doctor off-day — suggestion only',
-      items: recommendations.possibleDoctorOffDays,
-      description: (item: typeof recommendations.possibleDoctorOffDays[number]) => `${weekdays[item.weekday - 1]} · Possible doctor off-day — suggestion only · ${evidence(item)}`,
     },
     {
       title: 'Peak staffing',
@@ -46,6 +121,7 @@ export function AttendanceRecommendations({ cells, selectedDoctorId }: {
     <Card>
       <CardHeader><CardTitle>Recommendations</CardTitle></CardHeader>
       <CardContent className="grid gap-4 md:grid-cols-2">
+        <OffDayAssessmentPanel assessments={offDayAssessments} regression={regression} />
         {sections.map((section) => (
           <section key={section.title} aria-label={section.title}>
             <h3 className="text-sm font-semibold text-slate-800">{section.title}</h3>
