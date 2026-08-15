@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assessDoctorOffDays,
   buildAttendanceRecommendations,
   normalizeAttendanceHeatmapReport,
   type AttendanceHeatmapCell,
 } from '@/lib/clinic/attendanceHeatmap';
+import type { AttendanceRegressionResult, AttendanceWeekdayForecast } from '@/lib/clinic/attendanceRegression';
+import { fitAttendanceRegression, type AttendanceRegressionObservation } from '@/lib/clinic/attendanceRegression';
 
 const period = {
   startDate: '2026-05-01',
@@ -33,6 +36,99 @@ function cell(overrides: Partial<AttendanceHeatmapCell> = {}): AttendanceHeatmap
     coverage: 'complete',
     ...overrides,
   };
+}
+
+function forecast(weekday: AttendanceWeekdayForecast['weekday'], overrides: Partial<AttendanceWeekdayForecast> = {}): AttendanceWeekdayForecast {
+  const expectedTotal = weekday * 10;
+  const expectedVisits = weekday * 5;
+  return {
+    weekday,
+    expectedTotal,
+    lowerPrediction: expectedTotal - 1,
+    upperPrediction: expectedTotal + 1,
+    highestExpectedHour: {
+      weekday,
+      hour: 8,
+      expectedVisits,
+      lowerPrediction: expectedVisits - 1,
+      upperPrediction: expectedVisits + 1,
+    },
+    highestObservedPeak: weekday * 10,
+    averageWaitMinutes: 10,
+    comparableDates: 12,
+    backupCoverageRate: 1,
+    ...overrides,
+  };
+}
+
+function readyRegression(target: Partial<AttendanceWeekdayForecast> = {}): Extract<AttendanceRegressionResult, { status: 'ready' }> {
+  const weekdays = [forecast(1, {
+    expectedTotal: 1,
+    lowerPrediction: 0.5,
+    upperPrediction: 1.5,
+    highestExpectedHour: { weekday: 1, hour: 8, expectedVisits: 0.5, lowerPrediction: 0.1, upperPrediction: 0.6 },
+    highestObservedPeak: 1,
+    ...target,
+  }), forecast(2), forecast(3), forecast(4)];
+  return {
+    status: 'ready',
+    diagnostics: {
+      family: 'poisson', converged: true, iterations: 1, usableWeeks: 12,
+      observationCount: 48, dispersion: 0, warnings: [],
+    },
+    hourly: weekdays.map(day => day.highestExpectedHour),
+    weekdays,
+  };
+}
+
+function assessmentCells(): AttendanceHeatmapCell[] {
+  return [1, 2, 3, 4, 5, 6, 7].map(weekday => cell({ weekday: weekday as AttendanceHeatmapCell['weekday'] }));
+}
+
+function regressionDate(week: number, weekday: number): string {
+  return new Date(Date.UTC(2026, 7, 3 + (week * 7) + (weekday - 1))).toISOString().slice(0, 10);
+}
+
+function lowAverageHighPeakObservations(): AttendanceRegressionObservation[] {
+  return Array.from({ length: 12 }, (_, week) => [1, 2, 3, 4, 5, 6, 7].flatMap(weekday => [8, 9].map(hour => ({
+    date: regressionDate(week, weekday),
+    weekday: weekday as AttendanceRegressionObservation['weekday'],
+    hour,
+    visits: weekday === 1 ? hour === 9 && week % 3 === 0 ? 14 : 0 : weekday === 6 ? 4 : 3,
+    averageWaitMinutes: 15,
+    waitMeasuredVisits: 1,
+    doctorsRostered: 1 + ((week + weekday + hour) % 2),
+    selectedDoctorScheduled: (week + weekday) % 3 === 0,
+    backupDoctorCovered: ((week * 2) + weekday + hour) % 4 === 0,
+  })))).flat();
+}
+
+function assessmentFor(scenario: string) {
+  const target = (() => {
+    switch (scenario) {
+      case 'fewer than 8 comparable dates': return { comparableDates: 7 };
+      case 'upper daily prediction reaches the busy-day threshold': return { upperPrediction: 30 };
+      case 'predicted hour enters the busiest quartile': return {
+        highestExpectedHour: { weekday: 1 as const, hour: 8, expectedVisits: 15, lowerPrediction: 14, upperPrediction: 16 },
+      };
+      case 'observed peak enters the busiest observed-peak quartile': return { highestObservedPeak: 30 };
+      case 'hourly upper prediction crosses the busy threshold': return {
+        highestExpectedHour: { weekday: 1 as const, hour: 8, expectedVisits: 0.5, lowerPrediction: 0.1, upperPrediction: 15 },
+      };
+      case 'average wait exceeds 45 minutes': return { averageWaitMinutes: 46 };
+      case 'volatility is too high': return { lowerPrediction: 0, upperPrediction: 3 };
+      case 'backup doctor coverage is incomplete': return { backupCoverageRate: 0.99 };
+      default: return {};
+    }
+  })();
+  const regression: AttendanceRegressionResult = scenario === 'fewer than 12 usable weeks'
+    ? {
+      status: 'unavailable',
+      diagnostics: { family: 'poisson', converged: false, iterations: 0, usableWeeks: 11, observationCount: 44, dispersion: 0, warnings: [] },
+      reasons: ['At least 12 usable weeks are required.'],
+    }
+    : readyRegression(target);
+  return assessDoctorOffDays(assessmentCells(), regression, 'doctor-1').find(item => item.weekday === 1)!;
 }
 
 describe('normalizeAttendanceHeatmapReport', () => {
@@ -211,6 +307,100 @@ describe('normalizeAttendanceHeatmapReport', () => {
   });
 });
 
+describe('assessDoctorOffDays', () => {
+  it.each([
+    'fewer than 12 usable weeks',
+    'fewer than 8 comparable dates',
+    'upper daily prediction reaches the busy-day threshold',
+    'predicted hour enters the busiest quartile',
+    'observed peak enters the busiest observed-peak quartile',
+    'hourly upper prediction crosses the busy threshold',
+    'average wait exceeds 45 minutes',
+    'volatility is too high',
+    'backup doctor coverage is incomplete',
+  ])('rejects a weekday when %s', scenario => {
+    expect(assessmentFor(scenario).status).toBe('rejected');
+  });
+
+  it('rejects a low-average weekday with one very high observed peak', () => {
+    const assessment = assessmentFor('observed peak enters the busiest observed-peak quartile');
+
+    expect(assessment).toMatchObject({
+      status: 'rejected',
+      weekday: 1,
+      reasons: expect.arrayContaining(['Observed peak is in the busiest weekday quartile.']),
+    });
+  });
+
+  it('uses the exact insufficient-data copy as the primary reason', () => {
+    expect(assessmentFor('fewer than 12 usable weeks').reasons[0]).toBe('Not enough data for regression recommendation');
+  });
+
+  it('rejects a ready-shaped result with fewer than 12 usable weeks', () => {
+    const regression = readyRegression();
+    regression.diagnostics.usableWeeks = 11;
+
+    expect(assessDoctorOffDays(assessmentCells(), regression)[0]).toMatchObject({
+      status: 'rejected',
+      reasons: ['Not enough data for regression recommendation'],
+    });
+  });
+
+  it('uses all hourly forecasts to reject an hourly upper prediction at the busy threshold', () => {
+    const regression = readyRegression();
+    regression.hourly = [1, 2, 3, 4].map((expectedVisits, index) => ({
+      weekday: (index + 1) as AttendanceHeatmapCell['weekday'], hour: 8, expectedVisits,
+      lowerPrediction: Math.max(0, expectedVisits - 1), upperPrediction: expectedVisits + 1,
+    }));
+    regression.weekdays[0].highestExpectedHour.upperPrediction = 3;
+
+    expect(assessDoctorOffDays(assessmentCells(), regression).find(item => item.weekday === 1)).toMatchObject({
+      status: 'rejected',
+      reasons: expect.arrayContaining(['Hourly upper prediction crosses the busy threshold.']),
+    });
+  });
+
+  it('requires complete backup coverage even when no doctor is selected', () => {
+    const assessment = assessDoctorOffDays(assessmentCells(), readyRegression({ backupCoverageRate: 0.99 }))
+      .find(item => item.weekday === 1)!;
+
+    expect(assessment.status).toBe('rejected');
+  });
+
+  it('ranks passing weekdays by lower-is-safer score and weekday tie-breaker', () => {
+    const regression = readyRegression();
+    regression.weekdays[1] = forecast(2, {
+      expectedTotal: 1,
+      lowerPrediction: 0.5,
+      upperPrediction: 1.5,
+      highestExpectedHour: { weekday: 2, hour: 8, expectedVisits: 0.5, lowerPrediction: 0.1, upperPrediction: 0.6 },
+      highestObservedPeak: 1,
+    });
+    const assessments = assessDoctorOffDays(assessmentCells(), regression, 'doctor-1');
+
+    expect(assessments.filter(item => item.status === 'suggested').map(item => item.weekday)).toEqual([1, 2]);
+    expect(assessments.find(item => item.weekday === 1)?.safetyScore).toBe(assessments.find(item => item.weekday === 2)?.safetyScore);
+  });
+
+  it('rejects the actual low-average weekday with a high observed peak from regression', () => {
+    const result = fitAttendanceRegression(lowAverageHighPeakObservations(), 'doctor-1');
+
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    const assessments = assessDoctorOffDays(assessmentCells(), {
+      ...result,
+      weekdays: result.weekdays.map(forecast => ({ ...forecast, backupCoverageRate: 1 })),
+    }, 'doctor-1');
+
+    expect(assessments).toEqual(expect.arrayContaining([
+      expect.objectContaining({ weekday: 1, status: 'rejected' }),
+    ]));
+    expect(assessments).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ weekday: 1, status: 'suggested' }),
+    ]));
+  });
+});
+
 describe('buildAttendanceRecommendations', () => {
   it('offers a two-hour quiet training window with sample and evidence', () => {
     const recommendations = buildAttendanceRecommendations([
@@ -243,7 +433,7 @@ describe('buildAttendanceRecommendations', () => {
     expect(buildAttendanceRecommendations(insufficient).trainingWindows).toEqual([]);
   });
 
-  it('recommends the lowest-attendance weekday for all doctors at weekday level', () => {
+  it('does not construct average-based doctor off-day suggestions', () => {
     const recommendations = buildAttendanceRecommendations([
       cell({ weekday: 1, hour: 8, totalVisits: 16, averageVisits: 2, peakVisits: 3 }),
       cell({ weekday: 1, hour: 9, totalVisits: 24, averageVisits: 3, peakVisits: 4 }),
@@ -253,12 +443,7 @@ describe('buildAttendanceRecommendations', () => {
       cell({ weekday: 3, hour: 9, totalVisits: 40, averageVisits: 5, peakVisits: 6 }),
     ]);
 
-    expect(recommendations.possibleDoctorOffDays).toEqual([expect.objectContaining({
-      weekday: 2,
-      sampleSize: 8,
-      evidence: expect.objectContaining({ averageVisits: 2, peakVisits: 2 }),
-    })]);
-    expect(recommendations.possibleDoctorOffDays[0]).not.toHaveProperty('hour');
+    expect(recommendations.possibleDoctorOffDays).toEqual([]);
   });
 
   it('suppresses the lowest weekday when its peak hour is in the busiest quartile', () => {
@@ -274,7 +459,7 @@ describe('buildAttendanceRecommendations', () => {
     expect(recommendations.possibleDoctorOffDays).toEqual([]);
   });
 
-  it('requires selected-doctor support on every comparable operating date', () => {
+  it('leaves doctor off-day safety decisions to the regression assessment', () => {
     const supported = [
       cell({ weekday: 2, hour: 8, averageVisits: 1, peakVisits: 2, otherDoctorCoveredOccurrences: 8 }),
       cell({ weekday: 2, hour: 9, averageVisits: 1, peakVisits: 2, otherDoctorCoveredOccurrences: 8 }),
@@ -282,13 +467,7 @@ describe('buildAttendanceRecommendations', () => {
       cell({ weekday: 3, hour: 9, averageVisits: 4, peakVisits: 5, otherDoctorCoveredOccurrences: 8 }),
     ];
 
-    expect(buildAttendanceRecommendations(supported, 'doctor-1').possibleDoctorOffDays).toEqual([
-      expect.objectContaining({
-        weekday: 2,
-        sampleSize: 8,
-        evidence: expect.objectContaining({ otherDoctorCoveredOccurrences: 8 }),
-      }),
-    ]);
+    expect(buildAttendanceRecommendations(supported, 'doctor-1').possibleDoctorOffDays).toEqual([]);
     expect(buildAttendanceRecommendations([
       supported[0],
       cell({ ...supported[1], otherDoctorCoveredOccurrences: 7 }),
@@ -334,5 +513,32 @@ describe('buildAttendanceRecommendations', () => {
       sampleSize: 8,
       evidence: expect.objectContaining({ medianVisits: 2, averageVisits: 2, peakVisits: 6 }),
     })]);
+  });
+
+  it('preserves training, staffing, and unstable-period recommendations when model status changes', () => {
+    const cells = [
+      cell({ weekday: 1, hour: 8, averageVisits: 1, medianVisits: 1, peakVisits: 1 }),
+      cell({ weekday: 1, hour: 9, averageVisits: 1, medianVisits: 1, peakVisits: 2 }),
+      cell({ weekday: 1, hour: 10, averageVisits: 5, medianVisits: 2, peakVisits: 6, averageWaitMinutes: 46 }),
+      cell({ weekday: 2, hour: 8, averageVisits: 4, medianVisits: 2, peakVisits: 5 }),
+    ];
+    const descriptiveLists = (recommendations: ReturnType<typeof buildAttendanceRecommendations>) => ({
+      trainingWindows: recommendations.trainingWindows,
+      peakStaffing: recommendations.peakStaffing,
+      unstablePeaks: recommendations.unstablePeaks,
+    });
+    const before = descriptiveLists(buildAttendanceRecommendations(cells, 'doctor-1'));
+
+    assessDoctorOffDays(cells, readyRegression(), 'doctor-1');
+    const ready = descriptiveLists(buildAttendanceRecommendations(cells, 'doctor-1'));
+    assessDoctorOffDays(cells, {
+      status: 'unavailable',
+      diagnostics: { family: 'poisson', converged: false, iterations: 0, usableWeeks: 11, observationCount: 0, dispersion: 0, warnings: [] },
+      reasons: ['At least 12 usable weeks are required.'],
+    }, 'doctor-1');
+    const unavailable = descriptiveLists(buildAttendanceRecommendations(cells, 'doctor-1'));
+
+    expect(ready).toEqual(before);
+    expect(unavailable).toEqual(before);
   });
 });

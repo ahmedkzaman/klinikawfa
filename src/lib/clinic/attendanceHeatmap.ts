@@ -1,4 +1,8 @@
-import type { AttendanceRegressionObservation } from './attendanceRegression';
+import type {
+  AttendanceRegressionObservation,
+  AttendanceRegressionResult,
+  AttendanceWeekdayForecast,
+} from './attendanceRegression';
 
 export type AttendanceHeatmapCell = {
   weekday: 1 | 2 | 3 | 4 | 5 | 6 | 7;
@@ -57,6 +61,15 @@ type AttendanceRecommendation = {
 
 type AttendanceOffDayRecommendation = Omit<AttendanceRecommendation, 'hour'>;
 
+export type DoctorOffDayAssessment = {
+  status: 'suggested' | 'rejected' | 'unavailable';
+  weekday: AttendanceHeatmapCell['weekday'] | null;
+  forecast: AttendanceWeekdayForecast | null;
+  safetyScore: number | null;
+  reasons: string[];
+  passedChecks: string[];
+};
+
 export type AttendanceRecommendations = {
   trainingWindows: Array<AttendanceRecommendation & { startHour: number; endHour: number }>;
   possibleDoctorOffDays: AttendanceOffDayRecommendation[];
@@ -66,6 +79,10 @@ export type AttendanceRecommendations = {
 
 const MINIMUM_COMPARABLE_OCCURRENCES = 8;
 const MAXIMUM_MODEL_OBSERVATIONS = 52 * 7 * 16;
+const MINIMUM_USABLE_WEEKS = 12;
+const MAX_AVERAGE_WAIT_MINUTES = 45;
+const MIN_COMPARABLE_DATES = 8;
+const MAX_BACKUP_MISS_RATE = 0;
 
 function object(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -277,6 +294,142 @@ function percentile(values: number[], fraction: number): number {
   return sorted[Math.floor((sorted.length - 1) * fraction)];
 }
 
+function normalizeAcrossEligible(values: number[]): number[] {
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  return maximum === minimum ? values.map(() => 0) : values.map(value => (value - minimum) / (maximum - minimum));
+}
+
+function observedPeakPercentile(value: number, peaks: number[]): number {
+  return peaks.filter(peak => peak <= value).length / peaks.length;
+}
+
+function insufficientDataOffDayAssessments(
+  cells: AttendanceHeatmapCell[],
+  forecasts: AttendanceWeekdayForecast[] = [],
+): DoctorOffDayAssessment[] {
+  const assessments = forecasts.length > 0
+    ? forecasts.map(forecast => ({ weekday: forecast.weekday, forecast }))
+    : [...new Set(cells.map(cell => cell.weekday))].sort((left, right) => left - right).map(weekday => ({ weekday, forecast: null }));
+  return (assessments.length > 0 ? assessments : [{ weekday: null, forecast: null }]).map(({ weekday, forecast }) => ({
+    status: 'rejected',
+    weekday,
+    forecast,
+    safetyScore: null,
+    reasons: ['Not enough data for regression recommendation'],
+    passedChecks: [],
+  }));
+}
+
+function unavailableOffDayAssessments(
+  cells: AttendanceHeatmapCell[],
+  regression: Extract<AttendanceRegressionResult, { status: 'unavailable' }>,
+): DoctorOffDayAssessment[] {
+  if (regression.diagnostics.usableWeeks < MINIMUM_USABLE_WEEKS) {
+    return insufficientDataOffDayAssessments(cells);
+  }
+  return [{
+    status: 'unavailable',
+    weekday: null,
+    forecast: null,
+    safetyScore: null,
+    reasons: regression.reasons,
+    passedChecks: [],
+  }];
+}
+
+export function assessDoctorOffDays(
+  cells: AttendanceHeatmapCell[],
+  regression: AttendanceRegressionResult,
+  selectedDoctorId?: string | null,
+): DoctorOffDayAssessment[] {
+  void selectedDoctorId;
+  if (regression.diagnostics.usableWeeks < MINIMUM_USABLE_WEEKS) {
+    return insufficientDataOffDayAssessments(cells, regression.status === 'ready' ? regression.weekdays : []);
+  }
+  if (regression.status !== 'ready') return unavailableOffDayAssessments(cells, regression);
+
+  const forecasts = [...regression.weekdays].sort((left, right) => left.weekday - right.weekday);
+  const busyDailyThreshold = percentile(forecasts.map(day => day.expectedTotal), 0.75);
+  const busyHourlyThreshold = percentile(regression.hourly.map(hour => hour.expectedVisits), 0.75);
+  const observedWeekdayPeaks = forecasts.map(day => day.highestObservedPeak);
+  const observedPeakThreshold = percentile(observedWeekdayPeaks, 0.75);
+  const assessments = forecasts.map(forecast => {
+    const volatility = (forecast.upperPrediction - forecast.lowerPrediction) / Math.max(forecast.expectedTotal, 1);
+    const backupMissRate = 1 - forecast.backupCoverageRate;
+    const reasons: string[] = [];
+    const passedChecks: string[] = [];
+    const check = (passes: boolean, passed: string, rejected: string): void => {
+      if (passes) passedChecks.push(passed);
+      else reasons.push(rejected);
+    };
+
+    check(forecast.comparableDates >= MIN_COMPARABLE_DATES,
+      'At least 8 comparable dates.', 'Fewer than 8 comparable dates.');
+    check(forecast.upperPrediction < busyDailyThreshold,
+      'Daily upper prediction is below the busy-day threshold.', 'Daily upper prediction reaches the busy-day threshold.');
+    check(forecast.highestExpectedHour.expectedVisits < busyHourlyThreshold,
+      'Predicted busiest hour is below the busiest quartile.', 'Predicted busiest hour is in the busiest quartile.');
+    check(forecast.highestObservedPeak < observedPeakThreshold,
+      'Observed peak is below the busiest weekday quartile.', 'Observed peak is in the busiest weekday quartile.');
+    check(forecast.highestExpectedHour.upperPrediction < busyHourlyThreshold,
+      'Hourly upper prediction is below the busy threshold.', 'Hourly upper prediction crosses the busy threshold.');
+    check(forecast.averageWaitMinutes === null || forecast.averageWaitMinutes <= MAX_AVERAGE_WAIT_MINUTES,
+      'Average wait is at most 45 minutes.', 'Average wait exceeds 45 minutes.');
+    check(volatility <= 1,
+      'Prediction volatility is within the safety limit.', 'Prediction volatility is too high.');
+    check(backupMissRate <= MAX_BACKUP_MISS_RATE,
+      'Backup doctor coverage is complete.', 'Backup doctor coverage is incomplete.');
+
+    return {
+      status: reasons.length === 0 ? 'suggested' as const : 'rejected' as const,
+      weekday: forecast.weekday,
+      forecast,
+      safetyScore: null,
+      reasons,
+      passedChecks,
+      components: {
+        predictedDailyAttendance: forecast.expectedTotal,
+        dailyUpperPrediction: forecast.upperPrediction,
+        highestPredictedHour: forecast.highestExpectedHour.expectedVisits,
+        observedPeakPercentile: observedPeakPercentile(forecast.highestObservedPeak, observedWeekdayPeaks),
+        waitingRisk: forecast.averageWaitMinutes ?? 0,
+        volatility,
+        backupRisk: backupMissRate,
+      },
+    };
+  });
+  const suggestions = assessments.filter(item => item.status === 'suggested');
+  const componentNames = [
+    'predictedDailyAttendance', 'dailyUpperPrediction', 'highestPredictedHour',
+    'observedPeakPercentile', 'waitingRisk', 'volatility', 'backupRisk',
+  ] as const;
+  const normalizedComponents = Object.fromEntries(componentNames.map(name => [
+    name,
+    normalizeAcrossEligible(suggestions.map(item => item.components[name])),
+  ])) as Record<typeof componentNames[number], number[]>;
+  suggestions.forEach((suggestion, index) => {
+    suggestion.safetyScore = (0.30 * normalizedComponents.predictedDailyAttendance[index])
+      + (0.25 * normalizedComponents.dailyUpperPrediction[index])
+      + (0.15 * normalizedComponents.highestPredictedHour[index])
+      + (0.10 * normalizedComponents.observedPeakPercentile[index])
+      + (0.10 * normalizedComponents.waitingRisk[index])
+      + (0.05 * normalizedComponents.volatility[index])
+      + (0.05 * normalizedComponents.backupRisk[index]);
+  });
+
+  return assessments
+    .map(({ components: _components, ...assessment }) => assessment)
+    .sort((left, right) => {
+      if (left.status === 'suggested' && right.status !== 'suggested') return -1;
+      if (left.status !== 'suggested' && right.status === 'suggested') return 1;
+      if (left.status === 'suggested' && right.status === 'suggested') {
+        return (left.safetyScore ?? Infinity) - (right.safetyScore ?? Infinity) || (left.weekday ?? Infinity) - (right.weekday ?? Infinity);
+      }
+      return (left.weekday ?? Infinity) - (right.weekday ?? Infinity);
+    });
+}
+
 export function buildAttendanceRecommendations(
   cells: AttendanceHeatmapCell[],
   selectedDoctorId?: string | null,
@@ -310,48 +463,11 @@ export function buildAttendanceRecommendations(
     }
   }
 
-  const weekdayCandidates = ([1, 2, 3, 4, 5, 6, 7] as const).flatMap((weekday) => {
-    const rosterBackedDay = cells.filter((cell) => cell.weekday === weekday && cell.operatingOccurrences > 0);
-    if (rosterBackedDay.length === 0 || rosterBackedDay.some((cell) => !eligible(cell))) return [];
-    const day = rosterBackedDay;
-    const averageVisits = day.reduce((sum, cell) => sum + (cell.averageVisits as number), 0);
-    const medianVisits = day.every((cell) => cell.medianVisits !== null)
-      ? day.reduce((sum, cell) => sum + (cell.medianVisits as number), 0)
-      : null;
-    const peakVisits = day.reduce<number | null>((peak, cell) => cell.peakVisits === null
-      ? peak
-      : Math.max(peak ?? cell.peakVisits, cell.peakVisits), null);
-    const waitMeasuredVisits = day.reduce((sum, cell) => sum + cell.waitMeasuredVisits, 0);
-    const averageWaitMinutes = waitMeasuredVisits === 0
-      ? null
-      : day.reduce((sum, cell) => sum + (cell.averageWaitMinutes ?? 0) * cell.waitMeasuredVisits, 0) / waitMeasuredVisits;
-    return [{
-      weekday,
-      averageVisits,
-      busiestHourAverage: Math.max(...day.map((cell) => cell.averageVisits as number)),
-      sampleSize: Math.min(...day.map((cell) => cell.operatingOccurrences)),
-      fullySupported: day.every((cell) => cell.otherDoctorCoveredOccurrences >= cell.operatingOccurrences),
-      evidence: {
-        averageVisits,
-        medianVisits,
-        peakVisits,
-        averageWaitMinutes,
-        otherDoctorCoveredOccurrences: Math.min(...day.map((cell) => cell.otherDoctorCoveredOccurrences)),
-      },
-    }];
-  });
-  const lowestWeekdayAverage = weekdayCandidates.length === 0
-    ? null
-    : Math.min(...weekdayCandidates.map((day) => day.averageVisits));
-  const possibleDoctorOffDays = weekdayCandidates
-    .filter((day) => day.averageVisits === lowestWeekdayAverage)
-    .filter((day) => busyThreshold !== null && day.busiestHourAverage < busyThreshold)
-    .filter((day) => !selectedDoctorId || day.fullySupported)
-    .map(({ weekday, sampleSize, evidence: dayEvidence }) => ({ weekday, sampleSize, evidence: dayEvidence }));
+  void selectedDoctorId;
 
   return {
     trainingWindows,
-    possibleDoctorOffDays,
+    possibleDoctorOffDays: [],
     peakStaffing: candidates.filter(cell => (busyThreshold !== null && (cell.averageVisits as number) >= busyThreshold)
       || (cell.averageWaitMinutes !== null && cell.averageWaitMinutes > 45)).map(recommendation),
     unstablePeaks: candidates.filter(cell => cell.peakVisits !== null && cell.medianVisits !== null
