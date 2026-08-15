@@ -75,6 +75,9 @@ export function usePatientVisitHistory(patientId: string | null) {
         )
         .eq('patient_id', patientId as string)
         .is('deleted_at', null)
+        // Special-admin RLS can expose voided rows for audit purposes. Keep
+        // those rows out of patient-facing history at the query boundary.
+        .is('consultations.consultation_items.deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(10);
 

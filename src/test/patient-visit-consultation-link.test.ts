@@ -17,6 +17,10 @@ describe('patient visit consultation links', () => {
     expect(source).toContain('getRecordedDiagnosisLabels');
   });
 
+  it('filters voided consultation items at the database query boundary', () => {
+    expect(historyHookSource).toContain(".is('consultations.consultation_items.deleted_at', null)");
+  });
+
   it.each(['resident_doctor', 'doctor_admin'] as const)(
     'allows %s to open the exact visit consultation',
     (role) => {

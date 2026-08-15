@@ -153,6 +153,7 @@ export function usePatientVisitPaymentHistory(patientId: string | null | undefin
         `)
         .eq('patient_id', patientId!)
         .is('deleted_at', null)
+        .is('consultations.consultation_items.deleted_at', null)
         .order('created_at', { ascending: false });
       if (error) throw error;
 
