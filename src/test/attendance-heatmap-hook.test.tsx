@@ -32,6 +32,17 @@ const validReport = {
   cells: [],
   doctors: [],
   warnings: [],
+  observations: [{
+    date: '2026-08-03',
+    weekday: 1,
+    hour: 8,
+    visits: 4,
+    averageWaitMinutes: 18.5,
+    waitMeasuredVisits: 4,
+    doctorsRostered: 2,
+    selectedDoctorScheduled: true,
+    backupDoctorCovered: true,
+  }],
 };
 
 function useAttendanceHeatmapOptions(input: Parameters<typeof useAttendanceHeatmap>[0]) {
@@ -91,6 +102,11 @@ describe('useAttendanceHeatmap', () => {
         comparisonStartDate: '2026-03-02',
         comparisonEndDate: '2026-05-24',
       },
+      observations: [{
+        date: '2026-08-03', weekday: 1, hour: 8, visits: 4,
+        averageWaitMinutes: 18.5, waitMeasuredVisits: 4,
+        doctorsRostered: 2, selectedDoctorScheduled: true, backupDoctorCovered: true,
+      }],
     });
     expect(query.queryKey).toEqual(['clinical-attendance-heatmap', '2026-05-25', '2026-08-16', 'doctor-1']);
     expect(rpc).toHaveBeenCalledWith('get_clinical_attendance_heatmap', {
@@ -98,6 +114,7 @@ describe('useAttendanceHeatmap', () => {
       _end_date: '2026-08-16',
       _doctor_id: 'doctor-1',
     });
+    expect(rpc).toHaveBeenCalledTimes(1);
   });
 
   it('uses the all-doctors cache key and null doctor RPC parameter', async () => {

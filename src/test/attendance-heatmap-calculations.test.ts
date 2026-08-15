@@ -36,6 +36,67 @@ function cell(overrides: Partial<AttendanceHeatmapCell> = {}): AttendanceHeatmap
 }
 
 describe('normalizeAttendanceHeatmapReport', () => {
+  it('normalizes aggregate attendance model observations', () => {
+    const result = normalizeAttendanceHeatmapReport({
+      period,
+      cells: [],
+      observations: [{
+        date: '2026-08-03',
+        weekday: 1,
+        hour: 8,
+        visits: 4,
+        averageWaitMinutes: 18.5,
+        waitMeasuredVisits: 4,
+        doctorsRostered: 2,
+        selectedDoctorScheduled: true,
+        backupDoctorCovered: true,
+      }],
+    });
+
+    expect(result.observations).toEqual([{
+      date: '2026-08-03', weekday: 1, hour: 8, visits: 4,
+      averageWaitMinutes: 18.5, waitMeasuredVisits: 4,
+      doctorsRostered: 2, selectedDoctorScheduled: true, backupDoctorCovered: true,
+    }]);
+  });
+
+  it('discards malformed model observations without discarding descriptive cells', () => {
+    const result = normalizeAttendanceHeatmapReport({
+      period,
+      cells: [{ weekday: 1, hour: 8, totalVisits: 2, operatingOccurrences: 8, waitMeasuredVisits: 2, otherDoctorCoveredOccurrences: 0 }],
+      observations: [
+        { date: '2026-02-30', weekday: 1, hour: 8, visits: 1, averageWaitMinutes: null, waitMeasuredVisits: 0, doctorsRostered: 1, selectedDoctorScheduled: false, backupDoctorCovered: false },
+        { date: '2026-08-03', weekday: 1, hour: 24, visits: 1, averageWaitMinutes: null, waitMeasuredVisits: 0, doctorsRostered: 1, selectedDoctorScheduled: false, backupDoctorCovered: false },
+        { date: '2026-08-03', weekday: 8, hour: 8, visits: 1, averageWaitMinutes: null, waitMeasuredVisits: 0, doctorsRostered: 1, selectedDoctorScheduled: false, backupDoctorCovered: false },
+        { date: '2026-08-03', weekday: 1, hour: 8, visits: -1, averageWaitMinutes: null, waitMeasuredVisits: 0, doctorsRostered: 1, selectedDoctorScheduled: false, backupDoctorCovered: false },
+        { date: '2026-08-03', weekday: 1, hour: 8, visits: 1, averageWaitMinutes: null, waitMeasuredVisits: -1, doctorsRostered: 1, selectedDoctorScheduled: false, backupDoctorCovered: false },
+        { date: '2026-08-03', weekday: 1, hour: 8, visits: 1, averageWaitMinutes: null, waitMeasuredVisits: 0, doctorsRostered: -1, selectedDoctorScheduled: false, backupDoctorCovered: false },
+        { date: '2026-08-03', weekday: 1, hour: 8, visits: 1, averageWaitMinutes: null, waitMeasuredVisits: 0, doctorsRostered: 0, selectedDoctorScheduled: false, backupDoctorCovered: false },
+        { date: '2026-08-03', weekday: 1, hour: 8, visits: 1, averageWaitMinutes: null, waitMeasuredVisits: 0, doctorsRostered: 1, selectedDoctorScheduled: 'false', backupDoctorCovered: false },
+        { date: '2026-08-03', weekday: 1, hour: 8, visits: 1, averageWaitMinutes: null, waitMeasuredVisits: 0, doctorsRostered: 1, selectedDoctorScheduled: false, backupDoctorCovered: 'false' },
+      ],
+    });
+
+    expect(result.cells).toHaveLength(1);
+    expect(result.observations).toEqual([]);
+    expect(result.warnings).toContain('Malformed attendance model observations were discarded.');
+  });
+
+  it('caps model observations and warns when the payload exceeds 52 weeks of roster slots', () => {
+    const observation = {
+      date: '2026-08-03', weekday: 1, hour: 8, visits: 1,
+      averageWaitMinutes: null, waitMeasuredVisits: 0,
+      doctorsRostered: 1, selectedDoctorScheduled: false, backupDoctorCovered: false,
+    };
+    const result = normalizeAttendanceHeatmapReport({
+      period,
+      observations: Array.from({ length: 5_825 }, () => observation),
+    });
+
+    expect(result.observations).toHaveLength(5_824);
+    expect(result.warnings).toContain('Attendance model observations were truncated.');
+  });
+
   it('drops out-of-range cells and normalizes malformed metrics without inventing nullable values', () => {
     const result = normalizeAttendanceHeatmapReport({
       period,
@@ -83,6 +144,7 @@ describe('normalizeAttendanceHeatmapReport', () => {
       })],
       doctors: [],
       hasAttendanceData: true,
+      observations: [],
       warnings: ['limited roster data'],
     });
   });

@@ -1,3 +1,5 @@
+import type { AttendanceRegressionObservation } from './attendanceRegression';
+
 export type AttendanceHeatmapCell = {
   weekday: 1 | 2 | 3 | 4 | 5 | 6 | 7;
   hour: number;
@@ -32,6 +34,7 @@ export type AttendanceHeatmapReport = {
     timezone: 'Asia/Kuala_Lumpur';
   };
   cells: AttendanceHeatmapCell[];
+  observations: AttendanceRegressionObservation[];
   hasAttendanceData: boolean;
   doctors: Array<{ id: string; name: string }>;
   warnings: string[];
@@ -62,6 +65,7 @@ export type AttendanceRecommendations = {
 };
 
 const MINIMUM_COMPARABLE_OCCURRENCES = 8;
+const MAXIMUM_MODEL_OBSERVATIONS = 52 * 7 * 16;
 
 function object(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -72,6 +76,11 @@ function object(value: unknown): Record<string, unknown> | null {
 function valueOf(source: Record<string, unknown>, camelCase: string): unknown {
   const snakeCase = camelCase.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
   return source[camelCase] ?? source[snakeCase];
+}
+
+function nullableValueOf(source: Record<string, unknown>, camelCase: string): unknown {
+  const snakeCase = camelCase.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+  return camelCase in source ? source[camelCase] : source[snakeCase];
 }
 
 function finiteNumber(value: unknown, fallback: number | null = null): number | null {
@@ -88,6 +97,17 @@ function requiredNonNegativeNumber(value: unknown): number | null {
 function nullableNumber(value: unknown): number | null {
   const number = finiteNumber(value);
   return number === null || number < 0 ? null : number;
+}
+
+function isoDate(value: unknown): string | null {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : null;
+}
+
+function weekdayFromIsoDate(date: string): number {
+  const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay();
+  return weekday === 0 ? 7 : weekday;
 }
 
 function periodFrom(raw: Record<string, unknown>): AttendanceHeatmapReport['period'] {
@@ -159,24 +179,78 @@ function normalizeCell(raw: unknown): AttendanceHeatmapCell | null {
   };
 }
 
+function normalizeObservation(raw: unknown): AttendanceRegressionObservation | null {
+  const source = object(raw);
+  if (!source) return null;
+  const date = isoDate(valueOf(source, 'date'));
+  const weekday = finiteNumber(valueOf(source, 'weekday'));
+  const hour = finiteNumber(valueOf(source, 'hour'));
+  const visits = requiredNonNegativeNumber(valueOf(source, 'visits'));
+  const rawAverageWaitMinutes = nullableValueOf(source, 'averageWaitMinutes');
+  const averageWaitMinutes = rawAverageWaitMinutes === null
+    ? null
+    : nullableNumber(rawAverageWaitMinutes);
+  const waitMeasuredVisits = requiredNonNegativeNumber(valueOf(source, 'waitMeasuredVisits'));
+  const doctorsRostered = requiredNonNegativeNumber(valueOf(source, 'doctorsRostered'));
+  const selectedDoctorScheduled = valueOf(source, 'selectedDoctorScheduled');
+  const backupDoctorCovered = valueOf(source, 'backupDoctorCovered');
+
+  if (date === null
+    || weekday === null || !Number.isInteger(weekday) || weekday < 1 || weekday > 7 || weekday !== weekdayFromIsoDate(date)
+    || hour === null || !Number.isInteger(hour) || hour < 0 || hour > 23
+    || visits === null || waitMeasuredVisits === null || doctorsRostered === null || doctorsRostered <= 0
+    || averageWaitMinutes === null && rawAverageWaitMinutes !== null
+    || typeof selectedDoctorScheduled !== 'boolean' || typeof backupDoctorCovered !== 'boolean') return null;
+
+  return {
+    date,
+    weekday: weekday as AttendanceRegressionObservation['weekday'],
+    hour,
+    visits,
+    averageWaitMinutes,
+    waitMeasuredVisits,
+    doctorsRostered,
+    selectedDoctorScheduled,
+    backupDoctorCovered,
+  };
+}
+
 export function normalizeAttendanceHeatmapReport(raw: unknown): AttendanceHeatmapReport {
   const source = object(raw) ?? {};
   const rawCells = valueOf(source, 'cells');
   const rawDoctors = valueOf(source, 'doctors');
   const rawWarnings = valueOf(source, 'warnings');
+  const rawObservations = valueOf(source, 'observations');
   const cells = Array.isArray(rawCells) ? rawCells.flatMap(cell => {
     const normalized = normalizeCell(cell);
     return normalized ? [normalized] : [];
   }) : [];
+  const normalizedObservations = Array.isArray(rawObservations)
+    ? rawObservations.flatMap(observation => {
+      const normalized = normalizeObservation(observation);
+      return normalized ? [normalized] : [];
+    })
+    : [];
+  const observationWarnings = Array.isArray(rawObservations) && normalizedObservations.length !== rawObservations.length
+    ? ['Malformed attendance model observations were discarded.']
+    : [];
+  const observations = normalizedObservations.slice(0, MAXIMUM_MODEL_OBSERVATIONS);
+  if (normalizedObservations.length > MAXIMUM_MODEL_OBSERVATIONS) {
+    observationWarnings.push('Attendance model observations were truncated.');
+  }
   return {
     period: periodFrom(source),
     cells,
+    observations,
     hasAttendanceData: cells.some((cell) => cell.rawTotalVisits > 0 || cell.operatingOccurrences > 0),
     doctors: Array.isArray(rawDoctors) ? rawDoctors.flatMap(doctor => {
       const value = object(doctor);
       return value && typeof value.id === 'string' && typeof value.name === 'string' ? [{ id: value.id, name: value.name }] : [];
     }) : [],
-    warnings: Array.isArray(rawWarnings) ? rawWarnings.filter((warning): warning is string => typeof warning === 'string') : [],
+    warnings: [
+      ...(Array.isArray(rawWarnings) ? rawWarnings.filter((warning): warning is string => typeof warning === 'string') : []),
+      ...observationWarnings,
+    ],
   };
 }
 
