@@ -116,11 +116,25 @@ describe('fitAttendanceRegression', () => {
   it('encodes weekday, hour, month, trend, roster count, selected doctor, and backup coverage', () => {
     const matrix = buildAttendanceDesignMatrix(syntheticObservations({ weeks: 12 }));
     expect(matrix.featureNames).toEqual(expect.arrayContaining([
-      'weekday_2', 'hour_9', 'month_8', 'week_trend',
+      'weekday_2', 'hour_9', 'month_9', 'week_trend',
       'doctors_rostered', 'selected_doctor_scheduled', 'backup_doctor_covered',
     ]));
+    expect(matrix.featureNames).not.toContain('month_8');
     expect(matrix.featureNames[0]).toBe('intercept');
     expect(matrix.values.every(row => row.length === matrix.featureNames.length)).toBe(true);
+  });
+
+  it('uses the earliest observed month as a stable reference regardless of input order', () => {
+    const augustAndSeptember = [
+      observation({ date: '2026-08-03', weekday: 1, hour: 8 }),
+      observation({ date: '2026-09-01', weekday: 2, hour: 9 }),
+    ];
+    const inOrder = buildAttendanceDesignMatrix(augustAndSeptember);
+    const shuffled = buildAttendanceDesignMatrix([...augustAndSeptember].reverse());
+
+    expect(inOrder.featureNames).not.toContain('month_8');
+    expect(inOrder.featureNames).toContain('month_9');
+    expect(shuffled.featureNames).toEqual(inOrder.featureNames);
   });
 
   it('uses the Poisson limit for stable equidispersed counts', () => {

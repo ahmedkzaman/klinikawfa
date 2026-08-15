@@ -105,7 +105,7 @@ function featureNames(observations: AttendanceRegressionObservation[]): string[]
   const weekdays = new Set(observations.map(observation => observation.weekday));
   const hours = new Set(observations.map(observation => observation.hour));
   const months = new Set(observations.map(observation => Number(observation.date.slice(5, 7))));
-  const monthReference = months.has(1) ? 1 : Math.max(...months);
+  const monthReference = Math.min(...months);
   return [
     'intercept',
     ...[2, 3, 4, 5, 6, 7].filter(weekday => weekdays.has(weekday as AttendanceRegressionObservation['weekday'])).map(weekday => `weekday_${weekday}`),
