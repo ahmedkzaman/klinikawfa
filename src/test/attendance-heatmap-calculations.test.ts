@@ -88,13 +88,48 @@ describe('normalizeAttendanceHeatmapReport', () => {
     const result = normalizeAttendanceHeatmapReport({
       period,
       cells: [
-        { weekday: 2, hour: 9, averageVisits: 3, comparisonAverageVisits: 2 },
-        { weekday: 2, hour: 10, averageVisits: 3, comparisonAverageVisits: 0 },
+        { weekday: 2, hour: 9, totalVisits: 24, operatingOccurrences: 8, waitMeasuredVisits: 8, otherDoctorCoveredOccurrences: 0, averageVisits: 3, comparisonAverageVisits: 2 },
+        { weekday: 2, hour: 10, totalVisits: 24, operatingOccurrences: 8, waitMeasuredVisits: 8, otherDoctorCoveredOccurrences: 0, averageVisits: 3, comparisonAverageVisits: 0 },
       ],
     });
 
     expect(result.cells[0]).toMatchObject({ comparisonAbsoluteChange: 1, comparisonPercentChange: 50 });
     expect(result.cells[1]).toMatchObject({ comparisonAbsoluteChange: 3, comparisonPercentChange: null });
+  });
+
+  it('rejects cells with missing, malformed, or negative required aggregate counts', () => {
+    const result = normalizeAttendanceHeatmapReport({
+      period,
+      cells: [
+        { weekday: 1, hour: 8, operatingOccurrences: 8, waitMeasuredVisits: 4, otherDoctorCoveredOccurrences: 0 },
+        { weekday: 1, hour: 9, totalVisits: 2, operatingOccurrences: 'eight', waitMeasuredVisits: 4, otherDoctorCoveredOccurrences: 0 },
+        { weekday: 1, hour: 10, totalVisits: 2, operatingOccurrences: 8, waitMeasuredVisits: -1, otherDoctorCoveredOccurrences: 0 },
+        { weekday: 1, hour: 11, totalVisits: 2, operatingOccurrences: 8, waitMeasuredVisits: 4, otherDoctorCoveredOccurrences: null },
+      ],
+    });
+
+    expect(result.cells).toEqual([]);
+  });
+
+  it('rejects malformed date summaries instead of reporting zero visits', () => {
+    const result = normalizeAttendanceHeatmapReport({
+      period,
+      cells: [{
+        weekday: 1,
+        hour: 8,
+        totalVisits: 2,
+        operatingOccurrences: 8,
+        waitMeasuredVisits: 2,
+        otherDoctorCoveredOccurrences: 0,
+        dates: [
+          { date: '2026-05-05', visits: 'bad' },
+          { date: '2026-05-06', visits: -1 },
+          { date: '2026-05-07', visits: 2 },
+        ],
+      }],
+    });
+
+    expect(result.cells[0]?.dates).toEqual([{ date: '2026-05-07', visits: 2, averageWaitMinutes: null }]);
   });
 });
 

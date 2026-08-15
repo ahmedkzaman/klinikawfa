@@ -74,8 +74,9 @@ function finiteNumber(value: unknown, fallback: number | null = null): number | 
   return Number.isFinite(number) ? number : fallback;
 }
 
-function nonNegativeNumber(value: unknown): number {
-  return Math.max(0, finiteNumber(value, 0) ?? 0);
+function requiredNonNegativeNumber(value: unknown): number | null {
+  const number = finiteNumber(value);
+  return number === null || number < 0 ? null : number;
 }
 
 function nullableNumber(value: unknown): number | null {
@@ -110,29 +111,35 @@ function normalizeCell(raw: unknown): AttendanceHeatmapCell | null {
   const comparisonPercentChange = comparisonAbsoluteChange === null || comparisonAverageVisits === 0
     ? null
     : (comparisonAbsoluteChange / comparisonAverageVisits) * 100;
-  const operatingOccurrences = nonNegativeNumber(valueOf(source, 'operatingOccurrences'));
+  const totalVisits = requiredNonNegativeNumber(valueOf(source, 'totalVisits'));
+  const operatingOccurrences = requiredNonNegativeNumber(valueOf(source, 'operatingOccurrences'));
+  const waitMeasuredVisits = requiredNonNegativeNumber(valueOf(source, 'waitMeasuredVisits'));
+  const otherDoctorCoveredOccurrences = requiredNonNegativeNumber(valueOf(source, 'otherDoctorCoveredOccurrences'));
+  if (totalVisits === null || operatingOccurrences === null || waitMeasuredVisits === null || otherDoctorCoveredOccurrences === null) return null;
   const rawDates = valueOf(source, 'dates');
 
   return {
     weekday: weekday as AttendanceHeatmapCell['weekday'],
     hour,
-    totalVisits: nonNegativeNumber(valueOf(source, 'totalVisits')),
+    totalVisits,
     operatingOccurrences,
     averageVisits,
     medianVisits: nullableNumber(valueOf(source, 'medianVisits')),
     peakVisits: nullableNumber(valueOf(source, 'peakVisits')),
     averageWaitMinutes: nullableNumber(valueOf(source, 'averageWaitMinutes')),
-    waitMeasuredVisits: nonNegativeNumber(valueOf(source, 'waitMeasuredVisits')),
+    waitMeasuredVisits,
     comparisonAverageVisits,
     comparisonAbsoluteChange,
     comparisonPercentChange,
-    otherDoctorCoveredOccurrences: nonNegativeNumber(valueOf(source, 'otherDoctorCoveredOccurrences')),
+    otherDoctorCoveredOccurrences,
     dates: Array.isArray(rawDates) ? rawDates.flatMap(item => {
       const date = object(item);
       if (!date || typeof date.date !== 'string') return [];
+      const visits = requiredNonNegativeNumber(valueOf(date, 'visits'));
+      if (visits === null) return [];
       return [{
         date: date.date,
-        visits: nonNegativeNumber(valueOf(date, 'visits')),
+        visits,
         averageWaitMinutes: nullableNumber(valueOf(date, 'averageWaitMinutes')),
       }];
     }) : [],
