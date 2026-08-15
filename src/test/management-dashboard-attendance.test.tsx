@@ -41,7 +41,7 @@ const attendanceReport = {
     startDate: '2026-05-25', endDate: '2026-08-16',
     comparisonStartDate: '2026-03-02', comparisonEndDate: '2026-05-24', timezone: 'Asia/Kuala_Lumpur' as const,
   },
-  doctors: [],
+  doctors: [{ id: 'doctor-1', name: 'Dr Aina' }],
   warnings: [],
   cells: [],
   hasAttendanceData: false,
@@ -102,14 +102,21 @@ describe('ManagementDashboard attendance integration', () => {
     expect(screen.getByRole('region', { name: /growth & marketing/i })).toBeInTheDocument();
   });
 
-  it('refetches active attendance data with the dashboard refresh control', async () => {
+  it('refreshes attendance exactly once without resetting its selected filters', async () => {
     renderDashboard();
 
     await waitFor(() => expect(rpc).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText(/attendance period/i), { target: { value: 'month' } });
+    await waitFor(() => expect(rpc).toHaveBeenCalledTimes(2));
+    fireEvent.change(screen.getByLabelText(/treating doctor/i), { target: { value: 'doctor-1' } });
+    await waitFor(() => expect(rpc).toHaveBeenCalledTimes(3));
+
     fireEvent.click(screen.getByRole('button', { name: /refresh dashboard/i }));
 
     expect(reportRefetch).toHaveBeenCalledTimes(1);
     expect(manualRefetch).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(rpc).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(rpc).toHaveBeenCalledTimes(4));
+    expect(screen.getByLabelText(/attendance period/i)).toHaveValue('month');
+    expect(screen.getByLabelText(/treating doctor/i)).toHaveValue('doctor-1');
   });
 });

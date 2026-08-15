@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const useAttendanceHeatmap = vi.hoisted(() => vi.fn());
@@ -102,6 +102,24 @@ const suggestedAssessment = {
   },
 };
 
+function unavailableRegression(reason: string, usableWeeks = 12) {
+  return {
+    status: 'unavailable' as const,
+    diagnostics: {
+      family: 'negative_binomial' as const, converged: false, iterations: 50,
+      usableWeeks, observationCount: 96, dispersion: Number.NaN, warnings: [reason],
+    },
+    reasons: [reason],
+  };
+}
+
+function unavailableAssessmentFromModel(regression: { status: string; reasons?: string[] }) {
+  return [{
+    status: 'unavailable' as const, weekday: null, forecast: null, safetyScore: null,
+    reasons: regression.status === 'unavailable' ? regression.reasons ?? [] : [], passedChecks: [],
+  }];
+}
+
 describe('PatientAttendanceHeatmap', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -179,6 +197,18 @@ describe('PatientAttendanceHeatmap', () => {
     expect(screen.getByText(/Planning aid only — confirm against roster and current operations\./i)).toBeInTheDocument();
   });
 
+  it('labels only the lowest-score safe candidate as ranked safest', () => {
+    attendanceModel.assessDoctorOffDays.mockReturnValue([
+      { ...suggestedAssessment, weekday: 1, safetyScore: 0.7, forecast: { ...suggestedAssessment.forecast, weekday: 1, expectedTotal: 7.8 } },
+      { ...suggestedAssessment, weekday: 2, safetyScore: 0.1, forecast: { ...suggestedAssessment.forecast, weekday: 2, expectedTotal: 3.2 } },
+    ]);
+    render(<PatientAttendanceHeatmap />);
+
+    expect(screen.getByText(/Ranked safest: safety score 0\.1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Predicted visits:\s*3\.2/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Predicted visits:\s*7\.8/i)).not.toBeInTheDocument();
+  });
+
   it('shows the highest-priority safety reasons when no weekday is safe', () => {
     attendanceModel.assessDoctorOffDays.mockReturnValue([{
       ...suggestedAssessment,
@@ -189,24 +219,40 @@ describe('PatientAttendanceHeatmap', () => {
     render(<PatientAttendanceHeatmap />);
 
     expect(screen.getByText('No safe off-day recommendation')).toBeInTheDocument();
-    expect(screen.getAllByText('Average wait exceeds 45 minutes.').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Backup doctor coverage is incomplete.').length).toBeGreaterThan(0);
+    const priorityReasons = within(screen.getByLabelText(/highest-priority safety reasons/i));
+    expect(priorityReasons.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      'Backup doctor coverage is incomplete.',
+      'Average wait exceeds 45 minutes.',
+      'Prediction volatility is too high.',
+    ]);
     expect(screen.getByLabelText(/safety checks/i)).toBeInTheDocument();
     expect(screen.getByText('View all checks')).toBeInTheDocument();
   });
 
   it.each([
-    ['fewer than 12 weeks', ['Not enough data for regression recommendation']],
-    ['a non-convergent model', ['Regression model did not converge']],
-  ])('keeps the descriptive heatmap available with %s', (_scenario, reasons) => {
-    attendanceModel.assessDoctorOffDays.mockReturnValue([{
-      status: 'unavailable', weekday: null, forecast: null, safetyScore: null, reasons, passedChecks: [],
-    }]);
+    ['fewer than 12 weeks', unavailableRegression('Not enough data for regression recommendation', 11)],
+    ['a non-convergent model', unavailableRegression('Regression model did not converge')],
+  ])('keeps the descriptive heatmap available when regression returns unavailable for %s', (_scenario, regression) => {
+    attendanceModel.fitAttendanceRegression.mockReturnValue(regression);
+    attendanceModel.assessDoctorOffDays.mockImplementation((_cells, result) => unavailableAssessmentFromModel(result));
     render(<PatientAttendanceHeatmap />);
 
     expect(screen.getByText('No safe off-day recommendation')).toBeInTheDocument();
-    expect(screen.getAllByText(reasons[0]).length).toBeGreaterThan(0);
+    expect(attendanceModel.fitAttendanceRegression).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByText(regression.reasons[0]).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText(/attendance heatmap grid/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Covered average/i).length).toBeGreaterThan(0);
+  });
+
+  it('keeps the descriptive heatmap visible when regression throws unexpectedly', () => {
+    attendanceModel.fitAttendanceRegression.mockImplementation(() => { throw new Error('Unexpected numerical failure'); });
+    attendanceModel.assessDoctorOffDays.mockImplementation((_cells, regression) => unavailableAssessmentFromModel(regression));
+    render(<PatientAttendanceHeatmap />);
+
+    expect(attendanceModel.fitAttendanceRegression).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('No safe off-day recommendation')).toBeInTheDocument();
+    expect(screen.getAllByText(/Attendance regression is unavailable/i).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText(/attendance heatmap grid/i)).toBeInTheDocument();
   });
 
   it('shows missing backup coverage for the selected doctor', () => {

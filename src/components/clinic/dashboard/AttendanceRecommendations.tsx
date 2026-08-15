@@ -23,20 +23,45 @@ function decimal(value: number): string {
   return value.toFixed(1);
 }
 
-function offDayReasons(assessments: DoctorOffDayAssessment[]): string[] {
-  return [...new Set(assessments.flatMap((assessment) => assessment.reasons))];
+const reasonPriority = [
+  'Backup doctor coverage is incomplete.',
+  'Average wait exceeds 45 minutes.',
+  'Daily upper prediction reaches the busy-day threshold.',
+  'Predicted busiest hour is in the busiest quartile.',
+  'Hourly upper prediction crosses the busy threshold.',
+  'Observed peak is in the busiest weekday quartile.',
+  'Prediction volatility is too high.',
+  'Fewer than 8 comparable dates.',
+  'Not enough data for regression recommendation',
+  'Regression model did not converge',
+  'Attendance regression is unavailable.',
+  'Off-day safety assessment is unavailable.',
+];
+
+function reasonPriorityIndex(reason: string): number {
+  const index = reasonPriority.findIndex((candidate) => reason.startsWith(candidate));
+  return index === -1 ? reasonPriority.length : index;
 }
 
-function OffDayRecommendation({ assessment, usableWeeks }: {
+function offDayReasons(assessments: DoctorOffDayAssessment[]): string[] {
+  return [...new Set(assessments.flatMap((assessment) => assessment.reasons))]
+    .map((reason, index) => ({ reason, index }))
+    .sort((left, right) => reasonPriorityIndex(left.reason) - reasonPriorityIndex(right.reason) || left.index - right.index)
+    .map(({ reason }) => reason);
+}
+
+function OffDayRecommendation({ assessment, usableWeeks, safeCandidateCount }: {
   assessment: DoctorOffDayAssessment;
   usableWeeks: number;
+  safeCandidateCount: number;
 }) {
   const forecast = assessment.forecast;
   if (!forecast) return null;
 
+  const score = assessment.safetyScore === null ? 'unavailable' : decimal(assessment.safetyScore);
   const whySafest = assessment.passedChecks.length > 0
-    ? `Ranked safest because it passed: ${assessment.passedChecks.slice(0, 3).join(' ')}`
-    : 'Ranked safest among the assessed weekdays.';
+    ? `Ranked safest: safety score ${score} is the lowest of ${safeCandidateCount} safe candidate${safeCandidateCount === 1 ? '' : 's'}. It passed: ${assessment.passedChecks.slice(0, 3).join(' ')}`
+    : `Ranked safest: safety score ${score} is the lowest of ${safeCandidateCount} safe candidate${safeCandidateCount === 1 ? '' : 's'}.`;
 
   return (
     <li className="rounded-md bg-slate-50 p-3">
@@ -50,7 +75,7 @@ function OffDayRecommendation({ assessment, usableWeeks }: {
         <li>Average wait: {forecast.averageWaitMinutes === null ? 'unavailable' : `${decimal(forecast.averageWaitMinutes)} min`}</li>
         <li>Usable weeks / comparable dates: {usableWeeks} / {forecast.comparableDates}</li>
         <li>Backup coverage: {decimal(forecast.backupCoverageRate * 100)}%</li>
-        <li>Safety score: {assessment.safetyScore === null ? 'unavailable' : decimal(assessment.safetyScore)}</li>
+        <li>Safety score: {score}</li>
       </ul>
       <p className="mt-2 text-sm text-slate-700">{whySafest}</p>
     </li>
@@ -61,7 +86,9 @@ function OffDayAssessmentPanel({ assessments, regression }: {
   assessments: DoctorOffDayAssessment[];
   regression: AttendanceRegressionResult;
 }) {
-  const suggestions = assessments.filter((assessment) => assessment.status === 'suggested' && assessment.forecast !== null);
+  const suggestions = assessments
+    .filter((assessment) => assessment.status === 'suggested' && assessment.forecast !== null)
+    .sort((left, right) => (left.safetyScore ?? Infinity) - (right.safetyScore ?? Infinity) || (left.weekday ?? Infinity) - (right.weekday ?? Infinity));
   const reasons = offDayReasons(assessments);
   const checks = assessments.flatMap((assessment) => [
     ...assessment.reasons.map((reason) => ({ outcome: 'Does not pass', reason })),
@@ -74,12 +101,12 @@ function OffDayAssessmentPanel({ assessments, regression }: {
       <p className="mt-1 text-sm text-slate-600">Planning aid only — confirm against roster and current operations.</p>
       {suggestions.length > 0 ? (
         <ul className="mt-2 space-y-2 text-sm text-slate-600">
-          {suggestions.map((assessment) => <OffDayRecommendation key={assessment.weekday} assessment={assessment} usableWeeks={regression.diagnostics.usableWeeks} />)}
+          <OffDayRecommendation assessment={suggestions[0]} usableWeeks={regression.diagnostics.usableWeeks} safeCandidateCount={suggestions.length} />
         </ul>
       ) : (
         <div className="mt-2 rounded-md bg-slate-50 p-3 text-sm text-slate-700">
           <h4 className="font-medium text-slate-800">No safe off-day recommendation</h4>
-          {reasons.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5">{reasons.slice(0, 3).map((reason) => <li key={reason}>{reason}</li>)}</ul>}
+          {reasons.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5" aria-label="Highest-priority safety reasons">{reasons.slice(0, 3).map((reason) => <li key={reason}>{reason}</li>)}</ul>}
           <details className="mt-3" aria-label="Safety checks">
             <summary className="cursor-pointer font-medium text-slate-800">View all checks</summary>
             {checks.length > 0
