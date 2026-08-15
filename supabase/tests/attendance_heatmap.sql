@@ -38,13 +38,13 @@ BEGIN
     id, roster_type, month, year, roster_data, staff_list, warnings, created_by
   ) VALUES
     (
-      '72000000-0000-4000-8000-000000000401', 'doctor', 6, 2026,
+      '72000000-0000-4000-8000-000000000401', 'doctor', 7, 2026,
       '{"2026-07-27":{"DOC_S1":{"staffId":"72000000-0000-4000-8000-000000000011","staffName":"TEST ONLY HEATMAP DOCTOR A"}}}'::jsonb,
       '[]'::jsonb, '[]'::jsonb, '72000000-0000-4000-8000-000000000001'
     ),
     (
-      '72000000-0000-4000-8000-000000000402', 'doctor', 7, 2026,
-      '{"2026-08-02":{"shift1":{"staffId":"72000000-0000-4000-8000-000000000011","staffName":"TEST ONLY HEATMAP DOCTOR A"},"shift2":{"staffId":"72000000-0000-4000-8000-000000000012","staffName":"TEST ONLY HEATMAP DOCTOR B"}},"2026-08-03":{"DOC_S1":{"staffId":"72000000-0000-4000-8000-000000000011","staffName":"TEST ONLY HEATMAP DOCTOR A"},"DOC_S2":{"staffId":"72000000-0000-4000-8000-000000000012","staffName":"TEST ONLY HEATMAP DOCTOR B"},"DOC_S3":{"staffId":"72000000-0000-4000-8000-000000000012","staffName":"TEST ONLY HEATMAP DOCTOR B"}}}'::jsonb,
+      '72000000-0000-4000-8000-000000000402', 'doctor', 8, 2026,
+      '{"2026-08-02":{"shift1":{"staffId":"72000000-0000-4000-8000-000000000011","staffName":"TEST ONLY HEATMAP DOCTOR A"},"shift2":{"staffId":"72000000-0000-4000-8000-000000000012","staffName":"TEST ONLY HEATMAP DOCTOR B"}},"2026-08-03":{"DOC_S1":[{"staffId":"72000000-0000-4000-8000-000000000011","staffName":"TEST ONLY HEATMAP DOCTOR A"},{"staffId":"72000000-0000-4000-8000-000000000012","staffName":"TEST ONLY HEATMAP DOCTOR B"}],"DOC_S2":{"staffId":"72000000-0000-4000-8000-000000000012","staffName":"TEST ONLY HEATMAP DOCTOR B"},"DOC_S3":{"staffId":"72000000-0000-4000-8000-000000000012","staffName":"TEST ONLY HEATMAP DOCTOR B"}}}'::jsonb,
       '[]'::jsonb, '[]'::jsonb, '72000000-0000-4000-8000-000000000001'
     );
 
@@ -57,6 +57,7 @@ BEGIN
     ('72000000-0000-4000-8000-000000000203', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', 7203, 'consultation', 'ewallet', '2026-08-03 00:10:00+00', NULL,                    'completed'),
     ('72000000-0000-4000-8000-000000000204', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', 7204, 'consultation', 'panel',   '2026-08-03 00:15:00+00', NULL,                    'completed'),
     ('72000000-0000-4000-8000-000000000215', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', 7215, 'consultation', 'other',   '2026-08-03 00:18:00+00', NULL,                    'completed'),
+    ('72000000-0000-4000-8000-000000000216', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', 7216, 'consultation', 'cash',    '2026-08-10 00:00:00+00', '2026-08-10 00:30:00+00', 'completed'),
     ('72000000-0000-4000-8000-000000000205', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', 7205, 'consultation', 'cash',    '2026-08-03 01:00:00+00', '2026-08-03 00:55:00+00', 'completed'),
     ('72000000-0000-4000-8000-000000000206', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', 7206, 'consultation', 'cash',    '2026-08-02 16:30:00+00', NULL,                    'completed'),
     ('72000000-0000-4000-8000-000000000207', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', 7207, 'payment_only', 'cash',   '2026-08-03 00:20:00+00', NULL,                    'completed'),
@@ -76,6 +77,7 @@ BEGIN
     ('72000000-0000-4000-8000-000000000303', '72000000-0000-4000-8000-000000000203', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', '', '', '', NULL),
     ('72000000-0000-4000-8000-000000000304', '72000000-0000-4000-8000-000000000204', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', '', '', '', NULL),
     ('72000000-0000-4000-8000-000000000315', '72000000-0000-4000-8000-000000000215', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', '', '', '', NULL),
+    ('72000000-0000-4000-8000-000000000316', '72000000-0000-4000-8000-000000000216', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', '', '', '', NULL),
     ('72000000-0000-4000-8000-000000000305', '72000000-0000-4000-8000-000000000205', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', '', '', '', NULL),
     ('72000000-0000-4000-8000-000000000306', '72000000-0000-4000-8000-000000000206', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', '', '', '', NULL),
     ('72000000-0000-4000-8000-000000000307', '72000000-0000-4000-8000-000000000207', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', '', '', '', NULL),
@@ -99,6 +101,7 @@ DO $verify$
 DECLARE
   v_report jsonb;
   v_all_doctors jsonb;
+  v_mixed_coverage jsonb;
   v_cell jsonb;
 BEGIN
   PERFORM set_config('request.jwt.claim.sub', '72000000-0000-4000-8000-000000000099', true);
@@ -139,6 +142,9 @@ BEGIN
     '2026-08-03', '2026-08-09', '72000000-0000-4000-8000-000000000011'
   );
   v_all_doctors := public.get_clinical_attendance_heatmap('2026-08-03', '2026-08-09');
+  v_mixed_coverage := public.get_clinical_attendance_heatmap(
+    '2026-08-03', '2026-08-16', '72000000-0000-4000-8000-000000000011'
+  );
 
   IF v_report->'period' IS DISTINCT FROM jsonb_build_object(
     'startDate', '2026-08-03'::date,
@@ -156,6 +162,7 @@ BEGIN
   FROM jsonb_array_elements(v_report->'cells')
   WHERE value->>'weekday' = '1' AND value->>'hour' = '8';
   IF (v_cell->>'totalVisits')::integer IS DISTINCT FROM 5
+     OR (v_cell->>'rawTotalVisits')::integer IS DISTINCT FROM 5
      OR (v_cell->>'operatingOccurrences')::integer IS DISTINCT FROM 1
      OR (v_cell->>'averageVisits')::numeric IS DISTINCT FROM 5
      OR (v_cell->>'medianVisits')::numeric IS DISTINCT FROM 5
@@ -163,6 +170,7 @@ BEGIN
      OR (v_cell->>'waitMeasuredVisits')::integer IS DISTINCT FROM 2
      OR (v_cell->>'averageWaitMinutes')::numeric IS DISTINCT FROM 15
      OR (v_cell->>'comparisonAverageVisits')::numeric IS DISTINCT FROM 2
+     OR (v_cell->>'otherDoctorCoveredOccurrences')::integer IS DISTINCT FROM 1
      OR v_cell->>'coverage' IS DISTINCT FROM 'insufficient' THEN
     RAISE EXCEPTION 'QUALIFYING_PAYMENT_OR_COMPARISON_AGGREGATE_MISMATCH';
   END IF;
@@ -187,7 +195,7 @@ BEGIN
   FROM jsonb_array_elements(v_report->'cells')
   WHERE value->>'weekday' = '1' AND value->>'hour' = '14';
   IF (v_cell->>'operatingOccurrences')::integer IS DISTINCT FROM 0
-     OR (v_cell->>'otherDoctorCoveredOccurrences')::integer IS DISTINCT FROM 1
+     OR (v_cell->>'otherDoctorCoveredOccurrences')::integer IS DISTINCT FROM 0
      OR v_cell->>'coverage' IS DISTINCT FROM 'uncovered' THEN
     RAISE EXCEPTION 'SELECTED_DOCTOR_ROSTER_DENOMINATOR_MISMATCH';
   END IF;
@@ -206,6 +214,23 @@ BEGIN
   IF (v_cell->>'operatingOccurrences')::integer IS DISTINCT FROM 1
      OR v_cell->>'coverage' IS DISTINCT FROM 'insufficient' THEN
     RAISE EXCEPTION 'S3_ROSTER_COVERAGE_MISMATCH';
+  END IF;
+
+  SELECT value INTO STRICT v_cell
+  FROM jsonb_array_elements(v_mixed_coverage->'cells')
+  WHERE value->>'weekday' = '1' AND value->>'hour' = '8';
+  IF (v_cell->>'totalVisits')::integer IS DISTINCT FROM 5
+     OR (v_cell->>'rawTotalVisits')::integer IS DISTINCT FROM 6
+     OR (v_cell->>'operatingOccurrences')::integer IS DISTINCT FROM 1
+     OR (v_cell->>'averageVisits')::numeric IS DISTINCT FROM 5
+     OR (v_cell->>'medianVisits')::numeric IS DISTINCT FROM 5
+     OR (v_cell->>'peakVisits')::integer IS DISTINCT FROM 5
+     OR (v_cell->>'waitMeasuredVisits')::integer IS DISTINCT FROM 2
+     OR (v_cell->>'averageWaitMinutes')::numeric IS DISTINCT FROM 15
+     OR jsonb_array_length(v_cell->'dates') IS DISTINCT FROM 1
+     OR v_cell->'dates'->0->>'date' IS DISTINCT FROM '2026-08-03'
+     OR v_cell->>'coverage' IS DISTINCT FROM 'insufficient' THEN
+    RAISE EXCEPTION 'OUTSIDE_OPERATING_COVERAGE_MISMATCH';
   END IF;
 
   IF v_report::text LIKE '%TEST ONLY PRIVATE PATIENT%'

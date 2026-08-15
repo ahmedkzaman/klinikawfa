@@ -21,38 +21,38 @@ const report = {
   warnings: ['Roster coverage is incomplete for some periods.'],
   cells: [
     {
-      weekday: 1 as const, hour: 8, totalVisits: 16, operatingOccurrences: 8,
+      weekday: 1 as const, hour: 8, totalVisits: 16, rawTotalVisits: 17, operatingOccurrences: 8,
       averageVisits: 2, medianVisits: 2, peakVisits: 4, averageWaitMinutes: 50,
       waitMeasuredVisits: 6, comparisonAverageVisits: 1, comparisonAbsoluteChange: 1,
       comparisonPercentChange: 100, otherDoctorCoveredOccurrences: 0,
       dates: [{ date: '2026-06-01', visits: 3, averageWaitMinutes: 45 }], coverage: 'complete' as const,
     },
     {
-      weekday: 1 as const, hour: 9, totalVisits: 0, operatingOccurrences: 0,
+      weekday: 1 as const, hour: 9, totalVisits: 0, rawTotalVisits: 0, operatingOccurrences: 0,
       averageVisits: null, medianVisits: null, peakVisits: null, averageWaitMinutes: null,
       waitMeasuredVisits: 0, comparisonAverageVisits: null, comparisonAbsoluteChange: null,
       comparisonPercentChange: null, otherDoctorCoveredOccurrences: 0, dates: [], coverage: 'uncovered' as const,
     },
     {
-      weekday: 1 as const, hour: 10, totalVisits: 8, operatingOccurrences: 4,
+      weekday: 1 as const, hour: 10, totalVisits: 8, rawTotalVisits: 8, operatingOccurrences: 4,
       averageVisits: 2, medianVisits: 2, peakVisits: 2, averageWaitMinutes: 10,
       waitMeasuredVisits: 4, comparisonAverageVisits: 1, comparisonAbsoluteChange: 1,
       comparisonPercentChange: 100, otherDoctorCoveredOccurrences: 0, dates: [], coverage: 'insufficient' as const,
     },
     {
-      weekday: 2 as const, hour: 8, totalVisits: 0, operatingOccurrences: 8,
+      weekday: 2 as const, hour: 8, totalVisits: 0, rawTotalVisits: 0, operatingOccurrences: 8,
       averageVisits: 0, medianVisits: 0, peakVisits: 0, averageWaitMinutes: 5,
       waitMeasuredVisits: 8, comparisonAverageVisits: 1, comparisonAbsoluteChange: -1,
       comparisonPercentChange: -100, otherDoctorCoveredOccurrences: 8, dates: [], coverage: 'complete' as const,
     },
     {
-      weekday: 2 as const, hour: 9, totalVisits: 8, operatingOccurrences: 8,
+      weekday: 2 as const, hour: 9, totalVisits: 8, rawTotalVisits: 8, operatingOccurrences: 8,
       averageVisits: 1, medianVisits: 1, peakVisits: 1, averageWaitMinutes: 5,
       waitMeasuredVisits: 8, comparisonAverageVisits: 1, comparisonAbsoluteChange: 0,
       comparisonPercentChange: 0, otherDoctorCoveredOccurrences: 0, dates: [], coverage: 'complete' as const,
     },
     {
-      weekday: 2 as const, hour: 10, totalVisits: 8, operatingOccurrences: 8,
+      weekday: 2 as const, hour: 10, totalVisits: 8, rawTotalVisits: 8, operatingOccurrences: 8,
       averageVisits: 1, medianVisits: 1, peakVisits: 1, averageWaitMinutes: 5,
       waitMeasuredVisits: 8, comparisonAverageVisits: 1, comparisonAbsoluteChange: 0,
       comparisonPercentChange: 0, otherDoctorCoveredOccurrences: 0, dates: [], coverage: 'complete' as const,
@@ -99,7 +99,8 @@ describe('PatientAttendanceHeatmap', () => {
     fireEvent.click(cell);
     const dialog = screen.getByRole('dialog', { name: /attendance cell details/i });
     expect(screen.getByRole('button', { name: /close/i })).toHaveFocus();
-    expect(dialog).toHaveTextContent(/Total visits:\s*16/i);
+    expect(dialog).toHaveTextContent(/Visits on operating dates:\s*16/i);
+    expect(dialog).toHaveTextContent(/Raw visits including uncovered dates:\s*17/i);
     expect(dialog).toHaveTextContent(/Average:\s*2/i);
     expect(dialog).toHaveTextContent(/Median:\s*2/i);
     expect(dialog).toHaveTextContent(/Peak:\s*4/i);
@@ -126,7 +127,7 @@ describe('PatientAttendanceHeatmap', () => {
     ['error', { data: undefined, isLoading: false, isError: true, error: new Error('Unavailable'), }, /unavailable/i],
     ['empty', { data: { ...report, hasAttendanceData: false, cells: Array.from({ length: 112 }, (_, index) => ({
       weekday: (Math.floor(index / 16) + 1) as 1 | 2 | 3 | 4 | 5 | 6 | 7,
-      hour: (index % 16) + 8, totalVisits: 0, operatingOccurrences: 0,
+      hour: (index % 16) + 8, totalVisits: 0, rawTotalVisits: 0, operatingOccurrences: 0,
       averageVisits: null, medianVisits: null, peakVisits: null, averageWaitMinutes: null,
       waitMeasuredVisits: 0, comparisonAverageVisits: null, comparisonAbsoluteChange: null,
       comparisonPercentChange: null, otherDoctorCoveredOccurrences: 0, dates: [], coverage: 'uncovered' as const,

@@ -18,6 +18,7 @@ function cell(overrides: Partial<AttendanceHeatmapCell> = {}): AttendanceHeatmap
     weekday: 1,
     hour: 8,
     totalVisits: 16,
+    rawTotalVisits: 16,
     operatingOccurrences: 8,
     averageVisits: 2,
     medianVisits: 2,
@@ -67,6 +68,7 @@ describe('normalizeAttendanceHeatmapReport', () => {
         weekday: 1,
         hour: 8,
         totalVisits: 12,
+        rawTotalVisits: 12,
         operatingOccurrences: 8,
         averageVisits: null,
         medianVisits: 2,
@@ -179,18 +181,73 @@ describe('buildAttendanceRecommendations', () => {
     expect(buildAttendanceRecommendations(insufficient).trainingWindows).toEqual([]);
   });
 
-  it('flags a selected doctor’s possible off-day only when other-doctor coverage exists', () => {
+  it('recommends the lowest-attendance weekday for all doctors at weekday level', () => {
     const recommendations = buildAttendanceRecommendations([
-      cell({ averageVisits: 0, medianVisits: 0, peakVisits: 0, otherDoctorCoveredOccurrences: 8 }),
-    ], 'doctor-1');
+      cell({ weekday: 1, hour: 8, totalVisits: 16, averageVisits: 2, peakVisits: 3 }),
+      cell({ weekday: 1, hour: 9, totalVisits: 24, averageVisits: 3, peakVisits: 4 }),
+      cell({ weekday: 2, hour: 8, totalVisits: 8, averageVisits: 1, peakVisits: 2 }),
+      cell({ weekday: 2, hour: 9, totalVisits: 8, averageVisits: 1, peakVisits: 2 }),
+      cell({ weekday: 3, hour: 8, totalVisits: 40, averageVisits: 5, peakVisits: 6 }),
+      cell({ weekday: 3, hour: 9, totalVisits: 40, averageVisits: 5, peakVisits: 6 }),
+    ]);
 
     expect(recommendations.possibleDoctorOffDays).toEqual([expect.objectContaining({
-      weekday: 1,
-      hour: 8,
+      weekday: 2,
       sampleSize: 8,
-      evidence: expect.objectContaining({ otherDoctorCoveredOccurrences: 8 }),
+      evidence: expect.objectContaining({ averageVisits: 2, peakVisits: 2 }),
     })]);
-    expect(buildAttendanceRecommendations([cell({ averageVisits: 0, medianVisits: 0, peakVisits: 0 })], 'doctor-1').possibleDoctorOffDays).toEqual([]);
+    expect(recommendations.possibleDoctorOffDays[0]).not.toHaveProperty('hour');
+  });
+
+  it('suppresses the lowest weekday when its peak hour is in the busiest quartile', () => {
+    const recommendations = buildAttendanceRecommendations([
+      cell({ weekday: 1, hour: 8, averageVisits: 0.5, peakVisits: 1 }),
+      cell({ weekday: 1, hour: 9, averageVisits: 4, peakVisits: 5 }),
+      cell({ weekday: 2, hour: 8, averageVisits: 2, peakVisits: 3 }),
+      cell({ weekday: 2, hour: 9, averageVisits: 3, peakVisits: 4 }),
+      cell({ weekday: 3, hour: 8, averageVisits: 3, peakVisits: 4 }),
+      cell({ weekday: 3, hour: 9, averageVisits: 3, peakVisits: 4 }),
+    ]);
+
+    expect(recommendations.possibleDoctorOffDays).toEqual([]);
+  });
+
+  it('requires selected-doctor support on every comparable operating date', () => {
+    const supported = [
+      cell({ weekday: 2, hour: 8, averageVisits: 1, peakVisits: 2, otherDoctorCoveredOccurrences: 8 }),
+      cell({ weekday: 2, hour: 9, averageVisits: 1, peakVisits: 2, otherDoctorCoveredOccurrences: 8 }),
+      cell({ weekday: 3, hour: 8, averageVisits: 4, peakVisits: 5, otherDoctorCoveredOccurrences: 8 }),
+      cell({ weekday: 3, hour: 9, averageVisits: 4, peakVisits: 5, otherDoctorCoveredOccurrences: 8 }),
+    ];
+
+    expect(buildAttendanceRecommendations(supported, 'doctor-1').possibleDoctorOffDays).toEqual([
+      expect.objectContaining({
+        weekday: 2,
+        sampleSize: 8,
+        evidence: expect.objectContaining({ otherDoctorCoveredOccurrences: 8 }),
+      }),
+    ]);
+    expect(buildAttendanceRecommendations([
+      supported[0],
+      cell({ ...supported[1], otherDoctorCoveredOccurrences: 7 }),
+      supported[2],
+      supported[3],
+    ], 'doctor-1').possibleDoctorOffDays).toEqual([]);
+  });
+
+  it('does not infer an off-day from only the complete part of an incompletely covered weekday', () => {
+    const recommendations = buildAttendanceRecommendations([
+      cell({ weekday: 1, hour: 8, averageVisits: 1 }),
+      cell({ weekday: 1, hour: 9, operatingOccurrences: 7, coverage: 'insufficient', averageVisits: 0 }),
+      cell({ weekday: 2, hour: 8, averageVisits: 3 }),
+      cell({ weekday: 2, hour: 9, averageVisits: 3 }),
+      cell({ weekday: 3, hour: 8, averageVisits: 5 }),
+      cell({ weekday: 3, hour: 9, averageVisits: 5 }),
+    ]);
+
+    expect(recommendations.possibleDoctorOffDays).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ weekday: 1 }),
+    ]));
   });
 
   it('identifies busiest periods and unusually high waits for staffing review', () => {

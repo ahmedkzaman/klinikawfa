@@ -1,7 +1,10 @@
 export type AttendanceHeatmapCell = {
   weekday: 1 | 2 | 3 | 4 | 5 | 6 | 7;
   hour: number;
+  /** Clinical visits on roster-operating dates only. */
   totalVisits: number;
+  /** All qualifying clinical visits, including dates without roster coverage. */
+  rawTotalVisits: number;
   operatingOccurrences: number;
   averageVisits: number | null;
   medianVisits: number | null;
@@ -49,9 +52,11 @@ type AttendanceRecommendation = {
   evidence: RecommendationEvidence;
 };
 
+type AttendanceOffDayRecommendation = Omit<AttendanceRecommendation, 'hour'>;
+
 export type AttendanceRecommendations = {
   trainingWindows: Array<AttendanceRecommendation & { startHour: number; endHour: number }>;
-  possibleDoctorOffDays: AttendanceRecommendation[];
+  possibleDoctorOffDays: AttendanceOffDayRecommendation[];
   peakStaffing: AttendanceRecommendation[];
   unstablePeaks: AttendanceRecommendation[];
 };
@@ -113,16 +118,18 @@ function normalizeCell(raw: unknown): AttendanceHeatmapCell | null {
     ? null
     : (comparisonAbsoluteChange / comparisonAverageVisits) * 100;
   const totalVisits = requiredNonNegativeNumber(valueOf(source, 'totalVisits'));
+  const rawTotalVisits = requiredNonNegativeNumber(valueOf(source, 'rawTotalVisits') ?? totalVisits);
   const operatingOccurrences = requiredNonNegativeNumber(valueOf(source, 'operatingOccurrences'));
   const waitMeasuredVisits = requiredNonNegativeNumber(valueOf(source, 'waitMeasuredVisits'));
   const otherDoctorCoveredOccurrences = requiredNonNegativeNumber(valueOf(source, 'otherDoctorCoveredOccurrences'));
-  if (totalVisits === null || operatingOccurrences === null || waitMeasuredVisits === null || otherDoctorCoveredOccurrences === null) return null;
+  if (totalVisits === null || rawTotalVisits === null || operatingOccurrences === null || waitMeasuredVisits === null || otherDoctorCoveredOccurrences === null) return null;
   const rawDates = valueOf(source, 'dates');
 
   return {
     weekday: weekday as AttendanceHeatmapCell['weekday'],
     hour,
     totalVisits,
+    rawTotalVisits,
     operatingOccurrences,
     averageVisits,
     medianVisits: nullableNumber(valueOf(source, 'medianVisits')),
@@ -164,7 +171,7 @@ export function normalizeAttendanceHeatmapReport(raw: unknown): AttendanceHeatma
   return {
     period: periodFrom(source),
     cells,
-    hasAttendanceData: cells.some((cell) => cell.totalVisits > 0 || cell.operatingOccurrences > 0),
+    hasAttendanceData: cells.some((cell) => cell.rawTotalVisits > 0 || cell.operatingOccurrences > 0),
     doctors: Array.isArray(rawDoctors) ? rawDoctors.flatMap(doctor => {
       const value = object(doctor);
       return value && typeof value.id === 'string' && typeof value.name === 'string' ? [{ id: value.id, name: value.name }] : [];
@@ -229,11 +236,48 @@ export function buildAttendanceRecommendations(
     }
   }
 
+  const weekdayCandidates = ([1, 2, 3, 4, 5, 6, 7] as const).flatMap((weekday) => {
+    const rosterBackedDay = cells.filter((cell) => cell.weekday === weekday && cell.operatingOccurrences > 0);
+    if (rosterBackedDay.length === 0 || rosterBackedDay.some((cell) => !eligible(cell))) return [];
+    const day = rosterBackedDay;
+    const averageVisits = day.reduce((sum, cell) => sum + (cell.averageVisits as number), 0);
+    const medianVisits = day.every((cell) => cell.medianVisits !== null)
+      ? day.reduce((sum, cell) => sum + (cell.medianVisits as number), 0)
+      : null;
+    const peakVisits = day.reduce<number | null>((peak, cell) => cell.peakVisits === null
+      ? peak
+      : Math.max(peak ?? cell.peakVisits, cell.peakVisits), null);
+    const waitMeasuredVisits = day.reduce((sum, cell) => sum + cell.waitMeasuredVisits, 0);
+    const averageWaitMinutes = waitMeasuredVisits === 0
+      ? null
+      : day.reduce((sum, cell) => sum + (cell.averageWaitMinutes ?? 0) * cell.waitMeasuredVisits, 0) / waitMeasuredVisits;
+    return [{
+      weekday,
+      averageVisits,
+      busiestHourAverage: Math.max(...day.map((cell) => cell.averageVisits as number)),
+      sampleSize: Math.min(...day.map((cell) => cell.operatingOccurrences)),
+      fullySupported: day.every((cell) => cell.otherDoctorCoveredOccurrences >= cell.operatingOccurrences),
+      evidence: {
+        averageVisits,
+        medianVisits,
+        peakVisits,
+        averageWaitMinutes,
+        otherDoctorCoveredOccurrences: Math.min(...day.map((cell) => cell.otherDoctorCoveredOccurrences)),
+      },
+    }];
+  });
+  const lowestWeekdayAverage = weekdayCandidates.length === 0
+    ? null
+    : Math.min(...weekdayCandidates.map((day) => day.averageVisits));
+  const possibleDoctorOffDays = weekdayCandidates
+    .filter((day) => day.averageVisits === lowestWeekdayAverage)
+    .filter((day) => busyThreshold !== null && day.busiestHourAverage < busyThreshold)
+    .filter((day) => !selectedDoctorId || day.fullySupported)
+    .map(({ weekday, sampleSize, evidence: dayEvidence }) => ({ weekday, sampleSize, evidence: dayEvidence }));
+
   return {
     trainingWindows,
-    possibleDoctorOffDays: selectedDoctorId
-      ? candidates.filter(cell => cell.averageVisits === 0 && cell.otherDoctorCoveredOccurrences >= MINIMUM_COMPARABLE_OCCURRENCES).map(recommendation)
-      : [],
+    possibleDoctorOffDays,
     peakStaffing: candidates.filter(cell => (busyThreshold !== null && (cell.averageVisits as number) >= busyThreshold)
       || (cell.averageWaitMinutes !== null && cell.averageWaitMinutes > 45)).map(recommendation),
     unstablePeaks: candidates.filter(cell => cell.peakVisits !== null && cell.medianVisits !== null

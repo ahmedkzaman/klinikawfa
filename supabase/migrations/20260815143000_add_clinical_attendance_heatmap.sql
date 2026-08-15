@@ -79,7 +79,7 @@ BEGIN
       END AS end_hour
     FROM period_days AS pd
     JOIN current_rosters AS sr
-      ON sr.month = extract(month FROM pd.day)::integer - 1
+      ON sr.month = extract(month FROM pd.day)::integer
       AND sr.year = extract(year FROM pd.day)::integer
     CROSS JOIN LATERAL jsonb_each(
       coalesce(sr.roster_data -> to_char(pd.day, 'YYYY-MM-DD'), '{}'::jsonb)
@@ -169,7 +169,7 @@ BEGIN
         ELSE coalesce(rs.selected_doctor, false)
       END AS operating,
       CASE WHEN _doctor_id IS NULL THEN false
-        ELSE coalesce(rs.another_doctor, false) AND NOT coalesce(rs.selected_doctor, false)
+        ELSE coalesce(rs.selected_doctor, false) AND coalesce(rs.another_doctor, false)
       END AS other_doctor_covered
     FROM period_days AS pd
     CROSS JOIN generate_series(8, 23) AS hour(hour)
@@ -204,13 +204,15 @@ BEGIN
       period.period,
       wh.weekday,
       wh.hour,
-      coalesce(sum(cd.visits), 0)::integer AS total_visits,
+      coalesce(sum(cd.visits), 0)::integer AS raw_total_visits,
+      coalesce(sum(cd.visits) FILTER (WHERE cd.operating), 0)::integer AS covered_total_visits,
+      coalesce(sum(cd.visits) FILTER (WHERE NOT cd.operating), 0)::integer AS uncovered_visits,
       count(cd.day) FILTER (WHERE cd.operating)::integer AS operating_occurrences,
       percentile_disc(0.5) WITHIN GROUP (ORDER BY cd.visits)
         FILTER (WHERE cd.operating)::integer AS median_visits,
       max(cd.visits) FILTER (WHERE cd.operating)::integer AS peak_visits,
-      coalesce(sum(cd.wait_total_minutes), 0)::numeric AS wait_total_minutes,
-      coalesce(sum(cd.wait_measured_visits), 0)::integer AS wait_measured_visits,
+      coalesce(sum(cd.wait_total_minutes) FILTER (WHERE cd.operating), 0)::numeric AS wait_total_minutes,
+      coalesce(sum(cd.wait_measured_visits) FILTER (WHERE cd.operating), 0)::integer AS wait_measured_visits,
       count(cd.day) FILTER (WHERE cd.other_doctor_covered)::integer AS other_doctor_covered_occurrences,
       coalesce(jsonb_agg(jsonb_build_object(
         'date', cd.day,
@@ -218,7 +220,7 @@ BEGIN
         'averageWaitMinutes', CASE WHEN cd.wait_measured_visits > 0
           THEN round(cd.wait_total_minutes / cd.wait_measured_visits, 1)
         END
-      ) ORDER BY cd.day) FILTER (WHERE cd.visits > 0), '[]'::jsonb) AS dates
+      ) ORDER BY cd.day) FILTER (WHERE cd.operating), '[]'::jsonb) AS dates
     FROM (VALUES ('selected'::text), ('comparison'::text)) AS period(period)
     CROSS JOIN weekday_hour_cells AS wh
     LEFT JOIN cell_daily AS cd
@@ -231,10 +233,11 @@ BEGIN
     SELECT
       selected.weekday,
       selected.hour,
-      selected.total_visits,
+      selected.covered_total_visits AS total_visits,
+      selected.raw_total_visits,
       selected.operating_occurrences,
       CASE WHEN selected.operating_occurrences > 0
-        THEN round(selected.total_visits::numeric / selected.operating_occurrences, 2)
+        THEN round(selected.covered_total_visits::numeric / selected.operating_occurrences, 2)
       END AS average_visits,
       selected.median_visits,
       selected.peak_visits,
@@ -243,12 +246,13 @@ BEGIN
       END AS average_wait_minutes,
       selected.wait_measured_visits,
       CASE WHEN comparison.operating_occurrences > 0
-        THEN round(comparison.total_visits::numeric / comparison.operating_occurrences, 2)
+        THEN round(comparison.covered_total_visits::numeric / comparison.operating_occurrences, 2)
       END AS comparison_average_visits,
       selected.other_doctor_covered_occurrences,
       selected.dates,
       CASE
         WHEN selected.operating_occurrences = 0 THEN 'uncovered'
+        WHEN selected.uncovered_visits > 0 THEN 'insufficient'
         WHEN selected.operating_occurrences < 8 THEN 'insufficient'
         ELSE 'complete'
       END AS coverage
@@ -278,7 +282,7 @@ BEGIN
       ) THEN 'Roster gaps leave one or more attendance cells uncovered.' END,
       CASE WHEN EXISTS (
         SELECT 1 FROM cells WHERE coverage = 'insufficient'
-      ) THEN 'Some roster-backed cells have fewer than eight operating occurrences.' END,
+      ) THEN 'Some roster-backed cells have incomplete coverage or fewer than eight operating occurrences.' END,
       CASE WHEN NOT EXISTS (
         SELECT 1 FROM roster_assignments WHERE period = 'selected'
       ) THEN 'No non-cancelled doctor roster assignments were found for the selected period.' END
@@ -297,6 +301,7 @@ BEGIN
         'weekday', weekday,
         'hour', hour,
         'totalVisits', total_visits,
+        'rawTotalVisits', raw_total_visits,
         'operatingOccurrences', operating_occurrences,
         'averageVisits', average_visits,
         'medianVisits', median_visits,

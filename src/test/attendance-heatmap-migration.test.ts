@@ -57,6 +57,8 @@ describe('clinical attendance heatmap migration', () => {
     expect(sql).toMatch(/medianVisits/i);
     expect(sql).toMatch(/peakVisits/i);
     expect(sql).toContain('S3_ROSTER_COVERAGE_MISMATCH');
+    expect(sql).toContain("'doctor', 8, 2026");
+    expect(sql).toContain('OUTSIDE_OPERATING_COVERAGE_MISMATCH');
   });
 
   it('assigns native qualifying visits by Malaysia local date, weekday, and hour', () => {
@@ -92,6 +94,19 @@ describe('clinical attendance heatmap migration', () => {
     expect(sql).toMatch(/other_doctor_covered_occurrences/i);
     expect(sql).toMatch(/'coverage'/i);
     expect(sql).toMatch(/'warnings'/i);
+    expect(sql).toMatch(/sr\.month\s*=\s*extract\s*\(\s*month\s+from\s+pd\.day\s*\)::integer/i);
+    expect(sql).not.toMatch(/extract\s*\(\s*month\s+from\s+pd\.day\s*\)::integer\s*-\s*1/i);
+  });
+
+  it('keeps operating aggregates separate from raw off-roster attendance', () => {
+    const sql = migrationSql();
+
+    expect(sql).toMatch(/raw_total_visits/i);
+    expect(sql).toMatch(/covered_total_visits/i);
+    expect(sql).toMatch(/sum\s*\(\s*cd\.visits\s*\)\s*filter\s*\(\s*where\s+cd\.operating\s*\)/i);
+    expect(sql).toMatch(/sum\s*\(\s*cd\.wait_total_minutes\s*\)\s*filter\s*\(\s*where\s+cd\.operating\s*\)/i);
+    expect(sql).toMatch(/jsonb_agg[\s\S]*filter\s*\(\s*where\s+cd\.operating\s*\)/i);
+    expect(sql).toMatch(/'rawTotalVisits'\s*,\s*raw_total_visits/i);
   });
 
   it('exposes only aggregate JSON and the intended execution grants', () => {

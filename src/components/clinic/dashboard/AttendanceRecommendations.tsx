@@ -28,7 +28,7 @@ export function AttendanceRecommendations({ cells, selectedDoctorId }: {
     {
       title: 'Possible doctor off-day — suggestion only',
       items: recommendations.possibleDoctorOffDays,
-      description: (item: typeof recommendations.possibleDoctorOffDays[number]) => `${weekdays[item.weekday - 1]} ${hour(item.hour)} · Possible doctor off-day — suggestion only · ${evidence(item)}`,
+      description: (item: typeof recommendations.possibleDoctorOffDays[number]) => `${weekdays[item.weekday - 1]} · Possible doctor off-day — suggestion only · ${evidence(item)}`,
     },
     {
       title: 'Peak staffing',
@@ -53,7 +53,7 @@ export function AttendanceRecommendations({ cells, selectedDoctorId }: {
               <p className="mt-1 text-sm text-slate-500">No evidence-based recommendation for this period.</p>
             ) : (
               <ul className="mt-2 space-y-2 text-sm text-slate-600">
-                {section.items.map((item, index) => <li key={`${item.weekday}-${item.hour}-${index}`} className="rounded-md bg-slate-50 p-2">{section.description(item as never)}</li>)}
+                {section.items.map((item, index) => <li key={`${item.weekday}-${'hour' in item ? item.hour : 'day'}-${index}`} className="rounded-md bg-slate-50 p-2">{section.description(item as never)}</li>)}
               </ul>
             )}
           </section>

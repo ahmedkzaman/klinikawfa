@@ -41,7 +41,8 @@ export function AttendanceHeatmapCellDetails({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2 text-sm sm:grid-cols-2">
-          <p>Total visits: <strong>{cell.totalVisits}</strong></p>
+          <p>Visits on operating dates: <strong>{cell.totalVisits}</strong></p>
+          <p>Raw visits including uncovered dates: <strong>{cell.rawTotalVisits}</strong></p>
           <p>Average: <strong>{amount(cell.averageVisits)}</strong></p>
           <p>Median: <strong>{amount(cell.medianVisits)}</strong></p>
           <p>Peak: <strong>{amount(cell.peakVisits)}</strong></p>
