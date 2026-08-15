@@ -17,6 +17,7 @@ describe('management dashboard page contract', () => {
     expect(source).toContain('canEditManagementDashboard');
     expect(source).toContain('Edit revenue target');
     expect(source).toContain('Enter stock purchases');
+    expect(source).toContain('PatientAttendanceHeatmap');
   });
 
   it('protects the route from locum and operations roles and leaves Insight unchanged', () => {

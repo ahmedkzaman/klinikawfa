@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -7,6 +8,7 @@ import { FinancialOperationsPanel } from '@/components/clinic/dashboard/Financia
 import { ManualMetricDialog } from '@/components/clinic/dashboard/ManualMetricDialog';
 import { ManualScorecardPanel } from '@/components/clinic/dashboard/ManualScorecardPanel';
 import { StockInventoryPanel } from '@/components/clinic/dashboard/StockInventoryPanel';
+import { PatientAttendanceHeatmap } from '@/components/clinic/dashboard/PatientAttendanceHeatmap';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDeleteManagementDashboardMetric, useManagementDashboardManual, useManagementDashboardReport, useSetManagementDashboardMetric } from '@/hooks/clinic/useManagementDashboard';
 import { type ManagementMetricKey } from '@/lib/clinic/managementDashboard';
@@ -25,6 +27,7 @@ export default function ManagementDashboard() {
   const monthStart = `${month}-01`;
   const [editing, setEditing] = useState<ManagementMetricKey | null>(null);
   const { canEditManagementDashboard } = useAuth();
+  const queryClient = useQueryClient();
   const reportQuery = useManagementDashboardReport(monthStart);
   const manualQuery = useManagementDashboardManual(monthStart);
   const saveMetric = useSetManagementDashboardMetric();
@@ -42,7 +45,7 @@ export default function ManagementDashboard() {
     <div className="space-y-5 pb-10">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div><p className="text-xs font-semibold uppercase tracking-wider text-blue-600">Clinic command centre</p><h1 className="text-2xl font-bold text-slate-900">Management Dashboard</h1><p className="mt-1 text-sm text-slate-500">Daily operations and monthly clinic health, separated by source and confidence.</p></div>
-        <div className="flex items-center gap-2"><label htmlFor="dashboard-month" className="text-sm font-medium">Month</label><input id="dashboard-month" type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="h-10 rounded-lg border bg-white px-3 text-sm" /><Button variant="outline" size="icon" onClick={() => { reportQuery.refetch(); manualQuery.refetch(); }} aria-label="Refresh dashboard"><RefreshCw className="h-4 w-4" /></Button></div>
+        <div className="flex items-center gap-2"><label htmlFor="dashboard-month" className="text-sm font-medium">Month</label><input id="dashboard-month" type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="h-10 rounded-lg border bg-white px-3 text-sm" /><Button variant="outline" size="icon" onClick={() => { reportQuery.refetch(); manualQuery.refetch(); queryClient.invalidateQueries({ queryKey: ['clinical-attendance-heatmap'] }); }} aria-label="Refresh dashboard"><RefreshCw className="h-4 w-4" /></Button></div>
       </div>
       {canEditManagementDashboard && (
         <div className="flex flex-wrap gap-2">
@@ -57,6 +60,8 @@ export default function ManagementDashboard() {
         <DashboardKpiStrip report={reportQuery.data} revenueTarget={revenueTarget} />
         <div className="grid gap-4 xl:grid-cols-3"><FinancialOperationsPanel report={reportQuery.data} metrics={metrics} canEdit={canEditManagementDashboard} onEdit={setEditing} /><StockInventoryPanel report={reportQuery.data} metrics={metrics} canEdit={canEditManagementDashboard} onEdit={setEditing} /></div>
       </>}
+
+      <PatientAttendanceHeatmap />
 
       {manualQuery.isLoading && <div className="rounded-xl border bg-white p-6 text-sm text-slate-500">Loading monthly management records…</div>}
       {manualQuery.error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">Monthly records could not load: {manualQuery.error.message}. Automatic metrics above remain available.</div>}
