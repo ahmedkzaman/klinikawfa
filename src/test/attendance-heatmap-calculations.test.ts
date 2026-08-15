@@ -80,6 +80,7 @@ describe('normalizeAttendanceHeatmapReport', () => {
         coverage: 'complete',
       })],
       doctors: [],
+      hasAttendanceData: true,
       warnings: ['limited roster data'],
     });
   });
@@ -95,6 +96,19 @@ describe('normalizeAttendanceHeatmapReport', () => {
 
     expect(result.cells[0]).toMatchObject({ comparisonAbsoluteChange: 1, comparisonPercentChange: 50 });
     expect(result.cells[1]).toMatchObject({ comparisonAbsoluteChange: 3, comparisonPercentChange: null });
+  });
+
+  it('preserves uncovered roster gaps and marks an all-uncovered response as having no attendance data', () => {
+    const result = normalizeAttendanceHeatmapReport({
+      period,
+      cells: [
+        { weekday: 1, hour: 8, totalVisits: 0, operatingOccurrences: 0, waitMeasuredVisits: 0, otherDoctorCoveredOccurrences: 0, coverage: 'uncovered' },
+        { weekday: 1, hour: 9, totalVisits: 0, operatingOccurrences: 0, waitMeasuredVisits: 0, otherDoctorCoveredOccurrences: 0, coverage: 'uncovered' },
+      ],
+    });
+
+    expect(result.cells.every((item) => item.coverage === 'uncovered')).toBe(true);
+    expect(result.hasAttendanceData).toBe(false);
   });
 
   it('rejects cells with missing, malformed, or negative required aggregate counts', () => {

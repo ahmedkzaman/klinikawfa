@@ -31,7 +31,7 @@ const report = {
       weekday: 1 as const, hour: 9, totalVisits: 0, operatingOccurrences: 0,
       averageVisits: null, medianVisits: null, peakVisits: null, averageWaitMinutes: null,
       waitMeasuredVisits: 0, comparisonAverageVisits: null, comparisonAbsoluteChange: null,
-      comparisonPercentChange: null, otherDoctorCoveredOccurrences: 0, dates: [], coverage: 'insufficient' as const,
+      comparisonPercentChange: null, otherDoctorCoveredOccurrences: 0, dates: [], coverage: 'uncovered' as const,
     },
     {
       weekday: 1 as const, hour: 10, totalVisits: 8, operatingOccurrences: 4,
@@ -74,6 +74,7 @@ describe('PatientAttendanceHeatmap', () => {
     expect(screen.getByText('08:00–09:00')).toBeInTheDocument();
     expect(screen.getByText('23:00–00:00')).toBeInTheDocument();
     expect(screen.getAllByText(/Closed \/ not operating/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Uncovered roster gap/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Insufficient data/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Covered average/i).length).toBeGreaterThan(0);
     const alertCell = screen.getByRole('button', { name: /Monday 08:00–09:00.*2.*wait alert/i });
@@ -123,7 +124,13 @@ describe('PatientAttendanceHeatmap', () => {
   it.each([
     ['loading', { data: undefined, isLoading: true, isError: false, error: null }, /loading attendance heatmap/i],
     ['error', { data: undefined, isLoading: false, isError: true, error: new Error('Unavailable'), }, /unavailable/i],
-    ['empty', { data: { ...report, cells: [] }, isLoading: false, isError: false, error: null }, /no attendance data/i],
+    ['empty', { data: { ...report, hasAttendanceData: false, cells: Array.from({ length: 112 }, (_, index) => ({
+      weekday: (Math.floor(index / 16) + 1) as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+      hour: (index % 16) + 8, totalVisits: 0, operatingOccurrences: 0,
+      averageVisits: null, medianVisits: null, peakVisits: null, averageWaitMinutes: null,
+      waitMeasuredVisits: 0, comparisonAverageVisits: null, comparisonAbsoluteChange: null,
+      comparisonPercentChange: null, otherDoctorCoveredOccurrences: 0, dates: [], coverage: 'uncovered' as const,
+    })) }, isLoading: false, isError: false, error: null }, /no attendance data/i],
   ])('shows the %s state', (_name, query, expected) => {
     useAttendanceHeatmap.mockReturnValue(query);
     render(<PatientAttendanceHeatmap />);

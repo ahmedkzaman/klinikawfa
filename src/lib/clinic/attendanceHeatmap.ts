@@ -17,7 +17,7 @@ export type AttendanceHeatmapCell = {
     visits: number;
     averageWaitMinutes: number | null;
   }>;
-  coverage: 'complete' | 'insufficient';
+  coverage: 'complete' | 'insufficient' | 'uncovered';
 };
 
 export type AttendanceHeatmapReport = {
@@ -29,6 +29,7 @@ export type AttendanceHeatmapReport = {
     timezone: 'Asia/Kuala_Lumpur';
   };
   cells: AttendanceHeatmapCell[];
+  hasAttendanceData: boolean;
   doctors: Array<{ id: string; name: string }>;
   warnings: string[];
 };
@@ -143,9 +144,11 @@ function normalizeCell(raw: unknown): AttendanceHeatmapCell | null {
         averageWaitMinutes: nullableNumber(valueOf(date, 'averageWaitMinutes')),
       }];
     }) : [],
-    coverage: valueOf(source, 'coverage') === 'complete' && operatingOccurrences >= MINIMUM_COMPARABLE_OCCURRENCES
-      ? 'complete'
-      : 'insufficient',
+    coverage: valueOf(source, 'coverage') === 'uncovered'
+      ? 'uncovered'
+      : valueOf(source, 'coverage') === 'complete' && operatingOccurrences >= MINIMUM_COMPARABLE_OCCURRENCES
+        ? 'complete'
+        : 'insufficient',
   };
 }
 
@@ -154,12 +157,14 @@ export function normalizeAttendanceHeatmapReport(raw: unknown): AttendanceHeatma
   const rawCells = valueOf(source, 'cells');
   const rawDoctors = valueOf(source, 'doctors');
   const rawWarnings = valueOf(source, 'warnings');
+  const cells = Array.isArray(rawCells) ? rawCells.flatMap(cell => {
+    const normalized = normalizeCell(cell);
+    return normalized ? [normalized] : [];
+  }) : [];
   return {
     period: periodFrom(source),
-    cells: Array.isArray(rawCells) ? rawCells.flatMap(cell => {
-      const normalized = normalizeCell(cell);
-      return normalized ? [normalized] : [];
-    }) : [],
+    cells,
+    hasAttendanceData: cells.some((cell) => cell.totalVisits > 0 || cell.operatingOccurrences > 0),
     doctors: Array.isArray(rawDoctors) ? rawDoctors.flatMap(doctor => {
       const value = object(doctor);
       return value && typeof value.id === 'string' && typeof value.name === 'string' ? [{ id: value.id, name: value.name }] : [];
