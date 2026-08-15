@@ -59,7 +59,7 @@ function rangeIsValid(startDate: string, endDate: string): boolean {
   const end = utcDate(endDate);
   return start !== null && end !== null
     && start <= end
-    && (end.getTime() - start.getTime()) / 86_400_000 <= 365;
+    && (end.getTime() - start.getTime()) / 86_400_000 <= 364;
 }
 
 function assertRange(startDate: string | undefined, endDate: string | undefined): void {

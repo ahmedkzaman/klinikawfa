@@ -26,6 +26,14 @@ export type AttendanceHourlyForecast = {
   expectedVisits: number;
   lowerPrediction: number;
   upperPrediction: number;
+  observedAverage: number;
+  observedMedian: number;
+  observedPeak: number;
+  /** Latest four observed occurrences minus the preceding four. */
+  recentTrend: number | null;
+  sampleSize: number;
+  averageWaitMinutes: number | null;
+  waitMeasuredVisits: number;
 };
 
 export type AttendanceWeekdayForecast = {
@@ -35,6 +43,10 @@ export type AttendanceWeekdayForecast = {
   upperPrediction: number;
   highestExpectedHour: AttendanceHourlyForecast;
   highestObservedPeak: number;
+  observedAverage: number;
+  observedMedian: number;
+  /** Latest four comparable dates minus the preceding four. */
+  recentTrend: number | null;
   averageWaitMinutes: number | null;
   comparableDates: number;
   backupCoverageRate: number;
@@ -45,6 +57,7 @@ export type AttendanceRegressionResult =
   | { status: 'unavailable'; diagnostics: AttendanceModelDiagnostics; reasons: string[] };
 
 const MIN_USABLE_WEEKS = 12;
+const MAX_USABLE_WEEKS = 52;
 const MAX_ITERATIONS = 50;
 const CONVERGENCE_TOLERANCE = 1e-7;
 const RIDGE = 1e-6;
@@ -58,6 +71,8 @@ type DesignMatrix = {
   values: number[][];
   responses: number[];
   observations: AttendanceRegressionObservation[];
+  omittedFeatureNames: string[];
+  latestWeekIndex: number;
 };
 
 type Fit = { coefficients: number[]; iterations: number };
@@ -97,18 +112,26 @@ function validObservation(observation: AttendanceRegressionObservation): boolean
     && Number.isFinite(observation.doctorsRostered)
     && observation.doctorsRostered > 0
     && (observation.averageWaitMinutes === null || (Number.isFinite(observation.averageWaitMinutes) && observation.averageWaitMinutes >= 0))
+    && !(observation.waitMeasuredVisits > 0 && observation.averageWaitMinutes === null)
     && typeof observation.selectedDoctorScheduled === 'boolean'
     && typeof observation.backupDoctorCovered === 'boolean';
 }
 
-function featureNames(observations: AttendanceRegressionObservation[]): string[] {
+const OPTIONAL_OPERATIONAL_FEATURES = [
+  'doctors_rostered',
+  'selected_doctor_scheduled',
+  'backup_doctor_covered',
+] as const;
+
+function requestedFeatureNames(observations: AttendanceRegressionObservation[]): string[] {
   const weekdays = new Set(observations.map(observation => observation.weekday));
   const hours = new Set(observations.map(observation => observation.hour));
   const months = new Set(observations.map(observation => Number(observation.date.slice(5, 7))));
   const rosterCounts = new Set(observations.map(observation => observation.doctorsRostered));
   const selectedDoctorStates = new Set(observations.map(observation => observation.selectedDoctorScheduled));
   const backupCoverageStates = new Set(observations.map(observation => observation.backupDoctorCovered));
-  const monthReference = Math.min(...months);
+  const earliestObservedDate = [...observations].sort((left, right) => left.date.localeCompare(right.date))[0]?.date;
+  const monthReference = Number(earliestObservedDate?.slice(5, 7));
   return [
     'intercept',
     ...[2, 3, 4, 5, 6, 7].filter(weekday => weekdays.has(weekday as AttendanceRegressionObservation['weekday'])).map(weekday => `weekday_${weekday}`),
@@ -121,27 +144,67 @@ function featureNames(observations: AttendanceRegressionObservation[]): string[]
   ];
 }
 
+function designRow(
+  observation: AttendanceRegressionObservation,
+  names: string[],
+  weekIndexes: Map<string, number>,
+  trendOverride?: number,
+): number[] {
+  const month = Number(observation.date.slice(5, 7));
+  return names.map(name => {
+    if (name === 'intercept') return 1;
+    if (name === 'week_trend') return trendOverride ?? weekIndexes.get(weekKey(observation.date)) ?? 0;
+    if (name === 'doctors_rostered') return observation.doctorsRostered;
+    if (name === 'selected_doctor_scheduled') return Number(observation.selectedDoctorScheduled);
+    if (name === 'backup_doctor_covered') return Number(observation.backupDoctorCovered);
+    if (name.startsWith('weekday_')) return Number(observation.weekday === Number(name.slice('weekday_'.length)));
+    if (name.startsWith('hour_')) return Number(observation.hour === Number(name.slice('hour_'.length)));
+    return Number(month === Number(name.slice('month_'.length)));
+  });
+}
+
+export function latestAttendanceRegressionObservations(
+  observations: AttendanceRegressionObservation[],
+): AttendanceRegressionObservation[] {
+  const weeks = [...new Set(observations.filter(observation => isDate(observation.date)).map(observation => weekKey(observation.date)))].sort();
+  const retainedWeeks = new Set(weeks.slice(-MAX_USABLE_WEEKS));
+  return observations
+    .filter(observation => isDate(observation.date) && retainedWeeks.has(weekKey(observation.date)))
+    .sort((left, right) => left.date.localeCompare(right.date)
+      || left.weekday - right.weekday
+      || left.hour - right.hour);
+}
+
 function buildAttendanceDesignMatrix(observations: AttendanceRegressionObservation[]): DesignMatrix {
   const weeks = [...new Set(observations.map(observation => weekKey(observation.date)))].sort();
   const weekIndexes = new Map(weeks.map((week, index) => [week, index - ((weeks.length - 1) / 2)]));
-  const names = featureNames(observations);
+  const requestedNames = requestedFeatureNames(observations);
+  const coreNames = requestedNames.filter(name => !OPTIONAL_OPERATIONAL_FEATURES.includes(name as typeof OPTIONAL_OPERATIONAL_FEATURES[number]));
+  let names = coreNames;
+  let values = observations.map(observation => designRow(observation, names, weekIndexes));
+  const omittedFeatureNames: string[] = [];
+
+  if (hasFullColumnRank(values)) {
+    for (const featureName of OPTIONAL_OPERATIONAL_FEATURES) {
+      if (!requestedNames.includes(featureName)) continue;
+      const candidateNames = [...names, featureName];
+      const candidateValues = observations.map(observation => designRow(observation, candidateNames, weekIndexes));
+      if (hasFullColumnRank(candidateValues)) {
+        names = candidateNames;
+        values = candidateValues;
+      } else {
+        omittedFeatureNames.push(featureName);
+      }
+    }
+  }
+
   return {
     featureNames: names,
-    values: observations.map(observation => {
-      const month = Number(observation.date.slice(5, 7));
-      return names.map(name => {
-        if (name === 'intercept') return 1;
-        if (name === 'week_trend') return weekIndexes.get(weekKey(observation.date)) ?? 0;
-        if (name === 'doctors_rostered') return observation.doctorsRostered;
-        if (name === 'selected_doctor_scheduled') return Number(observation.selectedDoctorScheduled);
-        if (name === 'backup_doctor_covered') return Number(observation.backupDoctorCovered);
-        if (name.startsWith('weekday_')) return Number(observation.weekday === Number(name.slice('weekday_'.length)));
-        if (name.startsWith('hour_')) return Number(observation.hour === Number(name.slice('hour_'.length)));
-        return Number(month === Number(name.slice('month_'.length)));
-      });
-    }),
+    values,
     responses: observations.map(observation => observation.visits),
     observations,
+    omittedFeatureNames,
+    latestWeekIndex: (weeks.length - 1) / 2,
   };
 }
 
@@ -263,6 +326,23 @@ function finiteForecast(forecast: Pick<AttendanceHourlyForecast, 'expectedVisits
     && finitePredictionBounds(forecast);
 }
 
+function average(values: number[]): number {
+  return values.reduce((total, value) => total + value, 0) / values.length;
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
+}
+
+function recentObservedTrend(values: number[]): number | null {
+  if (values.length < 8) return null;
+  const latestFour = values.slice(-4);
+  const previousFour = values.slice(-8, -4);
+  return average(latestFour) - average(previousFour);
+}
+
 function makeForecasts(matrix: DesignMatrix, coefficients: number[], alpha: number): { hourly: AttendanceHourlyForecast[]; weekdays: AttendanceWeekdayForecast[] } | null {
   const groups = new Map<string, number[]>();
   matrix.observations.forEach((observation, index) => {
@@ -270,13 +350,45 @@ function makeForecasts(matrix: DesignMatrix, coefficients: number[], alpha: numb
     groups.set(key, [...(groups.get(key) ?? []), index]);
   });
   const hourlyRows: ForecastRow[] = [...groups.values()].map(indexes => {
-    const first = matrix.observations[indexes[0]];
-    const estimates = indexes.map(index => prediction(matrix.values[index], coefficients, alpha));
-    const expectedVisits = estimates.reduce((total, estimate) => total + estimate.mean, 0) / estimates.length;
-    const variance = estimates.reduce((total, estimate) => total + estimate.variance + ((estimate.mean - expectedVisits) ** 2), 0) / estimates.length;
-    return { weekday: first.weekday, hour: first.hour, expectedVisits, ...predictionBounds(expectedVisits, variance), variance, observations: indexes.map(index => matrix.observations[index]) };
+    const latestIndex = indexes.reduce((latest, index) => (
+      matrix.observations[index].date > matrix.observations[latest].date ? index : latest
+    ));
+    const latestObservation = matrix.observations[latestIndex];
+    const forecastRow = [...matrix.values[latestIndex]];
+    const trendColumn = matrix.featureNames.indexOf('week_trend');
+    if (trendColumn >= 0) forecastRow[trendColumn] = matrix.latestWeekIndex;
+    const estimate = prediction(forecastRow, coefficients, alpha);
+    const observations = indexes
+      .map(index => matrix.observations[index])
+      .sort((left, right) => left.date.localeCompare(right.date));
+    const observedVisits = observations.map(observation => observation.visits);
+    const waitMeasuredVisits = observations.reduce((total, observation) => total + observation.waitMeasuredVisits, 0);
+    const weightedWaitMinutes = observations.reduce(
+      (total, observation) => total + ((observation.averageWaitMinutes ?? 0) * observation.waitMeasuredVisits),
+      0,
+    );
+    return {
+      weekday: latestObservation.weekday,
+      hour: latestObservation.hour,
+      expectedVisits: estimate.mean,
+      ...predictionBounds(estimate.mean, estimate.variance),
+      observedAverage: average(observedVisits),
+      observedMedian: median(observedVisits),
+      observedPeak: Math.max(...observedVisits),
+      recentTrend: recentObservedTrend(observedVisits),
+      sampleSize: observations.length,
+      averageWaitMinutes: waitMeasuredVisits === 0 ? null : weightedWaitMinutes / waitMeasuredVisits,
+      waitMeasuredVisits,
+      variance: estimate.variance,
+      observations,
+    };
   }).sort((left, right) => left.weekday - right.weekday || left.hour - right.hour);
-  if (hourlyRows.some(row => !finiteForecast(row) || !Number.isFinite(row.variance) || row.variance < 0)) return null;
+  if (hourlyRows.some(row => !finiteForecast(row)
+    || !Number.isFinite(row.variance) || row.variance < 0
+    || !Number.isFinite(row.observedAverage) || !Number.isFinite(row.observedMedian) || !Number.isFinite(row.observedPeak)
+    || !Number.isFinite(row.waitMeasuredVisits) || row.waitMeasuredVisits < 0
+    || (row.averageWaitMinutes !== null && (!Number.isFinite(row.averageWaitMinutes) || row.averageWaitMinutes < 0))
+    || (row.recentTrend !== null && !Number.isFinite(row.recentTrend)))) return null;
 
   const weekdays = ([1, 2, 3, 4, 5, 6, 7] as const).flatMap(weekday => {
     const dayHours = hourlyRows.filter(hour => hour.weekday === weekday);
@@ -287,6 +399,14 @@ function makeForecasts(matrix: DesignMatrix, coefficients: number[], alpha: numb
     const waitMeasuredVisits = observations.reduce((total, observation) => total + observation.waitMeasuredVisits, 0);
     const weightedWait = observations.reduce((total, observation) => total + ((observation.averageWaitMinutes ?? 0) * observation.waitMeasuredVisits), 0);
     const highestExpectedHour = [...dayHours].sort((left, right) => right.expectedVisits - left.expectedVisits || left.hour - right.hour)[0];
+    const dailyVisits = new Map<string, number>();
+    observations.forEach(observation => dailyVisits.set(
+      observation.date,
+      (dailyVisits.get(observation.date) ?? 0) + observation.visits,
+    ));
+    const observedDailyTotals = [...dailyVisits.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([, visits]) => visits);
     return [{
       weekday,
       expectedTotal,
@@ -297,14 +417,27 @@ function makeForecasts(matrix: DesignMatrix, coefficients: number[], alpha: numb
         expectedVisits: highestExpectedHour.expectedVisits,
         lowerPrediction: highestExpectedHour.lowerPrediction,
         upperPrediction: highestExpectedHour.upperPrediction,
+        observedAverage: highestExpectedHour.observedAverage,
+        observedMedian: highestExpectedHour.observedMedian,
+        observedPeak: highestExpectedHour.observedPeak,
+        recentTrend: highestExpectedHour.recentTrend,
+        sampleSize: highestExpectedHour.sampleSize,
+        averageWaitMinutes: highestExpectedHour.averageWaitMinutes,
+        waitMeasuredVisits: highestExpectedHour.waitMeasuredVisits,
       },
       highestObservedPeak: Math.max(...observations.map(observation => observation.visits)),
+      observedAverage: average(observedDailyTotals),
+      observedMedian: median(observedDailyTotals),
+      recentTrend: recentObservedTrend(observedDailyTotals),
       averageWaitMinutes: waitMeasuredVisits === 0 ? null : weightedWait / waitMeasuredVisits,
       comparableDates: new Set(observations.map(observation => observation.date)).size,
       backupCoverageRate: observations.filter(observation => observation.backupDoctorCovered).length / observations.length,
     }];
   });
-  if (weekdays.some(day => !Number.isFinite(day.expectedTotal) || day.expectedTotal < 0 || !finitePredictionBounds(day) || !finiteForecast(day.highestExpectedHour))) return null;
+  if (weekdays.some(day => !Number.isFinite(day.expectedTotal) || day.expectedTotal < 0
+    || !finitePredictionBounds(day) || !finiteForecast(day.highestExpectedHour)
+    || !Number.isFinite(day.observedAverage) || !Number.isFinite(day.observedMedian)
+    || (day.recentTrend !== null && !Number.isFinite(day.recentTrend)))) return null;
   return { hourly: hourlyRows.map(({ variance: _variance, observations: _observations, ...hour }) => hour), weekdays };
 }
 
@@ -326,43 +459,51 @@ export function fitAttendanceRegression(
   selectedDoctorId?: string | null,
 ): AttendanceRegressionResult {
   void selectedDoctorId;
-  const usable = observations.filter(validObservation);
+  const valid = observations.filter(validObservation);
+  const usable = latestAttendanceRegressionObservations(valid);
   const usableWeeks = new Set(usable.map(observation => weekKey(observation.date))).size;
-  const warnings = observations.length === usable.length ? [] : ['Uncovered or invalid observations were excluded.'];
+  const warnings: string[] = [];
+  if (observations.length !== valid.length) warnings.push('Uncovered or invalid observations were excluded.');
+  if (valid.length !== usable.length) warnings.push('Attendance model observations were truncated to the latest 52 weeks.');
   const baseDiagnostics = diagnostics({ usableWeeks, observationCount: usable.length, warnings });
   const reasons: string[] = [];
-  if (usable.length !== observations.length) reasons.push('All observations must be covered and finite.');
+  if (valid.length !== observations.length) reasons.push('All observations must be covered and finite.');
   if (usable.length === 0) reasons.push('No covered, valid observations are available.');
   if (usableWeeks < MIN_USABLE_WEEKS) reasons.push('At least 12 usable weeks are required.');
   if (reasons.length > 0) return { status: 'unavailable', diagnostics: baseDiagnostics, reasons };
 
   const matrix = buildAttendanceDesignMatrix(usable);
+  const modelWarnings = [
+    ...warnings,
+    ...matrix.omittedFeatureNames.map(name => `Dependent predictor ${name} was omitted.`),
+  ];
+  const modelDiagnostics = diagnostics({ ...baseDiagnostics, warnings: modelWarnings });
   if (!hasFullColumnRank(matrix.values)) return {
     status: 'unavailable',
-    diagnostics: baseDiagnostics,
+    diagnostics: modelDiagnostics,
     reasons: ['The design matrix is structurally unidentifiable.'],
   };
   const poissonFit = fitIrls(matrix, 0);
-  if (!poissonFit) return { status: 'unavailable', diagnostics: baseDiagnostics, reasons: ['The Poisson fit did not converge.'] };
+  if (!poissonFit) return { status: 'unavailable', diagnostics: modelDiagnostics, reasons: ['The Poisson fit did not converge.'] };
   const estimatedDispersion = pearsonDispersion(matrix, poissonFit.coefficients);
-  if (!Number.isFinite(estimatedDispersion)) return { status: 'unavailable', diagnostics: baseDiagnostics, reasons: ['The dispersion estimate was not finite.'] };
+  if (!Number.isFinite(estimatedDispersion)) return { status: 'unavailable', diagnostics: modelDiagnostics, reasons: ['The dispersion estimate was not finite.'] };
   const family = estimatedDispersion <= 0.01 ? 'poisson' : 'negative_binomial';
   const fit = family === 'poisson' ? poissonFit : fitIrls(matrix, estimatedDispersion);
   if (!fit) return {
     status: 'unavailable',
-    diagnostics: diagnostics({ ...baseDiagnostics, family, dispersion: estimatedDispersion }),
+    diagnostics: diagnostics({ ...modelDiagnostics, family, dispersion: estimatedDispersion }),
     reasons: [`The ${family === 'poisson' ? 'Poisson' : 'negative binomial'} fit did not converge.`],
   };
   const forecasts = makeForecasts(matrix, fit.coefficients, estimatedDispersion);
   if (!forecasts) return {
     status: 'unavailable',
-    diagnostics: diagnostics({ ...baseDiagnostics, family, converged: true, iterations: fit.iterations, dispersion: estimatedDispersion }),
+    diagnostics: diagnostics({ ...modelDiagnostics, family, converged: true, iterations: fit.iterations, dispersion: estimatedDispersion }),
     reasons: ['The fitted predictions were not finite.'],
   };
   return {
     status: 'ready',
     diagnostics: diagnostics({
-      ...baseDiagnostics,
+      ...modelDiagnostics,
       family,
       converged: true,
       iterations: fit.iterations,
@@ -372,4 +513,12 @@ export function fitAttendanceRegression(
   };
 }
 
-export const __attendanceRegressionTestables = { buildAttendanceDesignMatrix };
+function fitCoefficientMap(observations: AttendanceRegressionObservation[]): Record<string, number> | null {
+  const usable = latestAttendanceRegressionObservations(observations.filter(validObservation));
+  const matrix = buildAttendanceDesignMatrix(usable);
+  if (!hasFullColumnRank(matrix.values)) return null;
+  const fit = fitIrls(matrix, 0);
+  return fit ? Object.fromEntries(matrix.featureNames.map((name, index) => [name, fit.coefficients[index]])) : null;
+}
+
+export const __attendanceRegressionTestables = { buildAttendanceDesignMatrix, fitCoefficientMap };

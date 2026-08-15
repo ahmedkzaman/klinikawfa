@@ -36,7 +36,7 @@ describe('clinical attendance heatmap migration', () => {
     expect(sql).toMatch(/_start_date\s*>\s*_end_date/i);
     expect(sql).toMatch(/_start_date\s+is\s+null\s+or\s+_end_date\s+is\s+null/i);
     expect(sql).toMatch(/raise\s+exception\s+'INVALID_DATE_RANGE'.*22023/is);
-    expect(sql).toMatch(/\(_end_date\s*-\s*_start_date\)\s*>\s*365/i);
+    expect(sql).toMatch(/\(_end_date\s*-\s*_start_date\)\s*>\s*364/i);
     expect(sql).toMatch(/v_range_days\s*:=\s*\(_end_date\s*-\s*_start_date\)\s*\+\s*1/i);
     expect(sql).toMatch(/v_comparison_start\s*:=\s*_start_date\s*-\s*v_range_days/i);
     expect(sql).toMatch(/v_comparison_end\s*:=\s*_start_date\s*-\s*1/i);
@@ -52,6 +52,7 @@ describe('clinical attendance heatmap migration', () => {
 
     expect(sql).toContain('NULL_START_DATE_SUCCEEDED');
     expect(sql).toContain('NULL_END_DATE_SUCCEEDED');
+    expect(sql).toContain('MAXIMUM_INCLUSIVE_RANGE_REJECTED');
     expect(sql).toContain('DOC_S3');
     expect(sql).toMatch(/'other'/i);
     expect(sql).toMatch(/medianVisits/i);
@@ -70,12 +71,12 @@ describe('clinical attendance heatmap migration', () => {
     expect(sql).toMatch(/qe\.cancelled_at\s+is\s+null/i);
     expect(sql).toMatch(/qe\.clinic_status::text\s*<>\s*'cancelled'/i);
     expect(sql).toMatch(/qe\.visit_type::text\s*<>\s*'payment_only'/i);
-    expect(sql).toMatch(/qualifying_consultations/i);
-    expect(sql).toMatch(/join\s+qualifying_consultations\s+as\s+c\s+on\s+c\.queue_entry_id\s*=\s+qe\.id/i);
+    expect(sql).toMatch(/queue_candidates\s+as\s+materialized/i);
+    expect(sql).toMatch(/from\s+queue_candidates\s+as\s+qe\s+join\s+public\.consultations\s+as\s+c/is);
     expect(sql).toMatch(/c\.deleted_at\s+is\s+null/i);
     expect(sql).toMatch(/timezone\s*\(\s*'Asia\/Kuala_Lumpur'\s*,\s*qe\.created_at\s*\)/i);
-    expect(sql).toMatch(/extract\s*\(\s*isodow\s+from\s+local_time\.local_created_at\s*\)/i);
-    expect(sql).toMatch(/extract\s*\(\s*hour\s+from\s+local_time\.local_created_at\s*\)/i);
+    expect(sql).toMatch(/extract\s*\(\s*isodow\s+from\s+qe\.local_created_at\s*\)/i);
+    expect(sql).toMatch(/extract\s*\(\s*hour\s+from\s+qe\.local_created_at\s*\)/i);
     expect(sql).toMatch(/extract\s*\(\s*hour\s+from\s+local_time\.local_created_at\s*\)\s+between\s+8\s+and\s+23/i);
     expect(sql).toMatch(/qe\.called_at\s*>=\s*qe\.created_at/i);
     expect(sql).toMatch(/current\s+imported\/synthetic-arrival\s+boundary/i);
@@ -118,6 +119,6 @@ describe('clinical attendance heatmap migration', () => {
     expect(sql).toMatch(/revoke\s+all\s+on\s+function\s+public\.get_clinical_attendance_heatmap\s*\(\s*date\s*,\s*date\s*,\s*uuid\s*\)\s+from\s+public\s*,\s*anon/i);
     expect(sql).toMatch(/grant\s+execute\s+on\s+function\s+public\.get_clinical_attendance_heatmap\s*\(\s*date\s*,\s*date\s*,\s*uuid\s*\)\s+to\s+authenticated/i);
     expect(sql).toMatch(/create\s+index\s+if\s+not\s+exists\s+clinical_attendance_heatmap_queue_created_idx\s+on\s+public\.queue_entries\s*\(\s*created_at\s*\)/i);
-    expect(sql).toMatch(/create\s+index\s+if\s+not\s+exists\s+clinical_attendance_heatmap_consultation_queue_doctor_idx\s+on\s+public\.consultations\s*\(\s*queue_entry_id\s*,\s*doctor_id\s*\)/i);
+    expect(sql).not.toMatch(/clinical_attendance_heatmap_consultation_queue_doctor_idx/i);
   });
 });

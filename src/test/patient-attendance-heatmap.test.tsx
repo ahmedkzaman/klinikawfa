@@ -97,8 +97,13 @@ const suggestedAssessment = {
   ],
   forecast: {
     weekday: 2 as const, expectedTotal: 3.24, lowerPrediction: 1.1, upperPrediction: 5.38,
-    highestExpectedHour: { weekday: 2 as const, hour: 9, expectedVisits: 1.56, lowerPrediction: 0.2, upperPrediction: 2.92 },
-    highestObservedPeak: 4, averageWaitMinutes: 12.4, comparableDates: 12, backupCoverageRate: 1,
+    highestExpectedHour: {
+      weekday: 2 as const, hour: 9, expectedVisits: 1.56, lowerPrediction: 0.2, upperPrediction: 2.92,
+      observedAverage: 1.4, observedMedian: 1, observedPeak: 4, recentTrend: 0.2, sampleSize: 12,
+      averageWaitMinutes: 14.2, waitMeasuredVisits: 10,
+    },
+    highestObservedPeak: 4, observedAverage: 2.8, observedMedian: 2.5, recentTrend: 0.4,
+    averageWaitMinutes: 12.4, comparableDates: 12, backupCoverageRate: 1,
   },
 };
 
@@ -192,7 +197,18 @@ describe('PatientAttendanceHeatmap', () => {
     expect(screen.getByText(/Predicted visits:\s*3\.2/i)).toBeInTheDocument();
     expect(screen.getByText(/Prediction range:\s*1\.1–5\.4/i)).toBeInTheDocument();
     expect(screen.getByText(/Highest-risk hour:\s*09:00/i)).toBeInTheDocument();
-    expect(screen.getByText(/Observed peak:\s*4\.0/i)).toBeInTheDocument();
+    expect(screen.getByText(/Risk-hour observed average:\s*1\.4/i)).toBeInTheDocument();
+    expect(screen.getByText(/Risk-hour observed median:\s*1\.0/i)).toBeInTheDocument();
+    expect(screen.getByText(/Risk-hour observed peak:\s*4\.0/i)).toBeInTheDocument();
+    expect(screen.getByText(/Risk-hour recent trend:\s*\+0\.2 visits vs previous 4 occurrences/i)).toBeInTheDocument();
+    expect(screen.getByText(/Risk-hour average wait:\s*14\.2 min/i)).toBeInTheDocument();
+    expect(screen.getByText(/Risk-hour measured waits:\s*10/i)).toBeInTheDocument();
+    expect(screen.getByText(/Weekday highest observed hourly peak:\s*4\.0/i)).toBeInTheDocument();
+    expect(screen.getByText(/Weekday observed average:\s*2\.8/i)).toBeInTheDocument();
+    expect(screen.getByText(/Weekday observed median:\s*2\.5/i)).toBeInTheDocument();
+    expect(screen.getByText(/Weekday recent trend:\s*\+0\.4 visits vs previous 4 comparable dates/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Backup coverage:/i)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/treating doctor/i), { target: { value: 'doctor-1' } });
     expect(screen.getByText(/Backup coverage:\s*100\.0%/i)).toBeInTheDocument();
     expect(screen.getByText(/Planning aid only — confirm against roster and current operations\./i)).toBeInTheDocument();
   });
@@ -225,8 +241,10 @@ describe('PatientAttendanceHeatmap', () => {
       'Average wait exceeds 45 minutes.',
       'Prediction volatility is too high.',
     ]);
-    expect(screen.getByLabelText(/safety checks/i)).toBeInTheDocument();
-    expect(screen.getByText('View all checks')).toBeInTheDocument();
+    expect(screen.getByLabelText('Safety checks')).toBeInTheDocument();
+    const disclosure = screen.getByText('View all checks by weekday');
+    fireEvent.click(disclosure);
+    expect(screen.getByRole('heading', { name: 'Tuesday safety checks' })).toBeInTheDocument();
   });
 
   it.each([
@@ -301,5 +319,15 @@ describe('PatientAttendanceHeatmap', () => {
     fireEvent.change(screen.getByLabelText(/custom start date/i), { target: { value: '2026-08-16' } });
     fireEvent.change(screen.getByLabelText(/custom end date/i), { target: { value: '2026-08-15' } });
     expect(screen.getByText(/invalid date range/i)).toBeInTheDocument();
+  });
+
+  it('rejects a custom range with a 365-day difference', () => {
+    render(<PatientAttendanceHeatmap />);
+
+    fireEvent.change(screen.getByLabelText(/attendance period/i), { target: { value: 'custom' } });
+    fireEvent.change(screen.getByLabelText(/custom start date/i), { target: { value: '2025-08-15' } });
+    fireEvent.change(screen.getByLabelText(/custom end date/i), { target: { value: '2026-08-15' } });
+
+    expect(screen.getByText(/Invalid date range\. Choose at most 365 inclusive dates\./i)).toBeInTheDocument();
   });
 });

@@ -48,7 +48,7 @@ function timeRange(hour: number): string {
 function dateRangeIsValid(startDate: string, endDate: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(startDate) && /^\d{4}-\d{2}-\d{2}$/.test(endDate)
     && startDate <= endDate
-    && (new Date(`${endDate}T00:00:00Z`).getTime() - new Date(`${startDate}T00:00:00Z`).getTime()) <= 365 * 86_400_000;
+    && (new Date(`${endDate}T00:00:00Z`).getTime() - new Date(`${startDate}T00:00:00Z`).getTime()) <= 364 * 86_400_000;
 }
 
 function cellStatus(cell: AttendanceHeatmapCell | undefined): 'closed' | 'uncovered' | 'insufficient' | 'covered' {
@@ -122,7 +122,7 @@ export function PatientAttendanceHeatmap() {
             <div className="space-y-1"><Label htmlFor="treating-doctor">Treating doctor</Label><select id="treating-doctor" aria-label="Treating doctor" value={doctorId ?? 'all'} onChange={(event) => setDoctorId(event.target.value === 'all' ? null : event.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"><option value="all">All doctors</option>{report?.doctors.map((doctor) => <option key={doctor.id} value={doctor.id}>{doctor.name}</option>)}</select><p className="text-xs text-slate-500">{doctorId ? 'Selected treating doctor' : 'All doctors'}</p></div>
             {preset === 'custom' && <><div className="space-y-1"><Label htmlFor="custom-start-date">Custom start date</Label><Input id="custom-start-date" aria-label="Custom start date" type="date" value={customStartDate} onChange={(event) => setCustomStartDate(event.target.value)} /></div><div className="space-y-1"><Label htmlFor="custom-end-date">Custom end date</Label><Input id="custom-end-date" aria-label="Custom end date" type="date" value={customEndDate} onChange={(event) => setCustomEndDate(event.target.value)} /></div></>}
           </div>
-          {invalidRange && <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">Invalid date range. Choose dates in order, up to 366 days apart.</p>}
+          {invalidRange && <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">Invalid date range. Choose at most 365 inclusive dates.</p>}
           {report?.warnings.map((warning) => <p key={warning} className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{warning}</p>)}
           {query.isLoading && <p className="text-sm text-slate-500">Loading attendance heatmap…</p>}
           {query.isError && <p role="alert" className="text-sm text-red-700">{query.error?.message ?? 'Attendance heatmap is unavailable.'}</p>}

@@ -5,7 +5,7 @@ import {
   type AttendanceRegressionObservation,
 } from '@/lib/clinic/attendanceRegression';
 
-const { buildAttendanceDesignMatrix } = __attendanceRegressionTestables;
+const { buildAttendanceDesignMatrix, fitCoefficientMap } = __attendanceRegressionTestables;
 
 function dateFor(week: number, weekday: number): string {
   const date = new Date(Date.UTC(2026, 7, 3 + (week * 7) + (weekday - 1)));
@@ -67,6 +67,56 @@ function lowAverageHighPeakFixture(): AttendanceRegressionObservation[] {
   });
 }
 
+function sqlShapedSelectedDoctorFixture(weeks = 12): AttendanceRegressionObservation[] {
+  return syntheticObservations({ weeks }).map((item, index) => {
+    const backupDoctorCovered = index % 3 === 0;
+    return {
+      ...item,
+      doctorsRostered: 1 + Number(backupDoctorCovered),
+      selectedDoctorScheduled: true,
+      backupDoctorCovered,
+    };
+  });
+}
+
+function risingSeriesFixture(): AttendanceRegressionObservation[] {
+  return syntheticObservations({
+    weeks: 12,
+    visits: (week) => 2 + week,
+  }).map(item => ({
+    ...item,
+    doctorsRostered: 1,
+    selectedDoctorScheduled: false,
+    backupDoctorCovered: false,
+  }));
+}
+
+function knownCoefficientFixture(): AttendanceRegressionObservation[] {
+  const weeks = 20;
+  const center = (weeks - 1) / 2;
+  return Array.from({ length: weeks }, (_, week) => [1, 2].flatMap(weekday => [8, 9].map(hour => {
+    const doctorsRostered = 1 + Number(((week * 3) + weekday + hour) % 4 === 0);
+    const selectedDoctorScheduled = ((week * 2) + weekday + hour) % 5 < 2;
+    const backupDoctorCovered = ((week * 5) + (weekday * 2) + hour) % 7 < 3;
+    const logMean = 2.6
+      + (weekday === 2 ? 0.35 : 0)
+      + (hour === 9 ? 0.25 : 0)
+      + (0.04 * (week - center))
+      + (0.30 * doctorsRostered)
+      + (selectedDoctorScheduled ? 0.20 : 0)
+      - (backupDoctorCovered ? 0.15 : 0);
+    return observation({
+      date: dateFor(week, weekday),
+      weekday: weekday as AttendanceRegressionObservation['weekday'],
+      hour,
+      visits: Math.round(Math.exp(logMean)),
+      doctorsRostered,
+      selectedDoctorScheduled,
+      backupDoctorCovered,
+    });
+  }))).flat();
+}
+
 function peakBusyThreshold(result: ReturnType<typeof fitAttendanceRegression>): number {
   if (result.status !== 'ready') return Infinity;
   return result.weekdays.find(day => day.weekday === 6)!.highestExpectedHour.expectedVisits;
@@ -100,10 +150,14 @@ describe('fitAttendanceRegression', () => {
   });
 
   it('rejects structurally unidentifiable designs before ridge stabilization', () => {
-    const result = fitAttendanceRegression(syntheticObservations({ weeks: 12 }).map(item => ({
-      ...item,
-      backupDoctorCovered: item.selectedDoctorScheduled,
-    })), null);
+    const result = fitAttendanceRegression(syntheticObservations({ weeks: 12 })
+      .filter(item => (item.weekday === 1 && item.hour === 8) || (item.weekday === 2 && item.hour === 9))
+      .map(item => ({
+        ...item,
+        doctorsRostered: 1,
+        selectedDoctorScheduled: false,
+        backupDoctorCovered: false,
+      })), null);
 
     expect(result).toMatchObject({
       status: 'unavailable',
@@ -135,6 +189,12 @@ describe('fitAttendanceRegression', () => {
     expect(fitAttendanceRegression(selectedDoctor, 'doctor-1')).toMatchObject({ status: 'ready' });
   });
 
+  it('keeps a SQL-shaped selected-doctor fit available when roster count equals one plus backup coverage', () => {
+    const result = fitAttendanceRegression(sqlShapedSelectedDoctorFixture(), 'doctor-1');
+
+    expect(result).toMatchObject({ status: 'ready', diagnostics: { usableWeeks: 12 } });
+  });
+
   it('encodes weekday, hour, month, trend, roster count, selected doctor, and backup coverage', () => {
     const matrix = buildAttendanceDesignMatrix(syntheticObservations({ weeks: 12 }));
     expect(matrix.featureNames).toEqual(expect.arrayContaining([
@@ -157,6 +217,31 @@ describe('fitAttendanceRegression', () => {
     expect(inOrder.featureNames).not.toContain('month_8');
     expect(inOrder.featureNames).toContain('month_9');
     expect(shuffled.featureNames).toEqual(inOrder.featureNames);
+  });
+
+  it('uses the chronologically earliest retained month as reference across a year boundary', () => {
+    const decemberAndJanuary = [
+      observation({ date: '2026-12-07', weekday: 1, hour: 8 }),
+      observation({ date: '2027-01-05', weekday: 2, hour: 9 }),
+    ];
+    const inOrder = buildAttendanceDesignMatrix(decemberAndJanuary);
+    const shuffled = buildAttendanceDesignMatrix([...decemberAndJanuary].reverse());
+
+    expect(inOrder.featureNames).not.toContain('month_12');
+    expect(inOrder.featureNames).toContain('month_1');
+    expect(shuffled.featureNames).toEqual(inOrder.featureNames);
+  });
+
+  it('recovers the direction and approximate size of known weekday, hour, trend, and doctor-coverage effects', () => {
+    const effects = fitCoefficientMap(knownCoefficientFixture());
+
+    expect(effects).not.toBeNull();
+    expect(effects?.weekday_2).toBeCloseTo(0.35, 1);
+    expect(effects?.hour_9).toBeCloseTo(0.25, 1);
+    expect(effects?.week_trend).toBeCloseTo(0.04, 1);
+    expect(effects?.doctors_rostered).toBeCloseTo(0.30, 1);
+    expect(effects?.selected_doctor_scheduled).toBeCloseTo(0.20, 1);
+    expect(effects?.backup_doctor_covered).toBeCloseTo(-0.15, 1);
   });
 
   it('uses the Poisson limit for stable equidispersed counts', () => {
@@ -199,6 +284,48 @@ describe('fitAttendanceRegression', () => {
         expect(forecast.upperPrediction).toBeGreaterThanOrEqual(0);
       });
     }
+  });
+
+  it('projects a rising weekly series at the latest forecast point and exposes observed context', () => {
+    const result = fitAttendanceRegression(risingSeriesFixture(), null);
+
+    expect(result.status).toBe('ready');
+    if (result.status === 'ready') {
+      const monday = result.weekdays.find(day => day.weekday === 1)!;
+      expect(monday.observedAverage).toBeCloseTo(15, 5);
+      expect(monday.observedMedian).toBeCloseTo(15, 5);
+      expect(monday.expectedTotal).toBeGreaterThan(20);
+      expect(monday.expectedTotal).toBeGreaterThan(monday.observedAverage);
+      expect(monday.recentTrend).toBeGreaterThan(0);
+      expect(monday.highestExpectedHour.averageWaitMinutes).toBe(15);
+      expect(monday.highestExpectedHour.waitMeasuredVisits).toBe(24);
+    }
+  });
+
+  it('keeps only the latest 52 distinct weeks when called directly with a longer sparse sample', () => {
+    const observations = syntheticObservations({ weeks: 53 }).map((item, index) => index < 14
+      ? { ...item, visits: 500 }
+      : item);
+    const result = fitAttendanceRegression(observations, null);
+    const latestOnly = fitAttendanceRegression(observations.slice(14), null);
+
+    expect(result).toMatchObject({ status: 'ready', diagnostics: { usableWeeks: 52 } });
+    expect(latestOnly.status).toBe('ready');
+    if (result.status === 'ready' && latestOnly.status === 'ready') {
+      expect(result.weekdays.map(day => day.expectedTotal))
+        .toEqual(latestOnly.weekdays.map(day => day.expectedTotal));
+    }
+  });
+
+  it('rejects a positive measured-wait count with a null wait average', () => {
+    const result = fitAttendanceRegression(risingSeriesFixture().map((item, index) => index === 0
+      ? { ...item, waitMeasuredVisits: 1, averageWaitMinutes: null }
+      : item), null);
+
+    expect(result).toMatchObject({
+      status: 'unavailable',
+      reasons: expect.arrayContaining(['All observations must be covered and finite.']),
+    });
   });
 
   it('preserves a low average weekday but exposes its dangerous peak bound', () => {

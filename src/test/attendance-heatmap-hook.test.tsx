@@ -74,12 +74,14 @@ describe('attendance heatmap periods', () => {
     });
   });
 
-  it('keeps a valid custom range inclusive and rejects reversed or over-366-day ranges', () => {
+  it('allows at most a 364-day difference (365 inclusive dates) for custom ranges', () => {
     expect(attendancePresetRange({ preset: 'custom', startDate: '2026-02-01', endDate: '2026-02-28' }))
       .toEqual({ startDate: '2026-02-01', endDate: '2026-02-28' });
+    expect(attendancePresetRange({ preset: 'custom', startDate: '2025-08-16', endDate: '2026-08-15' }))
+      .toEqual({ startDate: '2025-08-16', endDate: '2026-08-15' });
     expect(() => attendancePresetRange({ preset: 'custom', startDate: '2026-02-28', endDate: '2026-02-01' }))
       .toThrow(/date range/i);
-    expect(() => attendancePresetRange({ preset: 'custom', startDate: '2025-01-01', endDate: '2026-01-02' }))
+    expect(() => attendancePresetRange({ preset: 'custom', startDate: '2025-08-15', endDate: '2026-08-15' }))
       .toThrow(/date range/i);
   });
 });

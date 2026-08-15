@@ -28,4 +28,24 @@ describe('clinical attendance heatmap observations RPC contract', () => {
       expect(observationJsonFragment).not.toContain(forbidden);
     }
   });
+
+  it('bounds queue rows before joining the active consultation and avoids all-history DISTINCT materialization', () => {
+    const sql = migrationSql();
+    const queueCandidates = sql.indexOf('queue_candidates AS MATERIALIZED');
+    const consultationJoin = sql.indexOf('JOIN public.consultations AS c');
+
+    expect(queueCandidates).toBeGreaterThan(-1);
+    expect(consultationJoin).toBeGreaterThan(queueCandidates);
+    expect(sql).toMatch(/queue_candidates AS MATERIALIZED \([\s\S]*qe\.created_at >=[\s\S]*qe\.created_at </);
+    expect(sql).toMatch(/JOIN public\.consultations AS c[\s\S]*c\.queue_entry_id = qe\.id[\s\S]*c\.deleted_at IS NULL/);
+    expect(sql).not.toContain('qualifying_consultations AS MATERIALIZED');
+    expect(sql).not.toMatch(/DISTINCT ON \(c\.queue_entry_id\)/);
+  });
+
+  it('emits model observations from only the latest 52 distinct operating weeks', () => {
+    const sql = migrationSql();
+
+    expect(sql).toMatch(/observation_weeks AS MATERIALIZED \([\s\S]*date_trunc\('week',[\s\S]*LIMIT 52/);
+    expect(sql).toMatch(/observations AS MATERIALIZED \([\s\S]*JOIN observation_weeks/);
+  });
 });

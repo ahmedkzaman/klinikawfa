@@ -1,6 +1,12 @@
 -- Aggregate-only clinical attendance report for the management dashboard.
 -- A non-null native queue number is the current imported/synthetic-arrival boundary:
 -- rows without one are not a native clinic arrival and are excluded.
+--
+-- Controlled rollout: this range index is deliberately the only new index in this
+-- migration. Review queue_entries size and the deployment lock budget before applying
+-- it; use a separately managed CREATE INDEX CONCURRENTLY rollout if the table is too
+-- large for the normal migration window. Validate All-doctors and selected-doctor
+-- maximum-range calls with EXPLAIN (ANALYZE, BUFFERS) in staging before production.
 
 CREATE INDEX IF NOT EXISTS clinical_attendance_heatmap_queue_created_idx
   ON public.queue_entries (created_at)
@@ -9,9 +15,9 @@ CREATE INDEX IF NOT EXISTS clinical_attendance_heatmap_queue_created_idx
     AND queue_number IS NOT NULL
     AND visit_type::text <> 'payment_only';
 
-CREATE INDEX IF NOT EXISTS clinical_attendance_heatmap_consultation_queue_doctor_idx
-  ON public.consultations (queue_entry_id, doctor_id)
-  WHERE deleted_at IS NULL;
+-- The direct active-consultation join below is already protected and served by the
+-- historical consultations_queue_entry_id_active_uidx partial unique index. Do not
+-- add a duplicate report-specific index or restore an all-history DISTINCT scan.
 
 CREATE OR REPLACE FUNCTION public.get_clinical_attendance_heatmap(
   _start_date date,
@@ -36,7 +42,7 @@ BEGIN
   IF _start_date IS NULL
      OR _end_date IS NULL
      OR _start_date > _end_date
-     OR (_end_date - _start_date) > 365 THEN
+     OR (_end_date - _start_date) > 364 THEN
     RAISE EXCEPTION 'INVALID_DATE_RANGE' USING ERRCODE = '22023';
   END IF;
 
@@ -109,29 +115,14 @@ BEGIN
     CROSS JOIN LATERAL generate_series(ra.start_hour, ra.end_hour - 1) AS hour(hour)
     GROUP BY ra.period, ra.day, hour.hour
   ),
-  qualifying_consultations AS MATERIALIZED (
-    SELECT DISTINCT ON (c.queue_entry_id)
-      c.queue_entry_id,
-      c.doctor_id
-    FROM public.consultations AS c
-    WHERE c.deleted_at IS NULL
-    ORDER BY c.queue_entry_id, c.created_at, c.id
-  ),
-  attendance_facts AS MATERIALIZED (
+  queue_candidates AS MATERIALIZED (
     SELECT
       pd.period,
-      local_time.local_created_at::date AS day,
-      extract(isodow FROM local_time.local_created_at)::integer AS weekday,
-      extract(hour FROM local_time.local_created_at)::integer AS hour,
-      c.doctor_id::text AS doctor_id,
-      coalesce(nullif(btrim(d.name), ''), 'Unknown doctor') AS doctor_name,
-      CASE
-        WHEN qe.called_at >= qe.created_at
-          THEN extract(epoch FROM (qe.called_at - qe.created_at)) / 60.0
-      END AS wait_minutes
+      qe.id,
+      qe.created_at,
+      qe.called_at,
+      local_time.local_created_at
     FROM public.queue_entries AS qe
-    JOIN qualifying_consultations AS c ON c.queue_entry_id = qe.id
-    LEFT JOIN public.doctors AS d ON d.id = c.doctor_id
     CROSS JOIN LATERAL (
       SELECT timezone('Asia/Kuala_Lumpur', qe.created_at) AS local_created_at
     ) AS local_time
@@ -145,7 +136,25 @@ BEGIN
       AND qe.created_at >= (v_comparison_start::timestamp AT TIME ZONE 'Asia/Kuala_Lumpur')
       AND qe.created_at < ((_end_date + 1)::timestamp AT TIME ZONE 'Asia/Kuala_Lumpur')
       AND extract(hour FROM local_time.local_created_at) BETWEEN 8 AND 23
-      AND (_doctor_id IS NULL OR c.doctor_id = _doctor_id)
+  ),
+  attendance_facts AS MATERIALIZED (
+    SELECT
+      qe.period,
+      qe.local_created_at::date AS day,
+      extract(isodow FROM qe.local_created_at)::integer AS weekday,
+      extract(hour FROM qe.local_created_at)::integer AS hour,
+      c.doctor_id::text AS doctor_id,
+      coalesce(nullif(btrim(d.name), ''), 'Unknown doctor') AS doctor_name,
+      CASE
+        WHEN qe.called_at >= qe.created_at
+          THEN extract(epoch FROM (qe.called_at - qe.created_at)) / 60.0
+      END AS wait_minutes
+    FROM queue_candidates AS qe
+    JOIN public.consultations AS c
+      ON c.queue_entry_id = qe.id
+      AND c.deleted_at IS NULL
+    LEFT JOIN public.doctors AS d ON d.id = c.doctor_id
+    WHERE _doctor_id IS NULL OR c.doctor_id = _doctor_id
   ),
   attendance_daily AS MATERIALIZED (
     SELECT
@@ -268,6 +277,15 @@ BEGIN
       AND comparison.hour = selected.hour
     WHERE selected.period = 'selected'
   ),
+  observation_weeks AS MATERIALIZED (
+    SELECT date_trunc('week', cd.day)::date AS week_start
+    FROM cell_daily AS cd
+    WHERE cd.period = 'selected'
+      AND cd.operating
+    GROUP BY date_trunc('week', cd.day)::date
+    ORDER BY week_start DESC
+    LIMIT 52
+  ),
   observations AS MATERIALIZED (
     SELECT coalesce(jsonb_agg(jsonb_build_object(
       'date', cd.day,
@@ -282,6 +300,8 @@ BEGIN
       'backupDoctorCovered', cd.other_doctor_covered
     ) ORDER BY cd.day, cd.hour) FILTER (WHERE cd.period = 'selected' AND cd.operating), '[]'::jsonb) AS rows
     FROM cell_daily AS cd
+    JOIN observation_weeks AS ow
+      ON ow.week_start = date_trunc('week', cd.day)::date
   ),
   doctor_directory AS MATERIALIZED (
     SELECT doctor_id, max(doctor_name) AS doctor_name

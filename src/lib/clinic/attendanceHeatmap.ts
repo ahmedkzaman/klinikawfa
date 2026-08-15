@@ -1,7 +1,8 @@
-import type {
-  AttendanceRegressionObservation,
-  AttendanceRegressionResult,
-  AttendanceWeekdayForecast,
+import {
+  latestAttendanceRegressionObservations,
+  type AttendanceRegressionObservation,
+  type AttendanceRegressionResult,
+  type AttendanceWeekdayForecast,
 } from './attendanceRegression';
 
 export type AttendanceHeatmapCell = {
@@ -217,6 +218,7 @@ function normalizeObservation(raw: unknown): AttendanceRegressionObservation | n
     || hour === null || !Number.isInteger(hour) || hour < 0 || hour > 23
     || visits === null || waitMeasuredVisits === null || doctorsRostered === null || doctorsRostered <= 0
     || averageWaitMinutes === null && rawAverageWaitMinutes !== null
+    || waitMeasuredVisits > 0 && averageWaitMinutes === null
     || typeof selectedDoctorScheduled !== 'boolean' || typeof backupDoctorCovered !== 'boolean') return null;
 
   return {
@@ -251,8 +253,14 @@ export function normalizeAttendanceHeatmapReport(raw: unknown): AttendanceHeatma
   const observationWarnings = Array.isArray(rawObservations) && normalizedObservations.length !== rawObservations.length
     ? ['Malformed attendance model observations were discarded.']
     : [];
-  const observations = normalizedObservations.slice(0, MAXIMUM_MODEL_OBSERVATIONS);
-  if (normalizedObservations.length > MAXIMUM_MODEL_OBSERVATIONS) {
+  const latestWeekObservations = latestAttendanceRegressionObservations(normalizedObservations);
+  if (latestWeekObservations.length < normalizedObservations.length) {
+    observationWarnings.push('Attendance model observations were truncated to the latest 52 weeks.');
+  }
+  const observations = latestWeekObservations.length > MAXIMUM_MODEL_OBSERVATIONS
+    ? latestWeekObservations.slice(-MAXIMUM_MODEL_OBSERVATIONS)
+    : latestWeekObservations;
+  if (latestWeekObservations.length > MAXIMUM_MODEL_OBSERVATIONS) {
     observationWarnings.push('Attendance model observations were truncated.');
   }
   return {
@@ -343,21 +351,30 @@ export function assessDoctorOffDays(
   regression: AttendanceRegressionResult,
   selectedDoctorId?: string | null,
 ): DoctorOffDayAssessment[] {
-  void selectedDoctorId;
   if (regression.diagnostics.usableWeeks < MINIMUM_USABLE_WEEKS) {
     return insufficientDataOffDayAssessments(cells, regression.status === 'ready' ? regression.weekdays : []);
   }
   if (regression.status !== 'ready') return unavailableOffDayAssessments(cells, regression);
 
   const forecasts = [...regression.weekdays].sort((left, right) => left.weekday - right.weekday);
+  const comparableForecasts = forecasts.filter(day => day.comparableDates >= MIN_COMPARABLE_DATES);
+  const lowestEligibleDailyThreshold = comparableForecasts.length > 0
+    ? percentile(comparableForecasts.map(day => day.expectedTotal), 0.25)
+    : null;
   const busyDailyThreshold = percentile(forecasts.map(day => day.expectedTotal), 0.75);
-  const busiestPredictedHourThreshold = percentile(forecasts.map(day => day.highestExpectedHour.expectedVisits), 0.75);
   const busyHourlyThreshold = percentile(regression.hourly.map(hour => hour.expectedVisits), 0.75);
   const observedWeekdayPeaks = forecasts.map(day => day.highestObservedPeak);
   const observedPeakThreshold = percentile(observedWeekdayPeaks, 0.75);
   const assessments = forecasts.map(forecast => {
     const volatility = (forecast.upperPrediction - forecast.lowerPrediction) / Math.max(forecast.expectedTotal, 1);
     const backupMissRate = 1 - forecast.backupCoverageRate;
+    const weekdayHours = regression.hourly.filter(hour => hour.weekday === forecast.weekday);
+    const maximumHourlyExpectedVisits = weekdayHours.length > 0
+      ? Math.max(...weekdayHours.map(hour => hour.expectedVisits))
+      : Infinity;
+    const maximumHourlyUpperPrediction = weekdayHours.length > 0
+      ? Math.max(...weekdayHours.map(hour => hour.upperPrediction))
+      : Infinity;
     const reasons: string[] = [];
     const passedChecks: string[] = [];
     const check = (passes: boolean, passed: string, rejected: string): void => {
@@ -367,20 +384,24 @@ export function assessDoctorOffDays(
 
     check(forecast.comparableDates >= MIN_COMPARABLE_DATES,
       'At least 8 comparable dates.', 'Fewer than 8 comparable dates.');
+    check(lowestEligibleDailyThreshold !== null && forecast.expectedTotal <= lowestEligibleDailyThreshold,
+      'Predicted daily attendance is among the lowest eligible weekdays.', 'Predicted daily attendance is not among the lowest eligible weekdays.');
     check(forecast.upperPrediction < busyDailyThreshold,
       'Daily upper prediction is below the busy-day threshold.', 'Daily upper prediction reaches the busy-day threshold.');
-    check(forecast.highestExpectedHour.expectedVisits < busiestPredictedHourThreshold,
+    check(maximumHourlyExpectedVisits < busyHourlyThreshold,
       'Predicted busiest hour is below the busiest quartile.', 'Predicted busiest hour is in the busiest quartile.');
     check(forecast.highestObservedPeak < observedPeakThreshold,
       'Observed peak is below the busiest weekday quartile.', 'Observed peak is in the busiest weekday quartile.');
-    check(forecast.highestExpectedHour.upperPrediction < busyHourlyThreshold,
+    check(maximumHourlyUpperPrediction < busyHourlyThreshold,
       'Hourly upper prediction is below the busy threshold.', 'Hourly upper prediction crosses the busy threshold.');
     check(forecast.averageWaitMinutes === null || forecast.averageWaitMinutes <= MAX_AVERAGE_WAIT_MINUTES,
       'Average wait is at most 45 minutes.', 'Average wait exceeds 45 minutes.');
     check(volatility <= 1,
       'Prediction volatility is within the safety limit.', 'Prediction volatility is too high.');
-    check(backupMissRate <= MAX_BACKUP_MISS_RATE,
-      'Backup doctor coverage is complete.', 'Backup doctor coverage is incomplete.');
+    if (selectedDoctorId) {
+      check(backupMissRate <= MAX_BACKUP_MISS_RATE,
+        'Backup doctor coverage is complete.', 'Backup doctor coverage is incomplete.');
+    }
 
     return {
       status: reasons.length === 0 ? 'suggested' as const : 'rejected' as const,
@@ -392,11 +413,11 @@ export function assessDoctorOffDays(
       components: {
         predictedDailyAttendance: forecast.expectedTotal,
         dailyUpperPrediction: forecast.upperPrediction,
-        highestPredictedHour: forecast.highestExpectedHour.expectedVisits,
+        highestPredictedHour: maximumHourlyExpectedVisits,
         observedPeakPercentile: observedPeakPercentile(forecast.highestObservedPeak, observedWeekdayPeaks),
         waitingRisk: forecast.averageWaitMinutes ?? 0,
         volatility,
-        backupRisk: backupMissRate,
+        backupRisk: selectedDoctorId ? backupMissRate : 0,
       },
     };
   });
