@@ -57,3 +57,31 @@ The fixture ends in `ROLLBACK`, so its synthetic data is not retained.
 ## Schema note
 
 `public.saved_rosters.month` is documented in its defining migration as `0-11`; this RPC follows that source contract (`extract(month) - 1`). This differs from several older dashboard queries that compare directly to a 1-based extracted month, so production roster rows should retain the documented 0-based convention.
+
+## Review fix round — 2026-08-15
+
+Addressed all follow-up findings:
+
+- The RPC now explicitly rejects a null start or end date with `INVALID_DATE_RANGE` / `22023` before computing the range or comparison boundaries. The contract test asserts both the null guard and its ordering; the rollback fixture calls the RPC with each null argument and asserts rejection.
+- The fixture now assigns `DOC_S3` to Doctor B and asserts all-doctor Monday 23:00 coverage, proving the S3 20:00–24:00 expansion includes its final 23:00 cell.
+- The fixture now contains a qualifying native consultation with payment method `other`; the selected Monday 08:00 aggregate consequently asserts five included visits.
+- The selected Monday 08:00 aggregate assertion now checks `medianVisits = 5` and `peakVisits = 5` in addition to total, denominator, average, waits, comparison, and coverage.
+
+Validation after the fix:
+
+```text
+npm test -- src/test/attendance-heatmap-migration.test.ts src/test/attendance-heatmap-calculations.test.ts
+Test Files  2 passed (2)
+Tests  15 passed (15)
+
+npx tsc --noEmit
+exit 0
+
+npx eslint src/test/attendance-heatmap-migration.test.ts
+exit 0
+
+npx --yes supabase@latest db push --dry-run
+Would push only 20260815143000_add_clinical_attendance_heatmap.sql
+```
+
+Repository-wide `npm run lint` remains non-green due to 278 pre-existing errors (primarily `@typescript-eslint/no-explicit-any`) across unrelated files; none are in the changed migration-contract test. The rollback-only database fixture remains pending a post-apply database environment, as documented above.

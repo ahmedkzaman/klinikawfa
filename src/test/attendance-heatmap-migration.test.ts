@@ -6,9 +6,14 @@ const migrationPath = resolve(
   process.cwd(),
   'supabase/migrations/20260815143000_add_clinical_attendance_heatmap.sql',
 );
+const fixturePath = resolve(process.cwd(), 'supabase/tests/attendance_heatmap.sql');
 
 function migrationSql(): string {
   return existsSync(migrationPath) ? readFileSync(migrationPath, 'utf8') : '';
+}
+
+function fixtureSql(): string {
+  return existsSync(fixturePath) ? readFileSync(fixturePath, 'utf8') : '';
 }
 
 describe('clinical attendance heatmap migration', () => {
@@ -29,14 +34,29 @@ describe('clinical attendance heatmap migration', () => {
     const sql = migrationSql();
 
     expect(sql).toMatch(/_start_date\s*>\s*_end_date/i);
+    expect(sql).toMatch(/_start_date\s+is\s+null\s+or\s+_end_date\s+is\s+null/i);
     expect(sql).toMatch(/raise\s+exception\s+'INVALID_DATE_RANGE'.*22023/is);
     expect(sql).toMatch(/\(_end_date\s*-\s*_start_date\)\s*>\s*365/i);
-    expect(sql).toMatch(/v_comparison_start\s+date\s*:=\s*_start_date\s*-\s*v_range_days/i);
-    expect(sql).toMatch(/v_comparison_end\s+date\s*:=\s*_start_date\s*-\s*1/i);
+    expect(sql).toMatch(/v_range_days\s*:=\s*\(_end_date\s*-\s*_start_date\)\s*\+\s*1/i);
+    expect(sql).toMatch(/v_comparison_start\s*:=\s*_start_date\s*-\s*v_range_days/i);
+    expect(sql).toMatch(/v_comparison_end\s*:=\s*_start_date\s*-\s*1/i);
+    expect(sql.indexOf('_start_date IS NULL')).toBeLessThan(sql.indexOf('v_range_days :='));
     expect(sql).toMatch(/'startDate'\s*,\s*_start_date/i);
     expect(sql).toMatch(/'endDate'\s*,\s*_end_date/i);
     expect(sql).toMatch(/'comparisonStartDate'\s*,\s*v_comparison_start/i);
     expect(sql).toMatch(/'comparisonEndDate'\s*,\s*v_comparison_end/i);
+  });
+
+  it('keeps the executable fixture focused on null bounds, S3, other payment, median, and peak', () => {
+    const sql = fixtureSql();
+
+    expect(sql).toContain('NULL_START_DATE_SUCCEEDED');
+    expect(sql).toContain('NULL_END_DATE_SUCCEEDED');
+    expect(sql).toContain('DOC_S3');
+    expect(sql).toMatch(/'other'/i);
+    expect(sql).toMatch(/medianVisits/i);
+    expect(sql).toMatch(/peakVisits/i);
+    expect(sql).toContain('S3_ROSTER_COVERAGE_MISMATCH');
   });
 
   it('assigns native qualifying visits by Malaysia local date, weekday, and hour', () => {

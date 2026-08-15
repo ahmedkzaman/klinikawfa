@@ -24,18 +24,25 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public, pg_temp
 AS $function$
 DECLARE
-  v_range_days integer := (_end_date - _start_date) + 1;
-  v_comparison_start date := _start_date - v_range_days;
-  v_comparison_end date := _start_date - 1;
+  v_range_days integer;
+  v_comparison_start date;
+  v_comparison_end date;
   v_result jsonb;
 BEGIN
   IF NOT public.can_view_management_dashboard((SELECT auth.uid())) THEN
     RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
   END IF;
 
-  IF _start_date > _end_date OR (_end_date - _start_date) > 365 THEN
+  IF _start_date IS NULL
+     OR _end_date IS NULL
+     OR _start_date > _end_date
+     OR (_end_date - _start_date) > 365 THEN
     RAISE EXCEPTION 'INVALID_DATE_RANGE' USING ERRCODE = '22023';
   END IF;
+
+  v_range_days := (_end_date - _start_date) + 1;
+  v_comparison_start := _start_date - v_range_days;
+  v_comparison_end := _start_date - 1;
 
   WITH period_days AS MATERIALIZED (
     SELECT 'selected'::text AS period, day::date AS day
