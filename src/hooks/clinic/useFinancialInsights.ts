@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { getLocalDateRangeBounds } from '@/lib/clinic/salesInsights';
+import { fetchAllBillingRows } from '@/lib/clinic/fetchAllBillingRows';
 
 export interface InsightSummary {
   totalRevenue: number;
@@ -119,28 +120,39 @@ export function useFinancialInsights(startDate: Date, endDate: Date) {
     queryKey: ['financial-insights', startKey, endKey],
     queryFn: async () => {
       const { startIso, endExclusiveIso } = getLocalDateRangeBounds(startDate, endDate);
-      const queryWithCogs = await db
-        .from('insight_financials_view')
-        .select(
-          'id, item_name, visit_date, payment_method, revenue, cogs, profit, queue_entry_id, kind, queue_entry_created_at',
-        )
-        .gte('queue_entry_created_at', startIso)
-        .lt('queue_entry_created_at', endExclusiveIso);
+      let rows: ViewRow[];
 
-      const queryWithoutCogs =
-        isMissingViewColumnError(queryWithCogs.error)
-          ? await db
-              .from('insight_financials_view')
-              .select('id, item_name, visit_date, payment_method, revenue, profit, queue_entry_id, kind')
-              .gte('visit_date', startKey)
-              .lte('visit_date', endKey)
-          : queryWithCogs;
+      try {
+        rows = await fetchAllBillingRows<ViewRow>(async (from, to) => {
+          const { data, error } = await db
+            .from('insight_financials_view')
+            .select(
+              'id, item_name, visit_date, payment_method, revenue, cogs, profit, queue_entry_id, kind, queue_entry_created_at',
+            )
+            .gte('queue_entry_created_at', startIso)
+            .lt('queue_entry_created_at', endExclusiveIso)
+            .range(from, to);
 
-      const { data, error } = queryWithoutCogs;
+          if (error) throw error;
+          return (data ?? []) as ViewRow[];
+        });
+      } catch (queryError) {
+        if (!isMissingViewColumnError(queryError as { code?: string; message?: string })) {
+          throw queryError;
+        }
 
-      if (error) throw error;
+        rows = await fetchAllBillingRows<ViewRow>(async (from, to) => {
+          const { data, error } = await db
+            .from('insight_financials_view')
+            .select('id, item_name, visit_date, payment_method, revenue, profit, queue_entry_id, kind')
+            .gte('visit_date', startKey)
+            .lte('visit_date', endKey)
+            .range(from, to);
 
-      const rows: ViewRow[] = (data ?? []) as ViewRow[];
+          if (error) throw error;
+          return (data ?? []) as ViewRow[];
+        });
+      }
 
       let totalRevenue = 0;
       let totalCogs = 0;

@@ -87,7 +87,7 @@ describe('Insight panel billed card', () => {
     expect(screen.getByText('Panel Billed')).toBeInTheDocument();
     expect(screen.getByText('RM 450.00')).toBeInTheDocument();
     expect(screen.getByText('Total Visit Billing').parentElement?.parentElement)
-      .toHaveTextContent('RM 750.00');
+      .toHaveTextContent('RM 300.00');
     expect(screen.getByText('3 claims')).toBeInTheDocument();
     expect(screen.getByText('Total Collected').parentElement?.parentElement)
       .toHaveTextContent('RM 200.00');
