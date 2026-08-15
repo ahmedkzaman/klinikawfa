@@ -105,6 +105,9 @@ function featureNames(observations: AttendanceRegressionObservation[]): string[]
   const weekdays = new Set(observations.map(observation => observation.weekday));
   const hours = new Set(observations.map(observation => observation.hour));
   const months = new Set(observations.map(observation => Number(observation.date.slice(5, 7))));
+  const rosterCounts = new Set(observations.map(observation => observation.doctorsRostered));
+  const selectedDoctorStates = new Set(observations.map(observation => observation.selectedDoctorScheduled));
+  const backupCoverageStates = new Set(observations.map(observation => observation.backupDoctorCovered));
   const monthReference = Math.min(...months);
   return [
     'intercept',
@@ -112,9 +115,9 @@ function featureNames(observations: AttendanceRegressionObservation[]): string[]
     ...Array.from(hours).filter(hour => hour !== 8).sort((left, right) => left - right).map(hour => `hour_${hour}`),
     ...Array.from(months).filter(month => month !== monthReference).sort((left, right) => left - right).map(month => `month_${month}`),
     'week_trend',
-    'doctors_rostered',
-    'selected_doctor_scheduled',
-    'backup_doctor_covered',
+    ...(rosterCounts.size > 1 ? ['doctors_rostered'] : []),
+    ...(selectedDoctorStates.size > 1 ? ['selected_doctor_scheduled'] : []),
+    ...(backupCoverageStates.size > 1 ? ['backup_doctor_covered'] : []),
   ];
 }
 

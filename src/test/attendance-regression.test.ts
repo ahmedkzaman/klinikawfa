@@ -102,15 +102,37 @@ describe('fitAttendanceRegression', () => {
   it('rejects structurally unidentifiable designs before ridge stabilization', () => {
     const result = fitAttendanceRegression(syntheticObservations({ weeks: 12 }).map(item => ({
       ...item,
-      doctorsRostered: 1,
-      selectedDoctorScheduled: false,
-      backupDoctorCovered: false,
+      backupDoctorCovered: item.selectedDoctorScheduled,
     })), null);
 
     expect(result).toMatchObject({
       status: 'unavailable',
       reasons: expect.arrayContaining(['The design matrix is structurally unidentifiable.']),
     });
+  });
+
+  it('omits invariant production-shaped predictors without rejecting an otherwise estimable fit', () => {
+    const allDoctors = poissonLikeFixture().map(item => ({
+      ...item,
+      doctorsRostered: 2,
+      selectedDoctorScheduled: false,
+      backupDoctorCovered: false,
+    }));
+    const selectedDoctor = poissonLikeFixture().map(item => ({
+      ...item,
+      doctorsRostered: 2,
+      selectedDoctorScheduled: true,
+      backupDoctorCovered: true,
+    }));
+
+    expect(buildAttendanceDesignMatrix(allDoctors).featureNames).not.toEqual(expect.arrayContaining([
+      'doctors_rostered', 'selected_doctor_scheduled', 'backup_doctor_covered',
+    ]));
+    expect(buildAttendanceDesignMatrix(selectedDoctor).featureNames).not.toEqual(expect.arrayContaining([
+      'doctors_rostered', 'selected_doctor_scheduled', 'backup_doctor_covered',
+    ]));
+    expect(fitAttendanceRegression(allDoctors, null)).toMatchObject({ status: 'ready' });
+    expect(fitAttendanceRegression(selectedDoctor, 'doctor-1')).toMatchObject({ status: 'ready' });
   });
 
   it('encodes weekday, hour, month, trend, roster count, selected doctor, and backup coverage', () => {

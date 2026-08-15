@@ -22,7 +22,7 @@ describe('clinical attendance heatmap observations RPC contract', () => {
 
   it('does not add row or patient identifiers to observations', () => {
     const sql = migrationSql();
-    const observationJsonFragment = sql.match(/observations AS MATERIALIZED \([\s\S]*?\n  \),\n  doctor_directory AS MATERIALIZED/)?.[0] ?? '';
+    const observationJsonFragment = sql.match(/observations AS MATERIALIZED \([\s\S]*?\n {2}\),\n {2}doctor_directory AS MATERIALIZED/)?.[0] ?? '';
 
     for (const forbidden of ['queueEntryId', 'patientId', 'patientName', 'icNo', 'consultationNotes']) {
       expect(observationJsonFragment).not.toContain(forbidden);
