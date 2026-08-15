@@ -36,9 +36,9 @@ function syntheticObservations({ weeks, visits = (week: number, weekday: number,
     weekday: weekday as AttendanceRegressionObservation['weekday'],
     hour,
     visits: visits(week, weekday, hour),
-    doctorsRostered: weekday === 6 ? 2 : 1,
-    selectedDoctorScheduled: weekday !== 6,
-    backupDoctorCovered: weekday === 6,
+    doctorsRostered: 1 + ((week + weekday + hour) % 2),
+    selectedDoctorScheduled: (week + weekday) % 3 === 0,
+    backupDoctorCovered: ((week * 2) + weekday + hour) % 4 === 0,
   })))).flat();
 }
 
@@ -52,7 +52,7 @@ function poissonLikeFixture(): AttendanceRegressionObservation[] {
 function overdispersedFixture(): AttendanceRegressionObservation[] {
   return syntheticObservations({
     weeks: 12,
-    visits: (week, weekday, hour) => weekday === 6 && hour === 9 && week % 3 === 0 ? 20 : 2 + ((week + weekday) % 2),
+    visits: (week, weekday, hour) => weekday === 6 && hour === 9 && [1, 2, 6, 10].includes(week) ? 50 : 2 + ((week + weekday) % 2),
   });
 }
 
@@ -90,6 +90,27 @@ describe('fitAttendanceRegression', () => {
       status: 'unavailable',
       reasons: expect.arrayContaining(['No covered, valid observations are available.']),
     });
+    expect(fitAttendanceRegression([
+      ...syntheticObservations({ weeks: 12 }),
+      observation({ visits: Number.NaN }),
+    ], null)).toMatchObject({
+      status: 'unavailable',
+      reasons: expect.arrayContaining(['All observations must be covered and finite.']),
+    });
+  });
+
+  it('rejects structurally unidentifiable designs before ridge stabilization', () => {
+    const result = fitAttendanceRegression(syntheticObservations({ weeks: 12 }).map(item => ({
+      ...item,
+      doctorsRostered: 1,
+      selectedDoctorScheduled: false,
+      backupDoctorCovered: false,
+    })), null);
+
+    expect(result).toMatchObject({
+      status: 'unavailable',
+      reasons: expect.arrayContaining(['The design matrix is structurally unidentifiable.']),
+    });
   });
 
   it('encodes weekday, hour, month, trend, roster count, selected doctor, and backup coverage', () => {
@@ -111,6 +132,37 @@ describe('fitAttendanceRegression', () => {
     const result = fitAttendanceRegression(overdispersedFixture(), null);
     expect(result).toMatchObject({ status: 'ready', diagnostics: { family: 'negative_binomial', converged: true } });
     if (result.status === 'ready') expect(result.diagnostics.dispersion).toBeGreaterThan(0);
+  });
+
+  it('returns unavailable when the count fit does not converge within its iteration limit', () => {
+    const result = fitAttendanceRegression(syntheticObservations({ weeks: 12, visits: () => 0 }), null);
+    expect(result).toMatchObject({
+      status: 'unavailable',
+      reasons: expect.arrayContaining(['The Poisson fit did not converge.']),
+    });
+  });
+
+  it('keeps ready forecast estimates and prediction bounds finite and non-negative', () => {
+    const result = fitAttendanceRegression(overdispersedFixture(), null);
+    expect(result.status).toBe('ready');
+    if (result.status === 'ready') {
+      [...result.hourly, ...result.weekdays.map(day => day.highestExpectedHour)].forEach(forecast => {
+        expect(Number.isFinite(forecast.expectedVisits)).toBe(true);
+        expect(Number.isFinite(forecast.lowerPrediction)).toBe(true);
+        expect(Number.isFinite(forecast.upperPrediction)).toBe(true);
+        expect(forecast.expectedVisits).toBeGreaterThanOrEqual(0);
+        expect(forecast.lowerPrediction).toBeGreaterThanOrEqual(0);
+        expect(forecast.upperPrediction).toBeGreaterThanOrEqual(0);
+      });
+      result.weekdays.forEach(forecast => {
+        expect(Number.isFinite(forecast.expectedTotal)).toBe(true);
+        expect(Number.isFinite(forecast.lowerPrediction)).toBe(true);
+        expect(Number.isFinite(forecast.upperPrediction)).toBe(true);
+        expect(forecast.expectedTotal).toBeGreaterThanOrEqual(0);
+        expect(forecast.lowerPrediction).toBeGreaterThanOrEqual(0);
+        expect(forecast.upperPrediction).toBeGreaterThanOrEqual(0);
+      });
+    }
   });
 
   it('preserves a low average weekday but exposes its dangerous peak bound', () => {
