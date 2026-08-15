@@ -170,6 +170,7 @@ export default function ClinicPermissionsSettings() {
     else {
       toast.success(value === 'inherit' ? 'Role default restored' : 'Account override saved');
       await loadUserPermissions(selectedUserId);
+      window.dispatchEvent(new Event('clinic-permissions-changed'));
     }
     setPendingKey(null);
   };
@@ -185,6 +186,7 @@ export default function ClinicPermissionsSettings() {
     else {
       toast.success('All account overrides reset');
       await loadUserPermissions(selectedUserId);
+      window.dispatchEvent(new Event('clinic-permissions-changed'));
     }
     setPendingKey(null);
   };

@@ -164,7 +164,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
     );
 
-    return () => subscription.unsubscribe();
+    const refreshDashboardAccess = () => {
+      const currentUserId = currentUserIdRef.current;
+      if (currentUserId) fetchManagementDashboardAccess(currentUserId);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refreshDashboardAccess();
+    };
+    window.addEventListener('clinic-permissions-changed', refreshDashboardAccess);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('clinic-permissions-changed', refreshDashboardAccess);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [fetchManagementDashboardAccess, fetchUserRole]);
 
   const signIn = async (email: string, password: string) => {
