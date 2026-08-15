@@ -97,7 +97,14 @@ export function ClinicProtectedRoute({
   }
 
   if (requiredRole === 'management_dashboard') {
-    if (!canViewManagementDashboard) return <Navigate to="/clinic/queue" replace />;
+    const roleHasDefaultAccess =
+      role === 'special_admin' ||
+      role === 'admin' ||
+      role === 'doctor_admin' ||
+      role === 'resident_doctor';
+    if (!canViewManagementDashboard && !roleHasDefaultAccess) {
+      return <Navigate to="/clinic/queue" replace />;
+    }
     return <>{children}</>;
   }
 

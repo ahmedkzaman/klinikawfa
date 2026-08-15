@@ -132,6 +132,15 @@ export function ClinicLayout() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   useClinicChimes();
+  // Core clinical/admin roles must not lose the dashboard because a cached or
+  // delayed permission RPC briefly reports false. Operations and locum access
+  // still depends on the explicit permission result.
+  const effectiveManagementDashboardAccess =
+    canViewManagementDashboard ||
+    role === 'special_admin' ||
+    role === 'admin' ||
+    role === 'doctor_admin' ||
+    role === 'resident_doctor';
 
   return (
     <div className="min-h-screen flex w-full bg-slate-50">
@@ -150,7 +159,7 @@ export function ClinicLayout() {
             isAdmin={isAdmin}
             isLocum={isLocum}
             role={role}
-            canViewManagementDashboard={canViewManagementDashboard}
+            canViewManagementDashboard={effectiveManagementDashboardAccess}
           />
         </div>
         <div className="shrink-0 p-4 border-t border-slate-100">
@@ -204,7 +213,7 @@ export function ClinicLayout() {
               isAdmin={isAdmin}
               isLocum={isLocum}
               role={role}
-              canViewManagementDashboard={canViewManagementDashboard}
+              canViewManagementDashboard={effectiveManagementDashboardAccess}
               onLinkClick={() => setMobileOpen(false)}
             />
           </div>
