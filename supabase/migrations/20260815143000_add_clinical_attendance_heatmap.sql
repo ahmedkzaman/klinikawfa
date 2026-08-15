@@ -101,6 +101,7 @@ BEGIN
       ra.period,
       ra.day,
       hour.hour::integer AS hour,
+      count(DISTINCT ra.doctor_id)::integer AS doctors_rostered,
       bool_or(true) AS any_doctor,
       bool_or(ra.doctor_id = _doctor_id::text) AS selected_doctor,
       bool_or(ra.doctor_id IS DISTINCT FROM _doctor_id::text) AS another_doctor
@@ -168,6 +169,8 @@ BEGIN
         THEN coalesce(rs.any_doctor, false)
         ELSE coalesce(rs.selected_doctor, false)
       END AS operating,
+      coalesce(rs.doctors_rostered, 0)::integer AS doctors_rostered,
+      coalesce(rs.selected_doctor, false) AS selected_doctor_scheduled,
       CASE WHEN _doctor_id IS NULL THEN false
         ELSE coalesce(rs.selected_doctor, false) AND coalesce(rs.another_doctor, false)
       END AS other_doctor_covered
@@ -183,6 +186,8 @@ BEGIN
       g.weekday,
       g.hour,
       g.operating,
+      g.doctors_rostered,
+      g.selected_doctor_scheduled,
       g.other_doctor_covered,
       coalesce(ad.visits, 0)::integer AS visits,
       coalesce(ad.wait_total_minutes, 0)::numeric AS wait_total_minutes,
@@ -263,6 +268,21 @@ BEGIN
       AND comparison.hour = selected.hour
     WHERE selected.period = 'selected'
   ),
+  observations AS MATERIALIZED (
+    SELECT coalesce(jsonb_agg(jsonb_build_object(
+      'date', cd.day,
+      'weekday', cd.weekday,
+      'hour', cd.hour,
+      'visits', cd.visits,
+      'averageWaitMinutes', CASE WHEN cd.wait_measured_visits > 0
+        THEN round(cd.wait_total_minutes / cd.wait_measured_visits, 1) END,
+      'waitMeasuredVisits', cd.wait_measured_visits,
+      'doctorsRostered', cd.doctors_rostered,
+      'selectedDoctorScheduled', cd.selected_doctor_scheduled,
+      'backupDoctorCovered', cd.other_doctor_covered
+    ) ORDER BY cd.day, cd.hour) FILTER (WHERE cd.period = 'selected' AND cd.operating), '[]'::jsonb) AS rows
+    FROM cell_daily AS cd
+  ),
   doctor_directory AS MATERIALIZED (
     SELECT doctor_id, max(doctor_name) AS doctor_name
     FROM (
@@ -315,6 +335,7 @@ BEGIN
       ) ORDER BY weekday, hour)
       FROM cells
     ), '[]'::jsonb),
+    'observations', coalesce((SELECT rows FROM observations), '[]'::jsonb),
     'doctors', coalesce((
       SELECT jsonb_agg(jsonb_build_object('id', doctor_id, 'name', doctor_name)
         ORDER BY doctor_name, doctor_id)

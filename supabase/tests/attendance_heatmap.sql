@@ -103,6 +103,7 @@ DECLARE
   v_all_doctors jsonb;
   v_mixed_coverage jsonb;
   v_cell jsonb;
+  v_observation jsonb;
 BEGIN
   PERFORM set_config('request.jwt.claim.sub', '72000000-0000-4000-8000-000000000099', true);
   BEGIN
@@ -233,6 +234,63 @@ BEGIN
     RAISE EXCEPTION 'OUTSIDE_OPERATING_COVERAGE_MISMATCH';
   END IF;
 
+  IF EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(v_report->'observations')
+    WHERE value->>'date' = '2026-08-03' AND value->>'hour' = '14'
+  ) THEN
+    RAISE EXCEPTION 'CLOSED_OR_UNCOVERED_OBSERVATION_PRESENT';
+  END IF;
+
+  SELECT value INTO STRICT v_observation
+  FROM jsonb_array_elements(v_report->'observations')
+  WHERE value->>'date' = '2026-08-03' AND value->>'hour' = '10';
+  IF (v_observation->>'visits')::integer IS DISTINCT FROM 0 THEN
+    RAISE EXCEPTION 'OPERATING_ZERO_VISIT_OBSERVATION_MISSING';
+  END IF;
+
+  SELECT value INTO STRICT v_observation
+  FROM jsonb_array_elements(v_all_doctors->'observations')
+  WHERE value->>'date' = '2026-08-03' AND value->>'hour' = '8';
+  IF (v_observation->>'doctorsRostered')::integer IS DISTINCT FROM 2 THEN
+    RAISE EXCEPTION 'S1_DOCTORS_ROSTERED_MISMATCH';
+  END IF;
+
+  SELECT value INTO STRICT v_observation
+  FROM jsonb_array_elements(v_all_doctors->'observations')
+  WHERE value->>'date' = '2026-08-03' AND value->>'hour' = '14';
+  IF (v_observation->>'doctorsRostered')::integer IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'S2_DOCTORS_ROSTERED_MISMATCH';
+  END IF;
+
+  SELECT value INTO STRICT v_observation
+  FROM jsonb_array_elements(v_all_doctors->'observations')
+  WHERE value->>'date' = '2026-08-03' AND value->>'hour' = '20';
+  IF (v_observation->>'doctorsRostered')::integer IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'S3_DOCTORS_ROSTERED_MISMATCH';
+  END IF;
+
+  SELECT value INTO STRICT v_observation
+  FROM jsonb_array_elements(v_report->'observations')
+  WHERE value->>'date' = '2026-08-03' AND value->>'hour' = '8';
+  IF (v_observation->>'doctorsRostered')::integer IS DISTINCT FROM 2
+     OR (v_observation->>'selectedDoctorScheduled')::boolean IS DISTINCT FROM true
+     OR (v_observation->>'backupDoctorCovered')::boolean IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'DOCTOR_FILTERED_OBSERVATION_COVERAGE_MISMATCH';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(v_report->'observations') AS observation(value)
+    WHERE observation.value ?| ARRAY[
+      'queueEntryId', 'queue_entry_id', 'patientId', 'patient_id',
+      'patientName', 'patient_name', 'icNo', 'nationalId',
+      'consultationNotes', 'consultation_notes'
+    ]
+  ) THEN
+    RAISE EXCEPTION 'OBSERVATION_PRIVACY_LEAK';
+  END IF;
+
   IF v_report::text LIKE '%TEST ONLY PRIVATE PATIENT%'
      OR v_report::text LIKE '%TEST-IC-DO-NOT-LEAK%'
      OR v_report::text LIKE '%TEST-PRIVATE-NOTE-DO-NOT-LEAK%'
@@ -258,6 +316,7 @@ SELECT jsonb_build_object(
   'malaysia_midnight', 'pass',
   'waiting_validity', 'pass',
   'roster_denominators', 'pass',
+  'model_observations', 'pass',
   'comparison', 'pass',
   'aggregate_privacy', 'pass',
   'transaction_end', 'ROLLBACK'
