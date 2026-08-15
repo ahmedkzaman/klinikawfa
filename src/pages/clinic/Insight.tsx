@@ -458,8 +458,8 @@ export default function Insight() {
                   />
                   <SummaryCard
                     icon={<Wallet className="h-4 w-4" />}
-                    label="Consultation Revenue"
-                    value={summary ? formatRM(summary.totalRevenue) : '-'}
+                    label="Total Visit Billing"
+                    value={summary ? formatRM(summary.totalRevenue + (panelBilledData?.totalBilled ?? 0)) : '-'}
                   />
                   <SummaryCard
                     icon={<PackageMinus className="h-4 w-4" />}
