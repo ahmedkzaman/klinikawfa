@@ -104,21 +104,27 @@ function lowAverageHighPeakObservations(): AttendanceRegressionObservation[] {
 }
 
 function assessmentFor(scenario: string) {
-  const target = (() => {
+  const configuration = (() => {
     switch (scenario) {
-      case 'fewer than 8 comparable dates': return { comparableDates: 7 };
-      case 'upper daily prediction reaches the busy-day threshold': return { upperPrediction: 30 };
+      case 'fewer than 8 comparable dates': return { target: { comparableDates: 7 } };
+      case 'upper daily prediction reaches the busy-day threshold': return { target: { lowerPrediction: 29, upperPrediction: 30 } };
       case 'predicted hour enters the busiest quartile': return {
-        highestExpectedHour: { weekday: 1 as const, hour: 8, expectedVisits: 15, lowerPrediction: 14, upperPrediction: 16 },
+        target: {
+          highestExpectedHour: { weekday: 1 as const, hour: 8, expectedVisits: 15, lowerPrediction: 14, upperPrediction: 16 },
+        },
+        hourly: [0.5, 10, 20, 25],
       };
-      case 'observed peak enters the busiest observed-peak quartile': return { highestObservedPeak: 30 };
+      case 'observed peak enters the busiest observed-peak quartile': return { target: { highestObservedPeak: 30 } };
       case 'hourly upper prediction crosses the busy threshold': return {
-        highestExpectedHour: { weekday: 1 as const, hour: 8, expectedVisits: 0.5, lowerPrediction: 0.1, upperPrediction: 15 },
+        target: {
+          highestExpectedHour: { weekday: 1 as const, hour: 8, expectedVisits: 0.5, lowerPrediction: 0.1, upperPrediction: 20 },
+        },
+        hourly: [0.5, 10, 20, 25],
       };
-      case 'average wait exceeds 45 minutes': return { averageWaitMinutes: 46 };
-      case 'volatility is too high': return { lowerPrediction: 0, upperPrediction: 3 };
-      case 'backup doctor coverage is incomplete': return { backupCoverageRate: 0.99 };
-      default: return {};
+      case 'average wait exceeds 45 minutes': return { target: { averageWaitMinutes: 46 } };
+      case 'volatility is too high': return { target: { lowerPrediction: 0, upperPrediction: 3 } };
+      case 'backup doctor coverage is incomplete': return { target: { backupCoverageRate: 0.99 } };
+      default: return { target: {} };
     }
   })();
   const regression: AttendanceRegressionResult = scenario === 'fewer than 12 usable weeks'
@@ -127,7 +133,13 @@ function assessmentFor(scenario: string) {
       diagnostics: { family: 'poisson', converged: false, iterations: 0, usableWeeks: 11, observationCount: 44, dispersion: 0, warnings: [] },
       reasons: ['At least 12 usable weeks are required.'],
     }
-    : readyRegression(target);
+    : readyRegression(configuration.target);
+  if (regression.status === 'ready' && configuration.hourly) {
+    regression.hourly = configuration.hourly.map((expectedVisits, index) => ({
+      weekday: (index + 1) as AttendanceHeatmapCell['weekday'], hour: 8, expectedVisits,
+      lowerPrediction: Math.max(0, expectedVisits - 1), upperPrediction: expectedVisits + 1,
+    }));
+  }
   return assessDoctorOffDays(assessmentCells(), regression, 'doctor-1').find(item => item.weekday === 1)!;
 }
 
@@ -309,17 +321,20 @@ describe('normalizeAttendanceHeatmapReport', () => {
 
 describe('assessDoctorOffDays', () => {
   it.each([
-    'fewer than 12 usable weeks',
-    'fewer than 8 comparable dates',
-    'upper daily prediction reaches the busy-day threshold',
-    'predicted hour enters the busiest quartile',
-    'observed peak enters the busiest observed-peak quartile',
-    'hourly upper prediction crosses the busy threshold',
-    'average wait exceeds 45 minutes',
-    'volatility is too high',
-    'backup doctor coverage is incomplete',
-  ])('rejects a weekday when %s', scenario => {
-    expect(assessmentFor(scenario).status).toBe('rejected');
+    ['fewer than 12 usable weeks', 'Not enough data for regression recommendation'],
+    ['fewer than 8 comparable dates', 'Fewer than 8 comparable dates.'],
+    ['upper daily prediction reaches the busy-day threshold', 'Daily upper prediction reaches the busy-day threshold.'],
+    ['predicted hour enters the busiest quartile', 'Predicted busiest hour is in the busiest quartile.'],
+    ['observed peak enters the busiest observed-peak quartile', 'Observed peak is in the busiest weekday quartile.'],
+    ['hourly upper prediction crosses the busy threshold', 'Hourly upper prediction crosses the busy threshold.'],
+    ['average wait exceeds 45 minutes', 'Average wait exceeds 45 minutes.'],
+    ['volatility is too high', 'Prediction volatility is too high.'],
+    ['backup doctor coverage is incomplete', 'Backup doctor coverage is incomplete.'],
+  ])('rejects a weekday only when %s', (scenario, expectedReason) => {
+    expect(assessmentFor(scenario)).toMatchObject({
+      status: 'rejected',
+      reasons: [expectedReason],
+    });
   });
 
   it('rejects a low-average weekday with one very high observed peak', () => {
@@ -387,13 +402,19 @@ describe('assessDoctorOffDays', () => {
 
     expect(result.status).toBe('ready');
     if (result.status !== 'ready') return;
-    const assessments = assessDoctorOffDays(assessmentCells(), {
-      ...result,
-      weekdays: result.weekdays.map(forecast => ({ ...forecast, backupCoverageRate: 1 })),
-    }, 'doctor-1');
+    const actualMondayPeak = result.weekdays.find(forecast => forecast.weekday === 1)!.highestObservedPeak;
+    const regression = readyRegression({ highestObservedPeak: actualMondayPeak });
+    regression.weekdays.slice(1).forEach((forecast, index) => {
+      forecast.highestObservedPeak = index + 1;
+    });
+    const assessments = assessDoctorOffDays(assessmentCells(), regression, 'doctor-1');
 
     expect(assessments).toEqual(expect.arrayContaining([
-      expect.objectContaining({ weekday: 1, status: 'rejected' }),
+      expect.objectContaining({
+        weekday: 1,
+        status: 'rejected',
+        reasons: ['Observed peak is in the busiest weekday quartile.'],
+      }),
     ]));
     expect(assessments).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ weekday: 1, status: 'suggested' }),

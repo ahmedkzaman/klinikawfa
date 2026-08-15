@@ -351,6 +351,7 @@ export function assessDoctorOffDays(
 
   const forecasts = [...regression.weekdays].sort((left, right) => left.weekday - right.weekday);
   const busyDailyThreshold = percentile(forecasts.map(day => day.expectedTotal), 0.75);
+  const busiestPredictedHourThreshold = percentile(forecasts.map(day => day.highestExpectedHour.expectedVisits), 0.75);
   const busyHourlyThreshold = percentile(regression.hourly.map(hour => hour.expectedVisits), 0.75);
   const observedWeekdayPeaks = forecasts.map(day => day.highestObservedPeak);
   const observedPeakThreshold = percentile(observedWeekdayPeaks, 0.75);
@@ -368,7 +369,7 @@ export function assessDoctorOffDays(
       'At least 8 comparable dates.', 'Fewer than 8 comparable dates.');
     check(forecast.upperPrediction < busyDailyThreshold,
       'Daily upper prediction is below the busy-day threshold.', 'Daily upper prediction reaches the busy-day threshold.');
-    check(forecast.highestExpectedHour.expectedVisits < busyHourlyThreshold,
+    check(forecast.highestExpectedHour.expectedVisits < busiestPredictedHourThreshold,
       'Predicted busiest hour is below the busiest quartile.', 'Predicted busiest hour is in the busiest quartile.');
     check(forecast.highestObservedPeak < observedPeakThreshold,
       'Observed peak is below the busiest weekday quartile.', 'Observed peak is in the busiest weekday quartile.');
