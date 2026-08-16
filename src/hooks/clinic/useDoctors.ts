@@ -33,6 +33,7 @@ export function useDoctors() {
       const { data, error } = await supabase
         .from('doctors')
         .select('*')
+        .eq('status', 'active')
         .order('name', { ascending: true });
       if (error) throw error;
       return (data ?? []) as Doctor[];
