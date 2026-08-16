@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { Check, ChevronsUpDown, CreditCard, Loader2, Search, UserCheck, X } from 'lucide-react';
-import { toMalayTitleCase } from '@/lib/textCase';
+import { toMalayTitleCase, toUpperSafe } from '@/lib/textCase';
 import {
   cleanIC,
   mapGender,
@@ -115,6 +115,7 @@ const schema = z
     gender: z.enum(['male', 'female', 'other', '']).optional(),
     date_of_birth: z.string().optional(),
     email: z.string().trim().email('Invalid email').max(255).optional().or(z.literal('')),
+    address: z.string().trim().max(500).optional(),
 
     // Dependant linkage
     is_dependent: z.boolean(),
@@ -204,6 +205,7 @@ const EMPTY: FormData = {
   gender: '',
   date_of_birth: '',
   email: '',
+  address: '',
   is_dependent: false,
   principal_id: null,
   relationship: '',
@@ -399,6 +401,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
       email?: string | null;
       panel_remarks?: string | null;
       id_type?: string | null;
+      address?: string | null;
     };
     reset({
       ...EMPTY,
@@ -409,6 +412,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
       gender: (ep.gender as FormData['gender']) ?? '',
       date_of_birth: ep.date_of_birth ?? '',
       email: ep.email ?? '',
+      address: ep.address ?? '',
       visit_type: 'consultation',
       visit_purpose: 'consultation',
       payment_method: ep.default_panel_id ? 'panel' : 'cash',
@@ -434,10 +438,20 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
       if (usingExisting) {
         const existingRemarks =
           ((existingPatient as { panel_remarks?: string | null }).panel_remarks ?? null) || null;
+        const existingAddress =
+          ((existingPatient as { address?: string | null }).address ?? null) || null;
+        const normalizedAddress = data.address ? toUpperSafe(data.address) : null;
+        const patch: { panel_remarks?: string | null; address?: string | null } = {};
         if (existingRemarks !== normalizedRemarks) {
+          patch.panel_remarks = normalizedRemarks;
+        }
+        if (existingAddress !== normalizedAddress) {
+          patch.address = normalizedAddress;
+        }
+        if (Object.keys(patch).length > 0) {
           await updatePatient.mutateAsync({
             id: loadedPatientId!,
-            patch: { panel_remarks: normalizedRemarks } as never,
+            patch: patch as never,
           });
         }
         patient = { id: loadedPatientId! };
@@ -450,6 +464,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
           date_of_birth: data.date_of_birth || null,
           gender: data.gender || null,
           email: data.email || null,
+          address: data.address ? toUpperSafe(data.address) : null,
           principal_id: data.is_dependent ? data.principal_id : null,
           relationship: data.is_dependent ? data.relationship || null : null,
           panel_remarks: normalizedRemarks,
@@ -615,6 +630,8 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                           const g = mapGender(data.gender);
                           if (g)
                             setValue('gender', g, { shouldValidate: true, shouldDirty: true });
+                          if (data.address)
+                            setValue('address', toUpperSafe(data.address), { shouldValidate: true, shouldDirty: true });
                           toast.success('MyKad read successfully');
                         }}
                       >
@@ -675,6 +692,15 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
                   {errors.email && (
                     <p className="text-sm text-destructive">{errors.email.message}</p>
                   )}
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label htmlFor="reg-address">Address</Label>
+                  <Textarea
+                    id="reg-address"
+                    rows={2}
+                    placeholder="Patient address"
+                    {...register('address')}
+                  />
                 </div>
               </div>
 
