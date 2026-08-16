@@ -891,7 +891,11 @@ export default function QueueBoard() {
 
       <CheckInAppointmentDialog open={appointmentDialog} onOpenChange={setAppointmentDialog} />
       <CheckInWalkInDialog open={walkInDialog} onOpenChange={setWalkInDialog} />
-      <RegisterAndCheckInDialog open={registerDialog} onOpenChange={setRegisterDialog} />
+      <RegisterAndCheckInDialog
+        open={registerDialog}
+        onOpenChange={setRegisterDialog}
+        selectedDate={effectiveQueueDate}
+      />
 
       <SettleDebtModal
         entry={settleDebtEntry}

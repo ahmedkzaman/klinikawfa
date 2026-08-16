@@ -59,10 +59,12 @@ import { usePatientOutstanding, formatRm } from '@/hooks/clinic/usePatientFinanc
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useInsuranceProviders } from '@/hooks/clinic/useInsuranceProviders';
 import { useDoctors } from '@/hooks/clinic/useDoctors';
+import { dateRangeForLocalDate, todayInputValue } from '@/hooks/clinic/useQueueEntries';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import type { Database } from '@/integrations/supabase/types';
 import type { PatientRow } from '@/types/clinic';
 
 const VISIT_PURPOSES = [
@@ -78,6 +80,7 @@ const RELATIONSHIPS = ['Spouse', 'Child', 'Parent', 'Sibling', 'Other'] as const
 
 const ID_TYPES = ['mykad', 'passport', 'police', 'army'] as const;
 type LocalIdType = (typeof ID_TYPES)[number];
+type QueueEntryInsert = Database['public']['Tables']['queue_entries']['Insert'];
 
 const ID_TYPE_OPTIONS_LOCAL: Array<{ value: LocalIdType; label: string }> = [
   { value: 'mykad', label: 'MyKad / MyKid' },
@@ -220,6 +223,61 @@ const EMPTY: FormData = {
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  selectedDate?: string;
+}
+
+function isValidLocalDateKey(value: string | undefined): value is string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return (
+    !Number.isNaN(date.getTime()) &&
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  );
+}
+
+function dateRangeForLocalDateKey(date: string) {
+  return dateRangeForLocalDate(date);
+}
+
+function createdAtForSelectedLocalDate(date: string) {
+  const [year, month, day] = date.split('-').map(Number);
+  const now = new Date();
+  return new Date(
+    year,
+    month - 1,
+    day,
+    now.getHours(),
+    now.getMinutes(),
+    now.getSeconds(),
+    now.getMilliseconds(),
+  ).toISOString();
+}
+
+async function getNextQueueSequenceForDate(date: string) {
+  if (date === todayInputValue()) {
+    const { data, error } = await supabase.rpc('get_next_queue_number');
+    if (error) throw error;
+    return data as number;
+  }
+
+  const { start, end } = dateRangeForLocalDateKey(date);
+  const { data, error } = await supabase
+    .from('queue_entries')
+    .select('queue_sequence')
+    .is('deleted_at', null)
+    .gte('created_at', start)
+    .lt('created_at', end)
+    .not('queue_sequence', 'is', null)
+    .order('queue_sequence', { ascending: false })
+    .limit(1);
+
+  if (error) throw error;
+
+  const lastSequence = Number(data?.[0]?.queue_sequence ?? 0);
+  return Number.isFinite(lastSequence) ? lastSequence + 1 : 1;
 }
 
 /**
@@ -267,7 +325,7 @@ function BridgeStatusDot({ status }: { status: MyKadBridgeStatus }) {
   );
 }
 
-export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
+export function RegisterAndCheckInDialog({ open, onOpenChange, selectedDate }: Props) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -313,6 +371,8 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
   const genderValue = watch('gender');
   const idType = (watch('id_type') ?? 'mykad') as LocalIdType;
   const isMykadType = idType === 'mykad';
+  const queueDate = isValidLocalDateKey(selectedDate) ? selectedDate : todayInputValue();
+  const isBackdatedQueueDate = queueDate !== todayInputValue();
 
   // Optional doctor assignment at check-in
   const [assignedDoctorId, setAssignedDoctorId] = useState<string | null>(null);
@@ -471,10 +531,13 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
         } as never);
       }
 
-      // 2. Insert queue entry (today's ephemeral visit) with atomic daily sequence
-      const { data: seq, error: seqError } = await supabase.rpc('get_next_queue_number');
-      if (seqError) {
-        toast.error(`Patient saved but failed to allocate queue number: ${seqError.message}`);
+      // 2. Insert queue entry for the Queue Board's selected date.
+      let seq: number;
+      try {
+        seq = await getNextQueueSequenceForDate(queueDate);
+      } catch (seqError) {
+        const message = seqError instanceof Error ? seqError.message : 'Unknown sequence error';
+        toast.error(`Patient saved but failed to allocate queue number: ${message}`);
         qc.invalidateQueries({ queryKey: ['clinic', 'patients'] });
         return;
       }
@@ -482,7 +545,9 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
       const isDirectSaleSubmit = data.visit_type === 'direct_sale';
       const isPaymentOnlySubmit = data.visit_type === 'payment_only';
       const skipClinical = isDirectSaleSubmit || isPaymentOnlySubmit;
-      const { error: queueError } = await supabase.from('queue_entries').insert({
+      const queueCreatedAt =
+        queueDate === todayInputValue() ? null : createdAtForSelectedLocalDate(queueDate);
+      const queuePayload: QueueEntryInsert = {
         patient_id: patient.id,
         clinic_status: skipClinical ? 'sent_to_dispensary' : 'registered',
         visit_type: data.visit_type,
@@ -491,10 +556,14 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
         payment_method: data.payment_method,
         panel_id: data.payment_method === 'panel' ? data.panel_id : null,
         created_by: user?.id ?? null,
-        queue_sequence: seq as number,
+        queue_sequence: seq,
         assigned_doctor_id: skipClinical ? null : assignedDoctorId,
         visit_remarks: visitRemarks.trim() || null,
-      });
+      };
+      if (queueCreatedAt) {
+        queuePayload.created_at = queueCreatedAt;
+      }
+      const { error: queueError } = await supabase.from('queue_entries').insert(queuePayload);
 
       if (queueError) {
         toast.error(
@@ -535,9 +604,14 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>Register & Add to Queue</DialogTitle>
           <DialogDescription>
-            Capture permanent patient details, optional principal linkage, and today's visit in
-            one step.
+            Capture permanent patient details, optional principal linkage, and the selected queue
+            visit in one step.
           </DialogDescription>
+          {isBackdatedQueueDate && (
+            <p className="text-sm font-medium text-amber-700">
+              Backdated queue date: {queueDate}
+            </p>
+          )}
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-2">
@@ -910,10 +984,12 @@ export function RegisterAndCheckInDialog({ open, onOpenChange }: Props) {
             </CardContent>
           </Card>
 
-          {/* ─────────── Section 3: Today's Visit ─────────── */}
+          {/* ─────────── Section 3: Selected Queue Visit ─────────── */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Today's Visit</CardTitle>
+              <CardTitle className="text-base">
+                {isBackdatedQueueDate ? 'Backdated Visit' : "Today's Visit"}
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
