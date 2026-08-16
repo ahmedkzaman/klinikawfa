@@ -61,8 +61,10 @@ import {
 } from '@/hooks/clinic/useConsultations';
 import { useConsultationLock } from '@/hooks/clinic/useConsultationLock';
 import { ConsultationLockBanner } from '@/components/clinic/consultation/ConsultationLockBanner';
-import { useConsultationItems } from '@/hooks/clinic/useConsultationItems';
+import { useAddConsultationItem, useConsultationItems } from '@/hooks/clinic/useConsultationItems';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
+import { useClinicPreferences } from '@/hooks/clinic/useClinicPreferences';
+import { useVisitConsultationFee } from '@/hooks/clinic/useVisitConsultationFee';
 import { useDrugLabelSettings } from '@/hooks/clinic/useDrugLabelSettings';
 import { usePayments } from '@/hooks/clinic/usePayments';
 import { CatalogItemPicker } from '@/components/clinic/visit/CatalogItemPicker';
@@ -171,16 +173,30 @@ export default function DispenseCheckout() {
     [entries, queueEntryId],
   );
   const patient = entry?.patients;
+  const panelId =
+    (entry as unknown as { panel_id?: string | null } | undefined)?.panel_id ?? null;
 
   const { data: consultation, isFetched: consultationFetched, refetch: refetchConsultation } = useConsultation(queueEntryId);
   const { data: items = [], refetch: refetchItems } = useConsultationItems(consultation?.id);
   const { settings: clinicSettings } = useClinicSettings();
+  const {
+    getPreference,
+    isLoading: preferencesLoading,
+  } = useClinicPreferences();
+  const cashConsultationFee = parseFloat(
+    getPreference('default_consultation_fee_price', '0'),
+  );
+  const {
+    data: resolvedConsultationFee,
+    isLoading: consultationFeeLoading,
+  } = useVisitConsultationFee(panelId, cashConsultationFee);
   const { data: labelSettings } = useDrugLabelSettings();
   const { data: payments = [], refetch: refetchPayments } = usePayments(queueEntryId);
   const { data: attachedDocs = [] } = useConsultationDocuments(consultation?.id);
   const { data: docTemplates = [] } = useDocumentTemplates();
   const { data: activePanels = [] } = useInsuranceProviders({ activeOnly: true });
   const deleteDoc = useDeleteConsultationDocument();
+  const addItem = useAddConsultationItem();
   const { isLockedByOther, canEdit, forceUnlock } = useConsultationLock(
     consultation as
       | { id?: string; locked_by?: string | null; status?: string }
@@ -202,8 +218,6 @@ export default function DispenseCheckout() {
 
   // Panel billing context: name + medication discount % drive the
   // "Panel Billing Applied" badge and the per-row strikethrough pricing.
-  const panelId =
-    (entry as unknown as { panel_id?: string | null } | undefined)?.panel_id ?? null;
   const payerType: DispensaryPayerType = panelId ? 'panel' : 'self';
 
   useEffect(() => {
@@ -445,6 +459,45 @@ export default function DispenseCheckout() {
       }),
     [items],
   );
+
+  const consultationFeeName = getPreference(
+    'default_consultation_fee_name',
+    'Consultation Fee',
+  ).trim();
+  const resolvedConsultationFeeAmount =
+    resolvedConsultationFee?.amount ?? cashConsultationFee;
+  const hasConsultationFee = useMemo(() => {
+    const normalizedFeeName = consultationFeeName.toLowerCase();
+    return items.some((item) => {
+      const itemName = String(item.item_name ?? '').trim().toLowerCase();
+      return itemName === normalizedFeeName || itemName.includes('consultation fee');
+    });
+  }, [consultationFeeName, items]);
+  const canAddConsultationFee =
+    dispensaryCanEdit &&
+    !!consultation?.id &&
+    !hasConsultationFee &&
+    consultationFeeName.length > 0 &&
+    Number.isFinite(resolvedConsultationFeeAmount) &&
+    resolvedConsultationFeeAmount >= 0 &&
+    !preferencesLoading &&
+    !consultationFeeLoading;
+
+  const handleAddConsultationFee = async () => {
+    if (!consultation?.id || !canAddConsultationFee) return;
+    try {
+      await addItem.mutateAsync({
+        consultation_id: consultation.id,
+        item_name: consultationFeeName,
+        quantity: 1,
+        price: resolvedConsultationFeeAmount,
+      });
+      toast.success(`Added ${consultationFeeName}`);
+      await refetchItems();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to add consultation fee');
+    }
+  };
 
   // Keep amount-paid input in sync with what the patient currently owes,
   // unless the cashier has manually typed a partial amount this session.
@@ -804,6 +857,28 @@ export default function DispenseCheckout() {
               mode={isDirectSale ? 'direct_sale' : 'consultation'}
               onItemAdded={(row) => setEditingItem(row)}
             />
+
+            {canAddConsultationFee && (
+              <Card className={bento}>
+                <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+                  <div>
+                    <h2 className={`${bentoHeader} mb-1`}>Consultation Fee</h2>
+                    <p className="text-xs text-muted-foreground">
+                      Add {consultationFeeName} at RM {resolvedConsultationFeeAmount.toFixed(2)} to this bill.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleAddConsultationFee}
+                    disabled={addItem.isPending}
+                  >
+                    <FilePlus2 className="h-4 w-4 mr-2" />
+                    Add consultation fee
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
 
 
             {!isDirectSale && consultation?.dispense_note?.trim() && (

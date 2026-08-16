@@ -7,8 +7,10 @@ const state = vi.hoisted(() => ({
   navigate: vi.fn(),
   invalidateQueries: vi.fn(),
   checkout: vi.fn(),
+  addConsultationItem: vi.fn(),
   legacySetCheckoutPortions: vi.fn(),
   includeOtherCharge: false,
+  items: [{ id: 'item-1', item_id: null, item_name: 'Medication', quantity: 1, price: 100 }],
 }));
 
 vi.mock('react-router-dom', async () => {
@@ -61,7 +63,30 @@ vi.mock('@/hooks/clinic/useConsultations', () => ({
 
 vi.mock('@/hooks/clinic/useConsultationItems', () => ({
   useConsultationItems: () => ({
-    data: [{ id: 'item-1', item_id: null, item_name: 'Consultation', quantity: 1, price: 100 }],
+    data: state.items,
+    refetch: vi.fn(),
+  }),
+  useAddConsultationItem: () => ({
+    mutateAsync: state.addConsultationItem,
+    isPending: false,
+  }),
+}));
+
+vi.mock('@/hooks/clinic/useClinicPreferences', () => ({
+  useClinicPreferences: () => ({
+    isLoading: false,
+    getPreference: (key: string, fallback = '') => {
+      if (key === 'default_consultation_fee_name') return 'Consultation Fee';
+      if (key === 'default_consultation_fee_price') return '45';
+      return fallback;
+    },
+  }),
+}));
+
+vi.mock('@/hooks/clinic/useVisitConsultationFee', () => ({
+  useVisitConsultationFee: () => ({
+    data: { amount: 18, source: 'panel' },
+    isLoading: false,
   }),
 }));
 
@@ -174,6 +199,13 @@ describe('dispensary panel payment split', () => {
     vi.clearAllMocks();
     state.role = 'ops_staff';
     state.includeOtherCharge = false;
+    state.items = [{ id: 'item-1', item_id: null, item_name: 'Medication', quantity: 1, price: 100 }];
+    state.addConsultationItem.mockResolvedValue({
+      id: 'fee-1',
+      item_name: 'Consultation Fee',
+      quantity: 1,
+      price: 18,
+    });
     state.checkout.mockResolvedValue({
       data: { status: 'partial', balance_due: 100, payment_id: null },
       error: null,
@@ -218,6 +250,31 @@ describe('dispensary panel payment split', () => {
     await renderCheckout();
 
     expect(screen.queryByRole('switch', { name: 'Split panel payment' })).not.toBeInTheDocument();
+  });
+
+  it('lets operations staff add the resolved consultation fee at dispensary', async () => {
+    await renderCheckout();
+
+    fireEvent.click(screen.getByRole('button', { name: /Add consultation fee/i }));
+
+    await waitFor(() => expect(state.addConsultationItem).toHaveBeenCalledTimes(1));
+    expect(state.addConsultationItem).toHaveBeenCalledWith({
+      consultation_id: 'consultation-1',
+      item_name: 'Consultation Fee',
+      quantity: 1,
+      price: 18,
+    });
+  });
+
+  it('does not offer to add a duplicate consultation fee', async () => {
+    state.items = [
+      { id: 'item-1', item_id: null, item_name: 'Medication', quantity: 1, price: 100 },
+      { id: 'fee-1', item_id: null, item_name: 'Consultation Fee', quantity: 1, price: 18 },
+    ];
+
+    await renderCheckout();
+
+    expect(screen.queryByRole('button', { name: /Add consultation fee/i })).not.toBeInTheDocument();
   });
 
   it('allows a purchaser to commit a split in the checkout transaction', async () => {
