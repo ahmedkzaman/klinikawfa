@@ -145,6 +145,43 @@ describe('consultation access', () => {
     },
   );
 
+  it.each([
+    'admin',
+    'special_admin',
+    'doctor_admin',
+    'resident_doctor',
+    'ops_staff',
+    'operations',
+    'staff_nurse',
+    'purchaser',
+    'staff',
+  ] as const)('%s can list completed consultations on past dates', (role) => {
+    expect(
+      canListConsultationEntry({
+        role,
+        currentDoctorId: 'doctor-a',
+        attendingDoctorId: 'doctor-b',
+        queueStatus: 'completed',
+        selectedDateIsToday: false,
+      }),
+    ).toBe(true);
+  });
+
+  it.each(['locum', 'guest'] as const)(
+    '%s cannot list completed consultations on past dates',
+    (role) => {
+      expect(
+        canListConsultationEntry({
+          role,
+          currentDoctorId: 'doctor-a',
+          attendingDoctorId: 'doctor-a',
+          queueStatus: 'completed',
+          selectedDateIsToday: false,
+        }),
+      ).toBe(false);
+    },
+  );
+
   it.each(['resident_doctor', 'doctor_admin'] as const)(
     '%s can open an existing consultation from patient history',
     (role) => {

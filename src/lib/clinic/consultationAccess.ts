@@ -78,6 +78,10 @@ export function canListConsultationEntry(input: ConsultationListAccessInput) {
     !!input.currentDoctorId &&
     input.currentDoctorId === input.attendingDoctorId;
 
+  if (input.queueStatus === 'completed') {
+    return canBrowseConsultationDates(input.role);
+  }
+
   if (input.role === 'locum') {
     return input.selectedDateIsToday && ownEntry;
   }
@@ -91,10 +95,6 @@ export function canListConsultationEntry(input: ConsultationListAccessInput) {
     CONSULTATION_OVERVIEW_ROLES.has(input.role)
   ) {
     return input.selectedDateIsToday;
-  }
-
-  if (input.queueStatus === 'completed') {
-    return canBrowseConsultationDates(input.role);
   }
 
   return input.selectedDateIsToday && ownEntry;

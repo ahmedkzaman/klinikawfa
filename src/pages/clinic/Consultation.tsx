@@ -325,6 +325,11 @@ export default function Consultation() {
                   });
                   const canUseWorkflowActions =
                     selectedDateIsToday && access.canEdit;
+                  const canEnterOfflineConsultation =
+                    role === 'ops_staff' &&
+                    selectedDateIsToday &&
+                    entry.clinic_status !== 'completed' &&
+                    eligibleOfflineVisitIds.has(entry.id);
 
                   return (
                   <TableRow key={entry.id} className="border-slate-100 hover:bg-slate-50/60">
@@ -369,7 +374,7 @@ export default function Consultation() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        {role === 'ops_staff' ? (
+                        {canEnterOfflineConsultation ? (
                           <Button
                             size="sm"
                             className={primaryBtn}
