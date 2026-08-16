@@ -545,8 +545,7 @@ export function RegisterAndCheckInDialog({ open, onOpenChange, selectedDate }: P
       const isDirectSaleSubmit = data.visit_type === 'direct_sale';
       const isPaymentOnlySubmit = data.visit_type === 'payment_only';
       const skipClinical = isDirectSaleSubmit || isPaymentOnlySubmit;
-      const queueCreatedAt =
-        queueDate === todayInputValue() ? null : createdAtForSelectedLocalDate(queueDate);
+      const queueCreatedAt = createdAtForSelectedLocalDate(queueDate);
       const queuePayload: QueueEntryInsert = {
         patient_id: patient.id,
         clinic_status: skipClinical ? 'sent_to_dispensary' : 'registered',
@@ -559,10 +558,8 @@ export function RegisterAndCheckInDialog({ open, onOpenChange, selectedDate }: P
         queue_sequence: seq,
         assigned_doctor_id: skipClinical ? null : assignedDoctorId,
         visit_remarks: visitRemarks.trim() || null,
+        created_at: queueCreatedAt,
       };
-      if (queueCreatedAt) {
-        queuePayload.created_at = queueCreatedAt;
-      }
       const { error: queueError } = await supabase.from('queue_entries').insert(queuePayload);
 
       if (queueError) {
@@ -583,12 +580,14 @@ export function RegisterAndCheckInDialog({ open, onOpenChange, selectedDate }: P
             : 'Patient registered and added to queue',
       );
       onOpenChange(false);
+      const queueReturnPath =
+        queueDate === todayInputValue() ? '/clinic/queue' : `/clinic/queue?date=${queueDate}`;
       navigate(
         isPaymentOnlySubmit
-          ? '/clinic/queue'
+          ? queueReturnPath
           : isDirectSaleSubmit
             ? '/clinic/dispensary'
-            : '/clinic/queue',
+            : queueReturnPath,
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to register patient';

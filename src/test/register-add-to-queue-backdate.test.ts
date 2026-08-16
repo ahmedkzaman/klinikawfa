@@ -20,10 +20,13 @@ describe('Register & Add to Queue backdated queue date', () => {
     expect(dialogSource).toContain('dateRangeForLocalDateKey');
     expect(dialogSource).toContain(".gte('created_at', start)");
     expect(dialogSource).toContain(".lt('created_at', end)");
-    expect(dialogSource).toContain('queuePayload.created_at = queueCreatedAt');
+    expect(dialogSource).toContain('created_at: queueCreatedAt');
+    expect(dialogSource).toContain('queueReturnPath');
+    expect(dialogSource).toContain('date=${queueDate}');
     expect(dialogSource).toContain('Backdated queue date');
 
     expect(queueBoardSource).toContain('<RegisterAndCheckInDialog');
     expect(queueBoardSource).toContain('selectedDate={effectiveQueueDate}');
+    expect(queueBoardSource).toContain('setSearchParams');
   });
 });

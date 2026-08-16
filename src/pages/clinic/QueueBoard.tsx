@@ -149,7 +149,7 @@ export default function QueueBoard() {
   const [selectedDate, setSelectedDate] = useState(() =>
     new URLSearchParams(window.location.search).get("date") ?? todayInputValue(),
   );
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const missingPaymentFocus = searchParams.get("focus") === "missing-payment";
   const [highlightMissingPayment, setHighlightMissingPayment] = useState(missingPaymentFocus);
   const { isLocum, isAdmin, isGuest } = useAuth();
@@ -278,6 +278,17 @@ export default function QueueBoard() {
       setActiveEntry(entry);
     }
   };
+  const handleSelectedDateChange = (date: string) => {
+    const nextDate = date || todayInputValue();
+    setSelectedDate(nextDate);
+    const params = new URLSearchParams(searchParams);
+    if (nextDate === todayInputValue()) {
+      params.delete("date");
+    } else {
+      params.set("date", nextDate);
+    }
+    setSearchParams(params, { replace: true });
+  };
   const ANY_DOCTOR = "__any__";
   const [skipTriageDoctorId, setSkipTriageDoctorId] = useState<string | null>(null);
   const { data: allDoctors = [] } = useDoctors();
@@ -340,7 +351,7 @@ export default function QueueBoard() {
                     id="queue-date"
                     type="date"
                     value={selectedDate}
-                    onChange={(event) => setSelectedDate(event.target.value || todayInputValue())}
+                    onChange={(event) => handleSelectedDateChange(event.target.value)}
                     className="h-8 w-[9.5rem] border-0 bg-transparent px-1 py-0 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
                   />
                   {!selectedDateIsToday && (
@@ -349,7 +360,7 @@ export default function QueueBoard() {
                       variant="ghost"
                       size="sm"
                       className="h-7 px-2 text-xs text-slate-600 hover:bg-slate-100"
-                      onClick={() => setSelectedDate(todayInputValue())}
+                      onClick={() => handleSelectedDateChange(todayInputValue())}
                     >
                       Today
                     </Button>
