@@ -126,6 +126,7 @@ function unavailableAssessmentFromModel(regression: { status: string; reasons?: 
 }
 
 describe('PatientAttendanceHeatmap', () => {
+  const openDetailedAnalysis = () => fireEvent.click(screen.getByText('View detailed analysis'));
   beforeEach(() => {
     vi.clearAllMocks();
     useAttendanceHeatmap.mockReturnValue({ data: report, isLoading: false, isError: false, error: null });
@@ -133,12 +134,15 @@ describe('PatientAttendanceHeatmap', () => {
     attendanceModel.assessDoctorOffDays.mockReturnValue([suggestedAssessment]);
   });
 
-  it('renders an accessible Monday–Sunday, 08:00–00:00 heatmap with colour-independent statuses', () => {
+  it('renders the compact period heatmap and expandable detailed analysis', () => {
     render(<PatientAttendanceHeatmap />);
 
     expect(screen.getByRole('heading', { name: /patient attendance heatmap/i })).toBeInTheDocument();
     expect(screen.getByText('Monday')).toBeInTheDocument();
     expect(screen.getByText('Sunday')).toBeInTheDocument();
+    expect(screen.getByText('8am–12pm')).toBeInTheDocument();
+    expect(screen.getByText('8pm–12 midnight')).toBeInTheDocument();
+    openDetailedAnalysis();
     expect(screen.getByText('08:00–09:00')).toBeInTheDocument();
     expect(screen.getByText('23:00–00:00')).toBeInTheDocument();
     expect(screen.getAllByText(/Closed \/ not operating/i).length).toBeGreaterThan(0);
@@ -162,6 +166,7 @@ describe('PatientAttendanceHeatmap', () => {
 
   it('opens a focused details dialog with aggregate evidence and no patient identifiers', () => {
     render(<PatientAttendanceHeatmap />);
+    openDetailedAnalysis();
 
     const cell = screen.getByRole('button', { name: /Monday 08:00–09:00.*2.*wait alert/i });
     fireEvent.click(cell);
@@ -182,9 +187,10 @@ describe('PatientAttendanceHeatmap', () => {
 
   it('renders deterministic recommendations with their evidence and suggestion label', () => {
     render(<PatientAttendanceHeatmap />);
+    openDetailedAnalysis();
 
     expect(screen.getByRole('heading', { name: /recommendations/i })).toBeInTheDocument();
-    expect(screen.getByText(/Training window/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Training window/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Peak staffing/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Possible doctor off-day.*suggestion only/i)).toBeInTheDocument();
     expect(screen.getAllByText(/sample/i).length).toBeGreaterThan(0);
@@ -192,6 +198,7 @@ describe('PatientAttendanceHeatmap', () => {
 
   it('shows a suggested off-day with predicted and observed safety evidence', () => {
     render(<PatientAttendanceHeatmap />);
+    openDetailedAnalysis();
 
     expect(screen.getByText('Possible doctor off-day — suggestion only')).toBeInTheDocument();
     expect(screen.getByText(/Predicted visits:\s*3\.2/i)).toBeInTheDocument();
@@ -219,6 +226,7 @@ describe('PatientAttendanceHeatmap', () => {
       { ...suggestedAssessment, weekday: 2, safetyScore: 0.1, forecast: { ...suggestedAssessment.forecast, weekday: 2, expectedTotal: 3.2 } },
     ]);
     render(<PatientAttendanceHeatmap />);
+    openDetailedAnalysis();
 
     expect(screen.getByText(/Ranked safest: safety score 0\.1/i)).toBeInTheDocument();
     expect(screen.getByText(/Predicted visits:\s*3\.2/i)).toBeInTheDocument();
@@ -233,6 +241,7 @@ describe('PatientAttendanceHeatmap', () => {
       passedChecks: [],
     }]);
     render(<PatientAttendanceHeatmap />);
+    openDetailedAnalysis();
 
     expect(screen.getByText('No safe off-day recommendation')).toBeInTheDocument();
     const priorityReasons = within(screen.getByLabelText(/highest-priority safety reasons/i));
@@ -254,6 +263,7 @@ describe('PatientAttendanceHeatmap', () => {
     attendanceModel.fitAttendanceRegression.mockReturnValue(regression);
     attendanceModel.assessDoctorOffDays.mockImplementation((_cells, result) => unavailableAssessmentFromModel(result));
     render(<PatientAttendanceHeatmap />);
+    openDetailedAnalysis();
 
     expect(screen.getByText('No safe off-day recommendation')).toBeInTheDocument();
     expect(attendanceModel.fitAttendanceRegression).toHaveBeenCalledTimes(1);
@@ -266,6 +276,7 @@ describe('PatientAttendanceHeatmap', () => {
     attendanceModel.fitAttendanceRegression.mockImplementation(() => { throw new Error('Unexpected numerical failure'); });
     attendanceModel.assessDoctorOffDays.mockImplementation((_cells, regression) => unavailableAssessmentFromModel(regression));
     render(<PatientAttendanceHeatmap />);
+    openDetailedAnalysis();
 
     expect(attendanceModel.fitAttendanceRegression).toHaveBeenCalledTimes(1);
     expect(screen.getByText('No safe off-day recommendation')).toBeInTheDocument();
@@ -281,6 +292,7 @@ describe('PatientAttendanceHeatmap', () => {
       forecast: { ...suggestedAssessment.forecast, backupCoverageRate: 0 },
     }]);
     render(<PatientAttendanceHeatmap />);
+    openDetailedAnalysis();
     fireEvent.change(screen.getByLabelText(/treating doctor/i), { target: { value: 'doctor-1' } });
 
     expect(screen.getByText(/selected treating doctor/i)).toBeInTheDocument();
@@ -290,6 +302,7 @@ describe('PatientAttendanceHeatmap', () => {
   it('does not refit the model when opening a heatmap cell', () => {
     render(<PatientAttendanceHeatmap />);
     expect(attendanceModel.fitAttendanceRegression).toHaveBeenCalledTimes(1);
+    openDetailedAnalysis();
 
     fireEvent.click(screen.getByRole('button', { name: /Monday 08:00–09:00.*2.*wait alert/i }));
 

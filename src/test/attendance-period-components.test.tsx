@@ -63,7 +63,7 @@ describe('attendance period components', () => {
   it('renders a readable Monday–Sunday four-period grid', () => {
     render(<AttendancePeriodHeatmap analysis={analysis} onSelectPeriod={vi.fn()} />);
 
-    expect(screen.getByLabelText('Compact attendance period heatmap')).toBeInTheDocument();
+    expect(screen.getByLabelText('Compact attendance heatmap')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Monday 8am–12pm/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Sunday 8pm–12 midnight/i })).toBeInTheDocument();
     expect(screen.getAllByText('8am–12pm').length).toBeGreaterThan(0);

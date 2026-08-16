@@ -102,7 +102,8 @@ describe('PatientAttendanceHeatmap model integration', () => {
     expect(selectedDoctorAssessments.some(item => item.reasons.includes('Backup doctor coverage is incomplete.'))).toBe(true);
 
     render(<PatientAttendanceHeatmap />);
-    expect(screen.getByText('No safe off-day recommendation')).toBeInTheDocument();
+    expect(screen.getAllByText('No safe period identified').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByText('View detailed analysis'));
     fireEvent.click(screen.getByText('View all checks by weekday'));
     expect(screen.getAllByText('Hourly upper prediction crosses the busy threshold.').length).toBeGreaterThan(0);
     expect(screen.queryByText('Backup doctor coverage is incomplete.')).not.toBeInTheDocument();
