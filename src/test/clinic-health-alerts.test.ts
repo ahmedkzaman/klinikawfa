@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildClinicAlerts, type ClinicHealthMetrics } from '@/lib/clinic/insight/alerts';
+import { buildClinicAlerts } from '@/lib/clinic/insight/alerts';
+import type { ClinicHealthMetrics } from '@/lib/clinic/insight/healthScore';
 
 describe('buildClinicAlerts', () => {
   it('prioritizes critical claims and links panel fee issues to settings', () => {
@@ -27,6 +28,19 @@ describe('buildClinicAlerts', () => {
       dataQuality: { completedWithoutPayment: 0, panelVisitWithoutPanel: 0, consultationWithoutFee: 0 },
     };
     expect(buildClinicAlerts(metrics)).toHaveLength(0);
+  });
+
+  it('includes issue counts so presentation layers can defensively hide zero-count alerts', () => {
+    const metrics: ClinicHealthMetrics = {
+      financial: { revenue: 0, profit: 0, marginPct: 0 },
+      visits: { registered: 2, completed: 1, cancelled: 0, noShow: 0 },
+      claims: { outstandingAmount: 15, unsubmittedCount: 0, overdueCount: 1 },
+      panelFees: { activePanels: 0, missingDefaultCount: 0, mismatchedVisitCount: 0 },
+      inventory: { outOfStockCount: 0, belowReorderCount: 0, expiring60DaysCount: 0 },
+      dataQuality: { completedWithoutPayment: 0, panelVisitWithoutPanel: 0, consultationWithoutFee: 0 },
+    };
+
+    expect(buildClinicAlerts(metrics)[0]).toMatchObject({ id: 'overdue-claims', count: 1 });
   });
 
   it('links unpaid completed visits to the focused queue view', () => {

@@ -79,7 +79,7 @@ import RestockReview from "./pages/clinic/RestockReview";
 import OweSlips from "./pages/clinic/OweSlips";
 import Receivables from "./pages/clinic/Receivables";
 import VoidedRecords from "./pages/clinic/VoidedRecords";
-import Insight from "./pages/clinic/Insight";
+import { InsightRoute } from "./pages/clinic/Insight";
 import ManagementDashboard from "./pages/clinic/ManagementDashboard";
 import SettingsPage from "./pages/clinic/settings/SettingsPage";
 import ClinicProfile from "./pages/clinic/settings/ClinicProfile";
@@ -418,7 +418,7 @@ const App = () => (
                   path="insight"
                   element={
                     <ClinicProtectedRoute requiredRole="insights">
-                      <Insight />
+                      <InsightRoute />
                     </ClinicProtectedRoute>
                   }
                 />

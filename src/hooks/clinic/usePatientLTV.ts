@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { differenceInYears, parseISO } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import type { InsightQueryOptions } from './useInsightSectionData';
 
 // View not in generated types — same loose-cast pattern as useScoreboards.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -56,9 +57,10 @@ function bucketIndexFor(revenue: number): number {
   return BUCKET_DEFS.length - 1;
 }
 
-export function usePatientLTV() {
+export function usePatientLTV(options?: InsightQueryOptions) {
   return useQuery<PatientLtvData>({
     queryKey: ['patient-ltv'],
+    enabled: options?.enabled ?? true,
     queryFn: async () => {
       const { data, error } = await db
         .from('insight_financials_view')

@@ -84,7 +84,7 @@ const csvField = (value: string | number): string => {
   const serialized = typeof value === 'string' && dangerousCsvPrefix.test(value)
     ? `'${value}`
     : String(value);
-  return `"${serialized.replaceAll('"', '""')}"`;
+  return `"${serialized.replace(/"/g, '""')}"`;
 };
 
 export function doctorActivityQueueLabel(
@@ -108,9 +108,9 @@ export function doctorClinicalActivityCsv(
       row.activityName,
       row.patientName,
       doctorActivityQueueLabel(row),
-      row.unitPrice ?? '',
+      row.unitPrice == null ? '' : row.unitPrice.toFixed(2),
       row.quantity ?? '',
-      row.totalPrice ?? '',
+      row.totalPrice == null ? '' : row.totalPrice.toFixed(2),
     ].map(csvField).join(',')),
   );
 

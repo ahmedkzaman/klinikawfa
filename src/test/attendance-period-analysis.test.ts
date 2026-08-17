@@ -73,10 +73,10 @@ function readyRegression(hourly: AttendanceHourlyForecast[]): AttendanceRegressi
 describe('attendance period analysis', () => {
   it('defines the four requested four-hour periods', () => {
     expect(ATTENDANCE_PERIODS.map(({ id, startHour, endHour }) => [id, startHour, endHour])).toEqual([
-      ['morning', 8, 12],
-      ['afternoon', 12, 16],
-      ['evening', 16, 20],
-      ['night', 20, 24],
+      ['08_12', 8, 12],
+      ['12_16', 12, 16],
+      ['16_20', 16, 20],
+      ['20_24', 20, 24],
     ]);
   });
 
@@ -115,7 +115,7 @@ describe('attendance period analysis', () => {
       selectedDoctorId: null,
     });
 
-    expect(result.periods.find((period) => period.weekday === 1 && period.periodId === 'morning')).toMatchObject({
+    expect(result.periods.find((period) => period.weekday === 1 && period.periodId === '08_12')).toMatchObject({
       status: 'insufficient',
       safeForTraining: false,
     });
@@ -134,8 +134,8 @@ describe('attendance period analysis', () => {
       selectedDoctorId: null,
     });
 
-    expect(result.decisions.training).toMatchObject({ status: 'ready', weekday: 2, periodId: 'morning' });
-    expect(result.decisions.peak).toMatchObject({ status: 'ready', weekday: 3, periodId: 'evening' });
+    expect(result.decisions.training).toMatchObject({ status: 'ready', weekday: 2, periodId: '08_12' });
+    expect(result.decisions.peak).toMatchObject({ status: 'ready', weekday: 3, periodId: '16_20' });
   });
 
   it('rejects a low-demand training period when one included hour is unsafe', () => {
@@ -153,10 +153,10 @@ describe('attendance period analysis', () => {
       selectedDoctorId: null,
     });
 
-    expect(result.periods.find((period) => period.weekday === 2 && period.periodId === 'morning')).toMatchObject({
+    expect(result.periods.find((period) => period.weekday === 2 && period.periodId === '08_12')).toMatchObject({
       safeForTraining: false,
     });
-    expect(result.periods.find((period) => period.weekday === 2 && period.periodId === 'morning')?.safetyReasons).toContain('Average wait exceeds 45 minutes.');
+    expect(result.periods.find((period) => period.weekday === 2 && period.periodId === '08_12')?.safetyReasons).toContain('Average wait exceeds 45 minutes.');
   });
 
   it('uses an existing regression off-day assessment without changing its safety decision', () => {

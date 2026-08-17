@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { differenceInCalendarDays, format, subDays } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import type { InsightQueryOptions } from './useInsightSectionData';
+import { doctorAttributionField } from '@/lib/clinic/insight/insightAccess';
 
 const LIQUID_METHODS = new Set(['cash', 'qr_pay', 'card', 'transfer']);
 const PROFIT_PER_VISIT_BENCHMARK = 80; // RM
@@ -39,17 +41,19 @@ interface ViewRow {
   revenue: number | string | null;
   profit: number | string | null;
   queue_entry_id: string;
-  doctor_name: string | null;
+  doctor_name?: string | null;
+  doctor_id?: string | null;
 }
 
 // View not in generated types — loose client.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any;
 
-async function fetchPeriod(startKey: string, endKey: string): Promise<ViewRow[]> {
+async function fetchPeriod(startKey: string, endKey: string, canSeeNamedDoctors: boolean): Promise<ViewRow[]> {
+  const doctorField = doctorAttributionField(canSeeNamedDoctors);
   const { data, error } = await db
     .from('insight_financials_view')
-    .select('visit_date, payment_method, revenue, profit, queue_entry_id, doctor_name')
+    .select(`visit_date, payment_method, revenue, profit, queue_entry_id, ${doctorField}`)
     .gte('visit_date', startKey)
     .lte('visit_date', endKey);
   if (error) throw error;
@@ -85,7 +89,7 @@ export function aggregateBankHealthRows(rows: ViewRow[]): PeriodAggregate {
       acc.liquidRevenue += rev;
     }
 
-    const doctor = r.doctor_name ?? 'Unassigned';
+    const doctor = r.doctor_name ?? r.doctor_id ?? 'Unassigned';
     acc.doctorRevenue.set(doctor, (acc.doctorRevenue.get(doctor) ?? 0) + rev);
   }
 
@@ -166,12 +170,18 @@ function describePriorPeriod(days: number): string {
   return `Previous ${days} days`;
 }
 
-export function useBankHealth(startDate: Date, endDate: Date) {
+export function useBankHealth(
+  startDate: Date,
+  endDate: Date,
+  options?: InsightQueryOptions & { canSeeNamedDoctors?: boolean },
+) {
   const startKey = format(startDate, 'yyyy-MM-dd');
   const endKey = format(endDate, 'yyyy-MM-dd');
+  const canSeeNamedDoctors = options?.canSeeNamedDoctors ?? false;
 
   return useQuery<BankHealthData>({
-    queryKey: ['bank-health', startKey, endKey],
+    queryKey: ['bank-health', startKey, endKey, canSeeNamedDoctors ? 'named' : 'anonymous'],
+    enabled: options?.enabled ?? true,
     queryFn: async () => {
       const days = Math.max(1, differenceInCalendarDays(endDate, startDate) + 1);
       const priorEnd = subDays(startDate, 1);
@@ -180,8 +190,8 @@ export function useBankHealth(startDate: Date, endDate: Date) {
       const priorEndKey = format(priorEnd, 'yyyy-MM-dd');
 
       const [currentRows, priorRows] = await Promise.all([
-        fetchPeriod(startKey, endKey),
-        fetchPeriod(priorStartKey, priorEndKey),
+        fetchPeriod(startKey, endKey, canSeeNamedDoctors),
+        fetchPeriod(priorStartKey, priorEndKey, canSeeNamedDoctors),
       ]);
 
       const currAgg = aggregateBankHealthRows(currentRows);

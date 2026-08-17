@@ -97,9 +97,9 @@ function normalizeRow(row: PanelClaimRow): PanelClaimRow {
   };
 }
 
-export function usePanelClaims(tab: PanelClaimsTab, page: number) {
+export function usePanelClaims(tab: PanelClaimsTab, page: number, claimId?: string | null) {
   return useQuery<PanelClaimsPage>({
-    queryKey: ['panel_claims', tab, page],
+    queryKey: claimId ? ['panel_claims', tab, page, claimId] : ['panel_claims', tab, page],
     queryFn: async () => {
       const from = page * PANEL_CLAIMS_PAGE_SIZE;
       const to = from + PANEL_CLAIMS_PAGE_SIZE - 1;
@@ -110,6 +110,11 @@ export function usePanelClaims(tab: PanelClaimsTab, page: number) {
         .select(PANEL_CLAIMS_SELECT, { count: 'exact' } as any)
         .order('created_at', { ascending: false })
         .range(from, to);
+
+      if (claimId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        query = (query as any).eq('id', claimId);
+      }
 
       if (tab === 'overdue') {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

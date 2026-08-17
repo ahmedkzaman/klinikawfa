@@ -30,6 +30,10 @@ vi.mock("@/contexts/AuthContext", () => ({
 vi.mock("@/integrations/supabase/client", () => ({ supabase: {} }));
 
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { ClinicLayout } from "@/components/clinic/ClinicLayout";
+
+vi.mock("@/hooks/clinic/useClinicChimes", () => ({ useClinicChimes: vi.fn() }));
+vi.mock("@/components/staff/chat/StaffChat", () => ({ StaffChat: () => null }));
 
 const baseAuth = {
   user: null as null | { id: string },
@@ -162,5 +166,40 @@ describe("ProtectedRoute", () => {
 
     expect(screen.queryByTestId("children")).toBeNull();
     expect(navigations).toHaveLength(0);
+  });
+
+  it("shows Insight to resident doctors through the role policy", () => {
+    useAuthMock.mockReturnValue({
+      ...baseAuth,
+      user: { id: "doctor-7", email: "resident@example.com" },
+      role: "resident_doctor",
+      isStaffOrAdmin: true,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/clinic/queue"]}>
+        <ClinicLayout />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: "Insight" })).toHaveAttribute("href", "/clinic/insight");
+  });
+
+  it("keeps Insight hidden from locums even when another account permission is true", () => {
+    useAuthMock.mockReturnValue({
+      ...baseAuth,
+      user: { id: "doctor-8", email: "locum@example.com" },
+      role: "locum",
+      isLocum: true,
+      canViewManagementDashboard: true,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/clinic/queue"]}>
+        <ClinicLayout />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole("link", { name: "Insight" })).toBeNull();
   });
 });

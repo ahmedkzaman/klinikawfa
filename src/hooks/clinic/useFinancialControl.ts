@@ -11,6 +11,7 @@ import {
   type FinancialControlDetailResponse,
   type FinancialControlSummary,
 } from '@/lib/clinic/financialControl';
+import type { InsightQueryOptions } from './useInsightSectionData';
 
 function dateKeyOrNull(value: unknown): string | null {
   if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null;
@@ -22,6 +23,7 @@ function dateKeyOrNull(value: unknown): string | null {
 
 export function useFinancialControlSummary(
   range: DateRange,
+  options?: InsightQueryOptions,
 ): UseQueryResult<FinancialControlSummary, Error> {
   const args = getFinancialControlSummaryArguments(range);
   const queryKey = args
@@ -38,11 +40,11 @@ export function useFinancialControlSummary(
 
   return useQuery<FinancialControlSummary, Error>({
     queryKey,
-    enabled: args !== null,
+    enabled: args !== null && (options?.enabled ?? true),
     queryFn: async () => {
       if (!args) throw new Error('Invalid financial control date range');
 
-      const { data, error } = await supabase.rpc('get_financial_control_summary', args);
+      const { data, error } = await (supabase.rpc as unknown as (name: string, args: typeof args) => Promise<{ data: unknown; error: Error | null }>)('get_insight_financial_control_summary', args);
       if (error) throw error;
       return parseFinancialControlSummary(data);
     },
@@ -72,7 +74,7 @@ export function useFinancialControlDetails(
     enabled: isValidFinancialControlDateRange(filters.startDate, filters.endDate),
     queryFn: async () => {
       const args = getFinancialControlDetailArguments(filters);
-      const { data, error } = await supabase.rpc('get_financial_control_details', args);
+      const { data, error } = await (supabase.rpc as unknown as (name: string, args: typeof args) => Promise<{ data: unknown; error: Error | null }>)('get_insight_financial_control_details', args);
       if (error) throw error;
       const parsed = parseFinancialControlDetails(data);
       const missingPanelQueueIds = parsed.rows

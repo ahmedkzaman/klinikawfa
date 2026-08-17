@@ -217,7 +217,7 @@ describe('useFinancialControlSummary', () => {
       '2026-08-07',
     ]);
     await expect(options.queryFn()).resolves.toEqual(summaryResponse);
-    expect(rpc).toHaveBeenCalledWith('get_financial_control_summary', {
+    expect(rpc).toHaveBeenCalledWith('get_insight_financial_control_summary', {
       _start_date: '2026-08-01',
       _end_date: '2026-08-07',
       _comparison_start: '2026-07-25',
@@ -292,7 +292,7 @@ describe('useFinancialControlDetails', () => {
       100,
     ]);
     await expect(options.queryFn()).resolves.toEqual(detailResponse);
-    expect(rpc).toHaveBeenCalledWith('get_financial_control_details', {
+    expect(rpc).toHaveBeenCalledWith('get_insight_financial_control_details', {
       _start_date: '2026-08-01',
       _end_date: '2026-08-07',
       _as_of_date: '2026-08-07',
@@ -310,7 +310,7 @@ describe('useFinancialControlDetails', () => {
     await latestOptions().queryFn();
 
     expect(rpc).toHaveBeenCalledWith(
-      'get_financial_control_details',
+      'get_insight_financial_control_details',
       expect.objectContaining({ _metric: metric }),
     );
   });
@@ -321,7 +321,7 @@ describe('useFinancialControlDetails', () => {
     await latestOptions().queryFn();
 
     expect(rpc).toHaveBeenCalledWith(
-      'get_financial_control_details',
+      'get_insight_financial_control_details',
       expect.objectContaining({ _group_by: groupBy }),
     );
   });
@@ -332,7 +332,7 @@ describe('useFinancialControlDetails', () => {
     await latestOptions().queryFn();
 
     expect(rpc).toHaveBeenCalledWith(
-      'get_financial_control_details',
+      'get_insight_financial_control_details',
       expect.objectContaining({ _alert_key: alertKey }),
     );
   });

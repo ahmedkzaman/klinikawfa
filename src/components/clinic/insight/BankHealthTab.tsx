@@ -22,10 +22,13 @@ import {
   chartColors,
 } from '@/lib/clinic/bentoTokens';
 import { useBankHealth, type AxisContext } from '@/hooks/clinic/useBankHealth';
+import { doctorConcentrationLabel } from '@/lib/clinic/insight/insightAccess';
 
 interface Props {
   startDate: Date;
   endDate: Date;
+  enabled?: boolean;
+  canSeeNamedDoctors?: boolean;
 }
 
 function fmtPct(n: number, digits = 0): string {
@@ -71,9 +74,9 @@ function AxisCard({ label, score, priorScore, raw, rawPrior }: AxisCardProps) {
 function describeProfitability(c: AxisContext): string {
   return c.revenue > 0 ? `${fmtPct(c.marginPct, 1)} gross margin` : 'No revenue';
 }
-function describeRisk(c: AxisContext): string {
+function describeRisk(c: AxisContext, canSeeNamedDoctors: boolean): string {
   return c.revenue > 0
-    ? `${c.topDoctorName}: ${fmtPct(c.topDoctorSharePct, 0)} of revenue`
+    ? doctorConcentrationLabel(c.topDoctorName, c.topDoctorSharePct, canSeeNamedDoctors)
     : 'No revenue';
 }
 function describeEfficiency(c: AxisContext): string {
@@ -90,8 +93,8 @@ function describeGrowth(c: AxisContext, label: string): string {
   return `${sign}${c.growthPct.toFixed(1)}% vs ${label.toLowerCase()}`;
 }
 
-export function BankHealthTab({ startDate, endDate }: Props) {
-  const { data, isLoading, isError, error } = useBankHealth(startDate, endDate);
+export function BankHealthTab({ startDate, endDate, enabled = true, canSeeNamedDoctors = false }: Props) {
+  const { data, isLoading, isError, error } = useBankHealth(startDate, endDate, { enabled, canSeeNamedDoctors });
 
   if (isError) {
     return (
@@ -222,8 +225,8 @@ export function BankHealthTab({ startDate, endDate }: Props) {
               label="Risk"
               score={cs.Risk.current}
               priorScore={cs.Risk.prior}
-              raw={describeRisk(current)}
-              rawPrior={describeRisk(prior)}
+              raw={describeRisk(current, canSeeNamedDoctors)}
+              rawPrior={describeRisk(prior, canSeeNamedDoctors)}
             />
             <AxisCard
               label="Efficiency"

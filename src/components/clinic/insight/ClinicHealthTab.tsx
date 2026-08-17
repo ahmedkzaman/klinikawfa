@@ -1,28 +1,109 @@
-import { Card, CardContent } from '@/components/ui/card';
-import { HealthAlertsList } from './HealthAlertsList';
-import { HealthScoreCard } from './HealthScoreCard';
-import { useClinicHealth } from '@/hooks/clinic/useClinicHealth';
+import { format } from 'date-fns';
 
-export function ClinicHealthTab({ startDate, endDate }: { startDate: Date; endDate: Date }) {
-  const { data, isLoading, isError, error } = useClinicHealth(startDate, endDate);
-  if (isLoading) return <Card><CardContent className="p-6 text-sm text-slate-500">Loading clinic health…</CardContent></Card>;
-  if (isError) return <Card><CardContent className="p-6 text-sm text-rose-600">Failed to load clinic health: {(error as Error)?.message ?? 'Unknown error'}</CardContent></Card>;
-  if (!data) return <Card><CardContent className="p-6 text-sm text-slate-500">No clinic health data available.</CardContent></Card>;
-  const { metrics } = data;
+import { useAttendanceHeatmap } from '@/hooks/clinic/useAttendanceHeatmap';
+import { useClinicHealth } from '@/hooks/clinic/useClinicHealth';
+import { useFinancialControlSummary } from '@/hooks/clinic/useFinancialControl';
+import {
+  attendanceAverageWaiting,
+  buildAttendanceSummary,
+} from '@/lib/clinic/insight/commandCentre';
+import { evaluateDataConfidence } from '@/lib/clinic/insight/dataConfidence';
+import { CommandCentreTab } from './command/CommandCentreTab';
+import { InsightState } from './shared/InsightState';
+
+export function ClinicHealthTab({
+  startDate,
+  endDate,
+  enabled = true,
+}: {
+  startDate: Date;
+  endDate: Date;
+  enabled?: boolean;
+}) {
+  const startKey = format(startDate, 'yyyy-MM-dd');
+  const endKey = format(endDate, 'yyyy-MM-dd');
+  const clinic = useClinicHealth(startDate, endDate, { enabled });
+  const financial = useFinancialControlSummary({ from: startDate, to: endDate }, { enabled });
+  const attendance = useAttendanceHeatmap({
+    startDate: enabled ? startKey : '',
+    endDate: enabled ? endKey : '',
+    doctorId: null,
+    permissionDomain: 'insight',
+  });
+
+  if (clinic.isLoading && !clinic.data) {
+    return <InsightState state="loading" label="Loading Command Centre…" />;
+  }
+  if (clinic.isError && !clinic.data) {
+    return (
+      <InsightState
+        state="error"
+        label="Command Centre"
+        error={clinic.error}
+        onRetry={() => { void clinic.refetch(); }}
+        retryLabel="Retry Command Centre"
+      />
+    );
+  }
+  if (!clinic.data) {
+    return <InsightState state="empty" label="No Command Centre data is available for this period." />;
+  }
+
+  const attendanceCells = attendance.data?.cells ?? [];
+  const attendanceConfidence = evaluateDataConfidence({
+    expectedRows: attendance.data || attendance.isError ? 112 : null,
+    observedRows: attendanceCells.length,
+    missingAttributionRows: attendanceCells.filter((cell) => cell.coverage !== 'complete').length,
+    lastRefreshedAt: attendance.dataUpdatedAt > 0 ? new Date(attendance.dataUpdatedAt) : null,
+    source: 'clinical-attendance-heatmap',
+    dateBasis: 'Queue arrival hour in Asia/Kuala_Lumpur',
+    sourceFailed: attendance.isError,
+  });
+  const financialIncomplete = Boolean(financial.data && (
+    !financial.data.period.attributionComplete || !financial.data.period.costComplete
+  ));
+  const clinicDataQuality = clinic.data.metrics.dataQuality;
+  const clinicIncomplete = clinicDataQuality.completedWithoutPayment > 0
+    || clinicDataQuality.panelVisitWithoutPanel > 0
+    || clinicDataQuality.consultationWithoutFee > 0;
+  const partial = clinic.isError || financial.isError || financial.isLoading || attendance.isError || attendance.isLoading
+    || !financial.data || financialIncomplete || clinicIncomplete || attendanceConfidence.level !== 'reliable';
+  const retryPartial = clinic.isError || financial.isError || attendance.isError
+    ? () => {
+        if (clinic.isError) void clinic.refetch();
+        if (financial.isError) void financial.refetch();
+        if (attendance.isError) void attendance.refetch();
+      }
+    : undefined;
+
   return (
     <div className="space-y-4">
-      <HealthScoreCard score={data.score} />
-      <HealthAlertsList alerts={data.alerts} />
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {[
-          ['Revenue', `RM ${Number(metrics.financial.revenue).toLocaleString('en-MY', { minimumFractionDigits: 2 })}`],
-          ['Completed visits', metrics.visits.completed],
-          ['Outstanding claims', `RM ${Number(metrics.claims.outstandingAmount).toLocaleString('en-MY', { minimumFractionDigits: 2 })}`],
-          ['Out of stock', metrics.inventory.outOfStockCount],
-          ['Missing panel fees', metrics.panelFees.missingDefaultCount],
-          ['Data-quality exceptions', metrics.dataQuality.completedWithoutPayment + metrics.dataQuality.panelVisitWithoutPanel + metrics.dataQuality.consultationWithoutFee],
-        ].map(([label, value]) => <Card key={String(label)}><CardContent className="p-5"><div className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</div><div className="mt-2 text-2xl font-bold text-slate-900">{value}</div></CardContent></Card>)}
-      </div>
+      {partial ? (
+        <InsightState
+          state="partial"
+          label={clinic.isError || financial.isError || attendance.isError
+            ? 'Some Command Centre sources could not be loaded.'
+            : financial.isLoading || attendance.isLoading
+              ? 'Some Command Centre sources are still loading.'
+              : 'Some Command Centre data is incomplete.'}
+          onRetry={retryPartial}
+          retryLabel="Retry Command Centre sources"
+        />
+      ) : (
+        <InsightState state="success" label="Command Centre data is up to date." />
+      )}
+      <CommandCentreTab
+        healthMetrics={clinic.data.metrics}
+        healthAlerts={clinic.data.alerts}
+        financialSummary={financial.data ?? null}
+        attendancePeriods={buildAttendanceSummary(attendanceCells)}
+        averageWaitingMinutes={attendanceAverageWaiting(attendanceCells)}
+        attendanceConfidence={attendanceConfidence}
+        clinicLastRefreshedAt={clinic.dataUpdatedAt > 0 ? new Date(clinic.dataUpdatedAt).toISOString() : null}
+        asOfDate={endKey}
+        clinicSourceFailed={clinic.isError}
+        financialSourceFailed={financial.isError}
+      />
     </div>
   );
 }

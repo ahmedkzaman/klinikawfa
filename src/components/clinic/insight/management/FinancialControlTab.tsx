@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ReceiptText, RefreshCw } from 'lucide-react';
 import { differenceInCalendarDays, format, subDays } from 'date-fns';
+import { useInRouterContext, useLocation } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -15,10 +16,14 @@ import { FinancialAlertsTable } from './FinancialAlertsTable';
 import { FinancialDetailSheet } from './FinancialDetailSheet';
 import { FinancialReconciliation } from './FinancialReconciliation';
 import { FinancialSummaryStrip } from './FinancialSummaryStrip';
+import { parseCommandFinanceDetail } from '@/lib/clinic/insight/commandCentre';
 
 interface FinancialControlTabProps {
   startDate: Date;
   endDate: Date;
+  enabled?: boolean;
+  display?: 'all' | 'costs' | 'reconciliation' | 'details';
+  showHeader?: boolean;
 }
 
 const METRIC_LABELS: Record<FinancialControlMetric, string> = {
@@ -116,7 +121,19 @@ function LoadingState() {
   );
 }
 
-export function FinancialControlTab({ startDate, endDate }: FinancialControlTabProps) {
+function FinancialRouterLocationSync({ onSearchChange }: { onSearchChange: (search: string) => void }) {
+  const location = useLocation();
+  useEffect(() => onSearchChange(location.search), [location.search, onSearchChange]);
+  return null;
+}
+
+export function FinancialControlTab({
+  startDate,
+  endDate,
+  enabled = true,
+  display = 'all',
+  showHeader = true,
+}: FinancialControlTabProps) {
   const dateRangeKey = `${startDate.getTime()}:${endDate.getTime()}`;
   const [selectedMetric, setSelectedMetric] = useState<FinancialControlMetric>('billed_revenue');
   const [selectedAlert, setSelectedAlert] = useState<FinancialControlAlertKey | null>(null);
@@ -125,9 +142,11 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
   const [pageRangeKey, setPageRangeKey] = useState(dateRangeKey);
   const [pageSize, setPageSize] = useState(25);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [detailSearch, setDetailSearch] = useState(() => window.location.search);
   const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const inRouter = useInRouterContext();
   const range = useMemo(() => ({ from: startDate, to: endDate }), [endDate, startDate]);
-  const summary = useFinancialControlSummary(range);
+  const summary = useFinancialControlSummary(range, { enabled });
   const { data, isLoading, isError, error } = summary;
   const comparisonLabel = comparisonPeriodLabel(startDate, endDate);
   const detailPage = pageRangeKey === dateRangeKey ? page : 1;
@@ -138,6 +157,17 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
       setPageRangeKey(dateRangeKey);
     }
   }, [dateRangeKey, pageRangeKey]);
+
+  useEffect(() => {
+    const detail = parseCommandFinanceDetail(detailSearch);
+    if (!detail) return;
+    detailTriggerRef.current = null;
+    setSelectedMetric(detail.metric);
+    setSelectedAlert(detail.alert);
+    setGroupBy(detail.metric === 'margin' ? 'medicine' : 'visit');
+    setPage(1);
+    setDetailOpen(true);
+  }, [detailSearch]);
 
   const closeDetail = (open: boolean) => {
     setDetailOpen(open);
@@ -188,7 +218,8 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      {inRouter ? <FinancialRouterLocationSync onSearchChange={setDetailSearch} /> : null}
+      {showHeader && <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Financial Control</h2>
           <p className="mt-0.5 max-w-3xl text-xs leading-5 text-slate-500">
@@ -200,9 +231,9 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
             Last updated {lastUpdatedLabel(data.generated_at)}
           </p>
         )}
-      </div>
+      </div>}
 
-      {isError && !data ? (
+      {display === 'details' ? null : isError && !data ? (
         <section role="alert" className="rounded-lg border border-rose-200 bg-white p-5">
           <h3 className="text-sm font-semibold text-rose-800">Financial control summary unavailable</h3>
           <p className="mt-1 text-xs text-rose-700">{SUMMARY_ERROR_MESSAGE}</p>
@@ -261,7 +292,7 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
             </div>
           )}
 
-          <FinancialSummaryStrip
+          {(display === 'all' || display === 'costs') && <FinancialSummaryStrip
             period={data.period}
             comparison={data.comparison}
             comparisonLabel={comparisonLabel}
@@ -271,11 +302,25 @@ export function FinancialControlTab({ startDate, endDate }: FinancialControlTabP
             comparisonMissingCostItems={data.comparison.missingCostItems}
             selectedMetric={selectedMetric}
             onMetricSelect={openMetricDetails}
-          />
+            visibleValues={display === 'costs' ? ['cogs', 'grossProfit', 'grossMarginPct', 'averageBill'] : undefined}
+          />}
 
-          <FinancialReconciliation reconciliation={data.reconciliation} />
+          {(display === 'all' || display === 'reconciliation') && (
+            <FinancialReconciliation reconciliation={data.reconciliation} />
+          )}
 
-          <FinancialAlertsTable alerts={data.alerts} onView={openAlertDetails} />
+          {(display === 'all' || display === 'costs' || display === 'reconciliation') && (
+            <FinancialAlertsTable
+              alerts={data.alerts}
+              onView={openAlertDetails}
+              keys={display === 'costs'
+                ? ['missing_cost', 'zero_price', 'negative_margin', 'large_discount']
+                : display === 'reconciliation'
+                  ? ['unpaid_self_pay', 'payment_mismatch', 'duplicate_or_excess_payment', 'refund_void_correction']
+                  : undefined}
+              title={display === 'costs' ? 'Cost and margin alerts' : display === 'reconciliation' ? 'Reconciliation alerts' : undefined}
+            />
+          )}
         </>
       )}
 

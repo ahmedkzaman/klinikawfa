@@ -12,7 +12,7 @@ function decisionLocation(decision: AttendanceDecision): string {
   if (decision.weekday === null) return 'No safe period identified';
   const weekday = weekdays[decision.weekday - 1];
   if (decision.periodId === null) return weekday;
-  const labels = { morning: '8am–12pm', afternoon: '12pm–4pm', evening: '4pm–8pm', night: '8pm–12 midnight' } as const;
+  const labels = { '08_12': '08:00-12:00', '12_16': '12:00-16:00', '16_20': '16:00-20:00', '20_24': '20:00-00:00' } as const;
   return `${weekday}, ${labels[decision.periodId]}`;
 }
 

@@ -5,10 +5,10 @@ const from = vi.hoisted(() => vi.fn());
 const select = vi.hoisted(() => vi.fn());
 const gte = vi.hoisted(() => vi.fn());
 const lte = vi.hoisted(() => vi.fn());
-const not = vi.hoisted(() => vi.fn());
+const rpc = vi.hoisted(() => vi.fn());
 
 vi.mock('@tanstack/react-query', () => ({ useQuery }));
-vi.mock('@/integrations/supabase/client', () => ({ supabase: { from } }));
+vi.mock('@/integrations/supabase/client', () => ({ supabase: { from, rpc } }));
 
 import { usePanelBilledInsights } from '@/hooks/clinic/usePanelBilledInsights';
 
@@ -24,35 +24,96 @@ describe('usePanelBilledInsights', () => {
     from.mockReturnValue({ select });
     select.mockReturnValue({ gte });
     gte.mockReturnValue({ lte });
-    lte.mockReturnValue({ not });
-    not.mockResolvedValue({
+    lte.mockReset();
+    lte.mockResolvedValue({
       data: [
-        { amount: '100', status: 'pending' },
-        { amount: '150', status: 'approved' },
+        { id: 'pending', amount: '100', received_amount: 0, status: 'pending' },
+        { id: 'approved', amount: '150', received_amount: 0, status: 'approved' },
+        { id: 'rejected', amount: '50', received_amount: 0, status: 'rejected' },
       ],
       error: null,
     });
+    rpc.mockResolvedValue({ data: { total_received: 65 }, error: null });
   });
 
-  it('queries the inclusive claim date range and excludes rejected and cancelled claims', async () => {
+  it('queries all claim lifecycle rows and the authorized receipt-event aggregate', async () => {
     usePanelBilledInsights(new Date(2026, 7, 10, 12), new Date(2026, 7, 10, 18));
     const options = useQuery.mock.calls.at(-1)?.[0] as QueryOptions<unknown>;
 
     expect(options.queryKey).toEqual(['panel-billed-insights', '2026-08-10', '2026-08-10']);
-    await expect(options.queryFn()).resolves.toMatchObject({ totalBilled: 250, claimCount: 2, claims: expect.any(Array) });
+    await expect(options.queryFn()).resolves.toMatchObject({
+      totalBilled: 250,
+      totalReceived: 65,
+      claimCount: 2,
+      claims: expect.arrayContaining([expect.objectContaining({ id: 'rejected' })]),
+    });
+    expect(from).toHaveBeenCalledTimes(1);
     expect(from).toHaveBeenCalledWith('panel_claims');
-    expect(select).toHaveBeenCalledWith('queue_entry_id, claim_date, amount, status');
+    expect(select).toHaveBeenCalledWith(
+      'id, queue_entry_id, claim_date, due_date, received_date, amount, received_amount, status, insurance_providers:panel_id ( id, name )',
+    );
     expect(gte).toHaveBeenCalledWith('claim_date', '2026-08-10');
     expect(lte).toHaveBeenCalledWith('claim_date', '2026-08-10');
-    expect(not).toHaveBeenCalledWith('status', 'in', '(rejected,cancelled)');
+    expect(rpc).toHaveBeenCalledWith('get_panel_receipt_summary', {
+      _start_date: '2026-08-10',
+      _end_date: '2026-08-10',
+    });
+  });
+
+  it('attributes RM40 in August and RM60 in September instead of reusing a cumulative parent total', async () => {
+    lte
+      .mockResolvedValueOnce({
+        data: [{ id: 'split-claim', claim_date: '2026-08-15', amount: '100', received_amount: '100', received_date: '2026-09-02', status: 'received' }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: [], error: null });
+    rpc
+      .mockResolvedValueOnce({ data: { total_received: 40 }, error: null })
+      .mockResolvedValueOnce({ data: { total_received: 60 }, error: null });
+
+    usePanelBilledInsights(new Date(2026, 7, 1), new Date(2026, 7, 31));
+    const august = useQuery.mock.calls.at(-1)?.[0] as QueryOptions<{ totalReceived: number }>;
+    await expect(august.queryFn()).resolves.toMatchObject({ totalReceived: 40 });
+
+    usePanelBilledInsights(new Date(2026, 8, 1), new Date(2026, 8, 30));
+    const september = useQuery.mock.calls.at(-1)?.[0] as QueryOptions<{ totalReceived: number }>;
+    await expect(september.queryFn()).resolves.toMatchObject({ totalReceived: 60 });
+
+    expect(rpc).toHaveBeenNthCalledWith(1, 'get_panel_receipt_summary', {
+      _start_date: '2026-08-01', _end_date: '2026-08-31',
+    });
+    expect(rpc).toHaveBeenNthCalledWith(2, 'get_panel_receipt_summary', {
+      _start_date: '2026-09-01', _end_date: '2026-09-30',
+    });
   });
 
   it('preserves the database error', async () => {
     const error = new Error('panel claims unavailable');
-    not.mockResolvedValue({ data: null, error });
+    lte.mockReset();
+    lte.mockResolvedValueOnce({ data: null, error });
     usePanelBilledInsights(new Date(2026, 7, 10), new Date(2026, 7, 11));
     const options = useQuery.mock.calls.at(-1)?.[0] as QueryOptions<unknown>;
 
     await expect(options.queryFn()).rejects.toBe(error);
+  });
+
+  it('preserves the receipt aggregate error', async () => {
+    const error = new Error('receipt history unavailable');
+    rpc.mockResolvedValueOnce({ data: null, error });
+    usePanelBilledInsights(new Date(2026, 7, 10), new Date(2026, 7, 11));
+    const options = useQuery.mock.calls.at(-1)?.[0] as QueryOptions<unknown>;
+
+    await expect(options.queryFn()).rejects.toBe(error);
+  });
+
+  it('does not present an incomplete historical receipt total as authoritative', async () => {
+    rpc.mockResolvedValueOnce({
+      data: { total_received: 60, attribution_complete: false, incomplete_claims: 1 },
+      error: null,
+    });
+    usePanelBilledInsights(new Date(2026, 7, 1), new Date(2026, 7, 31));
+    const options = useQuery.mock.calls.at(-1)?.[0] as QueryOptions<unknown>;
+
+    await expect(options.queryFn()).resolves.toMatchObject({ totalReceived: null });
   });
 });

@@ -43,6 +43,7 @@ import {
 interface Props {
   startDate: Date;
   endDate: Date;
+  enabled?: boolean;
 }
 
 const WACC_ROWS = [8, 10, 12, 14, 16, 18, 20];
@@ -125,8 +126,8 @@ function runDCF(
 const TH = 'text-[11px] font-semibold text-slate-500 uppercase tracking-wider';
 const TR = 'border-slate-100';
 
-export function ValuationTab({ startDate, endDate }: Props) {
-  const { data, isLoading, isError, error } = useFinancialInsights(startDate, endDate);
+export function ValuationTab({ startDate, endDate, enabled = true }: Props) {
+  const { data, isLoading, isError, error } = useFinancialInsights(startDate, endDate, { enabled });
 
   const [growth, setGrowth] = useState(10);
   const [wacc, setWacc] = useState(12);

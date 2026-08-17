@@ -103,7 +103,7 @@ describe('PatientAttendanceHeatmap model integration', () => {
 
     render(<PatientAttendanceHeatmap />);
     expect(screen.getAllByText('No safe period identified').length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByText('View detailed analysis'));
+    fireEvent.click(screen.getByText('Advanced detail'));
     fireEvent.click(screen.getByText('View all checks by weekday'));
     expect(screen.getAllByText('Hourly upper prediction crosses the busy threshold.').length).toBeGreaterThan(0);
     expect(screen.queryByText('Backup doctor coverage is incomplete.')).not.toBeInTheDocument();

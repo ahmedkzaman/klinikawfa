@@ -3,6 +3,10 @@ import { cn } from '@/lib/utils';
 
 const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+function periodLabel(period: AttendancePeriodSummary): string {
+  return `${String(period.startHour).padStart(2, '0')}:00–${String(period.endHour % 24).padStart(2, '0')}:00`;
+}
+
 function trafficLabel(period: AttendancePeriodSummary): string {
   if (period.status !== 'ready') return period.status === 'uncovered' ? 'Uncovered' : period.status === 'insufficient' ? 'Insufficient data' : 'Unavailable';
   return period.trafficLevel === 'low' ? 'Low' : period.trafficLevel === 'high' ? 'High' : 'Moderate';
@@ -20,7 +24,7 @@ export function AttendancePeriodHeatmap({ analysis, onSelectPeriod }: { analysis
     <div className="overflow-x-auto" aria-label="Compact attendance heatmap" tabIndex={0}>
       <div className="grid min-w-[680px] grid-cols-[96px_repeat(4,minmax(130px,1fr))] gap-px rounded-md border bg-slate-200 p-px">
         <div className="bg-white p-2 text-xs font-semibold text-slate-600">Day</div>
-        {analysis.periods.filter((period) => period.weekday === 1).map((period) => <div key={period.periodId} className="bg-white p-2 text-center text-xs font-semibold text-slate-600">{period.label}</div>)}
+        {analysis.periods.filter((period) => period.weekday === 1).map((period) => <div key={period.periodId} className="bg-white p-2 text-center text-xs font-semibold text-slate-600">{periodLabel(period)}</div>)}
         {weekdays.map((day, index) => (
           <div key={day} className="contents">
             <div className="bg-white p-2 text-xs font-medium text-slate-600">{day}</div>
@@ -29,7 +33,7 @@ export function AttendancePeriodHeatmap({ analysis, onSelectPeriod }: { analysis
                 key={`${day}-${period.periodId}`}
                 type="button"
                 onClick={() => onSelectPeriod(period)}
-                aria-label={`${day} ${period.label}: ${trafficLabel(period)}, predicted ${period.expectedVisits === null ? 'unavailable' : period.expectedVisits.toFixed(1)} visits`}
+                aria-label={`${day} ${periodLabel(period)}: ${trafficLabel(period)}, predicted ${period.expectedVisits === null ? 'unavailable' : period.expectedVisits.toFixed(1)} visits`}
                 className={cn('min-h-16 p-2 text-center text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950', trafficClass(period))}
               >
                 <span className="block font-semibold">{period.expectedVisits === null ? '—' : period.expectedVisits.toFixed(1)}</span>

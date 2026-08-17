@@ -30,18 +30,21 @@ const summaries: DoctorActivitySummary[] = [
         activityName: 'Dressing', consultationId: 'consultation-a', queueEntryId: 'queue-a',
         queueCreatedAt: '2026-07-27T09:00:00.000Z', queueSequence: 1, doctorId: 'doctor-a',
         doctorName: 'Dr A', patientName: 'Aminah Patient',
+        unitPrice: 45, quantity: 1, totalPrice: 45,
       },
       {
         activityId: 'procedure-a2', activityKind: 'procedure', activityDate: '2026-07-26',
         activityName: 'Nebuliser', consultationId: 'consultation-a2', queueEntryId: 'queue-a2',
         queueCreatedAt: '2026-07-26T09:00:00.000Z', queueSequence: 2, doctorId: 'doctor-a',
         doctorName: 'Dr A', patientName: 'Aminah Patient',
+        unitPrice: 35, quantity: 1, totalPrice: 35,
       },
       {
         activityId: 'mc-a', activityKind: 'mc', activityDate: '2026-07-25',
         activityName: 'Medical certificate', consultationId: 'consultation-a3', queueEntryId: 'queue-a3',
         queueCreatedAt: '2026-07-25T09:00:00.000Z', queueSequence: 3, doctorId: 'doctor-a',
         doctorName: 'Dr A', patientName: 'Aminah Patient',
+        unitPrice: 15, quantity: 1, totalPrice: 15,
       },
     ],
   },
@@ -53,6 +56,7 @@ const summaries: DoctorActivitySummary[] = [
       activityName: 'Wound care', consultationId: 'consultation-b', queueEntryId: 'queue-b',
       queueCreatedAt: '2026-07-26T09:00:00.000Z', queueSequence: 4, doctorId: 'doctor-b',
       doctorName: 'Dr B', patientName: 'Badrul Patient',
+      unitPrice: 55, quantity: 1, totalPrice: 55,
     }],
   },
   {
@@ -63,6 +67,7 @@ const summaries: DoctorActivitySummary[] = [
       activityName: 'Quarantine order', consultationId: 'consultation-c', queueEntryId: 'queue-c',
       queueCreatedAt: '2026-07-24T09:00:00.000Z', queueSequence: 5, doctorId: null,
       doctorName: 'Unassigned', patientName: 'Chong Patient',
+      unitPrice: null, quantity: null, totalPrice: null,
     }],
   },
 ];
@@ -156,6 +161,7 @@ describe('DoctorClinicalActivity', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Documents' }));
     expect(screen.getByText('Medical certificate')).toBeInTheDocument();
+    expect(screen.getAllByText('RM 15.00')).toHaveLength(2);
     expect(screen.queryByText('Dressing')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Dr B' }));
@@ -267,7 +273,7 @@ describe('DoctorClinicalActivity', () => {
   });
 
   it('exports all doctors or a selected doctor as separate CSV downloads', async () => {
-    const createObjectURL = vi.fn(() => 'blob:doctor-clinical-activity');
+    const createObjectURL = vi.fn((_blob: Blob) => 'blob:doctor-clinical-activity');
     const downloads: string[] = [];
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
       downloads.push(this.download);
@@ -297,7 +303,7 @@ describe('DoctorClinicalActivity', () => {
   });
 
   it('uses a stable fallback filename for a doctor name without Latin characters', () => {
-    const createObjectURL = vi.fn(() => 'blob:doctor-clinical-activity');
+    const createObjectURL = vi.fn((_blob: Blob) => 'blob:doctor-clinical-activity');
     const downloads: string[] = [];
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
       downloads.push(this.download);
@@ -325,5 +331,22 @@ describe('DoctorClinicalActivity', () => {
 
     expect(downloads).toEqual(['doctor-clinical-activity-doctor-2026-07-01-to-2026-07-31.csv']);
     click.mockRestore();
+  });
+
+  it('renders one selected doctor detail with charged procedure rows and no eager doctor list', () => {
+    render(
+      <DoctorClinicalActivity
+        startDate={new Date('2026-07-01T00:00:00.000Z')}
+        endDate={new Date('2026-07-31T00:00:00.000Z')}
+        doctorId="doctor-a"
+        detailOnly
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Dr A' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Badrul Patient')).not.toBeInTheDocument();
+    expect(screen.getByText('Dressing')).toBeInTheDocument();
+    expect(screen.getAllByText('RM 45.00')).toHaveLength(2);
+    expect(screen.getByRole('link', { name: '260727-01' })).toHaveAttribute('href', '/clinic/visits/queue-a');
   });
 });

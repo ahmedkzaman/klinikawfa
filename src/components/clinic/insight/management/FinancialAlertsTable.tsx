@@ -19,6 +19,9 @@ import type {
 interface FinancialAlertsTableProps {
   alerts: FinancialControlAlert[];
   onView: (alertKey: FinancialControlAlertKey, trigger: HTMLButtonElement) => void;
+  keys?: FinancialControlAlertKey[];
+  title?: string;
+  description?: string;
 }
 
 const FINANCIAL_ALERT_LABELS: Record<FinancialControlAlertKey, string> = {
@@ -71,8 +74,14 @@ function sortedAlerts(alerts: FinancialControlAlert[]): FinancialControlAlert[] 
   ));
 }
 
-export function FinancialAlertsTable({ alerts, onView }: FinancialAlertsTableProps) {
-  const orderedAlerts = sortedAlerts(alerts);
+export function FinancialAlertsTable({
+  alerts,
+  onView,
+  keys,
+  title = 'Financial alerts',
+  description = 'Exceptions ordered by severity, amount at risk, and age.',
+}: FinancialAlertsTableProps) {
+  const orderedAlerts = sortedAlerts(keys ? alerts.filter((alert) => keys.includes(alert.key)) : alerts);
 
   return (
     <section
@@ -81,10 +90,10 @@ export function FinancialAlertsTable({ alerts, onView }: FinancialAlertsTablePro
     >
       <div className="border-b border-slate-100 px-4 py-4 sm:px-5">
         <h2 id="financial-alerts-heading" className="text-sm font-semibold text-slate-900">
-          Financial alerts
+          {title}
         </h2>
         <p className="mt-0.5 text-xs text-slate-500">
-          Exceptions ordered by severity, amount at risk, and age.
+          {description}
         </p>
       </div>
 

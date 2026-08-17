@@ -10,12 +10,13 @@ interface FinancialSummaryStripProps {
   period: FinancialControlPeriodSummary;
   comparison: FinancialControlPeriodSummary;
   comparisonLabel: string;
-  comparisonAttributionComplete: boolean;
-  comparisonCostComplete: boolean;
-  comparisonIncompleteVisits: number;
-  comparisonMissingCostItems: number;
+  comparisonAttributionComplete?: boolean;
+  comparisonCostComplete?: boolean;
+  comparisonIncompleteVisits?: number;
+  comparisonMissingCostItems?: number;
   selectedMetric: FinancialControlMetric;
   onMetricSelect: (metric: FinancialControlMetric, trigger: HTMLButtonElement) => void;
+  visibleValues?: Array<keyof FinancialControlPeriodSummary>;
 }
 
 interface MetricDefinition {
@@ -103,17 +104,19 @@ function comparisonText(
   previous: number | null,
   kind: MetricDefinition['kind'],
   label: string,
+  unavailableReason?: string,
 ): { text: string; direction: 'up' | 'down' | 'same' | 'unavailable' } {
+  if (unavailableReason) {
+    return { text: `Comparison unavailable — ${unavailableReason}`, direction: 'unavailable' };
+  }
   if (current === null || previous === null) {
-    return { text: 'Comparison unavailable', direction: 'unavailable' };
+    return { text: 'Comparison unavailable — missing period data', direction: 'unavailable' };
   }
   if (current === previous) {
     return { text: `no change vs ${label}`, direction: 'same' };
   }
   if (previous === 0) {
-    const direction = current > 0 ? 'up' : 'down';
-    const baseline = kind === 'percentage' ? '0.0%' : 'RM 0.00';
-    return { text: `${direction} from ${baseline} vs ${label}`, direction };
+    return { text: 'Comparison unavailable — prior period is zero', direction: 'unavailable' };
   }
 
   const direction = current > previous ? 'up' : 'down';
@@ -126,13 +129,15 @@ function Comparison({
   previous,
   kind,
   label,
+  unavailableReason,
 }: {
   current: number | null;
   previous: number | null;
   kind: MetricDefinition['kind'];
   label: string;
+  unavailableReason?: string;
 }) {
-  const comparison = comparisonText(current, previous, kind, label);
+  const comparison = comparisonText(current, previous, kind, label, unavailableReason);
   const Icon = comparison.direction === 'up'
     ? TrendingUp
     : comparison.direction === 'down'
@@ -164,6 +169,7 @@ export function FinancialSummaryStrip({
   comparisonMissingCostItems = 0,
   selectedMetric,
   onMetricSelect,
+  visibleValues,
 }: FinancialSummaryStripProps) {
   const comparisonWarnings = [
     !comparisonAttributionComplete
@@ -190,7 +196,7 @@ export function FinancialSummaryStrip({
         )}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
-        {METRICS.map((definition) => {
+        {METRICS.filter((definition) => !visibleValues || visibleValues.includes(definition.value)).map((definition) => {
           const current = period[definition.value] as number | null;
           const previous = comparison[definition.value] as number | null;
           const content = (
@@ -207,6 +213,13 @@ export function FinancialSummaryStrip({
                 previous={previous}
                 kind={definition.kind}
                 label={comparisonLabel}
+                unavailableReason={
+                  !comparisonAttributionComplete
+                    ? 'incomplete attribution'
+                    : !comparisonCostComplete && ['cogs', 'grossProfit', 'grossMarginPct'].includes(definition.value)
+                      ? 'incomplete cost data'
+                      : undefined
+                }
               />
             </>
           );

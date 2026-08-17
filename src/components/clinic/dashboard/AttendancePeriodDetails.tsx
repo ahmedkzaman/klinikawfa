@@ -7,14 +7,18 @@ function timeRange(hour: number): string {
   return `${String(hour).padStart(2, '0')}:00–${String((hour + 1) % 24).padStart(2, '0')}:00`;
 }
 
+function periodRange(period: AttendancePeriodSummary): string {
+  return `${String(period.startHour).padStart(2, '0')}:00–${String(period.endHour % 24).padStart(2, '0')}:00`;
+}
+
 export function AttendancePeriodDetails({ period, open, onOpenChange }: { period: AttendancePeriodSummary | null; open: boolean; onOpenChange: (open: boolean) => void }) {
   if (!period) return null;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent aria-describedby="attendance-period-detail-description" className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Attendance period details</DialogTitle>
-          <DialogDescription id="attendance-period-detail-description">{weekdays[period.weekday - 1]} {period.label}. Aggregate regression and operational data only.</DialogDescription>
+          <DialogTitle>Attendance details</DialogTitle>
+          <DialogDescription id="attendance-period-detail-description">{weekdays[period.weekday - 1]} {periodRange(period)}. Aggregate regression and operational data only.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-2 text-sm sm:grid-cols-2">
           <p>Predicted visits: <strong>{period.expectedVisits === null ? 'Unavailable' : period.expectedVisits.toFixed(1)}</strong></p>

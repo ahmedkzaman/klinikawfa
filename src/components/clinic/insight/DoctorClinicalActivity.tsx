@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useCallback, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 
 import { Button } from '@/components/ui/button';
@@ -15,17 +15,17 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useDoctorClinicalActivity } from '@/hooks/clinic/useDoctorClinicalActivity';
 import { bento, bentoHeader } from '@/lib/clinic/bentoTokens';
-import {
-  doctorActivityQueueLabel,
-  doctorClinicalActivityCsv,
-  type DoctorActivityRow,
-  type DoctorActivitySummary,
-} from '@/lib/clinic/doctorClinicalActivity';
+import { doctorActivityQueueLabel, doctorClinicalActivityCsv, type DoctorActivityRow, type DoctorActivitySummary } from '@/lib/clinic/doctorClinicalActivity';
 import { cn } from '@/lib/utils';
+import { useInsightExportRegistration } from './InsightShell';
+import type { InsightExportItem } from './shared/InsightExportMenu';
 
 interface DoctorClinicalActivityProps {
   startDate: Date;
   endDate: Date;
+  enabled?: boolean;
+  doctorId?: string;
+  detailOnly?: boolean;
 }
 
 const TH = 'text-[11px] font-semibold text-slate-500 uppercase tracking-wider';
@@ -36,30 +36,31 @@ const documentTypeLabels = {
   referral: 'Referral',
 } as const;
 
-export function DoctorClinicalActivity({ startDate, endDate }: DoctorClinicalActivityProps) {
-  const { data, isLoading, isError, error } = useDoctorClinicalActivity(startDate, endDate);
+export function DoctorClinicalActivity({ startDate, endDate, enabled = true, doctorId, detailOnly = false }: DoctorClinicalActivityProps) {
+  const { data, isLoading, isError, error, refetch } = useDoctorClinicalActivity(startDate, endDate, { enabled });
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const rangeKey = `${format(startDate, 'yyyy-MM-dd')}:${format(endDate, 'yyyy-MM-dd')}`;
-
-  const exportCsv = (summaries: DoctorActivitySummary[], doctor?: DoctorActivitySummary) => {
+  const exportCsv = useCallback((summaries: DoctorActivitySummary[], doctor?: DoctorActivitySummary) => {
     const csv = doctorClinicalActivityCsv(summaries, doctor?.doctorId);
     const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     const period = `${format(startDate, 'yyyy-MM-dd')}-to-${format(endDate, 'yyyy-MM-dd')}`;
-    const safeDoctorName = doctor?.doctorName
-      .trim()
-      .replace(/[^a-z0-9]+/gi, '-')
-      .replace(/^-|-$/g, '')
-      .toLowerCase() || 'doctor';
-
+    const safeDoctorName = doctor?.doctorName.trim().replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'doctor';
     anchor.href = url;
-    anchor.download = doctor
-      ? `doctor-clinical-activity-${safeDoctorName}-${period}.csv`
-      : `doctor-clinical-activity-${period}.csv`;
+    anchor.download = doctor ? `doctor-clinical-activity-${safeDoctorName}-${period}.csv` : `doctor-clinical-activity-${period}.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
-  };
+  }, [endDate, startDate]);
+  const exportItems = useMemo<InsightExportItem[]>(() => {
+    const summaries = data ?? [];
+    if (doctorId) {
+      const doctor = summaries.find((summary) => summary.doctorId === doctorId);
+      return doctor ? [{ id: `doctor-clinical-activity-${doctor.doctorId}`, label: `Doctor activity: ${doctor.doctorName}`, download: () => exportCsv(summaries, doctor), disabled: doctor.rows.length === 0, disabledReason: 'No doctor clinical activity is available for this period.' }] : [];
+    }
+    return [{ id: 'doctor-clinical-activity-all', label: 'Doctor clinical activity CSV', download: () => exportCsv(summaries), disabled: summaries.length === 0, disabledReason: 'No doctor clinical activity is available for this period.' }, ...summaries.map((doctor) => ({ id: `doctor-clinical-activity-${doctor.doctorId ?? 'unassigned'}`, label: `Doctor activity: ${doctor.doctorName}`, download: () => exportCsv(summaries, doctor), disabled: doctor.rows.length === 0, disabledReason: 'No doctor clinical activity is available for this period.' }))];
+  }, [data, doctorId, exportCsv]);
+  const hasSharedExportMenu = useInsightExportRegistration('doctor-clinical-activity', exportItems);
 
   if (isLoading) {
     return (
@@ -75,8 +76,24 @@ export function DoctorClinicalActivity({ startDate, endDate }: DoctorClinicalAct
   if (isError) {
     return (
       <Card className={bento} role="alert">
-        <CardContent className="py-6 text-sm text-rose-600">
-          Failed to load doctor clinical activity: {error?.message ?? 'Unknown error'}
+        <CardContent className="space-y-3 py-6 text-sm text-rose-600">
+          <p>Failed to load doctor clinical activity: {error?.message ?? 'Unknown error'}</p>
+          <Button variant="outline" size="sm" onClick={() => { void refetch(); }}>Retry doctor clinical activity</Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (detailOnly && doctorId) {
+    const selectedDoctor = data?.find((summary) => summary.doctorId === doctorId);
+    return (
+      <Card className={bento}>
+        <CardContent className="p-4">
+          <div className="mb-3">
+            <h3 className={cn(bentoHeader, 'mb-1')}>Procedure and document records</h3>
+            <p className="text-xs text-slate-500">Loaded on demand from the secured clinical-activity report. Procedure and document prices are saved charged values.</p>
+          </div>
+          {selectedDoctor ? <ActivityDetails summary={selectedDoctor} /> : <p className="py-4 text-sm text-slate-400">No permitted clinical activity is available for this doctor and period.</p>}
         </CardContent>
       </Card>
     );
@@ -92,14 +109,7 @@ export function DoctorClinicalActivity({ startDate, endDate }: DoctorClinicalAct
               Procedures and selected documents credited to the treating doctor.
             </p>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={isLoading || !data?.length}
-            onClick={() => exportCsv(data ?? [])}
-          >
-            Export all
-          </Button>
+          {!hasSharedExportMenu ? <Button size="sm" variant="outline" disabled={isLoading || !data?.length} onClick={() => exportCsv(data ?? [])}>Export all</Button> : null}
         </div>
         {!data?.length ? (
           <div className="flex h-[180px] items-center justify-center text-sm text-slate-400">
@@ -135,15 +145,7 @@ export function DoctorClinicalActivity({ startDate, endDate }: DoctorClinicalAct
                         >
                           {summary.doctorName}
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="mt-1 h-auto px-0 text-xs text-slate-500 hover:bg-transparent hover:text-slate-800"
-                          disabled={isLoading || summary.rows.length === 0}
-                          onClick={() => exportCsv(data, summary)}
-                        >
-                          Export {summary.doctorName}
-                        </Button>
+                        {!hasSharedExportMenu ? <Button size="sm" variant="ghost" className="mt-1 h-auto px-0 text-xs text-slate-500 hover:bg-transparent hover:text-slate-800" disabled={isLoading || summary.rows.length === 0} onClick={() => exportCsv(data, summary)}>Export {summary.doctorName}</Button> : null}
                       </TableCell>
                       <TableCell className="text-right text-slate-600">{summary.procedures}</TableCell>
                       <TableCell className="text-right text-slate-600">{summary.mc}</TableCell>
@@ -221,9 +223,9 @@ function ActivityRows({
             {kind === 'documents' ? 'Document Name' : 'Procedure'}
           </TableHead>
           <TableHead className={TH}>Patient</TableHead>
-          {kind === 'procedures' ? <TableHead className={cn(TH, 'text-right')}>Unit Price</TableHead> : null}
-          {kind === 'procedures' ? <TableHead className={cn(TH, 'text-right')}>Qty</TableHead> : null}
-          {kind === 'procedures' ? <TableHead className={cn(TH, 'text-right')}>Charged</TableHead> : null}
+          <TableHead className={cn(TH, 'text-right')}>Unit Price</TableHead>
+          <TableHead className={cn(TH, 'text-right')}>Qty</TableHead>
+          <TableHead className={cn(TH, 'text-right')}>Charged</TableHead>
           <TableHead className={cn(TH, 'text-right')}>Queue</TableHead>
         </TableRow>
       </TableHeader>
@@ -240,9 +242,9 @@ function ActivityRows({
               ) : null}
               <TableCell className="text-slate-700">{row.activityName}</TableCell>
               <TableCell className="text-slate-600">{row.patientName}</TableCell>
-              {kind === 'procedures' ? <TableCell className="text-right text-slate-600">{row.unitPrice == null ? '—' : `RM ${row.unitPrice.toFixed(2)}`}</TableCell> : null}
-              {kind === 'procedures' ? <TableCell className="text-right text-slate-600">{row.quantity ?? '—'}</TableCell> : null}
-              {kind === 'procedures' ? <TableCell className="text-right font-medium text-slate-800">{row.totalPrice == null ? '—' : `RM ${row.totalPrice.toFixed(2)}`}</TableCell> : null}
+              <TableCell className="text-right text-slate-600">{row.unitPrice == null ? '—' : `RM ${row.unitPrice.toFixed(2)}`}</TableCell>
+              <TableCell className="text-right text-slate-600">{row.quantity ?? '—'}</TableCell>
+              <TableCell className="text-right font-medium text-slate-800">{row.totalPrice == null ? '—' : `RM ${row.totalPrice.toFixed(2)}`}</TableCell>
               <TableCell className="text-right">
                 <a className="text-blue-600 hover:underline" href={`/clinic/visits/${row.queueEntryId}`}>
                   {queueNo}

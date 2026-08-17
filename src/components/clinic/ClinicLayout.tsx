@@ -32,6 +32,7 @@ import { cn } from '@/lib/utils';
 import logoKlinikAwfa from '@/assets/logo-klinik-awfa.png';
 import { StaffChat } from '@/components/staff/chat/StaffChat';
 import { useClinicChimes } from '@/hooks/clinic/useClinicChimes';
+import { getInsightAccess } from '@/lib/clinic/insight/insightAccess';
 
 type ClinicNavItem = {
   href: string;
@@ -41,6 +42,7 @@ type ClinicNavItem = {
   adminOnly?: boolean;
   locumAllowed?: boolean;
   managementDashboard?: boolean;
+  insight?: boolean;
 };
 
 const clinicNavItems: ClinicNavItem[] = [
@@ -62,7 +64,7 @@ const clinicNavItems: ClinicNavItem[] = [
   { href: '/clinic/procurement-dashboard', label: 'Procurement Dashboard', icon: Activity },
   { href: '/clinic/seasonal-forecast', label: 'Seasonal Forecast', icon: TrendingUp, adminOnly: true },
   { href: '/clinic/voided', label: 'Voided Records', icon: Trash2, specialAdminOnly: true },
-  { href: '/clinic/insight', label: 'Insight', icon: LineChart, adminOnly: true },
+  { href: '/clinic/insight', label: 'Insight', icon: LineChart, adminOnly: true, insight: true },
   { href: '/clinic/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -84,11 +86,13 @@ function SidebarNav({
   onLinkClick?: () => void;
 }) {
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const insightAccess = getInsightAccess(role, null);
   const visibleItems = clinicNavItems.filter((item) => {
     if (item.managementDashboard && !canViewManagementDashboard) return false;
+    if (item.insight && !insightAccess.canOpenInsight) return false;
     if (isLocum) return !!item.locumAllowed || !!item.managementDashboard;
     if (item.specialAdminOnly && !isSpecialAdmin) return false;
-    if (item.adminOnly && !(isAdmin || isSpecialAdmin)) return false;
+    if (item.adminOnly && !item.insight && !(isAdmin || isSpecialAdmin)) return false;
     return true;
   });
 

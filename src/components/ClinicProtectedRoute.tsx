@@ -44,6 +44,7 @@ export function ClinicProtectedRoute({
     isClinical,
     isLocum,
     canViewInsights,
+    insightAccessLoading,
     canViewManagementDashboard,
     managementDashboardAccessLoading,
   } = useAuth();
@@ -52,6 +53,7 @@ export function ClinicProtectedRoute({
   if (
     loading ||
     rolesLoading ||
+    (requiredRole === 'insights' && insightAccessLoading) ||
     (requiredRole === 'management_dashboard' && managementDashboardAccessLoading)
   ) {
     return (

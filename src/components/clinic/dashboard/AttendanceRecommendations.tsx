@@ -166,7 +166,7 @@ export function AttendanceRecommendations({ cells, selectedDoctorId, regression,
 
   return (
     <Card>
-      <CardHeader><CardTitle>Recommendations</CardTitle></CardHeader>
+      <CardHeader><CardTitle>Recommendations</CardTitle><p className="text-sm text-slate-500">Regression model status: {regression.status === 'ready' ? 'ready' : 'unavailable'} · model/data confidence is represented by the regression evidence and safety checks below.</p></CardHeader>
       <CardContent className="grid gap-4 md:grid-cols-2">
         <OffDayAssessmentPanel assessments={offDayAssessments} regression={regression} selectedDoctorId={selectedDoctorId} />
         {sections.map((section) => (

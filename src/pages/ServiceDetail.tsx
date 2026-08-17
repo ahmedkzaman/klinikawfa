@@ -21,7 +21,6 @@ import { canonicalUrl } from "@/lib/website/seoRoutes";
 import { ServiceAeoSections } from "@/components/seo/ServiceAeoSections";
 import { buildCategoryServiceAeo } from "@/features/website-cms/service-seo/aeoContent";
 import { buildServiceStructuredData } from "@/lib/seo/serviceStructuredData";
-import { CLINIC_INFO } from '@/lib/constants';
 import { richHtmlToPlainText } from "@/lib/rich-html-to-plain-text";
 
 interface ClinicService {
@@ -159,12 +158,6 @@ export default function ServiceDetail() {
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Services
           </Link>
           <h1 className="mb-4">{title}</h1>
-          <p className="mb-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
-            {CLINIC_INFO.legalName}
-            <span className="mt-1 block text-xs normal-case tracking-normal">
-              Registration No. {CLINIC_INFO.registrationNo}
-            </span>
-          </p>
           {service.hero_image_url && (
             <img
               src={service.hero_image_url}

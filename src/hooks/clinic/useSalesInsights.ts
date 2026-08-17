@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import type { InsightQueryOptions } from './useInsightSectionData';
 import {
   aggregateSalesInsights,
   getLocalDateRangeBounds,
@@ -18,12 +19,13 @@ export type {
   SalesSummary,
 } from '@/lib/clinic/salesInsights';
 
-export function useSalesInsights(startDate: Date, endDate: Date) {
+export function useSalesInsights(startDate: Date, endDate: Date, options?: InsightQueryOptions) {
   const startKey = format(startDate, 'yyyy-MM-dd');
   const endKey = format(endDate, 'yyyy-MM-dd');
 
   return useQuery<SalesInsights>({
     queryKey: ['sales-insights', startKey, endKey],
+    enabled: options?.enabled ?? true,
     queryFn: async () => {
       const { startIso, endExclusiveIso } = getLocalDateRangeBounds(startDate, endDate);
       const rows: SalesPaymentRow[] = [];

@@ -5,10 +5,10 @@ import type {
 } from './attendanceRegression';
 
 export const ATTENDANCE_PERIODS = [
-  { id: 'morning', label: '8am–12pm', startHour: 8, endHour: 12 },
-  { id: 'afternoon', label: '12pm–4pm', startHour: 12, endHour: 16 },
-  { id: 'evening', label: '4pm–8pm', startHour: 16, endHour: 20 },
-  { id: 'night', label: '8pm–12 midnight', startHour: 20, endHour: 24 },
+  { id: '08_12', label: '08:00-12:00', startHour: 8, endHour: 12 },
+  { id: '12_16', label: '12:00-16:00', startHour: 12, endHour: 16 },
+  { id: '16_20', label: '16:00-20:00', startHour: 16, endHour: 20 },
+  { id: '20_24', label: '20:00-00:00', startHour: 20, endHour: 24 },
 ] as const;
 
 export type AttendancePeriodId = typeof ATTENDANCE_PERIODS[number]['id'];

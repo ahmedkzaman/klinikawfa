@@ -1,5 +1,6 @@
+import { format } from 'date-fns';
 import { describe, expect, it } from 'vitest';
-import { buildComparisonPeriod } from '@/lib/clinic/insight/periods';
+import { buildComparisonPeriod, getInsightQuickRanges } from '@/lib/clinic/insight/periods';
 
 describe('buildComparisonPeriod', () => {
   it('builds an equal seven-day prior period', () => {
@@ -20,5 +21,14 @@ describe('buildComparisonPeriod', () => {
       priorEndKey: '2026-06-30',
       days: 1,
     });
+  });
+});
+
+describe('getInsightQuickRanges', () => {
+  it('preserves the six Malaysian calendar presets', () => {
+    const ranges = getInsightQuickRanges(new Date(2026, 7, 16));
+    expect(ranges.map(({ label }) => label)).toEqual(['Today', 'This week', 'This month', 'Last month', 'This quarter', 'Year to date']);
+    expect(format(ranges[3].range.from!, 'yyyy-MM-dd')).toBe('2026-07-01');
+    expect(format(ranges[3].range.to!, 'yyyy-MM-dd')).toBe('2026-07-31');
   });
 });

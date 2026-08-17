@@ -18,6 +18,7 @@ type AttendanceHeatmapInput = {
   startDate: string;
   endDate: string;
   doctorId: string | null;
+  permissionDomain?: 'insight' | 'management';
 };
 
 type DateParts = { year: number; month: number; day: number };
@@ -111,12 +112,16 @@ const db = supabase as any;
 
 export function useAttendanceHeatmap(input: AttendanceHeatmapInput): UseQueryResult<AttendanceHeatmapReport, Error> {
   const enabled = rangeIsValid(input.startDate, input.endDate);
+  const permissionDomain = input.permissionDomain ?? 'management';
 
   return useQuery<AttendanceHeatmapReport, Error>({
-    queryKey: ['clinical-attendance-heatmap', input.startDate, input.endDate, input.doctorId ?? 'all'],
+    queryKey: ['clinical-attendance-heatmap', permissionDomain, input.startDate, input.endDate, input.doctorId ?? 'all'],
     enabled,
     queryFn: async () => {
-      const { data, error } = await db.rpc('get_clinical_attendance_heatmap', {
+      const rpcName = permissionDomain === 'insight'
+        ? 'get_insight_clinical_attendance_heatmap'
+        : 'get_clinical_attendance_heatmap';
+      const { data, error } = await db.rpc(rpcName, {
         _start_date: input.startDate,
         _end_date: input.endDate,
         _doctor_id: input.doctorId,

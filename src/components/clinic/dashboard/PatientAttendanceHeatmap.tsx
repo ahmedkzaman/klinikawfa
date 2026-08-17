@@ -63,7 +63,12 @@ export function PatientAttendanceHeatmap() {
     ? { startDate: customStartDate, endDate: customEndDate }
     : attendancePresetRange({ preset });
   const invalidRange = !dateRangeIsValid(range.startDate, range.endDate);
-  const query = useAttendanceHeatmap({ startDate: range.startDate, endDate: range.endDate, doctorId });
+  const query = useAttendanceHeatmap({
+    startDate: range.startDate,
+    endDate: range.endDate,
+    doctorId,
+    permissionDomain: 'management',
+  });
   const report = query.data;
   const cells = report?.cells ?? emptyCells;
   const hasAttendanceData = report?.hasAttendanceData ?? cells.length > 0;
@@ -113,7 +118,7 @@ export function PatientAttendanceHeatmap() {
             <AttendanceDecisionCards decisions={periodAnalysis.decisions} />
             <AttendancePeriodHeatmap analysis={periodAnalysis} onSelectPeriod={setSelectedPeriod} />
             <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-              <CollapsibleTrigger className="rounded-md border px-3 py-2 text-sm font-medium text-slate-700">{advancedOpen ? 'Hide detailed analysis' : 'View detailed analysis'}</CollapsibleTrigger>
+              <CollapsibleTrigger className="rounded-md border px-3 py-2 text-sm font-medium text-slate-700">{advancedOpen ? 'Hide advanced detail' : 'Advanced detail'}</CollapsibleTrigger>
               <CollapsibleContent className="mt-4 space-y-4">
                 <AttendanceHourlyHeatmap cells={cells} onSelectCell={setSelectedCell} />
                 <AttendanceRecommendations cells={cells} selectedDoctorId={doctorId} regression={regression} offDayAssessments={offDayAssessments} />

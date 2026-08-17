@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, ExternalLink, LoaderCircle, RefreshCw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,8 @@ import {
   type FinancialControlGroupBy,
   type FinancialControlMetric,
 } from '@/lib/clinic/financialControl';
+import { useInsightExportRegistration } from '../InsightShell';
+import type { InsightExportItem } from '../shared/InsightExportMenu';
 import { FinancialMarginTable } from './FinancialMarginTable';
 
 const DETAIL_ERROR_MESSAGE = 'Financial details are temporarily unavailable. Please retry.';
@@ -99,6 +101,7 @@ export function FinancialDetailSheet({
   const [isExporting, setIsExporting] = useState(false);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const sharedExportInteractionRef = useRef(false);
   const detail = useFinancialControlDetails({
     startDate,
     endDate,
@@ -111,7 +114,7 @@ export function FinancialDetailSheet({
   const pageCount = detail.data ? Math.max(1, Math.ceil(detail.data.total / pageSize)) : 1;
   const canGoPrevious = page > 1;
   const canGoNext = Boolean(detail.data && page < pageCount);
-  const filters = {
+  const filters = useMemo(() => ({
     startDate,
     endDate,
     metric,
@@ -119,7 +122,7 @@ export function FinancialDetailSheet({
     alertKey,
     page,
     pageSize,
-  };
+  }), [alertKey, endDate, groupBy, metric, page, pageSize, startDate]);
   const resolution = alertKey ? ALERT_RESOLUTION[alertKey] : undefined;
 
   useEffect(() => {
@@ -131,7 +134,7 @@ export function FinancialDetailSheet({
     void detail.refetch();
   };
 
-  const exportCsv = async () => {
+  const exportCsv = useCallback(async () => {
     if (!detail.data || detail.data.total === 0 || isExporting) return;
 
     setIsExporting(true);
@@ -140,7 +143,8 @@ export function FinancialDetailSheet({
     try {
       const fetchPage = async (pageFilters: typeof filters) => {
         const args = getFinancialControlDetailArguments(pageFilters);
-        const { data, error } = await supabase.rpc('get_financial_control_details', args);
+        const callInsightDetails = supabase.rpc as unknown as (name: string, input: typeof args) => Promise<{ data: unknown; error: Error | null }>;
+        const { data, error } = await callInsightDetails('get_insight_financial_control_details', args);
         if (error) throw error;
         return parseFinancialControlDetails(data);
       };
@@ -161,18 +165,42 @@ export function FinancialDetailSheet({
           `Export limited to the first 10,000 of ${detail.data.total.toLocaleString('en-MY')} rows.`,
         );
       }
-    } catch (error) {
+    } catch {
       setExportError(EXPORT_ERROR_MESSAGE);
     } finally {
       setIsExporting(false);
     }
-  };
+  }, [detail.data, filters, groupBy, isExporting]);
+  const exportItems = useMemo<InsightExportItem[]>(() => [{
+    id: 'financial-details-csv',
+    label: 'Financial details CSV',
+    download: () => { void exportCsv(); },
+    disabled: isExporting || !detail.data || detail.data.rows.length === 0,
+    disabledReason: 'No financial details are available for the current filters.',
+  }], [detail.data, exportCsv, isExporting]);
+  const hasSharedExportMenu = useInsightExportRegistration('financial-details', exportItems);
+  const handleOpenChange = useCallback((nextOpen: boolean) => {
+    if (!nextOpen && sharedExportInteractionRef.current) {
+      sharedExportInteractionRef.current = false;
+      return;
+    }
+    onOpenChange(nextOpen);
+  }, [onOpenChange]);
 
   return (
-    <Sheet modal={false} open={open} onOpenChange={onOpenChange}>
+    <Sheet modal={false} open={open} onOpenChange={handleOpenChange}>
       <SheetContent
         side="right"
         className="w-full overflow-y-auto bg-slate-50 p-4 sm:max-w-[calc(100vw-3rem)] sm:p-5 xl:max-w-7xl"
+        onInteractOutside={(event) => {
+          const target = event.target;
+          if (target instanceof Element && target.closest('[data-insight-export-control]')) {
+            sharedExportInteractionRef.current = true;
+            queueMicrotask(() => {
+              sharedExportInteractionRef.current = false;
+            });
+          }
+        }}
       >
         <SheetHeader className="pr-8 text-left">
           <SheetTitle className="text-base font-semibold text-slate-950">{title}</SheetTitle>
@@ -246,22 +274,24 @@ export function FinancialDetailSheet({
               <p className="text-[11px] text-slate-500">
                 {detail.data.total.toLocaleString('en-MY')} matching rows
               </p>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isExporting || detail.data.rows.length === 0}
-                aria-label="Export financial details as CSV"
-                aria-busy={isExporting}
-                onClick={() => void exportCsv()}
-                className="h-9 w-36 shrink-0 rounded-md px-3 text-xs focus-visible:ring-blue-600"
-              >
-                {isExporting ? (
-                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                ) : (
-                  <Download className="h-3.5 w-3.5" aria-hidden="true" />
-                )}
-                {isExporting ? 'Exporting' : 'Export CSV'}
-              </Button>
+              {!hasSharedExportMenu ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isExporting || detail.data.rows.length === 0}
+                  aria-label="Export financial details as CSV"
+                  aria-busy={isExporting}
+                  onClick={() => void exportCsv()}
+                  className="h-9 w-36 shrink-0 rounded-md px-3 text-xs focus-visible:ring-blue-600"
+                >
+                  {isExporting ? (
+                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                  {isExporting ? 'Exporting' : 'Export CSV'}
+                </Button>
+              ) : null}
             </div>
 
             {exportNotice && (

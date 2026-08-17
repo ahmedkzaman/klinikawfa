@@ -437,15 +437,6 @@ export default function Doctors() {
                 ? 'Hubungi kami sekarang untuk membuat temujanji dengan doktor kami. Kami sedia membantu anda.'
                 : 'Contact us now to make an appointment with our doctors. We are ready to help you.'}
             </p>
-            <p className="mb-3 text-sm font-semibold text-primary-foreground/80">
-              {CLINIC_INFO.name}
-              <span className="block text-xs font-medium uppercase tracking-wide text-primary-foreground/70">
-                {CLINIC_INFO.legalName}
-              </span>
-              <span className="block text-xs font-medium text-primary-foreground/65">
-                Registration No. {CLINIC_INFO.registrationNo}
-              </span>
-            </p>
             <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Button size="lg" variant="secondary" className="min-w-[180px]" asChild>
                 <a href={CLINIC_INFO.whatsapp} target="_blank" rel="noopener noreferrer">

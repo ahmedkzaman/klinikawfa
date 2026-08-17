@@ -37,6 +37,7 @@ import { DoctorClinicalActivity } from './DoctorClinicalActivity';
 interface Props {
   startDate: Date;
   endDate: Date;
+  enabled?: boolean;
 }
 
 function formatRM(value: number) {
@@ -55,8 +56,8 @@ function marginColorClass(margin: number) {
 const TH = 'text-[11px] font-semibold text-slate-500 uppercase tracking-wider';
 const TR = 'border-slate-100';
 
-export function ScoreboardsTab({ startDate, endDate }: Props) {
-  const { data, isLoading, isError, error } = useScoreboards(startDate, endDate);
+export function ScoreboardsTab({ startDate, endDate, enabled = true }: Props) {
+  const { data, isLoading, isError, error } = useScoreboards(startDate, endDate, { enabled });
 
   const diagnosesChartData = useMemo(
     () =>
@@ -157,7 +158,7 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
         </CardContent>
       </Card>
 
-      <DoctorClinicalActivity startDate={startDate} endDate={endDate} />
+      <DoctorClinicalActivity startDate={startDate} endDate={endDate} enabled={enabled} />
 
       {/* 2. Top Diagnoses + Top Medications */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -291,7 +292,7 @@ export function ScoreboardsTab({ startDate, endDate }: Props) {
       )}
 
       {(isError || isLoading || !hasData) && (
-        <DoctorClinicalActivity startDate={startDate} endDate={endDate} />
+        <DoctorClinicalActivity startDate={startDate} endDate={endDate} enabled={enabled} />
       )}
     </div>
   );

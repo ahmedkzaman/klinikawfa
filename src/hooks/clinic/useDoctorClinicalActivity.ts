@@ -8,8 +8,13 @@ import {
   type DoctorActivitySummary,
 } from '@/lib/clinic/doctorClinicalActivity';
 import type { Database } from '@/integrations/supabase/types';
+import type { InsightQueryOptions } from './useInsightSectionData';
 
-type DoctorClinicalActivityRpcRow = Database['public']['Functions']['get_doctor_clinical_activity']['Returns'][number];
+type DoctorClinicalActivityRpcRow = Database['public']['Functions']['get_doctor_clinical_activity']['Returns'][number] & {
+  unit_price?: number | null;
+  quantity?: number | null;
+  total_price?: number | null;
+};
 const RPC_PAGE_SIZE = 1_000;
 
 const activityKinds: readonly DoctorActivityKind[] = [
@@ -38,21 +43,23 @@ function mapDoctorActivityRow(row: DoctorClinicalActivityRpcRow): DoctorActivity
     doctorId: row.doctor_id,
     doctorName: row.doctor_name,
     patientName: row.patient_name,
-    unitPrice: row.unit_price,
-    quantity: row.quantity,
-    totalPrice: row.total_price,
+    unitPrice: row.unit_price ?? null,
+    quantity: row.quantity ?? null,
+    totalPrice: row.total_price ?? null,
   };
 }
 
 export function useDoctorClinicalActivity(
   startDate: Date,
   endDate: Date,
+  options?: InsightQueryOptions,
 ): UseQueryResult<DoctorActivitySummary[], Error> {
   const startKey = format(startDate, 'yyyy-MM-dd');
   const endKey = format(endDate, 'yyyy-MM-dd');
 
   return useQuery<DoctorActivitySummary[], Error>({
     queryKey: ['doctor-clinical-activity', startKey, endKey],
+    enabled: options?.enabled ?? true,
     queryFn: async () => {
       const rpcRows: DoctorClinicalActivityRpcRow[] = [];
 

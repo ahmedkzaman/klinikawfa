@@ -47,6 +47,7 @@ import {
 } from '@/hooks/clinic/usePanelClaims';
 import ClaimDetailsSheet from '@/components/clinic/claims/ClaimDetailsSheet';
 import { isPayablePanelClaimStatus } from '@/lib/clinic/panelClaimPortions';
+import { parsePanelClaimId } from '@/lib/clinic/insight/financeSections';
 
 const TABS: Array<{ key: PanelClaimsTab; label: string }> = [
   { key: 'all', label: 'All' },
@@ -101,10 +102,12 @@ function Dot({ className }: { className: string }) {
 export default function PanelClaims() {
   const [tab, setTab] = useState<PanelClaimsTab>(initialPanelClaimsTab);
   const [page, setPage] = useState(0);
-  const [activeClaimId, setActiveClaimId] = useState<string | null>(null);
+  const linkedClaimId = useMemo(() => parsePanelClaimId(window.location.search), []);
+  const [activeClaimId, setActiveClaimId] = useState<string | null>(linkedClaimId);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const { data: claims, isLoading } = usePanelClaims(tab, page);
+  const linkedClaimArgs: [string] | [] = linkedClaimId ? [linkedClaimId] : [];
+  const { data: claims, isLoading } = usePanelClaims(tab, page, ...linkedClaimArgs);
   const { data: summary } = usePanelClaimsSummary();
   const bulkMark = useBulkMarkClaimsSubmitted();
 

@@ -126,7 +126,7 @@ function unavailableAssessmentFromModel(regression: { status: string; reasons?: 
 }
 
 describe('PatientAttendanceHeatmap', () => {
-  const openDetailedAnalysis = () => fireEvent.click(screen.getByText('View detailed analysis'));
+  const openDetailedAnalysis = () => fireEvent.click(screen.getByText('Advanced detail'));
   beforeEach(() => {
     vi.clearAllMocks();
     useAttendanceHeatmap.mockReturnValue({ data: report, isLoading: false, isError: false, error: null });
@@ -140,8 +140,8 @@ describe('PatientAttendanceHeatmap', () => {
     expect(screen.getByRole('heading', { name: /patient attendance heatmap/i })).toBeInTheDocument();
     expect(screen.getByText('Monday')).toBeInTheDocument();
     expect(screen.getByText('Sunday')).toBeInTheDocument();
-    expect(screen.getByText('8am–12pm')).toBeInTheDocument();
-    expect(screen.getByText('8pm–12 midnight')).toBeInTheDocument();
+    expect(screen.getByText('08:00–12:00')).toBeInTheDocument();
+    expect(screen.getByText('20:00–00:00')).toBeInTheDocument();
     openDetailedAnalysis();
     expect(screen.getByText('08:00–09:00')).toBeInTheDocument();
     expect(screen.getByText('23:00–00:00')).toBeInTheDocument();

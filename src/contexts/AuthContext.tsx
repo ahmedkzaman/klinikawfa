@@ -1,15 +1,28 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import {
   canManageTrackingSettingsRole,
   canManageWebsiteRole,
 } from '@/lib/website-access';
+import { ALL_INSIGHT_QUERY_ROOTS } from '@/hooks/clinic/useInsightSectionData';
 
 type ManagementDashboardAccessRpc = (
   fn: 'can_view_management_dashboard',
   args: { _user_id: string },
 ) => Promise<{ data: boolean | null; error: { message: string } | null }>;
+
+type InsightViewerScope = {
+  allowed: boolean;
+  role: AppRole | null;
+  doctor_id: string | null;
+  permission_version: string;
+};
+
+type InsightViewerScopeRpc = (
+  fn: 'get_insight_viewer_scope',
+) => Promise<{ data: InsightViewerScope | null; error: { message: string } | null }>;
 
 export type AppRole =
   | 'special_admin'
@@ -42,6 +55,9 @@ interface AuthContextType {
   isLocum: boolean;
   isClinical: boolean;
   canViewInsights: boolean;
+  insightAccessLoading: boolean;
+  insightDoctorId: string | null;
+  insightPermissionVersion: string;
   canViewManagementDashboard: boolean;
   managementDashboardAccessLoading: boolean;
   canEditManagementDashboard: boolean;
@@ -56,20 +72,49 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [rolesLoading, setRolesLoading] = useState(true);
   const [role, setRole] = useState<AppRole | null>(null);
+  const [canViewInsights, setCanViewInsights] = useState(false);
+  const [insightAccessLoading, setInsightAccessLoading] = useState(true);
+  const [insightDoctorId, setInsightDoctorId] = useState<string | null>(null);
+  const [insightPermissionVersion, setInsightPermissionVersion] = useState('unresolved');
   const [canViewManagementDashboard, setCanViewManagementDashboard] = useState(false);
   const [managementDashboardAccessLoading, setManagementDashboardAccessLoading] = useState(true);
 
   // Refs to track state across the auth listener closure
   const authInitializedRef = useRef(false);
   const currentUserIdRef = useRef<string | null>(null);
+  // Every access refresh owns a generation. A response may publish state only
+  // while both its account and generation are still current.
+  const accessGenerationRef = useRef(0);
 
-  const fetchUserRole = useCallback(async (userId: string) => {
-    setRolesLoading(true);
+  const clearInsightQueries = useCallback(() => {
+    for (const queryKey of ALL_INSIGHT_QUERY_ROOTS) {
+      void queryClient.cancelQueries({ queryKey });
+      queryClient.removeQueries({ queryKey });
+    }
+  }, [queryClient]);
+
+  const resetIdentityAccess = useCallback((signedOut = false) => {
+    setRole(null);
+    setCanViewInsights(false);
+    setInsightDoctorId(null);
+    setInsightPermissionVersion(signedOut ? 'signed-out' : 'transitioning');
+    setCanViewManagementDashboard(false);
+    setRolesLoading(!signedOut);
+    setInsightAccessLoading(!signedOut);
+    setManagementDashboardAccessLoading(!signedOut);
+  }, []);
+
+  const isCurrentAccessRequest = useCallback((userId: string, generation: number) => (
+    currentUserIdRef.current === userId && accessGenerationRef.current === generation
+  ), []);
+
+  const fetchUserRole = useCallback(async (userId: string, generation: number) => {
     try {
       const { data, error } = await supabase
         .from('user_roles')
@@ -79,21 +124,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error('Error fetching role:', error);
-        setRole(null);
+        if (isCurrentAccessRequest(userId, generation)) setRole(null);
         return;
       }
 
-      setRole((data?.role as AppRole) ?? null);
+      if (isCurrentAccessRequest(userId, generation)) setRole((data?.role as AppRole) ?? null);
     } catch (err) {
       console.error('Error in fetchUserRole:', err);
-      setRole(null);
+      if (isCurrentAccessRequest(userId, generation)) setRole(null);
     } finally {
-      setRolesLoading(false);
+      if (isCurrentAccessRequest(userId, generation)) setRolesLoading(false);
     }
-  }, []);
+  }, [isCurrentAccessRequest]);
 
-  const fetchManagementDashboardAccess = useCallback(async (userId: string) => {
-    setManagementDashboardAccessLoading(true);
+  const fetchManagementDashboardAccess = useCallback(async (userId: string, generation: number) => {
     try {
       const fetchDashboardAccess = supabase.rpc as unknown as ManagementDashboardAccessRpc;
       const { data: canViewDashboard, error: dashboardError } =
@@ -101,21 +145,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (dashboardError) {
         console.error('Error fetching management dashboard access:', dashboardError);
-        setCanViewManagementDashboard(false);
+        if (isCurrentAccessRequest(userId, generation)) setCanViewManagementDashboard(false);
       } else {
-        setCanViewManagementDashboard(canViewDashboard === true);
+        if (isCurrentAccessRequest(userId, generation)) setCanViewManagementDashboard(canViewDashboard === true);
       }
     } catch (err) {
       console.error('Error fetching management dashboard access:', err);
-      setCanViewManagementDashboard(false);
+      if (isCurrentAccessRequest(userId, generation)) setCanViewManagementDashboard(false);
     } finally {
-      setManagementDashboardAccessLoading(false);
+      if (isCurrentAccessRequest(userId, generation)) setManagementDashboardAccessLoading(false);
     }
-  }, []);
+  }, [isCurrentAccessRequest]);
+
+  const fetchInsightAccess = useCallback(async (userId: string, generation: number) => {
+    try {
+      const fetchViewerScope = supabase.rpc as unknown as InsightViewerScopeRpc;
+      const { data, error } = await fetchViewerScope('get_insight_viewer_scope');
+      const supportedInsightRoles: AppRole[] = [
+        'special_admin', 'admin', 'doctor_admin', 'resident_doctor', 'ops_staff', 'operations',
+      ];
+      const appRoles: AppRole[] = [
+        'special_admin', 'admin', 'doctor_admin', 'purchaser', 'staff_nurse', 'ops_staff',
+        'operations', 'staff', 'locum', 'resident_doctor', 'website_editor', 'guest',
+      ];
+      const validVersion = typeof data?.permission_version === 'string' && data.permission_version.trim() !== '';
+      const validRole = data?.role !== null && appRoles.includes(data?.role as AppRole);
+      const validAllowedScope = data?.allowed === true
+        && validRole
+        && supportedInsightRoles.includes(data.role)
+        && validVersion
+        && (data.doctor_id === null || typeof data.doctor_id === 'string')
+        && (data.role !== 'resident_doctor' || (typeof data.doctor_id === 'string' && data.doctor_id.trim() !== ''));
+      const validDeniedScope = data?.allowed === false && validRole && validVersion;
+      if (!isCurrentAccessRequest(userId, generation)) return;
+      if (error || !data || (!validAllowedScope && !validDeniedScope)) {
+        if (error) console.error('Error fetching Clinic Insight access:', error);
+        setCanViewInsights(false);
+        setInsightDoctorId(null);
+        setInsightPermissionVersion('unavailable');
+        return;
+      }
+      setRole(data.role);
+      setRolesLoading(false);
+      setCanViewInsights(validAllowedScope);
+      setInsightDoctorId(validAllowedScope ? data.doctor_id : null);
+      setInsightPermissionVersion(data.permission_version);
+    } catch (err) {
+      console.error('Error in fetchInsightAccess:', err);
+      if (!isCurrentAccessRequest(userId, generation)) return;
+      setCanViewInsights(false);
+      setInsightDoctorId(null);
+      setInsightPermissionVersion('unavailable');
+    } finally {
+      if (isCurrentAccessRequest(userId, generation)) setInsightAccessLoading(false);
+    }
+  }, [isCurrentAccessRequest]);
 
   useEffect(() => {
     // Initialize session first
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (authInitializedRef.current) return;
       currentUserIdRef.current = session?.user?.id ?? null;
       authInitializedRef.current = true;
       setSession(session);
@@ -123,11 +212,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
 
       if (session?.user) {
-        fetchUserRole(session.user.id);
-        fetchManagementDashboardAccess(session.user.id);
+        const generation = ++accessGenerationRef.current;
+        void fetchUserRole(session.user.id, generation).then(() => fetchInsightAccess(session.user.id, generation));
+        void fetchManagementDashboardAccess(session.user.id, generation);
       } else {
         setRolesLoading(false);
         setManagementDashboardAccessLoading(false);
+        setInsightAccessLoading(false);
       }
     });
 
@@ -144,7 +235,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        clearInsightQueries();
+        const generation = ++accessGenerationRef.current;
+        resetIdentityAccess(!session?.user);
+
         currentUserIdRef.current = newUserId;
+        authInitializedRef.current = true;
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
@@ -152,21 +248,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session?.user) {
           // Only refetch role when user actually changed
           setTimeout(() => {
-            fetchUserRole(session.user.id);
-            fetchManagementDashboardAccess(session.user.id);
+            void fetchUserRole(session.user.id, generation).then(() => fetchInsightAccess(session.user.id, generation));
+            void fetchManagementDashboardAccess(session.user.id, generation);
           }, 0);
         } else {
-          setRole(null);
-          setCanViewManagementDashboard(false);
-          setRolesLoading(false);
-          setManagementDashboardAccessLoading(false);
+          resetIdentityAccess(true);
         }
       },
     );
 
     const refreshDashboardAccess = () => {
       const currentUserId = currentUserIdRef.current;
-      if (currentUserId) fetchManagementDashboardAccess(currentUserId);
+      if (currentUserId) {
+        const generation = ++accessGenerationRef.current;
+        resetIdentityAccess(false);
+        clearInsightQueries();
+        void fetchUserRole(currentUserId, generation).then(() => fetchInsightAccess(currentUserId, generation));
+        void fetchManagementDashboardAccess(currentUserId, generation);
+      }
     };
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') refreshDashboardAccess();
@@ -179,7 +278,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('clinic-permissions-changed', refreshDashboardAccess);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [fetchManagementDashboardAccess, fetchUserRole]);
+  }, [clearInsightQueries, fetchInsightAccess, fetchManagementDashboardAccess, fetchUserRole, queryClient, resetIdentityAccess]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
@@ -206,12 +305,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    clearInsightQueries();
+    ++accessGenerationRef.current;
     currentUserIdRef.current = null;
     authInitializedRef.current = false;
     await supabase.auth.signOut();
-    setRole(null);
-    setCanViewManagementDashboard(false);
-    setManagementDashboardAccessLoading(false);
+    resetIdentityAccess(true);
   };
 
   const resetPassword = async (email: string) => {
@@ -259,8 +358,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     role === 'special_admin' ||
     role === 'admin' ||
     role === 'resident_doctor';
-  const canViewInsights =
-    role === 'admin' || role === 'special_admin' || role === 'doctor_admin';
   const canEditManagementDashboard =
     role === 'admin' || role === 'special_admin' || role === 'doctor_admin';
   const canManageWebsite = canManageWebsiteRole(role);
@@ -285,6 +382,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLocum,
         isClinical,
         canViewInsights,
+        insightAccessLoading,
+        insightDoctorId,
+        insightPermissionVersion,
         canViewManagementDashboard,
         managementDashboardAccessLoading,
         canEditManagementDashboard,

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { InsightQueryOptions } from './useInsightSectionData';
 import { format } from 'date-fns';
 import { getLocalDateRangeBounds } from '@/lib/clinic/salesInsights';
 import { fetchAllBillingRows } from '@/lib/clinic/fetchAllBillingRows';
@@ -112,12 +113,13 @@ function parseFinancialRow(r: ViewRow) {
   return { rev, cogs: effectiveCogs, profit, hasMissingCogs };
 }
 
-export function useFinancialInsights(startDate: Date, endDate: Date) {
+export function useFinancialInsights(startDate: Date, endDate: Date, options?: InsightQueryOptions) {
   const startKey = format(startDate, 'yyyy-MM-dd');
   const endKey = format(endDate, 'yyyy-MM-dd');
 
   return useQuery<FinancialInsights>({
     queryKey: ['financial-insights', startKey, endKey],
+    enabled: options?.enabled ?? true,
     queryFn: async () => {
       const { startIso, endExclusiveIso } = getLocalDateRangeBounds(startDate, endDate);
       let rows: ViewRow[];

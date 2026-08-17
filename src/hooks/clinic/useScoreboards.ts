@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import type { InsightQueryOptions } from './useInsightSectionData';
 import {
   isProcedureScoreboardRow,
   normalizeProcedureName,
@@ -69,12 +70,13 @@ export interface ScoreboardsData {
   procedureRoi: ProcedureROI[];
 }
 
-export function useScoreboards(startDate: Date, endDate: Date) {
+export function useScoreboards(startDate: Date, endDate: Date, options?: InsightQueryOptions) {
   const startKey = format(startDate, 'yyyy-MM-dd');
   const endKey = format(endDate, 'yyyy-MM-dd');
 
   return useQuery<ScoreboardsData>({
     queryKey: ['scoreboards', startKey, endKey],
+    enabled: options?.enabled ?? true,
     queryFn: async () => {
       const [financialQuery, servicesQuery] = await Promise.all([
         db

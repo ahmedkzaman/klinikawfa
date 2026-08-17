@@ -1,122 +1,21 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import Insight from '@/pages/clinic/Insight';
 
-const {
-  useFinancialInsightsMock,
-  useSalesInsightsMock,
-  usePanelBilledInsightsMock,
-} = vi.hoisted(() => ({
-  useFinancialInsightsMock: vi.fn(),
-  useSalesInsightsMock: vi.fn(),
-  usePanelBilledInsightsMock: vi.fn(),
-}));
-
-vi.mock('@/hooks/clinic/useFinancialInsights', () => ({
-  useFinancialInsights: useFinancialInsightsMock,
-}));
-vi.mock('@/hooks/clinic/useSalesInsights', () => ({
-  useSalesInsights: useSalesInsightsMock,
-}));
-vi.mock('@/hooks/clinic/usePanelBilledInsights', () => ({
-  usePanelBilledInsights: usePanelBilledInsightsMock,
-}));
-
+const performanceTabMock = vi.hoisted(() => vi.fn(() => <div>Secured performance workspace</div>));
+vi.mock('@/components/clinic/insight/performance/PerformanceTab', () => ({ PerformanceTab: performanceTabMock }));
 vi.mock('@/components/clinic/insight/ClinicHealthTab', () => ({ ClinicHealthTab: () => null }));
-vi.mock('@/components/clinic/insight/ScoreboardsTab', () => ({ ScoreboardsTab: () => null }));
-vi.mock('@/components/clinic/insight/LeaderboardsTab', () => ({ LeaderboardsTab: () => null }));
-vi.mock('@/components/clinic/insight/ValuationTab', () => ({ ValuationTab: () => null }));
-vi.mock('@/components/clinic/insight/BankHealthTab', () => ({ BankHealthTab: () => null }));
-vi.mock('@/components/clinic/insight/management/ManagementTab', () => ({ ManagementTab: () => null }));
+vi.mock('@/components/clinic/insight/finance/FinanceTab', () => ({ FinanceTab: () => null }));
+vi.mock('@/components/clinic/insight/planning/PlanningTab', () => ({ PlanningTab: () => null }));
+vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({}) }));
 
-const financialData = {
-  summary: {
-    totalRevenue: 300,
-    totalCogs: 100,
-    totalProfit: 200,
-    marginPct: 66.67,
-    patientVolume: 2,
-    missingCogsLineCount: 0,
-  },
-  dailyTrends: [],
-  topItems: [],
-  ltvSegment: [],
-  rows: [],
-};
+describe('Insight panel-billed presentation boundary', () => {
+  it('keeps the legacy panel card out of Performance and mounts the secured workspace', () => {
+    render(<Insight initialSearch="?section=performance" />);
 
-function openOverview() {
-  fireEvent.mouseDown(screen.getByRole('tab', { name: 'Overview' }), {
-    button: 0,
-    ctrlKey: false,
-  });
-}
-
-describe('Insight panel billed card', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    useFinancialInsightsMock.mockReturnValue({
-      data: financialData,
-      isLoading: false,
-      isError: false,
-      error: null,
-    });
-    useSalesInsightsMock.mockReturnValue({
-      data: {
-        summary: { totalCollected: 200, paymentCount: 1, visitCount: 1 },
-        dailyTrends: [],
-        byMethod: [{ method: 'cash', collected: 200, paymentCount: 1 }],
-        rows: [],
-      },
-      isLoading: false,
-      isError: false,
-      error: null,
-    });
-    usePanelBilledInsightsMock.mockReturnValue({
-      data: { totalBilled: 450, claimCount: 3 },
-      isLoading: false,
-      isError: false,
-      error: null,
-    });
-  });
-
-  it('shows billed panel claims without changing total collected', () => {
-    render(<Insight />);
-    openOverview();
-
-    expect(screen.getByText('Panel Billed')).toBeInTheDocument();
-    expect(screen.getByText('RM 450.00')).toBeInTheDocument();
-    expect(screen.getByText('Total Visit Billing').parentElement?.parentElement)
-      .toHaveTextContent('RM 300.00');
-    expect(screen.getByText('3 claims')).toBeInTheDocument();
-    expect(screen.getByText('Total Collected').parentElement?.parentElement)
-      .toHaveTextContent('RM 200.00');
-  });
-
-  it('keeps the zero-valued card visible on a panel-only day', () => {
-    useSalesInsightsMock.mockReturnValue({
-      data: {
-        summary: { totalCollected: 0, paymentCount: 0, visitCount: 0 },
-        dailyTrends: [],
-        byMethod: [],
-        rows: [],
-      },
-      isLoading: false,
-      isError: false,
-      error: null,
-    });
-    usePanelBilledInsightsMock.mockReturnValue({
-      data: { totalBilled: 0, claimCount: 0 },
-      isLoading: false,
-      isError: false,
-      error: null,
-    });
-
-    render(<Insight />);
-    openOverview();
-
-    expect(screen.getByText('Panel Billed')).toBeInTheDocument();
-    expect(screen.getAllByText('RM 0.00').length).toBeGreaterThan(0);
-    expect(screen.getByText('0 claims')).toBeInTheDocument();
+    expect(screen.getByText('Secured performance workspace')).toBeInTheDocument();
+    expect(screen.queryByText('Panel Billed')).not.toBeInTheDocument();
+    expect(performanceTabMock).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { InsightShell } from '@/components/clinic/insight/InsightShell';
 import { FinancialControlTab } from '@/components/clinic/insight/management/FinancialControlTab';
 import { FinancialSummaryStrip } from '@/components/clinic/insight/management/FinancialSummaryStrip';
 import { ManagementTab } from '@/components/clinic/insight/management/ManagementTab';
@@ -295,7 +296,8 @@ describe('FinancialSummaryStrip', () => {
     expect(screen.getByText('Comparison period: 25-31 Jul')).toBeInTheDocument();
     expect(screen.getByText(/Comparison incomplete: attribution for 2 visits/)).toBeInTheDocument();
     expect(screen.getByText(/cost completeness unknown because attribution is incomplete/)).toBeInTheDocument();
-    expect(within(screen.getByRole('button', { name: /Billed Revenue details/i })).getByText('up 25.0% vs 25-31 Jul')).toBeInTheDocument();
+    expect(within(screen.getByRole('button', { name: /Billed Revenue details/i }))
+      .getByText('Comparison unavailable — incomplete attribution')).toBeInTheDocument();
   });
 
   it('emits the exact metric for every selectable KPI', () => {
@@ -344,8 +346,8 @@ describe('FinancialSummaryStrip', () => {
     const cogs = screen.getByRole('button', { name: /COGS details/i });
 
     expect(within(billed).getByText('Unavailable')).toBeInTheDocument();
-    expect(within(billed).getByText('Comparison unavailable')).toBeInTheDocument();
-    expect(within(cash).getByText('up from RM 0.00 vs 25-31 Jul')).toBeInTheDocument();
+    expect(within(billed).getByText('Comparison unavailable — missing period data')).toBeInTheDocument();
+    expect(within(cash).getByText('Comparison unavailable — prior period is zero')).toBeInTheDocument();
     expect(within(cogs).getByText('no change vs 25-31 Jul')).toBeInTheDocument();
     expect(screen.queryByText(/Infinity/)).not.toBeInTheDocument();
   });
@@ -639,6 +641,92 @@ describe('FinancialControlTab alerts and drill-down', () => {
     await waitFor(() => expect(alertView).toHaveFocus());
   });
 
+  it('suppresses percentage comparisons when the comparison attribution is incomplete', () => {
+    render(
+      <FinancialSummaryStrip
+        period={period}
+        comparison={{ ...comparison, attributionComplete: false, incompleteVisits: 2 }}
+        comparisonLabel="25-31 Jul"
+        comparisonAttributionComplete={false}
+        comparisonIncompleteVisits={2}
+        selectedMetric="billed_revenue"
+        onMetricSelect={vi.fn()}
+      />,
+    );
+
+    expect(within(screen.getByRole('button', { name: /Billed Revenue details/i }))
+      .getByText('Comparison unavailable — incomplete attribution')).toBeInTheDocument();
+  });
+
+  it('keeps a controlled financial detail open while its shell export is selected, then closes intentionally', async () => {
+    useFinancialControlDetailsMock.mockImplementation((filters: FinancialControlDetailFilters) => detailResult({
+      total: 1,
+      page: filters.page,
+      pageSize: filters.pageSize,
+    }));
+    const downloads: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+      downloads.push(this.download);
+    });
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:financial-control-shell'),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+
+    render(
+      <InsightShell
+        section="finance"
+        onSectionChange={vi.fn()}
+        range={{ from: dates.startDate, to: dates.endDate }}
+        onRangeChange={vi.fn()}
+        comparisonEnabled={false}
+        onComparisonChange={vi.fn()}
+        onRefresh={vi.fn()}
+        exportItems={[]}
+        confidence="current period"
+      >
+        <FinancialControlTab {...dates} />
+      </InsightShell>,
+    );
+
+    const detailTrigger = screen.getByRole('button', { name: /Billed Revenue details/i });
+    fireEvent.click(detailTrigger);
+    expect(await screen.findByRole('dialog', { name: 'Billed Revenue details' })).toBeInTheDocument();
+
+    const exportTrigger = screen.getByRole('button', { name: 'Export' });
+    fireEvent(exportTrigger, new MouseEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      ctrlKey: false,
+    }));
+    expect(exportTrigger).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(exportTrigger);
+
+    expect(exportTrigger).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('dialog', { hidden: true })).toHaveAttribute('data-state', 'open');
+    const exportItem = await screen.findByRole('menuitem', { name: 'Financial details CSV' });
+    fireEvent(exportItem, new MouseEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      ctrlKey: false,
+    }));
+    fireEvent.click(exportItem);
+    await waitFor(() => expect(downloads).toEqual([
+      'financial_control_2026-08-01_to_2026-08-07_billed_revenue_visit.csv',
+    ]));
+
+    fireEvent.keyDown(screen.getByRole('menu', { name: 'Export' }), { key: 'Escape' });
+    await waitFor(() => expect(exportTrigger).toHaveAttribute('aria-expanded', 'false'));
+    expect(screen.getByRole('dialog', { name: 'Billed Revenue details' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Billed Revenue details' })).not.toBeInTheDocument());
+    await waitFor(() => expect(detailTrigger).toHaveFocus());
+  });
+
   it('keeps summary and reconciliation visible for detail loading, zero rows, and errors', async () => {
     useFinancialControlDetailsMock.mockReturnValue(detailResult({}, { data: undefined, isLoading: true }));
     const { rerender } = render(<FinancialControlTab {...dates} />);
@@ -695,7 +783,7 @@ describe('FinancialControlTab alerts and drill-down', () => {
         error: null,
       };
     });
-    const createObjectURL = vi.fn(() => 'blob:financial-control');
+    const createObjectURL = vi.fn<(blob: Blob) => string>(() => 'blob:financial-control');
     const downloads: string[] = [];
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
       downloads.push(this.download);

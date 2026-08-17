@@ -1354,6 +1354,7 @@ export type Database = {
           price_tier: string | null
           quantity: number
           service_id: string | null
+          source_document_id: string | null
           unit_cost: number
         }
         Insert: {
@@ -1382,6 +1383,7 @@ export type Database = {
           price_tier?: string | null
           quantity?: number
           service_id?: string | null
+          source_document_id?: string | null
           unit_cost?: number
         }
         Update: {
@@ -1410,6 +1412,7 @@ export type Database = {
           price_tier?: string | null
           quantity?: number
           service_id?: string | null
+          source_document_id?: string | null
           unit_cost?: number
         }
         Relationships: [
@@ -6551,6 +6554,10 @@ export type Database = {
       }
       available_quantity: { Args: { _item_id: string }; Returns: number }
       can_view_insights: { Args: { _user_id: string }; Returns: boolean }
+      can_view_insight_workspace: {
+        Args: { _user_id: string }
+        Returns: boolean
+      }
       can_view_inventory_costs: { Args: { _user_id: string }; Returns: boolean }
       delete_offline_consultation_attachment: {
         Args: { p_attachment_id: string; p_consultation_id: string }
@@ -6582,6 +6589,9 @@ export type Database = {
           doctor_id: string | null
           doctor_name: string
           patient_name: string
+          unit_price: number | null
+          quantity: number | null
+          total_price: number | null
         }>
       }
       get_financial_control_details: {
@@ -6605,6 +6615,81 @@ export type Database = {
           _end_date: string
           _start_date: string
         }
+        Returns: Json
+      }
+      get_insight_performance: {
+        Args: { _end_date: string; _start_date: string }
+        Returns: Json
+      }
+      get_insight_performance_filtered: {
+        Args: {
+          _activity_type: string
+          _doctor_id: string | null
+          _end_date: string
+          _include_comparison: boolean
+          _payment_type: string
+          _start_date: string
+        }
+        Returns: Json
+      }
+      get_insight_performance_detail: {
+        Args: {
+          _detail_id: string
+          _detail_kind: string
+          _end_date: string
+          _start_date: string
+        }
+        Returns: Json
+      }
+      get_insight_performance_detail_filtered: {
+        Args: {
+          _activity_type: string
+          _detail_id: string
+          _detail_kind: string
+          _doctor_id: string | null
+          _end_date: string
+          _payment_type: string
+          _start_date: string
+        }
+        Returns: Json
+      }
+      get_insight_clinic_health_metrics: {
+        Args: { _end_date: string; _start_date: string }
+        Returns: Json
+      }
+      get_insight_clinical_attendance_heatmap: {
+        Args: { _doctor_id?: string | null; _end_date: string; _start_date: string }
+        Returns: Json
+      }
+      get_insight_financial_control_details: {
+        Args: {
+          _alert_key: string | null
+          _as_of_date: string
+          _end_date: string
+          _group_by: string
+          _metric: string
+          _page: number
+          _page_size: number
+          _start_date: string
+        }
+        Returns: Json
+      }
+      get_insight_financial_control_summary: {
+        Args: {
+          _as_of_date: string
+          _comparison_end: string
+          _comparison_start: string
+          _end_date: string
+          _start_date: string
+        }
+        Returns: Json
+      }
+      get_insight_viewer_scope: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      get_panel_receipt_summary: {
+        Args: { _end_date: string; _start_date: string }
         Returns: Json
       }
       get_patient_debt_snapshot: {

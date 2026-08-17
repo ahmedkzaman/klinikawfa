@@ -60,6 +60,14 @@ describe('aggregateDoctorClinicalActivity', () => {
 });
 
 describe('doctorClinicalActivityCsv', () => {
+  it('exports authoritative charged document price, quantity, and total', () => {
+    const csv = doctorClinicalActivityCsv(aggregateDoctorClinicalActivity([
+      row({ activityKind: 'mc', activityName: 'Medical certificate', unitPrice: 15, quantity: 1, totalPrice: 15 }),
+    ]));
+    expect(csv).toContain('"mc","Medical certificate"');
+    expect(csv).toContain('"15.00","1","15.00"');
+  });
+
   it('exports only the selected doctor when a doctor filter is supplied', () => {
     const csv = doctorClinicalActivityCsv(
       aggregateDoctorClinicalActivity([

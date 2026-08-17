@@ -95,7 +95,7 @@ describe('useAttendanceHeatmap', () => {
   it('uses the selected range and doctor in the cache key and RPC contract', async () => {
     rpc.mockResolvedValue({ data: validReport, error: null });
 
-    const query = useAttendanceHeatmapOptions({ startDate: '2026-05-25', endDate: '2026-08-16', doctorId: 'doctor-1' });
+    const query = useAttendanceHeatmapOptions({ startDate: '2026-05-25', endDate: '2026-08-16', doctorId: 'doctor-1', permissionDomain: 'insight' });
 
     await expect(query.queryFn()).resolves.toMatchObject({
       period: {
@@ -110,8 +110,8 @@ describe('useAttendanceHeatmap', () => {
         doctorsRostered: 2, selectedDoctorScheduled: true, backupDoctorCovered: true,
       }],
     });
-    expect(query.queryKey).toEqual(['clinical-attendance-heatmap', '2026-05-25', '2026-08-16', 'doctor-1']);
-    expect(rpc).toHaveBeenCalledWith('get_clinical_attendance_heatmap', {
+    expect(query.queryKey).toEqual(['clinical-attendance-heatmap', 'insight', '2026-05-25', '2026-08-16', 'doctor-1']);
+    expect(rpc).toHaveBeenCalledWith('get_insight_clinical_attendance_heatmap', {
       _start_date: '2026-05-25',
       _end_date: '2026-08-16',
       _doctor_id: 'doctor-1',
@@ -119,11 +119,24 @@ describe('useAttendanceHeatmap', () => {
     expect(rpc).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps management-dashboard attendance on its legacy permission domain', async () => {
+    rpc.mockResolvedValue({ data: validReport, error: null });
+    const query = useAttendanceHeatmapOptions({
+      startDate: '2026-05-25', endDate: '2026-08-16', doctorId: null, permissionDomain: 'management',
+    });
+
+    await query.queryFn();
+    expect(query.queryKey).toEqual(['clinical-attendance-heatmap', 'management', '2026-05-25', '2026-08-16', 'all']);
+    expect(rpc).toHaveBeenCalledWith('get_clinical_attendance_heatmap', {
+      _start_date: '2026-05-25', _end_date: '2026-08-16', _doctor_id: null,
+    });
+  });
+
   it('uses the all-doctors cache key and null doctor RPC parameter', async () => {
     rpc.mockResolvedValue({ data: validReport, error: null });
     const query = useAttendanceHeatmapOptions({ startDate: '2026-05-25', endDate: '2026-08-16', doctorId: null });
 
-    expect(query.queryKey).toEqual(['clinical-attendance-heatmap', '2026-05-25', '2026-08-16', 'all']);
+    expect(query.queryKey).toEqual(['clinical-attendance-heatmap', 'management', '2026-05-25', '2026-08-16', 'all']);
     await query.queryFn();
     expect(rpc).toHaveBeenCalledWith('get_clinical_attendance_heatmap', {
       _start_date: '2026-05-25',

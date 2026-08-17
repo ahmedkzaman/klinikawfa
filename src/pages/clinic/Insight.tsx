@@ -1,242 +1,81 @@
-import { useCallback, useMemo, useState } from 'react';
-import { differenceInCalendarDays, endOfMonth, format, startOfMonth, startOfQuarter, startOfYear, subDays } from 'date-fns';
-import {
-  Bar,
-  CartesianGrid,
-  Cell,
-  ComposedChart,
-  Legend,
-  Line,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import {
-  CalendarIcon,
-  TrendingUp,
-  Wallet,
-  Percent,
-  PackageMinus,
-  Download,
-} from 'lucide-react';
-import { DateRange } from 'react-day-picker';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { differenceInCalendarDays, subDays } from 'date-fns';
+import type { DateRange } from 'react-day-picker';
+import { Navigate, useInRouterContext, useLocation } from 'react-router-dom';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { cn } from '@/lib/utils';
-import {
-  bento,
-  bentoHeader,
-  pageInner,
-  pageShell,
-  primaryBtn,
-  secondaryBtn,
-  softTile,
-  chartGridStroke,
-  chartAxisStroke,
-  chartTickFill,
-  chartTooltipStyle,
-  chartColors,
-} from '@/lib/clinic/bentoTokens';
-
-import { useFinancialInsights, type RawFinancialRow } from '@/hooks/clinic/useFinancialInsights';
-import { useSalesInsights, type SalesInsightRow } from '@/hooks/clinic/useSalesInsights';
-import { usePanelBilledInsights } from '@/hooks/clinic/usePanelBilledInsights';
-import { ScoreboardsTab } from '@/components/clinic/insight/ScoreboardsTab';
-import { LeaderboardsTab } from '@/components/clinic/insight/LeaderboardsTab';
-import { ValuationTab } from '@/components/clinic/insight/ValuationTab';
-import { BankHealthTab } from '@/components/clinic/insight/BankHealthTab';
 import { ClinicHealthTab } from '@/components/clinic/insight/ClinicHealthTab';
-import { ManagementTab } from '@/components/clinic/insight/management/ManagementTab';
+import { FinanceTab } from '@/components/clinic/insight/finance/FinanceTab';
+import { InsightShell } from '@/components/clinic/insight/InsightShell';
+import { PerformanceTab } from '@/components/clinic/insight/performance/PerformanceTab';
+import { PlanningTab } from '@/components/clinic/insight/planning/PlanningTab';
+import { InsightState } from '@/components/clinic/insight/shared/InsightState';
+import { useAuth } from '@/contexts/AuthContext';
+import type { InsightPerformanceViewerScope } from '@/hooks/clinic/useInsightPerformance';
+import { insightQueryFlags, insightQueryKeyPrefixes } from '@/hooks/clinic/useInsightSectionData';
+import { getInsightAccess, type InsightAccess } from '@/lib/clinic/insight/insightAccess';
+import { parseInsightSection, withInsightSection, type InsightSection } from '@/lib/clinic/insight/insightSections';
 
-const SEGMENT_COLORS = [chartColors.emerald, chartColors.blue, chartColors.slate];
 const MAX_RANGE_DAYS = 365;
 
-function formatRM(value: number) {
-  return `RM ${value.toLocaleString('en-MY', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+function useOptionalQueryClient(): QueryClient | null {
+  try { return useQueryClient(); } catch { return null; }
 }
 
-function csvEscape(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return '';
-  const str = String(value);
-  if (/[",\n\r]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
-  return str;
+function parseDoctor(search: string): string | null {
+  const value = new URLSearchParams(search).get('doctor');
+  return value?.trim() || null;
 }
 
-function downloadCSV(rows: RawFinancialRow[], startDate: Date, endDate: Date) {
-  const header = [
-    'visit_date',
-    'queue_entry_id',
-    'payment_method',
-    'item_name',
-    'kind',
-    'revenue',
-    'cogs',
-    'profit',
-    'has_missing_cogs',
-  ];
-  const lines = [header.join(',')];
-  for (const r of rows) {
-    lines.push([
-      csvEscape(r.visit_date),
-      csvEscape(r.queue_entry_id),
-      csvEscape(r.payment_method),
-      csvEscape(r.item_name),
-      csvEscape(r.kind),
-      csvEscape(r.revenue.toFixed(2)),
-      csvEscape(r.cogs.toFixed(2)),
-      csvEscape(r.profit.toFixed(2)),
-      csvEscape(r.hasMissingCogs ? 'true' : 'false'),
-    ].join(','));
-  }
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `clinic_financials_${format(startDate, 'yyyyMMdd')}_to_${format(endDate, 'yyyyMMdd')}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+function InsightRouterLocationSync({ onSearchChange }: { onSearchChange: (search: string) => void }) {
+  const location = useLocation();
+  useEffect(() => onSearchChange(location.search), [location.search, onSearchChange]);
+  return null;
 }
 
-function paymentExportCategory(row: SalesInsightRow): string {
-  const method = String(row.paymentMethod ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-  if (method === 'card' || method.includes('credit') || method.includes('debit')) return 'card';
-  if (method === 'qr_pay' || method.includes('qr') || method.includes('duitnow')) return 'QR pay';
-  if (method === 'cash') return 'cash';
-  if (method.includes('ewallet') || method.includes('e_wallet') || method.includes('tng') || method.includes('touch')) return 'e-wallet';
-  if (method === 'panel' || row.paymentType === 'panel' || row.paymentType === 'insurance') return 'panel billed';
-  return 'other';
-}
+type InsightProps = {
+  initialSearch?: string;
+  canViewFinanceAdvanced?: boolean;
+  canSeeNamedDoctors?: boolean;
+  access?: InsightAccess;
+  viewerRole?: string | null;
+  viewerScope?: InsightPerformanceViewerScope | null;
+};
 
-function downloadSalesCSV(rows: SalesInsightRow[], panelClaims: Array<{ queue_entry_id?: string | null; amount: number | string | null }>, startDate: Date, endDate: Date) {
-  const header = ['created_at', 'payment_id', 'queue_entry_id', 'consultation_id', 'payment_type', 'payment_method', 'category', 'amount'];
-  const panelAmountByQueue = new Map<string, number>();
-  for (const claim of panelClaims) {
-    if (claim.queue_entry_id) panelAmountByQueue.set(claim.queue_entry_id, Number(claim.amount ?? 0));
-  }
-  const lines = [header.join(',')];
-  for (const r of rows) {
-    lines.push([
-      csvEscape(r.createdAt),
-      csvEscape(r.paymentId),
-      csvEscape(r.queueEntryId),
-      csvEscape(r.consultationId),
-      csvEscape(r.paymentType),
-      csvEscape(r.paymentMethod),
-      csvEscape(paymentExportCategory(r)),
-      csvEscape((paymentExportCategory(r) === 'panel billed'
-        ? panelAmountByQueue.get(r.queueEntryId ?? '') ?? r.amount
-        : r.amount).toFixed(2)),
-    ].join(','));
-  }
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `clinic_sales_${format(startDate, 'yyyyMMdd')}_to_${format(endDate, 'yyyyMMdd')}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
+export default function Insight({
+  initialSearch,
+  canViewFinanceAdvanced = false,
+  canSeeNamedDoctors = false,
+  access,
+  viewerRole,
+  viewerScope = null,
+}: InsightProps) {
+  const initialQuery = initialSearch ?? window.location.search;
+  const [range, setRange] = useState<DateRange | undefined>({ from: subDays(new Date(), 29), to: new Date() });
+  const [section, setSection] = useState<InsightSection>(() => parseInsightSection(initialQuery));
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(() => parseDoctor(initialQuery));
+  const [comparisonEnabled, setComparisonEnabled] = useState(false);
+  const queryClient = useOptionalQueryClient();
+  const inRouter = useInRouterContext();
+  const queryFlags = insightQueryFlags(section);
+  const effectiveAccess = useMemo(
+    () => access ?? getInsightAccess(canSeeNamedDoctors ? 'doctor_admin' : 'admin', null),
+    [access, canSeeNamedDoctors],
+  );
 
-function downloadDailyConsultationRevenueCSV(
-  rows: RawFinancialRow[],
-  panelClaims: Array<{ queue_entry_id?: string | null; claim_date?: string | null; amount: number | string | null }>,
-  startDate: Date,
-  endDate: Date,
-) {
-  type DailyTotals = { card: number; qrPay: number; cash: number; eWallet: number; panelBilled: number; other: number };
-  const totals = new Map<string, DailyTotals>();
-  const getTotals = (date: string) => {
-    const existing = totals.get(date);
-    if (existing) return existing;
-    const next = { card: 0, qrPay: 0, cash: 0, eWallet: 0, panelBilled: 0, other: 0 };
-    totals.set(date, next);
-    return next;
-  };
-  const panelQueueIds = new Set(panelClaims.map((claim) => claim.queue_entry_id).filter(Boolean));
-  for (const row of rows) {
-    // Panel claims are reported from the claim ledger below, not repeated once per billed item.
-    if (panelQueueIds.has(row.queue_entry_id)) continue;
-    const daily = getTotals(row.visit_date);
-    const category = paymentExportCategory({
-      paymentMethod: row.payment_method,
-      paymentType: row.payment_method === 'panel' ? 'panel' : 'self_pay',
-    } as SalesInsightRow);
-    const amount = Number(row.revenue || 0);
-    if (category === 'card') daily.card += amount;
-    else if (category === 'QR pay') daily.qrPay += amount;
-    else if (category === 'cash') daily.cash += amount;
-    else if (category === 'e-wallet') daily.eWallet += amount;
-    else daily.other += amount;
-  }
-  for (const claim of panelClaims) {
-    const date = claim.claim_date;
-    if (!date) continue;
-    getTotals(date).panelBilled += Number(claim.amount ?? 0);
-  }
-  const lines = [['date', 'card', 'qr_pay', 'cash', 'e_wallet', 'panel_billed', 'other_methods', 'consultation_revenue'].join(',')];
-  for (const [date, daily] of [...totals.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-    const revenue = daily.card + daily.qrPay + daily.cash + daily.eWallet + daily.panelBilled + daily.other;
-    lines.push([
-      csvEscape(date),
-      daily.card.toFixed(2),
-      daily.qrPay.toFixed(2),
-      daily.cash.toFixed(2),
-      daily.eWallet.toFixed(2),
-      daily.panelBilled.toFixed(2),
-      daily.other.toFixed(2),
-      revenue.toFixed(2),
-    ].join(','));
-  }
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `daily_consultation_revenue_${format(startDate, 'yyyyMMdd')}_to_${format(endDate, 'yyyyMMdd')}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
-
-export default function Insight() {
-  const [range, setRange] = useState<DateRange | undefined>({
-    from: subDays(new Date(), 29),
-    to: new Date(),
-  });
+  useEffect(() => {
+    const syncSection = () => {
+      setSection(parseInsightSection(window.location.search));
+      setSelectedDoctorId(parseDoctor(window.location.search));
+    };
+    window.addEventListener('popstate', syncSection);
+    return () => window.removeEventListener('popstate', syncSection);
+  }, []);
 
   const handleRangeSelect = useCallback((next: DateRange | undefined) => {
-    if (!next?.from || !next?.to) {
-      setRange(next);
-      return;
-    }
-    if (next.from > next.to) {
-      toast.warning('Start date cannot be after end date.');
-      return;
-    }
+    if (!next?.from || !next?.to) { setRange(next); return; }
+    if (next.from > next.to) { toast.warning('Start date cannot be after end date.'); return; }
     if (differenceInCalendarDays(next.to, next.from) > MAX_RANGE_DAYS) {
       toast.warning('Date range limited to 1 year for performance.');
       setRange({ from: next.from, to: subDays(next.from, -MAX_RANGE_DAYS) });
@@ -248,535 +87,115 @@ export default function Insight() {
   const startDate = range?.from ?? subDays(new Date(), 29);
   const endDate = range?.to ?? new Date();
 
-  const quickRanges = [
-    ['Today', new Date(), new Date()],
-    ['This week', subDays(new Date(), new Date().getDay()), new Date()],
-    ['This month', startOfMonth(new Date()), new Date()],
-    ['Last month', startOfMonth(subDays(startOfMonth(new Date()), 1)), endOfMonth(subDays(startOfMonth(new Date()), 1))],
-    ['This quarter', startOfQuarter(new Date()), new Date()],
-    ['Year to date', startOfYear(new Date()), new Date()],
-  ] as const;
+  const handleSectionChange = useCallback((next: InsightSection) => {
+    const params = new URLSearchParams(withInsightSection(window.location.search, next));
+    if (next !== 'performance') params.delete('doctor');
+    window.history.pushState(null, '', `?${params.toString()}`);
+    setSection(next);
+    if (next !== 'performance') setSelectedDoctorId(null);
+  }, []);
 
-  const { data, isLoading, isError, error } = useFinancialInsights(startDate, endDate);
-  const {
-    data: salesData,
-    isLoading: salesLoading,
-    isError: salesIsError,
-    error: salesError,
-  } = useSalesInsights(startDate, endDate);
-  const {
-    data: panelBilledData,
-    isLoading: panelBilledLoading,
-    isError: panelBilledIsError,
-    error: panelBilledError,
-  } = usePanelBilledInsights(startDate, endDate);
+  const handleDoctorChange = useCallback((doctorId: string | null, options?: { replace?: boolean }) => {
+    const params = new URLSearchParams(window.location.search);
+    params.set('section', 'performance');
+    if (doctorId) params.set('doctor', doctorId); else params.delete('doctor');
+    const method = options?.replace ? 'replaceState' : 'pushState';
+    window.history[method](null, '', `?${params.toString()}`);
+    setSelectedDoctorId(doctorId);
+  }, []);
 
-  const summary = data?.summary;
-  const topItems = data?.topItems ?? [];
-  const ltvSegment = data?.ltvSegment ?? [];
-  const rows = data?.rows ?? [];
+  const handleRouterSearchChange = useCallback((search: string) => {
+    setSection(parseInsightSection(search));
+    setSelectedDoctorId(parseDoctor(search));
+  }, []);
 
-  const salesSummary = salesData?.summary;
-  const salesByMethod = salesData?.byMethod ?? [];
-  const salesRows = salesData?.rows ?? [];
-  const salesExportRows = salesData?.allRows ?? salesRows;
-
-  const chartData = useMemo(
-    () =>
-      (data?.dailyTrends ?? []).map((d) => ({
-        date: format(new Date(d.date), 'd MMM'),
-        Revenue: Number(d.revenue.toFixed(2)),
-        COGS: Number(d.cogs.toFixed(2)),
-        Margin: d.revenue > 0 ? Number(((d.profit / d.revenue) * 100).toFixed(1)) : 0,
-      })),
-    [data?.dailyTrends],
-  );
-
-  const salesChartData = useMemo(
-    () =>
-      (salesData?.dailyTrends ?? []).map((d) => ({
-        date: format(new Date(d.date), 'd MMM'),
-        Collected: Number(d.collected.toFixed(2)),
-      })),
-    [salesData?.dailyTrends],
-  );
-
-  const handleDownload = () => {
-    if (rows.length === 0) return;
-    downloadCSV(rows, startDate, endDate);
-    toast.success(`Exported ${rows.length} row${rows.length === 1 ? '' : 's'} to CSV.`);
-  };
-
-  const handleSalesDownload = () => {
-    if (salesExportRows.length === 0) return;
-    downloadSalesCSV(salesExportRows, panelBilledData?.claims ?? [], startDate, endDate);
-    toast.success(`Exported ${salesExportRows.length} payment row${salesExportRows.length === 1 ? '' : 's'} to CSV.`);
-  };
-
-  const handleDailyRevenueDownload = () => {
-    if (rows.length === 0) return;
-    downloadDailyConsultationRevenueCSV(rows, panelBilledData?.claims ?? [], startDate, endDate);
-    toast.success('Exported daily consultation revenue to CSV.');
-  };
-
-  const TAB_TRIGGER =
-    'rounded-full px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm';
+  const handleRefresh = useCallback(() => {
+    if (!queryClient) return;
+    insightQueryKeyPrefixes(section).forEach((queryKey) => { void queryClient.invalidateQueries({ queryKey: [...queryKey] }); });
+  }, [queryClient, section]);
 
   return (
-    <div className={pageShell}>
-      <div className={pageInner}>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Financial Insights</h1>
-            <p className="text-sm text-slate-500">
-              Collected payments and consultation profitability, shown as separate measures.
-            </p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="flex flex-wrap gap-1">
-              {quickRanges.map(([label, from, to]) => <Button key={label} variant="ghost" onClick={() => setRange({ from, to })} className="h-8 px-2 text-xs text-slate-600">{label}</Button>)}
-            </div>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    secondaryBtn,
-                    'w-full sm:w-[280px] justify-start text-left font-normal',
-                    !range && 'text-slate-400',
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {range?.from ? (
-                    range.to ? (
-                      <>
-                        {format(range.from, 'd MMM yyyy')} - {format(range.to, 'd MMM yyyy')}
-                      </>
-                    ) : (
-                      format(range.from, 'd MMM yyyy')
-                    )
-                  ) : (
-                    <span>Pick a date range</span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0 rounded-2xl border-none shadow-[0_8px_30px_rgb(0,0,0,0.08)]" align="end">
-                <Calendar
-                  mode="range"
-                  selected={range}
-                  onSelect={handleRangeSelect}
-                  numberOfMonths={2}
-                  defaultMonth={range?.from}
-                  className={cn('p-3 pointer-events-auto')}
-                />
-              </PopoverContent>
-            </Popover>
-
-            <Button
-              onClick={handleDownload}
-              disabled={isLoading || rows.length === 0}
-              className={primaryBtn}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Consultation CSV
-            </Button>
-
-            <Button
-              onClick={handleSalesDownload}
-              disabled={salesLoading || salesExportRows.length === 0}
-              variant="outline"
-              className={secondaryBtn}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Collected CSV
-            </Button>
-
-            <Button
-              onClick={handleDailyRevenueDownload}
-              disabled={isLoading || rows.length === 0}
-              variant="outline"
-              className={secondaryBtn}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Daily Consultation Revenue
-            </Button>
-          </div>
-        </div>
-
-        <Tabs defaultValue="clinic-health" className="w-full space-y-4">
-          <Card className={cn(bento, 'p-2')}>
-            <TabsList className="flex flex-wrap h-auto gap-1 bg-transparent p-0">
-              <TabsTrigger value="clinic-health" className={TAB_TRIGGER}>Clinic Health</TabsTrigger>
-              <TabsTrigger value="overview" className={TAB_TRIGGER}>Overview</TabsTrigger>
-              <TabsTrigger value="scoreboards" className={TAB_TRIGGER}>Scoreboards</TabsTrigger>
-              <TabsTrigger value="leaderboards" className={TAB_TRIGGER}>Leaderboards</TabsTrigger>
-              <TabsTrigger value="valuation" className={TAB_TRIGGER}>Valuation</TabsTrigger>
-              <TabsTrigger value="health" className={TAB_TRIGGER}>Bank Health</TabsTrigger>
-              <TabsTrigger value="management" className={TAB_TRIGGER}>Management</TabsTrigger>
-            </TabsList>
-          </Card>
-
-          <TabsContent value="clinic-health" className="mt-0">
-            <ClinicHealthTab startDate={startDate} endDate={endDate} />
-          </TabsContent>
-
-          <TabsContent value="overview" className="space-y-4 mt-0">
-            {isError && (
-              <Card className={bento}>
-                <CardContent className="py-6 text-sm text-rose-600">
-                  Failed to load insights: {(error as Error)?.message ?? 'Unknown error'}
-                </CardContent>
-              </Card>
-            )}
-
-            {salesIsError && (
-              <Card className={bento}>
-                <CardContent className="py-6 text-sm text-rose-600">
-                  Failed to load collected payments: {(salesError as Error)?.message ?? 'Unknown error'}
-                </CardContent>
-              </Card>
-            )}
-
-            {panelBilledIsError && (
-              <Card className={bento}>
-                <CardContent className="py-6 text-sm text-rose-600">
-                  Failed to load panel billed amount: {(panelBilledError as Error)?.message ?? 'Unknown error'}
-                </CardContent>
-              </Card>
-            )}
-
-            {isLoading || salesLoading || panelBilledLoading ? (
-              <InsightSkeleton />
-            ) : (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-                  <SummaryCard
-                    icon={<Wallet className="h-4 w-4" />}
-                    label="Total Collected"
-                    value={salesSummary ? formatRM(salesSummary.totalCollected) : '-'}
-                  />
-                  <SummaryCard
-                    icon={<Wallet className="h-4 w-4" />}
-                    label="Total Visit Billing"
-                    value={summary ? formatRM(summary.totalRevenue) : '-'}
-                  />
-                  <SummaryCard
-                    icon={<PackageMinus className="h-4 w-4" />}
-                    label="COGS"
-                    value={summary ? formatRM(summary.totalCogs) : '-'}
-                  />
-                  <SummaryCard
-                    icon={<TrendingUp className="h-4 w-4" />}
-                    label="Gross Profit"
-                    value={summary ? formatRM(summary.totalProfit) : '-'}
-                  />
-                  <SummaryCard
-                    icon={<Percent className="h-4 w-4" />}
-                    label="Gross Margin"
-                    value={summary ? `${summary.marginPct.toFixed(1)}%` : '-'}
-                  />
-                </div>
-
-                <Card className={bento}>
-                  <CardContent className="p-6">
-                    <div className="mb-3">
-                      <h3 className={bentoHeader}>Collected Sales</h3>
-                      <p className="text-xs text-slate-500">
-                        Every active payment recorded in the selected period, including dispensary collections.
-                      </p>
-                    </div>
-                    {salesChartData.length === 0 ? (
-                      <div className="flex h-[220px] items-center justify-center text-sm text-slate-400">
-                        No payment collections in this period.
-                      </div>
-                    ) : (
-                      <div className="h-[220px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <ComposedChart data={salesChartData} margin={{ top: 12, right: 16, left: 4, bottom: 4 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartGridStroke} />
-                            <XAxis dataKey="date" stroke={chartAxisStroke} tick={{ fill: chartTickFill }} fontSize={12} />
-                            <YAxis
-                              stroke={chartAxisStroke}
-                              tick={{ fill: chartTickFill }}
-                              fontSize={12}
-                              tickFormatter={(v: number) => `RM ${v}`}
-                            />
-                            <Tooltip contentStyle={chartTooltipStyle} formatter={(value: number) => formatRM(value)} />
-                            <Bar dataKey="Collected" fill={chartColors.blue} radius={[6, 6, 0, 0]} />
-                          </ComposedChart>
-                        </ResponsiveContainer>
-                      </div>
-                    )}
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-                      {salesByMethod.slice(0, 3).map((method) => (
-                        <div key={method.method} className={softTile}>
-                          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                            {method.method}
-                          </div>
-                          <div className="text-lg font-semibold text-slate-900">
-                            {formatRM(method.collected)}
-                          </div>
-                          <div className="text-xs text-slate-500">
-                            {method.paymentCount} payment{method.paymentCount === 1 ? '' : 's'}
-                          </div>
-                        </div>
-                      ))}
-                      <div className={softTile}>
-                        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                          Panel Billed
-                        </div>
-                        <div className="text-lg font-semibold text-slate-900">
-                          {formatRM(panelBilledData?.totalBilled ?? 0)}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          {panelBilledData?.claimCount ?? 0} claim{panelBilledData?.claimCount === 1 ? '' : 's'}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className={bento}>
-                  <CardContent className="p-6">
-                    <div className="mb-3">
-                      <h3 className={bentoHeader}>Daily Consultation Revenue vs COGS</h3>
-                      <p className="text-xs text-slate-500">
-                        Completed consultation items only; this is the basis for gross profit and margin.
-                      </p>
-                    </div>
-                    {chartData.length === 0 ? (
-                      <div className="flex h-[320px] items-center justify-center text-sm text-slate-400">
-                        No completed consultations in this period.
-                      </div>
-                    ) : (
-                      <div className="h-[320px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <ComposedChart data={chartData} margin={{ top: 12, right: 16, left: 4, bottom: 4 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartGridStroke} />
-                            <XAxis dataKey="date" stroke={chartAxisStroke} tick={{ fill: chartTickFill }} fontSize={12} />
-                            <YAxis
-                              yAxisId="left"
-                              stroke={chartAxisStroke}
-                              tick={{ fill: chartTickFill }}
-                              fontSize={12}
-                              tickFormatter={(v) => `RM ${v}`}
-                            />
-                            <YAxis
-                              yAxisId="right"
-                              orientation="right"
-                              domain={[0, 100]}
-                              stroke={chartAxisStroke}
-                              tick={{ fill: chartTickFill }}
-                              fontSize={12}
-                              tickFormatter={(v) => `${v}%`}
-                            />
-                            <Tooltip
-                              contentStyle={chartTooltipStyle}
-                              formatter={(value: number, name: string) =>
-                                name === 'Margin' ? `${value.toFixed(1)}%` : formatRM(value)
-                              }
-                            />
-                            <Legend wrapperStyle={{ fontSize: '12px' }} />
-                            <Bar yAxisId="left" dataKey="Revenue" fill={chartColors.emerald} radius={[6, 6, 0, 0]} />
-                            <Bar yAxisId="left" dataKey="COGS" fill={chartColors.slate} radius={[6, 6, 0, 0]} />
-                            <Line
-                              yAxisId="right"
-                              type="monotone"
-                              dataKey="Margin"
-                              stroke={chartColors.blue}
-                              strokeWidth={2}
-                              dot={false}
-                            />
-                          </ComposedChart>
-                        </ResponsiveContainer>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <Card className={bento}>
-                    <CardContent className="p-6">
-                      <div className="mb-3">
-                        <h3 className={bentoHeader}>Top 10 Profit Leaders</h3>
-                      </div>
-                      {topItems.length === 0 ? (
-                        <div className="flex h-[280px] items-center justify-center text-sm text-slate-400">
-                          No items to rank.
-                        </div>
-                      ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="border-slate-100 hover:bg-transparent">
-                              <TableHead className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Item</TableHead>
-                              <TableHead className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider text-right">Revenue</TableHead>
-                              <TableHead className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider text-right">COGS</TableHead>
-                              <TableHead className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider text-right">Profit</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {topItems.map((item) => (
-                              <TableRow key={item.itemName} className="border-slate-100">
-                                <TableCell className="font-medium text-slate-800">{item.itemName}</TableCell>
-                                <TableCell className="text-right text-slate-500">{formatRM(item.revenue)}</TableCell>
-                                <TableCell className="text-right text-slate-500">{formatRM(item.cogs)}</TableCell>
-                                <TableCell className="text-right font-semibold text-slate-900">
-                                  {formatRM(item.profit)}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card className={bento}>
-                    <CardContent className="p-6">
-                      <div className="mb-3">
-                        <h3 className={bentoHeader}>Profit by Segment (LTV)</h3>
-                      </div>
-                      {ltvSegment.length === 0 ? (
-                        <div className="flex h-[280px] items-center justify-center text-sm text-slate-400">
-                          No segmentation data available.
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-                          <div className="h-[240px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <PieChart>
-                                <Pie
-                                  data={ltvSegment}
-                                  dataKey="totalProfit"
-                                  nameKey="segment"
-                                  cx="50%"
-                                  cy="50%"
-                                  innerRadius={50}
-                                  outerRadius={90}
-                                  paddingAngle={2}
-                                >
-                                  {ltvSegment.map((entry, index) => (
-                                    <Cell
-                                      key={entry.segment}
-                                      fill={SEGMENT_COLORS[index % SEGMENT_COLORS.length]}
-                                    />
-                                  ))}
-                                </Pie>
-                                <Tooltip
-                                  contentStyle={chartTooltipStyle}
-                                  formatter={(value: number) => formatRM(value)}
-                                />
-                                <Legend wrapperStyle={{ fontSize: '12px' }} />
-                              </PieChart>
-                            </ResponsiveContainer>
-                          </div>
-                          <div className="space-y-2">
-                            {ltvSegment.map((seg, index) => (
-                              <div key={seg.segment} className={softTile}>
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span
-                                    className="h-2.5 w-2.5 rounded-full"
-                                    style={{
-                                      background: SEGMENT_COLORS[index % SEGMENT_COLORS.length],
-                                    }}
-                                  />
-                                  <span className="text-sm font-medium text-slate-700">{seg.segment}</span>
-                                </div>
-                                <div className="text-xs text-slate-500">
-                                  {seg.patientCount} patient{seg.patientCount === 1 ? '' : 's'}
-                                </div>
-                                <div className="text-sm font-semibold text-slate-900 mt-1">
-                                  Avg profit: {formatRM(seg.avgProfitPerPatient)}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-              </>
-            )}
-          </TabsContent>
-
-          <TabsContent value="scoreboards" className="mt-0">
-            <ScoreboardsTab startDate={startDate} endDate={endDate} />
-          </TabsContent>
-
-          <TabsContent value="leaderboards" className="mt-0">
-            <LeaderboardsTab startDate={startDate} endDate={endDate} />
-          </TabsContent>
-
-          <TabsContent value="valuation" className="mt-0">
-            <ValuationTab startDate={startDate} endDate={endDate} />
-          </TabsContent>
-
-          <TabsContent value="health" className="mt-0">
-            <BankHealthTab startDate={startDate} endDate={endDate} />
-          </TabsContent>
-
-          <TabsContent value="management" className="mt-0">
-            <ManagementTab startDate={startDate} endDate={endDate} />
-          </TabsContent>
-        </Tabs>
-      </div>
-    </div>
+    <>
+      {inRouter ? <InsightRouterLocationSync onSearchChange={handleRouterSearchChange} /> : null}
+      <InsightShell
+        section={section}
+        onSectionChange={handleSectionChange}
+        range={range}
+        onRangeChange={handleRangeSelect}
+        comparisonEnabled={comparisonEnabled}
+        onComparisonChange={setComparisonEnabled}
+        onRefresh={handleRefresh}
+        exportItems={[]}
+        confidence={comparisonEnabled ? 'comparison enabled' : 'current period'}
+      >
+        <InsightSectionContent
+          section={section}
+          queryFlags={queryFlags}
+          startDate={startDate}
+          endDate={endDate}
+          canViewFinanceAdvanced={canViewFinanceAdvanced}
+          access={effectiveAccess}
+          viewerRole={viewerRole}
+          viewerScope={viewerScope}
+          selectedDoctorId={selectedDoctorId}
+          onDoctorChange={handleDoctorChange}
+          comparisonEnabled={comparisonEnabled}
+        />
+      </InsightShell>
+    </>
   );
 }
 
-function SummaryCard({
-  icon,
-  label,
-  value,
+export function InsightRoute() {
+  const {
+    role, user, rolesLoading, canViewInsights, insightAccessLoading,
+    insightDoctorId, insightPermissionVersion,
+    canViewManagementDashboard, managementDashboardAccessLoading,
+  } = useAuth();
+  const access = getInsightAccess(role, insightDoctorId);
+  if (rolesLoading || insightAccessLoading) return <InsightState state="loading" label="Checking Clinic Insight access…" />;
+  if (!access.canOpenInsight || !canViewInsights || !user) return <Navigate to="/clinic/queue" replace />;
+
+  const viewerScope: InsightPerformanceViewerScope = {
+    userId: user.id,
+    reportsView: { allowed: canViewInsights, version: insightPermissionVersion },
+  };
+  return (
+    <Insight
+      canViewFinanceAdvanced={!managementDashboardAccessLoading && canViewManagementDashboard}
+      canSeeNamedDoctors={access.canSeeNamedDoctors}
+      access={access}
+      viewerRole={role}
+      viewerScope={viewerScope}
+    />
+  );
+}
+
+function InsightSectionContent({
+  section, queryFlags, startDate, endDate, canViewFinanceAdvanced, access,
+  viewerRole, viewerScope, selectedDoctorId, onDoctorChange,
+  comparisonEnabled,
 }: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
+  section: InsightSection;
+  queryFlags: ReturnType<typeof insightQueryFlags>;
+  startDate: Date;
+  endDate: Date;
+  canViewFinanceAdvanced: boolean;
+  access: InsightAccess;
+  viewerRole: string | null | undefined;
+  viewerScope: InsightPerformanceViewerScope | null;
+  selectedDoctorId: string | null;
+  onDoctorChange: (doctorId: string | null, options?: { replace?: boolean }) => void;
+  comparisonEnabled: boolean;
 }) {
-  return (
-    <Card className={bento}>
-      <CardContent className="p-5">
-        <div className="flex items-center justify-between text-slate-500 mb-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wider">{label}</span>
-          <div className="rounded-lg bg-slate-50 p-1.5 text-slate-600">{icon}</div>
-        </div>
-        <div className="text-2xl font-bold text-slate-900 tabular-nums">{value}</div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function InsightSkeleton() {
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Card key={i} className={bento}>
-            <CardContent className="p-5 space-y-3">
-              <Skeleton className="h-3 w-24" />
-              <Skeleton className="h-8 w-32" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-      <Card className={bento}>
-        <CardContent className="p-6 space-y-3">
-          <Skeleton className="h-4 w-48" />
-          <Skeleton className="h-[320px] w-full" />
-        </CardContent>
-      </Card>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {Array.from({ length: 2 }).map((_, i) => (
-          <Card key={i} className={bento}>
-            <CardContent className="p-6 space-y-3">
-              <Skeleton className="h-4 w-40" />
-              <Skeleton className="h-[280px] w-full" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
+  switch (section) {
+    case 'command':
+      return <ClinicHealthTab startDate={startDate} endDate={endDate} enabled={queryFlags.command} />;
+    case 'finance':
+      return <FinanceTab startDate={startDate} endDate={endDate} enabled={queryFlags.finance} canViewAdvanced={canViewFinanceAdvanced} canSeeNamedDoctors={access.canSeeNamedDoctors} />;
+    case 'performance':
+      return <PerformanceTab startDate={startDate} endDate={endDate} enabled={queryFlags.performance} comparisonEnabled={comparisonEnabled} access={access} viewerRole={viewerRole ?? null} viewerScope={viewerScope} selectedDoctorId={selectedDoctorId} onDoctorChange={onDoctorChange} />;
+    case 'planning':
+      return <PlanningTab startDate={startDate} endDate={endDate} enabled={queryFlags.planning} />;
+  }
 }

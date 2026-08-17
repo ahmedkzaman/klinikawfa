@@ -186,15 +186,7 @@ export default function LocalServicePage({ slug }: LocalServicePageProps) {
         <aside className="space-y-5 md:sticky md:top-24 md:self-start">
           <section className="rounded-2xl border bg-card p-6 shadow-sm">
             <MapPin className="h-6 w-6 text-primary" aria-hidden="true" />
-            <h2 className="mt-4 text-xl">
-              Klinik Awfa di KotaSAS, Kuantan
-            </h2>
-            <p className="mt-1 text-xs font-medium tracking-wide text-muted-foreground">
-              {CLINIC_INFO.legalName}
-              <span className="mt-1 block tracking-normal">
-                Registration No. {CLINIC_INFO.registrationNo}
-              </span>
-            </p>
+            <h2 className="mt-4 text-xl">Klinik Awfa di KotaSAS, Kuantan</h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               {CLINIC_INFO.address.full}
             </p>
