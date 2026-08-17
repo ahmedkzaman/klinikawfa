@@ -79,6 +79,9 @@ export default function Services() {
             </p>
             <p className="mt-2 text-xs font-medium uppercase tracking-wide text-slate-500">
               {CLINIC_INFO.legalName}
+              <span className="mt-1 block normal-case tracking-normal">
+                Registration No. {CLINIC_INFO.registrationNo}
+              </span>
             </p>
           </div>
         </div>
@@ -167,6 +170,9 @@ export default function Services() {
               {CLINIC_INFO.name}
               <span className="mt-1 block text-xs tracking-wide text-primary-foreground/70">
                 {CLINIC_INFO.legalName}
+              </span>
+              <span className="block text-xs text-primary-foreground/65">
+                Registration No. {CLINIC_INFO.registrationNo}
               </span>
             </p>
             <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">

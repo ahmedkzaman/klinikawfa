@@ -49,6 +49,9 @@ export default function Index() {
             </h2>
             <p className="mb-2 text-sm font-medium text-muted-foreground tracking-wide">
               {CLINIC_INFO.legalName}
+              <span className="mt-1 block text-xs">
+                Registration No. {CLINIC_INFO.registrationNo}
+              </span>
             </p>
             <p className="mb-7 text-muted-foreground">
               Klinik Awfa KotaSAS, Kuantan terletak di {CLINIC_INFO.address.full}. Hubungi{' '}

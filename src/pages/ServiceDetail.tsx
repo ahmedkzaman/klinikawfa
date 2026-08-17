@@ -161,6 +161,9 @@ export default function ServiceDetail() {
           <h1 className="mb-4">{title}</h1>
           <p className="mb-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
             {CLINIC_INFO.legalName}
+            <span className="mt-1 block text-xs normal-case tracking-normal">
+              Registration No. {CLINIC_INFO.registrationNo}
+            </span>
           </p>
           {service.hero_image_url && (
             <img

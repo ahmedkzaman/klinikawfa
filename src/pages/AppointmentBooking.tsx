@@ -175,6 +175,9 @@ export default function AppointmentBooking() {
               <span className="ml-2 block text-xs font-medium uppercase tracking-wide text-slate-400">
                 {CLINIC_INFO.legalName}
               </span>
+              <span className="block text-xs font-medium text-slate-400">
+                Registration No. {CLINIC_INFO.registrationNo}
+              </span>
             </p>
           </div>
 

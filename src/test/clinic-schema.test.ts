@@ -16,6 +16,11 @@ import {
 afterEach(() => cleanup());
 
 describe('Klinik Awfa structured data', () => {
+  it('keeps the registered company name and number available for public pages', () => {
+    expect(CLINIC_INFO.legalName).toBe('KUMPULAN IKRAM HEALTH TERENGGANU SDN. BHD.');
+    expect(CLINIC_INFO.registrationNo).toBe('(1335162-W)');
+  });
+
   it('identifies one stable medical clinic entity in KotaSAS, Kuantan', () => {
     const schema = buildClinicSchema(PUBLIC_CLINIC_FACTS);
 

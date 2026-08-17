@@ -2,6 +2,7 @@
 export const CLINIC_INFO = {
   name: 'Klinik Awfa',
   legalName: 'KUMPULAN IKRAM HEALTH TERENGGANU SDN. BHD.',
+  registrationNo: '(1335162-W)',
   phone: '+60 18-252 3531',
   phoneLink: 'tel:+60182523531',
   whatsapp: 'https://wa.me/60182523531',

@@ -83,6 +83,9 @@ export function Footer() {
               <span className="mt-1 block text-base font-medium tracking-wide text-primary-foreground/75">
                 {CLINIC_INFO.legalName}
               </span>
+              <span className="mt-1 block text-sm font-medium tracking-wide text-primary-foreground/65">
+                Registration No. {CLINIC_INFO.registrationNo}
+              </span>
             </h3>
             <address className="not-italic text-primary-foreground/80 leading-relaxed text-lg">
               B2 & B4, Jalan KS 1/12,

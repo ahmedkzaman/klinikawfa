@@ -442,6 +442,9 @@ export default function Doctors() {
               <span className="block text-xs font-medium uppercase tracking-wide text-primary-foreground/70">
                 {CLINIC_INFO.legalName}
               </span>
+              <span className="block text-xs font-medium text-primary-foreground/65">
+                Registration No. {CLINIC_INFO.registrationNo}
+              </span>
             </p>
             <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Button size="lg" variant="secondary" className="min-w-[180px]" asChild>

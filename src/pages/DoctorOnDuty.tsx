@@ -232,6 +232,9 @@ export default function DoctorOnDuty() {
                 <span className="mt-1 block text-xs font-medium uppercase tracking-wide text-white/65">
                   {CLINIC_INFO.legalName}
                 </span>
+                <span className="block text-xs font-medium text-white/60">
+                  Registration No. {CLINIC_INFO.registrationNo}
+                </span>
               </p>
               <div className="flex flex-wrap items-center justify-center gap-3">
                 <Button asChild className="bg-white text-[#261d84] hover:bg-white/90">
