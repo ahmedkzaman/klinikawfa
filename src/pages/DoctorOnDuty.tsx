@@ -227,6 +227,12 @@ export default function DoctorOnDuty() {
                   ? 'Hubungi kami untuk pengesahan jadual atau tempah temujanji.'
                   : 'Contact us to confirm the schedule or book an appointment.'}
               </p>
+              <p className="mb-4 text-sm text-white/80">
+                {CLINIC_INFO.name}
+                <span className="mt-1 block text-xs font-medium uppercase tracking-wide text-white/65">
+                  {CLINIC_INFO.legalName}
+                </span>
+              </p>
               <div className="flex flex-wrap items-center justify-center gap-3">
                 <Button asChild className="bg-white text-[#261d84] hover:bg-white/90">
                   <a href={`tel:${CLINIC_INFO.phone}`}>

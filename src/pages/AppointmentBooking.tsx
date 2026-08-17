@@ -17,6 +17,7 @@ import {
 import { MainLayout } from "@/components/layout";
 import { SEOHead } from "@/components/seo";
 import { PublicPageSchema } from "@/components/seo/PublicPageSchema";
+import { CLINIC_INFO } from "@/lib/constants";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -168,6 +169,12 @@ export default function AppointmentBooking() {
             </h1>
             <p className="mt-2 text-slate-600">
               Reserve your slot in three quick steps.
+            </p>
+            <p className="mt-1 text-sm text-slate-500">
+              {CLINIC_INFO.name}
+              <span className="ml-2 block text-xs font-medium uppercase tracking-wide text-slate-400">
+                {CLINIC_INFO.legalName}
+              </span>
             </p>
           </div>
 

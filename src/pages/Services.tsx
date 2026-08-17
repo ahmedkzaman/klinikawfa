@@ -77,6 +77,9 @@ export default function Services() {
                 ? 'Kami menawarkan pelbagai perkhidmatan kesihatan untuk seluruh keluarga anda.'
                 : 'We offer a wide range of health services for your entire family.'}
             </p>
+            <p className="mt-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+              {CLINIC_INFO.legalName}
+            </p>
           </div>
         </div>
       </section>
@@ -159,6 +162,12 @@ export default function Services() {
               {language === 'ms'
                 ? 'Hubungi kami untuk membuat temujanji atau bertanya soalan.'
                 : 'Contact us to make an appointment or ask questions.'}
+            </p>
+            <p className="mb-6 text-sm font-medium text-primary-foreground/80">
+              {CLINIC_INFO.name}
+              <span className="mt-1 block text-xs tracking-wide text-primary-foreground/70">
+                {CLINIC_INFO.legalName}
+              </span>
             </p>
             <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Button size="lg" variant="secondary" asChild>

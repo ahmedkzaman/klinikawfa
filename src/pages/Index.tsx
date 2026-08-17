@@ -44,7 +44,12 @@ export default function Index() {
       <section className="border-y border-border/60 bg-muted/30 py-14 md:py-16">
         <div className="container">
           <div className="mx-auto max-w-4xl">
-            <h2 className="mb-3">Rawatan di Klinik Awfa</h2>
+            <h2 className="mb-3 text-2xl md:text-3xl font-bold">
+              Rawatan di {CLINIC_INFO.name}
+            </h2>
+            <p className="mb-2 text-sm font-medium text-muted-foreground tracking-wide">
+              {CLINIC_INFO.legalName}
+            </p>
             <p className="mb-7 text-muted-foreground">
               Klinik Awfa KotaSAS, Kuantan terletak di {CLINIC_INFO.address.full}. Hubungi{' '}
               <a className="font-medium text-primary hover:underline" href={CLINIC_INFO.phoneLink}>
