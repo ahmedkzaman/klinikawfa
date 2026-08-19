@@ -79,7 +79,7 @@ export function InsightShell({
         <header className="space-y-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Clinic Insight</h1>
-            <p className="text-sm text-slate-500">{period}</p>
+            <p className="text-sm text-slate-500">Operational analytics for the selected period.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap gap-1" aria-label="Quick date ranges">
@@ -105,7 +105,8 @@ export function InsightShell({
             <Button variant="outline" size="sm" onClick={onRefresh} aria-label="Refresh active section">
               <RefreshCw className="mr-1 h-4 w-4" /> Refresh
             </Button>
-            <span className="text-xs text-slate-500">Confidence: {confidence}</span>
+            <span className="hidden h-5 w-px bg-slate-200 sm:block" aria-hidden="true" />
+            <span className="text-xs text-slate-500">Data confidence: <span className="font-medium text-slate-700">{confidence}</span></span>
             <InsightExportMenu items={menuItems} />
           </div>
         </header>

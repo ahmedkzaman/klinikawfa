@@ -105,7 +105,7 @@ export function CommandCentreTab({
         <CommandActionCentre actions={actions} />
         <section aria-labelledby="patient-flow-heading" className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
           <h2 id="patient-flow-heading" className="text-base font-semibold text-slate-900">Patient flow</h2>
-          <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <dl className="mt-4 space-y-2 text-sm">
             {[
               ['Registered', healthMetrics.visits.registered],
               ['Completed', healthMetrics.visits.completed],
@@ -113,9 +113,9 @@ export function CommandCentreTab({
               ['Cancelled', healthMetrics.visits.cancelled],
               ['No-show', healthMetrics.visits.noShow],
             ].map(([label, value]) => (
-              <div key={String(label)} className="rounded-lg bg-slate-50 p-3">
+              <div key={String(label)} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2">
                 <dt className="text-xs text-slate-500">{label}</dt>
-                <dd className="mt-1 font-semibold tabular-nums text-slate-900">{value}</dd>
+                <dd className="font-semibold tabular-nums text-slate-900">{value}</dd>
               </div>
             ))}
           </dl>
@@ -131,13 +131,20 @@ export function CommandCentreTab({
           <Link to="/clinic/insight?section=planning" className="text-sm font-medium text-blue-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">View planning analysis</Link>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {attendancePeriods.map((period) => (
-            <article key={period.key} data-testid="attendance-period" className="rounded-lg bg-slate-50 p-3">
-              <h3 className="text-xs font-semibold text-slate-600">{period.label}</h3>
-              <p className="mt-2 text-lg font-bold tabular-nums text-slate-900">{number(period.visits)} visits</p>
-              <p className="mt-1 text-xs text-slate-500">{period.averageWaitingMinutes === null ? 'Waiting unavailable' : `${Math.round(period.averageWaitingMinutes)} min average wait`}</p>
-            </article>
-          ))}
+          {attendancePeriods.map((period) => {
+            const maxVisits = Math.max(...attendancePeriods.map((entry) => entry.visits), 1);
+            const barWidth = period.visits === 0 ? 0 : Math.max(4, Math.round((period.visits / maxVisits) * 100));
+            return (
+              <article key={period.key} data-testid="attendance-period" className="rounded-lg bg-slate-50 p-3">
+                <h3 className="text-xs font-semibold text-slate-600">{period.label}</h3>
+                <p className="mt-2 text-lg font-bold tabular-nums text-slate-900">{number(period.visits)} visits</p>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200" aria-hidden="true">
+                  <div className="h-full rounded-full bg-blue-600" style={{ width: `${barWidth}%` }} />
+                </div>
+                <p className="mt-2 text-xs text-slate-500">{period.averageWaitingMinutes === null ? 'Waiting unavailable' : `${Math.round(period.averageWaitingMinutes)} min average wait`}</p>
+              </article>
+            );
+          })}
         </div>
       </section>
 
