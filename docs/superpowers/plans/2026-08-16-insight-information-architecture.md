@@ -78,7 +78,7 @@ Keep the authoritative existing modules in place and compose them:
 - Produces `getInsightAccess(role, doctorId): InsightAccess` where `InsightAccess` has `canOpenInsight`, `canSeeNamedDoctors`, `canSeeClinicDoctorBenchmarks`, `canSeeServicePerformance`, and `ownDoctorId`.
 - `locum`, `guest`, and `null` always return `canOpenInsight: false`, regardless of account permission overrides.
 
-- [ ] **Step 1: Write failing section and access tests**
+- [x] **Step 1: Write failing section and access tests**
 
 ```ts
 expect(parseInsightSection('?section=performance')).toBe('performance');
@@ -94,13 +94,13 @@ expect(getInsightAccess('locum', 'doctor-8').canOpenInsight).toBe(false);
 expect(getInsightAccess('guest', null).canOpenInsight).toBe(false);
 ```
 
-- [ ] **Step 2: Run the tests and confirm RED**
+- [x] **Step 2: Run the tests and confirm RED**
 
 Run: `npm test -- src/test/insight-access.test.ts src/test/insight-sections.test.ts src/test/auth-guards.test.tsx`
 
 Expected: FAIL because the section parser and policy do not exist and `canViewInsights` currently excludes resident and operations roles.
 
-- [ ] **Step 3: Implement the exact section and access types**
+- [x] **Step 3: Implement the exact section and access types**
 
 ```ts
 export const INSIGHT_SECTIONS = ['command', 'finance', 'performance', 'planning'] as const;
@@ -117,11 +117,11 @@ export type InsightAccess = {
 
 Implement the allowlists explicitly. Do not infer access from `isAdmin`, and do not let the mutable account override bypass the locum/guest deny rule.
 
-- [ ] **Step 4: Wire AuthContext and sidebar visibility to the policy**
+- [x] **Step 4: Wire AuthContext and sidebar visibility to the policy**
 
 `AuthContext.canViewInsights` must call the policy. `ClinicLayout` must show Insight to every role for which `canOpenInsight` is true and hide it for locum/guest. Preserve existing Management Dashboard permission behavior.
 
-- [ ] **Step 5: Run focused tests and type-check**
+- [x] **Step 5: Run focused tests and type-check**
 
 Run: `npm test -- src/test/insight-access.test.ts src/test/insight-sections.test.ts src/test/auth-guards.test.tsx`
 
@@ -129,7 +129,7 @@ Run: `npx tsc --noEmit -p tsconfig.app.json`
 
 Expected: all PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lib/clinic/insight/insightSections.ts src/lib/clinic/insight/insightAccess.ts src/contexts/AuthContext.tsx src/components/clinic/ClinicLayout.tsx src/test/insight-access.test.ts src/test/insight-sections.test.ts src/test/auth-guards.test.tsx
@@ -156,7 +156,7 @@ git commit -m "feat: define clinic insight access and sections"
 - Produces `insightQueryFlags(section)` returning `{ command, finance, performance, planning }` booleans with exactly one `true`.
 - Export items use `{ id, label, download, disabled, disabledReason }`; no section may render standalone export buttons outside the shared menu.
 
-- [ ] **Step 1: Write the failing shell interaction test**
+- [x] **Step 1: Write the failing shell interaction test**
 
 ```tsx
 render(<Insight initialSearch="?section=performance" />);
@@ -169,25 +169,25 @@ expect(screen.getByRole('button', { name: 'Export' })).toBeVisible();
 
 Mock all section hooks and assert only the active section has `enabled: true`.
 
-- [ ] **Step 2: Run the tests and confirm RED**
+- [x] **Step 2: Run the tests and confirm RED**
 
 Run: `npm test -- src/test/insight-shell.test.tsx src/test/insight-query-enablement.test.tsx src/test/insight-periods.test.ts`
 
 Expected: FAIL because the current page has seven tabs, three export buttons, and eagerly invokes page-level hooks.
 
-- [ ] **Step 3: Extract date presets and CSV actions without changing calculations**
+- [x] **Step 3: Extract date presets and CSV actions without changing calculations**
 
 Move existing preset/date utilities and download callbacks out of the rendered page into focused helpers. Keep `MAX_RANGE_DAYS = 365`, Malaysian date semantics, existing filenames, and existing CSV columns during this task.
 
-- [ ] **Step 4: Implement the shell**
+- [x] **Step 4: Implement the shell**
 
 Use a compact wrapping header: title and period summary first; date range, compare, refresh, confidence, and one Export menu second; four horizontally scrollable accessible tabs third. On narrow screens controls wrap without horizontal page overflow.
 
-- [ ] **Step 5: Replace eager page queries with enabled flags**
+- [x] **Step 5: Replace eager page queries with enabled flags**
 
 Every section hook receives or derives an `enabled` option. Query keys retain date range and identity dimensions. Refresh invalidates only the active section's query-key prefix.
 
-- [ ] **Step 6: Verify focused and existing export regressions**
+- [x] **Step 6: Verify focused and existing export regressions**
 
 Run: `npm test -- src/test/insight-shell.test.tsx src/test/insight-query-enablement.test.tsx src/test/insight-periods.test.ts src/test/insight-panel-billed-card.test.tsx src/test/sales-insights.test.ts src/test/panel-billed-insights.test.ts`
 
@@ -195,7 +195,7 @@ Run: `npx eslint src/pages/clinic/Insight.tsx src/components/clinic/insight/Insi
 
 Expected: all PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/pages/clinic/Insight.tsx src/components/clinic/insight/InsightShell.tsx src/components/clinic/insight/shared/InsightExportMenu.tsx src/components/clinic/insight/shared/InsightState.tsx src/hooks/clinic/useInsightSectionData.ts src/test/insight-shell.test.tsx src/test/insight-query-enablement.test.tsx src/test/insight-periods.test.ts
@@ -225,7 +225,7 @@ git commit -m "feat: add focused clinic insight shell"
 - Produces `CommandAction` with `key`, `group`, `severity`, `title`, `count`, `amount`, `oldestDate`, `href`, and `confidence`.
 - Consumes existing clinic-health and financial-control results; it must not recalculate money from raw payment rows.
 
-- [ ] **Step 1: Write failing confidence and action tests**
+- [x] **Step 1: Write failing confidence and action tests**
 
 ```ts
 expect(evaluateDataConfidence({ expectedRows: 10, observedRows: 10, missingAttributionRows: 0, lastRefreshedAt: now, source: 'financial-control' }).level).toBe('reliable');
@@ -234,31 +234,31 @@ expect(buildCommandActions({ unpaidSelfPay: 0, overduePanel: 4 })).toHaveLength(
 expect(buildCommandActions({ unpaidSelfPay: 0, overduePanel: 4 })[0].title).toMatch(/panel/i);
 ```
 
-- [ ] **Step 2: Run tests and confirm RED**
+- [x] **Step 2: Run tests and confirm RED**
 
 Run: `npm test -- src/test/insight-data-confidence.test.ts src/test/insight-command-centre.test.tsx src/test/clinic-health-alerts.test.ts`
 
 Expected: FAIL because zero-count health alerts are currently rendered and no confidence model exists.
 
-- [ ] **Step 3: Implement deterministic confidence rules**
+- [x] **Step 3: Implement deterministic confidence rules**
 
 Use `insufficient` when the source failed, the expected denominator is unknown, or there are no observed rows for a period expected to contain data. Use `partial` for missing attribution or incomplete costs. Use `reliable` only when the source succeeded and the relevant completeness counters are zero. Expose the reason, source, date basis, refresh timestamp, and missing count.
 
-- [ ] **Step 4: Implement Command Centre composition**
+- [x] **Step 4: Implement Command Centre composition**
 
 Primary KPIs are total patients, average waiting time, visit billing, patient collections, panel receivable, and critical action count. Group actions into Money, Panels, Billing, Clinical records, and Inventory. Hide zero-count alerts. Preserve existing deep links such as missing-payment queue focus and financial detail drawers.
 
-- [ ] **Step 5: Add patient-flow and compact attendance summaries**
+- [x] **Step 5: Add patient-flow and compact attendance summaries**
 
 Render patient-flow counts and a four-period attendance summary; link `View planning analysis` to `?section=planning`. Do not duplicate the full heatmap here.
 
-- [ ] **Step 6: Verify accessibility and regressions**
+- [x] **Step 6: Verify accessibility and regressions**
 
 Run: `npm test -- src/test/insight-data-confidence.test.ts src/test/insight-command-centre.test.tsx src/test/clinic-health-alerts.test.ts src/test/clinic-health-score.test.ts src/test/financial-control-components.test.tsx`
 
 Expected: all PASS; a zero alert is absent, partial confidence has an explanation, and each actionable card is keyboard reachable.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/lib/clinic/insight/dataConfidence.ts src/lib/clinic/insight/commandCentre.ts src/components/clinic/insight/shared/DataConfidence.tsx src/components/clinic/insight/command src/components/clinic/insight/ClinicHealthTab.tsx src/components/clinic/insight/HealthAlertsList.tsx src/test/insight-data-confidence.test.ts src/test/insight-command-centre.test.tsx src/test/clinic-health-alerts.test.ts
@@ -287,7 +287,7 @@ git commit -m "feat: add clinic insight command centre"
 - Consumes existing `FinancialControlPeriodSummary`, panel-billed insights, sales insights, and dual-ledger classifications.
 - The summary contract exposes `visitBilled`, `patientCollected`, `panelBilled`, `panelReceived`, `patientOutstanding`, and `panelOutstanding` as distinct values.
 
-- [ ] **Step 1: Write failing finance identity tests**
+- [x] **Step 1: Write failing finance identity tests**
 
 ```ts
 expect(summary.patientCollected).toBe(98);
@@ -300,31 +300,31 @@ expect(screen.queryByText('panel', { selector: '[data-collection-method]' })).no
 
 Use a co-payment fixture with Cash/QR patient portions and a separate panel claim.
 
-- [ ] **Step 2: Run tests and confirm RED**
+- [x] **Step 2: Run tests and confirm RED**
 
 Run: `npm test -- src/test/insight-finance-tab.test.tsx src/test/insight-finance-ledger.test.ts src/test/financial-control-components.test.tsx`
 
 Expected: FAIL because the current Overview and Management tabs split the concepts and expose separate export controls.
 
-- [ ] **Step 3: Implement finance sub-navigation and summary**
+- [x] **Step 3: Implement finance sub-navigation and summary**
 
 Summary shows the six ledger values above and their definitions. Collections groups physical methods: Card, QR Pay, Cash, E-wallet, and Other. Panels show claim lifecycle and provider. Costs & Margin reuse existing COGS/margin details. Reconciliation displays the existing equations and attribution warnings. Bank Health and Valuation live under Advanced and remain permission-gated.
 
-- [ ] **Step 4: Preserve details and comparison safeguards**
+- [x] **Step 4: Preserve details and comparison safeguards**
 
 Keep visit-grouped detail drawers and CSV detail exports. Suppress percentage comparisons when the prior denominator is zero or confidence is insufficient; show `Comparison unavailable` with the reason instead of extreme percentages.
 
-- [ ] **Step 5: Consolidate export actions**
+- [x] **Step 5: Consolidate export actions**
 
 The Finance export menu contains Consultation CSV, Collected CSV, Daily Consultation Revenue, panel claim detail, and reconciliation detail. Remove the three independent header buttons after the menu tests pass.
 
-- [ ] **Step 6: Run the financial regression suite**
+- [x] **Step 6: Run the financial regression suite**
 
 Run: `npm test -- src/test/insight-finance-tab.test.tsx src/test/insight-finance-ledger.test.ts src/test/financial-control-components.test.tsx src/test/financial-control-lib.test.ts src/test/financial-payment-classification.test.ts src/test/dual-ledger.test.ts src/test/sales-insights.test.ts src/test/panel-billed-insights.test.ts`
 
 Expected: all PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/components/clinic/insight/finance src/lib/clinic/insight/financeSections.ts src/components/clinic/insight/management/FinancialControlTab.tsx src/components/clinic/insight/management/FinancialSummaryStrip.tsx src/components/clinic/insight/management/FinancialAlertsTable.tsx src/pages/clinic/Insight.tsx src/test/insight-finance-tab.test.tsx src/test/insight-finance-ledger.test.ts src/test/financial-control-components.test.tsx
@@ -352,33 +352,33 @@ git commit -m "feat: organize insight finance by ledger"
 - Service rows contain `service_id`, `service_name`, `volume`, `unique_patients`, `revenue`, `cogs`, `profit`, `margin_pct`, `average_price`, `trend_pct`, `doctor_count`, and `missing_cost_count`.
 - The server returns named doctor rows only to special/admin roles; resident output includes only the caller's doctor plus anonymized clinic benchmark; operations output has `doctors: []` and retains services.
 
-- [ ] **Step 1: Write the migration contract test first**
+- [x] **Step 1: Write the migration contract test first**
 
 Assert fixed `search_path`, date validation, maximum 365-day inclusive range, role deny for locum/guest, resident doctor identity binding, operations doctor suppression, saved quantity for billing, active-item filters, Malaysia-local visit date, and revoke/grant statements.
 
-- [ ] **Step 2: Run the contract test and confirm RED**
+- [x] **Step 2: Run the contract test and confirm RED**
 
 Run: `npm test -- src/test/insight-performance-migration.test.ts`
 
 Expected: FAIL because the migration and RPC do not exist.
 
-- [ ] **Step 3: Implement the secured RPC**
+- [x] **Step 3: Implement the secured RPC**
 
 Use `SECURITY DEFINER SET search_path = public, pg_temp`. Resolve the caller through `auth.uid()`, `user_roles`, `profiles`, and `doctors`; raise SQLSTATE `42501` for locum/guest or missing approved role. Aggregate only completed clinical visits; exclude deleted/cancelled consultation items and voided payments. Use saved `quantity`, not `dispensed_qty`, for authoritative billed values. Reuse the same claim/payment classifications as financial-control migrations.
 
-- [ ] **Step 4: Add supporting indexes only after EXPLAIN evidence**
+- [x] **Step 4: Add supporting indexes only after EXPLAIN evidence**
 
 Before adding an index, run `EXPLAIN (ANALYZE, BUFFERS)` on the aggregate fixture. Add only indexes that remove a demonstrated sequential scan on bounded completed-visit, doctor, roster, or active-item predicates. Record the before/after plans in the task report.
 
-- [ ] **Step 5: Write the executable SQL fixture**
+- [x] **Step 5: Write the executable SQL fixture**
 
 Seed admin, resident, operations, locum, and guest identities; two doctors; roster hours; one co-payment panel visit; one self-pay visit; one deleted item; one missing-cost service. Assert exact JSON visibility and values under each role, and wrap the fixture in a transaction ending with `ROLLBACK`.
 
-- [ ] **Step 6: Add TypeScript normalization and hook tests**
+- [x] **Step 6: Add TypeScript normalization and hook tests**
 
 Normalize nullable numerics, preserve missing-data counters, reject malformed JSON, use query key `['insight-performance', start, end, viewerScope]`, and accept an `enabled` option.
 
-- [ ] **Step 7: Run database and client gates**
+- [x] **Step 7: Run database and client gates**
 
 Run: `npm test -- src/test/insight-performance-migration.test.ts src/test/insight-performance-domain.test.ts src/test/use-insight-performance.test.tsx`
 
@@ -388,7 +388,7 @@ Run: `npx supabase db push --dry-run --linked`
 
 Expected: tests PASS and dry-run lists exactly the intended pending migrations in timestamp order.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add supabase/migrations/*_add_insight_performance_report.sql supabase/tests/insight_performance.sql src/lib/clinic/insight/performance.ts src/hooks/clinic/useInsightPerformance.ts src/integrations/supabase/types.ts src/test/insight-performance-migration.test.ts src/test/insight-performance-domain.test.ts src/test/use-insight-performance.test.tsx
@@ -416,33 +416,33 @@ git commit -m "feat: add role-safe insight performance report"
 - Produces doctor table sorted by completed visits by default and service table sorted by revenue by default.
 - Detail drawer route state uses `?section=performance&doctor=<uuid>` for permitted users only.
 
-- [ ] **Step 1: Write failing role-sensitive UI tests**
+- [x] **Step 1: Write failing role-sensitive UI tests**
 
 Admin fixture: named doctors and financial columns visible. Resident fixture: own name visible, other doctor rows replaced by clinic benchmark. Operations fixture: doctor comparison absent, service table visible. Locum fixture: route denied before data hooks execute.
 
-- [ ] **Step 2: Run tests and confirm RED**
+- [x] **Step 2: Run tests and confirm RED**
 
 Run: `npm test -- src/test/insight-performance-tab.test.tsx src/test/insight-performance-permissions.test.tsx src/test/doctor-clinical-activity-component.test.tsx`
 
 Expected: FAIL because Scoreboards and Leaderboards currently expose independent ranking presentations.
 
-- [ ] **Step 3: Implement clinic KPIs and doctor table**
+- [x] **Step 3: Implement clinic KPIs and doctor table**
 
 Show completed visits, unique patients, rostered hours, patients/hour, visit billing, and revenue/hour. Do not show an overall score or rank number. Add definition tooltips for rostered hours, attribution, and financial basis.
 
-- [ ] **Step 4: Implement doctor detail**
+- [x] **Step 4: Implement doctor detail**
 
 Tabs inside the drawer are Workload, Financial, Clinical activity, and Quality guardrails. Reuse procedure/document details from `DoctorClinicalActivity`; make queue/visit references retain existing visit navigation.
 
-- [ ] **Step 5: Implement service performance**
+- [x] **Step 5: Implement service performance**
 
 Show volume, patients, revenue, COGS, profit, margin, average price, trend, doctor count, and missing-cost warning. On mobile render summary cards plus a `View details` sheet rather than a 1,180-pixel table.
 
-- [ ] **Step 6: Remove obsolete ranking surfaces from navigation**
+- [x] **Step 6: Remove obsolete ranking surfaces from navigation**
 
 Stop rendering standalone Scoreboards and Leaderboards sections in the new shell. Keep their source modules temporarily until all reused functionality and exports are covered, then remove only imports and unreachable UI in this task.
 
-- [ ] **Step 7: Verify**
+- [x] **Step 7: Verify**
 
 Run: `npm test -- src/test/insight-performance-tab.test.tsx src/test/insight-performance-permissions.test.tsx src/test/doctor-clinical-activity-component.test.tsx src/test/doctor-clinical-activity.test.ts src/test/scoreboards-doctor-clinical-activity.test.tsx`
 
@@ -450,7 +450,7 @@ Run: `npx eslint src/components/clinic/insight/performance src/components/clinic
 
 Expected: all PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/components/clinic/insight/performance src/components/clinic/insight/DoctorClinicalActivity.tsx src/components/clinic/insight/ScoreboardsTab.tsx src/pages/clinic/Insight.tsx src/test/insight-performance-tab.test.tsx src/test/insight-performance-permissions.test.tsx src/test/doctor-clinical-activity-component.test.tsx
@@ -479,7 +479,7 @@ git commit -m "feat: add clinic performance workspace"
 - Produces four period summaries keyed `08_12`, `12_16`, `16_20`, and `20_24`.
 - Produces shift coverage rows keyed `S1`, `S2`, `S3` with rostered doctors, expected visits, patients/doctor-hour, confidence, and warning reason.
 
-- [ ] **Step 1: Write failing Planning composition tests**
+- [x] **Step 1: Write failing Planning composition tests**
 
 ```tsx
 expect(screen.getByRole('button', { name: /08:00.*12:00/ })).toBeVisible();
@@ -492,31 +492,31 @@ expect(screen.getByRole('dialog', { name: /attendance details/i })).toBeVisible(
 
 Also assert the recommendation card displays regression status, predicted attendance, uncertainty, veto reason, observed context, and model/data confidence.
 
-- [ ] **Step 2: Run tests and confirm RED**
+- [x] **Step 2: Run tests and confirm RED**
 
 Run: `npm test -- src/test/insight-planning-tab.test.tsx src/test/attendance-period-components.test.tsx src/test/patient-attendance-heatmap-integration.test.tsx`
 
 Expected: FAIL because attendance is currently owned by Management Dashboard and is denser than the approved Planning summary.
 
-- [ ] **Step 3: Compose the four-period summary**
+- [x] **Step 3: Compose the four-period summary**
 
 Default view shows four periods by weekday with one selected detail at a time. Clicking a period opens visits, average and peak attendance, wait context, doctor coverage, and regression explanation. Keep the full hourly heatmap behind `Advanced detail`.
 
-- [ ] **Step 4: Add doctor-hour planning**
+- [x] **Step 4: Add doctor-hour planning**
 
 Map roster S1/S2/S3 to their exact shift windows. Show aggregate approved OT hours/pay and aggregate locum pay only; never render individual salary. Flag under-coverage using expected visits and confidence, not a raw visit-count threshold.
 
-- [ ] **Step 5: Add demand and calendar surfaces**
+- [x] **Step 5: Add demand and calendar surfaces**
 
 Show forecast direction and confidence. Operational Calendar displays training/off-day candidates and links to the roster editor. Add a clear link to Management Dashboard for marketing, Google review, governance, targets, and manual inputs; do not duplicate them.
 
-- [ ] **Step 6: Verify the regression model remains authoritative**
+- [x] **Step 6: Verify the regression model remains authoritative**
 
 Run: `npm test -- src/test/insight-planning-tab.test.tsx src/test/attendance-period-components.test.tsx src/test/patient-attendance-heatmap-integration.test.tsx src/test/attendance-regression.test.ts src/test/attendance-heatmap-calculations.test.ts src/test/attendance-period-analysis.test.ts`
 
 Expected: all PASS; no UI code independently labels a day suitable for off-day without the regression assessment.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/components/clinic/insight/planning src/components/clinic/dashboard/PatientAttendanceHeatmap.tsx src/components/clinic/dashboard/AttendancePeriodHeatmap.tsx src/components/clinic/dashboard/AttendanceRecommendations.tsx src/pages/clinic/Insight.tsx src/test/insight-planning-tab.test.tsx src/test/attendance-period-components.test.tsx src/test/patient-attendance-heatmap-integration.test.tsx
@@ -544,27 +544,27 @@ git commit -m "feat: add regression-led clinic planning"
 - Every detail sheet returns focus to its trigger.
 - Inactive sections issue zero network requests on first render.
 
-- [ ] **Step 1: Write failing mobile and accessibility tests**
+- [x] **Step 1: Write failing mobile and accessibility tests**
 
 At 390-pixel viewport assert no document-level horizontal overflow, four section tabs remain keyboard reachable, tables switch to cards/details, chart summaries are present, and error Retry controls have accessible names.
 
-- [ ] **Step 2: Run tests and confirm RED**
+- [x] **Step 2: Run tests and confirm RED**
 
 Run: `npm test -- src/test/insight-responsive.test.tsx src/test/insight-accessibility.test.tsx src/test/insight-query-enablement.test.tsx`
 
-- [ ] **Step 3: Remove fixed-width page overflow**
+- [x] **Step 3: Remove fixed-width page overflow**
 
 Use component-local `overflow-x-auto` only for advanced tables, `min-w-0` on grid children, wrapping header controls, and mobile summary cards. Do not hide financial columns without a details path.
 
-- [ ] **Step 4: Add semantic and focus behavior**
+- [x] **Step 4: Add semantic and focus behavior**
 
 Use real headings in order, `aria-describedby` for definitions, live regions for refresh/error status, keyboard-operable tabs, and trigger focus restoration for dialogs/sheets.
 
-- [ ] **Step 5: Measure query and render behavior**
+- [x] **Step 5: Measure query and render behavior**
 
 Use React Query dev instrumentation or test spies to prove only active queries execute. Capture before/after request counts and time-to-first-section-content for a 30-day range. Investigate and fix the known management access `undefined.rest` call path if it can be reached from Planning links or shared permission refresh.
 
-- [ ] **Step 6: Run affected tests, lint, type-check, and build**
+- [x] **Step 6: Run affected tests, lint, type-check, and build**
 
 Run: `npm test -- src/test/insight-responsive.test.tsx src/test/insight-accessibility.test.tsx src/test/insight-query-enablement.test.tsx src/test/insight-command-centre.test.tsx src/test/insight-finance-tab.test.tsx src/test/insight-performance-tab.test.tsx src/test/insight-planning-tab.test.tsx`
 
@@ -576,7 +576,7 @@ Run: `npm run build`
 
 Expected: all PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/components/clinic/insight src/hooks/clinic/useInsightSectionData.ts src/pages/clinic/Insight.tsx src/test/insight-responsive.test.tsx src/test/insight-accessibility.test.tsx src/test/insight-query-enablement.test.tsx
@@ -599,7 +599,7 @@ git commit -m "fix: harden clinic insight usability and loading"
 - The page exposes exactly four top-level section tabs.
 - The definitions document names source, date basis, formula, exclusions, owner, and confidence rule for every primary KPI.
 
-- [ ] **Step 1: Write the final architecture regression**
+- [x] **Step 1: Write the final architecture regression**
 
 ```tsx
 expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual([
@@ -609,19 +609,19 @@ expect(screen.queryByRole('tab', { name: 'Leaderboards' })).not.toBeInTheDocumen
 expect(screen.queryByText(/clinic health score/i)).not.toBeInTheDocument();
 ```
 
-- [ ] **Step 2: Run the test and confirm any remaining RED**
+- [x] **Step 2: Run the test and confirm any remaining RED**
 
 Run: `npm test -- src/test/insight-information-architecture.test.tsx src/test/insight-management-tab.test.tsx`
 
-- [ ] **Step 3: Remove unreachable legacy presentation code**
+- [x] **Step 3: Remove unreachable legacy presentation code**
 
 Use `rg` before deleting. Retain any legacy component still imported by another route or test; remove only obsolete Insight navigation and unexplained composite-score UI. Update Management-tab regression to assert a link to the standalone Management Dashboard instead of an embedded tab.
 
-- [ ] **Step 4: Write the metric definition catalogue**
+- [x] **Step 4: Write the metric definition catalogue**
 
 For each KPI document: display label, business question, formula, authoritative query/RPC, included statuses, excluded rows, date column/timezone, update cadence, confidence downgrade conditions, and permitted audiences. Include the six distinct finance ledger values and the roster/attendance definitions.
 
-- [ ] **Step 5: Run the complete affected suite**
+- [x] **Step 5: Run the complete affected suite**
 
 Run all Insight, financial-control, dual-ledger, panel, doctor-activity, attendance, management-access, and auth tests serially:
 
@@ -631,7 +631,7 @@ npm test -- src/test/insight-information-architecture.test.tsx src/test/insight-
 
 Expected: all affected tests PASS.
 
-- [ ] **Step 6: Run final repository and migration gates**
+- [x] **Step 6: Run final repository and migration gates**
 
 Run: `npm run lint:changed`
 
@@ -647,11 +647,11 @@ Run: `npx supabase db push --dry-run --linked`
 
 Expected: changed lint, TypeScript, build, and diff checks PASS; migration history has no remote-only divergence; dry-run lists only reviewed local migrations.
 
-- [ ] **Step 7: Perform a fresh code and security review**
+- [x] **Step 7: Perform a fresh code and security review**
 
 Use `superpowers:requesting-code-review` and the Supabase skill. Review role leakage, SECURITY DEFINER search paths, resident doctor identity binding, operations anonymization, financial classification, query paging, active-item filters, URL state, error false-states, and mobile overflow. Resolve every Critical/Important finding and rerun its focused regressions.
 
-- [ ] **Step 8: Commit release cleanup**
+- [x] **Step 8: Commit release cleanup**
 
 ```bash
 git add src/pages/clinic/Insight.tsx src/components/clinic/insight src/test/insight-management-tab.test.tsx src/test/insight-information-architecture.test.tsx docs/clinic-insight-metric-definitions.md
@@ -670,31 +670,31 @@ git commit -m "docs: finalize clinic insight workspace"
 - Deployment order is database migration, production build/GitHub Pages, cache refresh, then role-based canary.
 - Rollback is application rollback first; additive RPC remains harmless and can be removed only by a separately reviewed migration.
 
-- [ ] **Step 1: Back up and validate the approved non-production Supabase project**
+- [x] **Step 1: Back up and validate the approved non-production Supabase project**
 
 Store schema/data backup artifacts in the user-approved Downloads backup folder with project reference and UTC timestamp. Verify the backup is non-empty and record checksums. Do not expose tokens in logs or commits.
 
-- [ ] **Step 2: Apply migration to the approved validation project**
+- [x] **Step 2: Apply migration to the approved validation project**
 
 Run the migration, executable SQL fixture, and role-specific RPC calls. Confirm admin, resident, operations, locum, and guest behavior exactly matches Task 5.
 
-- [ ] **Step 3: Run browser QA on the validation build**
+- [x] **Step 3: Run browser QA on the validation build**
 
 Check four sections at desktop and 390-pixel mobile widths for doctor_admin, resident_doctor, operations, locum, and guest. Verify URL restoration, active-only queries, exports, deep links, empty/error states, named-doctor restrictions, and no console errors.
 
-- [ ] **Step 4: Obtain explicit production deployment approval**
+- [x] **Step 4: Obtain explicit production deployment approval**
 
 Present migration list, backup evidence, test/build results, review verdict, validation screenshots, and rollback instructions. Do not apply production migrations or push `main` before approval.
 
-- [ ] **Step 5: Deploy in order**
+- [x] **Step 5: Deploy in order**
 
 Apply the reviewed Supabase migration to the main project, verify the RPC/schema cache, push the reviewed commit to `main`, and watch Security Gate and Deploy GitHub Pages to completion.
 
-- [ ] **Step 6: Run production canary**
+- [x] **Step 6: Run production canary**
 
 For 30 minutes, verify `/clinic/insight` HTTP availability, browser console, RPC error rate, section load latency, four role policies, financial reconciliation, one doctor detail, one service detail, one planning recommendation, and all CSV exports. Use the `canary` skill and stop/rollback on role leakage, financial mismatch, repeated RPC timeout, or page-level unavailability.
 
-- [ ] **Step 7: Close deployment**
+- [x] **Step 7: Close deployment**
 
 Record deployed commit, migration version, workflow URLs, production checks, known limitations, and rollback status. Do not claim full functionality if any external database fixture or role canary remains unverified.
 
