@@ -98,3 +98,35 @@ Present to the owner: migration list, backup evidence, test/build results, fixtu
 - NEVER point tooling at project ref `ncysmppzfjtiekfnomdv` (production stress-test rule from security-gate).
 - Stress tests must not target the production project.
 - No tokens or connection strings in logs, commits, or this repo.
+
+---
+
+## Deployment Record — 2026-08-19 (Validation Outcome: NO MIGRATION REQUIRED)
+
+**Prepared by:** Hermes agent, at user request ("prep the migration"), with user-supplied
+service key. All remote operations were READ-ONLY (REST GET/POST to RPC probes only —
+no schema changes, no data writes, no migrations pushed).
+
+### Finding: production is already fully migrated
+
+Target project `nhjbqdiyptjqherdfbqk` (klinikawfa production backend per the
+2026-07-22 cutover spec; NOT the legacy `ncysmppzfjtiekfnomdv`):
+
+| Check | Result |
+|---|---|
+| Insight RPC family present | 25 insight-related RPCs exposed, incl. `get_insight_performance`, `_filtered`, `_detail_filtered`, `viewer_scope`, financial-control summary/details, attendance heatmap, clinic health |
+| Marker of last migration (`20260817170000`) | `_get_doctor_clinical_activity_before_payment_only_filter` PRESENT |
+| Markers of `20260817150000`/`20260817160000` | `_round3`/`_round4` internal wrappers PRESENT (rename-and-wrap security pattern, REVOKEd from all roles) |
+| Frontend↔schema arg parity | `get_insight_performance_filtered(_start_date,_end_date,_doctor_id,_payment_type,_activity_type,_include_comparison)` and every other RPC signature matches repo hooks exactly |
+| Anonymous access (publishable key) | DENIED on every insight RPC (401/403 `42501`) |
+| Service-key caller (no user JWT) | DENIED (`NOT_AUTHORIZED`) — guards resolve real identity via `auth.uid()` |
+| Live bundle (klinikawfa.com, built from `b6d28c3` 2026-08-19 16:47 UTC) | Contains the same RPC names + arg generation as repo HEAD |
+
+**Conclusion:** the 7 insight migrations (20260816120000 → 20260817170000) were already
+applied to production before this session. The Performance tab's data layer is live and
+role-guarded. Nothing to `db push`.
+
+### Residual work (requires real user credentials — not doable with service key alone)
+- Browser QA per role (doctor_admin / resident_doctor / ops_staff / locum / guest) on
+  the live site: needs actual sign-ins.
+- Performance latency check under real usage (RPC execution path verified, timings not measured).
