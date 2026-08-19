@@ -45,10 +45,17 @@ export function ClinicProtectedRoute({
     isLocum,
     canViewInsights,
     insightAccessLoading,
+    insightPermissionVersion,
     canViewManagementDashboard,
     managementDashboardAccessLoading,
   } = useAuth();
   const location = useLocation();
+
+  // An insight access fetch that failed (network/RPC error) is reported as
+  // 'unavailable' — distinct from an explicit RPC denial. Never treat a failed
+  // check as a denial: retry instead of bouncing allowed users to the staff portal.
+  const insightAccessUnavailable =
+    requiredRole === 'insights' && !insightAccessLoading && insightPermissionVersion === 'unavailable';
 
   if (
     loading ||
@@ -59,6 +66,23 @@ export function ClinicProtectedRoute({
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (insightAccessUnavailable) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-center px-4">
+        <p className="text-sm font-medium text-slate-700">
+          Clinic Insight access could not be verified.
+        </p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+        >
+          Retry
+        </button>
       </div>
     );
   }

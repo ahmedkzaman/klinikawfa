@@ -213,7 +213,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (session?.user) {
         const generation = ++accessGenerationRef.current;
-        void fetchUserRole(session.user.id, generation).then(() => fetchInsightAccess(session.user.id, generation));
+        void fetchUserRole(session.user.id, generation);
+        void fetchInsightAccess(session.user.id, generation);
         void fetchManagementDashboardAccess(session.user.id, generation);
       } else {
         setRolesLoading(false);
@@ -248,7 +249,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session?.user) {
           // Only refetch role when user actually changed
           setTimeout(() => {
-            void fetchUserRole(session.user.id, generation).then(() => fetchInsightAccess(session.user.id, generation));
+            void fetchUserRole(session.user.id, generation);
+            void fetchInsightAccess(session.user.id, generation);
             void fetchManagementDashboardAccess(session.user.id, generation);
           }, 0);
         } else {
@@ -263,7 +265,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const generation = ++accessGenerationRef.current;
         resetIdentityAccess(false);
         clearInsightQueries();
-        void fetchUserRole(currentUserId, generation).then(() => fetchInsightAccess(currentUserId, generation));
+        void fetchUserRole(currentUserId, generation);
+        void fetchInsightAccess(currentUserId, generation);
         void fetchManagementDashboardAccess(currentUserId, generation);
       }
     };
