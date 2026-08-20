@@ -11,15 +11,25 @@
 -- Fix: resolve a roster staffId to a doctors row through EITHER id space —
 -- an exact doctors.id match is preferred, then a doctors.user_id match
 -- (profiles.id). Unresolvable references (e.g. a staffId for a deleted
--- profile with no doctors row) are still dropped, preserving the round-4
--- guard that a roster string only becomes an identity once it maps to a
--- doctors row. Signatures, ownership, and grants are unchanged.
+-- profile with no doctors row) are still dropped, preserving the guard that
+-- a roster string only becomes an identity once it maps to a doctors row.
+-- Signatures, ownership, and grants are unchanged.
+--
+-- v2: the first version of this patch (commit 9bc38c0) aborted with
+-- PERFORMANCE_ROSTER_JOIN_POINT_NOT_FOUND because its exact-text needles
+-- depended on the live function body's line endings/indentation matching the
+-- repo migration files byte-for-byte. This version uses whitespace-tolerant
+-- anchored regexes (regexp_replace with \s+) so the patch applies regardless
+-- of how the live functions were formatted when originally applied.
 --
 -- Rollback: re-apply the definitions from
 --   20260817140000_harden_insight_refresh_and_filtered_semantics.sql
 --   20260817150000_enforce_insight_doctor_visibility_and_cohorts.sql
 --   20260817160000_complete_insight_document_rows_and_attendance_roster.sql
 
+BEGIN;
+
+-- 1) _insight_rostered_hours: full rewrite with the dual-space resolver.
 CREATE OR REPLACE FUNCTION public._insight_rostered_hours(
   _start_date date, _end_date date, _doctor_id uuid DEFAULT NULL
 )
@@ -41,7 +51,7 @@ AS $function$
     CROSS JOIN LATERAL jsonb_each(coalesce(roster.roster_data, '{}'::jsonb)) AS day(key, value)
     CROSS JOIN LATERAL jsonb_each(CASE WHEN jsonb_typeof(day.value) = 'object'
       THEN day.value ELSE '{}'::jsonb END) AS shift(key, value)
-    CROSS JOIN LATERAL jsonb_array_elements(CASE jsonb_typeof(shift.value)
+    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(shift.value)
       WHEN 'array' THEN shift.value WHEN 'object' THEN jsonb_build_array(shift.value)
       ELSE '[]'::jsonb END) AS assignment(value)
     CROSS JOIN LATERAL (
@@ -69,21 +79,40 @@ AS $function$
   WHERE _doctor_id IS NULL OR doctor_id = _doctor_id;
 $function$;
 
-ALTER FUNCTION public._insight_rostered_hours(date, date, uuid) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public._insight_rostered_hours(date, date, uuid) FROM PUBLIC, anon, authenticated;
-
--- Patch _get_insight_performance_round3: resolve staffId through either id
--- space inside its roster_assignments CTE (per-doctor rostered hours).
+-- 2) _get_insight_performance_round3: patch the roster_assignments CTE so
+--    doctor_id_text carries the RESOLVED doctors.id instead of the raw
+--    staffId, by injecting a dual-space lateral resolver after the
+--    assignment(value) lateral and rewriting the column it selects.
 DO $migration$
 DECLARE
   v_definition text;
-  v_original text;
-  v_needle_col text := $n1$      assignment.value->>'staffId' AS doctor_id_text,$n1$;
-  v_repl_col text := $n2$      roster_doctor.doctor_id::text AS doctor_id_text,$n2$;
-  v_needle_join text := $n3$    ) AS assignment(value)
-    WHERE roster_day.key ~ '^\d{4}-\d{2}-\d{2}$'$n3$;
-  v_repl_join text := $n4$    ) AS assignment(value)
-    CROSS JOIN LATERAL (
+BEGIN
+  SELECT pg_catalog.pg_get_functiondef(
+    'public._get_insight_performance_round3(date,date)'::regprocedure
+  ) INTO v_definition;
+
+  IF v_definition IS NULL THEN
+    RAISE EXCEPTION 'PERFORMANCE_ROUND3_NOT_FOUND';
+  END IF;
+
+  IF v_definition NOT LIKE '%staffId'' AS doctor_id_text%' THEN
+    RAISE EXCEPTION 'PERFORMANCE_ROSTER_COLUMN_NOT_FOUND';
+  END IF;
+
+  -- 2a) Column: raw staffId -> resolved doctors.id
+  v_definition := regexp_replace(
+    v_definition,
+    $p1$assignment\.value->>'staffId'\s+AS\s+doctor_id_text$p1$,
+    $r1$roster_doctor.doctor_id::text AS doctor_id_text$r1$,
+    'g'
+  );
+
+  -- 2b) Inject the dual-space resolver between the assignment lateral and
+  --     the CTE's WHERE clause. \1 reproduces the original whitespace run.
+  v_definition := regexp_replace(
+    v_definition,
+    $p2$AS assignment\(value\)(\s+)WHERE roster_day\.key$p2$,
+    $r2$AS assignment(value)\1CROSS JOIN LATERAL (
       SELECT mapped_doctor.id AS doctor_id
       FROM public.doctors AS mapped_doctor
       WHERE (mapped_doctor.id::text = coalesce(assignment.value->>'staffId', '')
@@ -92,29 +121,13 @@ DECLARE
         mapped_doctor.updated_at DESC NULLS LAST,
         mapped_doctor.id
       LIMIT 1
-    ) AS roster_doctor(doctor_id)
-    WHERE roster_day.key ~ '^\d{4}-\d{2}-\d{2}$'$n4$;
-BEGIN
-  SELECT pg_catalog.pg_get_functiondef(
-    'public._get_insight_performance_round3(date,date)'::regprocedure
-  ) INTO v_definition;
-  v_original := v_definition;
-
-  IF (length(v_definition) - length(replace(v_definition, v_needle_col, '')))
-      / length(v_needle_col) <> 1 THEN
-    RAISE EXCEPTION 'PERFORMANCE_ROSTER_COLUMN_NOT_FOUND';
-  END IF;
-  IF (length(v_definition) - length(replace(v_definition, v_needle_join, '')))
-      / length(v_needle_join) <> 1 THEN
-    RAISE EXCEPTION 'PERFORMANCE_ROSTER_JOIN_POINT_NOT_FOUND';
-  END IF;
-
-  v_definition := replace(v_definition, v_needle_col, v_repl_col);
-  v_definition := replace(v_definition, v_needle_join, v_repl_join);
+    ) AS roster_doctor(doctor_id)\1WHERE roster_day.key$r2$,
+    'g'
+  );
 
   IF v_definition NOT LIKE '%AS roster_doctor(doctor_id)%'
      OR v_definition NOT LIKE '%mapped_doctor.user_id%'
-     OR v_definition LIKE '%' || v_needle_col || '%' THEN
+     OR v_definition LIKE '%assignment.value->>''staffId'' AS doctor_id_text%' THEN
     RAISE EXCEPTION 'PERFORMANCE_ROSTER_GUARD_NOT_INSTALLED';
   END IF;
 
@@ -122,19 +135,40 @@ BEGIN
 END;
 $migration$;
 
--- Patch _get_insight_clinical_attendance_heatmap_round3: replace the
--- doctors.id-only join injected by 20260817160000 with the dual-space
--- resolver, and expose the resolved doctor id to roster_slots.
+-- 3) _get_insight_clinical_attendance_heatmap_round3: replace the
+--    doctors.id-only join injected by 20260817160000 with the dual-space
+--    resolver, and select the resolved doctor id in the CTE column.
 DO $migration$
 DECLARE
   v_definition text;
-  v_original text;
-  v_needle_col text := $n1$      NULLIF(btrim(assignment.value->>'staffId'), '') AS doctor_id,$n1$;
-  v_repl_col text := $n2$      roster_doctor.doctor_id::text AS doctor_id,$n2$;
-  v_needle_join text := $n3$    JOIN public.doctors AS mapped_roster_doctor
-      ON mapped_roster_doctor.id::text = NULLIF(btrim(assignment.value->>'staffId'), '')
-      AND mapped_roster_doctor.status = 'active'$n3$;
-  v_repl_join text := $n4$    CROSS JOIN LATERAL (
+BEGIN
+  SELECT pg_catalog.pg_get_functiondef(
+    'public._get_insight_clinical_attendance_heatmap_round3(date,date,uuid)'::regprocedure
+  ) INTO v_definition;
+
+  IF v_definition IS NULL THEN
+    RAISE EXCEPTION 'ATTENDANCE_ROUND3_NOT_FOUND';
+  END IF;
+
+  IF v_definition NOT LIKE '%NULLIF(btrim(assignment.value->>''staffId''), '''') AS doctor_id%'
+     OR v_definition NOT LIKE '%JOIN public.doctors AS mapped_roster_doctor%' THEN
+    RAISE EXCEPTION 'ATTENDANCE_ROSTER_NEEDLES_NOT_FOUND';
+  END IF;
+
+  -- 3a) Column: raw staffId -> resolved doctors.id
+  v_definition := regexp_replace(
+    v_definition,
+    $p3$NULLIF\(btrim\(assignment\.value->>'staffId'\), ''\)\s+AS\s+doctor_id$p3$,
+    $r3$roster_doctor.doctor_id::text AS doctor_id$r3$,
+    'g'
+  );
+
+  -- 3b) Join: doctors.id-only inner join -> dual-space lateral resolver
+  --     (still restricted to active doctors).
+  v_definition := regexp_replace(
+    v_definition,
+    $p4$JOIN public\.doctors AS mapped_roster_doctor\s+ON mapped_roster_doctor\.id::text = NULLIF\(btrim\(assignment\.value->>'staffId'\), ''\)\s+AND mapped_roster_doctor\.status = 'active'$p4$,
+    $r4$CROSS JOIN LATERAL (
       SELECT mapped_roster_doctor.id AS doctor_id
       FROM public.doctors AS mapped_roster_doctor
       WHERE (mapped_roster_doctor.id::text = NULLIF(btrim(assignment.value->>'staffId'), '')
@@ -144,24 +178,9 @@ DECLARE
         mapped_roster_doctor.updated_at DESC NULLS LAST,
         mapped_roster_doctor.id
       LIMIT 1
-    ) AS roster_doctor(doctor_id)$n4$;
-BEGIN
-  SELECT pg_catalog.pg_get_functiondef(
-    'public._get_insight_clinical_attendance_heatmap_round3(date,date,uuid)'::regprocedure
-  ) INTO v_definition;
-  v_original := v_definition;
-
-  IF (length(v_definition) - length(replace(v_definition, v_needle_col, '')))
-      / length(v_needle_col) <> 1 THEN
-    RAISE EXCEPTION 'ATTENDANCE_ROSTER_COLUMN_NOT_FOUND';
-  END IF;
-  IF (length(v_definition) - length(replace(v_definition, v_needle_join, '')))
-      / length(v_needle_join) <> 1 THEN
-    RAISE EXCEPTION 'ATTENDANCE_ROSTER_JOIN_NOT_FOUND';
-  END IF;
-
-  v_definition := replace(v_definition, v_needle_col, v_repl_col);
-  v_definition := replace(v_definition, v_needle_join, v_repl_join);
+    ) AS roster_doctor(doctor_id)$r4$,
+    'g'
+  );
 
   IF v_definition NOT LIKE '%AS roster_doctor(doctor_id)%'
      OR v_definition NOT LIKE '%mapped_roster_doctor.user_id%'
@@ -175,3 +194,5 @@ END;
 $migration$;
 
 NOTIFY pgrst, 'reload schema';
+
+COMMIT;
