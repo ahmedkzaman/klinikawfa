@@ -55,9 +55,8 @@ describe('PlanningTab', () => {
     render(<PlanningTab startDate={new Date('2026-08-03T00:00:00Z')} endDate={new Date('2026-10-25T00:00:00Z')} enabled />);
 
     expect(useAttendanceHeatmap).toHaveBeenCalledWith(expect.objectContaining({ permissionDomain: 'insight', doctorId: null }));
-    expect(screen.getAllByRole('button', { name: /08:00.*12:00/ }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('button', { name: /12:00.*16:00/ }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('button', { name: /16:00.*20:00/ }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /08:00.*13:00/ }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /14:00.*19:00/ }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: /20:00.*00:00/ }).length).toBeGreaterThan(0);
 
     const recommendation = screen.getByRole('region', { name: /regression recommendation/i });
@@ -69,7 +68,7 @@ describe('PlanningTab', () => {
     expect(recommendation).toHaveTextContent(/Model\/data confidence/i);
     expect(screen.getByRole('link', { name: /management dashboard/i })).toHaveAttribute('href', '/clinic/dashboard');
     expect(screen.getByRole('link', { name: /roster editor/i })).toHaveAttribute('href', '/staff/dr-roster');
-    fireEvent.click(screen.getByRole('button', { name: /Monday 12:00.*16:00/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Monday 14:00.*19:00/ }));
     expect(screen.getByRole('dialog', { name: /attendance details/i })).toBeVisible();
   });
 
