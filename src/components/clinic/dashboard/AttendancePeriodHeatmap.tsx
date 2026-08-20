@@ -22,7 +22,7 @@ function trafficClass(period: AttendancePeriodSummary): string {
 export function AttendancePeriodHeatmap({ analysis, onSelectPeriod }: { analysis: AttendancePeriodAnalysis; onSelectPeriod: (period: AttendancePeriodSummary) => void }) {
   return (
     <div className="overflow-x-auto" aria-label="Compact attendance heatmap" tabIndex={0}>
-      <div className="grid min-w-[680px] grid-cols-[96px_repeat(4,minmax(130px,1fr))] gap-px rounded-md border bg-slate-200 p-px">
+      <div className="grid min-w-[520px] grid-cols-[96px_repeat(3,minmax(130px,1fr))] gap-px rounded-md border bg-slate-200 p-px">
         <div className="bg-white p-2 text-xs font-semibold text-slate-600">Day</div>
         {analysis.periods.filter((period) => period.weekday === 1).map((period) => <div key={period.periodId} className="bg-white p-2 text-center text-xs font-semibold text-slate-600">{periodLabel(period)}</div>)}
         {weekdays.map((day, index) => (

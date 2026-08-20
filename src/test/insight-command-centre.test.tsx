@@ -132,9 +132,9 @@ describe('buildAttendanceSummary', () => {
     ]);
 
     expect(periods.map((period) => period.label)).toEqual([
-      '08:00–12:00', '12:00–16:00', '16:00–20:00', '20:00–00:00',
+      '08:00–13:00', '14:00–19:00', '20:00–00:00',
     ]);
-    expect(periods.map((period) => period.visits)).toEqual([4, 3, 2, 1]);
+    expect(periods.map((period) => period.visits)).toEqual([4, 2, 1]);
   });
 });
 
@@ -175,7 +175,7 @@ describe('CommandCentreTab', () => {
     }
     expect(screen.queryByText(/health score/i)).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /patient flow/i })).toBeInTheDocument();
-    expect(screen.getAllByTestId('attendance-period')).toHaveLength(4);
+    expect(screen.getAllByTestId('attendance-period')).toHaveLength(3);
     expect(screen.getByRole('link', { name: /view planning analysis/i })).toHaveAttribute('href', '/clinic/insight?section=planning');
 
     const queueAction = screen.getByRole('link', { name: /completed visits without payment/i });

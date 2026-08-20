@@ -5,9 +5,8 @@ import type {
 } from './attendanceRegression';
 
 export const ATTENDANCE_PERIODS = [
-  { id: '08_12', label: '08:00-12:00', startHour: 8, endHour: 12 },
-  { id: '12_16', label: '12:00-16:00', startHour: 12, endHour: 16 },
-  { id: '16_20', label: '16:00-20:00', startHour: 16, endHour: 20 },
+  { id: '08_13', label: '08:00-13:00', startHour: 8, endHour: 13 },
+  { id: '14_19', label: '14:00-19:00', startHour: 14, endHour: 19 },
   { id: '20_24', label: '20:00-00:00', startHour: 20, endHour: 24 },
 ] as const;
 
@@ -157,9 +156,9 @@ export function buildAttendancePeriodAnalysis(input: Input): AttendancePeriodAna
         }
       }
       const readyEntries = hourly.filter((item): item is { forecast: AttendanceHourlyForecast; cell: AttendanceHeatmapCell | null } => item !== null);
-      const expectedVisits = readyEntries.length === 4 ? readyEntries.reduce((total, item) => total + item.forecast.expectedVisits, 0) : null;
-      const lowerPrediction = readyEntries.length === 4 ? readyEntries.reduce((total, item) => total + item.forecast.lowerPrediction, 0) : null;
-      const upperPrediction = readyEntries.length === 4 ? readyEntries.reduce((total, item) => total + item.forecast.upperPrediction, 0) : null;
+      const expectedVisits = readyEntries.length === period.endHour - period.startHour ? readyEntries.reduce((total, item) => total + item.forecast.expectedVisits, 0) : null;
+      const lowerPrediction = readyEntries.length === period.endHour - period.startHour ? readyEntries.reduce((total, item) => total + item.forecast.lowerPrediction, 0) : null;
+      const upperPrediction = readyEntries.length === period.endHour - period.startHour ? readyEntries.reduce((total, item) => total + item.forecast.upperPrediction, 0) : null;
       periods.push({
         weekday,
         periodId: period.id,

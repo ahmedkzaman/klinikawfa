@@ -28,8 +28,8 @@ export type CommandAction = {
 };
 
 export type CommandAttendancePeriod = {
-  key: '08_12' | '12_16' | '16_20' | '20_24';
-  label: '08:00–12:00' | '12:00–16:00' | '16:00–20:00' | '20:00–00:00';
+  key: '08_13' | '14_19' | '20_24';
+  label: '08:00–13:00' | '14:00–19:00' | '20:00–00:00';
   visits: number;
   averageWaitingMinutes: number | null;
 };
@@ -173,9 +173,8 @@ export function buildCommandActions(input: CommandActionInput): CommandAction[] 
 }
 
 const ATTENDANCE_PERIODS = [
-  { key: '08_12', label: '08:00–12:00', start: 8, end: 12 },
-  { key: '12_16', label: '12:00–16:00', start: 12, end: 16 },
-  { key: '16_20', label: '16:00–20:00', start: 16, end: 20 },
+  { key: '08_13', label: '08:00–13:00', start: 8, end: 13 },
+  { key: '14_19', label: '14:00–19:00', start: 14, end: 19 },
   { key: '20_24', label: '20:00–00:00', start: 20, end: 24 },
 ] as const;
 

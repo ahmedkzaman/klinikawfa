@@ -62,7 +62,7 @@ describe('Clinic Insight accessibility hardening', () => {
     render(
       <OperationalCalendar
         decisions={{
-          training: { status: 'ready', title: 'Training', weekday: 1, periodId: '12_16', reason: 'Lowest safe demand.', expectedVisits: 4, lowerPrediction: 2, upperPrediction: 6, confidence: 'high' },
+          training: { status: 'ready', title: 'Training', weekday: 1, periodId: '14_19', reason: 'Lowest safe demand.', expectedVisits: 4, lowerPrediction: 2, upperPrediction: 6, confidence: 'high' },
           offDay: { status: 'unavailable', title: 'Off day', weekday: null, periodId: null, reason: 'No candidate.', expectedVisits: null, lowerPrediction: null, upperPrediction: null, confidence: 'insufficient' },
           peak: { status: 'ready', title: 'Peak cover', weekday: 5, periodId: '20_24', reason: 'Highest demand.', expectedVisits: 9, lowerPrediction: 7, upperPrediction: 12, confidence: 'high' },
         }}
@@ -70,7 +70,7 @@ describe('Clinic Insight accessibility hardening', () => {
       />,
     );
 
-    expect(screen.getByText(/Training: Monday, 12:00-16:00/)).toBeInTheDocument();
+    expect(screen.getByText(/Training: Monday, 14:00-19:00/)).toBeInTheDocument();
     expect(screen.getByText(/Peak cover: Friday, 20:00-00:00/)).toBeInTheDocument();
     expect(screen.queryByText(/12_16/)).not.toBeInTheDocument();
   });
@@ -194,10 +194,10 @@ describe('Clinic Insight accessibility hardening', () => {
     }];
     const period = {
       weekday: 1,
-      periodId: '8_12',
-      label: 'Monday 08:00-12:00',
+      periodId: '08_13',
+      label: 'Monday 08:00-13:00',
       startHour: 8,
-      endHour: 12,
+      endHour: 13,
       expectedVisits: 3,
       lowerPrediction: 2,
       upperPrediction: 5,

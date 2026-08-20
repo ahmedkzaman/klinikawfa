@@ -40,7 +40,7 @@ describe('Insight Management boundary', () => {
     render(
       <OperationalCalendar
         decisions={{
-          training: { status: 'ready', title: 'Training', weekday: 1, periodId: '12_16', reason: 'Lowest safe demand.', expectedVisits: 4, lowerPrediction: 2, upperPrediction: 6, confidence: 'high' },
+          training: { status: 'ready', title: 'Training', weekday: 1, periodId: '14_19', reason: 'Lowest safe demand.', expectedVisits: 4, lowerPrediction: 2, upperPrediction: 6, confidence: 'high' },
           offDay: { status: 'unavailable', title: 'Off day', weekday: null, periodId: null, reason: 'No candidate.', expectedVisits: null, lowerPrediction: null, upperPrediction: null, confidence: 'insufficient' },
           peak: { status: 'ready', title: 'Peak cover', weekday: 5, periodId: '20_24', reason: 'Highest demand.', expectedVisits: 9, lowerPrediction: 7, upperPrediction: 12, confidence: 'high' },
         }}

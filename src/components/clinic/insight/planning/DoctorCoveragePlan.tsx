@@ -8,7 +8,6 @@ const shifts = [
   { key: 'S2', label: '14:00–19:00', startHour: 14, endHour: 19 },
   { key: 'S3', label: '20:00–00:00', startHour: 20, endHour: 24 },
 ] as const;
-
 function display(value: number | null, suffix = ''): string { return value === null ? 'Unavailable' : `${value.toFixed(1)}${suffix}`; }
 
 export function DoctorCoveragePlan({ analysis, regression, observations, doctors }: {

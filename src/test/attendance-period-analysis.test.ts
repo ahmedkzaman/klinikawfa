@@ -71,17 +71,17 @@ function readyRegression(hourly: AttendanceHourlyForecast[]): AttendanceRegressi
 }
 
 describe('attendance period analysis', () => {
-  it('defines the four requested four-hour periods', () => {
+  it('defines the three requested operating periods', () => {
     expect(ATTENDANCE_PERIODS.map(({ id, startHour, endHour }) => [id, startHour, endHour])).toEqual([
-      ['08_12', 8, 12],
-      ['12_16', 12, 16],
-      ['16_20', 16, 20],
+      ['08_13', 8, 13],
+      ['14_19', 14, 19],
       ['20_24', 20, 24],
     ]);
   });
 
   it('assigns every hour to exactly one period and sums forecast bounds', () => {
-    const hourly = Array.from({ length: 16 }, (_, index) => forecast(1, index + 8, 1));
+    const hours = [8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 20, 21, 22, 23];
+    const hourly = hours.map((hour) => forecast(1, hour, 1));
     const result = buildAttendancePeriodAnalysis({
       regression: readyRegression(hourly),
       cells: hourly.map((item) => cell(1, item.hour, 1)),
@@ -91,15 +91,13 @@ describe('attendance period analysis', () => {
 
     const monday = result.periods.filter((period) => period.weekday === 1);
     expect(monday.map((period) => period.hourly.map((item) => item.forecast.hour))).toEqual([
-      [8, 9, 10, 11],
-      [12, 13, 14, 15],
-      [16, 17, 18, 19],
+      [8, 9, 10, 11, 12],
+      [14, 15, 16, 17, 18],
       [20, 21, 22, 23],
     ]);
     expect(monday.map((period) => [period.expectedVisits, period.lowerPrediction, period.upperPrediction])).toEqual([
-      [4, 0, 8],
-      [4, 0, 8],
-      [4, 0, 8],
+      [5, 0, 10],
+      [5, 0, 10],
       [4, 0, 8],
     ]);
   });
@@ -115,16 +113,16 @@ describe('attendance period analysis', () => {
       selectedDoctorId: null,
     });
 
-    expect(result.periods.find((period) => period.weekday === 1 && period.periodId === '08_12')).toMatchObject({
+    expect(result.periods.find((period) => period.weekday === 1 && period.periodId === '08_13')).toMatchObject({
       status: 'insufficient',
       safeForTraining: false,
     });
   });
 
   it('chooses training and peak periods from regression totals, not raw hourly peaks', () => {
-    const hourly = [1, 2, 3, 4, 5, 6, 7].flatMap((weekday) => Array.from({ length: 16 }, (_, index) => {
-      const hour = index + 8;
-      const expectedVisits = weekday === 3 && hour >= 16 && hour < 20 ? 6 : weekday === 2 ? 0.5 : 1;
+    const hours = [8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 20, 21, 22, 23];
+    const hourly = [1, 2, 3, 4, 5, 6, 7].flatMap((weekday) => hours.map((hour) => {
+      const expectedVisits = weekday === 3 && hour >= 14 && hour < 19 ? 6 : weekday === 2 ? 0.5 : 1;
       return forecast(weekday as 1 | 2 | 3 | 4 | 5 | 6 | 7, hour, expectedVisits, 0.1);
     }));
     const result = buildAttendancePeriodAnalysis({
@@ -134,15 +132,13 @@ describe('attendance period analysis', () => {
       selectedDoctorId: null,
     });
 
-    expect(result.decisions.training).toMatchObject({ status: 'ready', weekday: 2, periodId: '08_12' });
-    expect(result.decisions.peak).toMatchObject({ status: 'ready', weekday: 3, periodId: '16_20' });
+    expect(result.decisions.training).toMatchObject({ status: 'ready', weekday: 2, periodId: '20_24' });
+    expect(result.decisions.peak).toMatchObject({ status: 'ready', weekday: 3, periodId: '14_19' });
   });
 
   it('rejects a low-demand training period when one included hour is unsafe', () => {
-    const hourly = [1, 2, 3, 4, 5, 6, 7].flatMap((weekday) => Array.from({ length: 16 }, (_, index) => {
-      const hour = index + 8;
-      return forecast(weekday as 1 | 2 | 3 | 4 | 5 | 6 | 7, hour, weekday === 2 ? 0.5 : 1, 0.1);
-    }));
+    const hours = [8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 20, 21, 22, 23];
+    const hourly = [1, 2, 3, 4, 5, 6, 7].flatMap((weekday) => hours.map((hour) => forecast(weekday as 1 | 2 | 3 | 4 | 5 | 6 | 7, hour, weekday === 2 ? 0.5 : 1, 0.1)));
     const cells = hourly.map((item) => cell(item.weekday, item.hour, item.expectedVisits));
     const unsafeIndex = cells.findIndex((item) => item.weekday === 2 && item.hour === 9);
     cells[unsafeIndex] = { ...cells[unsafeIndex], averageWaitMinutes: 60 };
@@ -153,14 +149,15 @@ describe('attendance period analysis', () => {
       selectedDoctorId: null,
     });
 
-    expect(result.periods.find((period) => period.weekday === 2 && period.periodId === '08_12')).toMatchObject({
+    expect(result.periods.find((period) => period.weekday === 2 && period.periodId === '08_13')).toMatchObject({
       safeForTraining: false,
     });
-    expect(result.periods.find((period) => period.weekday === 2 && period.periodId === '08_12')?.safetyReasons).toContain('Average wait exceeds 45 minutes.');
+    expect(result.periods.find((period) => period.weekday === 2 && period.periodId === '08_13')?.safetyReasons).toContain('Average wait exceeds 45 minutes.');
   });
 
   it('uses an existing regression off-day assessment without changing its safety decision', () => {
-    const hourly = [1, 2, 3, 4, 5, 6, 7].flatMap((weekday) => Array.from({ length: 16 }, (_, index) => forecast(weekday as 1 | 2 | 3 | 4 | 5 | 6 | 7, index + 8, 1)));
+    const hours = [8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 20, 21, 22, 23];
+    const hourly = [1, 2, 3, 4, 5, 6, 7].flatMap((weekday) => hours.map((hour) => forecast(weekday as 1 | 2 | 3 | 4 | 5 | 6 | 7, hour, 1)));
     const regression = readyRegression(hourly);
     const result = buildAttendancePeriodAnalysis({
       regression,

@@ -4,9 +4,8 @@ import type { AttendanceRegressionResult } from '@/lib/clinic/attendanceRegressi
 
 const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const periodLabels: Record<string, string> = {
-  '08_12': '08:00-12:00',
-  '12_16': '12:00-16:00',
-  '16_20': '16:00-20:00',
+  '08_13': '08:00-13:00',
+  '14_19': '14:00-19:00',
   '20_24': '20:00-00:00',
 };
 
