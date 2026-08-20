@@ -50,6 +50,7 @@ export function useInsightPerformance(
       filters,
     ],
     enabled: viewerScope.reportsView.allowed && (options?.enabled ?? true),
+    retry: 1,
     queryFn: async () => {
       const { data, error } = await supabase.rpc('get_insight_performance_filtered', {
         _start_date: startDate,
