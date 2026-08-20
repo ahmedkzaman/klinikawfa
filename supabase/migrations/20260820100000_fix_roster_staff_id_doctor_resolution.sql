@@ -51,7 +51,7 @@ AS $function$
     CROSS JOIN LATERAL jsonb_each(coalesce(roster.roster_data, '{}'::jsonb)) AS day(key, value)
     CROSS JOIN LATERAL jsonb_each(CASE WHEN jsonb_typeof(day.value) = 'object'
       THEN day.value ELSE '{}'::jsonb END) AS shift(key, value)
-    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(shift.value)
+    CROSS JOIN LATERAL jsonb_array_elements(CASE jsonb_typeof(shift.value)
       WHEN 'array' THEN shift.value WHEN 'object' THEN jsonb_build_array(shift.value)
       ELSE '[]'::jsonb END) AS assignment(value)
     CROSS JOIN LATERAL (
