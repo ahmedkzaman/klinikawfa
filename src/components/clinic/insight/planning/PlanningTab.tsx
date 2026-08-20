@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { format } from 'date-fns';
+import { differenceInCalendarDays, format, subDays } from 'date-fns';
 import { PlanningAttendanceSummary } from '@/components/clinic/insight/planning/PlanningAttendanceSummary';
 import { DoctorCoveragePlan } from '@/components/clinic/insight/planning/DoctorCoveragePlan';
 import { OperationalCalendar } from '@/components/clinic/insight/planning/OperationalCalendar';
@@ -19,10 +19,22 @@ function unavailableAssessments(reason: string): DoctorOffDayAssessment[] {
   return [{ status: 'unavailable', weekday: null, forecast: null, safetyScore: null, reasons: [reason], passedChecks: [] }];
 }
 
+const PLANNING_MIN_WEEKS = 12;
+const PLANNING_MIN_DAYS = PLANNING_MIN_WEEKS * 7;
+const PLANNING_DEFAULT_DAYS = 90;
+
+function ensurePlanningRange(startDate: Date, endDate: Date): { startDate: Date; endDate: Date } {
+  const spanDays = differenceInCalendarDays(endDate, startDate);
+  if (spanDays >= PLANNING_MIN_DAYS) return { startDate, endDate };
+  const widenedStart = subDays(endDate, Math.max(spanDays, PLANNING_DEFAULT_DAYS));
+  return { startDate: widenedStart, endDate };
+}
+
 export function PlanningTab({ startDate, endDate, enabled = true }: { startDate: Date; endDate: Date; enabled?: boolean }) {
+  const planningRange = useMemo(() => ensurePlanningRange(startDate, endDate), [startDate, endDate]);
   const attendance = useAttendanceHeatmap({
-    startDate: enabled ? format(startDate, 'yyyy-MM-dd') : '',
-    endDate: enabled ? format(endDate, 'yyyy-MM-dd') : '',
+    startDate: enabled ? format(planningRange.startDate, 'yyyy-MM-dd') : '',
+    endDate: enabled ? format(planningRange.endDate, 'yyyy-MM-dd') : '',
     doctorId: null,
     permissionDomain: 'insight',
   });
