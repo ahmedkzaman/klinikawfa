@@ -140,7 +140,7 @@ describe('PatientAttendanceHeatmap', () => {
     expect(screen.getByRole('heading', { name: /patient attendance heatmap/i })).toBeInTheDocument();
     expect(screen.getByText('Monday')).toBeInTheDocument();
     expect(screen.getByText('Sunday')).toBeInTheDocument();
-    expect(screen.getByText('08:00–12:00')).toBeInTheDocument();
+    expect(screen.getByText('08:00–13:00')).toBeInTheDocument();
     expect(screen.getByText('20:00–00:00')).toBeInTheDocument();
     openDetailedAnalysis();
     expect(screen.getByText('08:00–09:00')).toBeInTheDocument();
