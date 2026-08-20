@@ -52,7 +52,7 @@ export default function Insight({
   viewerScope = null,
 }: InsightProps) {
   const initialQuery = initialSearch ?? window.location.search;
-  const [range, setRange] = useState<DateRange | undefined>({ from: subDays(new Date(), 29), to: new Date() });
+  const [range, setRange] = useState<DateRange | undefined>({ from: subDays(new Date(), 89), to: new Date() });
   const [section, setSection] = useState<InsightSection>(() => parseInsightSection(initialQuery));
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(() => parseDoctor(initialQuery));
   const [comparisonEnabled, setComparisonEnabled] = useState(false);
