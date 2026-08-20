@@ -71,7 +71,12 @@ function PerformanceReport(props: PerformanceTabProps & { viewerScope: InsightPe
   const filters = useMemo<InsightPerformanceFilters>(() => ({
     doctorId: requestedDoctorId,
     paymentType: paymentFilter,
-    activityType: activityFilter,
+    // Doctor drill-down: the 'all'/'procedure' services block runs a per-row
+    // LATERAL legacy-service lookup that takes >60s on live data. When a doctor
+    // is selected and the user hasn't explicitly asked for procedure/document
+    // analytics, scope the query to consultations (~9s) instead. The services
+    // panel hides in drill-down mode below.
+    activityType: requestedDoctorId && activityFilter === 'all' ? 'consultation' : activityFilter,
     includeComparison: comparisonEnabled,
   }), [activityFilter, comparisonEnabled, paymentFilter, requestedDoctorId]);
   const query = useInsightPerformance(
@@ -120,13 +125,13 @@ function PerformanceReport(props: PerformanceTabProps & { viewerScope: InsightPe
       disabled: !report || doctors.length === 0,
       disabledReason: 'No permitted doctor performance rows are available for this period.',
     });
-    if (access.canSeeServicePerformance) items.push({
+    if (access.canSeeServicePerformance && !requestedDoctorId) items.push({
       id: 'service-performance-csv', label: 'Service performance CSV', download: downloadServices,
       disabled: !report || services.length === 0,
       disabledReason: 'No service performance rows are available for this period.',
     });
     return items;
-  }, [access.canSeeServicePerformance, doctors.length, downloadDoctors, downloadServices, report, services.length, showDoctorPerformance]);
+  }, [access.canSeeServicePerformance, doctors.length, downloadDoctors, downloadServices, report, requestedDoctorId, services.length, showDoctorPerformance]);
   useInsightExportRegistration('insight-performance-report', exportItems);
 
   if (query.isLoading && !report) return <InsightState state="loading" label="Loading clinic performance…" />;
@@ -195,7 +200,7 @@ function PerformanceReport(props: PerformanceTabProps & { viewerScope: InsightPe
           onOpenDoctor={onDoctorChange}
         />
       ) : null}
-      {access.canSeeServicePerformance ? (
+      {access.canSeeServicePerformance && !requestedDoctorId ? (
         services.length > 0
           ? <ServicePerformanceTable services={services} startDate={startDate} endDate={endDate} viewerScope={viewerScope} filters={filters} canSeeNamedDoctors={access.canSeeNamedDoctors} />
           : <InsightState state="empty" label="No service performance is available for this period." />

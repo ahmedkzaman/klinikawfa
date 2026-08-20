@@ -1,4 +1,4 @@
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import {
   normalizeInsightPerformanceReport,
@@ -51,6 +51,9 @@ export function useInsightPerformance(
     ],
     enabled: viewerScope.reportsView.allowed && (options?.enabled ?? true),
     retry: 1,
+    // Keep the last successful report on screen while a filter change refetches.
+    // Without this, every filter switch shows a full loading wall for 9-15s.
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const { data, error } = await supabase.rpc('get_insight_performance_filtered', {
         _start_date: startDate,
