@@ -84,7 +84,7 @@ export default function Insight({
     setRange(next);
   }, []);
 
-  const startDate = range?.from ?? subDays(new Date(), 29);
+  const startDate = range?.from ?? subDays(new Date(), 89);
   const endDate = range?.to ?? new Date();
 
   const handleSectionChange = useCallback((next: InsightSection) => {

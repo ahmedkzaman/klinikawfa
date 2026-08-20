@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Disallow: /clinic
+Disallow: /staff
+Disallow: /editor
+Disallow: /admin
+Disallow: /auth
+Disallow: /locum-register
+Disallow: /reset-password
+Disallow: /video-call
+Disallow: /tv
+
+Sitemap: https://klinikawfa.com/sitemap.xml
