@@ -69,16 +69,17 @@ function PerformanceReport(props: PerformanceTabProps & { viewerScope: InsightPe
     ? access.ownDoctorId
     : doctorFilter === 'all' ? null : doctorFilter;
   const filters = useMemo<InsightPerformanceFilters>(() => ({
-    doctorId: requestedDoctorId,
+    // Always fetch the clinic-wide report. The unfiltered RPC is ~10-14s and
+    // already contains every doctor's row, so the doctor selector filters
+    // client-side below. The per-doctor filtered RPC path times out (>60s) on
+    // live data for some doctors (e.g. Izzat) because the services/documents
+    // CTE stack cannot push the doctor predicate down. The drill-down panel
+    // fetches its own detail via useInsightPerformanceDetail.
+    doctorId: null,
     paymentType: paymentFilter,
-    // Doctor drill-down: the 'all'/'procedure' services block runs a per-row
-    // LATERAL legacy-service lookup that takes >60s on live data. When a doctor
-    // is selected and the user hasn't explicitly asked for procedure/document
-    // analytics, scope the query to consultations (~9s) instead. The services
-    // panel hides in drill-down mode below.
-    activityType: requestedDoctorId && activityFilter === 'all' ? 'consultation' : activityFilter,
+    activityType: activityFilter,
     includeComparison: comparisonEnabled,
-  }), [activityFilter, comparisonEnabled, paymentFilter, requestedDoctorId]);
+  }), [activityFilter, comparisonEnabled, paymentFilter]);
   const query = useInsightPerformance(
     format(startDate, 'yyyy-MM-dd'),
     format(endDate, 'yyyy-MM-dd'),
@@ -87,7 +88,13 @@ function PerformanceReport(props: PerformanceTabProps & { viewerScope: InsightPe
     filters,
   );
   const report = query.data;
-  const doctors = useMemo(() => report ? visibleDoctors(report, access, viewerRole) : [], [access, report, viewerRole]);
+  const doctors = useMemo(() => {
+    const visible = report ? visibleDoctors(report, access, viewerRole) : [];
+    if (!requestedDoctorId) return visible;
+    // Keep the anonymized clinic benchmark row (doctorId === null) alongside
+    // the selected doctor's row.
+    return visible.filter((doctor) => doctor.doctorId === null || doctor.doctorId === requestedDoctorId);
+  }, [access, report, requestedDoctorId, viewerRole]);
   const services = useMemo(() => report && access.canSeeServicePerformance ? report.services : [], [access.canSeeServicePerformance, report]);
   const showDoctorPerformance = viewerRole !== 'ops_staff' && viewerRole !== 'operations' && doctors.length > 0;
   const showFinancialColumns = access.canSeeNamedDoctors || viewerRole === 'resident_doctor';
@@ -125,13 +132,13 @@ function PerformanceReport(props: PerformanceTabProps & { viewerScope: InsightPe
       disabled: !report || doctors.length === 0,
       disabledReason: 'No permitted doctor performance rows are available for this period.',
     });
-    if (access.canSeeServicePerformance && !requestedDoctorId) items.push({
+    if (access.canSeeServicePerformance) items.push({
       id: 'service-performance-csv', label: 'Service performance CSV', download: downloadServices,
       disabled: !report || services.length === 0,
       disabledReason: 'No service performance rows are available for this period.',
     });
     return items;
-  }, [access.canSeeServicePerformance, doctors.length, downloadDoctors, downloadServices, report, requestedDoctorId, services.length, showDoctorPerformance]);
+  }, [access.canSeeServicePerformance, doctors.length, downloadDoctors, downloadServices, report, services.length, showDoctorPerformance]);
   useInsightExportRegistration('insight-performance-report', exportItems);
 
   if (query.isLoading && !report) return <InsightState state="loading" label="Loading clinic performance…" />;
@@ -200,7 +207,7 @@ function PerformanceReport(props: PerformanceTabProps & { viewerScope: InsightPe
           onOpenDoctor={onDoctorChange}
         />
       ) : null}
-      {access.canSeeServicePerformance && !requestedDoctorId ? (
+      {access.canSeeServicePerformance ? (
         services.length > 0
           ? <ServicePerformanceTable services={services} startDate={startDate} endDate={endDate} viewerScope={viewerScope} filters={filters} canSeeNamedDoctors={access.canSeeNamedDoctors} />
           : <InsightState state="empty" label="No service performance is available for this period." />

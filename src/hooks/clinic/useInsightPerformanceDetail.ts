@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeInsightPerformanceDetail } from '@/lib/clinic/insight/performanceDetails';
 import type { InsightPerformanceViewerScope } from './useInsightPerformance';
@@ -19,6 +19,8 @@ export function useInsightPerformanceDetail(
       permissionVersion: viewerScope.reportsView.version,
     }],
     enabled: Boolean(id) && enabled && viewerScope.reportsView.allowed,
+    retry: 1,
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       if (!id) throw new Error('Performance detail identity unavailable');
       const callDetail = supabase.rpc.bind(supabase) as unknown as (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: Error | null }>;

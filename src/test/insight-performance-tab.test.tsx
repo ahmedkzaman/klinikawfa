@@ -141,7 +141,7 @@ describe('PerformanceTab', () => {
     expect(within(serviceRows[1]).getByText('Comparison unavailable')).toBeInTheDocument();
   });
 
-  it('sends doctor, payer, activity, and comparison filters to the secured report hook', () => {
+  it('keeps the report query clinic-wide when the doctor filter changes (doctor scoping is client-side)', () => {
     renderAdmin({ comparisonEnabled: true });
     fireEvent.change(screen.getByLabelText('Filter performance by doctor'), { target: { value: 'doctor-a' } });
     fireEvent.change(screen.getByLabelText('Filter performance by payment'), { target: { value: 'panel' } });
@@ -149,7 +149,7 @@ describe('PerformanceTab', () => {
 
     expect(test.useInsightPerformance).toHaveBeenLastCalledWith(
       '2026-08-01', '2026-08-31', expect.any(Object), { enabled: true },
-      { doctorId: 'doctor-a', paymentType: 'panel', activityType: 'procedure', includeComparison: true },
+      { doctorId: null, paymentType: 'panel', activityType: 'procedure', includeComparison: true },
     );
   });
 
