@@ -44,7 +44,7 @@ export function useFinancialControlSummary(
     queryFn: async () => {
       if (!args) throw new Error('Invalid financial control date range');
 
-      const { data, error } = await (supabase.rpc as unknown as (name: string, args: typeof args) => Promise<{ data: unknown; error: Error | null }>)('get_insight_financial_control_summary', args);
+      const { data, error } = await (supabase.rpc.bind(supabase) as unknown as (name: string, args: typeof args) => Promise<{ data: unknown; error: Error | null }>)('get_insight_financial_control_summary', args);
       if (error) throw error;
       return parseFinancialControlSummary(data);
     },
@@ -74,7 +74,7 @@ export function useFinancialControlDetails(
     enabled: isValidFinancialControlDateRange(filters.startDate, filters.endDate),
     queryFn: async () => {
       const args = getFinancialControlDetailArguments(filters);
-      const { data, error } = await (supabase.rpc as unknown as (name: string, args: typeof args) => Promise<{ data: unknown; error: Error | null }>)('get_insight_financial_control_details', args);
+      const { data, error } = await (supabase.rpc.bind(supabase) as unknown as (name: string, args: typeof args) => Promise<{ data: unknown; error: Error | null }>)('get_insight_financial_control_details', args);
       if (error) throw error;
       const parsed = parseFinancialControlDetails(data);
       const missingPanelQueueIds = parsed.rows

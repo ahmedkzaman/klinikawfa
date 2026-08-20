@@ -21,7 +21,7 @@ export function useInsightPerformanceDetail(
     enabled: Boolean(id) && enabled && viewerScope.reportsView.allowed,
     queryFn: async () => {
       if (!id) throw new Error('Performance detail identity unavailable');
-      const callDetail = supabase.rpc as unknown as (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: Error | null }>;
+      const callDetail = supabase.rpc.bind(supabase) as unknown as (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: Error | null }>;
       const { data, error } = await callDetail('get_insight_performance_detail_filtered', {
         _start_date: startDate, _end_date: endDate, _detail_kind: kind, _detail_id: id,
         _doctor_id: filters.doctorId, _payment_type: filters.paymentType,

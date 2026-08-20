@@ -139,7 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchManagementDashboardAccess = useCallback(async (userId: string, generation: number) => {
     try {
-      const fetchDashboardAccess = supabase.rpc as unknown as ManagementDashboardAccessRpc;
+      const fetchDashboardAccess = supabase.rpc.bind(supabase) as unknown as ManagementDashboardAccessRpc;
       const { data: canViewDashboard, error: dashboardError } =
         await fetchDashboardAccess('can_view_management_dashboard', { _user_id: userId });
 
@@ -159,7 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchInsightAccess = useCallback(async (userId: string, generation: number) => {
     try {
-      const fetchViewerScope = supabase.rpc as unknown as InsightViewerScopeRpc;
+      const fetchViewerScope = supabase.rpc.bind(supabase) as unknown as InsightViewerScopeRpc;
       const { data, error } = await fetchViewerScope('get_insight_viewer_scope');
       const supportedInsightRoles: AppRole[] = [
         'special_admin', 'admin', 'doctor_admin', 'resident_doctor', 'ops_staff', 'operations',

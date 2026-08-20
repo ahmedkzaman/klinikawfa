@@ -143,7 +143,7 @@ export function FinancialDetailSheet({
     try {
       const fetchPage = async (pageFilters: typeof filters) => {
         const args = getFinancialControlDetailArguments(pageFilters);
-        const callInsightDetails = supabase.rpc as unknown as (name: string, input: typeof args) => Promise<{ data: unknown; error: Error | null }>;
+        const callInsightDetails = supabase.rpc.bind(supabase) as unknown as (name: string, input: typeof args) => Promise<{ data: unknown; error: Error | null }>;
         const { data, error } = await callInsightDetails('get_insight_financial_control_details', args);
         if (error) throw error;
         return parseFinancialControlDetails(data);
