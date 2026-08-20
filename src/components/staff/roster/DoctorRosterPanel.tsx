@@ -20,6 +20,7 @@ interface StaffMember {
   id: string;
   name: string;
   position: string;
+  role?: string; // app_role from user_roles (doctor_admin, resident_doctor, locum, etc.)
 }
 
 interface RosterCell {
@@ -58,6 +59,15 @@ const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function firstName(name: string) {
   return name.split(' ')[0];
+}
+
+// Classify a staff member by their real role.
+// Rule: doctor_admin → "Doctor Admin", resident_doctor → "Resident", everything else → "Locum".
+// This covers both registered locum accounts and manually-typed placeholder names (no user_roles row).
+function classifyStaff(role?: string): { label: string; variant: 'default' | 'secondary' | 'outline' } {
+  if (role === 'doctor_admin') return { label: 'Doctor Admin', variant: 'default' };
+  if (role === 'resident_doctor') return { label: 'Resident', variant: 'secondary' };
+  return { label: 'Locum', variant: 'outline' };
 }
 
 function getHoursForShift(shift: 'shift1' | 'shift2' | 'shift3') {
@@ -116,7 +126,16 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
     return eachDayOfInterval({ start, end });
   }, [selectedMonth, selectedYear]);
 
-  useEffect(() => { setStaffList(initialStaff); }, [initialStaff]);
+  // Latest role lookup (from user_roles via Roster.tsx) — used to enrich
+  // staff lists loaded from saved_rosters, which may predate role tracking.
+  const roleByIdRef = useRef<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    const m = new Map<string, string>();
+    initialStaff.forEach(s => { if (s.role) m.set(s.id, s.role); });
+    roleByIdRef.current = m;
+    setStaffList(initialStaff);
+  }, [initialStaff]);
 
   // Load roster settings
   useEffect(() => {
@@ -199,7 +218,11 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
         setRoster(translated);
         setOriginalRoster(translated);
         if (data.staff_list && (data.staff_list as unknown as StaffMember[]).length > 0) {
-          setStaffList(data.staff_list as unknown as StaffMember[]);
+          // Enrich loaded staff with roles from the live lookup (saved rosters
+          // may predate role tracking — without this, everyone shows as Locum).
+          const loaded = data.staff_list as unknown as StaffMember[];
+          const enriched = loaded.map(s => ({ ...s, role: s.role || roleByIdRef.current.get(s.id) }));
+          setStaffList(enriched);
         }
         setWarnings((data.warnings as unknown as string[]) || []);
         setManualOverrides({});
@@ -277,7 +300,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
   // Staff management
   const addStaff = () => {
     if (!newStaffName.trim()) return;
-    setStaffList(prev => [...prev, { id: crypto.randomUUID(), name: newStaffName.trim(), position: 'Doctor' }]);
+    setStaffList(prev => [...prev, { id: crypto.randomUUID(), name: newStaffName.trim(), position: 'Doctor', role: 'locum' }]);
     setNewStaffName('');
   };
   const removeStaff = (id: string) => setStaffList(prev => prev.filter(s => s.id !== id));
@@ -855,6 +878,7 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                   ) : (
                     <>
                       <span className="flex-1 font-medium cursor-pointer" onClick={() => startEdit(s)}>{s.name}</span>
+                      <Badge variant={classifyStaff(s.role).variant} className="text-[10px] px-1.5 py-0 h-5 shrink-0">{classifyStaff(s.role).label}</Badge>
                       <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => removeStaff(s.id)}>
                         <Trash2 className="h-3.5 w-3.5 text-rose-600" />
                       </Button>
@@ -928,7 +952,12 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                     const setting = rosterSettings[s.id] || { permanentOffDays: [] };
                     return (
                       <TableRow key={s.id}>
-                        <TableCell className="font-medium text-sm">{firstName(s.name)}</TableCell>
+                        <TableCell className="font-medium text-sm">
+                          <div className="flex items-center gap-1.5">
+                            {firstName(s.name)}
+                            <Badge variant={classifyStaff(s.role).variant} className="text-[10px] px-1 py-0 h-4">{classifyStaff(s.role).label}</Badge>
+                          </div>
+                        </TableCell>
                         {DAY_ABBR.map((_, i) => (
                           <TableCell key={i} className="text-center">
                             <Checkbox
@@ -1170,7 +1199,12 @@ export default function DoctorRosterPanel({ initialStaff }: { initialStaff: Staf
                     <TableBody>
                       {summary.map(s => (
                         <TableRow key={s.id}>
-                          <TableCell className="font-medium">{s.name}</TableCell>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-1.5">
+                              {s.name}
+                              <Badge variant={classifyStaff(staffList.find(staff => staff.id === s.id)?.role).variant} className="text-[10px] px-1 py-0 h-4">{classifyStaff(staffList.find(staff => staff.id === s.id)?.role).label}</Badge>
+                            </div>
+                          </TableCell>
                           {allWeeksSorted.map(w => (
                             <TableCell key={w} className="text-center text-xs">
                               {s.weeklyRegular[w] || 0}h{ruleOvertime && s.weeklyOvertime[w] ? <span className="text-rose-600"> +{s.weeklyOvertime[w]}h</span> : ''}

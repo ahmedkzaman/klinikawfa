@@ -24,6 +24,7 @@ interface StaffMember {
   id: string;
   name: string;
   position: string;
+  role?: string; // app_role from user_roles (doctor_admin, resident_doctor, locum, etc.)
 }
 
 interface RosterCell {
@@ -1452,15 +1453,29 @@ export default function Roster() {
 
   useEffect(() => {
     const fetchProfiles = async () => {
-      const { data } = await supabase
+      const { data, error: profileError } = await supabase
         .from('profiles')
         .select('id, full_name, position')
         .not('position', 'is', null);
-      if (data) {
-        const all = data.map(p => ({ id: p.id, name: p.full_name || 'Unknown', position: p.position || '' }));
-        setDoctorStaff(all.filter(s => DOCTOR_POSITIONS.includes(s.position)));
-        setSupportStaff(all.filter(s => SUPPORT_POSITIONS.includes(s.position)));
-      }
+      if (profileError || !data) return;
+      // Fetch real roles from user_roles to classify each doctor
+      const { data: roles } = await supabase
+        .from('user_roles')
+        .select('user_id, role');
+      const roleMap: Record<string, string> = {};
+      (roles || []).forEach((r: { user_id: string; role: string }) => {
+        if (!roleMap[r.user_id] || r.role === 'doctor_admin' || r.role === 'resident_doctor') {
+          roleMap[r.user_id] = r.role;
+        }
+      });
+      const all = data.map(p => ({
+        id: p.id,
+        name: p.full_name || 'Unknown',
+        position: p.position || '',
+        role: roleMap[p.id] || 'locum', // default: not doctor_admin/resident_doctor → locum
+      }));
+      setDoctorStaff(all.filter(s => DOCTOR_POSITIONS.includes(s.position)));
+      setSupportStaff(all.filter(s => SUPPORT_POSITIONS.includes(s.position)));
     };
     fetchProfiles();
   }, []);
