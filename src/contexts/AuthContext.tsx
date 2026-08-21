@@ -259,7 +259,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
     );
 
-    const refreshDashboardAccess = () => {
+    // Explicit clinic-permission change (e.g. an admin edited this user's
+    // access): fail closed — reset access state so guarded routes block until
+    // the authoritative refresh completes.
+    const refreshAfterPermissionChange = () => {
       const currentUserId = currentUserIdRef.current;
       if (currentUserId) {
         const generation = ++accessGenerationRef.current;
@@ -270,15 +273,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         void fetchManagementDashboardAccess(currentUserId, generation);
       }
     };
+
+    // Returning to the tab: re-fetch access in the background but keep the
+    // last-known state mounted. Resetting the loading flags here makes
+    // ClinicProtectedRoute unmount the active page behind a full-screen
+    // spinner every time the user switches back to this tab — which looks
+    // exactly like a page reload.
+    const refreshDashboardAccess = () => {
+      const currentUserId = currentUserIdRef.current;
+      if (currentUserId) {
+        const generation = ++accessGenerationRef.current;
+        clearInsightQueries();
+        void fetchUserRole(currentUserId, generation);
+        void fetchInsightAccess(currentUserId, generation);
+        void fetchManagementDashboardAccess(currentUserId, generation);
+      }
+    };
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') refreshDashboardAccess();
     };
-    window.addEventListener('clinic-permissions-changed', refreshDashboardAccess);
+    window.addEventListener('clinic-permissions-changed', refreshAfterPermissionChange);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       subscription.unsubscribe();
-      window.removeEventListener('clinic-permissions-changed', refreshDashboardAccess);
+      window.removeEventListener('clinic-permissions-changed', refreshAfterPermissionChange);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [clearInsightQueries, fetchInsightAccess, fetchManagementDashboardAccess, fetchUserRole, queryClient, resetIdentityAccess]);
