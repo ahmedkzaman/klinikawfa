@@ -188,7 +188,7 @@ describe("consent-aware Google tag loader", () => {
     ]);
   });
 
-  it("dispatches Ads conversions with only the fixed event and send_to label", () => {
+  it("dispatches Ads conversions and mirrors them to GA4", () => {
     googleTag.initializeGoogleTag(validConfig);
     googleTag.updateGoogleConsent("granted");
 
@@ -204,11 +204,14 @@ describe("consent-aware Google tag loader", () => {
       ([command, event]) => command === "event" && event !== "page_view",
     );
     expect(conversions).toEqual([
+      // Canonical Ads conversion hit
       [
         "event",
-        "contact_click",
+        "conversion",
         { send_to: "AW-123456789/ContactLabel_123" },
       ],
+      // GA4 mirror under the descriptive event name
+      ["event", "contact_click", { send_to: "G-ABC123DEF4" }],
     ]);
     expect(Object.keys(conversions[0][2] as object)).toEqual(["send_to"]);
   });
@@ -247,6 +250,60 @@ describe("consent-aware Google tag loader", () => {
       "trackGoogleConversion",
       "trackGooglePageView",
       "updateGoogleConsent",
+    ]);
+  });
+
+  it("recovers when a stale tag with a different measurement ID is present", () => {
+    googleTag.initializeGoogleTag(validConfig);
+    googleTag.updateGoogleConsent("granted");
+
+    // Simulate a leftover tag from a previous configuration (e.g. after an ID
+    // change without a full page reload).
+    const stale = document.createElement("script");
+    stale.id = "klinik-awfa-google-tag";
+    stale.src = "https://www.googletagmanager.com/gtag/js?id=G-OLDID0000";
+    document.head.appendChild(stale);
+
+    const changed: GoogleTrackingConfig = {
+      ...validConfig,
+      measurementId: "G-NEWID0000X",
+    };
+    googleTag.initializeGoogleTag(changed);
+    googleTag.trackGooglePageView("/services");
+
+    const sources = scripts().map((script) => script.src);
+    expect(sources).toEqual([
+      "https://www.googletagmanager.com/gtag/js?id=G-NEWID0000X",
+    ]);
+    expect(
+      dataLayerCommands().filter(
+        ([command, event]) => command === "event" && event === "page_view",
+      ),
+    ).toEqual([
+      ["event", "page_view", { page_path: "/services", send_to: "G-NEWID0000X" }],
+    ]);
+  });
+
+  it("keeps tracking after settings change mid-session instead of permanently disabling", () => {
+    googleTag.initializeGoogleTag(validConfig);
+    googleTag.updateGoogleConsent("granted");
+
+    const changed: GoogleTrackingConfig = {
+      ...validConfig,
+      adsConversionLabels: {
+        ...validConfig.adsConversionLabels,
+        phone_click: "NewPhoneLabel_9",
+      },
+    };
+    googleTag.initializeGoogleTag(changed);
+    googleTag.trackGoogleConversion("phone_click", "/services");
+
+    const conversions = dataLayerCommands().filter(
+      ([command, event]) => command === "event" && event !== "page_view",
+    );
+    expect(conversions).toEqual([
+      ["event", "conversion", { send_to: "AW-123456789/NewPhoneLabel_9" }],
+      ["event", "phone_click", { send_to: "G-ABC123DEF4" }],
     ]);
   });
 });

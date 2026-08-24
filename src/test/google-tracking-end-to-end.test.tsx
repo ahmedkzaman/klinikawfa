@@ -70,14 +70,14 @@ describe("Google tracking end-to-end safety gate", () => {
     ]);
   });
 
-  it("loads one tag after acceptance and sends only sanitized public signals", () => {
+  it("loads one tag after acceptance and sends sanitized public signals to both destinations", () => {
     googleTag.initializeGoogleTag(config);
     googleTag.updateGoogleConsent("granted");
     googleTag.trackGooglePageView("/services");
     googleTag.trackGooglePageView("/services");
     googleTag.trackGooglePageView("/services?fixture=1" as "/services");
     googleTag.trackGoogleConversion("phone_click", "/services");
-    googleTag.trackGoogleConversion("contact_click", "/appointment" as "/services");
+    googleTag.trackGoogleConversion("contact_click", "/not-a-route" as "/services");
 
     expect(googleScripts()).toHaveLength(1);
     expect(scriptRequests).toEqual([
@@ -92,7 +92,10 @@ describe("Google tracking end-to-end safety gate", () => {
       commands().filter(
         ([command, event]) => command === "event" && event !== "page_view",
       ),
-    ).toEqual([["event", "phone_click", { send_to: "AW-123456789/PhoneLabel_123" }]]);
+    ).toEqual([
+      ["event", "conversion", { send_to: "AW-123456789/PhoneLabel_123" }],
+      ["event", "phone_click", { send_to: "G-ABC123DEF4" }],
+    ]);
     expect(Object.keys(commands().at(-1)?.[2] as object)).toEqual(["send_to"]);
   });
 

@@ -14,7 +14,14 @@ import {
 const PUBLIC_PATHS = [
   "/",
   "/services",
+  "/services/rawatan-telinga-kuantan",
+  "/services/minor-surgery-kutil-kuantan",
+  "/services/swab-test-demam-kuantan",
+  "/services/pengurusan-berat-badan-kuantan",
+  "/services/sunat-kuantan",
   "/doctors",
+  "/doctor-on-duty",
+  "/appointment",
   "/gallery",
   "/health-tips",
   "/privacy",
@@ -26,7 +33,7 @@ function location(pathname: string, search = "", hash = "") {
 }
 
 describe("Google route policy", () => {
-  it("allows only the seven exact public pathnames", () => {
+  it("allows the public pathnames including ads landing pages and appointment", () => {
     for (const pathname of PUBLIC_PATHS) {
       expect(isGooglePageViewAllowed(location(pathname))).toBe(true);
       expect(getSanitizedGooglePageView(location(pathname))).toEqual({ pathname });
@@ -53,22 +60,40 @@ describe("Google route policy", () => {
     }
   });
 
-  it("denies details, dynamic pages, and doctor-on-duty", () => {
-    for (const pathname of [
-      "/services/fever",
-      "/health-tips/diabetes",
-      "/pages/privacy",
-      "/pages/terms",
-      "/doctor-on-duty",
+  it("allows ad-click query parameters but denies everything else", () => {
+    // Google Ads auto-tagging: every paid click lands with gclid — tracking
+    // must survive this or 100% of ad traffic is invisible.
+    for (const search of [
+      "?gclid=EAIaIQobChM",
+      "?wbraid=abc",
+      "?gbraid=abc",
+      "?utm_source=google&utm_medium=cpc&utm_campaign=Sunat",
+      "?gclid=EAIaIQobChM&ref=ads",
     ]) {
-      expect(isGooglePageViewAllowed(location(pathname))).toBe(false);
+      expect(isGooglePageViewAllowed(location("/services", search))).toBe(true);
+      expect(getSanitizedGooglePageView(location("/services", search))).toEqual({
+        pathname: "/services",
+      });
+    }
+
+    for (const [search, hash] of [
+      ["?patient=123", ""],
+      ["?symptom=fever", ""],
+      ["?unknown=1", ""],
+      ["?", ""],
+      ["?gclid=<script>", ""],
+      ["?gclid=" + "a".repeat(200), ""],
+      ["", "#contact"],
+      ["", "#"],
+      ["?patient=123", "#appointment"],
+    ] as const) {
+      expect(isGooglePageViewAllowed(location("/services", search, hash))).toBe(false);
+      expect(getSanitizedGooglePageView(location("/services", search, hash))).toBeNull();
     }
   });
 
-  it("denies appointment, auth, staff, clinic, editor, payment, callback, and unknown routes", () => {
+  it("denies protected routes and unknown routes", () => {
     for (const pathname of [
-      "/appointment",
-      "/appointment/confirmation",
       "/auth",
       "/auth/callback",
       "/reset-password",
@@ -89,16 +114,14 @@ describe("Google route policy", () => {
     }
   });
 
-  it("denies every non-empty query string or fragment", () => {
-    for (const [search, hash] of [
-      ["?utm_source=private", ""],
-      ["?", ""],
-      ["", "#contact"],
-      ["", "#"],
-      ["?patient=123", "#appointment"],
+  it("denies dynamic detail pages that are not fixed public slugs", () => {
+    for (const pathname of [
+      "/services/fever",
+      "/health-tips/diabetes",
+      "/pages/privacy",
+      "/pages/terms",
     ]) {
-      expect(isGooglePageViewAllowed(location("/services", search, hash))).toBe(false);
-      expect(getSanitizedGooglePageView(location("/services", search, hash))).toBeNull();
+      expect(isGooglePageViewAllowed(location(pathname))).toBe(false);
     }
   });
 
@@ -140,18 +163,23 @@ describe("Google conversion policy", () => {
     ]);
   });
 
-  it("allows fixed contact-intent conversions only on allowed clean public routes", () => {
+  it("allows fixed contact-intent conversions on allowed public routes", () => {
     for (const event of GOOGLE_CONVERSION_EVENT_NAMES) {
       expect(isGoogleConversionAllowed(event, location("/PRIVACY/"))).toBe(true);
       expect(getSanitizedGoogleConversion(event, location("/PRIVACY/"))).toEqual({
         event,
         pathname: "/privacy",
       });
-      expect(isGoogleConversionAllowed(event, location("/appointment"))).toBe(false);
+      // Ad landing pages with gclid still record conversions.
+      expect(
+        isGoogleConversionAllowed(event, location("/services/sunat-kuantan", "?gclid=abc")),
+      ).toBe(true);
       expect(isGoogleConversionAllowed(event, location("/privacy", "?patient=123"))).toBe(
         false,
       );
-      expect(isGoogleConversionAllowed(event, location("/privacy", "", "#form"))).toBe(false);
+      expect(isGoogleConversionAllowed(event, location("/privacy", "", "#form"))).toBe(
+        false,
+      );
     }
   });
 

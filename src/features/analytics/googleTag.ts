@@ -122,7 +122,7 @@ function configsMatch(
 }
 
 function injectGoogleTag(measurementId: string): boolean {
-  if (!hasBrowserGlobals() || scriptFailed) return false;
+  if (!hasBrowserGlobals()) return false;
 
   const src = `${GOOGLE_TAG_ORIGIN}/gtag/js?id=${measurementId}`;
   const existing = document.getElementById(GOOGLE_TAG_SCRIPT_ID);
@@ -131,11 +131,13 @@ function injectGoogleTag(measurementId: string): boolean {
       scriptInjected = true;
       return true;
     }
-    scriptFailed = true;
-    return false;
+    // A stale tag with a different src exists. Remove it so the correct one
+    // can load; do NOT latch a permanent failure for a recoverable state.
+    existing.remove();
+    scriptInjected = false;
   }
 
-  if (scriptInjected) return true;
+  if (scriptFailed) return false;
 
   const script = document.createElement("script");
   script.id = GOOGLE_TAG_SCRIPT_ID;
@@ -151,9 +153,9 @@ function injectGoogleTag(measurementId: string): boolean {
     { once: true },
   );
 
-  scriptInjected = true;
   try {
     document.head.appendChild(script);
+    scriptInjected = true;
     return true;
   } catch {
     scriptFailed = true;
@@ -204,8 +206,16 @@ export function initializeGoogleTag(config: GoogleTrackingConfig): void {
   }
 
   if (activeConfig && !configsMatch(activeConfig, validated)) {
-    disableGoogleTracking();
-    return;
+    // Settings changed mid-session (e.g. an editor updated a label). Re-configure
+    // with the new identifiers instead of permanently killing tracking: remove
+    // the stale script tag so injectGoogleTag() can load the correct one.
+    configured = false;
+    scriptFailed = false;
+    lastPageView = null;
+    activeConfig = null;
+    const existing = document.getElementById(GOOGLE_TAG_SCRIPT_ID);
+    if (existing) existing.remove();
+    scriptInjected = false;
   }
 
   activeConfig = validated;
@@ -265,14 +275,26 @@ export function trackGoogleConversion(
   });
   if (!sanitized) return;
 
+  // Google Ads conversion hit. Google's documented gtag snippet for Ads
+  // conversions is gtag('event', 'conversion', { send_to: 'AW-XXXX/label' }) —
+  // the fixed 'conversion' event name with the label routing is what Ads
+  // reliably records. Custom event names are not guaranteed to register.
+  queueCommand([
+    "event",
+    "conversion",
+    Object.freeze({
+      send_to: `${activeConfig.adsConversionId}/${activeConfig.adsConversionLabels[sanitized.event]}`,
+    }),
+  ]);
+
+  // GA4 mirror under the descriptive event name, restricted to the GA4
+  // property. In GA4 the event can be marked as a key event and joined with
+  // session source/medium — this is what makes "conversions by google / cpc"
+  // reporting possible. It carries no label, so Ads never double-counts it.
   queueCommand([
     "event",
     sanitized.event,
-    Object.freeze({
-      send_to: `${activeConfig.adsConversionId}/${
-        activeConfig.adsConversionLabels[sanitized.event]
-      }`,
-    }),
+    Object.freeze({ send_to: activeConfig.measurementId }),
   ]);
 }
 
