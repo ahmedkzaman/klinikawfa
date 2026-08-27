@@ -6431,6 +6431,10 @@ export type Database = {
       }
     }
     Functions: {
+      search_patients: {
+        Args: { p_limit?: number; p_search?: string | null }
+        Returns: Database["public"]["Tables"]["patients"]["Row"][]
+      }
       can_correct_completed_bill: {
         Args: { _user_id: string }
         Returns: boolean

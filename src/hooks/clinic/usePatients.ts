@@ -7,29 +7,22 @@ import type { Database } from '@/integrations/supabase/types';
 type PatientUpdate = Database['public']['Tables']['patients']['Update'];
 
 /**
- * Patients lookup. Empty search → 50 most recent.
- * Non-empty search → ilike across name / phone / national_id.
+ * Patient Explorer lookup. Empty search → 50 most recent.
+ * Non-empty search → demographics plus diagnosis and medication names.
+ * Medication matching deliberately ignores dose, strength, frequency,
+ * formulation, and route; the medicine name alone is sufficient.
  */
 export function usePatients(search?: string) {
   const trimmed = search?.trim() ?? '';
 
   return useQuery<PatientRow[]>({
-    queryKey: ['clinic', 'patients', trimmed],
+    queryKey: ['clinic', 'patients', 'explorer', trimmed],
     queryFn: async () => {
-      let query = supabase
-        .from('patients')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(50);
+      const { data, error } = await supabase.rpc('search_patients', {
+        p_search: trimmed || null,
+        p_limit: 50,
+      });
 
-      if (trimmed.length > 0) {
-        const escaped = trimmed.replace(/[%_]/g, (m) => `\\${m}`);
-        query = query.or(
-          `name.ilike.%${escaped}%,phone.ilike.%${escaped}%,national_id.ilike.%${escaped}%`,
-        );
-      }
-
-      const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
     },

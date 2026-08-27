@@ -67,9 +67,9 @@ export default function PatientsList() {
           {/* Header bar */}
           <div className={cn(bento, 'p-4 flex items-center justify-between gap-3 flex-wrap')}>
             <div>
-              <h1 className="text-2xl font-semibold text-slate-800">Patients</h1>
+              <h1 className="text-2xl font-semibold text-slate-800">Patient Explorer</h1>
               <p className="text-sm text-slate-500 mt-0.5">
-                Search the registry or register a new patient.
+                Find patients by demographics, diagnosis, or medicine name.
               </p>
             </div>
             <Button onClick={() => setRegisterOpen(true)} className={primaryBtn}>
@@ -82,7 +82,7 @@ export default function PatientsList() {
             <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="Search name, phone, or MyKad…"
+                placeholder="Search name, MyKad, diagnosis, or medicine…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className={cn(softInput, 'pl-9')}
