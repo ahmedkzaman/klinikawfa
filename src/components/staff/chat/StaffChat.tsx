@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Hash, MessageSquare, Send, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -103,6 +103,14 @@ export function StaffChat() {
   const activeChatRef = useRef<ActiveChat>(activeChat);
   const myIdRef = useRef<string | null>(null);
   const initialLoadedRef = useRef(false);
+  // Presence must not depend on displayName: it loads asynchronously, and a
+  // dep flip here tears down + rebuilds the presence channel seconds after
+  // mount (leave/join storm visible to everyone else). Track via ref instead.
+  const displayNameRef = useRef<string>('Staff');
+  const presenceRoomRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const presenceSubscribedRef = useRef(false);
+  // Resolved names for DM peers seen in history who are not currently online.
+  const [peerNames, setPeerNames] = useState<Record<string, string | null>>({});
 
   const myId = user?.id ?? null;
   const eligible = !!myId && !!role && role !== 'guest';
@@ -122,6 +130,7 @@ export function StaffChat() {
   useEffect(() => { openRef.current = open; }, [open]);
   useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
   useEffect(() => { myIdRef.current = myId; }, [myId]);
+  useEffect(() => { displayNameRef.current = displayName; }, [displayName]);
 
   // Browsers allow notification audio after the first user gesture.
   useEffect(() => {
@@ -180,26 +189,33 @@ export function StaffChat() {
     };
   }, [myId, user?.email]);
 
+  // History loader — separate from mount so it can be re-run whenever the
+  // sheet is opened. Realtime alone is not enough: if the tab slept or the
+  // socket dropped, INSERT events are lost forever and messages "disappear".
+  const loadHistory = useCallback(async () => {
+    if (!myIdRef.current) return;
+    try {
+      const { data, error } = await supabase
+        .from('staff_messages')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(PAGE_SIZE);
+      if (error) {
+        console.error('Failed to load staff messages', error);
+        return;
+      }
+      setMessages(((data ?? []) as StaffMessage[]).slice().reverse());
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // History + realtime subscription
   useEffect(() => {
     if (!eligible) return;
     let cancelled = false;
     setLoading(true);
-    supabase
-      .from('staff_messages')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(PAGE_SIZE)
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) {
-          console.error('Failed to load staff messages', error);
-          setLoading(false);
-          return;
-        }
-        setMessages(((data ?? []) as StaffMessage[]).slice().reverse());
-        setLoading(false);
-      });
+    void loadHistory();
 
     const channel = supabase
       .channel(CHAT_CHANNEL)
@@ -220,13 +236,18 @@ export function StaffChat() {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        // After any reconnect (sleep/wake, network switch), pull fresh history.
+        // Realtime INSERT streams are not replayed by the server, so anything
+        // sent while offline would otherwise never appear until a full reload.
+        if (!cancelled && status === 'SUBSCRIBED') void loadHistory();
+      });
 
     return () => {
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [eligible]);
+  }, [eligible, loadHistory]);
 
   // Presence
   useEffect(() => {
@@ -234,6 +255,8 @@ export function StaffChat() {
     const room = supabase.channel(PRESENCE_CHANNEL, {
       config: { presence: { key: myId } },
     });
+    presenceRoomRef.current = room;
+    presenceSubscribedRef.current = false;
 
     const compute = () => {
       const state = room.presenceState<OnlineUser>();
@@ -255,21 +278,98 @@ export function StaffChat() {
       .on('presence', { event: 'sync' }, compute)
       .on('presence', { event: 'join' }, compute)
       .on('presence', { event: 'leave' }, compute)
-      .subscribe(async (status) => {
+      .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-          await room.track({
+          presenceSubscribedRef.current = true;
+          void room.track({
             user_id: myId,
-            name: displayName,
+            name: displayNameRef.current || 'Staff',
             online_at: new Date().toISOString(),
-          } satisfies OnlineUser);
+          });
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          presenceSubscribedRef.current = false;
         }
       });
 
     return () => {
+      presenceRoomRef.current = null;
+      presenceSubscribedRef.current = false;
       room.untrack().catch(() => {});
       supabase.removeChannel(room);
     };
+  }, [eligible, myId]);
+
+  // Re-track with the real display name once the profile loads (initial
+  // track happens with the placeholder 'Staff').
+  useEffect(() => {
+    if (!eligible || !myId || !displayName || displayName === 'Staff') return;
+    const room = presenceRoomRef.current;
+    if (!room || !presenceSubscribedRef.current) return;
+    room
+      .track({
+        user_id: myId,
+        name: displayName,
+        online_at: new Date().toISOString(),
+      })
+      .catch(() => {});
   }, [eligible, myId, displayName]);
+
+  const onlineUserIds = useMemo(
+    () => new Set(onlineUsers.map((u) => u.user_id)),
+    [onlineUsers]
+  );
+
+  // Refetch history whenever the sheet is opened. If the tab slept while the
+  // sheet was closed, realtime INSERTs were missed; opening should reconcile.
+  useEffect(() => {
+    if (open) void loadHistory();
+  }, [open, loadHistory]);
+
+  // Refetch history when the user returns to this tab. Background tabs get
+  // their timers throttled and their sockets silently killed by the browser;
+  // the realtime SUBSCRIBED refetch only fires once the socket actually
+  // reconnects, so an immediate query on visibility closes the gap.
+  useEffect(() => {
+    if (!eligible) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void loadHistory();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [eligible, loadHistory]);
+
+  // Resolve display names for DM peers seen in history but not currently
+  // online, so the sidebar can still list the conversation. The sidebar
+  // otherwise only shows online users, making offline DM threads invisible.
+  useEffect(() => {
+    if (!myId) return;
+    const ids = new Set<string>();
+    for (const m of messages) {
+      const peerId = m.sender_id === myId ? m.receiver_id : m.sender_id;
+      if (peerId && !onlineUserIds.has(peerId) && !(peerId in peerNames)) {
+        ids.add(peerId);
+      }
+    }
+    if (ids.size === 0) return;
+    let cancelled = false;
+    supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', [...ids])
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        setPeerNames((prev) => {
+          const next = { ...prev };
+          for (const row of data) {
+            next[row.id] = row.full_name || row.email || null;
+          }
+          return next;
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, myId, onlineUserIds, peerNames]);
 
   // Filtered messages for the active chat
   const visibleMessages = useMemo(() => {
@@ -345,13 +445,32 @@ export function StaffChat() {
     [onlineUsers, myId]
   );
 
+  // DM conversations from history with users who are not currently online.
+  const offlinePeers = useMemo(() => {
+    if (!myId) return [];
+    const map = new Map<string, { user_id: string; name: string; online: false }>();
+    for (const m of messages) {
+      if (m.receiver_id === null) continue;
+      const peerId = m.sender_id === myId ? m.receiver_id : m.sender_id;
+      if (peerId === myId || map.has(peerId) || onlineUserIds.has(peerId)) continue;
+      const name = peerNames[peerId] ?? m.sender_name;
+      map.set(peerId, { user_id: peerId, name, online: false });
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [messages, myId, onlineUserIds, peerNames]);
+
   const activePeer =
-    activeChat === 'global' ? null : peers.find((p) => p.user_id === activeChat) ?? null;
+    activeChat === 'global'
+      ? null
+      : peers.find((p) => p.user_id === activeChat) ??
+        offlinePeers.find((p) => p.user_id === activeChat) ??
+        null;
   const activePeerName =
     activeChat === 'global'
       ? 'Global Room'
       : activePeer?.name ??
         messages.find((m) => m.sender_id === activeChat)?.sender_name ??
+        peerNames[activeChat] ??
         'Direct message';
 
   if (!eligible) return null;
@@ -434,39 +553,74 @@ export function StaffChat() {
                   Online
                 </div>
 
-                {peers.length === 0 ? (
+                {peers.length === 0 && offlinePeers.length === 0 ? (
                   <div className="px-2 py-2 text-xs text-muted-foreground">
                     No one else online.
                   </div>
                 ) : (
-                  peers.map((u) => {
-                    const isActive = activeChat === u.user_id;
-                    const unread = unreadByPeer[u.user_id] ?? 0;
-                    return (
-                      <button
-                        key={u.user_id}
-                        type="button"
-                        onClick={() => setActiveChat(u.user_id)}
-                        className={cn(
-                          'w-full flex items-center gap-2 px-2 py-2 rounded-md text-sm text-left transition-colors',
-                          isActive
-                            ? 'bg-primary text-primary-foreground'
-                            : 'hover:bg-muted'
-                        )}
-                      >
-                        <span className="relative flex h-2 w-2 shrink-0">
-                          <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
-                          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                        </span>
-                        <span className="flex-1 truncate">{u.name}</span>
-                        {unread > 0 && (
-                          <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold flex items-center justify-center">
-                            {unread}
+                  <>
+                    {peers.map((u) => {
+                      const isActive = activeChat === u.user_id;
+                      const unread = unreadByPeer[u.user_id] ?? 0;
+                      return (
+                        <button
+                          key={u.user_id}
+                          type="button"
+                          onClick={() => setActiveChat(u.user_id)}
+                          className={cn(
+                            'w-full flex items-center gap-2 px-2 py-2 rounded-md text-sm text-left transition-colors',
+                            isActive
+                              ? 'bg-primary text-primary-foreground'
+                              : 'hover:bg-muted'
+                          )}
+                        >
+                          <span className="relative flex h-2 w-2 shrink-0">
+                            <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+                            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
                           </span>
-                        )}
-                      </button>
-                    );
-                  })
+                          <span className="flex-1 truncate">{u.name}</span>
+                          {unread > 0 && (
+                            <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold flex items-center justify-center">
+                              {unread}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                    {offlinePeers.length > 0 && (
+                      <>
+                        <div className="flex items-center gap-1.5 px-2 pt-3 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                          <MessageSquare className="h-3 w-3" />
+                          Offline
+                        </div>
+                        {offlinePeers.map((u) => {
+                          const isActive = activeChat === u.user_id;
+                          const unread = unreadByPeer[u.user_id] ?? 0;
+                          return (
+                            <button
+                              key={u.user_id}
+                              type="button"
+                              onClick={() => setActiveChat(u.user_id)}
+                              className={cn(
+                                'w-full flex items-center gap-2 px-2 py-2 rounded-md text-sm text-left transition-colors',
+                                isActive
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'hover:bg-muted'
+                              )}
+                            >
+                              <span className="h-2 w-2 shrink-0 rounded-full bg-muted-foreground/40" />
+                              <span className="flex-1 truncate">{u.name}</span>
+                              {unread > 0 && (
+                                <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold flex items-center justify-center">
+                                  {unread}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </>
+                    )}
+                  </>
                 )}
               </div>
             </ScrollArea>

@@ -29,9 +29,14 @@ const historyQuery = {
 const profileQuery = {
   select: vi.fn(() => profileQuery),
   eq: vi.fn(() => profileQuery),
+  in: vi.fn(() => profileQuery),
   maybeSingle: vi.fn(async () => ({
     data: { full_name: 'Dr Awfa', email: 'doctor@klinikawfa.com' },
   })),
+  then: vi.fn(
+    (resolve: (value: { data: unknown[] | null }) => unknown) =>
+      Promise.resolve({ data: [] }).then(resolve),
+  ),
 };
 
 let realtimeInsertHandler: ((payload: { new: typeof insertedMessage }) => void) | null = null;
@@ -134,4 +139,77 @@ describe('StaffChat sending', () => {
 
     expect(oscillatorStart).toHaveBeenCalledTimes(3);
   });
+
+  it('refetches message history when the sheet is opened', async () => {
+    render(<StaffChat />);
+
+    fireEvent.click(screen.getByRole('button', { name: /open staff chat/i }));
+    await screen.findByPlaceholderText(/message everyone/i);
+
+    // Initial mount + realtime SUBSCRIBED both load history; the sheet being
+    // opened must trigger one more fetch.
+    const before = (historyQuery.limit as Mock).mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: /close/i }));
+    await waitFor(() =>
+      expect(screen.queryByPlaceholderText(/message everyone/i)).not.toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /open staff chat/i }));
+    await screen.findByPlaceholderText(/message everyone/i);
+    await waitFor(() =>
+      expect((historyQuery.limit as Mock).mock.calls.length).toBeGreaterThan(before),
+    );
+  });
+
+  it('lists an offline DM peer from history so their thread stays reachable', async () => {
+    // History contains a DM with a peer who is not in presence state.
+    // Persistent implementation: history is refetched on mount, on
+    // SUBSCRIBED, and on sheet open — all of them must keep returning it.
+    const dmMessage = {
+      id: 'dm-1',
+      sender_id: 'user-1',
+      sender_name: 'Dr Awfa',
+      receiver_id: 'user-2',
+      content: 'please register pt tu',
+      created_at: '2026-08-27T02:25:44.285912+00:00',
+    };
+    (historyQuery.limit as Mock).mockImplementation(async () => ({
+      data: [dmMessage],
+      error: null,
+    }));
+    (profileQuery.then as Mock).mockImplementation(
+      (resolve: (value: { data: unknown[] }) => unknown) =>
+        Promise.resolve({
+          data: [
+            {
+              id: 'user-2',
+              full_name: 'MUHAMMAD SHAHRUL AIMAN BIN SHAHRIZALLUDDIN',
+              email: 'shahrul@klinikawfa.com',
+            },
+          ],
+        }).then(resolve),
+    );
+
+    try {
+      render(<StaffChat />);
+      fireEvent.click(screen.getByRole('button', { name: /open staff chat/i }));
+
+      const peerButton = await screen.findByRole('button', {
+        name: /muhammad shahrul/i,
+      });
+      fireEvent.click(peerButton);
+      await screen.findByText('please register pt tu');
+    } finally {
+      (historyQuery.limit as Mock).mockImplementation(async () => ({
+        data: [],
+        error: null,
+      }));
+      (profileQuery.then as Mock).mockImplementation(
+        (resolve: (value: { data: unknown[] | null }) => unknown) =>
+          Promise.resolve({ data: [] }).then(resolve),
+      );
+    }
+  });
 });
+
+type Mock = ReturnType<typeof vi.fn>;
+
