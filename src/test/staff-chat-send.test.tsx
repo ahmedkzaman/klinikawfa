@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const insertedMessage = {
@@ -46,8 +46,12 @@ const channel = {
     if (event === 'postgres_changes' && callback) realtimeInsertHandler = callback;
     return channel;
   }),
+  // The real client acks SUBSCRIBED asynchronously off the websocket. A
+  // synchronous callback here welds the ack onto the channel-acquire
+  // microtask, which (with sync promise mocks) cascades state updates that
+  // starve even setTimeout — the exact storm this suite used to die of.
   subscribe: vi.fn((callback?: (status: string) => void) => {
-    callback?.('SUBSCRIBED');
+    if (callback) setTimeout(() => callback('SUBSCRIBED'), 0);
     return channel;
   }),
   track: vi.fn(async () => undefined),
@@ -72,7 +76,7 @@ vi.mock('@/integrations/supabase/client', () => ({
       throw new Error(`Unexpected table: ${table}`);
     }),
     channel: vi.fn(() => channel),
-    removeChannel: vi.fn(),
+    removeChannel: vi.fn(() => Promise.resolve('ok')),
   },
 }));
 
@@ -83,6 +87,11 @@ describe('StaffChat sending', () => {
     vi.clearAllMocks();
     realtimeInsertHandler = null;
     Element.prototype.scrollIntoView = vi.fn();
+  });
+  afterEach(async () => {
+    // Drain pending microtasks and timers so channel-op promises resolve
+    // inside the test boundary rather than after worker teardown.
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
   it('shows a successfully saved message without waiting for a realtime echo', async () => {
@@ -158,6 +167,123 @@ describe('StaffChat sending', () => {
     await waitFor(() =>
       expect((historyQuery.limit as Mock).mock.calls.length).toBeGreaterThan(before),
     );
+  });
+
+  it('survives a remount (channel lifecycle race) and still delivers a realtime insert', async () => {
+    // Regression: supabase.channel(topic) returns the existing instance while
+    // a previous copy is mid-teardown, and subscribe() on a not-yet-closed
+    // channel is silently ignored. StaffChat serializes create/dispose per
+    // topic; a fast unmount→remount (staff/clinic portal switch) must still
+    // deliver messages on the fresh subscription.
+    const { unmount } = render(<StaffChat />);
+    // Let the first mount finish acquiring its channels before tearing down,
+    // mirroring a real (fast) portal switch rather than a hypothetical
+    // mid-microtask cancel that jsdom teardown cannot model safely.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    unmount();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    render(<StaffChat />);
+    fireEvent.click(screen.getByRole('button', { name: /open staff chat/i }));
+    await waitFor(() => expect(realtimeInsertHandler).not.toBeNull());
+
+    realtimeInsertHandler?.({
+      new: {
+        ...insertedMessage,
+        id: 'remount-1',
+        sender_id: 'user-2',
+        sender_name: 'Nurse Awfa',
+        content: 'after remount',
+      },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText('after remount')).toBeInTheDocument(),
+    );
+  });
+
+  it('re-tracks presence after a socket reconnect', async () => {
+    // Regression: after a CHANNEL_ERROR→SUBSCRIBED cycle, the server has
+    // discarded our presence metadata. Without re-tracking on every
+    // SUBSCRIBED (not just the first), the user stays invisible to everyone
+    // else even though they can see others — the original symptom.
+    render(<StaffChat />);
+    await waitFor(() => expect(channel.subscribe).toHaveBeenCalled());
+    // Let the display-name profile lookup settle too — it also re-tracks once
+    // when the real name arrives, so compare against a delta, not an absolute.
+    await waitFor(() =>
+      expect(
+        (channel.track as Mock).mock.calls.some((call) =>
+          (call[0] as { name?: string }).name === 'Dr Awfa',
+        ),
+      ).toBe(true),
+    );
+
+    const subscribeCb = (channel.subscribe as Mock).mock.calls.at(-1)?.[0];
+    expect(subscribeCb).toBeTypeOf('function');
+    const before = (channel.track as Mock).mock.calls.length;
+
+    // Simulate a socket drop then reconnect
+    subscribeCb('CHANNEL_ERROR');
+    subscribeCb('SUBSCRIBED');
+
+    // Reconnected → track called again (presence re-announced)
+    await waitFor(() =>
+      expect((channel.track as Mock).mock.calls.length).toBeGreaterThan(before),
+    );
+  });
+
+  it('does not re-query profiles repeatedly for an unresolvable DM peer', async () => {
+    // Regression: a DM from a peer with no profile row used to trigger an
+    // infinite query→setState→re-render pump (the lookup gate keyed off the
+    // peerNames object it was merging into, so a merge that changed nothing
+    // still scheduled another effect run). Lookups are now issued at most
+    // once per peer per component lifetime.
+    (profileQuery.then as Mock).mockImplementation(
+      (resolve: (value: { data: unknown[] }) => unknown) =>
+        Promise.resolve({ data: [] }).then(resolve),
+    );
+
+    render(<StaffChat />);
+    fireEvent.click(screen.getByRole('button', { name: /open staff chat/i }));
+
+    await waitFor(() => expect(realtimeInsertHandler).not.toBeNull());
+    // Settle the mount-time + SUBSCRIBED refetches before firing the insert,
+    // so the late history response cannot overwrite the appended message.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    realtimeInsertHandler?.({
+      new: {
+        ...insertedMessage,
+        id: 'dm-unresolved-1',
+        sender_id: 'user-2',
+        sender_name: 'Nurse Awfa',
+        receiver_id: 'user-1',
+        content: 'dm from peer without profile row',
+      },
+    });
+
+    // The peer is offline and has no profile row: they must still show up in
+    // the sidebar (falling back to the message's sender_name) so the thread
+    // stays reachable — open it and confirm the DM renders.
+    const peerButton = await screen.findByRole('button', { name: /nurse awfa/i });
+    fireEvent.click(peerButton);
+    await screen.findByText('dm from peer without profile row');
+
+    // Give any pathological loop a generous window to make itself visible.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const before = (historyQuery.limit as Mock).mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    // The SUBSCRIBED refetch is one-shot per subscription; anything beyond
+    // noise-free here means an effect is still pumping.
+    expect((historyQuery.limit as Mock).mock.calls.length).toBe(before);
   });
 
   it('lists an offline DM peer from history so their thread stays reachable', async () => {

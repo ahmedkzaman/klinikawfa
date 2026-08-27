@@ -31,6 +31,47 @@ const PRESENCE_CHANNEL = 'online-users';
 const PAGE_SIZE = 100;
 let chatAudioContext: AudioContext | null = null;
 
+// --- Channel lifecycle serialization ----------------------------------------
+// supabase.channel(topic) returns the EXISTING instance while a previous copy
+// is still tearing down: removeChannel() only finishes after the server
+// acknowledges the leave, and subscribe() on a not-yet-closed channel is
+// silently ignored. <StaffChat /> remounts whenever the user switches between
+// the staff and clinic portals (both layouts render it), so a fast remount
+// could otherwise latch onto a half-dead channel and lose chat + presence
+// until a full page reload. Serializing create/dispose per topic guarantees
+// every new subscriber starts from a genuinely fresh channel.
+const channelOps = new Map<string, Promise<unknown>>();
+
+function enqueueChannelOp<T>(topic: string, op: () => T): Promise<T> {
+  const previous = channelOps.get(topic) ?? Promise.resolve();
+  const run = previous.then(op, op);
+  channelOps.set(
+    topic,
+    run.catch(() => {
+      // Keep the chain alive regardless of individual operation failures.
+    })
+  );
+  return run;
+}
+
+function acquireChannel(
+  topic: string,
+  config?: Parameters<typeof supabase.channel>[1]
+) {
+  return enqueueChannelOp(topic, () => supabase.channel(topic, config));
+}
+
+function releaseChannel(
+  topic: string,
+  room: ReturnType<typeof supabase.channel>
+) {
+  return enqueueChannelOp(topic, () =>
+    Promise.resolve(supabase.removeChannel(room)).catch(() => {
+      // Best-effort teardown; a failed leave must not stall future mounts.
+    })
+  );
+}
+
 function formatTime(iso: string) {
   try {
     return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -111,6 +152,11 @@ export function StaffChat() {
   const presenceSubscribedRef = useRef(false);
   // Resolved names for DM peers seen in history who are not currently online.
   const [peerNames, setPeerNames] = useState<Record<string, string | null>>({});
+  // Peers whose profile lookup was already issued (or exhausted). Without
+  // this, a lookup that yields no row re-runs forever: the effect would see
+  // "peer still unresolved", query again, and merge an unchanged-but-new
+  // peerNames object each cycle — an invisible CPU spin in production.
+  const peerLookupsRef = useRef<Set<string>>(new Set());
 
   const myId = user?.id ?? null;
   const eligible = !!myId && !!role && role !== 'guest';
@@ -214,12 +260,18 @@ export function StaffChat() {
   useEffect(() => {
     if (!eligible) return;
     let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
     setLoading(true);
     void loadHistory();
 
-    const channel = supabase
-      .channel(CHAT_CHANNEL)
-      .on(
+    void acquireChannel(CHAT_CHANNEL).then((ch) => {
+      if (cancelled) {
+        // Component unmounted while we were waiting for the channel; release it.
+        void releaseChannel(CHAT_CHANNEL, ch);
+        return;
+      }
+      channel = ch;
+      ch.on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'staff_messages' },
         (payload) => {
@@ -235,31 +287,28 @@ export function StaffChat() {
             setUnreadCount((c) => c + 1);
           }
         }
-      )
-      .subscribe((status) => {
+      ).subscribe((status) => {
         // After any reconnect (sleep/wake, network switch), pull fresh history.
         // Realtime INSERT streams are not replayed by the server, so anything
         // sent while offline would otherwise never appear until a full reload.
         if (!cancelled && status === 'SUBSCRIBED') void loadHistory();
       });
+    });
 
     return () => {
       cancelled = true;
-      supabase.removeChannel(channel);
+      if (channel) void releaseChannel(CHAT_CHANNEL, channel);
     };
   }, [eligible, loadHistory]);
 
   // Presence
   useEffect(() => {
     if (!eligible || !myId) return;
-    const room = supabase.channel(PRESENCE_CHANNEL, {
-      config: { presence: { key: myId } },
-    });
-    presenceRoomRef.current = room;
-    presenceSubscribedRef.current = false;
+    let cancelled = false;
+    let room: ReturnType<typeof supabase.channel> | null = null;
 
     const compute = () => {
-      const state = room.presenceState<OnlineUser>();
+      const state = room?.presenceState<OnlineUser>() ?? {};
       const flat: OnlineUser[] = [];
       const seen = new Set<string>();
       for (const arr of Object.values(state)) {
@@ -274,28 +323,47 @@ export function StaffChat() {
       setOnlineUsers(flat);
     };
 
-    room
-      .on('presence', { event: 'sync' }, compute)
-      .on('presence', { event: 'join' }, compute)
-      .on('presence', { event: 'leave' }, compute)
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          presenceSubscribedRef.current = true;
-          void room.track({
-            user_id: myId,
-            name: displayNameRef.current || 'Staff',
-            online_at: new Date().toISOString(),
-          });
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          presenceSubscribedRef.current = false;
-        }
-      });
+    void acquireChannel(PRESENCE_CHANNEL, {
+      config: { presence: { key: myId } },
+    }).then((ch) => {
+      if (cancelled) {
+        void releaseChannel(PRESENCE_CHANNEL, ch);
+        return;
+      }
+      room = ch;
+      presenceRoomRef.current = ch;
+      presenceSubscribedRef.current = false;
+
+      ch
+        .on('presence', { event: 'sync' }, compute)
+        .on('presence', { event: 'join' }, compute)
+        .on('presence', { event: 'leave' }, compute)
+        .subscribe((status) => {
+          // Re-track on EVERY (re)subscribe, not just the first. After a socket
+          // drop the server has discarded our presence metadata; the channel
+          // auto-rejoins, but without re-tracking we stay invisible to everyone
+          // else even though we can see them — which was the original symptom.
+          if (status === 'SUBSCRIBED') {
+            presenceSubscribedRef.current = true;
+            void ch.track({
+              user_id: myId,
+              name: displayNameRef.current || 'Staff',
+              online_at: new Date().toISOString(),
+            });
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            presenceSubscribedRef.current = false;
+          }
+        });
+    });
 
     return () => {
+      cancelled = true;
       presenceRoomRef.current = null;
       presenceSubscribedRef.current = false;
-      room.untrack().catch(() => {});
-      supabase.removeChannel(room);
+      if (room) {
+        room.untrack().catch(() => {});
+        void releaseChannel(PRESENCE_CHANNEL, room);
+      }
     };
   }, [eligible, myId]);
 
@@ -341,35 +409,56 @@ export function StaffChat() {
   // Resolve display names for DM peers seen in history but not currently
   // online, so the sidebar can still list the conversation. The sidebar
   // otherwise only shows online users, making offline DM threads invisible.
+  //
+  // Each peer is looked up AT MOST ONCE per component lifetime: the pending
+  // set is reserved before the request leaves. A merge that produced no
+  // change returns the previous object so its reference stays stable — the
+  // combination prevents an update→re-run→update microtask pump that used to
+  // spin forever whenever a peer's profile row was missing or unreadable.
   useEffect(() => {
     if (!myId) return;
-    const ids = new Set<string>();
+    const ids: string[] = [];
+    const seen = new Set<string>();
     for (const m of messages) {
       const peerId = m.sender_id === myId ? m.receiver_id : m.sender_id;
-      if (peerId && !onlineUserIds.has(peerId) && !(peerId in peerNames)) {
-        ids.add(peerId);
+      if (
+        peerId &&
+        !seen.has(peerId) &&
+        !onlineUserIds.has(peerId) &&
+        !peerLookupsRef.current.has(peerId)
+      ) {
+        seen.add(peerId);
+        ids.push(peerId);
       }
     }
-    if (ids.size === 0) return;
+    if (ids.length === 0) return;
+    for (const id of ids) peerLookupsRef.current.add(id);
     let cancelled = false;
     supabase
       .from('profiles')
       .select('id, full_name, email')
-      .in('id', [...ids])
+      .in('id', ids)
       .then(({ data }) => {
-        if (cancelled || !data) return;
+        if (cancelled) return;
+        const rows = data ?? [];
+        if (rows.length === 0) return;
         setPeerNames((prev) => {
+          let changed = false;
           const next = { ...prev };
-          for (const row of data) {
-            next[row.id] = row.full_name || row.email || null;
+          for (const row of rows) {
+            const name = row.full_name || row.email || null;
+            if (next[row.id] !== name) {
+              next[row.id] = name;
+              changed = true;
+            }
           }
-          return next;
+          return changed ? next : prev;
         });
       });
     return () => {
       cancelled = true;
     };
-  }, [messages, myId, onlineUserIds, peerNames]);
+  }, [messages, myId, onlineUserIds]);
 
   // Filtered messages for the active chat
   const visibleMessages = useMemo(() => {
