@@ -25,6 +25,7 @@ export function POLineItemsTable({ poId, items, readOnly }: Props) {
   const { items: inventory } = useInventoryItems();
   const { addLine, updateLine, removeLine } = usePurchaseOrderItems(poId);
   const [newItemId, setNewItemId] = useState<string>('');
+  const isSaving = addLine.isPending || updateLine.isPending || removeLine.isPending;
 
   const activeInventory = (inventory ?? []).filter(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,8 +54,8 @@ export function POLineItemsTable({ poId, items, readOnly }: Props) {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-md border">
-        <Table>
+      <div className="overflow-x-auto rounded-md border">
+        <Table className="min-w-[640px]">
           <TableHeader>
             <TableRow>
               <TableHead>Item</TableHead>
@@ -86,7 +87,10 @@ export function POLineItemsTable({ poId, items, readOnly }: Props) {
                       onBlur={(e) => {
                         const v = Math.max(1, Number(e.target.value) || 1);
                         if (v !== line.order_qty) {
-                          updateLine.mutate({ id: line.id, order_qty: v });
+                          updateLine.mutate(
+                            { id: line.id, order_qty: v },
+                            { onError: (error) => toast.error(error.message) },
+                          );
                         }
                       }}
                       className="h-8"
@@ -105,7 +109,10 @@ export function POLineItemsTable({ poId, items, readOnly }: Props) {
                       onBlur={(e) => {
                         const v = Math.max(0, Number(e.target.value) || 0);
                         if (v !== Number(line.unit_cost)) {
-                          updateLine.mutate({ id: line.id, unit_cost: v });
+                          updateLine.mutate(
+                            { id: line.id, unit_cost: v },
+                            { onError: (error) => toast.error(error.message) },
+                          );
                         }
                       }}
                       className="h-8"
@@ -120,8 +127,12 @@ export function POLineItemsTable({ poId, items, readOnly }: Props) {
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() => removeLine.mutate(line.id)}
-                      aria-label="Remove line"
+                      onClick={() => removeLine.mutate(
+                        line.id,
+                        { onError: (error) => toast.error(error.message) },
+                      )}
+                      aria-label={`Remove ${line.inventory_item?.name ?? 'line item'}`}
+                      disabled={removeLine.isPending}
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
@@ -134,9 +145,9 @@ export function POLineItemsTable({ poId, items, readOnly }: Props) {
       </div>
 
       {!readOnly && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Select value={newItemId} onValueChange={setNewItemId}>
-            <SelectTrigger className="flex-1">
+            <SelectTrigger className="flex-1" aria-label="Inventory item to add">
               <SelectValue placeholder="Select inventory item to add..." />
             </SelectTrigger>
             <SelectContent>
@@ -154,6 +165,9 @@ export function POLineItemsTable({ poId, items, readOnly }: Props) {
           </Button>
         </div>
       )}
+      <p className="min-h-5 text-xs text-muted-foreground" aria-live="polite">
+        {isSaving ? 'Saving line item changes…' : ''}
+      </p>
     </div>
   );
 }

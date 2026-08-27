@@ -51,7 +51,11 @@ export function usePurchaseOrders() {
   });
 
   const createDraft = useMutation({
-    mutationFn: async (input: { supplier_id?: string | null }) => {
+    mutationFn: async (input: {
+      supplier_id?: string | null;
+      inventory_item_id?: string;
+      order_qty?: number;
+    }) => {
       const { data: numData, error: numErr } = await supabase.rpc('generate_po_number');
       if (numErr) throw numErr;
 
@@ -81,7 +85,35 @@ export function usePurchaseOrders() {
         .select('id')
         .single();
       if (error) throw error;
-      return data as { id: string };
+
+      const draft = data as { id: string };
+      if (input.inventory_item_id) {
+        const quantity = Math.max(1, Math.round(input.order_qty ?? 1));
+        const { data: inventoryItem, error: itemError } = await supabase
+          .from('inventory_items')
+          .select('cost_price')
+          .eq('id', input.inventory_item_id)
+          .single();
+
+        if (itemError) {
+          await supabase.from('purchase_orders').delete().eq('id', draft.id);
+          throw itemError;
+        }
+
+        const { error: lineError } = await supabase.from('purchase_order_items').insert({
+          po_id: draft.id,
+          inventory_item_id: input.inventory_item_id,
+          order_qty: quantity,
+          unit_cost: Number((inventoryItem as { cost_price: number | null }).cost_price ?? 0),
+        } as never);
+
+        if (lineError) {
+          await supabase.from('purchase_orders').delete().eq('id', draft.id);
+          throw lineError;
+        }
+      }
+
+      return draft;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: LIST_KEY }),
   });
