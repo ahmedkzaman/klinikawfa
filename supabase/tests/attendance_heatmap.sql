@@ -34,6 +34,12 @@ BEGIN
   INSERT INTO public.patients (id, name, national_id, notes) VALUES
     ('72000000-0000-4000-8000-000000000101', 'TEST ONLY PRIVATE PATIENT', 'TEST-IC-DO-NOT-LEAK', 'TEST-PRIVATE-NOTE-DO-NOT-LEAK');
 
+  -- The acceptance fixture is always rolled back, but a restored production
+  -- snapshot can already contain these month keys. Temporarily replace them so
+  -- the test remains isolated without weakening the unique roster invariant.
+  DELETE FROM public.saved_rosters
+  WHERE roster_type = 'doctor' AND year = 2026 AND month IN (7, 8);
+
   INSERT INTO public.saved_rosters (
     id, roster_type, month, year, roster_data, staff_list, warnings, created_by
   ) VALUES
@@ -64,7 +70,7 @@ BEGIN
     ('72000000-0000-4000-8000-000000000208', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', 7208, 'consultation', 'cash',    '2026-08-03 00:25:00+00', NULL,                    'completed'),
     ('72000000-0000-4000-8000-000000000209', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', 7209, 'consultation', 'cash',    '2026-08-03 00:30:00+00', NULL,                    'completed'),
     ('72000000-0000-4000-8000-000000000210', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', 7210, 'consultation', 'cash',    '2026-08-03 00:35:00+00', NULL,                    'cancelled'),
-    ('72000000-0000-4000-8000-000000000211', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', NULL, 'consultation', 'cash',    '2026-08-03 00:40:00+00', NULL,                    'completed'),
+    ('72000000-0000-4000-8000-000000000211', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', NULL, 'historical_import', 'cash', '2026-08-03 00:40:00+00', NULL,                    'completed'),
     ('72000000-0000-4000-8000-000000000212', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', 7212, 'consultation', 'cash',    '2026-08-03 00:45:00+00', NULL,                    'completed'),
     ('72000000-0000-4000-8000-000000000213', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', 7213, 'consultation', 'cash',    '2026-07-27 00:00:00+00', NULL,                    'completed'),
     ('72000000-0000-4000-8000-000000000214', '72000000-0000-4000-8000-000000000101', '72000000-0000-4000-8000-000000000011', 7214, 'consultation', 'card',    '2026-07-27 00:15:00+00', NULL,                    'completed');
@@ -173,18 +179,18 @@ BEGIN
   SELECT value INTO STRICT v_cell
   FROM jsonb_array_elements(v_report->'cells')
   WHERE value->>'weekday' = '1' AND value->>'hour' = '8';
-  IF (v_cell->>'totalVisits')::integer IS DISTINCT FROM 5
-     OR (v_cell->>'rawTotalVisits')::integer IS DISTINCT FROM 5
+  IF (v_cell->>'totalVisits')::integer IS DISTINCT FROM 6
+     OR (v_cell->>'rawTotalVisits')::integer IS DISTINCT FROM 6
      OR (v_cell->>'operatingOccurrences')::integer IS DISTINCT FROM 1
-     OR (v_cell->>'averageVisits')::numeric IS DISTINCT FROM 5
-     OR (v_cell->>'medianVisits')::numeric IS DISTINCT FROM 5
-     OR (v_cell->>'peakVisits')::integer IS DISTINCT FROM 5
+     OR (v_cell->>'averageVisits')::numeric IS DISTINCT FROM 6
+     OR (v_cell->>'medianVisits')::numeric IS DISTINCT FROM 6
+     OR (v_cell->>'peakVisits')::integer IS DISTINCT FROM 6
      OR (v_cell->>'waitMeasuredVisits')::integer IS DISTINCT FROM 2
      OR (v_cell->>'averageWaitMinutes')::numeric IS DISTINCT FROM 15
      OR (v_cell->>'comparisonAverageVisits')::numeric IS DISTINCT FROM 2
      OR (v_cell->>'otherDoctorCoveredOccurrences')::integer IS DISTINCT FROM 1
      OR v_cell->>'coverage' IS DISTINCT FROM 'insufficient' THEN
-    RAISE EXCEPTION 'QUALIFYING_PAYMENT_OR_COMPARISON_AGGREGATE_MISMATCH';
+    RAISE EXCEPTION 'HISTORICAL_IMPORT_OR_PAYMENT_EXCLUSION_MISMATCH';
   END IF;
 
   SELECT value INTO STRICT v_cell
@@ -231,12 +237,12 @@ BEGIN
   SELECT value INTO STRICT v_cell
   FROM jsonb_array_elements(v_mixed_coverage->'cells')
   WHERE value->>'weekday' = '1' AND value->>'hour' = '8';
-  IF (v_cell->>'totalVisits')::integer IS DISTINCT FROM 5
-     OR (v_cell->>'rawTotalVisits')::integer IS DISTINCT FROM 6
+  IF (v_cell->>'totalVisits')::integer IS DISTINCT FROM 6
+     OR (v_cell->>'rawTotalVisits')::integer IS DISTINCT FROM 7
      OR (v_cell->>'operatingOccurrences')::integer IS DISTINCT FROM 1
-     OR (v_cell->>'averageVisits')::numeric IS DISTINCT FROM 5
-     OR (v_cell->>'medianVisits')::numeric IS DISTINCT FROM 5
-     OR (v_cell->>'peakVisits')::integer IS DISTINCT FROM 5
+     OR (v_cell->>'averageVisits')::numeric IS DISTINCT FROM 6
+     OR (v_cell->>'medianVisits')::numeric IS DISTINCT FROM 6
+     OR (v_cell->>'peakVisits')::integer IS DISTINCT FROM 6
      OR (v_cell->>'waitMeasuredVisits')::integer IS DISTINCT FROM 2
      OR (v_cell->>'averageWaitMinutes')::numeric IS DISTINCT FROM 15
      OR jsonb_array_length(v_cell->'dates') IS DISTINCT FROM 1

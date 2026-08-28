@@ -52,6 +52,7 @@ function postgrestQuery(rowsForSelection: (selection: string) => unknown[]) {
       return query;
     }),
     eq: vi.fn(() => query),
+    neq: vi.fn(() => query),
     is: vi.fn(() => query),
     gte: vi.fn(() => query),
     lt: vi.fn(() => query),

@@ -33,3 +33,19 @@ stress-tests/node_modules/
 !.env.example
 !.env.*.example
 .worktrees/
+
+# Remedi -> Verdamed migration artifacts (PHI must remain outside Git)
+secure-imports/
+**/secure-imports/
+pt awfa.csv
+awfa_notes.csv
+SALES DATE RANGE REPORT BY INVOICE DATE, MASTER*.pdf
+*.copy.csv
+*.conflicts.csv
+*.phi.zip
+*.phi.7z
+*.import-bundle*
+
+# Python compiler caches from the local import compiler test suite
+__pycache__/
+*.py[cod]

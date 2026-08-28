@@ -1,0 +1,6 @@
+MASTER SALES INVOICE by DATE RANGE
+# INVOICE INVOICE Bill No Patient Name (MRN / ICNo) Doctor Corporate Cash Total Cash O.Transfer C.Card E-Wallet Total Outstanding Outstanding
+{{ROW_1}}
+{{CONTINUATION_1}}
+{{ROW_2}}
+Page footer without monetary data
