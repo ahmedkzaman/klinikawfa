@@ -56,6 +56,7 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
   const { updateHeader, setStatus, receiveGoods } = usePurchaseOrders();
   const [confirmReceive, setConfirmReceive] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmSend, setConfirmSend] = useState(false);
 
   const [supplierId, setSupplierId] = useState<string>('');
   const [orderDate, setOrderDate] = useState<string>('');
@@ -91,7 +92,7 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
     }
   };
 
-  const onMarkSent = async () => {
+  const requestMarkSent = () => {
     if (!po) return;
     if (!po.items.length) {
       toast.error('Add at least one line item before sending.');
@@ -101,10 +102,16 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
       toast.error('Select a supplier first.');
       return;
     }
+    setConfirmSend(true);
+  };
+
+  const onMarkSent = async () => {
+    if (!po) return;
     await persistHeader();
     try {
       await setStatus.mutateAsync({ id: po.id, status: 'Sent' });
       toast.success(`PO ${po.po_number} marked as Sent`);
+      setConfirmSend(false);
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -156,13 +163,13 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
               {/* Header */}
               <div className="grid gap-4">
                 <div className="grid gap-2">
-                  <Label>Supplier</Label>
+                  <Label htmlFor="po-supplier">Supplier</Label>
                   <Select
                     value={supplierId}
                     onValueChange={(v) => setSupplierId(v)}
                     disabled={readOnly}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="po-supplier">
                       <SelectValue placeholder="Select supplier" />
                     </SelectTrigger>
                     <SelectContent>
@@ -176,10 +183,11 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="grid gap-2">
-                    <Label>Order Date</Label>
+                    <Label htmlFor="po-order-date">Order Date</Label>
                     <Input
+                      id="po-order-date"
                       type="date"
                       value={orderDate}
                       onChange={(e) => setOrderDate(e.target.value)}
@@ -188,8 +196,9 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label>Expected Date</Label>
+                    <Label htmlFor="po-expected-date">Expected Date</Label>
                     <Input
+                      id="po-expected-date"
                       type="date"
                       value={expectedDate}
                       onChange={(e) => setExpectedDate(e.target.value)}
@@ -199,8 +208,9 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
                   </div>
                 </div>
                 <div className="grid gap-2">
-                  <Label>Notes</Label>
+                  <Label htmlFor="po-notes">Notes</Label>
                   <Textarea
+                    id="po-notes"
                     rows={2}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
@@ -240,13 +250,13 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
                 </Button>
                 {status === 'Draft' && (
                   <>
-                    <Button variant="outline" onClick={persistHeader}>
-                      Save Draft
+                    <Button variant="outline" onClick={persistHeader} disabled={updateHeader.isPending}>
+                      {updateHeader.isPending ? 'Saving…' : 'Save Draft'}
                     </Button>
                     <Button variant="destructive" onClick={() => setConfirmCancel(true)}>
                       <XCircle className="h-4 w-4 mr-1" /> Cancel PO
                     </Button>
-                    <Button onClick={onMarkSent} disabled={setStatus.isPending}>
+                    <Button onClick={requestMarkSent} disabled={setStatus.isPending || updateHeader.isPending}>
                       <Send className="h-4 w-4 mr-1" /> Mark as Sent
                     </Button>
                   </>
@@ -294,6 +304,23 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
             <AlertDialogCancel>Keep PO</AlertDialogCancel>
             <AlertDialogAction onClick={onCancel} className="bg-destructive text-destructive-foreground">
               Cancel PO
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmSend} onOpenChange={setConfirmSend}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark {po?.po_number} as sent?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Confirm that this purchase order has been sent to the supplier. You can still cancel it before goods are received.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep as Draft</AlertDialogCancel>
+            <AlertDialogAction onClick={onMarkSent} disabled={setStatus.isPending}>
+              {setStatus.isPending ? 'Updating…' : 'Mark as Sent'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

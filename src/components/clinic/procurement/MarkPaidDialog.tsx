@@ -44,8 +44,9 @@ export function MarkPaidDialog({ open, invoiceId, invoiceNo, onOpenChange }: Pro
           <DialogTitle>Mark as Paid {invoiceNo ? `· ${invoiceNo}` : ''}</DialogTitle>
         </DialogHeader>
         <div className="space-y-2 py-2">
-          <Label>Payment Reference</Label>
+          <Label htmlFor="payment-reference">Payment Reference</Label>
           <Input
+            id="payment-reference"
             value={ref}
             onChange={(e) => setRef(e.target.value)}
             placeholder="e.g. TXN-12345 / Cheque #998"

@@ -178,6 +178,9 @@ export function useProcurementRecommendations(
 ): {
   data: Recommendations;
   isLoading: boolean;
+  isError: boolean;
+  error: Error | null;
+  refetch: () => void;
 } {
   const { settings } = useClinicSettings();
   const t: RecommendationThresholds = {
@@ -188,8 +191,10 @@ export function useProcurementRecommendations(
     deadStockDays: DEFAULT_THRESHOLDS.deadStockDays,
     ...thresholds,
   };
-  const { data: stats = [], isLoading: a } = useProcurementStats();
-  const { data: corr = [], isLoading: b } = useDiagnosisCorrelation({ minLift: t.surgeLift });
+  const statsQuery = useProcurementStats();
+  const correlationQuery = useDiagnosisCorrelation({ minLift: t.surgeLift });
+  const { data: stats = [], isLoading: a } = statsQuery;
+  const { data: corr = [], isLoading: b } = correlationQuery;
 
   const urgent: UrgentRec[] = stats
     .filter((s) => s.movement_status === 'fast' && s.days_cover != null && Number(s.days_cover) < t.urgentDays)
@@ -235,5 +240,14 @@ export function useProcurementRecommendations(
       current_stock: Number(s.current_stock),
     }));
 
-  return { data: { urgent, surge, overstock }, isLoading: a || b };
+  return {
+    data: { urgent, surge, overstock },
+    isLoading: a || b,
+    isError: statsQuery.isError || correlationQuery.isError,
+    error: (statsQuery.error ?? correlationQuery.error) as Error | null,
+    refetch: () => {
+      void statsQuery.refetch();
+      void correlationQuery.refetch();
+    },
+  };
 }

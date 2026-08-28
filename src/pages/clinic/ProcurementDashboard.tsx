@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { format, formatDistanceToNow } from 'date-fns';
+import { Link, useSearchParams } from 'react-router-dom';
+import { formatDistanceToNow } from 'date-fns';
 import {
   Activity, AlertTriangle, ArrowDown, ArrowUp, Info, Minus, Package, RefreshCw,
   Settings, Snowflake, TrendingUp, TrendingDown, Zap,
@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   useProcurementStats,
   useStockMovements,
@@ -26,11 +27,14 @@ import {
   type InventoryTxType,
 } from '@/hooks/clinic/useProcurementStats';
 import { ProcurementLogicSheet, type LogicSection } from '@/components/clinic/procurement/ProcurementLogicSheet';
+import { POSheet } from '@/components/clinic/procurement/POSheet';
+import { usePurchaseOrders } from '@/hooks/clinic/usePurchaseOrders';
+import { useSuppliers } from '@/hooks/clinic/useSuppliers';
 
 
 const statusBadge: Record<MovementStatus, string> = {
-  fast:   'bg-destructive/15 text-destructive',
-  normal: 'bg-blue-500/15 text-blue-700 dark:text-blue-400',
+  fast:   'bg-primary/15 text-primary',
+  normal: 'bg-secondary text-secondary-foreground',
   slow:   'bg-amber-500/15 text-amber-700 dark:text-amber-400',
   dead:   'bg-muted text-muted-foreground',
 };
@@ -40,21 +44,48 @@ const statusLabel: Record<MovementStatus, string> = {
 };
 
 const txBadge: Record<InventoryTxType, string> = {
-  restock:             'bg-green-500/15 text-green-700 dark:text-green-400',
-  dispense:            'bg-blue-500/15 text-blue-700 dark:text-blue-400',
+  restock:             'bg-success/15 text-success',
+  dispense:            'bg-primary/15 text-primary',
   adjustment:          'bg-amber-500/15 text-amber-700 dark:text-amber-400',
-  return:              'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+  return:              'bg-success/15 text-success',
   'write-off':         'bg-destructive/15 text-destructive',
   expire:              'bg-destructive/15 text-destructive',
   owe_slip_fulfilled:  'bg-purple-500/15 text-purple-700 dark:text-purple-400',
 };
 
 const fmt = (n: number) => Number.isFinite(n) ? n.toLocaleString() : '—';
+const dashboardTabs = ['planning', 'overview', 'ledger', 'correlation'] as const;
+type DashboardTab = typeof dashboardTabs[number];
+
+const malaysiaDateTime = new Intl.DateTimeFormat('en-MY', {
+  day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  hour12: false, timeZone: 'Asia/Kuala_Lumpur',
+});
+
+const humanize = (value: string) => value
+  .replace(/_/g, ' ')
+  .replace(/\b\w/g, (character) => character.toUpperCase());
 
 export default function ProcurementDashboard() {
-  const { data: stats = [], isLoading: statsLoading } = useProcurementStats();
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<MovementStatus | 'all'>('all');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const statsQuery = useProcurementStats();
+  const { data: stats = [], isLoading: statsLoading } = statsQuery;
+  const tabParam = searchParams.get('tab');
+  const activeTab: DashboardTab = dashboardTabs.includes(tabParam as DashboardTab)
+    ? tabParam as DashboardTab
+    : 'planning';
+  const search = searchParams.get('q') ?? '';
+  const statusParam = searchParams.get('status');
+  const statusFilter: MovementStatus | 'all' = ['fast', 'normal', 'slow', 'dead'].includes(statusParam ?? '')
+    ? statusParam as MovementStatus
+    : 'all';
+
+  const updateParam = (key: string, value: string, defaultValue?: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (!value || value === defaultValue) next.delete(key);
+    else next.set(key, value);
+    setSearchParams(next, { replace: true });
+  };
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -73,23 +104,48 @@ export default function ProcurementDashboard() {
   }), [stats]);
 
   // Movements tab
-  const [typeFilter, setTypeFilter] = useState<InventoryTxType | 'all'>('all');
-  const { data: movements = [], isLoading: movLoading } = useStockMovements({
+  const typeParam = searchParams.get('type');
+  const typeFilter: InventoryTxType | 'all' = [
+    'restock', 'dispense', 'adjustment', 'return', 'write-off', 'expire', 'owe_slip_fulfilled',
+  ].includes(typeParam ?? '') ? typeParam as InventoryTxType : 'all';
+  const movementsQuery = useStockMovements({
     limit: 200,
     type: typeFilter === 'all' ? null : typeFilter,
   });
+  const { data: movements = [], isLoading: movLoading } = movementsQuery;
 
   // Logic sheet
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetSection, setSheetSection] = useState<LogicSection>('correlation');
+  const [poSheet, setPOSheet] = useState<{ open: boolean; poId: string | null }>({ open: false, poId: null });
+  const [draftingItemId, setDraftingItemId] = useState<string | null>(null);
+  const { suppliers } = useSuppliers();
+  const { createDraft } = usePurchaseOrders();
 
   const openSheet = (section: LogicSection) => {
     setSheetSection(section);
     setSheetOpen(true);
   };
 
+  const draftRecommendedPO = async (itemId: string, qty: number) => {
+    if (!suppliers.some((supplier) => supplier.status === 'active')) {
+      toast.error('Add an active supplier before creating a purchase order.');
+      return;
+    }
+    setDraftingItemId(itemId);
+    try {
+      const draft = await createDraft.mutateAsync({ inventory_item_id: itemId, order_qty: qty });
+      setPOSheet({ open: true, poId: draft.id });
+      toast.success('Draft PO created with the recommended item and quantity.');
+    } catch (error) {
+      toast.error((error as Error).message || 'Could not create the draft PO.');
+    } finally {
+      setDraftingItemId(null);
+    }
+  };
+
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto max-w-[1400px] py-4 sm:py-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Activity className="h-6 w-6" /> Procurement Dashboard
@@ -99,35 +155,42 @@ export default function ProcurementDashboard() {
         </p>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="ledger">Movement Ledger</TabsTrigger>
-          <TabsTrigger value="correlation">Diagnosis Correlation</TabsTrigger>
-          <TabsTrigger value="planning">Purchase Planning</TabsTrigger>
-        </TabsList>
+      <Tabs value={activeTab} onValueChange={(value) => updateParam('tab', value, 'planning')} className="space-y-4">
+        <div className="overflow-x-auto pb-1">
+          <TabsList className="h-auto min-w-max justify-start">
+            <TabsTrigger value="planning">Purchase Planning</TabsTrigger>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="ledger">Movement Ledger</TabsTrigger>
+            <TabsTrigger value="correlation">Diagnosis Correlation</TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* OVERVIEW */}
         <TabsContent value="overview" className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <KpiCard icon={<Package className="h-4 w-4" />} label="Total Active Items"    value={kpis.total} />
-            <KpiCard icon={<TrendingUp className="h-4 w-4 text-destructive" />} label="Fast Moving" value={kpis.fast} tone="destructive" />
-            <KpiCard icon={<TrendingDown className="h-4 w-4 text-amber-600" />} label="Slow / Dead" value={kpis.slowDead} tone="amber" />
-            <KpiCard icon={<AlertTriangle className="h-4 w-4 text-destructive" />} label="Critical Low Stock" value={kpis.critical} tone="destructive" />
+          {statsQuery.isError && (
+            <QueryError message="Inventory movement data could not be loaded." onRetry={() => void statsQuery.refetch()} />
+          )}
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            <KpiCard icon={<Package className="h-4 w-4" />} label="Total active items" value={statsLoading ? null : kpis.total} />
+            <KpiCard icon={<TrendingUp className="h-4 w-4 text-primary" />} label="Fast moving" value={statsLoading ? null : kpis.fast} />
+            <KpiCard icon={<TrendingDown className="h-4 w-4 text-amber-600" />} label="Slow / dead" value={statsLoading ? null : kpis.slowDead} tone="amber" />
+            <KpiCard icon={<AlertTriangle className="h-4 w-4 text-destructive" />} label="Critical low stock" value={statsLoading ? null : kpis.critical} tone="destructive" />
           </div>
 
           <Card>
             <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <CardTitle>Inventory Movement</CardTitle>
-              <div className="flex gap-2">
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <Label htmlFor="movement-search" className="sr-only">Search inventory items</Label>
                 <Input
+                  id="movement-search"
                   placeholder="Search item…"
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-48"
+                  onChange={(event) => updateParam('q', event.target.value)}
+                  className="w-full sm:w-52"
                 />
-                <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as MovementStatus | 'all')}>
-                  <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                <Select value={statusFilter} onValueChange={(value) => updateParam('status', value, 'all')}>
+                  <SelectTrigger className="w-full sm:w-40" aria-label="Filter by movement status"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All statuses</SelectItem>
                     <SelectItem value="fast">Fast</SelectItem>
@@ -139,24 +202,23 @@ export default function ProcurementDashboard() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border">
-                <Table>
+              <div className="overflow-x-auto rounded-md border">
+                <Table className="min-w-[720px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Item</TableHead>
                       <TableHead className="text-right">Stock</TableHead>
                       <TableHead className="text-right">Used 30d</TableHead>
-                      <TableHead className="text-right">Used 90d</TableHead>
                       <TableHead className="text-right">Avg/day</TableHead>
-                      <TableHead className="text-right">Days Cover</TableHead>
+                      <TableHead className="text-right" title="Estimated days until stock runs out at the current average usage">Days cover</TableHead>
                       <TableHead>Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {statsLoading ? (
-                      <TableRow><TableCell colSpan={7} className="text-center py-6 text-muted-foreground">Loading…</TableCell></TableRow>
-                    ) : filtered.length === 0 ? (
-                      <TableRow><TableCell colSpan={7} className="text-center py-6 text-muted-foreground">No items match.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Loading inventory movement…</TableCell></TableRow>
+                    ) : statsQuery.isError ? null : filtered.length === 0 ? (
+                      <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">No items match these filters.</TableCell></TableRow>
                     ) : filtered.map((r) => {
                       const critical = r.reorder_level > 0 && r.current_stock <= r.reorder_level;
                       return (
@@ -166,10 +228,9 @@ export default function ProcurementDashboard() {
                             {fmt(Number(r.current_stock))}
                           </TableCell>
                           <TableCell className="text-right tabular-nums">{fmt(Number(r.used_30d))}</TableCell>
-                          <TableCell className="text-right tabular-nums">{fmt(Number(r.used_90d))}</TableCell>
                           <TableCell className="text-right tabular-nums">{Number(r.avg_daily_usage).toFixed(2)}</TableCell>
                           <TableCell className="text-right tabular-nums">
-                            {r.days_cover == null ? '∞' : Number(r.days_cover).toFixed(1)}
+                            {r.days_cover == null ? <span title="No usage recorded in the last 90 days">No usage</span> : Number(r.days_cover).toFixed(1)}
                           </TableCell>
                           <TableCell>
                             <Badge className={statusBadge[r.movement_status]}>{statusLabel[r.movement_status]}</Badge>
@@ -189,8 +250,8 @@ export default function ProcurementDashboard() {
           <Card>
             <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <CardTitle>Movement Ledger</CardTitle>
-              <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as InventoryTxType | 'all')}>
-                <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+              <Select value={typeFilter} onValueChange={(value) => updateParam('type', value, 'all')}>
+                <SelectTrigger className="w-full sm:w-48" aria-label="Filter movement ledger by transaction type"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All types</SelectItem>
                   <SelectItem value="dispense">Dispense</SelectItem>
@@ -203,9 +264,12 @@ export default function ProcurementDashboard() {
                 </SelectContent>
               </Select>
             </CardHeader>
-            <CardContent>
-              <div className="rounded-md border">
-                <Table>
+            <CardContent className="space-y-3">
+              {movementsQuery.isError && (
+                <QueryError message="The movement ledger could not be loaded." onRetry={() => void movementsQuery.refetch()} />
+              )}
+              <div className="overflow-x-auto rounded-md border">
+                <Table className="min-w-[720px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Date</TableHead>
@@ -218,14 +282,14 @@ export default function ProcurementDashboard() {
                   <TableBody>
                     {movLoading ? (
                       <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">Loading…</TableCell></TableRow>
-                    ) : movements.length === 0 ? (
+                    ) : movementsQuery.isError ? null : movements.length === 0 ? (
                       <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">No movements yet.</TableCell></TableRow>
                     ) : movements.map((m) => (
                       <TableRow key={m.id}>
-                        <TableCell className="whitespace-nowrap">{format(new Date(m.created_at), 'dd MMM yyyy HH:mm')}</TableCell>
+                        <TableCell className="whitespace-nowrap">{malaysiaDateTime.format(new Date(m.created_at))}</TableCell>
                         <TableCell className="font-medium">{m.inventory_item?.name ?? '—'}</TableCell>
-                        <TableCell><Badge className={txBadge[m.transaction_type]}>{m.transaction_type}</Badge></TableCell>
-                        <TableCell className={`text-right tabular-nums font-medium ${m.qty_change < 0 ? 'text-destructive' : 'text-green-600 dark:text-green-400'}`}>
+                        <TableCell><Badge className={txBadge[m.transaction_type]}>{humanize(m.transaction_type)}</Badge></TableCell>
+                        <TableCell className={`text-right tabular-nums font-medium ${m.qty_change < 0 ? 'text-destructive' : 'text-success'}`}>
                           {m.qty_change > 0 ? `+${m.qty_change}` : m.qty_change}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">
@@ -251,6 +315,8 @@ export default function ProcurementDashboard() {
         <TabsContent value="planning">
           <PlanningTab
             onOpenLogic={() => openSheet('planning')}
+            onDraftPO={draftRecommendedPO}
+            draftingItemId={draftingItemId}
           />
         </TabsContent>
       </Tabs>
@@ -260,20 +326,27 @@ export default function ProcurementDashboard() {
         onOpenChange={setSheetOpen}
         defaultSection={sheetSection}
       />
+      <POSheet
+        open={poSheet.open}
+        poId={poSheet.poId}
+        onOpenChange={(open) => setPOSheet({ open, poId: open ? poSheet.poId : null })}
+      />
     </div>
   );
 }
 
-function KpiCard({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: number; tone?: 'destructive' | 'amber' }) {
+function KpiCard({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: number | null; tone?: 'destructive' | 'amber' }) {
   const valueClass = tone === 'destructive' ? 'text-destructive' : tone === 'amber' ? 'text-amber-600 dark:text-amber-400' : '';
   return (
-    <Card>
+    <Card aria-label={value == null ? `${label}: loading` : `${label}: ${value.toLocaleString()}`}>
       <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
         <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-        {icon}
+        <span aria-hidden="true">{icon}</span>
       </CardHeader>
       <CardContent>
-        <div className={`text-3xl font-bold tabular-nums ${valueClass}`}>{value.toLocaleString()}</div>
+        {value == null
+          ? <Skeleton className="h-9 w-16" aria-hidden="true" />
+          : <div className={`text-2xl sm:text-3xl font-bold tabular-nums ${valueClass}`}>{value.toLocaleString()}</div>}
       </CardContent>
     </Card>
   );
@@ -283,17 +356,20 @@ function KpiCard({ icon, label, value, tone }: { icon: React.ReactNode; label: s
 
 const liftBadge = (lift: number | null) => {
   if (lift == null) return 'bg-muted text-muted-foreground';
-  if (lift >= 2)   return 'bg-destructive/15 text-destructive';
+  if (lift >= 2)   return 'bg-success/15 text-success';
   if (lift >= 1.5) return 'bg-amber-500/15 text-amber-700 dark:text-amber-400';
   if (lift >= 1)   return 'bg-blue-500/15 text-blue-700 dark:text-blue-400';
   return 'bg-muted text-muted-foreground';
 };
 
 function TrendArrow({ pct }: { pct: number | null }) {
-  if (pct == null) return <Minus className="h-3 w-3 inline text-muted-foreground" />;
-  if (pct > 0) return <ArrowUp className="h-3 w-3 inline text-destructive" />;
-  if (pct < 0) return <ArrowDown className="h-3 w-3 inline text-emerald-600" />;
-  return <Minus className="h-3 w-3 inline text-muted-foreground" />;
+  const label = pct == null ? 'Trend unavailable' : pct > 0 ? 'Increasing' : pct < 0 ? 'Decreasing' : 'No change';
+  const Icon = pct == null || pct === 0 ? Minus : pct > 0 ? ArrowUp : ArrowDown;
+  return (
+    <span aria-label={label}>
+      <Icon aria-hidden="true" className={`h-3 w-3 inline ${pct && pct > 0 ? 'text-primary' : 'text-muted-foreground'}`} />
+    </span>
+  );
 }
 
 function CorrelationTab({
@@ -301,13 +377,18 @@ function CorrelationTab({
 }: {
   onOpenLogic: () => void;
 }) {
-  const [hideLowLift, setHideLowLift] = useState(true);
-  const [includeUnlinked, setIncludeUnlinked] = useState(false);
-  const { data: rows = [], isLoading, dataUpdatedAt } = useDiagnosisCorrelation({
-    minLift: hideLowLift ? 1.2 : 0,
-    includeUnlinked,
-  });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const hideLowLift = searchParams.get('lift') !== 'all';
+  const includeUnlinked = searchParams.get('unlinked') === '1';
+  const query = useDiagnosisCorrelation({ minLift: hideLowLift ? 1.2 : 0, includeUnlinked });
+  const { data: rows = [], isLoading, dataUpdatedAt } = query;
   const refresh = useRefreshCorrelation();
+  const setFilter = (key: string, enabled: boolean, enabledValue: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (enabled) next.set(key, enabledValue);
+    else next.delete(key);
+    setSearchParams(next, { replace: true });
+  };
 
   const uncategorized = rows.filter((r) => r.diagnosis_group === 'Uncategorized').length;
   const lastRefreshed = rows[0]?.last_refreshed_at
@@ -324,11 +405,11 @@ function CorrelationTab({
           </div>
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2">
-              <Switch id="lowlift" checked={hideLowLift} onCheckedChange={setHideLowLift} />
+              <Switch id="lowlift" checked={hideLowLift} onCheckedChange={(checked) => setFilter('lift', !checked, 'all')} />
               <Label htmlFor="lowlift" className="text-sm">Hide low-lift (&lt;1.2)</Label>
             </div>
             <div className="flex items-center gap-2">
-              <Switch id="unlinked" checked={includeUnlinked} onCheckedChange={setIncludeUnlinked} />
+              <Switch id="unlinked" checked={includeUnlinked} onCheckedChange={(checked) => setFilter('unlinked', checked, '1')} />
               <Label htmlFor="unlinked" className="text-sm">Include unlinked usage</Label>
             </div>
             <Button size="sm" variant="ghost" onClick={onOpenLogic}>
@@ -340,7 +421,7 @@ function CorrelationTab({
               variant="outline"
               onClick={() => refresh.mutate(undefined, {
                 onSuccess: () => toast.success('Correlation refreshed'),
-                onError: (e: any) => toast.error(e?.message ?? 'Refresh failed'),
+                onError: (error) => toast.error(error instanceof Error ? error.message : 'Refresh failed'),
               })}
               disabled={refresh.isPending}
             >
@@ -350,6 +431,9 @@ function CorrelationTab({
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
+          {query.isError && (
+            <QueryError message="Diagnosis correlations could not be loaded." onRetry={() => void query.refetch()} />
+          )}
           {uncategorized > 0 && (
             <Alert>
               <AlertTriangle className="h-4 w-4" />
@@ -361,12 +445,12 @@ function CorrelationTab({
             </Alert>
           )}
 
-          <div className="rounded-md border">
-            <Table>
+          <div className="overflow-x-auto rounded-md border">
+            <Table className="min-w-[780px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Diagnosis Group</TableHead>
-                  <TableHead className="text-right">Cases (Curr · Prev)</TableHead>
+                  <TableHead className="text-right">Cases (current / previous)</TableHead>
                   <TableHead className="text-right">Trend</TableHead>
                   <TableHead>Item</TableHead>
                   <TableHead className="text-right">Confidence</TableHead>
@@ -376,7 +460,7 @@ function CorrelationTab({
               <TableBody>
                 {isLoading ? (
                   <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Loading…</TableCell></TableRow>
-                ) : rows.length === 0 ? (
+                ) : query.isError ? null : rows.length === 0 ? (
                   <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">No correlations available. Try unchecking "Hide low-lift" or click Refresh Now.</TableCell></TableRow>
                 ) : rows.map((r) => {
                   const isUnlinked = r.diagnosis_group === '__UNLINKED__';
@@ -385,7 +469,10 @@ function CorrelationTab({
                       <TableCell className="font-medium">
                         {isUnlinked ? <span className="text-muted-foreground italic">Non-clinical / Unlinked</span> : r.diagnosis_group}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell
+                        className="text-right tabular-nums"
+                        aria-label={`${r.case_count_current_month} current month cases, ${r.case_count_prior_month} previous month cases`}
+                      >
                         {r.case_count_current_month} · {r.case_count_prior_month}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
@@ -417,14 +504,14 @@ function CorrelationTab({
 
 function PlanningTab({
   onOpenLogic,
+  onDraftPO,
+  draftingItemId,
 }: {
   onOpenLogic: () => void;
+  onDraftPO: (itemId: string, qty: number) => Promise<void>;
+  draftingItemId: string | null;
 }) {
-  const { data, isLoading } = useProcurementRecommendations();
-  const navigate = useNavigate();
-
-  const draftPO = (itemId: string, qty: number) =>
-    navigate(`/clinic/procurement?prefillItem=${itemId}&qty=${qty}`);
+  const { data, isLoading, isError, error, refetch } = useProcurementRecommendations();
 
   const header = (
     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -438,8 +525,10 @@ function PlanningTab({
         <Button size="sm" variant="ghost" onClick={onOpenLogic}>
           <Info className="h-4 w-4 mr-2" /> How is this calculated?
         </Button>
-        <Button size="sm" variant="outline" onClick={() => navigate('/clinic/settings/procurement-rules')}>
-          <Settings className="h-4 w-4 mr-2" /> Configure Rules
+        <Button asChild size="sm" variant="outline">
+          <Link to="/clinic/settings/procurement-rules">
+            <Settings className="h-4 w-4 mr-2" /> Configure Rules
+          </Link>
         </Button>
       </div>
     </div>
@@ -450,6 +539,15 @@ function PlanningTab({
       <div className="space-y-4">
         {header}
         <Card><CardContent className="py-10 text-center text-muted-foreground">Crunching recommendations…</CardContent></Card>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-4">
+        {header}
+        <QueryError message={error?.message || 'Purchase recommendations could not be loaded.'} onRetry={refetch} />
       </div>
     );
   }
@@ -470,9 +568,10 @@ function PlanningTab({
           <EmptyHint>No urgent reorders.</EmptyHint>
         ) : urgent.map((r) => (
           <RecCard key={r.item_id} tone="destructive"
-            title={`🚨 ${r.item_name}`}
+            icon={<Zap className="h-4 w-4 text-destructive" />}
+            title={r.item_name}
             body={`${r.days_cover.toFixed(1)}d cover at ${r.avg_daily_usage.toFixed(2)}/day · ${r.current_stock} in stock. Reorder ~${r.suggested_qty} units.`}
-            action={<Button size="sm" onClick={() => draftPO(r.item_id, r.suggested_qty)}>Create PO</Button>}
+            action={<Button size="sm" onClick={() => void onDraftPO(r.item_id, r.suggested_qty)} disabled={draftingItemId !== null}>{draftingItemId === r.item_id ? 'Creating draft…' : 'Create PO'}</Button>}
           />
         ))}
       </Section>
@@ -482,9 +581,10 @@ function PlanningTab({
           <EmptyHint>No surge signals detected.</EmptyHint>
         ) : surge.map((r) => (
           <RecCard key={`${r.diagnosis_group}:${r.item_id}`} tone="amber"
-            title={`📈 ${r.diagnosis_group} up ${r.trend_pct}%`}
+            icon={<TrendingUp className="h-4 w-4 text-amber-600" />}
+            title={`${r.diagnosis_group} up ${r.trend_pct}%`}
             body={`High correlation to ${r.item_name} (Lift ${r.lift_score.toFixed(2)}). Cover ${r.days_cover}d — increase par level by ~${r.suggested_qty} units.`}
-            action={<Button size="sm" variant="secondary" onClick={() => draftPO(r.item_id, r.suggested_qty)}>Create PO</Button>}
+            action={<Button size="sm" variant="secondary" onClick={() => void onDraftPO(r.item_id, r.suggested_qty)} disabled={draftingItemId !== null}>{draftingItemId === r.item_id ? 'Creating draft…' : 'Create PO'}</Button>}
           />
         ))}
       </Section>
@@ -494,7 +594,8 @@ function PlanningTab({
           <EmptyHint>No dead stock — clean shelves.</EmptyHint>
         ) : overstock.map((r) => (
           <RecCard key={r.item_id} tone="muted"
-            title={`🧊 ${r.item_name}`}
+            icon={<Snowflake className="h-4 w-4 text-muted-foreground" />}
+            title={r.item_name}
             body={`Dead (0 usage in 90 days) but ${r.current_stock} units on hand. Halt reordering and monitor expiry.`}
           />
         ))}
@@ -517,7 +618,7 @@ function Section({ title, icon, count, children }: { title: string; icon: React.
   );
 }
 
-function RecCard({ tone, title, body, action }: { tone: 'destructive' | 'amber' | 'muted'; title: string; body: string; action?: React.ReactNode }) {
+function RecCard({ tone, icon, title, body, action }: { tone: 'destructive' | 'amber' | 'muted'; icon: React.ReactNode; title: string; body: string; action?: React.ReactNode }) {
   const border =
     tone === 'destructive' ? 'border-destructive/30 bg-destructive/5'
     : tone === 'amber'     ? 'border-amber-500/30 bg-amber-500/5'
@@ -525,14 +626,27 @@ function RecCard({ tone, title, body, action }: { tone: 'destructive' | 'amber' 
   return (
     <div className={`rounded-md border p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2 ${border}`}>
       <div>
-        <div className="font-semibold">{title}</div>
+        <div className="font-semibold flex items-center gap-2"><span aria-hidden="true">{icon}</span>{title}</div>
         <div className="text-sm text-muted-foreground mt-1">{body}</div>
       </div>
-      {action}
+      {action && <div className="shrink-0 sm:self-center">{action}</div>}
     </div>
   );
 }
 
 function EmptyHint({ children }: { children: React.ReactNode }) {
   return <div className="text-sm text-muted-foreground py-2">{children}</div>;
+}
+
+function QueryError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <Alert variant="destructive" role="alert">
+      <AlertTriangle className="h-4 w-4" />
+      <AlertTitle>Data unavailable</AlertTitle>
+      <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <span>{message}</span>
+        <Button size="sm" variant="outline" onClick={onRetry}>Try again</Button>
+      </AlertDescription>
+    </Alert>
+  );
 }

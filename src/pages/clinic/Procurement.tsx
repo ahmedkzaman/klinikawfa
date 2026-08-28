@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { Plus, Package, Building2, MoreHorizontal } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -35,6 +36,7 @@ const statusBadge: Record<POStatus, string> = {
 };
 
 export default function Procurement() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { suppliers, isLoading: suppliersLoading } = useSuppliers();
   const { orders, isLoading: ordersLoading, createDraft } = usePurchaseOrders();
   const { data: invoices = [], isLoading: invoicesLoading } = useVendorInvoices();
@@ -51,19 +53,37 @@ export default function Procurement() {
   const [paidDialog, setPaidDialog] = useState<{ open: boolean; id: string | null; no: string | null }>({
     open: false, id: null, no: null,
   });
+  const handledPrefill = useRef(false);
 
-  const onAddPO = async () => {
+  const onAddPO = useCallback(async (prefill?: { itemId: string; qty: number }) => {
     if (!suppliers.some((s) => s.status === 'active')) {
       toast.error('Add an active supplier before creating a PO.');
       return;
     }
     try {
-      const res = await createDraft.mutateAsync({});
+      const res = await createDraft.mutateAsync(prefill
+        ? { inventory_item_id: prefill.itemId, order_qty: prefill.qty }
+        : {});
       setPOSheet({ open: true, poId: res.id });
+      if (prefill) toast.success('Draft PO created with the recommended line item.');
     } catch (e) {
       toast.error((e as Error).message);
     }
-  };
+  }, [createDraft, suppliers]);
+
+  useEffect(() => {
+    if (handledPrefill.current || suppliersLoading) return;
+    const itemId = searchParams.get('prefillItem');
+    if (!itemId) return;
+    handledPrefill.current = true;
+    const parsedQty = Number(searchParams.get('qty'));
+    const qty = Number.isFinite(parsedQty) && parsedQty > 0 ? Math.round(parsedQty) : 1;
+    const next = new URLSearchParams(searchParams);
+    next.delete('prefillItem');
+    next.delete('qty');
+    setSearchParams(next, { replace: true });
+    void onAddPO({ itemId, qty });
+  }, [onAddPO, searchParams, setSearchParams, suppliersLoading]);
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -88,13 +108,13 @@ export default function Procurement() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Purchase Orders</CardTitle>
-              <Button onClick={onAddPO} disabled={createDraft.isPending}>
+              <Button onClick={() => void onAddPO()} disabled={createDraft.isPending}>
                 <Plus className="h-4 w-4 mr-1" /> Add PO
               </Button>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border">
-                <Table>
+              <div className="overflow-x-auto rounded-md border">
+                <Table className="min-w-[720px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>PO Number</TableHead>
@@ -119,12 +139,15 @@ export default function Procurement() {
                       </TableRow>
                     ) : (
                       orders.map((po) => (
-                        <TableRow
-                          key={po.id}
-                          className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => setPOSheet({ open: true, poId: po.id })}
-                        >
-                          <TableCell className="font-medium">{po.po_number}</TableCell>
+                        <TableRow key={po.id}>
+                          <TableCell className="font-medium">
+                            <button
+                              className="text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              onClick={() => setPOSheet({ open: true, poId: po.id })}
+                            >
+                              {po.po_number}
+                            </button>
+                          </TableCell>
                           <TableCell>{po.supplier?.name ?? '—'}</TableCell>
                           <TableCell>{po.order_date ? format(new Date(po.order_date), 'dd MMM yyyy') : '—'}</TableCell>
                           <TableCell className="text-right">{Number(po.total_amount).toFixed(2)}</TableCell>
@@ -153,8 +176,8 @@ export default function Procurement() {
               </Button>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border">
-                <Table>
+              <div className="overflow-x-auto rounded-md border">
+                <Table className="min-w-[720px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
@@ -179,18 +202,21 @@ export default function Procurement() {
                       </TableRow>
                     ) : (
                       suppliers.map((s) => (
-                        <TableRow
-                          key={s.id}
-                          className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => setSupplierDialog({ open: true, supplier: s })}
-                        >
-                          <TableCell className="font-medium">{s.name}</TableCell>
+                        <TableRow key={s.id}>
+                          <TableCell className="font-medium">
+                            <button
+                              className="text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              onClick={() => setSupplierDialog({ open: true, supplier: s })}
+                            >
+                              {s.name}
+                            </button>
+                          </TableCell>
                           <TableCell>{s.contact_person ?? '—'}</TableCell>
                           <TableCell>{s.phone ?? '—'}</TableCell>
                           <TableCell>{s.email ?? '—'}</TableCell>
                           <TableCell>
                             <Badge variant={s.status === 'active' ? 'default' : 'secondary'}>
-                              {s.status}
+                              {s.status === 'active' ? 'Active' : 'Inactive'}
                             </Badge>
                           </TableCell>
                         </TableRow>
@@ -213,8 +239,8 @@ export default function Procurement() {
               </Button>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border">
-                <Table>
+              <div className="overflow-x-auto rounded-md border">
+                <Table className="min-w-[720px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Invoice No</TableHead>
@@ -258,7 +284,12 @@ export default function Procurement() {
                             {inv.status !== 'Paid' && (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    aria-label={`Actions for invoice ${inv.invoice_no}`}
+                                  >
                                     <MoreHorizontal className="h-4 w-4" />
                                   </Button>
                                 </DropdownMenuTrigger>
