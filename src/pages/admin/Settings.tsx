@@ -290,8 +290,8 @@ export default function Settings() {
             </CardTitle>
             <CardDescription>
               {language === 'ms'
-                ? 'Kelayakan Stripe diurus secara selamat melalui Rahsia Cloud Lovable'
-                : 'Stripe credentials are managed securely through Lovable Cloud Secrets'}
+                ? 'Kelayakan Stripe diurus secara selamat melalui rahsia persekitaran Supabase Edge Function'
+                : 'Stripe credentials are managed securely through Supabase Edge Function environment secrets'}
             </CardDescription>
           </CardHeader>
           <CardContent>

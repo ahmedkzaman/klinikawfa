@@ -9,7 +9,7 @@ const completeEnvironment = {
 };
 
 describe("resolveSupabaseBuildConfig", () => {
-  it("uses the approved public production config when Lovable injects no Vite variables", () => {
+  it("uses the approved public production config when no Vite variables are injected", () => {
     const resolved = resolveSupabaseBuildConfig("production", {});
 
     expect(resolved).toMatchObject({

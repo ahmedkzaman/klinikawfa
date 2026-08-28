@@ -1,5 +1,5 @@
 // Deno tests for shared edge-function auth helpers.
-// Run with: supabase functions test, or via the Lovable supabase--test_edge_functions tool.
+// Run with: supabase functions test (Deno test runner).
 // No real Supabase keys are used; all env values are throwaway and fetch is stubbed.
 
 import {
