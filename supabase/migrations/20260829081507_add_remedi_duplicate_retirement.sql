@@ -126,6 +126,29 @@ ALTER TABLE private.remedi_invoice_map
     ));
 
 --------------------------------------------------------------------------------
+-- The ledger maps must not hard-reference clinical rows that retirement deletes.
+-- Linkage columns stay populated (they name WHAT was retired); row images are
+-- preserved in private.remedi_retired_rows, and restore re-creates the same IDs.
+--------------------------------------------------------------------------------
+ALTER TABLE private.remedi_encounter_map
+  DROP CONSTRAINT remedi_encounter_map_consultation_id_fkey;
+ALTER TABLE private.remedi_encounter_map
+  DROP CONSTRAINT remedi_encounter_map_queue_entry_id_fkey;
+ALTER TABLE private.remedi_invoice_map
+  DROP CONSTRAINT remedi_invoice_map_consultation_id_fkey;
+ALTER TABLE private.remedi_invoice_map
+  DROP CONSTRAINT remedi_invoice_map_queue_entry_id_fkey;
+
+COMMENT ON COLUMN private.remedi_encounter_map.queue_entry_id IS
+  'Imported queue entry id. No FK: retirement deletes the queue entry while keeping this linkage (row image preserved in private.remedi_retired_rows).';
+COMMENT ON COLUMN private.remedi_encounter_map.consultation_id IS
+  'Imported consultation id. No FK: retirement deletes the consultation while keeping this linkage (row image preserved in private.remedi_retired_rows).';
+COMMENT ON COLUMN private.remedi_invoice_map.queue_entry_id IS
+  'Imported queue entry id. No FK: retirement deletes the queue entry while keeping this linkage (row image preserved in private.remedi_retired_rows).';
+COMMENT ON COLUMN private.remedi_invoice_map.consultation_id IS
+  'Imported consultation id. No FK: retirement deletes the consultation while keeping this linkage (row image preserved in private.remedi_retired_rows).';
+
+--------------------------------------------------------------------------------
 -- Row-image capture + FK-safe delete helpers (SECURITY DEFINER, owner-only).
 --------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION private.remedi_retire_capture_row(
@@ -163,6 +186,7 @@ REVOKE ALL ON FUNCTION private.remedi_retire_capture_row(uuid, text, text, anyel
 --   E: imported side has a panel claim — delete claim after clinical rows.
 -- Money safety is asserted by the caller (bundle) before invoking.
 --------------------------------------------------------------------------------
+-- Fix: use typed %ROWTYPE loop variables so anyelement resolves correctly.
 CREATE OR REPLACE FUNCTION private.retire_remedi_duplicate(
   _retirement_batch_id uuid,
   _encounter_hash text,
@@ -180,7 +204,12 @@ DECLARE
   v_payment_ids uuid[];
   v_claim_id uuid;
   v_deleted integer := 0;
-  v_row record;
+  v_item public.consultation_items%ROWTYPE;
+  v_vital public.vital_signs%ROWTYPE;
+  v_payment public.payments%ROWTYPE;
+  v_claim public.panel_claims%ROWTYPE;
+  v_consult public.consultations%ROWTYPE;
+  v_queue public.queue_entries%ROWTYPE;
 BEGIN
   -- 1) Retirement batch must exist and be planned/rehearsed.
   SELECT base_batch_id INTO v_batch
@@ -224,6 +253,10 @@ BEGIN
   IF _financial_subcase = 'E_with_claim' AND v_claim_id IS NULL THEN
     RAISE EXCEPTION 'REMEDI_RETIRE_SUBCASE_MISMATCH: no panel claim present';
   END IF;
+  IF _financial_subcase = 'D_with_payments' AND v_claim_id IS NOT NULL THEN
+    -- D subcase with an unexpected claim: retire the claim too (captured first).
+    NULL;
+  END IF;
 
   -- 4) Invoice map row (may not exist for zero-total invoices).
   SELECT * INTO v_invoice
@@ -232,45 +265,53 @@ BEGIN
     AND queue_entry_id = v_map.queue_entry_id
   FOR UPDATE;
 
-  -- 5) Capture full row images BEFORE any delete (FK-safe order: children first).
-  FOR v_row IN
+  -- 5) Capture full row images BEFORE any delete.
+  FOR v_item IN
     SELECT * FROM public.consultation_items ci
     WHERE ci.consultation_id = v_map.consultation_id
   LOOP
-    PERFORM private.remedi_retire_capture_row(_retirement_batch_id, 'public', 'consultation_items', v_row);
+    PERFORM private.remedi_retire_capture_row(_retirement_batch_id, 'public', 'consultation_items', v_item);
   END LOOP;
-  FOR v_row IN
+  FOR v_vital IN
     SELECT * FROM public.vital_signs vs
     WHERE vs.queue_entry_id = v_map.queue_entry_id
   LOOP
-    PERFORM private.remedi_retire_capture_row(_retirement_batch_id, 'public', 'vital_signs', v_row);
+    PERFORM private.remedi_retire_capture_row(_retirement_batch_id, 'public', 'vital_signs', v_vital);
   END LOOP;
-  FOR v_row IN
+  FOR v_payment IN
     SELECT * FROM public.payments p
     WHERE p.queue_entry_id = v_map.queue_entry_id
   LOOP
-    PERFORM private.remedi_retire_capture_row(_retirement_batch_id, 'public', 'payments', v_row);
+    PERFORM private.remedi_retire_capture_row(_retirement_batch_id, 'public', 'payments', v_payment);
   END LOOP;
   IF v_claim_id IS NOT NULL THEN
-    FOR v_row IN
+    FOR v_claim IN
       SELECT * FROM public.panel_claims pc WHERE pc.id = v_claim_id
     LOOP
-      PERFORM private.remedi_retire_capture_row(_retirement_batch_id, 'public', 'panel_claims', v_row);
+      PERFORM private.remedi_retire_capture_row(_retirement_batch_id, 'public', 'panel_claims', v_claim);
     END LOOP;
   END IF;
-  FOR v_row IN
+  FOR v_consult IN
     SELECT * FROM public.consultations c WHERE c.id = v_map.consultation_id
   LOOP
-    PERFORM private.remedi_retire_capture_row(_retirement_batch_id, 'public', 'consultations', v_row);
+    PERFORM private.remedi_retire_capture_row(_retirement_batch_id, 'public', 'consultations', v_consult);
   END LOOP;
-  FOR v_row IN
+  FOR v_queue IN
     SELECT * FROM public.queue_entries q WHERE q.id = v_map.queue_entry_id
   LOOP
-    PERFORM private.remedi_retire_capture_row(_retirement_batch_id, 'public', 'queue_entries', v_row);
+    PERFORM private.remedi_retire_capture_row(_retirement_batch_id, 'public', 'queue_entries', v_queue);
   END LOOP;
 
   -- 6) Delete in FK-safe order. v_map.queue_entry_id is ONLY the imported row
   --    (guaranteed by the UNIQUE map constraint) — live rows are unreachable.
+  -- 6a) Release the invoice map's reference to the claim BEFORE deleting it
+  --     (FK is ON DELETE RESTRICT). The full claim row image is already
+  --     captured in private.remedi_retired_rows, so nothing is lost.
+  IF v_invoice.id IS NOT NULL AND v_invoice.panel_claim_id IS NOT NULL THEN
+    UPDATE private.remedi_invoice_map
+    SET panel_claim_id = NULL
+    WHERE id = v_invoice.id;
+  END IF;
   DELETE FROM public.panel_claims pc WHERE pc.id = v_claim_id;
   IF v_payment_ids IS NOT NULL THEN
     DELETE FROM public.payments p WHERE p.id = ANY(v_payment_ids);
@@ -294,9 +335,10 @@ BEGIN
 
   -- 8) Record the conflict resolution (upsert: UNIQUE (batch_id, source_key_hash)).
   INSERT INTO private.remedi_import_conflicts
-    (batch_id, conflict_type, severity, status, source_key_hash, details, resolved_at)
+    (id, batch_id, conflict_type, severity, status, source_key_hash, details, resolved_at)
   VALUES
-    (v_batch, 'duplicate_of_live_visit', 'warning', 'resolved',
+    (pg_catalog.gen_random_uuid(),
+     v_batch, 'duplicate_of_live_visit', 'warning', 'resolved',
      v_map.source_key_hash,
      jsonb_build_object(
        'retirement_batch_id', _retirement_batch_id,
