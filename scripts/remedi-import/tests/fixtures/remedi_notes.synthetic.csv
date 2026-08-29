@@ -1,0 +1,5 @@
+patient_name,patient_ic,patient_id,visit_date,visit_type,doctor_name,diagnosis,procedure,medication,symptoms,on_examination,sbp,dbp,pulse_rate,weight,height,spo2,temperature,other_vital_sign,lab_findings,lab_imaging,patient_plan_care,mc_issued,mc_day_no,mc_start,payment
+"Example, Alice",900101-01-0001, ui-001 ,13/08/2026 09:15,Walk In,Dr Alpha,Viral fever,,Paracetamol,Fever,,120,80,90,70,170,98,37.0,,, ,Hydration,N,,,70.00
+"Example, Alice",900101-01-0001,ui-001,13/08/2026 09:15,Walk In,,Viral fever,Nebuliser,,Fever,Chest clear,120,,,,,,38.0,,CBC normal,,Hydration,N,,,70.00
+"Example, Alice",900101-01-0001,ui-001,13/08/2026 09:15,Walk In,,Viral fever,Nebuliser,,Fever,Chest clear,120,,,,,,38.0,,CBC normal,,Hydration,N,,,70.00
+Example Bob,900101-01-0001,ui-002,14/08/2026 15:30,Walk In,Dr Beta,Otitis externa,Ear dressing,Topical drops,Ear pain,Ear canal inflamed,130,85,82,75,175,99,36.8,,,,Review in 3 days,N,,,85.00

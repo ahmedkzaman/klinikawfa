@@ -74,6 +74,7 @@ export function usePatientVisitHistory(patientId: string | null) {
         `,
         )
         .eq('patient_id', patientId as string)
+        .neq('visit_type', 'payment_only')
         .is('deleted_at', null)
         // Special-admin RLS can expose voided rows for audit purposes. Keep
         // those rows out of patient-facing history at the query boundary.
