@@ -137,6 +137,7 @@ class PrivateBundleTest(unittest.TestCase):
                 "private.begin_remedi_import_context",
                 "private.import_remedi_payment",
                 "private.import_remedi_panel_claim",
+                "REMEDI_PATIENT_MAP_MANY_TO_ONE_MIGRATION_MISSING",
                 "SET CONSTRAINTS ALL DEFERRED",
                 "COMMIT;",
             ):
@@ -150,6 +151,47 @@ class PrivateBundleTest(unittest.TestCase):
             self.assertIn("private.remedi_encounter_map", rollback_sql)
             self.assertIn("private.remedi_invoice_map", rollback_sql)
             self.assertIn("COMMIT;", rollback_sql)
+
+    def test_patient_resolution_handles_duplicate_destination_identity_safely(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "batch"
+            write_private_bundle(output, synthetic_inputs(), repository_root=PACKAGE_ROOT)
+            import_sql = (output / "import.sql").read_text(encoding="utf-8")
+
+            self.assertIn("strict_destination_match_count", import_sql)
+            self.assertIn("normalized_phone", import_sql)
+            self.assertIn("normalized_name", import_sql)
+            self.assertIn("REMEDI_PATIENT_DUPLICATE_DESTINATION_IDENTITY", import_sql)
+            self.assertNotIn("identity_dob_phone_name", import_sql)
+
+    def test_duplicate_identity_prefers_one_established_destination_patient(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "batch"
+            write_private_bundle(output, synthetic_inputs(), repository_root=PACKAGE_ROOT)
+            import_sql = (output / "import.sql").read_text(encoding="utf-8")
+
+            self.assertIn("destination_patient_usage", import_sql)
+            self.assertIn("external_id_count", import_sql)
+            self.assertIn("consultation_count", import_sql)
+            self.assertIn("queue_entry_count", import_sql)
+            self.assertIn("duplicate_usage_rank", import_sql)
+            self.assertIn("duplicate_top_rank_count = 1", import_sql)
+            self.assertIn("'national_id'::text AS match_method", import_sql)
+
+    def test_multiple_source_records_can_map_to_one_existing_patient(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "batch"
+            write_private_bundle(output, synthetic_inputs(), repository_root=PACKAGE_ROOT)
+            import_sql = (output / "import.sql").read_text(encoding="utf-8")
+
+            matched_identity = import_sql.split("), matched_identity AS (", 1)[1].split(
+                "), strict_duplicate_identity AS (", 1
+            )[0]
+            self.assertNotIn("s.source_identity_count = 1", matched_identity)
+            self.assertIn(
+                "HAVING count(*) > 1 AND bool_or(match_method = 'inserted')",
+                import_sql,
+            )
 
 
 if __name__ == "__main__":

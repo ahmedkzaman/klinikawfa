@@ -235,6 +235,14 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'REMEDI_FIXED_PROVIDER_MISSING';
   END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint
+    WHERE conrelid = 'private.remedi_patient_map'::regclass
+      AND conname = 'remedi_patient_map_batch_id_patient_id_key'
+  ) THEN
+    RAISE EXCEPTION 'REMEDI_PATIENT_MAP_MANY_TO_ONE_MIGRATION_MISSING';
+  END IF;
   IF (SELECT count(*) FROM public.clinic_document_fees
       WHERE document_type IN ('mc', 'prescription', 'quarantine', 'referral')
         AND amount = 15.00) <> 4 THEN
@@ -284,38 +292,125 @@ INSERT INTO private.remedi_source_files(
 {source_values}
 ON CONFLICT (batch_id, filename) DO NOTHING;
 
--- Existing patients are resolved only when a normalized identifier has exactly
--- one source occurrence and exactly one destination occurrence. All other
--- source patients keep their deterministic proposed ID.
+-- Existing patients are resolved by normalized identity. If the destination
+-- has duplicate identity rows, exactly one stricter DOB plus phone/name match
+-- may resolve it. Multiple Remedi records may map to one unique existing
+-- destination identity; unresolved duplicate identities still fail closed.
 CREATE TEMP TABLE stage_patient_resolution ON COMMIT DROP AS
 WITH source_identity AS (
   SELECT p.*,
     upper(regexp_replace(coalesce(p.national_id, p.passport_no, ''), '[^A-Z0-9]', '', 'g')) AS identity,
+    regexp_replace(coalesce(p.phone, ''), '[^0-9]', '', 'g') AS normalized_phone,
+    upper(regexp_replace(coalesce(p.name, ''), '[^A-Z0-9]', '', 'g')) AS normalized_name,
     count(*) OVER (PARTITION BY upper(regexp_replace(coalesce(p.national_id, p.passport_no, ''), '[^A-Z0-9]', '', 'g'))) AS source_identity_count
   FROM stage_patients p
+), external_id_usage AS (
+  SELECT patient_id, count(*) AS external_id_count
+  FROM public.patient_external_ids
+  GROUP BY patient_id
+), consultation_usage AS (
+  SELECT patient_id, count(*) AS consultation_count
+  FROM public.consultations
+  GROUP BY patient_id
+), queue_entry_usage AS (
+  SELECT patient_id, count(*) AS queue_entry_count
+  FROM public.queue_entries
+  GROUP BY patient_id
+), destination_patient_usage AS (
+  SELECT p.id,
+    coalesce(e.external_id_count, 0) AS external_id_count,
+    coalesce(c.consultation_count, 0) AS consultation_count,
+    coalesce(q.queue_entry_count, 0) AS queue_entry_count
+  FROM public.patients p
+  LEFT JOIN external_id_usage e ON e.patient_id = p.id
+  LEFT JOIN consultation_usage c ON c.patient_id = p.id
+  LEFT JOIN queue_entry_usage q ON q.patient_id = p.id
 ), destination_identity AS (
   SELECT p.id,
     upper(regexp_replace(coalesce(p.national_id, p.passport_no, ''), '[^A-Z0-9]', '', 'g')) AS identity,
+    regexp_replace(coalesce(p.phone, ''), '[^0-9]', '', 'g') AS normalized_phone,
+    upper(regexp_replace(coalesce(p.name, ''), '[^A-Z0-9]', '', 'g')) AS normalized_name,
+    p.date_of_birth,
     count(*) OVER (PARTITION BY upper(regexp_replace(coalesce(p.national_id, p.passport_no, ''), '[^A-Z0-9]', '', 'g'))) AS destination_identity_count
   FROM public.patients p
+), matched_identity AS (
+  SELECT s.remedi_ui_id, d.id, 'national_id'::text AS match_method
+  FROM source_identity s
+  JOIN destination_identity d ON d.identity = s.identity
+  WHERE s.identity <> ''
+    AND d.destination_identity_count = 1
+), strict_duplicate_identity AS (
+  SELECT s.remedi_ui_id, d.id, 'national_id'::text AS match_method,
+         count(*) OVER (PARTITION BY s.remedi_ui_id) AS strict_destination_match_count,
+         u.external_id_count, u.consultation_count, u.queue_entry_count
+  FROM source_identity s
+  JOIN destination_identity d ON d.identity = s.identity
+  JOIN destination_patient_usage u ON u.id = d.id
+  WHERE s.identity <> ''
+    AND s.source_identity_count = 1
+    AND d.destination_identity_count > 1
+    AND s.date_of_birth IS NOT DISTINCT FROM d.date_of_birth
+    AND (
+      (s.normalized_phone <> '' AND s.normalized_phone = d.normalized_phone)
+      OR (s.normalized_name <> '' AND s.normalized_name = d.normalized_name)
+    )
+), ranked_duplicate_identity AS (
+  SELECT d.*,
+    dense_rank() OVER (
+      PARTITION BY d.remedi_ui_id
+      ORDER BY d.external_id_count DESC,
+               d.consultation_count DESC,
+               d.queue_entry_count DESC
+    ) AS duplicate_usage_rank
+  FROM strict_duplicate_identity d
+  WHERE d.strict_destination_match_count > 1
+), top_ranked_duplicate_identity AS (
+  SELECT d.remedi_ui_id, d.id,
+    'national_id'::text AS match_method,
+    count(*) OVER (PARTITION BY d.remedi_ui_id) AS duplicate_top_rank_count
+  FROM ranked_duplicate_identity d
+  WHERE d.duplicate_usage_rank = 1
+), resolved_identity AS (
+  SELECT remedi_ui_id, id, match_method FROM matched_identity
+  UNION ALL
+  SELECT remedi_ui_id, id, match_method
+  FROM strict_duplicate_identity
+  WHERE strict_destination_match_count = 1
+  UNION ALL
+  SELECT remedi_ui_id, id, match_method
+  FROM top_ranked_duplicate_identity
+  WHERE duplicate_top_rank_count = 1
 )
 SELECT s.*,
-  CASE WHEN s.identity <> '' AND s.source_identity_count = 1
-             AND d.destination_identity_count = 1 THEN d.id ELSE s.proposed_patient_id END AS patient_id,
-  CASE WHEN s.identity <> '' AND s.source_identity_count = 1
-             AND d.destination_identity_count = 1 THEN 'national_id' ELSE 'inserted' END AS match_method
+  coalesce(r.id, s.proposed_patient_id) AS patient_id,
+  coalesce(r.match_method, 'inserted') AS match_method
 FROM source_identity s
-LEFT JOIN destination_identity d
-  ON d.identity = s.identity
- AND d.destination_identity_count = 1
- AND s.identity <> '';
+LEFT JOIN resolved_identity r ON r.remedi_ui_id = s.remedi_ui_id;
 
 DO $resolve$
 BEGIN
   IF (SELECT count(*) FROM stage_patient_resolution) <> {int(data.counts['patients'])}
      OR EXISTS (SELECT 1 FROM stage_patient_resolution GROUP BY remedi_ui_id HAVING count(*) <> 1)
-     OR EXISTS (SELECT 1 FROM stage_patient_resolution GROUP BY patient_id HAVING count(*) <> 1) THEN
+     OR EXISTS (
+       SELECT 1
+       FROM stage_patient_resolution
+       GROUP BY patient_id
+       HAVING count(*) > 1 AND bool_or(match_method = 'inserted')
+     ) THEN
     RAISE EXCEPTION 'REMEDI_PATIENT_RESOLUTION_CONFLICT';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM stage_patient_resolution r
+    WHERE r.match_method = 'inserted'
+      AND r.identity <> ''
+      AND EXISTS (
+        SELECT 1
+        FROM public.patients p
+        WHERE upper(regexp_replace(coalesce(p.national_id, p.passport_no, ''), '[^A-Z0-9]', '', 'g')) = r.identity
+      )
+  ) THEN
+    RAISE EXCEPTION 'REMEDI_PATIENT_DUPLICATE_DESTINATION_IDENTITY';
   END IF;
 END
 $resolve$;
