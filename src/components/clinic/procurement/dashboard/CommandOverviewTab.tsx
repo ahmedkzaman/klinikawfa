@@ -216,7 +216,7 @@ export const CommandOverviewTab = memo(function CommandOverviewTab({
                 <span className="text-right">Committed + Received</span>
                 <span className="text-right">Remaining</span>
               </div>
-              {report.budgetRows.map((row) => (
+              {(report.budgetRows ?? []).map((row) => (
                 <div
                   key={row.category}
                   className="grid grid-cols-4 items-center gap-2 border-t pt-2 text-sm"
@@ -250,7 +250,7 @@ export const CommandOverviewTab = memo(function CommandOverviewTab({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle className="text-base">Things to do</CardTitle>
-          {report && report.actions.length > MAX_ACTIONS && (
+          {report && (report.actions?.length ?? 0) > MAX_ACTIONS && (
             <Button size="sm" variant="ghost" onClick={() => onCreateOrder()} className="text-muted-foreground">
               View all
             </Button>
@@ -262,14 +262,14 @@ export const CommandOverviewTab = memo(function CommandOverviewTab({
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />
             </div>
-          ) : report.actions.length === 0 ? (
+          ) : (report.actions?.length ?? 0) === 0 ? (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
               <CheckCircle2 className="h-4 w-4 text-green-600" />
               Nothing needs attention right now.
             </p>
           ) : (
             <ul className="space-y-2">
-              {sortProcurementActions(report.actions)
+              {sortProcurementActions(report.actions ?? [])
                 .slice(0, MAX_ACTIONS)
                 .map((action) => (
                   <ActionRow key={action.id} action={action} onOpenPO={onOpenPO} onCreateOrder={onCreateOrder} />
@@ -285,10 +285,10 @@ export const CommandOverviewTab = memo(function CommandOverviewTab({
           onOpenChange={setBudgetDialogOpen}
           month={month}
           currentBudgets={{
-            medicines: report.budgetRows.find((r) => r.category === 'medicines')?.budget ?? 0,
-            consumables: report.budgetRows.find((r) => r.category === 'consumables')?.budget ?? 0,
-            vaccines: report.budgetRows.find((r) => r.category === 'vaccines')?.budget ?? 0,
-            other: report.budgetRows.find((r) => r.category === 'other')?.budget ?? 0,
+            medicines: (report.budgetRows ?? []).find((r) => r.category === 'medicines')?.budget ?? 0,
+            consumables: (report.budgetRows ?? []).find((r) => r.category === 'consumables')?.budget ?? 0,
+            vaccines: (report.budgetRows ?? []).find((r) => r.category === 'vaccines')?.budget ?? 0,
+            other: (report.budgetRows ?? []).find((r) => r.category === 'other')?.budget ?? 0,
           }}
         />
       )}
