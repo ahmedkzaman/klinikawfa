@@ -38,4 +38,23 @@ describe('simple procurement dashboard migration', () => {
     expect(sql).toMatch(/guard_purchase_order_status/i);
     expect(sql).toMatch(/current_setting\('app\.procurement_transition'/i);
   });
+
+  it('defines authoritative summaries and stock planning', () => {
+    expect(sql).toMatch(/create or replace function public\.get_procurement_dashboard/i);
+    expect(sql).toMatch(/security invoker/i);
+    expect(sql).toMatch(/status = 'Ordered'[\s\S]*status = 'Received'/i);
+    expect(sql).toMatch(/create or replace view public\.v_procurement_stock_planning/i);
+    expect(sql).toMatch(/open_order_qty[\s\S]*suggested_qty/i);
+    expect(sql).toMatch(/nearest_expiry_date/i);
+  });
+
+  it('routes approval and receiving through guarded functions', () => {
+    expect(sql).toMatch(/create or replace function public\.transition_purchase_order/i);
+    expect(sql).toMatch(/procurement_routine_order_limit/i);
+    expect(sql).toMatch(/has_clinic_permission\('procurement\.approve'/i);
+    expect(sql).toMatch(/set_config\('app\.procurement_transition', 'allowed', true\)/i);
+    expect(sql).toMatch(/receive_purchase_order[\s\S]*v_status <> 'Ordered'/i);
+    expect(sql).toMatch(/revoke all on function public\.transition_purchase_order/i);
+    expect(sql).toMatch(/grant execute on function public\.transition_purchase_order[\s\S]*to authenticated/i);
+  });
 });

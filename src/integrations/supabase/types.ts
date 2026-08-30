@@ -1162,7 +1162,8 @@ export type Database = {
           tts_language: string
           tv_ticker_text: string | null
           tv_youtube_id: string | null
-          updated_at: string
+          updated_at: string          procurement_routine_order_limit: number
+
         }
         Insert: {
           address_line_1?: string
@@ -1190,7 +1191,8 @@ export type Database = {
           tts_language?: string
           tv_ticker_text?: string | null
           tv_youtube_id?: string | null
-          updated_at?: string
+          updated_at?: string          procurement_routine_order_limit?: number
+
         }
         Update: {
           address_line_1?: string
@@ -1218,7 +1220,8 @@ export type Database = {
           tts_language?: string
           tv_ticker_text?: string | null
           tv_youtube_id?: string | null
-          updated_at?: string
+          updated_at?: string          procurement_routine_order_limit?: number
+
         }
         Relationships: []
       }
@@ -4007,6 +4010,77 @@ export type Database = {
         }
         Relationships: []
       }
+      procurement_monthly_budgets: {
+        Row: {
+          amount: number
+          budget_month: string
+          category: string
+          created_at: string
+          id: string
+          updated_at: string
+          updated_by: string
+        }
+        Insert: {
+          amount: number
+          budget_month: string
+          category: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string
+        }
+        Update: {
+          amount?: number
+          budget_month?: string
+          category?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string
+        }
+        Relationships: []
+      }
+      procurement_attachments: {
+        Row: {
+          created_at: string
+          file_name: string
+          id: string
+          mime_type: string
+          po_id: string
+          size_bytes: number
+          storage_path: string
+          uploaded_by: string
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          id?: string
+          mime_type: string
+          po_id: string
+          size_bytes: number
+          storage_path: string
+          uploaded_by?: string
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          id?: string
+          mime_type?: string
+          po_id?: string
+          size_bytes?: number
+          storage_path?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "procurement_attachments_po_id_fkey"
+            columns: ["po_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       purchase_order_items: {
         Row: {
           created_at: string
@@ -4086,7 +4160,13 @@ export type Database = {
           status: string
           supplier_id: string
           total_amount: number
-          updated_at: string
+          updated_at: string          approved_at: string | null
+          approved_by: string | null
+          order_channel: string
+          ordered_at: string | null
+          ordered_by: string | null
+          supplier_reference: string | null
+
         }
         Insert: {
           created_at?: string
@@ -4101,7 +4181,13 @@ export type Database = {
           status?: string
           supplier_id: string
           total_amount?: number
-          updated_at?: string
+          updated_at?: string          approved_at?: string | null
+          approved_by?: string | null
+          order_channel?: string
+          ordered_at?: string | null
+          ordered_by?: string | null
+          supplier_reference?: string | null
+
         }
         Update: {
           created_at?: string
@@ -4116,7 +4202,13 @@ export type Database = {
           status?: string
           supplier_id?: string
           total_amount?: number
-          updated_at?: string
+          updated_at?: string          approved_at?: string | null
+          approved_by?: string | null
+          order_channel?: string
+          ordered_at?: string | null
+          ordered_by?: string | null
+          supplier_reference?: string | null
+
         }
         Relationships: [
           {
@@ -5081,7 +5173,8 @@ export type Database = {
           notes: string | null
           phone: string | null
           status: string
-          updated_at: string
+          updated_at: string          lead_time_days: number
+
         }
         Insert: {
           contact_person?: string | null
@@ -5092,7 +5185,8 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           status?: string
-          updated_at?: string
+          updated_at?: string          lead_time_days?: number
+
         }
         Update: {
           contact_person?: string | null
@@ -5103,7 +5197,8 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           status?: string
-          updated_at?: string
+          updated_at?: string          lead_time_days?: number
+
         }
         Relationships: []
       }
@@ -6419,6 +6514,25 @@ export type Database = {
         }
         Relationships: []
       }
+      v_procurement_stock_planning: {
+        Row: {
+          avg_daily_usage: number | null
+          category: string | null
+          current_stock: number | null
+          days_cover: number | null
+          item_id: string | null
+          movement_status: string | null
+          name: string | null
+          nearest_expiry_date: string | null
+          open_order_qty: number | null
+          recommendation_reason: string | null
+          reorder_level: number | null
+          suggested_qty: number | null
+          supplier_lead_time_days: number | null
+          used_30d: number | null
+        }
+        Relationships: []
+      }
       v_seasonal_diagnosis_trends: {
         Row: {
           avg_expected_cases: number | null
@@ -6703,6 +6817,14 @@ export type Database = {
       get_payment_batch_receipt: {
         Args: { p_payment_id: string }
         Returns: Json
+      }
+      get_procurement_dashboard: {
+        Args: { _month: string }
+        Returns: Json
+      }
+      transition_purchase_order: {
+        Args: { _po_id: string; _requested_status: string }
+        Returns: string
       }
       get_visit_financial_snapshot: {
         Args: { p_queue_entry_id: string }
