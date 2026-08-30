@@ -2,9 +2,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 const LIST_KEY = ['purchase_orders'];
+const DASHBOARD_KEYS = [['procurement', 'dashboard'], ['procurement', 'stock-planning']];
 const detailKey = (id: string) => ['purchase_orders', id];
 
-export type POStatus = 'Draft' | 'Sent' | 'Received' | 'Cancelled';
+export type POChannel = 'internal' | 'whatsapp' | 'supplier_website' | 'phone' | 'email' | 'other';
+export type POStatus = 'Draft' | 'Awaiting approval' | 'Ordered' | 'Received' | 'Cancelled';
 
 export interface PurchaseOrderListRow {
   id: string;
@@ -17,6 +19,12 @@ export interface PurchaseOrderListRow {
   notes: string | null;
   received_at: string | null;
   created_at: string;
+  order_channel: POChannel;
+  supplier_reference: string | null;
+  approved_at: string | null;
+  approved_by: string | null;
+  ordered_at: string | null;
+  ordered_by: string | null;
   supplier?: { id: string; name: string } | null;
 }
 
@@ -33,6 +41,12 @@ export interface PurchaseOrderItemRow {
 
 export interface PurchaseOrderDetail extends PurchaseOrderListRow {
   items: PurchaseOrderItemRow[];
+}
+
+function invalidateProcurement(queryClient: ReturnType<typeof useQueryClient>, id?: string) {
+  queryClient.invalidateQueries({ queryKey: LIST_KEY });
+  if (id) queryClient.invalidateQueries({ queryKey: detailKey(id) });
+  for (const key of DASHBOARD_KEYS) queryClient.invalidateQueries({ queryKey: key });
 }
 
 export function usePurchaseOrders() {
@@ -115,32 +129,35 @@ export function usePurchaseOrders() {
 
       return draft;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: LIST_KEY }),
+    onSuccess: () => invalidateProcurement(queryClient),
   });
 
   const updateHeader = useMutation({
     mutationFn: async ({
       id,
       ...patch
-    }: { id: string } & Partial<Pick<PurchaseOrderListRow, 'supplier_id' | 'order_date' | 'expected_date' | 'notes'>>) => {
+    }: { id: string } & Partial<Pick<PurchaseOrderListRow, 'supplier_id' | 'order_date' | 'expected_date' | 'notes' | 'order_channel' | 'supplier_reference'>>) => {
       const { error } = await supabase.from('purchase_orders').update(patch as never).eq('id', id);
       if (error) throw error;
     },
-    onSuccess: (_d, vars) => {
-      queryClient.invalidateQueries({ queryKey: LIST_KEY });
-      queryClient.invalidateQueries({ queryKey: detailKey(vars.id) });
-    },
+    onSuccess: (_d, vars) => invalidateProcurement(queryClient, vars.id),
   });
 
-  const setStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: POStatus }) => {
-      const { error } = await supabase.from('purchase_orders').update({ status } as never).eq('id', id);
+  /**
+   * The only way client code moves a PO through the workflow. The database
+   * decides the resulting status (approval routing, permission checks) and
+   * returns it; the caller never assumes the requested status succeeded.
+   */
+  const transitionOrder = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: 'Ordered' | 'Cancelled' }) => {
+      const { data, error } = await supabase.rpc('transition_purchase_order', {
+        _po_id: id,
+        _requested_status: status,
+      });
       if (error) throw error;
+      return data as POStatus;
     },
-    onSuccess: (_d, vars) => {
-      queryClient.invalidateQueries({ queryKey: LIST_KEY });
-      queryClient.invalidateQueries({ queryKey: detailKey(vars.id) });
-    },
+    onSuccess: (_d, vars) => invalidateProcurement(queryClient, vars.id),
   });
 
   const receiveGoods = useMutation({
@@ -148,14 +165,10 @@ export function usePurchaseOrders() {
       const { error } = await supabase.rpc('receive_purchase_order', { _po_id: id });
       if (error) throw error;
     },
-    onSuccess: (_d, id) => {
-      queryClient.invalidateQueries({ queryKey: LIST_KEY });
-      queryClient.invalidateQueries({ queryKey: detailKey(id) });
-      queryClient.invalidateQueries({ queryKey: ['inventory_items'] });
-    },
+    onSuccess: (_d, id) => invalidateProcurement(queryClient, id),
   });
 
-  return { orders, isLoading, createDraft, updateHeader, setStatus, receiveGoods };
+  return { orders, isLoading, createDraft, updateHeader, transitionOrder, receiveGoods };
 }
 
 export function usePurchaseOrder(id: string | null) {
