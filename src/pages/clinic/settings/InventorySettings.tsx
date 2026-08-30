@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Pencil, Loader2 } from 'lucide-react';
+import { ArrowLeft, Plus, Pencil, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -35,6 +35,10 @@ import {
   PackageDialog,
   type PackageRow,
 } from '@/components/clinic/settings/PackageDialog';
+import { DeleteCatalogueEntryDialog } from '@/components/clinic/settings/DeleteCatalogueEntryDialog';
+import { useAuth } from '@/contexts/AuthContext';
+import { canArchiveCatalogue, type CatalogueType } from '@/lib/clinic/catalogueArchive';
+import { useArchiveCatalogueEntry } from '@/hooks/clinic/useArchiveCatalogueEntry';
 
 const fmtRM = (n: number) =>
   `RM ${(Number(n) || 0).toLocaleString('en-MY', {
@@ -58,6 +62,8 @@ const SVC_TAB_DEFAULTS: Record<SvcTabKey, ServiceCategory> = {
 };
 
 export default function InventorySettings() {
+  const { role } = useAuth();
+  const canDelete = canArchiveCatalogue(role);
   const { items, isLoading: itemsLoading } = useInventoryItems();
   const { services, isLoading: servicesLoading } = useServices();
   const { packages, isLoading: packagesLoading } = usePackages();
@@ -80,13 +86,15 @@ export default function InventorySettings() {
     open: false,
     row: null,
   });
+  const [deleteTarget, setDeleteTarget] = useState<{ type: CatalogueType; id: string; name: string } | null>(null);
+  const archiveMutation = useArchiveCatalogueEntry();
 
   // ── Filtered slices ────────────────────────────────────────────
   const medications = useMemo(
     () =>
       items.filter((it) => {
         const c = (it as { category?: string | null }).category ?? 'Medication';
-        return c === 'Medication' || c === 'Vaccine';
+        return (c === 'Medication' || c === 'Vaccine') && !(it as any).archived_at;
       }),
     [items],
   );
@@ -94,7 +102,7 @@ export default function InventorySettings() {
   const disposables = useMemo(
     () =>
       items.filter(
-        (it) => (it as { category?: string | null }).category === 'Disposable Item',
+        (it) => (it as { category?: string | null }).category === 'Disposable Item' && !(it as any).archived_at,
       ),
     [items],
   );
@@ -102,7 +110,7 @@ export default function InventorySettings() {
   const procedures = useMemo(
     () =>
       services.filter(
-        (s) => (s as { category?: string | null }).category === 'Procedure',
+        (s) => (s as { category?: string | null }).category === 'Procedure' && !(s as any).archived_at,
       ),
     [services],
   );
@@ -111,7 +119,7 @@ export default function InventorySettings() {
     () =>
       services.filter(
         (s) =>
-          (s as { category?: string | null }).category === 'Laboratory Investigation',
+          (s as { category?: string | null }).category === 'Laboratory Investigation' && !(s as any).archived_at,
       ),
     [services],
   );
@@ -120,7 +128,7 @@ export default function InventorySettings() {
     () =>
       services.filter((s) => {
         const c = (s as { category?: string | null }).category ?? 'General Service';
-        return c === 'General Service' || c === 'Other';
+        return (c === 'General Service' || c === 'Other') && !(s as any).archived_at;
       }),
     [services],
   );
@@ -224,6 +232,7 @@ export default function InventorySettings() {
                   >
                     <Pencil className="h-4 w-4" />
                   </Button>
+                  {canDelete && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleteTarget({ type: 'inventory_item', id: it.id, name: it.name })}><Trash2 className="h-4 w-4" /></Button>}
                 </TableCell>
               </TableRow>
             ))
@@ -285,6 +294,7 @@ export default function InventorySettings() {
                   >
                     <Pencil className="h-4 w-4" />
                   </Button>
+                  {canDelete && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleteTarget({ type: 'service', id: s.id, name: s.name })}><Trash2 className="h-4 w-4" /></Button>}
                 </TableCell>
               </TableRow>
             ))
@@ -428,7 +438,7 @@ export default function InventorySettings() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  packages.map((p) => (
+                  packages.filter((p) => !(p as any).archived_at).map((p) => (
                     <TableRow key={p.id}>
                       <TableCell className="font-medium">{p.name}</TableCell>
                       <TableCell className="text-right tabular-nums">{fmtRM(p.cost)}</TableCell>
@@ -454,6 +464,7 @@ export default function InventorySettings() {
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
+                        {canDelete && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleteTarget({ type: 'package', id: p.id, name: p.name })}><Trash2 className="h-4 w-4" /></Button>}
                       </TableCell>
                     </TableRow>
                   ))
@@ -481,6 +492,7 @@ export default function InventorySettings() {
         onOpenChange={(o) => setPkgDialog((s) => ({ ...s, open: o }))}
         pkg={pkgDialog.row}
       />
+      <DeleteCatalogueEntryDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)} name={deleteTarget?.name ?? ''} isPending={archiveMutation.isPending} onConfirm={() => deleteTarget && archiveMutation.mutate(deleteTarget, { onSuccess: () => setDeleteTarget(null) })} />
     </div>
   );
 }

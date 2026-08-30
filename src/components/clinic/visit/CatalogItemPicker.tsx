@@ -61,12 +61,12 @@ export function CatalogItemPicker({
 
   const services = useMemo(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    () => (servicesRaw as any[]).filter((s) => (s.status ?? 'active') === 'active'),
+    () => (servicesRaw as any[]).filter((s) => (s.status ?? 'active') === 'active' && !s.archived_at),
     [servicesRaw],
   );
   const packages = useMemo(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    () => (packagesRaw as any[]).filter((p) => (p.status ?? 'active') === 'active'),
+    () => (packagesRaw as any[]).filter((p) => (p.status ?? 'active') === 'active' && !p.archived_at),
     [packagesRaw],
   );
 

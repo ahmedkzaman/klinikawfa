@@ -233,7 +233,7 @@ export function PackageDialog({ open, onOpenChange, pkg }: Props) {
   const serviceOptions: PickerOption[] = useMemo(
     () =>
       services
-        .filter((s) => (s.status ?? 'active') === 'active')
+        .filter((s) => (s.status ?? 'active') === 'active' && !s.archived_at)
         .map((s) => ({
           id: s.id,
           name: s.name,
@@ -245,7 +245,7 @@ export function PackageDialog({ open, onOpenChange, pkg }: Props) {
   const medicationOptions: PickerOption[] = useMemo(
     () =>
       inventoryItems
-        .filter((i) => (i.status ?? 'active') === 'active')
+        .filter((i) => (i.status ?? 'active') === 'active' && !i.archived_at)
         .map((i) => ({
           id: i.id,
           name: i.name,
