@@ -39,9 +39,18 @@ export function useProcurementAccess(): ProcurementAccess {
   const { data, isLoading } = useQuery({
     queryKey: ['procurement', 'access'],
     queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not signed in');
+      // Both functions take an explicit uuid argument (can_manage_inventory has
+      // no default, and passing auth.uid() explicitly keeps the PostgREST call
+      // unambiguous). has_clinic_permission requires the caller to match
+      // auth.uid() unless they manage permissions, which holds here.
       const [manageRes, approveRes] = await Promise.all([
-        supabase.rpc('can_manage_inventory'),
-        supabase.rpc('has_clinic_permission', { _permission_key: 'procurement.approve' }),
+        supabase.rpc('can_manage_inventory', { _user_id: user.id }),
+        supabase.rpc('has_clinic_permission', {
+          _permission_key: 'procurement.approve',
+          _user_id: user.id,
+        }),
       ]);
       if (manageRes.error) throw manageRes.error;
       if (approveRes.error) throw approveRes.error;
