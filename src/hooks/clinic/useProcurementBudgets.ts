@@ -10,7 +10,7 @@ export function useSaveProcurementBudgets(month: string) {
   const queryClient = useQueryClient();
 
   const saveBudgets = useMutation({
-    mutationFn: async ({ budgets, updatedBy }: { budgets: Record<BudgetCategory, number>; updatedBy: string }) => {
+    mutationFn: async ({ budgets }: { budgets: Record<BudgetCategory, number> }) => {
       const rows = budgetCategoryList().map((category) => {
         const amount = budgets[category];
         if (!Number.isFinite(amount) || amount < 0) {
@@ -20,7 +20,6 @@ export function useSaveProcurementBudgets(month: string) {
           budget_month: month,
           category,
           amount,
-          updated_by: updatedBy,
         };
       });
 

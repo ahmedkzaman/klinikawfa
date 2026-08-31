@@ -115,7 +115,7 @@ describe('useSaveProcurementBudgets', () => {
       'other',
       'vaccines',
     ]);
-    expect(rows.every((r) => r.budget_month === '2026-08-01' && r.updated_by === 'user-1')).toBe(true);
+    expect(rows.every((r) => r.budget_month === '2026-08-01')).toBe(true);
   });
 
   it('rejects non-finite or negative amounts', async () => {

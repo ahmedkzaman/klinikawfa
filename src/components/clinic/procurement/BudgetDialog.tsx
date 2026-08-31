@@ -80,7 +80,7 @@ export function BudgetDialog({ open, onOpenChange, month, currentBudgets }: Budg
 
     setInlineError(null);
     saveBudgets.mutate(
-      { budgets, updatedBy: crypto.randomUUID() },
+      { budgets },
       {
         onSuccess: () => onOpenChange(false),
         onError: (error: Error) =>
