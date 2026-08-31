@@ -540,9 +540,15 @@ export function StaffChat() {
     const map = new Map<string, { user_id: string; name: string; online: false }>();
     for (const m of messages) {
       if (m.receiver_id === null) continue;
+      // Peer = the OTHER side of the conversation. Only the message SENT BY
+      // the peer carries the peer's name; when the peer is the receiver, the
+      // row's sender_name is OUR OWN name and must not be used as a fallback.
       const peerId = m.sender_id === myId ? m.receiver_id : m.sender_id;
       if (peerId === myId || map.has(peerId) || onlineUserIds.has(peerId)) continue;
-      const name = peerNames[peerId] ?? m.sender_name;
+      const peerIsSender = m.sender_id === peerId;
+      const name =
+        peerNames[peerId] ??
+        (peerIsSender ? m.sender_name : 'Direct message');
       map.set(peerId, { user_id: peerId, name, online: false });
     }
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
