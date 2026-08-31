@@ -1192,7 +1192,8 @@ export type Database = {
           tts_language?: string
           tv_ticker_text?: string | null
           tv_youtube_id?: string | null
-          updated_at?: string          procurement_routine_order_limit?: number
+          updated_at?: string
+          procurement_routine_order_limit?: number
 
         }
         Update: {
@@ -1221,7 +1222,8 @@ export type Database = {
           tts_language?: string
           tv_ticker_text?: string | null
           tv_youtube_id?: string | null
-          updated_at?: string          procurement_routine_order_limit?: number
+          updated_at?: string
+          procurement_routine_order_limit?: number
 
         }
         Relationships: []
@@ -4161,7 +4163,8 @@ export type Database = {
           status: string
           supplier_id: string
           total_amount: number
-          updated_at: string          approved_at: string | null
+          updated_at: string
+          approved_at: string | null
           approved_by: string | null
           order_channel: string
           ordered_at: string | null
@@ -4182,7 +4185,8 @@ export type Database = {
           status?: string
           supplier_id: string
           total_amount?: number
-          updated_at?: string          approved_at?: string | null
+          updated_at?: string
+          approved_at?: string | null
           approved_by?: string | null
           order_channel?: string
           ordered_at?: string | null
@@ -4203,7 +4207,8 @@ export type Database = {
           status?: string
           supplier_id?: string
           total_amount?: number
-          updated_at?: string          approved_at?: string | null
+          updated_at?: string
+          approved_at?: string | null
           approved_by?: string | null
           order_channel?: string
           ordered_at?: string | null
@@ -5174,7 +5179,8 @@ export type Database = {
           notes: string | null
           phone: string | null
           status: string
-          updated_at: string          lead_time_days: number
+          updated_at: string
+          lead_time_days: number
 
         }
         Insert: {
@@ -5186,7 +5192,8 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           status?: string
-          updated_at?: string          lead_time_days?: number
+          updated_at?: string
+          lead_time_days?: number
 
         }
         Update: {
@@ -5198,7 +5205,8 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           status?: string
-          updated_at?: string          lead_time_days?: number
+          updated_at?: string
+          lead_time_days?: number
 
         }
         Relationships: []
