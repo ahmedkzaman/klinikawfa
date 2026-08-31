@@ -85,6 +85,7 @@ const TAB_LABELS: Record<TabKey, string> = {
 };
 
 export default function Inventory() {
+  const { canManage: canEditInventory, isLoading: invAccessLoading } = useInventoryManageAccess();
   const { data: items = [], isLoading } = useInventoryDashboard();
   const [subNav, setSubNav] = useState<SubNav>('item_master');
   const [activeTab, setActiveTab] = useState<TabKey>('all');
@@ -147,7 +148,7 @@ export default function Inventory() {
                 Manage stock, expiry, and pricing tiers for medications and supplies.
               </p>
             </div>
-            {subNav === 'item_master' && (
+            {subNav === 'item_master' && canEditInventory && (
               <Button onClick={openAdd} size="sm">
                 <Plus className="mr-1.5 h-4 w-4" />
                 Add Item
@@ -268,7 +269,7 @@ export default function Inventory() {
                             return (
                               <TableRow
                                 key={it.id}
-                                onClick={() => openEdit(it)}
+                                onClick={() => canEditInventory && openEdit(it)}
                                 className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50/60"
                               >
                                 <TableCell className="font-medium text-slate-800">{it.name}</TableCell>

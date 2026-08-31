@@ -66,6 +66,7 @@ const PERMISSIONS = [
   ['settings.manage', 'Manage clinic settings'],
   ['management_dashboard.view', 'View management dashboard'],
   ['procurement.approve', 'Approve purchase orders'],
+  ['inventory.manage', 'Inventory management'],
 ] as const;
 
 const PERMISSION_HELP: Record<string, string> = {
@@ -79,6 +80,7 @@ const PERMISSION_HELP: Record<string, string> = {
   'settings.manage': 'Clinic preferences and configuration',
   'management_dashboard.view': 'Management KPI dashboard',
   'procurement.approve': 'Approve purchase orders above the routine limit or over budget',
+  'inventory.manage': 'Add or edit items, adjust stock, change prices',
 };
 
 /** Grants that deserve an explicit confirmation before they take effect. */

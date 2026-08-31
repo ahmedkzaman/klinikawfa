@@ -393,7 +393,7 @@ const App = () => (
                 <Route
                   path="inventory"
                   element={
-                    <ClinicProtectedRoute requiredRole="ops_or_admin">
+                    <ClinicProtectedRoute requiredRole="any_staff">
                       <Inventory />
                     </ClinicProtectedRoute>
                   }
@@ -466,7 +466,7 @@ const App = () => (
                 <Route
                   path="settings/inventory"
                   element={
-                    <ClinicProtectedRoute>
+                    <ClinicProtectedRoute requiredRole="any_staff">
                       <InventorySettings />
                     </ClinicProtectedRoute>
                   }

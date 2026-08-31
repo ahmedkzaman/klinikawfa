@@ -36,8 +36,7 @@ import {
   type PackageRow,
 } from '@/components/clinic/settings/PackageDialog';
 import { DeleteCatalogueEntryDialog } from '@/components/clinic/settings/DeleteCatalogueEntryDialog';
-import { useAuth } from '@/contexts/AuthContext';
-import { canArchiveCatalogue, type CatalogueType } from '@/lib/clinic/catalogueArchive';
+import { useInventoryManageAccess } from '@/hooks/clinic/useInventoryManageAccess';
 import { useArchiveCatalogueEntry } from '@/hooks/clinic/useArchiveCatalogueEntry';
 
 const fmtRM = (n: number) =>
@@ -62,8 +61,8 @@ const SVC_TAB_DEFAULTS: Record<SvcTabKey, ServiceCategory> = {
 };
 
 export default function InventorySettings() {
-  const { role } = useAuth();
-  const canDelete = canArchiveCatalogue(role);
+  const { canManage, canArchive, isLoading: accessLoading } = useInventoryManageAccess();
+  const canDelete = canArchive;
   const { items, isLoading: itemsLoading } = useInventoryItems();
   const { services, isLoading: servicesLoading } = useServices();
   const { packages, isLoading: packagesLoading } = usePackages();
@@ -362,7 +361,7 @@ export default function InventorySettings() {
         {/* MEDICATIONS (Medication + Vaccine) */}
         <TabsContent value="medications" className="space-y-3">
           <div className="flex justify-end">
-            <Button size="sm" onClick={() => openAddItem(ITEM_TAB_DEFAULTS.medications)}>
+            <Button size="sm" disabled={!canManage} onClick={() => openAddItem(ITEM_TAB_DEFAULTS.medications)}>
               <Plus className="mr-1.5 h-4 w-4" />
               Add Medication
             </Button>
@@ -377,7 +376,7 @@ export default function InventorySettings() {
         {/* DISPOSABLES */}
         <TabsContent value="disposables" className="space-y-3">
           <div className="flex justify-end">
-            <Button size="sm" onClick={() => openAddItem(ITEM_TAB_DEFAULTS.disposables)}>
+            <Button size="sm" disabled={!canManage} onClick={() => openAddItem(ITEM_TAB_DEFAULTS.disposables)}>
               <Plus className="mr-1.5 h-4 w-4" />
               Add Disposable
             </Button>
@@ -392,7 +391,7 @@ export default function InventorySettings() {
         {/* PROCEDURES */}
         <TabsContent value="procedures" className="space-y-3">
           <div className="flex justify-end">
-            <Button size="sm" onClick={() => openAddService(SVC_TAB_DEFAULTS.procedures)}>
+            <Button size="sm" disabled={!canManage} onClick={() => openAddService(SVC_TAB_DEFAULTS.procedures)}>
               <Plus className="mr-1.5 h-4 w-4" />
               Add Procedure
             </Button>
@@ -413,7 +412,7 @@ export default function InventorySettings() {
         {/* LAB INVESTIGATIONS */}
         <TabsContent value="labs" className="space-y-3">
           <div className="flex justify-end">
-            <Button size="sm" onClick={() => openAddService(SVC_TAB_DEFAULTS.labs)}>
+            <Button size="sm" disabled={!canManage} onClick={() => openAddService(SVC_TAB_DEFAULTS.labs)}>
               <Plus className="mr-1.5 h-4 w-4" />
               Add Lab Investigation
             </Button>
@@ -434,7 +433,7 @@ export default function InventorySettings() {
         {/* GENERAL SERVICES (General Service + Other) */}
         <TabsContent value="general_services" className="space-y-3">
           <div className="flex justify-end">
-            <Button size="sm" onClick={() => openAddService(SVC_TAB_DEFAULTS.general_services)}>
+            <Button size="sm" disabled={!canManage} onClick={() => openAddService(SVC_TAB_DEFAULTS.general_services)}>
               <Plus className="mr-1.5 h-4 w-4" />
               Add Service
             </Button>
@@ -455,7 +454,7 @@ export default function InventorySettings() {
         {/* PACKAGES */}
         <TabsContent value="packages" className="space-y-3">
           <div className="flex justify-end">
-            <Button size="sm" onClick={() => setPkgDialog({ open: true, row: null })}>
+            <Button size="sm" disabled={!canManage} onClick={() => setPkgDialog({ open: true, row: null })}>
               <Plus className="mr-1.5 h-4 w-4" />
               Add Package
             </Button>

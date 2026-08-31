@@ -140,6 +140,12 @@ describe('ClinicPermissionsSettings — registry completeness', () => {
     }
   });
 
+  it('exposes inventory management as a permission', async () => {
+    renderPage();
+    await screen.findByText('Inventory management');
+    expect(screen.getByTitle(/add or edit items, adjust stock/i)).toBeInTheDocument();
+  });
+
   it('documents what each permission unlocks', async () => {
     renderPage();
     await screen.findByText('Approve purchase orders');
