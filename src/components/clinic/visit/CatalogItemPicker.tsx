@@ -55,10 +55,11 @@ export function CatalogItemPicker({
 }: Props) {
   const [catalog, setCatalog] = useState<CatalogKind>('inventory');
 
-  const { data: inventoryItems = [], isLoading: invLoading } = useInventoryItemsSafe();
+  const { data: inventoryItemsRaw = [], isLoading: invLoading } = useInventoryItemsSafe();
   const { data: servicesRaw = [], isLoading: svcLoading } = useServicesSafe();
   const { data: packagesRaw = [], isLoading: pkgLoading } = usePackagesSafe();
 
+  // Inactive/archived entries must never be insertable into new consultations.
   const services = useMemo(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     () => (servicesRaw as any[]).filter((s) => (s.status ?? 'active') === 'active' && !s.archived_at),
@@ -68,6 +69,11 @@ export function CatalogItemPicker({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     () => (packagesRaw as any[]).filter((p) => (p.status ?? 'active') === 'active' && !p.archived_at),
     [packagesRaw],
+  );
+  const inventoryItems = useMemo(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    () => (inventoryItemsRaw as any[]).filter((i) => (i.status ?? 'active') === 'active' && !i.archived_at),
+    [inventoryItemsRaw],
   );
 
   const addItem = useAddConsultationItem();

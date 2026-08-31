@@ -164,11 +164,33 @@ export function AddTreatmentBulkDialog({
   const [selected, setSelected] = useState<SelectedItem[]>([]);
   const [restockNotified, setRestockNotified] = useState<Set<string>>(new Set());
 
-  const { items: inventoryItems } = useInventoryItems();
-  const { services } = useServices();
-  const { packages } = usePackages();
+  const { items: inventoryItemsRaw } = useInventoryItems();
+  const { services: servicesRaw } = useServices();
+  const { packages: packagesRaw } = usePackages();
   const { data: documentTemplates = [] } = useDocumentTemplates();
   const createRestock = useCreateRestockRequest();
+
+  // Inactive/archived catalogue entries must never be insertable into new
+  // treatments. Filter all three sources here so the search box (which scans
+  // the combined list) can't surface them either.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isActiveCatalogue = (e: any) =>
+    (e.status ?? 'active') === 'active' && !e.archived_at;
+  const inventoryItems = useMemo(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    () => (inventoryItemsRaw as any[]).filter(isActiveCatalogue),
+    [inventoryItemsRaw],
+  );
+  const services = useMemo(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    () => (servicesRaw as any[]).filter(isActiveCatalogue),
+    [servicesRaw],
+  );
+  const packages = useMemo(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    () => (packagesRaw as any[]).filter(isActiveCatalogue),
+    [packagesRaw],
+  );
 
   const requestRestock = (itemId: string) => {
     if (restockNotified.has(itemId)) return;
