@@ -76,7 +76,8 @@ export const StockPlanningTab = memo(function StockPlanningTab({
           return true;
       }
     });
-  }, [rows, filter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planning.data, filter]);
 
   if (planning.isError) {
     return (
