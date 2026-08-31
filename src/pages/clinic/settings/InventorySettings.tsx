@@ -133,6 +133,34 @@ export default function InventorySettings() {
     [services],
   );
 
+  // Inventory-based procedure/investigation rows (e.g. Remedi tally imports
+  // land in inventory_items with category 'Procedure' / 'Investigation').
+  // Show them alongside services so they can be activated/inactivated here too.
+  const itemProcedures = useMemo(
+    () =>
+      items.filter(
+        (it) => (it as { category?: string | null }).category === 'Procedure',
+      ),
+    [items],
+  );
+
+  const itemLabs = useMemo(
+    () =>
+      items.filter(
+        (it) => (it as { category?: string | null }).category === 'Investigation',
+      ),
+    [items],
+  );
+
+  const itemGeneral = useMemo(
+    () =>
+      items.filter(
+        (it) => (it as { category?: string | null }).category === 'General' ||
+          (it as { category?: string | null }).category === 'Consultation Fees',
+      ),
+    [items],
+  );
+
   // ── Helpers ────────────────────────────────────────────────────
   const buildItemRow = (it: (typeof items)[number]): InventoryItemRow => ({
     id: it.id,
@@ -374,6 +402,12 @@ export default function InventorySettings() {
             servicesLoading,
             'No procedures yet. Click "Add Procedure" to create one.',
           )}
+          {itemProcedures.length > 0 &&
+            renderItemTable(
+              itemProcedures,
+              itemsLoading,
+              'No inventory-based procedures.',
+            )}
         </TabsContent>
 
         {/* LAB INVESTIGATIONS */}
@@ -389,6 +423,12 @@ export default function InventorySettings() {
             servicesLoading,
             'No lab investigations yet. Click "Add Lab Investigation" to create one.',
           )}
+          {itemLabs.length > 0 &&
+            renderItemTable(
+              itemLabs,
+              itemsLoading,
+              'No inventory-based lab investigations.',
+            )}
         </TabsContent>
 
         {/* GENERAL SERVICES (General Service + Other) */}
@@ -404,6 +444,12 @@ export default function InventorySettings() {
             servicesLoading,
             'No general services yet. Click "Add Service" to create one.',
           )}
+          {itemGeneral.length > 0 &&
+            renderItemTable(
+              itemGeneral,
+              itemsLoading,
+              'No inventory-based general items.',
+            )}
         </TabsContent>
 
         {/* PACKAGES */}

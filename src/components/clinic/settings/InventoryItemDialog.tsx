@@ -47,12 +47,20 @@ import {
 } from '@/hooks/clinic/usePriceOverrides';
 import { toast } from 'sonner';
 
-export type InventoryCategory = 'Medication' | 'Disposable Item' | 'Vaccine' | 'Other';
+export type InventoryCategory =
+  | 'Medication'
+  | 'Disposable Item'
+  | 'Vaccine'
+  | 'Procedure'
+  | 'Investigation'
+  | 'Other';
 
 const INVENTORY_CATEGORIES: InventoryCategory[] = [
   'Medication',
   'Disposable Item',
   'Vaccine',
+  'Procedure',
+  'Investigation',
   'Other',
 ];
 
@@ -112,7 +120,7 @@ const itemSchema = z.object({
   standard_panel_price: moneyField,
   current_stock: intField,
   status: z.enum(['active', 'inactive']),
-  category: z.enum(['Medication', 'Disposable Item', 'Vaccine', 'Other']),
+  category: z.enum(['Medication', 'Disposable Item', 'Vaccine', 'Procedure', 'Investigation', 'Other']),
   item_code: optStr(100),
   brand: optStr(100),
   uom: optStr(50),
@@ -180,7 +188,14 @@ export function InventoryItemDialog({ open, onOpenChange, item, defaultCategory 
   useEffect(() => {
     if (!open) return;
     if (item) {
-      const validCats: InventoryCategory[] = ['Medication', 'Disposable Item', 'Vaccine', 'Other'];
+      const validCats: InventoryCategory[] = [
+        'Medication',
+        'Disposable Item',
+        'Vaccine',
+        'Procedure',
+        'Investigation',
+        'Other',
+      ];
       const cat = (validCats as string[]).includes(item.category as string)
         ? (item.category as InventoryCategory)
         : 'Medication';

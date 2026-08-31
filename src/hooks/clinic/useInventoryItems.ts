@@ -83,7 +83,13 @@ export function useInventoryItems() {
 /* Named mutation hooks (Step 12 catalog management)                  */
 /* ------------------------------------------------------------------ */
 
-export type InventoryCategory = 'Medication' | 'Disposable Item' | 'Vaccine' | 'Other';
+export type InventoryCategory =
+  | 'Medication'
+  | 'Disposable Item'
+  | 'Vaccine'
+  | 'Procedure'
+  | 'Investigation'
+  | 'Other';
 
 export interface InventoryItemInput {
   name: string;

@@ -70,7 +70,14 @@ export interface InventoryDashboardRow {
   status: string;
 }
 
-const CATEGORIES: InventoryCategory[] = ['Medication', 'Disposable Item', 'Vaccine', 'Other'];
+const CATEGORIES: InventoryCategory[] = [
+  'Medication',
+  'Disposable Item',
+  'Vaccine',
+  'Procedure',
+  'Investigation',
+  'Other',
+];
 
 const moneyField = z.preprocess(
   (v) => (v === '' || v === null || v === undefined ? 0 : Number(v)),
@@ -86,7 +93,7 @@ const optStr = (max = 200) => z.string().trim().max(max).optional().or(z.literal
 
 const schema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(120),
-  category: z.enum(['Medication', 'Disposable Item', 'Vaccine', 'Other']),
+  category: z.enum(['Medication', 'Disposable Item', 'Vaccine', 'Procedure', 'Investigation', 'Other']),
   current_stock: intField,
   low_stock_threshold: intField,
   base_price: moneyField,
