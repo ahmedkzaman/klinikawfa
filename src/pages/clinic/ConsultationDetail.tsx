@@ -170,6 +170,19 @@ function PastVisitCard({
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [itemsOpen, setItemsOpen] = useState(false);
+  const [revealedPriceIds, setRevealedPriceIds] = useState<Set<string>>(new Set());
+
+  const itemRows = visit.consultation_items ?? [];
+
+  const toggleItemPrice = (id: string) => {
+    setRevealedPriceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const structuredName = visit.diagnoses?.name?.trim() || '';
   const freeText = visit.diagnosis_text?.trim() || '';
@@ -275,26 +288,45 @@ function PastVisitCard({
         </div>
       )}
 
-      {/* Items */}
-      {visit.consultation_items && visit.consultation_items.length > 0 && (
+      {/* Items — hidden behind a toggle; each item's price reveals on click */}
+      {itemRows.length > 0 && (
         <div className="space-y-0.5 pt-2">
-          <span className="text-xs text-slate-400">Items:</span>
-          {visit.consultation_items.map((it) => (
-            <div
-              key={it.id}
-              className="flex justify-between items-start gap-4 w-full pl-2"
-            >
-              <div className="flex-1 min-w-0 flex flex-col">
-                <span className="text-sm text-slate-600 break-words">
-                  {it.item_name} x{it.quantity}{' '}
-                  {it.dosage && `(${it.dosage})`}
-                </span>
-              </div>
-              <span className="shrink-0 text-right whitespace-nowrap text-sm text-slate-600">
-                RM {Number(it.price).toFixed(2)}
-              </span>
-            </div>
-          ))}
+          <button
+            type="button"
+            onClick={() => setItemsOpen((v) => !v)}
+            aria-expanded={itemsOpen}
+            className="inline-flex items-center gap-0.5 text-xs text-slate-400 hover:text-slate-600"
+          >
+            Items ({itemRows.length})
+            {itemsOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </button>
+          {itemsOpen &&
+            itemRows.map((it) => {
+              const priceRevealed = revealedPriceIds.has(it.id);
+              return (
+                <div
+                  key={it.id}
+                  className="flex justify-between items-start gap-4 w-full pl-2"
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleItemPrice(it.id)}
+                    title={priceRevealed ? 'Hide price' : 'Show price'}
+                    className="flex-1 min-w-0 flex flex-col text-left"
+                  >
+                    <span className="text-sm text-slate-600 break-words">
+                      {it.item_name} x{it.quantity}{' '}
+                      {it.dosage && `(${it.dosage})`}
+                    </span>
+                  </button>
+                  {priceRevealed && (
+                    <span className="shrink-0 text-right whitespace-nowrap text-sm text-slate-600">
+                      RM {Number(it.price).toFixed(2)}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
         </div>
       )}
     </div>
