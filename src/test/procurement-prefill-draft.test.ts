@@ -100,3 +100,53 @@ describe('purchase order recommendation prefill', () => {
     expect(deleteEq).toHaveBeenCalledWith('id', 'po-1');
   });
 });
+
+describe('stock planning view contract', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useQueryClient.mockReturnValue({ invalidateQueries });
+    useMutation.mockImplementation((options) => options);
+  });
+
+  it('reports the view suggestion net of open orders without re-adding stock on order', async () => {
+    const viewRow = {
+      item_id: 'item-1',
+      name: 'Paracetamol',
+      category: 'Medication',
+      current_stock: 5,
+      reorder_level: 10,
+      used_30d: 60,
+      avg_daily_usage: 0.667,
+      days_cover: 7.5,
+      movement_status: 'fast',
+      open_order_qty: 40,
+      supplier_lead_time_days: 7,
+      nearest_expiry_date: null,
+      suggested_qty: 5,
+      recommendation_reason: 'Based on 90-day usage, lead time, and open orders',
+    };
+    const select = vi.fn(() => ({
+      order: vi.fn(() => ({ data: [viewRow], error: null })),
+    }));
+    from.mockImplementation((table: string) => {
+      if (table === 'v_procurement_stock_planning') return { select };
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    let captured: { queryKey: unknown[]; queryFn: () => Promise<unknown> } | undefined;
+    useQuery.mockImplementation((options: { queryKey: unknown[]; queryFn: () => Promise<unknown> }) => {
+      captured = options;
+      return { data: undefined, isLoading: true };
+    });
+
+    const { useProcurementStockPlanning } = await import('@/hooks/clinic/useProcurementStats');
+    useProcurementStockPlanning();
+    const rows = (await captured!.queryFn()) as Array<typeof viewRow>;
+
+    expect(rows).toHaveLength(1);
+    // The suggestion already subtracts the 40 units on open orders: the
+    // recommendation is 5, NOT (formula result + open order qty).
+    expect(rows[0].open_order_qty).toBe(40);
+    expect(rows[0].suggested_qty).toBe(5);
+  });
+});

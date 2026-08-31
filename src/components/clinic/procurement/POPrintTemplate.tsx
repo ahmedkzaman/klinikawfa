@@ -10,6 +10,7 @@ interface Props {
 
 export function POPrintTemplate({ po, supplier }: Props) {
   const { settings } = useClinicSettings();
+  if (!po || !Array.isArray(po.items)) return null;
   const total = (po.items ?? []).reduce((s, l) => s + Number(l.total_price ?? 0), 0);
 
   return (

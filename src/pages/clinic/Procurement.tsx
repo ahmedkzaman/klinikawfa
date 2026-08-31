@@ -29,10 +29,11 @@ const invoiceStatusBadge: Record<VendorInvoiceStatus, string> = {
 };
 
 const statusBadge: Record<POStatus, string> = {
-  Draft:     'bg-muted text-muted-foreground',
-  Sent:      'bg-blue-500/15 text-blue-700 dark:text-blue-400',
-  Received:  'bg-green-500/15 text-green-700 dark:text-green-400',
-  Cancelled: 'bg-destructive/15 text-destructive',
+  Draft:             'bg-muted text-muted-foreground',
+  'Awaiting approval': 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
+  Ordered:           'bg-blue-500/15 text-blue-700 dark:text-blue-400',
+  Received:          'bg-green-500/15 text-green-700 dark:text-green-400',
+  Cancelled:         'bg-destructive/15 text-destructive',
 };
 
 export default function Procurement() {

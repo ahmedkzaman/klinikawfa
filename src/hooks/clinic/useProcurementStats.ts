@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinicSettings } from '@/hooks/clinic/useClinicSettings';
+import type { StockPlanningRow } from '@/lib/clinic/procurementDashboard';
 
 export type MovementStatus = 'fast' | 'normal' | 'slow' | 'dead';
 
@@ -75,6 +76,27 @@ export function useStockMovements(opts: {
       return (data ?? []) as unknown as StockMovementRow[];
     },
     staleTime: 30_000,
+  });
+}
+
+/**
+ * Single source for the Stock Planning tab: the authoritative
+ * v_procurement_stock_planning view (usage, lead time, open orders,
+ * suggested quantity). Suggested quantity is never modified client-side —
+ * seasonal signals are display-only warnings.
+ */
+export function useProcurementStockPlanning() {
+  return useQuery({
+    queryKey: ['procurement', 'stock-planning'],
+    queryFn: async (): Promise<StockPlanningRow[]> => {
+      const { data, error } = await supabase
+        .from('v_procurement_stock_planning' as never)
+        .select('*')
+        .order('name', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as unknown as StockPlanningRow[];
+    },
+    staleTime: 60_000,
   });
 }
 

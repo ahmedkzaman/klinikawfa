@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { CheckCircle2, XCircle, Send, Printer } from 'lucide-react';
+import { CheckCircle2, XCircle, Send, Printer, Truck } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -32,36 +32,54 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useSuppliers } from '@/hooks/clinic/useSuppliers';
-import { usePurchaseOrder, usePurchaseOrders, type POStatus } from '@/hooks/clinic/usePurchaseOrders';
+import { usePurchaseOrder, usePurchaseOrders, type POChannel, type POStatus } from '@/hooks/clinic/usePurchaseOrders';
+import { useProcurementAccess } from '@/hooks/clinic/useProcurementDashboard';
 import { POLineItemsTable } from './POLineItemsTable';
 import { POPrintTemplate } from './POPrintTemplate';
+import { ProcurementAttachments } from './ProcurementAttachments';
 import { toast } from 'sonner';
 
 interface Props {
   poId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Management-approval permission from the database (useProcurementAccess). */
+  canApprove?: boolean;
 }
 
 const statusVariant: Record<POStatus, { className: string; label: string }> = {
-  Draft:     { className: 'bg-muted text-muted-foreground', label: 'Draft' },
-  Sent:      { className: 'bg-blue-500/15 text-blue-700 dark:text-blue-400', label: 'Sent' },
-  Received:  { className: 'bg-green-500/15 text-green-700 dark:text-green-400', label: 'Received' },
-  Cancelled: { className: 'bg-destructive/15 text-destructive', label: 'Cancelled' },
+  Draft:             { className: 'bg-muted text-muted-foreground', label: 'Draft' },
+  'Awaiting approval': { className: 'bg-amber-500/15 text-amber-700 dark:text-amber-400', label: 'Awaiting approval' },
+  Ordered:           { className: 'bg-blue-500/15 text-blue-700 dark:text-blue-400', label: 'Ordered' },
+  Received:          { className: 'bg-green-500/15 text-green-700 dark:text-green-400', label: 'Received' },
+  Cancelled:         { className: 'bg-destructive/15 text-destructive', label: 'Cancelled' },
 };
 
-export function POSheet({ poId, open, onOpenChange }: Props) {
+const CHANNELS: Array<{ value: POChannel; label: string }> = [
+  { value: 'internal', label: 'Internal' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'supplier_website', label: 'Supplier website' },
+  { value: 'phone', label: 'Phone' },
+  { value: 'email', label: 'Email' },
+  { value: 'other', label: 'Other' },
+];
+
+export function POSheet({ poId, open, onOpenChange, canApprove = false }: Props) {
   const { data: po, isLoading } = usePurchaseOrder(open ? poId : null);
   const { suppliers } = useSuppliers();
-  const { updateHeader, setStatus, receiveGoods } = usePurchaseOrders();
+  const { updateHeader, transitionOrder, receiveGoods } = usePurchaseOrders();
   const [confirmReceive, setConfirmReceive] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
-  const [confirmSend, setConfirmSend] = useState(false);
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
+  const [confirmApprove, setConfirmApprove] = useState(false);
+  const [followUpRequested, setFollowUpRequested] = useState(false);
 
   const [supplierId, setSupplierId] = useState<string>('');
   const [orderDate, setOrderDate] = useState<string>('');
   const [expectedDate, setExpectedDate] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
+  const [orderChannel, setOrderChannel] = useState<POChannel>('internal');
+  const [supplierReference, setSupplierReference] = useState<string>('');
 
   useEffect(() => {
     if (po) {
@@ -69,11 +87,14 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
       setOrderDate(po.order_date ?? '');
       setExpectedDate(po.expected_date ?? '');
       setNotes(po.notes ?? '');
+      setOrderChannel(po.order_channel ?? 'internal');
+      setSupplierReference(po.supplier_reference ?? '');
     }
   }, [po]);
 
   const status = (po?.status ?? 'Draft') as POStatus;
   const readOnly = status === 'Received' || status === 'Cancelled';
+  const external = orderChannel !== 'internal';
   const supplier = suppliers.find((s) => s.id === (po?.supplier_id ?? supplierId)) ?? null;
   const total = (po?.items ?? []).reduce((s, l) => s + Number(l.total_price ?? 0), 0);
 
@@ -86,32 +107,54 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
         order_date: orderDate || undefined,
         expected_date: expectedDate || null,
         notes: notes || null,
+        order_channel: orderChannel,
+        supplier_reference: supplierReference || null,
       });
     } catch (e) {
       toast.error((e as Error).message);
     }
   };
 
-  const requestMarkSent = () => {
+  const requestSubmit = () => {
     if (!po) return;
     if (!po.items.length) {
-      toast.error('Add at least one line item before sending.');
+      toast.error('Add at least one line item before submitting.');
       return;
     }
     if (!supplierId) {
       toast.error('Select a supplier first.');
       return;
     }
-    setConfirmSend(true);
+    setConfirmSubmit(true);
   };
 
-  const onMarkSent = async () => {
+  /**
+   * Interpret the RPC result: the database decides the resulting status.
+   * 'Awaiting approval' means the order exceeded a budget/limit and needs
+   * management; 'Ordered' means it went straight through.
+   */
+  const onSubmit = async () => {
     if (!po) return;
     await persistHeader();
     try {
-      await setStatus.mutateAsync({ id: po.id, status: 'Sent' });
-      toast.success(`PO ${po.po_number} marked as Sent`);
-      setConfirmSend(false);
+      const result = await transitionOrder.mutateAsync({ id: po.id, status: 'Ordered' });
+      if (result === 'Awaiting approval') {
+        toast.success('Order sent for management approval');
+      } else {
+        toast.success('Order marked as ordered');
+      }
+      setConfirmSubmit(false);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
+  const onApprove = async () => {
+    if (!po) return;
+    try {
+      await transitionOrder.mutateAsync({ id: po.id, status: 'Ordered' });
+      toast.success('Order marked as ordered');
+      setConfirmApprove(false);
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -132,7 +175,7 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
   const onCancel = async () => {
     if (!po) return;
     try {
-      await setStatus.mutateAsync({ id: po.id, status: 'Cancelled' });
+      await transitionOrder.mutateAsync({ id: po.id, status: 'Cancelled' });
       toast.success('PO cancelled');
       setConfirmCancel(false);
     } catch (e) {
@@ -149,7 +192,7 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
               <div>
                 <SheetTitle>{po?.po_number ?? 'Purchase Order'}</SheetTitle>
                 <SheetDescription>
-                  Create or manage a purchase order. Goods received here update inventory stock.
+                  Draft → Awaiting approval → Ordered → Received. Goods received here update inventory stock.
                 </SheetDescription>
               </div>
               <Badge className={statusVariant[status].className}>{statusVariant[status].label}</Badge>
@@ -206,6 +249,38 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
                       disabled={readOnly}
                     />
                   </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="po-channel">Order channel</Label>
+                    <Select
+                      value={orderChannel}
+                      onValueChange={(v) => setOrderChannel(v as POChannel)}
+                      disabled={readOnly}
+                    >
+                      <SelectTrigger id="po-channel">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CHANNELS.map((c) => (
+                          <SelectItem key={c.value} value={c.value}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {external && (
+                    <div className="grid gap-2">
+                      <Label htmlFor="po-supplier-reference">Supplier reference</Label>
+                      <Input
+                        id="po-supplier-reference"
+                        placeholder="Supplier's PO / invoice number"
+                        value={supplierReference}
+                        onChange={(e) => setSupplierReference(e.target.value)}
+                        onBlur={persistHeader}
+                        disabled={readOnly}
+                      />
+                    </div>
+                  )}
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="po-notes">Notes</Label>
@@ -243,6 +318,9 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
                 </div>
               )}
 
+              {/* External-order evidence */}
+              {external && <ProcurementAttachments poId={po.id} />}
+
               {/* Actions */}
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <Button variant="outline" onClick={() => window.print()}>
@@ -256,18 +334,38 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
                     <Button variant="destructive" onClick={() => setConfirmCancel(true)}>
                       <XCircle className="h-4 w-4 mr-1" /> Cancel PO
                     </Button>
-                    <Button onClick={requestMarkSent} disabled={setStatus.isPending || updateHeader.isPending}>
-                      <Send className="h-4 w-4 mr-1" /> Mark as Sent
+                    <Button onClick={requestSubmit} disabled={transitionOrder.isPending || updateHeader.isPending}>
+                      <Send className="h-4 w-4 mr-1" /> Submit order
                     </Button>
                   </>
                 )}
-                {status === 'Sent' && (
+                {status === 'Awaiting approval' && canApprove && (
                   <>
-                    <Button variant="outline" onClick={() => setConfirmCancel(true)}>
+                    <Button variant="destructive" onClick={() => setConfirmCancel(true)}>
+                      <XCircle className="h-4 w-4 mr-1" /> Cancel PO
+                    </Button>
+                    <Button onClick={() => setConfirmApprove(true)} disabled={transitionOrder.isPending}>
+                      <CheckCircle2 className="h-4 w-4 mr-1" /> Approve and order
+                    </Button>
+                  </>
+                )}
+                {status === 'Ordered' && (
+                  <>
+                    <Button
+                      variant="outline"
+                      disabled={followUpRequested}
+                      onClick={() => {
+                        setFollowUpRequested(true);
+                        toast.info(`Follow-up noted for ${po.po_number}`);
+                      }}
+                    >
+                      Follow up
+                    </Button>
+                    <Button variant="destructive" onClick={() => setConfirmCancel(true)}>
                       <XCircle className="h-4 w-4 mr-1" /> Cancel PO
                     </Button>
                     <Button onClick={() => setConfirmReceive(true)} disabled={receiveGoods.isPending}>
-                      <CheckCircle2 className="h-4 w-4 mr-1" /> Receive Goods
+                      <Truck className="h-4 w-4 mr-1" /> Receive goods
                     </Button>
                   </>
                 )}
@@ -287,7 +385,7 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={onReceive}>Receive Goods</AlertDialogAction>
+            <AlertDialogAction onClick={onReceive}>Receive goods</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -309,18 +407,35 @@ export function POSheet({ poId, open, onOpenChange }: Props) {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={confirmSend} onOpenChange={setConfirmSend}>
+      <AlertDialog open={confirmSubmit} onOpenChange={setConfirmSubmit}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Mark {po?.po_number} as sent?</AlertDialogTitle>
+            <AlertDialogTitle>Submit {po?.po_number}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Confirm that this purchase order has been sent to the supplier. You can still cancel it before goods are received.
+              Orders within budget go straight to Ordered; larger orders are sent for management approval first.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep as Draft</AlertDialogCancel>
-            <AlertDialogAction onClick={onMarkSent} disabled={setStatus.isPending}>
-              {setStatus.isPending ? 'Updating…' : 'Mark as Sent'}
+            <AlertDialogAction onClick={onSubmit} disabled={transitionOrder.isPending}>
+              {transitionOrder.isPending ? 'Submitting…' : 'Submit order'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmApprove} onOpenChange={setConfirmApprove}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Approve {po?.po_number}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The order will be marked as Ordered with you recorded as the approver.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Not yet</AlertDialogCancel>
+            <AlertDialogAction onClick={onApprove} disabled={transitionOrder.isPending}>
+              {transitionOrder.isPending ? 'Approving…' : 'Approve and order'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
