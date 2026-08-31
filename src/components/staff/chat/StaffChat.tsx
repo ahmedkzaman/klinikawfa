@@ -156,7 +156,6 @@ export function StaffChat() {
   // this, a lookup that yields no row re-runs forever: the effect would see
   // "peer still unresolved", query again, and merge an unchanged-but-new
   // peerNames object each cycle — an invisible CPU spin in production.
-  const peerLookupsRef = useRef<Set<string>>(new Set());
 
   const myId = user?.id ?? null;
   const eligible = !!myId && !!role && role !== 'guest';
@@ -417,29 +416,39 @@ export function StaffChat() {
   // spin forever whenever a peer's profile row was missing or unreadable.
   useEffect(() => {
     if (!myId) return;
+    // Unresolved offline peers = peers in DM history that are not online and
+    // whose names are not in peerNames yet. Only ids WITHOUT a resolved name
+    // are requested, so a failed/empty lookup is retried when the message
+    // list next changes instead of being reserved forever.
     const ids: string[] = [];
     const seen = new Set<string>();
     for (const m of messages) {
       const peerId = m.sender_id === myId ? m.receiver_id : m.sender_id;
       if (
         peerId &&
+        peerId !== myId &&
         !seen.has(peerId) &&
         !onlineUserIds.has(peerId) &&
-        !peerLookupsRef.current.has(peerId)
+        peerNames[peerId] === undefined
       ) {
         seen.add(peerId);
         ids.push(peerId);
       }
     }
     if (ids.length === 0) return;
-    for (const id of ids) peerLookupsRef.current.add(id);
     let cancelled = false;
     supabase
       .from('profiles')
       .select('id, full_name, email')
       .in('id', ids)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         if (cancelled) return;
+        if (error) {
+          // Transient failure: leave names unresolved so the next messages
+          // change retries the lookup.
+          console.error('Failed to resolve staff chat peer names', error);
+          return;
+        }
         const rows = data ?? [];
         if (rows.length === 0) return;
         setPeerNames((prev) => {
@@ -447,7 +456,7 @@ export function StaffChat() {
           const next = { ...prev };
           for (const row of rows) {
             const name = row.full_name || row.email || null;
-            if (next[row.id] !== name) {
+            if (name && next[row.id] !== name) {
               next[row.id] = name;
               changed = true;
             }
@@ -458,7 +467,7 @@ export function StaffChat() {
     return () => {
       cancelled = true;
     };
-  }, [messages, myId, onlineUserIds]);
+  }, [messages, myId, onlineUserIds, peerNames]);
 
   // Filtered messages for the active chat
   const visibleMessages = useMemo(() => {

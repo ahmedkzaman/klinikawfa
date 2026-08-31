@@ -18,6 +18,7 @@ type Msg = {
 };
 
 let scripted: Msg[] = [];
+let profileRows: Array<{ id: string; full_name: string; email: string }> = [];
 
 vi.mock('@/integrations/supabase/client', () => {
   const mk = (rows: unknown[] = []) => {
@@ -31,14 +32,19 @@ vi.mock('@/integrations/supabase/client', () => {
     b.finally = p.finally.bind(p);
     return b;
   };
+  const insertHandlers: Array<(payload: unknown) => void> = [];
   const channel: Record<string, unknown> = {
-    on: vi.fn(() => channel),
+    on: vi.fn((event: string, _filter: unknown, cb: (payload: unknown) => void) => {
+      if (event === 'postgres_changes') insertHandlers.push(cb);
+      return channel;
+    }),
     subscribe: vi.fn((cb: (s: string) => void) => { setTimeout(() => cb('SUBSCRIBED'), 0); return channel; }),
     untrack: vi.fn(async () => 'ok'),
     track: vi.fn(async () => 'ok'),
     send: vi.fn(async () => 'ok'),
     presenceState: vi.fn(() => ({})),
   };
+  (globalThis as unknown as { __insertHandlers?: typeof insertHandlers }).__insertHandlers = insertHandlers;
   return {
     supabase: {
       rpc: vi.fn(async () => ({ data: true, error: null })),
@@ -47,7 +53,7 @@ vi.mock('@/integrations/supabase/client', () => {
           t === 'staff_messages'
             ? scripted
             : t === 'profiles'
-              ? [{ id: 'ammar-1', full_name: 'Muhammad Ammar Harith', email: 'ammar@t.l' }]
+              ? profileRows
               : [],
         )
       ),
@@ -74,6 +80,29 @@ function openChat() {
 }
 
 describe('StaffChat offline peer names', () => {
+  it('retries the profile lookup after a failed first attempt', async () => {
+    scripted = [
+      { id: 'm1', sender_id: 'ahmed-1', sender_name: myName, receiver_id: 'ammar-1', content: 'dah register pt?', created_at: '2026-08-30T10:05:00Z' },
+    ];
+    profileRows = []; // first lookup returns nothing (transient failure)
+    await openChat();
+    await waitFor(
+      () => expect(screen.getByText('Direct message')).toBeInTheDocument(),
+      { timeout: 5000 },
+    );
+    // A new message arrives via realtime -> messages change -> lookup retried.
+    profileRows = [{ id: 'ammar-1', full_name: 'Muhammad Ammar Harith', email: 'ammar@t.l' }];
+    const handlers = (globalThis as unknown as { __insertHandlers?: Array<(p: unknown) => void> }).__insertHandlers ?? [];
+    expect(handlers.length).toBeGreaterThan(0);
+    for (const h of handlers) {
+      h({ new: { id: 'm2', sender_id: 'ahmed-1', sender_name: myName, receiver_id: 'ammar-1', content: 'tolong register pt tu dalam remedi', created_at: '2026-08-30T10:06:00Z' } });
+    }
+    await waitFor(
+      () => expect(screen.getByText('Muhammad Ammar Harith')).toBeInTheDocument(),
+      { timeout: 5000 },
+    );
+  }, 20000);
+
   it('never labels an offline peer with my own sender name', async () => {
     // I sent this DM, so the row's sender_name is MY name. The sidebar entry
     // for the offline recipient must come from the profiles lookup, never
@@ -81,6 +110,7 @@ describe('StaffChat offline peer names', () => {
     scripted = [
       { id: 'm1', sender_id: 'ahmed-1', sender_name: myName, receiver_id: 'ammar-1', content: 'dah register pt?', created_at: '2026-08-30T10:05:00Z' },
     ];
+    profileRows = [{ id: 'ammar-1', full_name: 'Muhammad Ammar Harith', email: 'ammar@t.l' }];
     await openChat();
     // ammar's profile resolves -> sidebar shows HIS name
     await waitFor(
@@ -94,6 +124,7 @@ describe('StaffChat offline peer names', () => {
     scripted = [
       { id: 'm3', sender_id: 'ammar-1', sender_name: 'Muhammad Ammar Harith', receiver_id: 'ahmed-1', content: 'salam', created_at: '2026-08-30T11:00:00Z' },
     ];
+    profileRows = [{ id: 'ammar-1', full_name: 'Muhammad Ammar Harith', email: 'ammar@t.l' }];
     await openChat();
     await waitFor(
       () => expect(screen.getByText('Muhammad Ammar Harith')).toBeInTheDocument(),
