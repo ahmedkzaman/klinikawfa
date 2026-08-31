@@ -182,6 +182,7 @@ AS $$
       ('billing.manage'),
       ('reports.view'),
       ('settings.manage'),
+      ('management_dashboard.view'),
       ('procurement.approve')
   ),
   target_role AS (
