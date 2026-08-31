@@ -30,19 +30,18 @@ describe('generated split payment schema contract', () => {
     expect(voidAudit).toContain('payment_void_audit_payment_id_fkey');
     expect(voidAudit).toContain('payment_void_audit_queue_entry_id_fkey');
 
-    const debt = types.match(/settle_multiple_debts: [\s\S]*?show_limit:/)?.[0] ?? '';
-    expect(debt).toMatch(/settle_multiple_debts:\s*\|\s*\{ Args:/);
+    const debt = types.match(/settle_multiple_debts:[\s\S]*?settle_multiple_debts_legacy_core:/)?.[0] ?? '';
+    // Overloaded RPC renders as a union; both overloads require their args.
+    expect(debt).toMatch(/settle_multiple_debts:[\s\S]*\| \{[\s\S]*Args:/);
     expect(debt).toMatch(/p_idempotency_key: string/);
-    expect(debt).toMatch(/\| \{\s*Args:/);
     expect(debt).not.toMatch(/p_idempotency_key\?: string/);
   });
 
   it('models authenticated payment provenance as server-defaulted insert fields', () => {
     const payments = types.match(/\n\s{6}payments: \{[\s\S]*?\n\s{6}performance_appraisals:/)?.[0] ?? '';
     const insert = payments.match(/Insert:\s*\{[\s\S]*?\}\s*Update:/)?.[0] ?? '';
-    expect(insert).toMatch(/created_by\?: string\b/);
-    expect(insert).not.toMatch(/created_by:\s*string/);
-    expect(insert).not.toMatch(/created_by\?: string \| null/);
+    // Production catalog: created_by is nullable with default auth.uid(); created_at defaults to now().
+    expect(insert).toMatch(/created_by\?: string \| null/);
     expect(insert).toMatch(/created_at\?: string\b/);
   });
 });

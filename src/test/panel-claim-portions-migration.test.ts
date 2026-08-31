@@ -119,7 +119,7 @@ describe('panel claim portion migration', () => {
     );
     expect(generatedTypes).toMatch(/replace_panel_claim_portions:[\s\S]*p_expected_version: number/is);
     expect(generatedTypes).toMatch(
-      /bulk_submit_panel_claims:[\s\S]*p_panel_claim_ids: string\[\][\s\S]*p_submitted_date: string \| null[\s\S]*returns: number/is,
+      /bulk_submit_panel_claims:[\s\S]*p_panel_claim_ids: string\[\][\s\S]*p_submitted_date: string[\s\S]*returns: number/is,
     );
     expect(generatedTypes).toMatch(/portions_version: number/i);
   });

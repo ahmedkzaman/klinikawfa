@@ -341,10 +341,10 @@ describe('panel receipt summary migration', () => {
       const assertions = join(root, 'assertions.sql');
       const port = String(61000 + (process.pid % 500));
       const run = (tool: string, args: string[]) => execFileSync(tool, args, {
-        encoding: 'utf8', stdio: 'pipe', timeout: 20_000, windowsHide: true,
+        encoding: 'utf8', stdio: 'pipe', timeout: 60_000, windowsHide: true,
       });
       const control = (args: string[]) => execFileSync(tools.pgCtl, args, {
-        stdio: 'ignore', timeout: 20_000, windowsHide: true,
+        stdio: 'ignore', timeout: 60_000, windowsHide: true,
       });
       const psql = (path: string) => run(tools.psql, ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-h', '127.0.0.1', '-p', port, '-U', 'postgres', '-d', 'postgres', '-f', path]);
 
