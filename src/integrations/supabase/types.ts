@@ -1162,7 +1162,8 @@ export type Database = {
           tts_language: string
           tv_ticker_text: string | null
           tv_youtube_id: string | null
-          updated_at: string          procurement_routine_order_limit: number
+          updated_at: string
+          procurement_routine_order_limit: number
 
         }
         Insert: {
