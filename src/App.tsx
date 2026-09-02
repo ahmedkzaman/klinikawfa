@@ -237,21 +237,21 @@ const App = () => (
                 <Route path="settings" element={<StaffSettings />} />
                 <Route path="appraisal" element={<PerformanceAppraisal />} />
                 <Route path="appraisal/:id" element={<AppraisalForm />} />
-                <Route path="admin" element={<StaffAdminDashboard />} />
-                <Route path="admin/employees" element={<AdminEmployees />} />
-                <Route path="admin/zones" element={<AdminZones />} />
-                <Route path="admin/assignments" element={<AdminAssignments />} />
-                <Route path="admin/requests" element={<AdminRequests />} />
-                <Route path="admin/roster" element={<AdminRoster />} />
-                <Route path="admin/onboarding" element={<AdminOnboarding />} />
-                <Route path="admin/attendance-review" element={<AdminAttendanceReview />} />
-                <Route path="admin/profile-approvals" element={<AdminProfileApprovals />} />
-                <Route path="admin/payroll-summary" element={<PayrollSummary />} />
-                <Route path="admin/payroll-profiles" element={<PayrollProfiles />} />
-                <Route path="admin/daily-tasks" element={<DailyTaskReview />} />
-                <Route path="admin/notices" element={<CircularNotices />} />
-                <Route path="admin/punch-settings" element={<PunchSettings />} />
-                <Route path="admin/landing-pages" element={<LandingPages />} />
+                <Route path="admin" element={<StaffAdminRoute><StaffAdminDashboard /></StaffAdminRoute>} />
+                <Route path="admin/employees" element={<StaffAdminRoute><AdminEmployees /></StaffAdminRoute>} />
+                <Route path="admin/zones" element={<StaffAdminRoute><AdminZones /></StaffAdminRoute>} />
+                <Route path="admin/assignments" element={<StaffAdminRoute><AdminAssignments /></StaffAdminRoute>} />
+                <Route path="admin/requests" element={<StaffAdminRoute><AdminRequests /></StaffAdminRoute>} />
+                <Route path="admin/roster" element={<StaffAdminRoute><AdminRoster /></StaffAdminRoute>} />
+                <Route path="admin/onboarding" element={<StaffAdminRoute><AdminOnboarding /></StaffAdminRoute>} />
+                <Route path="admin/attendance-review" element={<StaffAdminRoute><AdminAttendanceReview /></StaffAdminRoute>} />
+                <Route path="admin/profile-approvals" element={<StaffAdminRoute><AdminProfileApprovals /></StaffAdminRoute>} />
+                <Route path="admin/payroll-summary" element={<StaffAdminRoute><PayrollSummary /></StaffAdminRoute>} />
+                <Route path="admin/payroll-profiles" element={<StaffAdminRoute><PayrollProfiles /></StaffAdminRoute>} />
+                <Route path="admin/daily-tasks" element={<StaffAdminRoute><DailyTaskReview /></StaffAdminRoute>} />
+                <Route path="admin/notices" element={<StaffAdminRoute><CircularNotices /></StaffAdminRoute>} />
+                <Route path="admin/punch-settings" element={<StaffAdminRoute><PunchSettings /></StaffAdminRoute>} />
+                <Route path="admin/landing-pages" element={<StaffAdminRoute><LandingPages /></StaffAdminRoute>} />
                 
                 {/* Website Management */}
                 <Route path="website/leads" element={<LeadsManagement />} />
