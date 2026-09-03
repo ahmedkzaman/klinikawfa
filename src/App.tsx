@@ -37,6 +37,7 @@ import PerformanceAppraisal from "./pages/staff/PerformanceAppraisal";
 import AppraisalForm from "./pages/staff/AppraisalForm";
 import DrRosterView from "./pages/staff/DrRosterView";
 import StaffRosterView from "./pages/staff/StaffRosterView";
+import { StaffAdminRoute } from "./components/staff/StaffAdminRoute";
 import StaffAdminDashboard from "./pages/staff/admin/Dashboard";
 import AdminEmployees from "./pages/staff/admin/Employees";
 import AdminAttendanceReview from "./pages/staff/admin/AttendanceReview";
