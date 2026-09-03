@@ -39,6 +39,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toMalayTitleCase } from '@/lib/textCase';
+import { formatDoctorName } from '@/lib/doctorName';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -216,7 +217,7 @@ function PastVisitCard({
           {format(new Date(visit.created_at), 'dd MMM yyyy')}
         </span>
         {visit.doctors?.name && (
-          <span className="text-slate-500"> — Dr. {visit.doctors.name}</span>
+          <span className="text-slate-500"> — {formatDoctorName(visit.doctors.name)}</span>
         )}
       </div>
 

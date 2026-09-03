@@ -12,6 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { toMalayTitleCase } from '@/lib/textCase';
+import { formatDoctorName } from '@/lib/doctorName';
 import { formatQueueNo } from '@/lib/clinic/queueNumber';
 import {
   Sheet,
@@ -139,7 +140,7 @@ function VisitRow({
       : consultation.doctors
     : null;
 
-  const doctorName = doctor?.name ?? '—';
+  const doctorName = doctor?.name ? formatDoctorName(doctor.name) : '—';
   const structuredDiagnosis = consultation
     ? Array.isArray(consultation.diagnoses)
       ? consultation.diagnoses[0]?.name ?? null
@@ -193,7 +194,7 @@ function VisitRow({
             <Chevron className="h-4 w-4 text-muted-foreground" />
           </div>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">Dr. {doctorName}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{doctorName}</p>
         {diagnosisPills.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1">
             {diagnosisPills.slice(0, 4).map((d, i) => (

@@ -24,6 +24,7 @@ import { useRecordVitalSigns } from '@/hooks/clinic/useVitalSigns';
 import { useDoctors } from '@/hooks/clinic/useDoctors';
 import { primaryBtn, secondaryBtn } from '@/lib/clinic/bentoTokens';
 import { cn } from '@/lib/utils';
+import { formatDoctorName } from '@/lib/doctorName';
 
 interface VitalsEntryDialogProps {
   open: boolean;
@@ -282,7 +283,7 @@ export function VitalsEntryDialog({
               ) : (
                 activeDoctors.map((doc) => (
                   <SelectItem key={doc.id} value={doc.id}>
-                    Dr. {doc.name}
+                    {formatDoctorName(doc.name)}
                   </SelectItem>
                 ))
               )}

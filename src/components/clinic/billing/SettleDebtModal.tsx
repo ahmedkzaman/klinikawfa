@@ -47,6 +47,7 @@ import {
 import { formatRm } from '@/hooks/clinic/usePatientFinancials';
 import { useSettleMultipleDebts } from '@/hooks/clinic/usePayments';
 import { toMalayTitleCase } from '@/lib/textCase';
+import { formatDoctorName } from '@/lib/doctorName';
 import { cn } from '@/lib/utils';
 import { PrintReceiptDialog } from './PrintReceiptDialog';
 import type { QueueEntryWithJoins } from '@/types/clinic';
@@ -284,7 +285,7 @@ export function SettleDebtModal({ entry, open, onOpenChange }: Props) {
                               {format(new Date(v.created_at), 'd MMM yyyy')}
                             </p>
                             <p className="text-xs text-slate-500 truncate">
-                              {v.doctor_name ? `Dr. ${v.doctor_name}` : 'Counter sale'}
+                              {v.doctor_name ? formatDoctorName(v.doctor_name) : 'Counter sale'}
                             </p>
                           </div>
                           <p className="text-[11px] text-slate-400 mt-0.5">
