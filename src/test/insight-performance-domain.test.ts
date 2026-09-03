@@ -130,6 +130,34 @@ describe('normalizeInsightPerformanceReport', () => {
     });
   });
 
+  it('parses per-doctor partial-cost financial metrics and tolerates their absence', () => {
+    const withFinancials = {
+      ...validPayload,
+      doctors: [{
+        ...validPayload.doctors[0],
+        cogs: '32.50',
+        gross_profit: '67.50',
+        margin_pct: '67.50',
+        missing_cost_count: 2,
+      }],
+    };
+    const parsed = normalizeInsightPerformanceReport(withFinancials);
+    expect(parsed.doctors[0]).toMatchObject({
+      doctorId: 'doctor-1',
+      cogs: 32.5,
+      grossProfit: 67.5,
+      marginPct: 67.5,
+      missingCostCount: 2,
+    });
+
+    // Older cached payloads (and the clinic benchmark row) omit the keys entirely.
+    const legacy = normalizeInsightPerformanceReport(validPayload);
+    expect(legacy.doctors[0].cogs).toBeNull();
+    expect(legacy.doctors[0].grossProfit).toBeNull();
+    expect(legacy.doctors[0].marginPct).toBeNull();
+    expect(legacy.doctors[0].missingCostCount).toBe(0);
+  });
+
   it.each([
     null,
     {},

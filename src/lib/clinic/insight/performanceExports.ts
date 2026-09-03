@@ -105,12 +105,13 @@ export function buildDoctorPerformanceCsv(
     'filter_doctor_id', 'filter_payment_type', 'filter_activity_type', 'comparison_enabled',
     'doctor_id', 'doctor_name',
     'completed_visits', 'unique_patients', 'rostered_hours', 'patients_per_hour',
-    'visit_billing', 'revenue_per_hour', 'procedures', 'documents', 'doctor_missing_attribution',
+    'visit_billing', 'revenue_per_hour', 'cogs', 'gross_profit', 'margin_pct', 'doctor_missing_cost_count', 'procedures', 'documents', 'doctor_missing_attribution',
   ];
   return [header.join(','), ...doctors.map((doctor) => [
     ...sharedExportFields(context), doctor.doctorId, doctor.doctorName,
     doctor.completedVisits, doctor.uniquePatients, doctor.rosteredHours,
     doctor.patientsPerHour, doctor.visitBilling, doctor.revenuePerHour,
+    doctor.cogs, doctor.grossProfit, doctor.marginPct, doctor.missingCostCount,
     doctor.procedures, doctor.documents, doctor.missingAttribution,
   ].map(performanceCsvEscape).join(','))];
 }

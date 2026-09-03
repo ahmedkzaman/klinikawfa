@@ -25,6 +25,10 @@ export type InsightPerformanceDoctor = {
   patientsPerHour: number | null;
   visitBilling: number;
   revenuePerHour: number | null;
+  cogs?: number | null;
+  grossProfit?: number | null;
+  marginPct?: number | null;
+  missingCostCount?: number;
   procedures: number;
   documents: number;
   missingAttribution: number;
@@ -146,6 +150,10 @@ function normalizeDoctor(raw: unknown, index: number): InsightPerformanceDoctor 
     patientsPerHour: nullableNumber(row.patients_per_hour, `${field}.patients_per_hour`),
     visitBilling: finiteNumber(row.visit_billing, `${field}.visit_billing`),
     revenuePerHour: nullableNumber(row.revenue_per_hour, `${field}.revenue_per_hour`),
+    cogs: row.cogs === undefined ? null : nullableNumber(row.cogs, `${field}.cogs`),
+    grossProfit: row.gross_profit === undefined ? null : nullableNumber(row.gross_profit, `${field}.gross_profit`),
+    marginPct: row.margin_pct === undefined ? null : nullableNumber(row.margin_pct, `${field}.margin_pct`),
+    missingCostCount: row.missing_cost_count === undefined ? 0 : count(row.missing_cost_count, `${field}.missing_cost_count`),
     procedures: nonNegativeNumber(row.procedures, `${field}.procedures`),
     documents: count(row.documents, `${field}.documents`),
     missingAttribution: count(row.missing_attribution, `${field}.missing_attribution`),

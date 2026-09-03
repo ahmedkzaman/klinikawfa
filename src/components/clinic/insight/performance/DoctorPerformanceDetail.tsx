@@ -117,7 +117,7 @@ function DoctorDetailTabs({ doctor, report, startDate, endDate, viewerScope, fil
                   <Metric label="Revenue per visit" value={formatRM(detail?.financial.revenuePerVisit ?? null)} />
                   <Metric label="Attribution confidence" value={doctor.missingAttribution > 0 ? 'Partial' : 'Reliable'} note={doctor.missingAttribution > 0 ? `${doctor.missingAttribution} activity record(s) lack doctor attribution.` : 'No missing doctor attribution in this row.'} />
                 </dl>
-                {detail?.financial.missingCostCount ? <p className="mt-4 text-sm text-amber-700">{detail.financial.missingCostCount} item(s) have missing cost; COGS, profit, and margin remain unavailable.</p> : null}
+                {detail?.financial.missingCostCount ? <p className="mt-4 text-sm text-amber-700">{detail.financial.missingCostCount} dispensed item(s) have no recorded cost and are excluded from COGS. Gross profit and margin are partial until every dispensed item has a purchase cost.</p> : null}
               </TabsContent>
               <TabsContent value="clinical">
                 {canLoadClinicalActivity && doctor.doctorId ? (
