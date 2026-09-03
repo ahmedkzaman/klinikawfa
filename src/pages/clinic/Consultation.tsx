@@ -124,10 +124,24 @@ export default function Consultation() {
     return counts;
   }, [baseEntries]);
 
+  // Past dates normally expose completed history only, but a back-dated visit
+  // that is still awaiting offline entry must stay reachable, so the "all" tab
+  // is surfaced (first, so it auto-selects) when such entries exist.
+  const hasPastOfflineEntries = !selectedDateIsToday
+    && baseEntries.some((entry) => entry.clinic_status !== 'completed' && eligibleOfflineVisitIds.has(entry.id));
+  const visibleTabs = useMemo(
+    () => (selectedDateIsToday
+      ? TAB_KEYS
+      : hasPastOfflineEntries
+        ? (['all', 'completed'] as const)
+        : (['completed', 'all'] as const)),
+    [hasPastOfflineEntries, selectedDateIsToday],
+  );
+
   useEffect(() => {
     setAutoSelected(false);
-    setTab(selectedDateIsToday ? 'waiting' : 'completed');
-  }, [selectedDateIsToday, selectedDate]);
+    setTab(selectedDateIsToday ? 'waiting' : (visibleTabs[0] as string));
+  }, [selectedDate, selectedDateIsToday, visibleTabs]);
 
   useEffect(() => {
     if (autoSelected || baseEntries.length === 0) return;
@@ -135,10 +149,10 @@ export default function Consultation() {
       setAutoSelected(true);
       return;
     }
-    const firstNonEmpty = TAB_KEYS.find((k) => tabCounts[k] > 0);
+    const firstNonEmpty = visibleTabs.find((k) => tabCounts[k] > 0);
     if (firstNonEmpty) setTab(firstNonEmpty);
     setAutoSelected(true);
-  }, [tabCounts, baseEntries.length, autoSelected, tab]);
+  }, [autoSelected, baseEntries.length, tab, tabCounts, visibleTabs]);
 
   const filtered = useMemo(() => {
     let list = [...baseEntries];
@@ -184,9 +198,6 @@ export default function Consultation() {
   }
 
   const totalPatients = baseEntries.length;
-  const visibleTabs = selectedDateIsToday
-    ? TAB_KEYS
-    : (['completed', 'all'] as const);
 
   return (
     <div className={pageShell}>
@@ -325,9 +336,14 @@ export default function Consultation() {
                   });
                   const canUseWorkflowActions =
                     selectedDateIsToday && access.canEdit;
+                  // Offline (paper) consultations may be entered for any eligible
+                  // visit, not just today's — the server-side
+                  // list_offline_consultation_entry_visits RPC already scopes the
+                  // eligible window (up to 32 days) and the save/review RPCs remain
+                  // authoritative. The previous selectedDateIsToday gate made it
+                  // impossible to back-enter a visit from an earlier day.
                   const canEnterOfflineConsultation =
                     role === 'ops_staff' &&
-                    selectedDateIsToday &&
                     entry.clinic_status !== 'completed' &&
                     eligibleOfflineVisitIds.has(entry.id);
 

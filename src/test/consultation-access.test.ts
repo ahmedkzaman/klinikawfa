@@ -166,6 +166,33 @@ describe('consultation access', () => {
     ).toBe(true);
   });
 
+  it('ops_staff offline entry eligibility is date-independent (server scopes the window)', () => {
+    // A back-dated visit that is still in an entry status and returned by
+    // list_offline_consultation_entry_visits must list for ops_staff even when the
+    // selected date is not today — this is what lets staff enter a paper
+    // consultation for an earlier day's visit.
+    expect(
+      canListConsultationEntry({
+        role: 'ops_staff',
+        currentDoctorId: null,
+        attendingDoctorId: 'doctor-b',
+        queueStatus: 'ready_for_doctor',
+        selectedDateIsToday: false,
+        offlineEntryEligible: true,
+      }),
+    ).toBe(true);
+    expect(
+      canListConsultationEntry({
+        role: 'ops_staff',
+        currentDoctorId: null,
+        attendingDoctorId: 'doctor-b',
+        queueStatus: 'ready_for_doctor',
+        selectedDateIsToday: true,
+        offlineEntryEligible: true,
+      }),
+    ).toBe(true);
+  });
+
   it.each(['locum', 'guest'] as const)(
     '%s cannot list completed consultations on past dates',
     (role) => {
