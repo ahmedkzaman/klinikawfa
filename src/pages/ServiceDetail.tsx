@@ -1,5 +1,6 @@
 import { useParams, Link, Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { normalizeSupabaseStorageUrl } from "@/lib/media-url";
 import { supabase } from "@/integrations/supabase/client";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { SEOHead } from "@/components/seo/SEOHead";
@@ -56,7 +57,11 @@ export default function ServiceDetail() {
         .eq("slug", dbSlug!)
         .maybeSingle();
       if (error) throw error;
-      return (data as ClinicService | null) ?? null;
+      const service = (data as ClinicService | null) ?? null;
+      if (service?.hero_image_url) {
+        return { ...service, hero_image_url: normalizeSupabaseStorageUrl(service.hero_image_url) };
+      }
+      return service;
     },
     enabled: !!dbSlug,
   });

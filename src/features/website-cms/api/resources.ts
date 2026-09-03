@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseWebsiteResourceDraft } from "@/features/website-cms/resources/registry";
 import type { WebsiteResourceType } from "@/features/website-cms/resources/types";
 import type { BlogPostDraft, GalleryImageDraft, ReviewDraft, ServiceDraft, TeamMemberDraft } from "@/features/website-cms/resources/schemas";
+import { normalizeSupabaseStorageUrl } from "@/lib/media-url";
 import { supabase } from "@/integrations/supabase/client";
 
 type CmsClient = SupabaseClient & {
@@ -152,18 +153,18 @@ export async function fetchResourceForEditor(type: Exclude<WebsiteResourceType, 
   if (type === "team_member") {
     const { data, error } = await supabase.from("team_members").select("*").eq("id",resourceId).maybeSingle(); if (error) throw error; if (!data) return null;
     const row = data as typeof data & Record<string, unknown>;
-    return { revision: Number(row.website_revision ?? 0), payload: parseWebsiteResourceDraft(type,{ type: row.type === "doctor" ? "doctor" : "team", nameMs: row.name_ms, nameEn: row.name_en ?? "", titleMs: row.title_ms ?? row.type, titleEn: row.title_en ?? "", bioMs: row.bio_ms ?? "Profil ahli pasukan Klinik Awfa.", bioEn: row.bio_en ?? "", expertiseMs: row.expertise_ms ?? [], expertiseEn: row.expertise_en ?? [], qualifications: row.qualifications ?? [], yearsExperience: row.years_experience ?? 0, photoUrl: row.photo_url ?? "", isActive: row.is_active ?? true, displayOrder: row.display_order ?? 0 }) as TeamMemberDraft };
+    return { revision: Number(row.website_revision ?? 0), payload: parseWebsiteResourceDraft(type,{ type: row.type === "doctor" ? "doctor" : "team", nameMs: row.name_ms, nameEn: row.name_en ?? "", titleMs: row.title_ms ?? row.type, titleEn: row.title_en ?? "", bioMs: row.bio_ms ?? "Profil ahli pasukan Klinik Awfa.", bioEn: row.bio_en ?? "", expertiseMs: row.expertise_ms ?? [], expertiseEn: row.expertise_en ?? [], qualifications: row.qualifications ?? [], yearsExperience: row.years_experience ?? 0, photoUrl: normalizeSupabaseStorageUrl(row.photo_url ?? ""), isActive: row.is_active ?? true, displayOrder: row.display_order ?? 0 }) as TeamMemberDraft };
   }
   if (type === "blog_post") {
     const { data, error } = await supabase.from("blog_posts").select("*").eq("id",resourceId).maybeSingle(); if (error) throw error; if (!data) return null;
     const row = data as typeof data & Record<string, unknown>;
     const metadata = (row.website_editor_metadata ?? {}) as Record<string, unknown>;
-    return { revision: Number(row.website_revision ?? 0), payload: parseWebsiteResourceDraft(type,{ slug: row.slug, titleMs: row.title_ms ?? row.title, titleEn: row.title_en ?? "", excerptMs: row.excerpt_ms ?? "Ringkasan artikel.", excerptEn: row.excerpt_en ?? "", contentMs: row.content_ms ?? row.content, contentEn: row.content_en ?? "", categoryId: row.category_id, tagIds: metadata.tagIds ?? [], authorId: metadata.authorId ?? null, featuredImage: row.featured_image ?? "", featuredImageMediaId: metadata.featuredImageMediaId ?? null, readingTime: row.reading_time ?? 1, status: row.published ? "published" : row.scheduled_at ? "scheduled" : "draft", scheduledAt: row.scheduled_at, seoMs: metadata.seoMs, seoEn: metadata.seoEn }) as BlogPostDraft };
+    return { revision: Number(row.website_revision ?? 0), payload: parseWebsiteResourceDraft(type,{ slug: row.slug, titleMs: row.title_ms ?? row.title, titleEn: row.title_en ?? "", excerptMs: row.excerpt_ms ?? "Ringkasan artikel.", excerptEn: row.excerpt_en ?? "", contentMs: row.content_ms ?? row.content, contentEn: row.content_en ?? "", categoryId: row.category_id, tagIds: metadata.tagIds ?? [], authorId: metadata.authorId ?? null, featuredImage: normalizeSupabaseStorageUrl(row.featured_image ?? ""), featuredImageMediaId: metadata.featuredImageMediaId ?? null, readingTime: row.reading_time ?? 1, status: row.published ? "published" : row.scheduled_at ? "scheduled" : "draft", scheduledAt: row.scheduled_at, seoMs: metadata.seoMs, seoEn: metadata.seoEn }) as BlogPostDraft };
   }
   if (type === "gallery_image") {
     const { data, error } = await supabase.from("gallery_images").select("*").eq("id",resourceId).maybeSingle(); if (error) throw error; if (!data) return null;
     const row = data as typeof data & Record<string, unknown>;
-    return { revision: Number(row.website_revision ?? 0), payload: parseWebsiteResourceDraft(type,{ url: row.url, altMs: row.alt_text_ms ?? row.alt_text ?? "Imej Klinik Awfa", altEn: row.alt_text_en ?? "", tags: row.tags ?? [], displayOrder: row.display_order, visible: row.is_visible ?? true }) as GalleryImageDraft };
+    return { revision: Number(row.website_revision ?? 0), payload: parseWebsiteResourceDraft(type,{ url: normalizeSupabaseStorageUrl(row.url), altMs: row.alt_text_ms ?? row.alt_text ?? "Imej Klinik Awfa", altEn: row.alt_text_en ?? "", tags: row.tags ?? [], displayOrder: row.display_order, visible: row.is_visible ?? true }) as GalleryImageDraft };
   }
   const { data, error } = await supabase.from("website_review_presentations").select("*").eq("id",resourceId).maybeSingle(); if (error) throw error; if (!data) return null;
   return { revision: data.website_revision, payload: parseWebsiteResourceDraft(type,{ nameMs: data.name_ms, nameEn: data.name_en ?? "", reviewTextMs: data.review_text_ms, reviewTextEn: data.review_text_en ?? "", rating: data.rating, sourceLabel: data.source_label, status: data.status, displayOrder: data.display_order }) as ReviewDraft };
@@ -216,8 +217,8 @@ export async function fetchServiceResource(resourceId: string): Promise<{ draft:
       ctaEn: row.call_to_action_en ?? "",
       servicesMs: row.services_list_ms ?? row.services_list,
       servicesEn: row.services_list_en ?? [],
-      heroImageUrl: row.hero_image_url ?? "",
-      promoVideoUrl: row.promo_video_url ?? "",
+      heroImageUrl: normalizeSupabaseStorageUrl(row.hero_image_url ?? ""),
+      promoVideoUrl: normalizeSupabaseStorageUrl(row.promo_video_url ?? ""),
     }) as ServiceDraft,
   };
 }

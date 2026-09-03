@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { normalizeSupabaseStorageUrl } from '@/lib/media-url';
 import type { Tables } from '@/integrations/supabase/types';
 
 export type GalleryImage = Tables<'gallery_images'>;
@@ -59,7 +60,12 @@ async function fetchGalleryImages(): Promise<GalleryImage[]> {
     .order('display_order', { ascending: true });
 
   if (error) throw error;
-  return data || [];
+  // Rows written before the Supabase project cutover store dead legacy-host
+  // URLs; rewrite them to the current project so the gallery always renders.
+  return (data || []).map((image) => ({
+    ...image,
+    url: normalizeSupabaseStorageUrl(image.url),
+  }));
 }
 
 export function useGalleryImages(activeCategory: GalleryCategoryId = 'all') {

@@ -4,6 +4,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { Play, Pause, Volume2, VolumeX, Film } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { normalizeSupabaseStorageUrl } from '@/lib/media-url';
 import type { HomeContent } from '@/features/website-cms/schemas/home';
 
 interface VideoSectionProps {
@@ -104,9 +105,9 @@ function PublicVideoSection({ content }: Pick<VideoSectionProps, 'content'>) {
 
         data?.forEach((setting) => {
           if (setting.key === content.videoUrlSettingKey && setting.value) {
-            setVideoUrl(setting.value);
+            setVideoUrl(normalizeSupabaseStorageUrl(setting.value) || null);
           } else if (setting.key === content.posterSettingKey && setting.value) {
-            setPosterUrl(setting.value);
+            setPosterUrl(normalizeSupabaseStorageUrl(setting.value) || null);
           }
         });
       } catch (error) {
