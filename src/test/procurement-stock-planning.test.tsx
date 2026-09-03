@@ -108,6 +108,47 @@ describe('StockPlanningTab', () => {
     expect(within(cell as HTMLElement).queryByText(/^\d+$/)).toBeNull();
   });
 
+  it('offers a reorder-level top-up for low-stock items without usage data', () => {
+    const onDraftPO = vi.fn();
+    mockedPlanning.mockReturnValue({
+      ...baseQuery,
+      data: [
+        row({
+          name: 'Dead Low Stock Item',
+          current_stock: 0,
+          reorder_level: 5,
+          avg_daily_usage: 0,
+          used_30d: 0,
+          days_cover: null,
+          movement_status: 'dead',
+          suggested_qty: 5,
+          recommendation_reason: 'No recent usage; tops up to reorder level',
+        }),
+      ],
+    } as ReturnType<typeof mockedPlanning>);
+    mockedCorrelation.mockReturnValue({ data: [], isLoading: false } as ReturnType<typeof mockedCorrelation>);
+    render(<StockPlanningTab onDraftPO={onDraftPO} draftingItemId={null} />);
+    expect(screen.getByText('No recent usage; tops up to reorder level')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /create order/i }));
+    expect(onDraftPO).toHaveBeenCalledWith('i1', 5);
+  });
+
+  it('disables the order button when the usage-based suggestion is zero', () => {
+    setup({
+      data: [
+        row({
+          name: 'Healthy Zero Suggestion',
+          current_stock: 142,
+          reorder_level: 30,
+          suggested_qty: 0,
+          recommendation_reason: 'Based on 90-day usage, lead time, and open orders',
+        }),
+      ],
+    });
+    const button = screen.getByRole('button', { name: /create order/i });
+    expect(button).toBeDisabled();
+  });
+
   it('creates the order using the returned suggested_qty', () => {
     const onDraftPO = vi.fn();
     mockedPlanning.mockReturnValue({ ...baseQuery, data: [row()] } as ReturnType<typeof mockedPlanning>);

@@ -163,7 +163,9 @@ export const StockPlanningTab = memo(function StockPlanningTab({
                         <Button
                           size="sm"
                           variant={actionable ? 'default' : 'outline'}
-                          disabled={r.suggested_qty == null || draftingItemId === r.item_id}
+                          // suggested_qty 0 means "usage says nothing is needed";
+                          // only a positive suggestion creates an order.
+                          disabled={!r.suggested_qty || draftingItemId === r.item_id}
                           onClick={() => onDraftPO(r.item_id, r.suggested_qty as number)}
                         >
                           Create order
