@@ -21,7 +21,7 @@ describe('patient visit consultation links', () => {
     expect(historyHookSource).toContain(".is('consultations.consultation_items.deleted_at', null)");
   });
 
-  it.each(['resident_doctor', 'doctor_admin'] as const)(
+  it.each(['resident_doctor', 'doctor_admin', 'special_admin'] as const)(
     'allows %s to open the exact visit consultation',
     (role) => {
       expect(canOpenConsultationFromHistory(role, true)).toBe(true);
@@ -30,7 +30,6 @@ describe('patient visit consultation links', () => {
 
   it.each([
     'admin',
-    'special_admin',
     'ops_staff',
     'staff_nurse',
     'purchaser',

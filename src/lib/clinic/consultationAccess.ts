@@ -4,6 +4,7 @@ import type { ClinicStatus } from '@/types/clinic';
 const CROSS_DOCTOR_NOTE_ROLES = new Set<AppRole>([
   'resident_doctor',
   'doctor_admin',
+  'special_admin',
 ]);
 
 const CLINICAL_WORKFLOW_ROLES = new Set<AppRole>([

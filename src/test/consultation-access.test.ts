@@ -8,7 +8,7 @@ import {
 } from '@/lib/clinic/consultationAccess';
 
 describe('consultation access', () => {
-  it.each(['resident_doctor', 'doctor_admin'] as const)(
+  it.each(['resident_doctor', 'doctor_admin', 'special_admin'] as const)(
     '%s can read another doctor completed consultation',
     (role) => {
       expect(canReadCrossDoctorNotes(role)).toBe(true);
@@ -85,7 +85,6 @@ describe('consultation access', () => {
     'purchaser',
     'staff',
     'admin',
-    'special_admin',
   ] as const)('%s cannot read cross-doctor clinical notes', (role) => {
     expect(canReadCrossDoctorNotes(role)).toBe(false);
     expect(canOpenConsultationFromHistory(role, true)).toBe(false);
